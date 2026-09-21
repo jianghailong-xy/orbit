@@ -217,6 +217,7 @@ import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confi
 import { withControlPlaneNote, withOpenItemDelivery } from './control-plane-note';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
+import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
@@ -4551,18 +4552,53 @@ export class RunnerApiController {
       // neither id nor status, so only its terminal one clears the set), which is what lets
       // bgEnded below retire either kind without knowing which it was.
       // Atomic array ops stay idempotent under event-batch retries.
-      const bgStarted = events
-        .filter((e) => {
-          if (e.type !== RunEventType.TOOL_USE) return false;
-          const name = (e.payload as { name?: string }).name;
-          if (name === 'Monitor') return true;
-          return (
-            name === 'Bash' &&
-            (e.payload as { input?: { run_in_background?: boolean } }).input?.run_in_background === true
-          );
-        })
-        .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
-        .filter(Boolean);
+      //
+      // A launch counts only once its own result says the process started — the runner's bg-guard
+      // hook refuses Bash(run_in_background) outright (runner-go hook_bg_guard.go), and a shell
+      // that died on its way up is refused by nobody: both leave a tool_use whose result names no
+      // shell, and neither ever gets a terminal <task-notification>, since the runner retires only
+      // the shells it registered. Counting the tool_use alone therefore wedged the id in this set,
+      // and "N background processes running" on the session, for good (task
+      // 34ScjH8o8Bv1NvkPYCkoe). The verdict is read from the tool_call row rather than from the
+      // batch, for two reasons: the row is where the pair is already joined (name+input from the
+      // tool_use, text from its result), and it is durable — the same reading applied to an id
+      // already in the set is what heals one that got in that way (bgRefused below).
+      const batchToolIds = new Set<string>();
+      for (const e of events) {
+        const isUse = e.type === RunEventType.TOOL_USE;
+        if (!isUse && e.type !== RunEventType.TOOL_RESULT) continue;
+        // Both halves, because the 250ms flush may put a launch in one batch and its result in the
+        // next, and the result is the half that decides.
+        const id = String(
+          (e.payload as { id?: unknown; toolUseId?: unknown })[isUse ? 'id' : 'toolUseId'] ?? '',
+        );
+        if (id) batchToolIds.add(id);
+      }
+      // Read under this transaction, so the rows written just above for this batch are visible.
+      const launchCandidates = new Set<string>([...batchToolIds, ...session.runningBgShells]);
+      const launchRows =
+        launchCandidates.size > 0
+          ? await tx.toolCall.findMany({
+              where: { sessionId, toolUseId: { in: [...launchCandidates] } },
+              select: { toolUseId: true, name: true, input: true, output: true },
+            })
+          : [];
+      const bgConfirmed = new Set<string>();
+      const bgRefused = new Set<string>();
+      for (const row of launchRows) {
+        const id = row.toolUseId;
+        if (!id) continue;
+        const kind = bgLaunchKind(row.name, row.input);
+        // Neither a launch (every other tool) nor a launch with its result in yet (outstanding, or
+        // lost with the engine): nothing to confirm, and nothing to hold against it either.
+        if (!kind || row.output == null) continue;
+        if (bgLaunchConfirmed(kind, row.output)) bgConfirmed.add(id);
+        else bgRefused.add(id);
+      }
+      // tool_call has no uniqueness on (session, tool_use_id), so an id can have more than one row:
+      // any row that confirms it is the answer.
+      for (const id of bgConfirmed) bgRefused.delete(id);
+      const bgStarted = [...batchToolIds].filter((id) => bgConfirmed.has(id));
       // Sub-workspaces (Task/Workspace tool) run async: the launch tool_result ("Async workspace launched")
       // lands immediately and the parent then streams its own top-scope system progress events,
       // so lastToolUse can't stay 'Workspace'. Track in-flight sub-workspaces the same way as background
@@ -4671,6 +4707,14 @@ export class RunnerApiController {
       let shells = bgReset ? [] : [...session.runningBgShells];
       let jobs = bgReset ? [] : [...session.runningBgJobs];
       let subagents = bgReset ? [] : [...session.runningSubagents];
+      // The launch verdict above, applied to what the set already holds: an id whose launch the
+      // record refutes is not a running process. This is also how a set already wedged that way
+      // heals — the refused call's row sits in tool_call with the hook's refusal as its output, so
+      // the next batch of any kind drops the id, rather than waiting for a process that never
+      // existed to report its death. An id with no launch row at all is left alone: a runner-hosted
+      // `bgj_` job states itself with a `running` report instead, and silence is not evidence
+      // against either.
+      if (bgRefused.size > 0) shells = shells.filter((id) => !bgRefused.has(id));
       for (const id of bgStarted) shells = [...shells.filter((v) => v !== id), id];
       // A `running` report counts with the launches, and adds only an id that is missing — the
       // adoption. At launch the tool_use has already added it, and moving it would write the row

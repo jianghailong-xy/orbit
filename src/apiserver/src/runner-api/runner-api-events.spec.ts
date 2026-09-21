@@ -44,6 +44,8 @@ function makeController(
     toolUpdate: [] as any[],
   };
   const publishedEvents: any[] = [];
+  /** The `tool_call` table, as much of it as the fold reads: what a call was, and its result. */
+  const toolCallRows: Array<Record<string, unknown>> = [];
   const tx = {
     $queryRaw: async () => [{ id: 'session-1', leaseOwnerMatches: true }],
     $executeRaw: async (...args: unknown[]) => {
@@ -64,16 +66,28 @@ function makeController(
       },
     },
     // Every tool_use is denormalized into tool_call on create, and its tool_result pairs back
-    // via updateMany. Record both so a test can assert the id is stored and the outcome lands.
+    // via updateMany. Record both so a test can assert the id is stored and the outcome lands —
+    // and keep the rows, because that is the table the running-set fold reads a background
+    // launch's verdict out of (bg-launch-receipt.ts).
     toolCall: {
       createMany: async (args: any) => {
         calls.toolCreate.push(args);
+        for (const row of args.data as Array<Record<string, unknown>>) {
+          toolCallRows.push({ ...row, output: null });
+        }
         return { count: args.data.length };
       },
       updateMany: async (args: any) => {
         calls.toolUpdate.push(args);
+        for (const row of toolCallRows) {
+          if (row.toolUseId === args.where.toolUseId) row.output = args.data.output ?? null;
+        }
         return { count: 1 };
       },
+      findMany: async (args: { where: { toolUseId: { in: string[] } } }) =>
+        toolCallRows.filter(
+          (row) => row.toolUseId != null && args.where.toolUseId.in.includes(String(row.toolUseId)),
+        ),
     },
     conversationTurn: {
       findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
@@ -269,8 +283,15 @@ test('an init does not clear background work, since every query emits one', asyn
 });
 
 /** A Monitor is a background watcher with no run_in_background flag — backgrounding is all it
- *  does — and it reports in through the same terminal notification, so it is tracked alike. */
-test('a Monitor launch joins the running background set', async () => {
+ *  does — and it reports in through the same terminal notification, so it is tracked alike. What
+ *  says a watcher started is its own receipt, exactly as it is for a Bash shell; a Monitor call
+ *  that never started has no process to retire (refused-bg-launch-not-counted.pg.spec.ts). */
+const MONITOR_RECEIPT =
+  'Monitor started (task bbairyimf, expires in 5m unless the source ends first; you get one' +
+  ' notice at expiry — re-arm if you still need the watch). You will be notified on each event.' +
+  ' Keep working — do not poll or sleep.';
+
+test('a Monitor launch joins the running background set once its receipt says it started', async () => {
   const { calls, controller } = makeController();
 
   await controller.events({ id: 'runner-1' }, 'session-1', {
@@ -280,6 +301,12 @@ test('a Monitor launch joins the running background set', async () => {
         type: RunEventType.TOOL_USE,
         ts: '2026-07-31T12:00:00.000Z',
         payload: { id: 'toolu_mon', name: 'Monitor', input: { command: 'until done; do :; done' } },
+      },
+      {
+        seq: 43,
+        type: RunEventType.TOOL_RESULT,
+        ts: '2026-07-31T12:00:01.000Z',
+        payload: { toolUseId: 'toolu_mon', content: MONITOR_RECEIPT },
       },
     ],
   });
@@ -294,6 +321,30 @@ test('a Monitor launch joins the running background set', async () => {
     'runningSubagents' in calls.update[0].data,
     false,
     'the set it did not touch is left out of the write entirely',
+  );
+});
+
+/** The paired negative, on the same shape of call: the tool_use alone is a call, and no receipt
+ *  means no process — a Monitor whose call failed validation leaves the session reading none. */
+test('a Monitor call with no receipt puts nothing in the running background set', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 42,
+        type: RunEventType.TOOL_USE,
+        ts: '2026-07-31T12:00:00.000Z',
+        payload: { id: 'toolu_mon', name: 'Monitor', input: { command: 'until done; do :; done' } },
+      },
+    ],
+  });
+
+  assert.equal(calls.update.length, 1, 'the batch is still written: it carries the call');
+  assert.equal(
+    'runningBgShells' in calls.update[0].data,
+    false,
+    'a watcher that never started is not background work, and the set is left out of the write',
   );
 });
 

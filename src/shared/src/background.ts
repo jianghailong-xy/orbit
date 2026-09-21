@@ -66,7 +66,11 @@ export interface BgDeriveEvent {
 }
 
 // "Command running in background with ID: <id>." — capture up to the first period/space.
-const BG_ID_RE = /running in background with ID:\s+(\S+?)[.\s]/i;
+// Exported because it is the wording a launch is confirmed by, not only the id's source here: the
+// apiserver's running-set fold asks the same question of the same receipt (bg-launch-receipt.ts),
+// and one copy of the wording is what keeps a shell the tray lists from being one the fold refused
+// to count.
+export const BG_ID_RE = /running in background with ID:\s+(\S+?)[.\s]/i;
 // "Output is being written to: <path>.output." — greedy so it spans the whole path and stops
 // at the `.output` extension (the path segments themselves contain no dots).
 const BG_PATH_RE = /written to:\s+(\S+\.output)/i;
