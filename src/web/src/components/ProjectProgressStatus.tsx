@@ -1,11 +1,12 @@
-import { useState, type JSX, type ReactNode } from 'react';
+import { useId, useState, type JSX, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Alert, Button, Modal } from 'antd';
+import { Alert, Button, Input, Modal } from 'antd';
 import type {
   CoordinatorFuseUsage,
   CoordinatorWakeups,
   OpenItemAction,
+  OpenItemKind,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
 } from '@orbit/shared';
@@ -41,6 +42,13 @@ import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
  * today (§4.8). Neither is re-derived here: a card that composed its own sentence from a payload
  * would be a second rendering of one fact, free to disagree with the row beside it, and a button
  * this file invented would be one the reader presses to no effect.
+ *
+ * ONE PRESS IS NOT ON THAT LIST, and it is named rather than left to be noticed: "Mark as handled",
+ * the owner's ending for an exception they dealt with themselves (§4.7). Its door is real —
+ * `POST /projects/:id/open-items/:itemId/resolve` — and it landed without adding itself to the
+ * server's `actions`, so a project whose work was landed by hand carried items no press could
+ * answer. It is drawn from the item's KIND, which is the same fact the service's own door decides
+ * on, and it is drawn only where the owner is the one who has it — see `HAND_CLOSABLE_KINDS`.
  */
 
 /** §7.5's mark: Orbit filed this, an agent turn did not write it. The wording the criteria and
@@ -364,6 +372,30 @@ export function askCoordinatorAgainMutationOptions(
   };
 }
 
+/**
+ * Mark as handled: the owner ends an exception they dealt with themselves (§4.7's "标记已处理").
+ *
+ * The ending every other press on this card leaves to a fact — a task that moved on, a landing that
+ * happened — is the one a person sometimes has and the platform never will: work landed by hand
+ * leaves no row to read, and the item goes on saying "this did not land" until somebody says
+ * otherwise. The reason travels in the body because it is required (`ResolveOpenItemDto`: a note of
+ * at least one character, trimmed and checked again in the service), and it is the whole of what the
+ * record gains. Nothing is retried and nothing is reopened.
+ *
+ * The items are re-read rather than patched: which rows this project still owes somebody is the
+ * server's answer, and the same re-read moves the project's own counts.
+ */
+export function markItemHandledMutationOptions(qc: QueryClient, projectId: string, itemId: string) {
+  return {
+    mutationFn: (note: string) =>
+      api(
+        `/projects/${encodeURIComponent(projectId)}/open-items/${encodeURIComponent(itemId)}/resolve`,
+        { method: 'POST', body: { note } },
+      ),
+    onSuccess: () => refreshItemWriteViews(qc, projectId),
+  };
+}
+
 export const CANCEL_TASK_MODAL_TITLE = 'Cancel this task?';
 export const CANCEL_TASK_MODAL_OK = 'Cancel task';
 /** What the confirm says, in the two facts a reader weighing it needs: what it stops, and what it
@@ -372,6 +404,30 @@ export const CANCEL_TASK_MODAL_OK = 'Cancel task';
 export const CANCEL_TASK_MODAL_BODY =
   'It is recorded as cancelled: no further run starts on it, and the failed-attempt notices it '
   + 'opened close with it. Its branch and history stay where they are.';
+
+/** The label the press wears and its dialog's confirm repeats, as the cancel press does. */
+export const MARK_HANDLED = 'Mark as handled';
+export const MARK_HANDLED_MODAL_TITLE = 'Mark this item as handled?';
+/** What the confirm says, in the two facts a reader weighing it needs: what it ends, and what it
+ *  does not touch. Nothing read this ending off a row — that is the whole reason the press exists —
+ *  so the reason is what the record gains. */
+export const MARK_HANDLED_MODAL_BODY =
+  'It stops being something this project owes anyone. The reason is what the record gains, because '
+  + 'nothing on the line could verify the ending for itself — the task, its branch and its history '
+  + 'stay where they are.';
+
+/**
+ * The kinds an owner closes by hand (§4.7's "标记已处理"): the exceptions, which are the ones a person
+ * sometimes answers in a way the platform cannot read. A question is the owner's to ANSWER rather
+ * than to close, and a merge approval and a paused project each have a press of their own — the
+ * server's own door refuses all three (`HAND_CLOSABLE_RESOLUTIONS`, which names the same set).
+ */
+const HAND_CLOSABLE_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
+  'INTEGRATION_CONFLICT',
+  'INTEGRATION_CHECK_FAILED',
+  'INTEGRATION_ERROR',
+  'TASK_FAILED',
+]);
 
 /** One press, one button. `primary` is the first one a card offers — the mock's own emphasis, and
  *  the reason a reader can tell the expected press from the other ways out. */
@@ -514,6 +570,71 @@ function AskCoordinatorAgainPress({
   );
 }
 
+/**
+ * The owner closing an exception themselves. Like the cancel press, the press asks first — the
+ * reason is required, and a reader who has typed nothing yet is asked for it rather than sent off to
+ * be refused — and a refusal leaves the dialog open over the item it was about.
+ */
+function MarkHandledPress({
+  row,
+  projectId,
+}: {
+  row: ProjectOpenItemRow;
+  projectId: string;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const fieldId = useId();
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState('');
+  const mark = useMutation(markItemHandledMutationOptions(qc, projectId, row.itemId));
+  const trimmed = note.trim();
+  const close = () => {
+    if (mark.isPending) return;
+    mark.reset();
+    setNote('');
+    setAsking(false);
+  };
+  return (
+    <>
+      <PressButton label={MARK_HANDLED} pending={mark.isPending} onClick={() => setAsking(true)} />
+      <Modal
+        open={asking}
+        title={MARK_HANDLED_MODAL_TITLE}
+        okText={MARK_HANDLED}
+        // Empty is not a press: the server requires the reason, so the confirm waits for one. The
+        // handler holds the same line, because a disabled button is not a rule about what is sent.
+        okButtonProps={{ disabled: trimmed === '', loading: mark.isPending }}
+        cancelText="Back"
+        onOk={() => {
+          if (trimmed === '') return;
+          mark.mutate(trimmed, {
+            onSuccess: () => {
+              setNote('');
+              setAsking(false);
+            },
+          });
+        }}
+        onCancel={close}
+      >
+        <p>{MARK_HANDLED_MODAL_BODY}</p>
+        <label className="project-open-item-reason-label" htmlFor={fieldId}>
+          Why is it no longer open?
+        </label>
+        <Input.TextArea
+          id={fieldId}
+          value={note}
+          maxLength={2000}
+          autoSize={{ minRows: 2, maxRows: 8 }}
+          onChange={(event) => setNote(event.target.value)}
+        />
+        {mark.isError ? (
+          <PressError headline="The item was not closed" error={mark.error as Error} />
+        ) : null}
+      </Modal>
+    </>
+  );
+}
+
 /** One press of a card, by the action the server named. An action that writes and has no press
  *  here is one this build cannot make — and `cardActions` has already left it undrawn. */
 function ItemPress({
@@ -566,7 +687,12 @@ export function OpenItemCard({
 /** A card's presses, in the server's own order: a link where the press is a way in, a button where
  *  it writes. The first of the WRITING ones is drawn as the primary press — the mock's own emphasis
  *  on both cards (Retry where the coordinator owns the work, "Ask the coordinator again" where the
- *  owner does), and one rule rather than a list of exceptions. */
+ *  owner does), and one rule rather than a list of exceptions.
+ *
+ *  "Mark as handled" is drawn after them and never as the primary press: it is the ending for an
+ *  exception nobody has to act on at all — the work is already where it was going — so it is offered
+ *  last, to the one reader who knows that. It is not on the server's `actions` list (see this
+ *  module's head), which is why it is drawn from the kind rather than from the row's own list. */
 function CardActions({
   projectId,
   row,
@@ -576,6 +702,7 @@ function CardActions({
 }): JSX.Element {
   const actions = cardActions(row);
   const primary = actions.find((action) => WRITE_ACTIONS.has(action));
+  const handClosable = row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind);
   return (
     <>
       {actions.map((action) =>
@@ -591,6 +718,7 @@ function CardActions({
           <ItemLink key={action} row={row} action={action} />
         ),
       )}
+      {handClosable ? <MarkHandledPress row={row} projectId={projectId} /> : null}
     </>
   );
 }
