@@ -4,8 +4,8 @@ import { Alert } from 'antd';
 import { api } from '../api';
 import {
   acceptanceConfirmationKey,
+  acceptanceConfirmationQuery,
   confirmAcceptanceCriteria,
-  readAcceptanceConfirmation,
   type RecordedStandardSetConfirmation,
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
@@ -57,14 +57,19 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
  * nothing to start, which is OrbitKit's rule for a standing it does not have. Editing any criterion
  * ends the confirmation, and the card comes back for the new version on the same condition.
  *
- * WHAT THE ANSWER LEAVES IS NOT THIS WINDOW'S TO KEEP
- * ---------------------------------------------------
+ * WHAT THE ANSWER LEAVES IS NOT THIS WINDOW'S TO KEEP, NOR THIS CARD'S TO HOLD
+ * ---------------------------------------------------------------------------
  * A confirmed set leaves a RECEIPT in the conversation (`AcceptanceConfirmationReceipt`), drawn
  * from the door's own read and not from the window that pressed: who signed it, and which seal —
- * the version standing when it was signed, which is not always the version standing now. A press
- * made here gives the card up to that receipt; a confirmation made at another end draws the same
- * receipt and leaves the card beside it, for the rule above. A line this window remembered would
- * have been the one thing the reload took away, which is what happened before this receipt existed.
+ * the version standing when it was signed, which is not always the version standing now. DRAWN
+ * WHERE IT HAPPENED, by `WorkspaceView`'s `decisionReceipts` off the same read this card asks its
+ * question from, and not at the tail of the pane by this card: a record is what happened, and the
+ * bottom of a conversation is where the questions that are open NOW are drawn. Held here instead,
+ * it sat under every later message for the life of the project — including in a conversation
+ * started long after, and after the project was done — which is the state this card was moved out
+ * of. A press made here gives the card up; a confirmation made at another end leaves the card
+ * beside the record, for the rule above. A line this window remembered would have been the one
+ * thing the reload took away, which is what happened before this receipt existed.
  *
  * WHAT THE PINNED STRIP IS TOLD
  * -----------------------------
@@ -483,9 +488,16 @@ export function AcceptanceConfirmationCard({
  * page's. What it says is what was signed: the count, the seal it locked, who, and when. Nothing
  * on it is pressable — it is a record, and the question it answers is not on it.
  *
- * A STALE SET DRAWS BOTH OF THEM: this, naming the version somebody signed, and the card below it
- * asking about the version standing now. They are two different facts — what was agreed, and what
- * nobody has agreed to yet — and only the second is a question.
+ * A STALE SET DRAWS BOTH OF THEM: this, naming the version somebody signed, and the card asking
+ * about the version standing now. They are two different facts — what was agreed, and what nobody
+ * has agreed to yet — and only the second is a question.
+ *
+ * WHERE IT IS DRAWN IS THE CALLER'S, AND IT IS NOT THE TAIL. `afterSeq`-anchored into the
+ * transcript at the door's own clock (`decisionReceiptAnchor`, `WorkspaceView`'s
+ * `decisionReceipts`), like the criteria, evidence and owner receipts beside it, and like this
+ * record on the native clients (`AcceptanceConfirmations.receipt` +
+ * `ReceiptAnchor.after(items:at:)`) — a moment older than every loaded event is a record about a
+ * conversation this one is not, and is not drawn at all.
  */
 export function AcceptanceConfirmationReceipt({
   confirmation,
@@ -513,14 +525,15 @@ export function AcceptanceConfirmationReceipt({
  * The wired card for one conversation: at most one, delivered the first time an unstarted project
  * states a plan nobody has confirmed, and re-derived from both reads on every render after that.
  *
- * The standing is read under `acceptanceConfirmationKey` and the project under the project page's
- * own `['project', id]`. A press sends `currentVersion.digest` from the read the card is drawn
- * from; the door refuses a version that moved in between, and the answer to that refusal is to read
- * the set again — so a refusal re-reads, and the card stays busy until that read has landed.
+ * The standing is read under `acceptanceConfirmationQuery` — the same query the conversation draws
+ * the record from — and the project under the project page's own `['project', id]`. A press sends
+ * `currentVersion.digest` from the read the card is drawn from; the door refuses a version that
+ * moved in between, and the answer to that refusal is to read the set again — so a refusal
+ * re-reads, and the card stays busy until that read has landed.
  *
- * One thing puts the card down, and it is the answer: a press the door took gives way to the record
- * of it (`AcceptanceConfirmationReceipt`), which the same read draws back on every later load. No
- * action does. A third action used to, while the question was asked at the end of a project, where
+ * One thing puts the card down, and it is the answer: a press the door took takes the question away
+ * and the record of it is drawn by the conversation, where it happened. No action does. A third
+ * action used to, while the question was asked at the end of a project, where
  * putting it down meant "let me answer once the work settles"; asked before anything has run it
  * would mean waiting for nothing, so the way past this card is to start the project or to say what
  * should change first.
@@ -550,10 +563,8 @@ export function SessionAcceptanceConfirmationCard({
   const project = projectId ?? '';
   const [delivered, setDelivered] = useState(false);
   const standingRead = useQuery({
-    queryKey: acceptanceConfirmationKey(project),
-    queryFn: () => readAcceptanceConfirmation(project),
+    ...acceptanceConfirmationQuery(project),
     enabled: Boolean(projectId),
-    refetchInterval: 20_000,
   });
   const documentRead = useQuery({
     queryKey: ['project', project],
@@ -591,54 +602,42 @@ export function SessionAcceptanceConfirmationCard({
     onError: () => qc.invalidateQueries({ queryKey: acceptanceConfirmationKey(project) }),
   });
 
-  // The record of the newest confirmation, off the same read as everything else here. It is what
-  // outlives the press: this window's memory of pressing is worth nothing after a reload, while the
-  // door's own record is here on a device that never saw the card (`AcceptanceConfirmationReceipt`).
+  // The record of the newest confirmation is NOT drawn here, and what this card keeps of a press
+  // is nothing: the record belongs where it happened, which is the conversation's flow rather than
+  // a card that exists for as long as a QUESTION does (`AcceptanceConfirmationReceipt`, inserted by
+  // `WorkspaceView`'s `decisionReceipts` off this same read). A card that carried it stayed at the
+  // bottom of the pane for the life of the project, drawn in a stack reserved for what is true now.
   //
-  // The door's own response stands in for that read in the moment after a press made here, and only
-  // there: the next poll may be twenty seconds away and a poll that fails is not an answer, so
-  // without it a press followed by a failed re-read would empty the slot — the vanishing-mid-read
-  // this card is under orders not to do. It is the same record, off the same door, and it names the
-  // seal that was signed rather than the one standing now.
-  const record = standing?.confirmation
-    ?? (confirm.isSuccess ? confirm.data.confirmation : null);
-  // A press made HERE gives the card up: the question is answered, and what is left to read is the
-  // record of the answer. A confirmation made at ANOTHER end does not — that card stays where it
-  // is, going stale in place, because a reader halfway through it must not watch it vanish while
-  // somebody else answers (`shown`).
-  const answeredHere = confirm.isSuccess;
-  if (!shown && record === null) return null;
+  // A press made HERE gives the card up: the question is answered. A confirmation made at ANOTHER
+  // end does not — that card stays where it is, going stale in place, because a reader halfway
+  // through it must not watch it vanish while somebody else answers (`shown`).
+  if (!shown || confirm.isSuccess) return null;
   const title = document?.title || project;
   return (
-    <>
-      {record ? <AcceptanceConfirmationReceipt confirmation={record} /> : null}
-      {shown && !answeredHere ? (
-        <AcceptanceConfirmationCard
-          standing={standing}
-          criteria={criteria}
-          projectTitle={title}
-          // Straight off the project read, absent-or-unread meaning neither yes nor no. A press
-          // here will turn it on, and a project that was already on when this card arrived says so.
-          started={document?.coordinatorEnabled ?? null}
-          busy={confirm.isPending}
-          error={confirm.isError ? confirm.error : null}
-          onStart={() => {
-            if (standing === null || !acceptanceConfirmationAnswerable(standing)) return;
-            confirm.mutate(standing.currentVersion.digest);
-          }}
-          onChatAbout={() => {
-            if (standing === null) return;
-            onChatAbout?.({
-              projectId: project,
-              criteriaDigest: standing.currentVersion.digest,
-              projectTitle: title,
-              criteria: [...(criteria ?? [])]
-                .sort((a, b) => a.ordinal - b.ordinal)
-                .map((item) => item.text),
-            });
-          }}
-        />
-      ) : null}
-    </>
+    <AcceptanceConfirmationCard
+      standing={standing}
+      criteria={criteria}
+      projectTitle={title}
+      // Straight off the project read, absent-or-unread meaning neither yes nor no. A press
+      // here will turn it on, and a project that was already on when this card arrived says so.
+      started={document?.coordinatorEnabled ?? null}
+      busy={confirm.isPending}
+      error={confirm.isError ? confirm.error : null}
+      onStart={() => {
+        if (standing === null || !acceptanceConfirmationAnswerable(standing)) return;
+        confirm.mutate(standing.currentVersion.digest);
+      }}
+      onChatAbout={() => {
+        if (standing === null) return;
+        onChatAbout?.({
+          projectId: project,
+          criteriaDigest: standing.currentVersion.digest,
+          projectTitle: title,
+          criteria: [...(criteria ?? [])]
+            .sort((a, b) => a.ordinal - b.ordinal)
+            .map((item) => item.text),
+        });
+      }}
+    />
   );
 }

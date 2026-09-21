@@ -262,6 +262,58 @@ public enum OwnerConfirmations {
         return view.decisions.filter { $0.sessionId == sessionID }
     }
 
+    /// One recorded decision this console draws as a record, and the item it belongs after.
+    public struct Receipt: Equatable, Sendable, Identifiable {
+        public let taskId: String
+        public let decided: RecordedOwnerDecision
+        /// The transcript item that was last at or before the decision. A card delivered live
+        /// anchors to the item that was last when it ARRIVED; a record has no arrival of its own on
+        /// a device that was not there, so it is anchored by the door's clock instead (`ReceiptAnchor`).
+        public let afterItemID: String
+
+        public init(taskId: String, decided: RecordedOwnerDecision, afterItemID: String) {
+            self.taskId = taskId
+            self.decided = decided
+            self.afterItemID = afterItemID
+        }
+
+        /// The row this record is drawn in — the card's own address rather than a second spelling of
+        /// it, so the id the console dedupes on and the id the transcript draws cannot drift.
+        public var id: String {
+            DeliveredDecisionCard(kind: .ownerDecisionReceipt(taskID: taskId,
+                                                              decisionID: decided.id)).id
+        }
+    }
+
+    /// The receipts this conversation draws, each where its decision was MADE — the fourth of the
+    /// four records placed that way, beside the criteria decision's, the evidence decision's and the
+    /// standard set's confirmation.
+    ///
+    /// WHAT ARRIVING COST
+    /// ------------------
+    /// These used to be delivered as cards, which anchors them to the item that was last when the
+    /// READ came back (`DeliveryAnchor`) — a moment that belongs to this device rather than to the
+    /// decision. On the device that was present the two agree; on any other one the whole history
+    /// piles up under the newest row. The account owner's iOS screenshot, 2026-09-20: three
+    /// `Decision recorded` cards stacked at the bottom of a conversation that had gone on for a day
+    /// after them, in a stack reserved for what is true NOW. `decidedAt` is published by the read,
+    /// so the moment was never missing — this is the move `CriteriaDecisions.receipts` makes, and the
+    /// web client draws these by `decidedAt` already (`ownerDecisionReceiptsIn`).
+    ///
+    /// A decision whose moment is older than everything loaded is NOT drawn: the window this console
+    /// holds starts at the tail, so a record with no anchor has no honest place to go, and drawing it
+    /// at the tail instead is the defect itself.
+    public static func receipts(_ view: OwnerConfirmationView?, sessionID: String?,
+                                items: [TranscriptItem]) -> [Receipt] {
+        guard let view else { return [] }
+        return receiptsIn(view, sessionID: sessionID).compactMap { decided in
+            guard let anchor = ReceiptAnchor.after(items: items, at: decided.decidedAt) else {
+                return nil
+            }
+            return Receipt(taskId: view.taskId, decided: decided, afterItemID: anchor)
+        }
+    }
+
     /// Where one delivered card stands RIGHT NOW. A nil read is `unread` and never "nothing is
     /// waiting": a card that could not re-derive itself cannot say the door would accept anything.
     public static func standing(_ view: OwnerConfirmationView?, sessionID: String?,

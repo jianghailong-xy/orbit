@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>Owner 回执落位 — iOS 效果图</title>
+<style>
+  /* 真实 token，抄自 src/web/src/index.css :root（light）；卡片本身抄 .settlement-receipt */
+  :root {
+    --bg-raised:#ffffff; --bg-base:#ffffff; --bg-sunken:#f7f8fa;
+    --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+    --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-solid:#2ea121;
+    --mark:#e8590c;
+    --ios-bg:#f2f2f7; --ios-card:#eaf1ff;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 48px; background:#ececef; color:#16161a;
+         font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",
+         "Noto Serif CJK SC",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.02em; margin:0 0 10px; }
+  .lede { color:#55555e; max-width:1180px; margin:0 0 4px; font-size:14.5px; }
+  .lede b { color:#16161a; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px;
+         background:#e4e4ea; border-radius:4px; padding:1px 5px; }
+  .row { display:flex; gap:40px; align-items:flex-start; margin-top:28px; }
+  figure { margin:0; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#e3e3e8; color:#55555e; }
+  .tag.new { background:#d8ecff; color:#0a5ca8; }
+  figcaption { margin-top:12px; font-size:13px; line-height:1.6; color:#55555e; width:392px; }
+  figcaption b { color:#16161a; }
+  figcaption ul { margin:6px 0 0; padding-left:17px; }
+  figcaption li { margin-top:3px; }
+
+  /* ── 电话框：状态栏/导航/横幅/粘条/滚动区/底栏，比例照 9:33 那张截图 ── */
+  .phone { width:392px; border-radius:36px; background:var(--ios-bg); overflow:hidden;
+           border:1px solid #d3d3da; box-shadow:0 8px 26px rgba(20,20,30,.14); }
+  .status { display:flex; align-items:center; justify-content:space-between;
+            padding:10px 22px 4px; font-size:13px; font-weight:600; color:#16161a; }
+  .status .right { display:flex; align-items:center; gap:5px; font-size:11.5px; color:#3c3c43; }
+  .nav { display:flex; align-items:center; gap:10px; padding:6px 14px 10px; }
+  .nav .back { width:30px; height:30px; border-radius:15px; background:#fff; color:#3c3c43;
+               font-size:16px; line-height:30px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .nav .title { font-size:15px; font-weight:600; color:#16161a; }
+  .nav .chip { font-size:11px; font-weight:600; color:#55555e; background:#e4e4ea; border-radius:6px;
+               padding:2px 6px; }
+  .nav .sub { font-size:11.5px; color:#8a8a92; text-align:center; margin-top:-2px; }
+  .nav .share { margin-left:auto; color:var(--brand); font-size:17px; }
+  .banner { display:flex; align-items:center; gap:8px; margin:0 12px 8px; padding:9px 12px;
+            background:#fff; border-radius:10px; font-size:13.5px; color:#16161a;
+            box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .banner .dot { width:8px; height:8px; border-radius:4px; background:var(--mark); flex:none; }
+  .banner .chev { margin-left:auto; color:#c0c0c8; }
+  .stickybar { display:flex; align-items:center; gap:8px; padding:8px 14px; font-size:13.5px;
+               color:#1f2329; background:#f7f7fa; border-top:1px solid #e6e6ec;
+               border-bottom:1px solid #e6e6ec; }
+  .stickybar .up { color:#8a8a92; }
+  .stickybar .when { margin-left:auto; font-size:12.5px; color:#8a8a92; }
+  .scroll { padding:12px 12px 4px; }
+
+  /* 转录里的普通行 */
+  .report { font-size:13.5px; line-height:1.62; color:#1f2329; padding:2px 4px 12px; }
+  .report .label { display:block; font-size:11.5px; font-weight:600; letter-spacing:.03em;
+                   color:#8a8a92; margin-bottom:3px; }
+  .assistant { font-size:13.5px; line-height:1.62; color:#1f2329; padding:2px 4px 12px; }
+  .gapnote { text-align:center; font-size:12px; color:#a0a0a8; padding:2px 0 12px; }
+
+  /* ── 回执行：真 token 的 .settlement-receipt ── */
+  .receipt { border:1px solid #cfe0ff; border-radius:12px; background:var(--ios-card);
+             overflow:hidden; margin-bottom:12px; }
+  .receipt .head { display:flex; align-items:center; gap:8px; padding:11px 13px 0;
+                   font-size:14.5px; font-weight:600; color:var(--brand-strong); }
+  .receipt .tick { width:20px; height:20px; border-radius:10px; background:var(--brand);
+                   color:#fff; font-size:12px; line-height:20px; text-align:center; flex:none; }
+  .receipt .body { padding:6px 13px 12px; }
+  .receipt .claim { font-size:15px; line-height:1.5; color:#16161a; }
+  .receipt .stamp { margin-top:6px; font-size:13px; color:var(--text-2); }
+
+  /* 底部固定区 */
+  .bottom { padding:8px 12px 0; }
+  .jobs { display:flex; align-items:center; gap:8px; padding:11px 13px; background:#fff;
+          border:1px solid #e6e6ec; border-radius:12px; font-size:13.5px; color:#16161a; }
+  .jobs .ico { font-size:12px; color:#8a8a92; }
+  .jobs .n { color:#8a8a92; }
+  .jobs .chev { margin-left:auto; color:#c0c0c8; }
+  .composer { display:flex; align-items:center; gap:10px; margin:9px 0 10px; padding:9px 12px;
+              background:#fff; border:1px solid #e6e6ec; border-radius:22px; }
+  .composer .plus { color:#8a8a92; font-size:17px; }
+  .composer .ph { color:#a8acb3; font-size:14.5px; }
+  .composer .send { margin-left:auto; width:30px; height:30px; border-radius:15px; background:var(--brand); }
+  .pills { display:flex; align-items:center; gap:14px; padding:0 4px 12px; font-size:12.5px; color:#8a8a92; }
+  .pills .gauge { margin-left:auto; color:var(--mark); }
+
+  /* 改动标注 */
+  .mark { position:relative; }
+  .mark:before { content:''; position:absolute; inset:-5px; border:2px dashed var(--mark);
+                 border-radius:11px; pointer-events:none; }
+  .num { position:absolute; top:-11px; right:-11px; width:19px; height:19px; border-radius:10px;
+         background:var(--mark); color:#fff; font-size:11.5px; font-weight:700; line-height:19px;
+         text-align:center; z-index:4; }
+  /* 一组标签：一只胶囊，而不是三个编号 —— 被圈住的是"这一叠" */
+  .mark.stack .num { width:auto; height:20px; line-height:20px; padding:0 8px; border-radius:10px;
+                     font-size:11.5px; }
+  .note { margin-top:34px; max-width:1240px; font-size:13.5px; line-height:1.65; color:#3c3c43;
+          background:#fff; border:1px solid #e2e2e8; border-radius:12px; padding:14px 18px; }
+  .note h2 { font-size:15px; margin:0 0 8px; }
+  .note ul { margin:6px 0 0; padding-left:19px; }
+  .note li { margin-top:5px; }
+  .note .caveat { color:var(--mark); font-weight:600; }
+</style>
+<body>
+
+<h1>owner「Decision recorded」回执：从底部挪回它发生的那个 turn</h1>
+<p class="lede">两版是同一段对话（你 9/20 截图里的那三张）。<b>回执的位置今天由"设备读到它的时刻"决定，不由"它发生的时刻"决定</b>：
+原生把它们当 delivered card 投递，落在投递那一刻的最后一个 item 上，所以晚开的会话/晚到的一次读，三条就一起摞在底部。
+改后按 <code>decidedAt</code> 落位，和 criteria / evidence / settlement 三条回执同一条规则（web 端 owner 回执已经在这么做）。
+报告正文是摘要，长度压过；卡片文案与时间戳照你截图原样。</p>
+
+<div class="row">
+
+  <!-- ── 现在 ── -->
+  <figure>
+    <span class="tag now">现在 · iOS</span>
+    <div class="phone">
+      <div class="status"><span>9:33</span><span class="right">▮▮▮ 5G ▰ 51</span></div>
+      <div class="nav">
+        <span class="back">‹</span>
+        <span class="title">项目推进可靠…</span>
+        <span class="chip">Coordinator</span>
+        <span class="share">⇧</span>
+      </div>
+      <div class="nav sub" style="padding:0 14px 10px;">Running · Open · just now</div>
+      <div class="banner"><span class="dot"></span>Escalated to you · Wikids AI 游戏模…<span class="chev">›</span></div>
+      <div class="stickybar"><span class="up">↑</span>Background job finished 复验 workspace repo UR…<span class="when">just now</span></div>
+      <div class="scroll">
+        <div class="report"><span class="label">报告</span>复验 workspace repo URL 的三条判据已跑完：14 类任务里仍有 3 条 repo_url 为 null，已开单。</div>
+        <div class="report"><span class="label">报告</span>集成线 fixture 的 teardown 已定位：每次跑完漏一个 orbit run 进程，空转到宿主。</div>
+        <div class="report"><span class="label">报告</span>UI 验收 1–6 已逐张对照，产出一份对照表。</div>
+
+        <div class="mark stack"><span class="num">这一叠，全在底部</span>
+          <div class="receipt">
+            <div class="head"><span class="tick">✓</span>Decision recorded</div>
+            <div class="body">
+              <div class="claim">iOS 横幅与推送、macOS 计数覆盖四类 owner 待办</div>
+              <div class="stamp">Confirm done · rev 2 · 19/9/26, 11:47 AM</div>
+            </div>
+          </div>
+          <div class="receipt">
+            <div class="head"><span class="tick">✓</span>Decision recorded</div>
+            <div class="body">
+              <div class="claim">集成线 fixture 的 teardown 杀不掉 runner：每次跑完都漏一个 orbit run 进程，一直空转到宿主上</div>
+              <div class="stamp">Confirm done · rev 1 · 20/9/26, 7:44 PM</div>
+            </div>
+          </div>
+          <div class="receipt" style="margin-bottom:0;">
+            <div class="head"><span class="tick">✓</span>Decision recorded</div>
+            <div class="body">
+              <div class="claim">UI 验收：实现截图与效果图 1–6 逐张对照</div>
+              <div class="stamp">Confirm done · rev 1 · 20/9/26, 9:43 PM</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom">
+        <div class="jobs"><span class="ico">▤</span>Background processes <span class="n">75 total</span><span class="chev">›</span></div>
+        <div class="composer"><span class="plus">＋</span><span class="ph">Message…</span><span class="send"></span></div>
+        <div class="pills"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4…</span><span>Max</span><span class="gauge">◌ 85%</span></div>
+      </div>
+    </div>
+    <figcaption><b>三条回执一起摞在最底下</b>，和最新一条消息之间是"三个决定"与"三份报告"的错位：
+      <ul>
+        <li>三条各自发生在 19/9 11:47、20/9 19:44、20/9 21:43 —— 位置却都由"这次读是什么时候跑到的"决定；</li>
+        <li>同一份记录，当时在场的设备落在当时的位置，隔天打开的会话就落在底部（这张就是）；</li>
+        <li>底部这一叠是"现在要你答的问题"的位置，现在被三条无按钮的历史占着。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ── 改后 ── -->
+  <figure>
+    <span class="tag new">改后 · iOS</span>
+    <div class="phone">
+      <div class="status"><span>9:33</span><span class="right">▮▮▮ 5G ▰ 51</span></div>
+      <div class="nav">
+        <span class="back">‹</span>
+        <span class="title">项目推进可靠…</span>
+        <span class="chip">Coordinator</span>
+        <span class="share">⇧</span>
+      </div>
+      <div class="nav sub" style="padding:0 14px 10px;">Running · Open · just now</div>
+      <div class="banner"><span class="dot"></span>Escalated to you · Wikids AI 游戏模…<span class="chev">›</span></div>
+      <div class="stickybar"><span class="up">↑</span>Background job finished 复验 workspace repo UR…<span class="when">just now</span></div>
+      <div class="scroll">
+        <div class="report"><span class="label">报告</span>复验 workspace repo URL 的三条判据已跑完：14 类任务里仍有 3 条 repo_url 为 null，已开单。</div>
+        <div class="receipt mark"><span class="num">1</span>
+          <div class="head"><span class="tick">✓</span>Decision recorded</div>
+          <div class="body">
+            <div class="claim">iOS 横幅与推送、macOS 计数覆盖四类 owner 待办</div>
+            <div class="stamp">Confirm done · rev 2 · 19/9/26, 11:47 AM</div>
+          </div>
+        </div>
+
+        <div class="report"><span class="label">报告</span>集成线 fixture 的 teardown 已定位：每次跑完漏一个 orbit run 进程，空转到宿主。</div>
+        <div class="receipt mark"><span class="num">2</span>
+          <div class="head"><span class="tick">✓</span>Decision recorded</div>
+          <div class="body">
+            <div class="claim">集成线 fixture 的 teardown 杀不掉 runner：每次跑完都漏一个 orbit run 进程，一直空转到宿主上</div>
+            <div class="stamp">Confirm done · rev 1 · 20/9/26, 7:44 PM</div>
+          </div>
+        </div>
+
+        <div class="report"><span class="label">报告</span>UI 验收 1–6 已逐张对照，产出一份对照表。</div>
+        <div class="receipt mark"><span class="num">3</span>
+          <div class="head"><span class="tick">✓</span>Decision recorded</div>
+          <div class="body">
+            <div class="claim">UI 验收：实现截图与效果图 1–6 逐张对照</div>
+            <div class="stamp">Confirm done · rev 1 · 20/9/26, 9:43 PM</div>
+          </div>
+        </div>
+        <div class="gapnote">— 底部只剩"现在为真"的东西 —</div>
+      </div>
+      <div class="bottom">
+        <div class="jobs"><span class="ico">▤</span>Background processes <span class="n">75 total</span><span class="chev">›</span></div>
+        <div class="composer"><span class="plus">＋</span><span class="ph">Message…</span><span class="send"></span></div>
+        <div class="pills"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4…</span><span>Max</span><span class="gauge">◌ 85%</span></div>
+      </div>
+    </div>
+    <figcaption><b>每条回执贴住它被确认的那份报告</b>，日期与它相邻的消息一致：
+      <ul>
+        <li>位置由 <code>decidedAt</code> 决定：落在"该时刻之前最后一个 item"之后（<code>ReceiptAnchor.after</code>），和 criteria / evidence / settlement 三条回执同一条规则；</li>
+        <li>底部只留"现在为真"的东西：还在跑的报告、要你答的问题卡（问题卡照旧跟尾，不动）；</li>
+        <li>滑到哪一段，就看到那一段当时的决定，不再全挤在末尾。</li>
+      </ul>
+    </figcaption>
+  </figure>
+</div>
+
+<div class="note">
+  <h2>这一改的边界（写进注释的那种）</h2>
+  <ul>
+    <li><b>只动回执，不动问题卡。</b>owner 的<b>问题卡</b>必须继续跟尾 —— 这是 2026-09-16 那次 beta 截图定的：它的"到达"是控制面 read 触发的，早于本轮自己的转录行，锚在"到达时最后一个 item"会让卡片画在它引用的报告上面。<code>OwnerConfirmationPlacementTests</code> 两组用例正是钉这两半。</li>
+    <li><span class="caveat">晚于回执打开的会话：这条回执不画。</span>那一刻早于已加载的每个 item（<code>ReceiptAnchor</code> 返回 nil），和另外三条回执一致 —— 不把一条记录画到不属于它的对话里。</li>
+    <li>web 端这三张（owner 回执）已经按 <code>decidedAt</code> 落位；settlement 确认那条本会话刚从尾部改到同一个规则。两端自此一条规则。</li>
+  </ul>
+</div>
+
+</body>
+</html>

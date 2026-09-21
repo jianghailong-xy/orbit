@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import {
   acceptanceConfirmationKey,
+  type RecordedStandardSetConfirmation,
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
 import {
@@ -21,6 +22,7 @@ import {
   ACCEPTANCE_STARTED,
   CONFIRMATION_NOT_RECORDED,
   CONFIRMATION_UNREAD_EXPLANATION,
+  AcceptanceConfirmationReceipt,
   SessionAcceptanceConfirmationCard,
   acceptanceConfirmationStaleExplanation,
   acceptanceConfirmedLine,
@@ -176,6 +178,21 @@ afterEach(async () => {
 
 /** Every plan the card handed to the composer, in order: what the page would arm the bar with. */
 const armed: Array<{ projectId: string; criteriaDigest: string; projectTitle: string; criteria: string[] }> = [];
+
+/** The record ON ITS OWN, as the conversation draws it: no reads, no queries and nothing to press —
+ *  this file is where its words live, and the placement is the view's to assert. */
+async function mountReceipt(confirmation: RecordedStandardSetConfirmation): Promise<HTMLElement> {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const node = document.createElement('div');
+  document.body.appendChild(node);
+  container = node;
+  const tree = createRoot(node);
+  root = tree;
+  await act(async () => {
+    tree.render(<AcceptanceConfirmationReceipt confirmation={confirmation} />);
+  });
+  return node;
+}
 
 /** A pane per conversation, each holding the card for the project it coordinates — `null` for a
  *  conversation that coordinates none. */
@@ -674,7 +691,9 @@ describe('the two actions, reading the set, and starting the project', () => {
     await act(async () => {
       action(card(), ACCEPTANCE_START_LABEL).click();
     });
-    await until(() => receiptsIn(node).length === 1, 'the record the press left');
+    // What the press leaves on THIS page: the question answered and the standing the door wrote,
+    // which is the same read the conversation draws the record from.
+    await until(() => cardsIn(node).length === 0, 'the answered card to go');
 
     expect(presses()).toEqual([`POST ${STANDING_PATH} ${CURRENT}`]);
     expect(qc.getQueryData(acceptanceConfirmationKey(PROJECT))).toEqual(standingOf('CONFIRMED'));
@@ -682,78 +701,77 @@ describe('the two actions, reading the set, and starting the project', () => {
 });
 
 /**
- * THE RECORD A CONFIRMATION LEAVES, AND WHERE IT COMES FROM.
+ * THE RECORD THIS CARD DOES NOT DRAW.
  *
- * The answer used to be this window's own state: a line printed on the card by the mutation that
- * pressed it. A reload took the decision out of the conversation it was made in — the same defect
- * the three other receipts were fixed for (`decisionReceipt.ts`) — so what is asserted here is that
- * the record is drawn from the READ: on screen with nothing pressed in this window, and again after
- * the reads come round. Every fixture below goes on to show the empty case filling in once the read
- * says something, so a missing record is never a pane that was not going to draw anyway.
+ * The question and the record of its answer have different lives: the question is on screen for as
+ * long as somebody may answer it, and the record is a fact for as long as the project is — including
+ * in conversations that never saw the card, and after the project is done. Held by the card, the
+ * record sat at the BOTTOM of the pane under every later message, in the stack the questions that
+ * are open NOW are drawn in. So the conversation draws it instead, where it happened and at its own
+ * moment (`WorkspaceView`'s `decisionReceipts`, asserted in
+ * `WorkspaceView.acceptanceConfirmationCard.test.tsx`), and what is asserted HERE is this card's
+ * half of the rule: it draws no record in any standing, and the answer still takes the question
+ * away — whether the press was made here or at another end.
+ *
+ * The record's own words are asserted on it directly below, and the reading it is drawn from is
+ * asserted here: a set confirmed at another end, with nothing pressed in this window.
  */
 describe('the record a confirmation leaves', () => {
   const confirmed = (): StandardSetConfirmationStanding => standingOf('CONFIRMED');
-  /** The seal the fixture's record names: the one a stale set was signed on, not the one standing. */
-  const signedSeal = shortSeal(PRIOR);
 
-  it('is drawn from the read: on screen with nothing pressed here, and again after a re-read', async () => {
+  it('is not drawn here: the set is confirmed, no question stands, and this card draws no record', async () => {
     // A set confirmed at ANOTHER end — or a moment ago, on another device: nothing here pressed it.
     server.standing = confirmed();
     const { node, qc } = await mount(PROJECT);
     await readsLanded(qc);
 
     expect(cardsIn(node), 'a confirmed set is not a question, so no card').toHaveLength(0);
-    const [receipt] = receiptsIn(node);
-    expect(receipt, 'the reload took the decision out of the conversation').toBeTruthy();
-    expect(receiptLineOf(receipt!)).toBe(acceptanceConfirmedLine(confirmed().confirmation!));
-    expect(receiptLineOf(receipt!)).toContain(shortSeal(CURRENT));
-    expect(receiptStampOf(receipt!)).toContain('by you at');
-    expect(receipt!.querySelectorAll('button'), 'a record is not a question').toHaveLength(0);
-    expect(presses(), 'a record was drawn without anybody pressing anything here').toEqual([]);
+    expect(
+      receiptsIn(node),
+      'the card kept the record of an answer — it belongs where it happened, not at the pane’s tail',
+    ).toHaveLength(0);
+    expect(presses(), 'the record was drawn off somebody pressing here').toEqual([]);
 
-    // And the read coming round again redraws the same record rather than losing it.
+    // The read coming round again does not put one here either: this is not a state of a poll.
     await reread(qc);
-    expect(receiptsIn(node)).toHaveLength(1);
-    expect(receiptLineOf(receiptsIn(node)[0]!)).toBe(acceptanceConfirmedLine(confirmed().confirmation!));
+    expect(receiptsIn(node)).toHaveLength(0);
   });
 
-  it('names the version that was SIGNED, where the card beside it names the one standing now', async () => {
+  it('keeps the record of the version SIGNED away from the card naming the version standing now', async () => {
     server.standing = standingOf('STALE');
     const { node, qc, card } = await delivered();
     await reread(qc);
 
-    // Two rows, two facts: the record of what somebody agreed to, and the question about what
-    // nobody has agreed to yet.
-    expect(receiptsIn(node)).toHaveLength(1);
+    // One row, one fact: the question about what nobody has agreed to yet.
     expect(cardsIn(node)).toHaveLength(1);
-    expect(receiptLineOf(receiptsIn(node)[0]!)).toContain(signedSeal);
-    expect(receiptLineOf(receiptsIn(node)[0]!)).not.toContain(shortSeal(CURRENT));
+    expect(receiptsIn(node)).toHaveLength(0);
     expect(metaOf(card())).toContain(ACCEPTANCE_CHANGED_SINCE_CONFIRMED);
     expect(metaOf(card())).toContain(shortSeal(CURRENT));
     expect(actionsOf(card()), 'the question is still pressable').toHaveLength(2);
   });
 
-  it('gives way to the record when the press was made HERE, and keeps the card when it was not', async () => {
+  it('goes when the press was made HERE, and is kept when it was not', async () => {
     const { node, card } = await delivered();
     await act(async () => {
       action(card(), ACCEPTANCE_START_LABEL).click();
     });
-    await until(() => receiptsIn(node).length === 1, 'the record of the press');
+    await until(() => cardsIn(node).length === 0, 'the answered card to go');
 
-    expect(cardsIn(node), 'the answered card is still on screen beside its record').toHaveLength(0);
-    expect(receiptLineOf(receiptsIn(node)[0]!))
-      .toBe(acceptanceConfirmedLine(standingOf('CONFIRMED').confirmation!));
-    expect(receiptStampOf(receiptsIn(node)[0]!)).toContain('by you at');
+    // The card gives the question up and keeps nothing else: the record of the press is the
+    // conversation's, drawn at the moment the door took it.
+    expect(receiptsIn(node), 'the card kept a record of the press').toHaveLength(0);
   });
 
   /** The heading is the family's, so the fourth record reads as the same kind of thing as the
-   *  three Orbit already draws into a conversation. */
-  it('is headed the way the other three receipts are', async () => {
-    server.standing = confirmed();
-    const { node, qc } = await mount(PROJECT);
-    await readsLanded(qc);
-    expect(receiptsIn(node)[0]?.querySelector('.settlement-card-heading')?.textContent)
+   *  three Orbit already draws into a conversation — and it is a record: nothing on it presses. */
+  it('is headed the way the other three receipts are, with nothing pressable on it', async () => {
+    const node = await mountReceipt(standingOf('CONFIRMED').confirmation!);
+    const [receipt] = receiptsIn(node);
+    expect(receipt?.querySelector('.settlement-card-heading')?.textContent)
       .toBe(ACCEPTANCE_RECEIPT_HEADING);
+    expect(receiptLineOf(receipt!)).toBe(acceptanceConfirmedLine(standingOf('CONFIRMED').confirmation!));
+    expect(receiptStampOf(receipt!)).toContain('by you at');
+    expect(receipt!.querySelectorAll('button'), 'a record is not a question').toHaveLength(0);
   });
 });
 

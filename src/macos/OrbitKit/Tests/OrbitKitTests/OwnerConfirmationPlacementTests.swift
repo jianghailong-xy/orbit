@@ -41,9 +41,9 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
     }
 
     /// The row the card is asking about: the run's last message, the one it reported.
-    private func report(_ id: String) -> TranscriptItem {
+    private func report(_ id: String, ts: String = "2026-09-16T11:17:04.000Z") -> TranscriptItem {
         .assistant(AssistantBubble(id: id, text: "Done — the gate is green.", streamingText: "",
-                                   seq: 3, turnId: "t1", ts: "2026-09-16T11:17:04.000Z"))
+                                   seq: 3, turnId: "t1", ts: ts))
     }
 
     private func state(_ items: [TranscriptItem]) -> TranscriptState {
@@ -150,29 +150,85 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
                         "acceptance-confirmation", "i2", "transcript-bottom"])
     }
 
-    /// The receipt of an ANSWERED confirmation is a record of something that happened, not a
-    /// question waiting: it is drawn where the reader was when the decision was made and stays
-    /// there. Following the tail would walk one decision's record down past the next one's.
-    func testAnAnsweredConfirmationsReceiptKeepsThePlaceItWasGiven() {
-        let atDelivery = [question("i1")]
-        let receipt = deliveredNow(.ownerDecisionReceipt(taskID: taskID, decisionID: "d1"),
-                                   into: atDelivery)
-        XCTAssertEqual(receipt.afterItemID, "i1")
-        XCTAssertEqual(rows(items: [question("i1"), report("i2")], cards: [receipt]),
-                       ["i1", "owner-decision-receipt-\(taskID)@d1", "i2", "transcript-bottom"])
+    // MARK: the record of an answer, where it was MADE
+
+    private static let reportSession = "34JbyLO3TvHgOmBBHLgZu"
+    private var receiptID: String { "owner-decision-receipt-\(taskID)@d1" }
+
+    private func decision(_ id: String, at stamp: String,
+                          sessionId: String? = reportSession) -> RecordedOwnerDecision {
+        RecordedOwnerDecision(id: id, decision: .confirm, decidedAt: stamp, requestId: requestID,
+                              sessionId: sessionId)
+    }
+
+    private func read(_ decisions: [RecordedOwnerDecision]) -> OwnerConfirmationView {
+        OwnerConfirmationView(taskId: taskID, title: "把确认卡接到原生端", status: "OPEN",
+                              projectId: nil, completionCriterion: "OWNER_CONFIRMED",
+                              acceptanceCriteria: "原生端能确认，且与 web 同一句话。",
+                              waiting: nil, decisions: decisions)
+    }
+
+    /// The card the console adopts for a receipt, built the way `adoptOwnerReceipts` builds it.
+    private func card(_ receipt: OwnerConfirmations.Receipt) -> DeliveredDecisionCard {
+        DeliveredDecisionCard(kind: .ownerDecisionReceipt(taskID: receipt.taskId,
+                                                          decisionID: receipt.decided.id),
+                              afterItemID: receipt.afterItemID)
+    }
+
+    /// The record of an ANSWERED confirmation is a record of something that happened, not a question
+    /// waiting: it goes where it happened. The report it is about carries the clock before it, so
+    /// the receipt lands under that REPORT — and above a row that arrived later, which is what tells
+    /// the two rules apart: the last row loaded at this instant is i4, and a record placed by when
+    /// it was read would sit under that instead.
+    func testAnAnsweredReportsReceiptIsDrawnWhereTheDecisionWasMade() {
+        let items = [question("i1"), thought("i2"), report("i3"),
+                     report("i4", ts: "2026-09-16T12:00:00.000Z")]
+        // The press that answered i3's report: seconds after the report's own clock, an hour before
+        // the next row's.
+        let receipts = OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-16T11:17:05.000Z")]),
+                                                   sessionID: Self.reportSession, items: items)
+        XCTAssertEqual(receipts.map(\.afterItemID), ["i3"])
+        XCTAssertEqual(receipts.map(\.id), [receiptID])
+        XCTAssertEqual(rows(items: items, cards: receipts.map(card)),
+                       ["i1", "i2", "i3", receiptID, "i4", "transcript-bottom"])
+    }
+
+    /// THE SCREENSHOT'S CASE. The conversation ran for a day after the decisions; this console
+    /// holds only the tail of it, so every clocked row is LATER than the three decisions. None can
+    /// be placed, and none is drawn — the stack of three at the bottom of the pane was the arrival
+    /// anchor, and drawing an unplaceable record at the tail would be the same defect spelled out.
+    func testADecisionOlderThanEveryLoadedRowIsNotDrawnAtTheTailInstead() {
+        let items = [question("i1"), thought("i2"), report("i3")]
+        XCTAssertEqual(
+            OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-15T09:00:00.000Z")]),
+                                        sessionID: Self.reportSession, items: items),
+            [])
+        XCTAssertEqual(rows(items: items, cards: []),
+                       ["i1", "i2", "i3", "transcript-bottom"])
     }
 
     /// A newer report while an older decision's receipt is on screen: the receipt keeps its place up
-    /// in the conversation and the new question trails below everything. Both halves of the rule at
-    /// once, in the order a reader would have lived through them.
+    /// in the conversation and the next question trails below everything. Both halves of the rule at
+    /// once, in the order a reader would have lived through them — a record is placed by its own
+    /// moment, a question by what it is about.
     func testAReceiptAboveAndTheNextQuestionBelowInOneTranscript() {
-        let receipt = deliveredNow(.ownerDecisionReceipt(taskID: taskID, decisionID: "d1"),
-                                   into: [question("i1")])
-        let next = deliveredNow(confirmation(), into: [question("i1"), report("i2")])
-        XCTAssertEqual(rows(items: [question("i1"), report("i2"), report("i3")],
-                            cards: [receipt, next]),
-                       ["i1", "owner-decision-receipt-\(taskID)@d1", "i2", "i3", cardID,
-                        "transcript-bottom"])
+        let items = [question("i1"), thought("i2"), report("i3")]
+        let receipts = OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-16T11:17:05.000Z")]),
+                                                   sessionID: Self.reportSession, items: items)
+        let next = deliveredNow(confirmation(), into: items + [report("i4")])
+        XCTAssertEqual(rows(items: items + [report("i4")], cards: receipts.map(card) + [next]),
+                       ["i1", "i2", "i3", receiptID, "i4", cardID, "transcript-bottom"])
+    }
+
+    /// A decision that answered ANOTHER session's run belongs to that session and never to this one,
+    /// whatever the clock says — the same filter the question card is under (`receiptsIn`).
+    func testAReceiptForAnotherSessionsRunIsNotDrawnHere() {
+        let items = [question("i1"), thought("i2"), report("i3")]
+        XCTAssertEqual(
+            OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-16T11:17:05.000Z",
+                                                       sessionId: "34AnotherSession")]),
+                                        sessionID: Self.reportSession, items: items),
+            [])
     }
 
     // MARK: the wire from the console to the rule
@@ -243,5 +299,30 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
             "the waiting question is delivered by the anchor-less deliver(_:)")
         XCTAssertFalse(body.contains("anchoredAt:"),
                        "an anchor spelled in here would route around the rule above")
+    }
+
+    /// And the third thing the same read does: the owner's RECEIPTS are adopted by their own moment
+    /// rather than handed to the delivery path. Delivered, they anchor to what was last when THIS
+    /// device's read came back, which is the stack at the bottom of the 2026-09-20 screenshot; the
+    /// rule that places them is `OwnerConfirmations.receipts`, and this is the only gate that sees
+    /// whether the console still asks it.
+    func testTheOwnerReceiptsAreAdoptedByTheirMomentAndNotDelivered() throws {
+        let source = try source(Self.consolePath)
+        let refresh = try section(source,
+                                  from: "func refreshOwnerConfirmation(force: Bool = false) async {",
+                                  to: "func ownerStanding(")
+        XCTAssertTrue(refresh.contains("adoptOwnerReceipts(read)"),
+                      "the read no longer draws its receipts where they were made")
+        XCTAssertFalse(refresh.contains("deliver(.ownerDecisionReceipt"),
+                       "delivering a receipt anchors it to the moment this device read the answer, "
+                       + "which is what piled three of them at the bottom of the conversation")
+
+        let adopt = try section(source, from: "private func adoptOwnerReceipts(",
+                                to: "/// Where one delivered proposal stands right now")
+        XCTAssertTrue(
+            adopt.contains("OwnerConfirmations.receipts(read, sessionID: sessionID, items: state.items)"),
+            "the receipt's place is the door's own clock, and the console has to ask for it")
+        XCTAssertTrue(adopt.contains("afterItemID: receipt.afterItemID"),
+                      "the adopted row must carry the anchor the rule computed, not one of its own")
     }
 }

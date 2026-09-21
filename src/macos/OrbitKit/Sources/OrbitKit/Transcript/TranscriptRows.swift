@@ -216,10 +216,13 @@ public enum DeliveryAnchor {
         // The two owner cards anchor where they arrived, like every question the platform files:
         // what they are about happened before the read that found them.
         //
-        // The confirmation's receipt is placed by the door's own clock rather than here
-        // (`AcceptanceConfirmations.receipt`), like the two receipts above it: a record has no
-        // arrival of its own on a device that was not there. It answers the same question this
-        // switch asks — where a row delivered RIGHT NOW would go — and it is not delivered that way.
+        // All FOUR receipts are placed by the door's own clock rather than here —
+        // `CriteriaDecisions.receipts`, `EvidenceDecisions.receipts`,
+        // `AcceptanceConfirmations.receipt` and `OwnerConfirmations.receipts`: a record has no
+        // arrival of its own on a device that was not there. They answer the same question this
+        // switch asks — where a row delivered RIGHT NOW would go — and none of them is delivered
+        // that way. The last of them arrived here first, and the owner's iOS screenshot of
+        // 2026-09-20 is what that cost: three records stacked under the newest row.
         case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,

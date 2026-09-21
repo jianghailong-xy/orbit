@@ -205,6 +205,7 @@ import { CoordinatorQuestions } from './CoordinatorQuestionCard';
 import { ProjectExceptionCards } from './ProjectProgressStatus';
 import { ProjectPromotion } from './ProjectPromotionCard';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
+import { acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
 import {
   DECISION_SEND_BACK_LABEL,
   DECISION_SENDING_BACK_PREFIX,
@@ -217,6 +218,7 @@ import {
 import {
   ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
   ACCEPTANCE_PLAN_CHANGE_PREFIX,
+  AcceptanceConfirmationReceipt,
   SessionAcceptanceConfirmationCard,
   acceptancePlanChangeContext,
 } from './AcceptanceConfirmationCard';
@@ -3480,6 +3482,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     Record<string, CriteriaDecisionReply | null>
   >({});
 
+  // The confirmation somebody signed for this project's criteria, for the record of it
+  // (`AcceptanceConfirmationReceipt` below) — the fourth receipt, on the same query key the
+  // settlement card asks its question from, so a press there draws the record here with no second
+  // request. Distinct from the card: WHETHER the question is still open is the card's business and
+  // is asked of the same read (`SessionAcceptanceConfirmationCard`).
+  const acceptanceConfirmation = useQuery({
+    ...acceptanceConfirmationQuery(coordinatedProjectId ?? ''),
+    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+  });
+
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
   // the card's own filter over the same read and the project this session coordinates. The strip
   // counts and points at those and no others; a row this conversation draws no card for is counted
@@ -3539,9 +3551,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }, [qc, selectedTaskId, selectedRunMoment]);
 
   // The decisions this conversation has recorded, drawn into the transcript at the moment each was
-  // made (`EvidenceDecisionReceipt`, `CriteriaDecisionReceipt`, `OwnerDecisionReceipt`). Memoized
-  // because `Transcript` is: a fresh array on every render would rebuild the whole conversation
-  // with it.
+  // made (`EvidenceDecisionReceipt`, `CriteriaDecisionReceipt`, `OwnerDecisionReceipt`,
+  // `AcceptanceConfirmationReceipt`). Memoized because `Transcript` is: a fresh array on every
+  // render would rebuild the whole conversation with it.
   const decisionReceipts = useMemo(
     () => [
       ...criteriaDecisionReceiptRows(criteriaDecisions.data, transcriptEvents, criteriaReplies)
@@ -3570,8 +3582,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               element: <OwnerDecisionReceipt view={ownerConfirmation.data} decided={decided} />,
             }];
       }),
+      // The set somebody signed for this project, at the moment they signed it. This one is the
+      // settlement card's record and not its question: held by the card, it sat at the BOTTOM of
+      // the pane for the life of the project — under every later message, in conversations started
+      // long after, and after the project was done — which is where the questions that are open NOW
+      // belong. The native clients have always placed it this way (`AcceptanceConfirmations.receipt`
+      // + `ReceiptAnchor.after`), and a moment older than every loaded event is a record of a
+      // conversation this one is not: drawn nowhere, rather than at the top of somebody else's.
+      ...[acceptanceConfirmation.data?.confirmation].flatMap((confirmation) => {
+        if (!confirmation) return [];
+        const afterSeq = decisionReceiptAnchor(transcriptEvents, confirmation.confirmedAt);
+        return afterSeq === null
+          ? []
+          : [{
+              afterSeq,
+              key: `acceptance-receipt:${confirmation.confirmedAt}`,
+              element: <AcceptanceConfirmationReceipt confirmation={confirmation} />,
+            }];
+      }),
     ],
     [
+      acceptanceConfirmation.data,
       criteriaDecisions.data,
       criteriaReplies,
       pendingDecisions.data,

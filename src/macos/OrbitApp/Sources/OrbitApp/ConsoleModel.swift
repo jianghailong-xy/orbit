@@ -2383,6 +2383,26 @@ final class ConsoleModel {
             afterItemID: receipt.afterItemID))
     }
 
+    /// The same, for the decisions this session's runs have already recorded: each drawn where it
+    /// was DECIDED, off the door's own clock (`OwnerConfirmations.receipts`).
+    ///
+    /// These used to be delivered as cards, which placed them where this DEVICE read the answer —
+    /// the same place as the decision only on the console that was there to see it. Everywhere else
+    /// it stacked the history under the newest row: the account owner's iOS screenshot, 2026-09-20,
+    /// three `Decision recorded` cards at the bottom of a conversation that had run for a day after
+    /// them. The question card is untouched by this — its arrival is somebody else's clock, which is
+    /// what `DeliveryAnchor` says — and so is a decision the read stops publishing: a row already
+    /// adopted keeps its place, for `adoptReceipts`' reason.
+    private func adoptOwnerReceipts(_ read: OwnerConfirmationView) {
+        for receipt in OwnerConfirmations.receipts(read, sessionID: sessionID, items: state.items) {
+            guard !closedCards.contains(receipt.id),
+                  !decisionCards.contains(where: { $0.id == receipt.id }) else { continue }
+            decisionCards.append(DeliveredDecisionCard(
+                kind: .ownerDecisionReceipt(taskID: receipt.taskId, decisionID: receipt.decided.id),
+                afterItemID: receipt.afterItemID))
+        }
+    }
+
     /// Where one delivered proposal stands right now — the whole of what decides whether its
     /// buttons may be pressed, and never a frame this card kept.
     func criteriaStanding(_ intentID: String) -> CriteriaDecisionStanding {
@@ -2432,20 +2452,11 @@ final class ConsoleModel {
             if let waiting = OwnerConfirmations.waitingIn(read, sessionID: sessionID) {
                 deliver(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
             }
-            // The receipts this conversation has recorded, oldest first — from the read rather than
-            // from the press, so a reload or another device shows them too. They arrive where the
-            // conversation is, like every other delivered card, and the line names its own moment
-            // ("Confirmed done by you · 9/14 08:42").
-            //
-            // That placement is this path's, not the rule's: it was written when only a user bubble
-            // and a thinking stretch carried a clock, so there was no item to anchor a record
-            // between. Items carry one now (`TranscriptItem.clock`, added with the criteria and
-            // evidence receipts) and those two place themselves by `ReceiptAnchor`; anchoring these
-            // in flow where they happened would be the same move, and is left for whoever wants it
-            // — the read this draws from publishes each decision's `decidedAt`.
-            for decided in OwnerConfirmations.receiptsIn(read, sessionID: sessionID) {
-                deliver(.ownerDecisionReceipt(taskID: taskID, decisionID: decided.id))
-            }
+            // The receipts this conversation has recorded — from the read rather than from the
+            // press, so a reload or another device shows them too. Each is drawn where it was
+            // DECIDED (`adoptOwnerReceipts`), and the line names that moment itself
+            // ("Confirm done · rev 2 · 19/9/26, 11:47 AM").
+            adoptOwnerReceipts(read)
         }
         lastOwnerRead = Date()
     }

@@ -153,6 +153,9 @@ class FakeEventSource {
 /** Every path the page asked the api for, in order. */
 const requested: string[] = [];
 const unstubbed: string[] = [];
+/** The standing the confirmation door serves: `UNCONFIRMED` for most cases, and a case that is
+ *  about the RECORD sets one with a confirmation on it. Reset per case like every other stub. */
+let confirmationStanding: StandardSetConfirmationStanding = STANDING;
 let confirmationReads = 0;
 let criteriaReads = 0;
 let navigateTo: NavigateFunction | null = null;
@@ -177,6 +180,7 @@ beforeEach(() => {
   FakeEventSource.open = [];
   requested.length = 0;
   unstubbed.length = 0;
+  confirmationStanding = STANDING;
   confirmationReads = 0;
   criteriaReads = 0;
   navigateTo = null;
@@ -206,7 +210,7 @@ beforeEach(() => {
     requested.push(path);
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/confirmation`) {
       confirmationReads += 1;
-      return reply(STANDING);
+      return reply(confirmationStanding);
     }
     if (path === `/projects/${PROJECT_PUBLIC}`) {
       // `_count` is the fourth fact the card's condition turns on — a project with nothing filed
@@ -390,6 +394,104 @@ describe('the settlement confirmation card in WorkspaceView', { timeout: 60_000 
     await waitForUi(() => {
       expect(count('.settlement-card')).toBe(1);
     });
+  });
+});
+
+/**
+ * THE RECORD WHERE IT HAPPENED, AND NOT AT THE TAIL OF THE PANE.
+ *
+ * The QUESTION is drawn at the bottom of the conversation and belongs there: it is true now, and
+ * the pinned strip points down at it. The record of the answer is not that — it is a fact about a
+ * moment — and held by the card it sat under every later message for the life of the project, in
+ * conversations started long afterwards and after the project was done. Only the view can hold
+ * this: it is a fact about where a row lands in a transcript that moves, off the same read the
+ * card asks its question from (`acceptanceConfirmationQuery`).
+ */
+describe('the record a confirmation leaves, in the conversation it was made in', { timeout: 60_000 }, () => {
+  const OPENING_AT = '2026-09-11T03:10:00Z';
+  /** After the opening event and before every later one, so where the record belongs is a fact
+   *  about the transcript rather than about which poll happened to land first. */
+  const SIGNED_AT = '2026-09-11T03:10:30Z';
+
+  /** The set somebody signed, at `at`. */
+  const signed = (at = SIGNED_AT): StandardSetConfirmationStanding => ({
+    state: 'CONFIRMED',
+    confirmed: true,
+    currentVersion: STANDING.currentVersion,
+    confirmation: {
+      criteriaDigest: SEAL,
+      criteriaMaterial: STANDING.currentVersion.material,
+      confirmedAt: at,
+      confirmedById: 'user-1',
+    },
+  });
+
+  it('is drawn among the events, above what came after it, and not at the pane’s tail', async () => {
+    confirmationStanding = signed();
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.settlement-receipt')).toBe(1);
+    });
+    // A signed set is not a question, so no card is drawn beside the record.
+    expect(count('.settlement-card')).toBe(0);
+
+    await note(COORDINATOR_PUBLIC, 2);
+    const receipt = mounted().querySelector<HTMLElement>('.settlement-receipt')!;
+    const later = mounted().querySelector<HTMLElement>('[data-seq="3"]');
+    expect(later, 'the message published after the signing is not in the conversation').toBeTruthy();
+    expect(
+      receipt.compareDocumentPosition(later!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the record is drawn below a message that came after it — a tail, not the moment it happened',
+    ).toBeTruthy();
+    // And it is IN the flow: the next thing after it is an event, which no tail card can be.
+    expect(receipt.nextElementSibling?.hasAttribute('data-seq')).toBe(true);
+    // Nothing pressable on a record, wherever it is drawn.
+    expect(receipt.querySelectorAll('button'), 'a record is not a question').toHaveLength(0);
+  });
+
+  it('is drawn once, through every re-read of the read it comes from', async () => {
+    confirmationStanding = signed();
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.settlement-receipt')).toBe(1);
+    });
+    for (const round of [1, 2]) {
+      await note(COORDINATOR_PUBLIC, round);
+      await reread(acceptanceConfirmationKey(PROJECT_PUBLIC), () => confirmationReads);
+    }
+    expect(count('.settlement-receipt'), 'a re-read drew a second copy of one record').toBe(1);
+  });
+
+  /**
+   * A record older than every event this device holds is a record of a conversation this one is
+   * not: a coordinator conversation opened a month after the set was signed. The native clients
+   * drop it for the same reason (`ReceiptAnchor.after` returns nil), and drawing it anyway is what
+   * put the day-one receipt under the newest message in every conversation the project ever had.
+   */
+  it('is drawn in no conversation whose window begins after it was signed', async () => {
+    confirmationStanding = signed(OPENING_AT.replace('03:10:00', '02:00:00'));
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(mounted().textContent).toContain(`${NOTE[COORDINATOR_PUBLIC]}, opening`);
+    });
+    await note(COORDINATOR_PUBLIC, 1);
+    expect(
+      count('.settlement-receipt'),
+      'a record older than every loaded event was drawn — about a conversation this is not',
+    ).toBe(0);
+  });
+
+  it('is drawn in no conversation that coordinates no project, which reads nothing for one', async () => {
+    confirmationStanding = signed();
+    await mount(`/sessions/${ORDINARY_PUBLIC}`);
+    await waitForUi(() => {
+      expect(mounted().textContent).toContain(`${NOTE[ORDINARY_PUBLIC]}, opening`);
+    });
+    expect(count('.settlement-receipt')).toBe(0);
+    expect(
+      requested.filter((path) => path.endsWith('/acceptance/confirmation')),
+      'a conversation with no project read the confirmation door',
+    ).toEqual([]);
   });
 });
 

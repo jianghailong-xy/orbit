@@ -62,6 +62,19 @@ export const readAcceptanceConfirmation = (
 ): Promise<StandardSetConfirmationStanding> =>
   api<StandardSetConfirmationStanding>(confirmationPath(projectId));
 
+/** The read as a query, for the TWO readers of it: the card that asks the question
+ *  (`AcceptanceConfirmationCard.tsx`) and the conversation that draws the record of the answer
+ *  where it happened (`WorkspaceView.tsx`'s `decisionReceipts`). One key between them, so a press
+ *  at this door draws the record without a second request, and a confirmation made at another end
+ *  arrives at both together.
+ *
+ *  Both poll: the door is written by a person at either end, and no push stream mentions it. */
+export const acceptanceConfirmationQuery = (projectId: string) => ({
+  queryKey: acceptanceConfirmationKey(projectId),
+  queryFn: () => readAcceptanceConfirmation(projectId),
+  refetchInterval: 20_000,
+});
+
 /** The write. The digest is REQUIRED by the door and is the whole point of it: without naming a
  *  version, "confirm the criteria" would mean "confirm whatever they say when this request
  *  lands", and an edit arriving between the render and the click would be signed unread. */
