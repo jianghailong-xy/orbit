@@ -1297,6 +1297,20 @@ export function takeBudget(
   return true;
 }
 
+/**
+ * The LIST dimension alone, read without spending anything.
+ *
+ * `takeBudget` refuses for either dimension and answers as one refusal, which is what the dispatch
+ * loop needs and not what a per-list report needs: "the machine is busy" and "this campaign is at
+ * its own ceiling" are different sentences, and only the second one is about the list. Read through
+ * the same map the same way rather than re-derived at the call site — a call site spelling
+ * `left <= 0` itself would be a second copy of this rule, and the two would drift.
+ */
+export function listBudgetSpent(budget: MaterialisationBudget, listId: string | null): boolean {
+  if (!listId) return false;
+  const left = budget.list.get(listId);
+  return left !== undefined && left <= 0;
+}
 
 export const FOREMAN_RETRY_BACKOFF_MS = [30 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000];
 export const MAX_CONSECUTIVE_FOREMEN = FOREMAN_RETRY_BACKOFF_MS.length + 1;
@@ -8835,21 +8849,46 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       const candidates = await this.prisma.$queryRaw<
-        Array<{ id: string; dispatchEpoch: bigint | null }>
+        Array<{
+          id: string;
+          dispatchEpoch: bigint | null;
+          listId: string | null;
+          runnerId: string | null;
+        }>
       >(Prisma.sql`
-        SELECT t.id, e.epoch AS "dispatchEpoch"
+        SELECT t.id, e.epoch AS "dispatchEpoch",
+               t.list_id AS "listId",
+               a.runner_id AS "runnerId"
           FROM task t
           -- 0137's dispatch epoch, joined into the scan that selects the candidate so the fence
           -- carries the moment every clause below was evaluated against, exactly as the two sweeps
           -- do it. A second read would be a second snapshot.
           LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
+          -- The runner, joined for the same reason: the budget below spends two dimensions and this
+          -- is the statement that already knows both of them. PROJECT_INDEPENDENT_READY_SQL
+          -- requires a bound runner (a.runner_id IS NOT NULL), so this join adds no row and the
+          -- column cannot be null for a candidate the predicate let through.
+          LEFT JOIN workspace a ON a.id = t.assignee_id
          WHERE t.project_id = ${projectId}::uuid
            AND t.owner_id = ${ownerId}::uuid
            AND ${PROJECT_INDEPENDENT_READY_SQL}
          -- Oldest first: with more ready tasks than budget, the one that has waited longest goes.
          ORDER BY t.created_at, t.id
          LIMIT ${room.free}`);
+      // The same MATERIALISATION budget the sweep and the completion edge spend, read once outside
+      // the loop as they both read it. The Project's own `max_concurrent_tasks` above answers "may
+      // this Project start anything"; this answers "is there anywhere for it to land" — and the two
+      // are not the same question, which is how a release could put runs past the LIST's ceiling.
+      // A copy of a run is counted by `materialisationBudget`, so going past that ceiling takes the
+      // list's own `free` negative and stops its auto-run sweep entirely: on 2026-09-21 six runs
+      // reached a cap-of-one list that way (through the dependency edge, whose fix is ab4d8c170) and
+      // the queue then sat for ten hours reading, from outside, as a runner that would not pick work
+      // up. This pass is the third door into the same dispatch and it holds the same rule: the rule
+      // is about the WORK, not about which door is asking. Refused here, the task keeps its OPEN row
+      // and its READY state, and the periodic sweep materialises it the moment a slot frees.
+      const budget = await this.materialisationBudget();
       for (const candidate of candidates) {
+        if (!takeBudget(budget, candidate.runnerId!, candidate.listId)) continue; // left to the sweep
         try {
           await this.dispatchReadyTask(ownerId, candidate.id, candidate.dispatchEpoch ?? 0n);
         } catch (e) {
@@ -9153,12 +9192,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let resumesAt: Date | undefined;
     // Per list as well as in total. The aggregate below answers "is the fleet moving"; a list's
     // own console needs "is MY campaign moving", and one spent provider quota holds back every
-    // list assigned to that runner at once.
-    const perList = new Map<string, { quota: number; disk: number; resumesAt?: Date }>();
+    // list assigned to that runner at once. `cap` is the same question one level down and the one
+    // the incident's operator had no way to ask: the list's OWN ceiling, spent by this sweep.
+    const perList = new Map<
+      string,
+      { quota: number; disk: number; cap: number; resumesAt?: Date }
+    >();
     const holdFor = (listId: string | null) => {
       if (!listId) return null;
       let e = perList.get(listId);
-      if (!e) perList.set(listId, (e = { quota: 0, disk: 0 }));
+      if (!e) perList.set(listId, (e = { quota: 0, disk: 0, cap: 0 }));
       return e;
     };
     for (const t of ready) {
@@ -9191,6 +9234,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // description — so a second copy of it in `session` buys nothing until a slot exists.
       if (!takeBudget(budget, t.assignee.runnerId!, t.listId)) {
         atCapacity += 1;
+        // Counted apart when it is the LIST that ran out, so that a campaign at its own ceiling can
+        // say so on the list — where the operator is looking — instead of only in an aggregate log
+        // line about "no free slot". The state this names is the one that hides worst: going past a
+        // ceiling takes the budget negative, and a negative budget means this very sweep
+        // materialises NOTHING for that list until the queue drains below the cap. It keeps
+        // materialising for every other list, so the fleet looks healthy while one campaign is
+        // wedged, and on 2026-09-21 that read from outside as a runner that would not pick work up.
+        if (listBudgetSpent(budget, t.listId)) {
+          const e = holdFor(t.listId);
+          if (e) e.cap += 1;
+        }
         continue;
       }
       try {
@@ -9247,6 +9301,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           listId,
           'disk_hold',
           `${e.disk} 个就绪任务被磁盘下限挡住 —— 空间要由人来腾，不会自己恢复`,
+        );
+      }
+      if (e.cap > 0) {
+        await this.recordListEvent(
+          listId,
+          'cap_hold',
+          `${e.cap} 个就绪任务因为本列表已到并发上限而没被物化 —— auto-run 要等队列消化到上限以下才恢复`,
         );
       }
     }

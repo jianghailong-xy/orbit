@@ -8602,6 +8602,43 @@ button.composer-usage:focus-visible {
   gap: 4px;
   flex: none;
 }
+/* Phone: four presses beside the title do not fit. The title is the flex remainder (flex:1;
+   min-width:0), so it was squeezed to one CJK character per line while the actions kept their
+   width. Below 600px the actions take a row of their own — each growing into the space, and
+   wrapping when a label is long — while the panel's two window buttons (🗑 ✕) stay up beside the
+   title, at 40px: the touch target the composer's buttons take at this width. */
+@media (max-width: 600px) {
+  .tdp-head {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+  .tdp-head > .ant-btn-icon-only {
+    /* Ordered ahead of the actions, which come after them in the markup: with wrap, order is what
+       decides which line each lands on, and these two have to stay on the title's. */
+    order: 1;
+    width: 40px;
+    height: 40px;
+  }
+  .tdp-head-actions {
+    order: 2;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .tdp-head-actions > * {
+    flex: 1 1 0;
+  }
+  .tdp-head-actions > .ant-btn {
+    height: 40px;
+  }
+  /* Run now sits in a span — the Tooltip needs it to still fire while the button is disabled —
+     and the running-session case in a Link. Stretch what is inside those two as well. */
+  .tdp-head-actions > a > .ant-btn,
+  .tdp-head-actions > span > .ant-btn {
+    flex: 1;
+    height: 40px;
+  }
+}
 .tdp-title {
   font-size: 16px;
   font-weight: 600;

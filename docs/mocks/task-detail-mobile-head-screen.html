@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh" data-variant="now">
+<meta charset="utf-8">
+<title>任务详情面板 · 手机宽度（393pt）</title>
+<!--
+  屏幕本体：一屏 393×852（iPhone 14/15/16 的 CSS 宽，与用户截图同）。被
+  task-detail-mobile-head.html 用 iframe 各引一份，?variant=now|a|b 选头部画法。
+  iframe 的视口就是 393，所以 index.css 里 ≤960px / ≤600px 的移动端媒体查询是真的生效的：
+  现状那一版不做任何覆盖，就是生产在手机上的样子。
+
+  结构与类名照 src/web/src/components/TaskDetailPanel.tsx 的 `tdp-head` 一段；样式全部来自
+  src/web/src/index.css（本 worktree HEAD ab4d8c170，与 origin/main d0bae85bc 在相关类上零 diff）。
+  三处 mock 自有，别读成生产样式：
+   ① body 归零 —— 生产里这一步由 antd 的 reset 提供，静态页拿不到；
+   ② .ant-btn / .anticon 的静态替身 —— antd 的按钮样式是 CSS-in-JS、图标是 React 组件，
+      静态页里都拿不到，几何照 antd 默认（高 32、padding 0 15、圆角 6、字号 14、icon-only 宽 32），
+      品牌色取 index.css 的 --brand；图标是手绘等价形状（play-circle / trash / close / check），
+      不是 @ant-design/icons 的原始 path。
+   ③ 变体 A/B 的覆盖块 —— 那两段就是要落的补丁（真实补丁的选择器不带 html[data-variant] 前缀）。
+
+  另：DOM 里 🗑 与 ✕ 已提成 .tdp-head 的直接子级（补丁的一部分：它们是这个浮层的窗口按钮，不是
+  「对任务做什么」的操作，移动端要和 ✕ 一起留在标题那一行）。桌面上顺序不变，只差 4pt 间距 ——
+  .tdp-head 的 gap 是 8、.tdp-head-actions 的是 4。现状那一版据此渲染仍与生产一致：
+  这两个按钮本来就在这一行最末。
+-->
+<link rel="stylesheet" href="../../src/web/src/index.css">
+<style>
+  /* ① 生产里由 antd reset 提供 */
+  html, body { margin: 0; }
+  body { background: var(--bg-base); }
+
+  /* ② antd 按钮 / 图标的静态替身（几何照 antd 默认值） */
+  .ant-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 32px; padding: 0 15px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-1);
+    font: 14px/1 inherit; font-family: inherit; white-space: nowrap;
+  }
+  .ant-btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 500; }
+  .ant-btn-icon-only { width: 32px; padding: 0; border-color: transparent; background: transparent; color: var(--text-2); }
+  .ant-btn-icon-only.ant-btn-dangerous { color: var(--error); }
+  .anticon { width: 14px; height: 14px; flex: none; display: inline-block; }
+  .anticon.stroke { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .avatar {
+    width: 18px; height: 18px; border-radius: 50%; flex: none;
+    background: var(--brand-tint-hover); color: var(--brand);
+    font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;
+  }
+  /* Details 里的下拉（antd Select）：值占满一行，后缀贴右 —— 生产里由 Select 自己画 */
+  .mock-select { display: flex; align-items: center; gap: 6px; }
+  .mock-select .mock-suffix { margin-left: auto; color: var(--text-3); display: inline-flex; }
+  /* 输入框（antd TextArea）：≤600px 时 index.css 已把它抬到 16px，这里只补外观 */
+  .tdp-compose textarea.ant-input {
+    flex: 1; min-width: 0; resize: none; padding: 5px 11px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-1);
+    font-family: inherit; line-height: 1.5;
+  }
+
+  /* ③-A 拟落的补丁 A（推荐）：标题 / 🗑 ✕ 占第一行，两个操作按钮等宽平分第二行 */
+  @media (max-width: 600px) {
+    html[data-variant="a"] .tdp-head { flex-wrap: wrap; row-gap: 12px; }
+    html[data-variant="a"] .tdp-head > .ant-btn-icon-only { order: 1; width: 40px; height: 40px; }
+    html[data-variant="a"] .tdp-head-actions { order: 2; flex: 1 1 100%; flex-wrap: wrap; gap: 8px; }
+    html[data-variant="a"] .tdp-head-actions > .ant-btn { flex: 1 1 0; height: 40px; }
+  }
+
+  /* ③-B 对照：照 .card-actions 的移动端先例，两个操作按钮竖排撑满 */
+  @media (max-width: 600px) {
+    html[data-variant="b"] .tdp-head { flex-wrap: wrap; row-gap: 12px; }
+    html[data-variant="b"] .tdp-head > .ant-btn-icon-only { order: 1; width: 40px; height: 40px; }
+    html[data-variant="b"] .tdp-head-actions { order: 2; flex: 1 1 100%; flex-direction: column; align-items: stretch; gap: 8px; }
+    html[data-variant="b"] .tdp-head-actions > .ant-btn { width: 100%; height: 40px; }
+  }
+</style>
+<body>
+  <aside class="task-detail-panel">
+    <div class="tdp-head">
+      <div class="tdp-head-main">
+        <div class="tdp-title">UI 验收：实现截图与效果图 1–6 逐张对照</div>
+        <div class="tdp-meta">
+          <span class="tdp-badge tone-green">Done</span>
+          <span class="tdp-meta-item"><span class="avatar">O</span>orbit</span>
+          <span class="tdp-meta-item muted">· 14 Sep at 1:46 AM</span>
+        </div>
+        <div class="tdp-judgment is-judged">
+          <svg class="anticon stroke" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.6l3.3 3.3L13 5.2"/></svg>
+          <span>Judged by · submitted evidence</span>
+        </div>
+      </div>
+      <div class="tdp-head-actions">
+        <button class="ant-btn" type="button">Reopen task</button>
+        <button class="ant-btn ant-btn-primary" type="button">
+          <svg class="anticon" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M6.6 5.4L11 8l-4.4 2.6z" fill="currentColor"/>
+          </svg>
+          Run now
+        </button>
+      </div>
+      <button class="ant-btn ant-btn-icon-only ant-btn-dangerous" type="button" aria-label="Delete task">
+        <svg class="anticon stroke" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M2.6 4.4h10.8M6.2 4.4V3.2h3.6v1.2M4 4.4l.6 8.2h6.8l.6-8.2M6.6 6.6v3.8M9.4 6.6v3.8"/>
+        </svg>
+      </button>
+      <button class="ant-btn ant-btn-icon-only" type="button" aria-label="Close">
+        <svg class="anticon stroke" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 3.2l9.6 9.6M12.8 3.2l-9.6 9.6"/></svg>
+      </button>
+    </div>
+
+    <div class="tdp-body">
+      <section class="tdp-section">
+        <div class="tdp-section-title">Details</div>
+        <div class="tdp-field">
+          <span class="tdp-field-label">Assignee</span>
+          <span class="tdp-field-value mock-select">orbit
+            <span class="mock-suffix"><svg class="anticon stroke" viewBox="0 0 16 16"><path d="M4.6 6.2L8 9.6l3.4-3.4"/></svg></span>
+          </span>
+        </div>
+        <div class="tdp-field">
+          <span class="tdp-field-label">Provider</span>
+          <span class="tdp-field-value mock-select">Assignee's (deepseek)
+            <span class="mock-suffix"><svg class="anticon stroke" viewBox="0 0 16 16"><path d="M4.6 6.2L8 9.6l3.4-3.4"/></svg></span>
+          </span>
+        </div>
+        <div class="tdp-field">
+          <span class="tdp-field-label">Model</span>
+          <span class="tdp-field-value mock-select">Provider default
+            <span class="mock-suffix"><svg class="anticon stroke" viewBox="0 0 16 16"><path d="M4.6 6.2L8 9.6l3.4-3.4"/></svg></span>
+          </span>
+        </div>
+        <div class="tdp-field">
+          <span class="tdp-field-label">List</span>
+          <span class="tdp-field-value mock-select">No list
+            <span class="mock-suffix"><svg class="anticon stroke" viewBox="0 0 16 16"><path d="M4.6 6.2L8 9.6l3.4-3.4"/></svg></span>
+          </span>
+        </div>
+        <div class="tdp-field">
+          <span class="tdp-field-label">Created by</span>
+          <span class="tdp-field-value">orbit</span>
+        </div>
+      </section>
+      <section class="tdp-section">
+        <div class="tdp-section-title">Runs (1)</div>
+        <a class="tdp-session" href="#">
+          <span class="tdp-dot SUCCEEDED"></span>
+          <div class="tdp-session-main">
+            <div class="tdp-session-title">orbit</div>
+            <div class="tdp-session-sub">14 Sep at 1:46 AM</div>
+          </div>
+          <span class="tdp-badge tone-green">Succeeded</span>
+        </a>
+      </section>
+    </div>
+
+    <div class="tdp-compose">
+      <textarea class="ant-input" rows="1" readonly
+        placeholder="Add a comment…  type @ to mention a workspace  (⌘/Ctrl + Enter to send)"></textarea>
+      <button class="ant-btn ant-btn-primary" type="button" disabled>Send</button>
+    </div>
+  </aside>
+
+  <script>
+    // 变体由 ?variant= 选：now（默认，生产 CSS 原样）/ a / b
+    var v = new URLSearchParams(location.search).get('variant');
+    if (v) document.documentElement.dataset.variant = v;
+  </script>
+</body>
+</html>

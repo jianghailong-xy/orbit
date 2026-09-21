@@ -658,3 +658,92 @@ test('(11) the sweep\'s independent scan does not start a task that is filed und
       await s.db.$disconnect();
     }
   });
+
+/** A list whose `max_concurrent` is the ceiling under test — the batch `materialisationBudget` spends. */
+async function seedList(db: PrismaClient, ids: World, cap: number): Promise<string> {
+  const list = await db.taskList.create({
+    data: {
+      id: randomUUID(), ownerId: ids.ownerId,
+      title: `cap-${RUN}-${randomUUID().slice(0, 6)}`, maxConcurrent: cap,
+    },
+    select: { id: true },
+  });
+  return list.id;
+}
+
+/**
+ * One run already holding a slot of that list — what decides whether its `free` is zero or one.
+ * PENDING for the same reason the budget counts PENDING: it is queued for the next free slot, and
+ * that is exactly what a run released here would also be.
+ */
+async function occupyListSlot(
+  db: PrismaClient,
+  ids: World,
+  listId: string,
+  cap: number,
+): Promise<void> {
+  await db.session.create({
+    data: {
+      id: randomUUID(), title: `occupant-${RUN}`, prompt: 'x',
+      ownerId: ids.ownerId, creatorId: ids.ownerId, workspaceId: ids.agentId,
+      assignedRunnerId: ids.runnerId,
+      batchId: listId, batchMaxConcurrent: cap, status: 'PENDING',
+    },
+  });
+}
+
+// -------------------------------------------------------------------------------------------------
+// (12) The LIST's own ceiling, spent by this door too.
+//
+// The Project budget answers "may this Project start anything"; the list's answers "is there
+// anywhere for it to land", and until this case existed only the two sweeps and the dependency edge
+// spent the second one. So the same completion could release a run past its list's ceiling — and a
+// copy is counted by `materialisationBudget`, which is how a list's own `free` goes negative and its
+// auto-run stops entirely (2026-09-21, the WARC list: six copies through the dependency edge, whose
+// fix is ab4d8c170, and then ten hours in which nothing automatic could start anything).
+//
+// Two projects of one owner, identical but for the ceiling their tasks land under, driven by one
+// completion each in one run — so the difference between the two counts cannot be anything else.
+// -------------------------------------------------------------------------------------------------
+
+test('(12) a release that would land past its list\'s ceiling is left to the sweep',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const ids = await world(s.db, 'release-list-cap');
+      const atCap = await project(s.db, ids, 'release-list-cap-full');
+      const withRoom = await project(s.db, ids, 'release-list-cap-room');
+      // Both lists already hold ONE run, and both Projects have room (the default three). The only
+      // column their fixtures are apart by is the ceiling that run is counted against.
+      const full = await seedList(s.db, ids, 1);
+      const room = await seedList(s.db, ids, 2);
+      await occupyListSlot(s.db, ids, full, 1);
+      await occupyListSlot(s.db, ids, room, 2);
+
+      const finishedFull = await seedTask(s.db, ids, atCap, 'finished',
+        { status: TaskStatus.DONE, listId: full });
+      const finishedRoom = await seedTask(s.db, ids, withRoom, 'finished',
+        { status: TaskStatus.DONE, listId: room });
+      const held = await seedTask(s.db, ids, atCap, 'held', { listId: full });
+      const released = await seedTask(s.db, ids, withRoom, 'released', { listId: room });
+
+      await completionEdge(s, ids.ownerId, finishedFull);
+      await completionEdge(s, ids.ownerId, finishedRoom);
+
+      assert.equal(await sessionCount(s.db, released), 1,
+        'the project with room released nothing, so the refusal below is not measuring the ceiling');
+      assert.equal(await sessionCount(s.db, held), 0,
+        'a run was released past its list\'s ceiling — the copy would take that list\'s budget '
+          + 'negative and stop its auto-run entirely');
+      // Refused, not lost: the task keeps the OPEN row that is already the durable queue, and the
+      // periodic sweep materialises it the moment a slot frees.
+      const refused = await s.db.task.findUniqueOrThrow({
+        where: { id: held },
+        select: { status: true },
+      });
+      assert.equal(refused.status, TaskStatus.OPEN, 'the refused task left the durable queue');
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
