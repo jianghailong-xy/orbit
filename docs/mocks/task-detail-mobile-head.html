@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>任务详情面板 · 手机宽度（393pt）头部三版对照</title>
+<!--
+  对照图（人看的入口）：三屏并排 —— 现状 / 方案 A（推荐）/ 方案 B（对照）。
+  每一屏都是 task-detail-mobile-head-screen.html 的一份 iframe，各自 393×852 的真实视口，
+  所以 index.css 里 ≤960px / ≤600px 的媒体查询在这三屏里都是真生效的（不是缩放的桌面版）。
+  屏幕本体见那个文件的顶部注释；截这张图：chromium 1360 宽 + 2x，CDP 截图（iframe 才会被合成）。
+-->
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 44px; background: #eceef1; color: #16161a;
+    font: 15px/1.55 -apple-system, "Segoe UI", "Noto Sans CJK SC", "Liberation Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1180px; margin: 0 0 26px; }
+  .lede code, .patch code, figcaption code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #e2e2e8; border-radius: 4px; padding: 1px 5px; }
+  .row { display: flex; gap: 32px; align-items: flex-start; }
+  figure { margin: 0; width: 393px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; margin-bottom: 8px; }
+  .tag.now { background: #ffe0de; color: #a3251f; }
+  .tag.a { background: #d6e4ff; color: #14428f; }
+  .tag.b { background: #e5e5ea; color: #3a3a3c; }
+  iframe { display: block; width: 393px; height: 852px; border: 0; border-radius: 22px;
+           box-shadow: 0 18px 44px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.08); }
+  figcaption { margin-top: 14px; font-size: 13px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  .patch { margin-top: 30px; max-width: 1180px; background: #fff; border: 1px solid #e0e2e6; border-radius: 10px; padding: 16px 18px; }
+  .patch h2 { font-size: 14px; margin: 0 0 10px; color: #16161a; }
+  .patch pre { margin: 0; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.6; color: #24292f; }
+  .patch .c { color: #8b939e; }
+</style>
+<body>
+  <h1>任务详情面板：手机宽度（393pt）下头部被压成一列字</h1>
+  <p class="lede">
+    三屏都是 393×852 的真实视口（iPhone 14/15/16 的 CSS 宽），样式直接来自
+    <code>src/web/src/index.css</code>（HEAD <code>ab4d8c170</code>）。第一屏是生产 CSS 原样，
+    后面两屏是要落的两种改法。面板在 ≤960px 本来就变成全屏浮层，所以手机是它该正常工作的场景 ——
+    塌掉的只有头部这一条。
+  </p>
+
+  <div class="row">
+    <figure>
+      <div class="tag now">现状（生产 CSS，未打补丁）</div>
+      <iframe src="task-detail-mobile-head-screen.html?variant=now" title="现状"></iframe>
+      <figcaption>
+        <b>现状</b>
+        <code>.tdp-head</code> 是一条不换行的 flex：操作区 <code>flex:none</code>（Reopen task + Run now + 🗑 + ✕ ≈ 300pt），
+        标题 <code>flex:1; min-width:0</code> 只剩 ~50pt，中文逐字换行；meta 行与判定胶囊一并被挤扁。
+        终态任务多一个 Reopen task，最挤。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <div class="tag a">方案 A（推荐）</div>
+      <iframe src="task-detail-mobile-head-screen.html?variant=a" title="方案 A"></iframe>
+      <figcaption>
+        <b>方案 A</b>
+        标题 / meta / 判定占满第一行，🗑 与 ✕ 留在右上角（和现在同一位置，按压目标抬到 40pt）；
+        Reopen task 与 Run now 等宽平分第二行、高 40pt（同移动端 composer 按钮）。
+        行内再放东西（如 <code>Waiting for your confirmation</code>）时整行换行，不会挤标题。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <div class="tag b">方案 B（对照）</div>
+      <iframe src="task-detail-mobile-head-screen.html?variant=b" title="方案 B"></iframe>
+      <figcaption>
+        <b>方案 B</b>
+        第一行同 A；照 <code>.card-actions</code> 在 ≤600px 的既有先例，两个操作按钮竖排撑满 ——
+        按压目标最大最省力，代价是头部多占一行、Run now 离标题更远。两版选一个即可。
+      </figcaption>
+    </figure>
+  </div>
+
+  <div class="patch">
+    <h2>方案 A 的补丁（CSS 之外还要把 🗑 与 ✕ 从 <code>.tdp-head-actions</code> 提到 <code>.tdp-head</code> 下，桌面顺序不变）</h2>
+<pre><span class="c">@media (max-width: 600px) {</span>
+  .tdp-head { flex-wrap: wrap; row-gap: 12px; }
+  .tdp-head > .ant-btn-icon-only { order: 1; width: 40px; height: 40px; }
+  .tdp-head-actions { order: 2; flex: 1 1 100%; flex-wrap: wrap; gap: 8px; }
+  .tdp-head-actions > .ant-btn { flex: 1 1 0; height: 40px; }
+<span class="c">}</span></pre>
+  </div>
+</body>
+</html>

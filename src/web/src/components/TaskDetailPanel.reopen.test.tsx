@@ -61,7 +61,7 @@ function headButtonLabels(data: Record<string, unknown>): string[] {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  const head = /<div class="tdp-head-actions">([\s\S]*?)<\/div><\/div>/.exec(html)?.[1] ?? '';
+  const head = /<div class="tdp-head-actions">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
   return [...head.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gu)]
     .map((m) => m[1].replace(/<[^>]*>/gu, ''));
 }

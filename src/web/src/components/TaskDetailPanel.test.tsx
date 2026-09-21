@@ -119,7 +119,7 @@ function renderPanel(data: Record<string, unknown>, deleting = false): string {
 
 /** The header's primary action, as its label and whether it can be pressed. */
 function primaryAction(html: string): { label: string; disabled: boolean } | null {
-  const head = /<div class="tdp-head-actions">([\s\S]*?)<\/div><\/div>/.exec(html);
+  const head = /<div class="tdp-head-actions">([\s\S]*?)<\/div>/.exec(html);
   const m = /<button\s+([^>]*ant-btn-variant-solid[^>]*)>([\s\S]*?)<\/button>/.exec(head?.[1] ?? html);
   if (!m) return null;
   return {
@@ -163,8 +163,10 @@ describe('an OWNER_CONFIRMED task in the panel', () => {
     );
   }
 
+  // The actions row alone — the panel's two window buttons (🗑 ✕) are its siblings, not its
+  // contents, so a slice that ran past its close would read them as actions.
   const head = (html: string): string =>
-    /<div class="tdp-head-actions">([\s\S]*?)<\/div><\/div>/.exec(html)?.[1] ?? '';
+    /<div class="tdp-head-actions">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
   const buttonLabels = (html: string): string[] =>
     [...html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gu)].map((m) => m[1].replace(/<[^>]*>/gu, ''));
   const confirmation = (over: Record<string, unknown> = {}) => ({
@@ -233,13 +235,21 @@ describe('an OWNER_CONFIRMED task in the panel', () => {
 describe('the task panel’s delete', () => {
   /** The header's delete button's opening tag, or null when the header has none. */
   const deleteButton = (html: string) =>
-    /<button[^>]*aria-label="Delete task"[^>]*>/.exec(
-      /<div class="tdp-head-actions">([\s\S]*?)<\/div><\/div>/.exec(html)?.[1] ?? '',
-    )?.[0] ?? null;
+    /<button[^>]*aria-label="Delete task"[^>]*>/.exec(html)?.[0] ?? null;
 
   it('sits in the header, so a task can be deleted without hovering its row', () => {
     // The row's trash only appears on hover, which a touch screen never produces.
     expect(deleteButton(renderPanel(task()))).not.toBeNull();
+  });
+
+  it('sits beside the actions row rather than in it, so the phone rule keeps it by the title', () => {
+    // Below 600px index.css lifts exactly `.tdp-head > .ant-btn-icon-only` — the panel's own two
+    // window buttons — out of the pressing row and leaves them on the title's line. Put either of
+    // them back inside `.tdp-head-actions` and that rule stops matching it and the phone header
+    // quietly goes back to four presses on one line.
+    expect(renderPanel(task())).toMatch(
+      /<div class="tdp-head-actions">[\s\S]*?<\/div><button[^>]*aria-label="Delete task"[\s\S]*?<button[^>]*aria-label="Close"/,
+    );
   });
 
   it('shows the delete in progress', () => {

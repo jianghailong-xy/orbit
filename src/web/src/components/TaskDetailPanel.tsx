@@ -1117,19 +1117,22 @@ export function TaskDetailPanel({
               </span>
             </Tooltip>
           )}
-          {/* The row's trash is hover-only, so without this a touch screen has no way to delete. */}
-          <Popconfirm
-            title="Delete this task?"
-            description="A run still in flight is stopped. This action cannot be undone."
-            okText="Delete"
-            cancelText="Cancel"
-            okButtonProps={{ danger: true, loading: deleting }}
-            onConfirm={onDelete}
-          >
-            <Button type="text" danger icon={<DeleteOutlined />} loading={deleting} aria-label="Delete task" />
-          </Popconfirm>
-          <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
         </div>
+        {/* The panel's own two window buttons, siblings of the actions rather than part of them:
+            a phone has no room for four presses on one line, and the narrow-screen rule in
+            index.css keeps exactly these two beside the title while the actions drop below it.
+            The row's trash is hover-only, so without this a touch screen has no way to delete. */}
+        <Popconfirm
+          title="Delete this task?"
+          description="A run still in flight is stopped. This action cannot be undone."
+          okText="Delete"
+          cancelText="Cancel"
+          okButtonProps={{ danger: true, loading: deleting }}
+          onConfirm={onDelete}
+        >
+          <Button type="text" danger icon={<DeleteOutlined />} loading={deleting} aria-label="Delete task" />
+        </Popconfirm>
+        <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
       </div>
 
       {q.isLoading ? (
