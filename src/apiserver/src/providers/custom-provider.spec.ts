@@ -401,6 +401,22 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.ENABLE_CLAUDEAI_MCP_SERVERS, '0');
   });
 
+  // Explore is declared `inherit` but capped at the opus tier, and the cap fires whenever the
+  // session's model isn't a Claude family id — on this endpoint every research subagent would run
+  // the vendor's top model instead of the one the session is on. The CLI consults neither the
+  // session model nor CLAUDE_CODE_SUBAGENT_MODEL on that path (measured on 2.1.278), so this
+  // switch is the one that makes Explore inherit.
+  await t.test('custom provider keeps Explore subagents on the session model', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row(),
+      sessionModel: null,
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.env?.CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP, '1');
+  });
+
   // The CLI assumes 200k for a model id its own catalog doesn't describe and auto-compacts the
   // session inside that; DeepSeek's shim serves no /v1/models for it to learn the real window from.
   // The preset's declared window is the one authoritative number, so it rides in the env the CLI

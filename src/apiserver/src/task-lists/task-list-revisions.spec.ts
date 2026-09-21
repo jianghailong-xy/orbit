@@ -52,6 +52,12 @@ function makeService(initial: Partial<Revision> = {}) {
         return { count: 0 };
       },
     },
+    // A ceiling change brings the sessions already queued under the old one along with it, in this
+    // same transaction. These cases are about the revision bookkeeping, so the convergence is a
+    // stub; what it must do is asserted against real PostgreSQL, where the claim can be run.
+    session: {
+      updateMany: async () => ({ count: 0 }),
+    },
     taskList: {
       update: async ({ data }: { data: Record<string, unknown> }) => {
         Object.assign(list, data);

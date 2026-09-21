@@ -402,9 +402,10 @@ export class TaskListsService {
       // stops being one.
       await lockOwnerTaskGraph(tx, ownerId);
       const locked = await tx.$queryRaw<
-        Array<{ id: string; paused: boolean; pauseEpoch: number }>
+        Array<{ id: string; paused: boolean; pauseEpoch: number; maxConcurrent: number | null }>
       >`
-        SELECT id, paused, "pause_epoch" AS "pauseEpoch" FROM "task_list"
+        SELECT id, paused, "pause_epoch" AS "pauseEpoch", "max_concurrent" AS "maxConcurrent"
+        FROM "task_list"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('task list not found');
@@ -459,6 +460,48 @@ export class TaskListsService {
         where: { id },
         data: decided ? { ...data, pauseEpoch: locked[0].pauseEpoch + 1 } : data,
       });
+      // The same ceiling, taken to the runs that are already carrying a COPY of it.
+      //
+      // A list doubles as the durable batch the claim's cap gate reads (`batchActiveTurns(s) <
+      // s.batch_max_concurrent`, queue.service.ts), and a session holds that ceiling as a copy made
+      // when it was dispatched — deliberately, so an ad-hoc batch keeps the cap it was dispatched
+      // with. Left at that, a ceiling changed HERE would govern only the dispatches made after it:
+      // every row already queued would keep the old number while this panel and the revision show
+      // the new one, and the gate and the person reading it would disagree with nothing saying so.
+      // 2026-09-21 is that failure: the WARC list was raised 1→4 for exactly this reason and not
+      // one row moved — nine sessions queued under 1, ten hours, no claim. From outside it reads as
+      // a machine that will not pick work up, which is a wrong diagnosis this queue has already
+      // sent people to look for once.
+      //
+      // Written in the request's own transaction, unlike the pause's convergence, because what it
+      // writes is a list's UNFINISHED SESSIONS rather than its tasks: the write that could not live
+      // on this path is O(tasks) — 27,468 rows, the 2026-09-14 outage — and a list has only as many
+      // live sessions as it has had dispatches in flight at once (largest in this deployment: 10),
+      // over `session_batch_id_status_idx`. Rank 30 sits between the list's 20 and the revision's
+      // 60 below, so the order stays ascending (common/lock-order.ts).
+      //
+      // Unfinished, not merely PENDING: a RUNNING run is claimable again the moment it parks and
+      // the next turn arrives, and it reads this column then.
+      //
+      // A ceiling of null is deliberately NOT propagated. `batch_id` set with a NULL
+      // `batch_max_concurrent` makes the gate's `count(*) < NULL` evaluate to NULL, so that row
+      // could never be claimed at all — the trap the dispatch path already guards where it freezes
+      // one. Clearing the cap therefore leaves the rows already queued on the last ceiling that was
+      // in force: still claimable, bounded by a number that is no longer on any screen.
+      const askedCap = data.maxConcurrent;
+      if (typeof askedCap === 'number' && askedCap !== locked[0].maxConcurrent) {
+        await tx.session.updateMany({
+          where: {
+            batchId: id,
+            status: { in: TASK_OCCUPYING },
+            // A same-value row is not written, so its `updated_at` does not move for a change that
+            // did not reach it. `null` is included rather than left behind by `<>`: nothing should
+            // stay in the state that cannot be claimed.
+            OR: [{ batchMaxConcurrent: { not: askedCap } }, { batchMaxConcurrent: null }],
+          },
+          data: { batchMaxConcurrent: askedCap },
+        });
+      }
       if (recordAs) {
         const max = await tx.taskListRevision.aggregate({
           where: { listId: id },

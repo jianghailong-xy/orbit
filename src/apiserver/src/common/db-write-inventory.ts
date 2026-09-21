@@ -752,11 +752,11 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'task-lists/task-lists.service.ts#writePolicy',
     shape: 'TX_RETRIED',
-    locks: 'user FOR UPDATE (rank 10, I1 — kept after the task sweep left this transaction: the projector\'s chunks take the same mutex before writing task rows of this list, and remove() writes this row and those rows under it), task_list FOR UPDATE (rank 20), then task_list_revision (rank 60). It writes no task row at all, which is the point: the pause is a counter here and the rows are converged afterwards.',
+    locks: 'user FOR UPDATE (rank 10, I1 — kept after the task sweep left this transaction: the projector\'s chunks take the same mutex before writing task rows of this list, and remove() writes this row and those rows under it), task_list FOR UPDATE (rank 20), then session FOR NO KEY UPDATE (rank 30, one row per unfinished session of this list, and only when the ceiling itself changed — a list has as many of those as it has had dispatches in flight, not as many as it has tasks, over session_batch_id_status_idx), then task_list_revision (rank 60). It writes no task row at all, which is the point: the pause is a counter here and the rows are converged afterwards.',
     identity: 'The list id and the policy data, above the closure.',
     isolation: '',
     attempts: 4,
-    replay: 'The revision number, the seeded before-state, the stored `paused` the new value is compared against and the epoch it is bumped from are all derived inside the closure from rows read under the two locks.',
+    replay: 'The revision number, the seeded before-state, the stored `paused` and `maxConcurrent` each new value is compared against, and the epoch it is bumped from are all derived inside the closure from rows read under the two locks. The session convergence is decided from that same locked read, so a re-run re-decides the comparison rather than replaying it, and rows already carrying the value are not written again.',
     effects: 'None inside; the list-changed publish and the projector kick are after.',
     answer: 'Typed 503 from the global boundary.',
   },
