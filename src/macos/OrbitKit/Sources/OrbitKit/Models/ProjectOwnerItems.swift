@@ -1,8 +1,9 @@
 import Foundation
 
-/// The two owner cards a project draws in its coordinator's conversation: the merge waiting to be
-/// confirmed (`GET /projects/:id/promotions/current`, contract §3.6) and the question the
-/// coordinator put to its owner (`GET /projects/:id/open-items`, §4.8 / §5.2).
+/// The owner cards a project draws in its coordinator's conversation: the merge waiting to be
+/// confirmed (`GET /projects/:id/promotions/current`, contract §3.6), the question the coordinator
+/// put to its owner, and the exceptions that became the owner's without anybody asking
+/// (`GET /projects/:id/open-items`, §4.8 / §5.2 / §7.5).
 ///
 /// Mirrors `@orbit/shared`'s `project-progress.ts`, the one declaration both clients read (§7.0),
 /// and decodes only the fields these cards draw — every unknown key is ignored, so a server that
@@ -66,6 +67,65 @@ public struct CoordinatorQuestion: Codable, Equatable, Sendable {
     }
 }
 
+/// Who the item is expected to act (§4.3).
+public enum ProjectOpenItemAssignee: String, Codable, Sendable {
+    case coordinator = "COORDINATOR"
+    case owner = "OWNER"
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ProjectOpenItemAssignee(rawValue: raw) ?? .unknown
+    }
+}
+
+/// WHY it has that assignee — the difference between the ordinary route and every way an item ends
+/// up with a person (§7.1 V1). `default` is the ordinary one, and an item carrying it was the
+/// person's from the start rather than having become theirs.
+public enum ProjectOpenItemAssigneeReason: String, Codable, Sendable {
+    case defaultReason = "DEFAULT"
+    case noCoordinator = "NO_COORDINATOR"
+    case coordinatorEnded = "COORDINATOR_ENDED"
+    case chainLimit = "CHAIN_LIMIT"
+    case escalated = "ESCALATED"
+    case handedOver = "HANDED_OVER"
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ProjectOpenItemAssigneeReason(rawValue: raw) ?? .unknown
+    }
+
+    /// The five ways an item BECAME somebody's (`OPEN_ITEM_ESCALATION_REASONS` on the server), which
+    /// is exactly the set `ownerItemKind` folds into `ESCALATED` — so an item the needs-you banner
+    /// named as an escalation is one this card has a heading for.
+    public var isEscalation: Bool {
+        switch self {
+        case .noCoordinator, .coordinatorEnded, .chainLimit, .escalated, .handedOver: return true
+        case .defaultReason, .unknown: return false
+        }
+    }
+}
+
+/// One press an item offers. The server lists only doors that exist today, and the client draws
+/// only the ones it knows — an action it cannot name is not a button (`ExceptionCards`).
+public enum ProjectOpenItemAction: String, Codable, Sendable {
+    case review = "REVIEW"
+    case openCoordinator = "OPEN_COORDINATOR"
+    case openTaskSession = "OPEN_TASK_SESSION"
+    case retry = "RETRY"
+    case cancelTask = "CANCEL_TASK"
+    case askCoordinatorAgain = "ASK_COORDINATOR_AGAIN"
+    case resume = "RESUME"
+    case answer = "ANSWER"
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ProjectOpenItemAction(rawValue: raw) ?? .unknown
+    }
+}
+
 /// One exception item as `GET /projects/:id/open-items` serves it (§4.8).
 public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let itemId: String
@@ -75,18 +135,46 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// card that composed its own would be free to disagree with the row beside it on the web.
     public let detailLine: String
     public let waitingSince: String
+    public let assignee: ProjectOpenItemAssignee
+    /// Read by the card's heading, which is the owner's one sentence about how the item got here.
+    public let assigneeReason: ProjectOpenItemAssigneeReason
+    /// When it stops being the coordinator's, frozen at creation; null once it is the owner's.
+    public let escalateAt: String?
+    /// When the clock handed it to the owner. Part of the escalated card's heading, which says how
+    /// long the coordinator had it before that.
+    public let escalatedAt: String?
+    /// The task the item is about; nil for the kinds that are about something else.
+    public let taskId: String?
+    /// The attempt this item is about, when one is recorded: the run whose failure opened it.
+    public let sessionId: String?
+    /// The pause this item is, for a `FUSE_PAUSED`; nil for every other kind.
+    public let fuseEpisodeId: String?
+    /// The presses the server offers on this item.
+    public let actions: [ProjectOpenItemAction]
     /// What was asked, for a `COORDINATOR_QUESTION`; nil for every other kind.
     public let question: CoordinatorQuestion?
 
     public var id: String { itemId }
 
     public init(itemId: String, kind: ProjectOpenItemKind, title: String, detailLine: String = "",
-                waitingSince: String, question: CoordinatorQuestion? = nil) {
+                waitingSince: String, assignee: ProjectOpenItemAssignee = .owner,
+                assigneeReason: ProjectOpenItemAssigneeReason = .defaultReason,
+                escalateAt: String? = nil, escalatedAt: String? = nil, taskId: String? = nil,
+                sessionId: String? = nil, fuseEpisodeId: String? = nil,
+                actions: [ProjectOpenItemAction] = [], question: CoordinatorQuestion? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
         self.detailLine = detailLine
         self.waitingSince = waitingSince
+        self.assignee = assignee
+        self.assigneeReason = assigneeReason
+        self.escalateAt = escalateAt
+        self.escalatedAt = escalatedAt
+        self.taskId = taskId
+        self.sessionId = sessionId
+        self.fuseEpisodeId = fuseEpisodeId
+        self.actions = actions
         self.question = question
     }
 
@@ -97,6 +185,15 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         detailLine = try c.decodeIfPresent(String.self, forKey: .detailLine) ?? ""
         waitingSince = try c.decodeIfPresent(String.self, forKey: .waitingSince) ?? ""
+        assignee = try c.decodeIfPresent(ProjectOpenItemAssignee.self, forKey: .assignee) ?? .unknown
+        assigneeReason = try c.decodeIfPresent(ProjectOpenItemAssigneeReason.self,
+                                               forKey: .assigneeReason) ?? .unknown
+        escalateAt = try c.decodeIfPresent(String.self, forKey: .escalateAt)
+        escalatedAt = try c.decodeIfPresent(String.self, forKey: .escalatedAt)
+        taskId = try c.decodeIfPresent(String.self, forKey: .taskId)
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        fuseEpisodeId = try c.decodeIfPresent(String.self, forKey: .fuseEpisodeId)
+        actions = try c.decodeIfPresent([ProjectOpenItemAction].self, forKey: .actions) ?? []
         question = try c.decodeIfPresent(CoordinatorQuestion.self, forKey: .question)
     }
 }
@@ -116,6 +213,34 @@ public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
         needsYou = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .needsYou) ?? []
         withCoordinator = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .withCoordinator) ?? []
     }
+}
+
+/// `POST /projects/:id/open-items/:itemId/return-to-coordinator` — the item is the coordinator's
+/// again, with the project's clock for it restarted (§4.7, mock 5).
+public struct OpenItemReturned: Codable, Equatable, Sendable {
+    public let itemId: String
+    public let assignee: ProjectOpenItemAssignee
+    /// The wait starts over, which is the whole of what "ask again" gives the coordinator.
+    public let waitingSince: String
+    /// When it comes back to the owner if nobody acts on it this time.
+    public let escalateAt: String?
+
+    public init(itemId: String, assignee: ProjectOpenItemAssignee = .coordinator,
+                waitingSince: String, escalateAt: String? = nil) {
+        self.itemId = itemId
+        self.assignee = assignee
+        self.waitingSince = waitingSince
+        self.escalateAt = escalateAt
+    }
+}
+
+/// `POST /projects/:id/fuse/:episodeId/resume` — the pause is lifted (§6.3 F-T4). Only the instant
+/// is read: what else the door answers is the held work it released, and the card's business is
+/// that the press was taken, which the item list then says by no longer carrying the pause.
+public struct FuseResumed: Codable, Equatable, Sendable {
+    public let resumedAt: String
+
+    public init(resumedAt: String) { self.resumedAt = resumedAt }
 }
 
 /// `POST /projects/:id/open-items/:itemId/answer` — the item is closed, and where the answer went

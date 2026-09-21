@@ -1292,6 +1292,10 @@ struct DeliveredDecisionCardView: View {
                 EvidenceDecisionReceiptCard(decided: decided)
             case .coordinatorQuestion(let itemID):
                 CoordinatorQuestionCardView(console: console, itemID: itemID)
+            case .escalatedItem(let itemID):
+                OwnerItemCardView(console: console, itemID: itemID, isPause: false)
+            case .fusePause(let itemID):
+                OwnerItemCardView(console: console, itemID: itemID, isPause: true)
             case .promotionApproval(let promotionID):
                 PromotionApprovalCardView(console: console, promotionID: promotionID)
             }
@@ -1906,6 +1910,121 @@ private struct CoordinatorQuestionCardView: View {
             if let answered = await console.answerQuestion(row, option: chosen, text: text) {
                 sent = words
                 receipt = answered
+            }
+            sending = false
+        }
+    }
+}
+
+/// The exception that became the owner's without anybody asking, and the pause only the owner can
+/// lift (§7.5 mock 5's right column, §6.3 F-T4 mock 6 ①).
+///
+/// One card for two kinds, because it is one situation: something stopped, nobody else can move it,
+/// and the person reading is the one the project is waiting for. What differs is the press and the
+/// header — a pause has one word of its own and its title says what was paused, while an escalated
+/// item's title is the task or check that failed and its first line says how it got here.
+///
+/// Amber, not blue: the confirmation and question cards ask for a decision, and this one is the
+/// project's own failure sitting in somebody's lap. Every word is `ExceptionCards`, the browser's
+/// own copy (`ProjectProgressStatus.tsx`) held to it by `ExceptionCardsTests`. The card keeps
+/// nothing but the address and the receipt of a press made on THIS screen: the standing is
+/// re-derived from the console's read on every body pass, so an item the coordinator closed in the
+/// meantime goes dead in place here instead of staying pressable.
+private struct OwnerItemCardView: View {
+    let console: ConsoleModel
+    let itemID: String
+    /// The pause, rather than an exception that became the owner's.
+    let isPause: Bool
+    @State private var sending = false
+    /// What the door took, when the press was made HERE — the receipt, and the only thing this
+    /// card remembers. The read then says the item is gone, which is the same fact twice.
+    @State private var receipt: String?
+
+    private var standing: OwnerItemStanding { console.ownerItemStanding(itemID) }
+
+    var body: some View {
+        let standing = self.standing
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: isPause ? "pause.circle.fill" : "exclamationmark.triangle.fill",
+                           title: isPause ? ExceptionCards.pauseTitle : ExceptionCards.escalatedTitle,
+                           tone: .orange)
+            Text(ExceptionCards.provenance)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(ExceptionCards.provenanceTitle)
+
+            if let receipt {
+                Text("✓ \(receipt)")
+                    .font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if case .open(let row) = standing {
+                item(row)
+                if pressable(row) {
+                    ApprovalActions {
+                        Button { press(row) } label: {
+                            Text(isPause ? ExceptionCards.resume : ExceptionCards.askCoordinatorAgain)
+                                .approvalActionLabel()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(sending)
+                    }
+                }
+                Text(ExceptionCards.ownerLine(row))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if case .unread = standing {
+                Text(ExceptionCards.unreadable)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(ExceptionCards.gone)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .approvalChrome(.orange, dimmed: receipt != nil || !ExceptionCards.isOpen(standing))
+    }
+
+    /// What happened, in three lines the server wrote two of: how it became the owner's, what
+    /// escalated, and the fact that opened it.
+    private func item(_ row: ProjectOpenItemRow) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ExceptionCards.headingLine(row))
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let subject = ExceptionCards.subject(row) {
+                Text(subject)
+                    .font(.orbitProse)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if !row.detailLine.isEmpty {
+                Text(row.detailLine)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// Whether the door would take the press from here. Both are the server's own list, so a
+    /// button that is drawn is a button whose press lands: a project with no live coordinator
+    /// draws no "Ask the coordinator again", and a pause with no episode draws no "Resume".
+    private func pressable(_ row: ProjectOpenItemRow) -> Bool {
+        isPause ? ExceptionCards.resumable(row) : ExceptionCards.askable(row)
+    }
+
+    /// The press re-reads what the button was rendered from (`returnEscalatedItem` /
+    /// `resumeFuse` re-read the item list), so a race between a render and a tap cannot hand back
+    /// an item somebody else already moved.
+    private func press(_ row: ProjectOpenItemRow) {
+        guard !sending, pressable(row) else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            if isPause {
+                if await console.resumeFuse(row) != nil { receipt = ExceptionCards.resumed }
+            } else {
+                if await console.returnEscalatedItem(row) != nil { receipt = ExceptionCards.returned }
             }
             sending = false
         }
