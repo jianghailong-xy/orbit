@@ -1312,6 +1312,34 @@ export function listBudgetSpent(budget: MaterialisationBudget, listId: string | 
   return left !== undefined && left <= 0;
 }
 
+/**
+ * Spend the LIST's ceiling alone, and refuse only on it.
+ *
+ * This is the one door that cannot spend the runner's dimension, and the reason is what happens to
+ * a task it refuses: `dispatchIndependentSiblingsOf` releases tasks that depend on NOTHING, and the
+ * periodic sweep cannot see those at all (`AUTO_RUN_READY_SQL` resolves READY database-side — "the
+ * task HAS prerequisites and none of them is unfinished"), which is precisely why this pass exists.
+ * So a refusal here is not the sweep's 60-second delay; it is "the next completion in this Project",
+ * which for a campaign that has gone quiet may never come.
+ *
+ * The two dimensions are not symmetric in what they cost, either. A run held back by the runner's
+ * cap queues nowhere — the claim would have held it anyway, and that queue is where a busy machine
+ * says no. A run materialised past the LIST's ceiling is copied into `materialisationBudget`, takes
+ * that list's `free` negative, and stops that list's own auto-run entirely (2026-09-21: six copies,
+ * ten hours, nothing automatic able to start in that list). That is the failure this guard is for,
+ * and it is the only one of the two that has no benign reading.
+ *
+ * The sweep and the dependency edge spend both dimensions because both have a backstop that re-offers
+ * their work within a minute; this pass has none, so it spends only the dimension whose exhaustion
+ * would break the list.
+ */
+export function takeListBudget(budget: MaterialisationBudget, listId: string | null): boolean {
+  const listLeft = listId ? budget.list.get(listId) : undefined;
+  if (listLeft !== undefined && listLeft <= 0) return false;
+  if (listLeft !== undefined && listId) budget.list.set(listId, listLeft - 1);
+  return true;
+}
+
 export const FOREMAN_RETRY_BACKOFF_MS = [30 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000];
 export const MAX_CONSECUTIVE_FOREMEN = FOREMAN_RETRY_BACKOFF_MS.length + 1;
 
@@ -8849,46 +8877,36 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       const candidates = await this.prisma.$queryRaw<
-        Array<{
-          id: string;
-          dispatchEpoch: bigint | null;
-          listId: string | null;
-          runnerId: string | null;
-        }>
+        Array<{ id: string; dispatchEpoch: bigint | null; listId: string | null }>
       >(Prisma.sql`
         SELECT t.id, e.epoch AS "dispatchEpoch",
-               t.list_id AS "listId",
-               a.runner_id AS "runnerId"
+               t.list_id AS "listId"
           FROM task t
           -- 0137's dispatch epoch, joined into the scan that selects the candidate so the fence
           -- carries the moment every clause below was evaluated against, exactly as the two sweeps
           -- do it. A second read would be a second snapshot.
           LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
-          -- The runner, joined for the same reason: the budget below spends two dimensions and this
-          -- is the statement that already knows both of them. PROJECT_INDEPENDENT_READY_SQL
-          -- requires a bound runner (a.runner_id IS NOT NULL), so this join adds no row and the
-          -- column cannot be null for a candidate the predicate let through.
-          LEFT JOIN workspace a ON a.id = t.assignee_id
          WHERE t.project_id = ${projectId}::uuid
            AND t.owner_id = ${ownerId}::uuid
            AND ${PROJECT_INDEPENDENT_READY_SQL}
          -- Oldest first: with more ready tasks than budget, the one that has waited longest goes.
          ORDER BY t.created_at, t.id
          LIMIT ${room.free}`);
-      // The same MATERIALISATION budget the sweep and the completion edge spend, read once outside
-      // the loop as they both read it. The Project's own `max_concurrent_tasks` above answers "may
-      // this Project start anything"; this answers "is there anywhere for it to land" — and the two
-      // are not the same question, which is how a release could put runs past the LIST's ceiling.
-      // A copy of a run is counted by `materialisationBudget`, so going past that ceiling takes the
-      // list's own `free` negative and stops its auto-run sweep entirely: on 2026-09-21 six runs
-      // reached a cap-of-one list that way (through the dependency edge, whose fix is ab4d8c170) and
-      // the queue then sat for ten hours reading, from outside, as a runner that would not pick work
-      // up. This pass is the third door into the same dispatch and it holds the same rule: the rule
-      // is about the WORK, not about which door is asking. Refused here, the task keeps its OPEN row
-      // and its READY state, and the periodic sweep materialises it the moment a slot frees.
+      // The LIST's ceiling, read once outside the loop as the sweep reads it — and that dimension
+      // alone, for the reason `takeListBudget` states: this pass releases tasks that depend on
+      // NOTHING, the sweep cannot see those, so a refusal here is not a minute's delay but "the
+      // next completion in this Project". The Project's own `max_concurrent_tasks` above answers
+      // "may this Project start anything"; this answers "is there anywhere for it to land", and
+      // until this guard existed a release could put runs past the list's ceiling. A copy of a run
+      // is counted by `materialisationBudget`, so going past that ceiling takes the list's own
+      // `free` negative and stops its auto-run entirely: on 2026-09-21 six runs reached a cap-of-one
+      // list through the dependency edge (fixed in ab4d8c170) and the queue then sat for ten hours
+      // reading, from outside, as a runner that would not pick work up. Refused here, the task keeps
+      // its OPEN row and its READY state, and the door that would have released it — the next
+      // completion in the Project — offers it again.
       const budget = await this.materialisationBudget();
       for (const candidate of candidates) {
-        if (!takeBudget(budget, candidate.runnerId!, candidate.listId)) continue; // left to the sweep
+        if (!takeListBudget(budget, candidate.listId)) continue; // left to the next completion
         try {
           await this.dispatchReadyTask(ownerId, candidate.id, candidate.dispatchEpoch ?? 0n);
         } catch (e) {
