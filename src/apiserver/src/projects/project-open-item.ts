@@ -1,7 +1,9 @@
 import { Prisma } from '@prisma/client';
 import {
+  IntegrationCheckResult,
   OpenItemAction,
   OpenItemDeliveryCard,
+  OpenItemFacts,
   OwnerItemKind,
   SessionLifecycleState,
   SessionRunState,
@@ -821,6 +823,84 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
     `集成作业以一个错误结束：${payload.errorCode ?? '未记录错误码'}。`,
     ...(detail ? [`错误详情：${clip(detail)}`] : []),
   ];
+}
+
+/**
+ * The same payload again, this time as the ROWS an item's card draws (§7.5, mock 5).
+ *
+ * `integrationItemFacts` above is the same information written as prose for an agent, and this is
+ * it as fields for a person's card. Both read one payload — neither is derived from the other —
+ * which is why a card cannot come to disagree with the message the coordinator was handed.
+ *
+ * A key the payload does not carry reads as null (or as false, for the two booleans), so a payload
+ * an older build wrote leaves a row the card skips rather than a hole it falls into. `failure` is
+ * the one part read by KIND rather than by key: `how` and `chain` are a failed task's, and an
+ * integration job's payload has neither, so reading them off one would invent a retry count no
+ * failure ever had.
+ *
+ * `task` is a column of the item rather than of its payload — a conflict is about the task whose
+ * branch would not land, and the card's first row names it.
+ *
+ * Null for the kinds whose card has no such rows (a question is its own card and a pause writes its
+ * own sentence) and for a payload that is not an object at all.
+ */
+export function openItemFacts(
+  kind: string,
+  payload: unknown,
+  task: { id: string; title: string } | null,
+): OpenItemFacts | null {
+  if (!(INTEGRATION_ITEM_KINDS as readonly string[]).includes(kind) && kind !== 'TASK_FAILED') {
+    return null;
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const row = payload as IntegrationItemPayload & {
+    how?: string;
+    exitCode?: number;
+    expectedExitCode?: number;
+    chain?: { failuresInChain?: number; limit?: number };
+  };
+  return {
+    task,
+    targetRef: filled(row.targetRef),
+    targetSha: filled(row.targetSha),
+    files: Array.isArray(row.files)
+      ? row.files.filter((file): file is string => typeof file === 'string' && file !== '')
+      : [],
+    nothingLanded: row.nothingLanded === true,
+    check: checkResult(row.check),
+    branchUnchanged: row.branchUnchanged === true,
+    errorCode: filled(row.errorCode),
+    failure: kind === 'TASK_FAILED'
+      ? {
+          how: filled(row.how),
+          exitCode: typeof row.exitCode === 'number' ? row.exitCode : null,
+          expectedExitCode: typeof row.expectedExitCode === 'number' ? row.expectedExitCode : null,
+          attempt: typeof row.chain?.failuresInChain === 'number' ? row.chain.failuresInChain : 1,
+          limit: typeof row.chain?.limit === 'number' ? row.chain.limit : TASK_FAILURE_CHAIN_LIMIT,
+        }
+      : null,
+  };
+}
+
+function filled(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/** The check that disagreed, complete enough to draw: a payload that names no command is not one. */
+function checkResult(value: IntegrationItemPayload['check']): IntegrationCheckResult | null {
+  if (!value || typeof value !== 'object') return null;
+  const check = value as Record<string, unknown>;
+  if (typeof check.name !== 'string' || check.name === '') return null;
+  if (typeof check.command !== 'string' || check.command === '') return null;
+  return {
+    name: check.name as IntegrationCheckResult['name'],
+    command: check.command,
+    expectedExitCode: typeof check.expectedExitCode === 'number' ? check.expectedExitCode : 0,
+    exitCode: typeof check.exitCode === 'number' ? check.exitCode : null,
+    timedOut: check.timedOut === true,
+    durationMs: typeof check.durationMs === 'number' ? check.durationMs : 0,
+    outputTail: typeof check.outputTail === 'string' ? check.outputTail : '',
+  };
 }
 
 /**

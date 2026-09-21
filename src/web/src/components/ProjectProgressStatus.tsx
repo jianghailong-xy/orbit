@@ -5,12 +5,16 @@ import { Alert, Button, Input, Modal } from 'antd';
 import type {
   CoordinatorFuseUsage,
   CoordinatorWakeups,
+  IntegrationCheckResult,
   OpenItemAction,
+  OpenItemFacts,
   OpenItemKind,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
 } from '@orbit/shared';
 import { api } from '../api';
+import { stripAnsi } from '../lib/ansi';
+import { checkDuration } from '../lib/checkDuration';
 import { encodeId } from '../lib/idCodec';
 import { projectOpenItemsQuery } from '../lib/queries';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
@@ -38,10 +42,14 @@ import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
  * renders an item, and the hosts decide whether it is a row or a card.
  *
  * WHAT IS DRAWN IS WHAT THE SERVER SERVES. `detailLine` is the server's own sentence about the
- * fact that opened the item, and `actions` is the set of presses that have a door on the other side
- * today (§4.8). Neither is re-derived here: a card that composed its own sentence from a payload
- * would be a second rendering of one fact, free to disagree with the row beside it, and a button
- * this file invented would be one the reader presses to no effect.
+ * fact that opened the item, `actions` is the set of presses that have a door on the other side
+ * today (§4.8), and `facts` is the item's own payload read into fields — the files a merge
+ * conflicted on, the check that disagreed, the branch it left alone. None of the three is
+ * re-derived here: a card that composed its own sentence from a payload would be a second rendering
+ * of one fact, free to disagree with the row beside it, and a button this file invented would be
+ * one the reader presses to no effect. The fact block (§7.5) is not a second rendering either:
+ * every VALUE in it is a field of that reading, and every WORD around those values — the labels,
+ * and the sentences a value is read in — is this file's copy, taken from mock 5.
  *
  * ONE PRESS IS NOT ON THAT LIST, and it is named rather than left to be noticed: "Mark as handled",
  * the owner's ending for an exception they dealt with themselves (§4.7). Its door is real —
@@ -60,6 +68,21 @@ export const FROM_ORBIT_TITLE =
 export const OPEN_ITEMS_HEADING = 'Open items';
 export const NEEDS_YOU_GROUP = 'Needs you';
 export const WITH_COORDINATOR_GROUP = 'With the coordinator';
+
+/**
+ * What each exception card is called, by kind (§7.5, from mock 5).
+ *
+ * The kind's own line and nothing else: WHAT the item is about — the task, the branch, the check —
+ * is a row of the fact block below it, so the two never arrive as one run-on sentence about both.
+ * This is the card's copy rather than the item's `title`, which is the server's one-line name for
+ * the item and what the Open items ROW shows (§7.2 V5).
+ */
+const ITEM_HEADING: Partial<Record<OpenItemKind, string>> = {
+  INTEGRATION_CONFLICT: 'Merge conflict — needs a fix on the task branch',
+  INTEGRATION_CHECK_FAILED: 'Checks failed on the combined tree',
+  INTEGRATION_ERROR: 'Integration error',
+  TASK_FAILED: 'Task failed',
+};
 
 /** The two words each group's rows use for who has the item. */
 const WHO = { OWNER: 'You', COORDINATOR: 'Coordinator' } as const;
@@ -122,7 +145,14 @@ export function waitingLabel(row: ProjectOpenItemRow, now: number): string {
 /** §7.5's footer: who has it, how long, and when it stops being theirs. */
 export function ownerLine(row: ProjectOpenItemRow, now: number): string {
   const waited = `waiting ${formatSpan(waitedMs(row, now))}`;
-  if (row.assignee === 'OWNER') return `Owner: you · ${waited}`;
+  if (row.assignee === 'OWNER') {
+    // An item a clock already moved says WHEN it moved, in the words the coordinator's own footer
+    // uses for the same instant — it is the fact the escalation heading above it is about, and
+    // without it the line said only that the item had been waiting, which the heading already said.
+    return row.escalatedAt == null
+      ? `Owner: you · ${waited}`
+      : `Owner: you · ${waited} · came to the owner at ${waitedBeforeEscalation(row)}`;
+  }
   const left = row.escalateAt == null ? null : Date.parse(row.escalateAt) - now;
   return left != null && left > 0
     ? `Owner: coordinator · ${waited} · goes to the owner in ${formatSpan(left)}`
@@ -665,8 +695,8 @@ function ItemPress({
  * integration error, or a task that failed (mock 5, left column).
  *
  * One component for four kinds, because the card is the same card: what happened, who has it, how
- * long they have had it, and when it stops being theirs. What differs between the four is the
- * server's title and its one sentence, and those arrive already written.
+ * long they have had it, and when it stops being theirs. What differs between the four is the kind's
+ * heading and what its payload has to say, and both arrive already written — see `ItemFactRows`.
  */
 export function OpenItemCard({
   projectId,
@@ -678,9 +708,161 @@ export function OpenItemCard({
   now: number;
 }): JSX.Element {
   return (
-    <ItemCard row={row} heading={row.title} tone="coordinator" now={now}>
+    <ItemCard
+      row={row}
+      heading={ITEM_HEADING[row.kind] ?? row.title}
+      tone="coordinator"
+      now={now}
+    >
       <CardActions projectId={projectId} row={row} />
     </ItemCard>
+  );
+}
+
+/**
+ * One row of a card's fact block (§7.5). A fixed-width key column, so four rows read as a table —
+ * the same two classes the merge confirmation card's own rows use, which is what makes the two
+ * cards' blocks look like one thing.
+ */
+function FactRow({ label, children }: { label: string; children: ReactNode }): JSX.Element {
+  return (
+    <div className="criteria-decision-kv project-open-item-fact">
+      <span className="criteria-decision-k">{label}</span>
+      <span className="criteria-decision-v">{children}</span>
+    </div>
+  );
+}
+
+/** How many lines of a failed check's output stay out of the fold. The rest are one press away. */
+const CHECK_TAIL_LINES = 6;
+
+/**
+ * The tail of what a failed check printed.
+ *
+ * `Pre` is the app's block for a command's output, and it folds past a few lines by keeping the
+ * FIRST ones — which is right for output that grows downwards from its start and exactly wrong for
+ * a tail, whose whole reason to be shown is the failure at its end. So this keeps the last lines
+ * folded and offers the rest, in the same shape the reader has met everywhere else.
+ */
+function CheckOutputTail({ text }: { text: string }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const lines = stripAnsi(text).split('\n');
+  const hidden = Math.max(0, lines.length - CHECK_TAIL_LINES);
+  const shown = open || hidden === 0 ? lines.join('\n') : lines.slice(hidden).join('\n');
+  return (
+    <div className="project-open-item-log">
+      <pre className="chat-pre">{shown}</pre>
+      {hidden > 0 ? (
+        <button className="chat-more" onClick={() => setOpen((o) => !o)}>
+          {open ? 'Show less' : `Show ${hidden} more lines`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** How a check ended, in the words the mock uses for it (§7.5): the code it returned, or that its
+ *  budget ran out while it was still running. */
+function checkVerdict(check: IntegrationCheckResult): string {
+  if (check.exitCode != null) return `exit ${check.exitCode}`;
+  return check.timedOut ? 'timed out' : 'no exit code';
+}
+
+/** `3rd`, `1st`, `12th` — the mock counts the failure that stops being the coordinator's. */
+function ordinal(n: number): string {
+  const teens = n % 100;
+  if (teens >= 11 && teens <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+}
+
+/** Why an attempt failed and where its chain stands (§4.3, §4.5), in the two rows mock 5 draws. */
+function howFailed(failure: NonNullable<OpenItemFacts['failure']>): string {
+  const how: Record<string, string> = {
+    ACCEPTANCE_EXIT_MISMATCH: 'the acceptance command exited',
+    RUN_FAILED: 'a turn of the run failed',
+    RUNNER_FINALIZED_FAILED: 'the runner finished the run as failed',
+    REAPED_API_ERROR: 'the run stopped on an API or sign-in error and was reaped',
+    ATTEMPT_LOST_RUNNER_OFFLINE: 'its runner went offline and the attempt was taken back',
+    ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED: 'its runtime never started and the attempt was taken back',
+    REPORTED_FAILED: 'somebody filed it as failed',
+  };
+  const said = how[failure.how ?? ''] ?? 'the task failed';
+  return failure.exitCode == null
+    ? said
+    : `${said} ${failure.exitCode} (expected ${failure.expectedExitCode ?? 0})`;
+}
+
+function chainStanding(failure: NonNullable<OpenItemFacts['failure']>): string {
+  const standing = `attempt ${failure.attempt} of ${failure.limit} in this chain`;
+  return failure.attempt >= failure.limit
+    ? `${standing} — this one is the owner's`
+    : `${standing} — the ${ordinal(failure.limit)} failure goes straight to the owner`;
+}
+
+/**
+ * The card's fact block (§7.5, mock 5): what the item's payload holds, in the rows the mock draws.
+ *
+ * Every row is drawn only where the payload has something to say, because an item whose payload
+ * predates this build still has to read as the card it was rather than as a card with blanks in it.
+ * A payload this build cannot read at all is not a blank card either: it keeps the one line the
+ * card had before the rows existed — the server's own sentence about the fact.
+ */
+function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null {
+  const facts = row.facts;
+  if (!facts) {
+    return row.detailLine ? <p className="project-open-item-detail">{row.detailLine}</p> : null;
+  }
+  const check = facts.check;
+  return (
+    <div className="project-open-item-facts">
+      {facts.task ? <FactRow label="Task">{facts.task.title}</FactRow> : null}
+      {facts.targetRef ? (
+        <FactRow label="Into">
+          <span className="project-open-item-mono">{facts.targetRef}</span>
+          {facts.targetSha ? ` at ${facts.targetSha.slice(0, 7)}` : null}
+          {facts.nothingLanded ? ' · nothing landed' : null}
+        </FactRow>
+      ) : null}
+      {facts.files.length > 0 ? (
+        <FactRow label="Files">
+          <span className="project-open-item-mono">{facts.files.join(' · ')}</span>
+        </FactRow>
+      ) : null}
+      {/* Only where the item is about a task: the press this sentence describes is a push to that
+          task's branch, and a promotion's failure has no task branch to push to. */}
+      {facts.task && facts.files.length > 0 ? (
+        <FactRow label="After a fix">
+          push to the task branch — Orbit re-integrates and re-checks on its own
+        </FactRow>
+      ) : null}
+      {check ? (
+        <>
+          <FactRow label="Check">
+            <span className="project-open-item-mono">{check.command}</span>
+            {' · '}
+            <span className="project-open-item-bad">{checkVerdict(check)}</span>
+            {` after ${checkDuration(check.durationMs)}`}
+          </FactRow>
+          {check.outputTail.trim() !== '' ? <CheckOutputTail text={check.outputTail} /> : null}
+        </>
+      ) : null}
+      {facts.branchUnchanged ? (
+        <FactRow label="Branch">
+          unchanged — the task passed on its own branch; it fails only on the combined tree
+        </FactRow>
+      ) : null}
+      {facts.failure ? (
+        <>
+          <FactRow label="How">{howFailed(facts.failure)}</FactRow>
+          <FactRow label="Retries">{chainStanding(facts.failure)}</FactRow>
+        </>
+      ) : null}
+      {facts.errorCode ? (
+        <FactRow label="Error">
+          <span className="project-open-item-mono">{facts.errorCode}</span>
+        </FactRow>
+      ) : null}
+    </div>
   );
 }
 
@@ -727,6 +909,9 @@ function CardActions({
  * The same exception once it is the owner's (mock 5, right column): the heading says how it got
  * here, because that is the fact the reader is missing — an item that arrived by a clock, by a
  * conversation ending, by a chain running out or by a hand-over each ask for something different.
+ *
+ * What it is about is not in that heading and not in a bare line under it either: it is the first
+ * row of the fact block, the same row the card wears while the coordinator has it.
  */
 export function EscalatedItemCard({
   projectId,
@@ -737,31 +922,22 @@ export function EscalatedItemCard({
   row: ProjectOpenItemRow;
   now: number;
 }): JSX.Element {
-  const heading = escalationHeading(row, now) ?? row.title;
+  const heading = escalationHeading(row, now) ?? ITEM_HEADING[row.kind] ?? row.title;
   return (
-    <ItemCard
-      row={row}
-      heading={heading}
-      tone="owner"
-      now={now}
-      // What escalated, above the sentence about it — the heading says how it got here, and this
-      // says what "it" is, which the heading no longer has room for.
-      subject={row.title}
-    >
+    <ItemCard row={row} heading={heading} tone="owner" now={now}>
       <CardActions projectId={projectId} row={row} />
     </ItemCard>
   );
 }
 
-/** The chrome all three share: the head with its provenance mark, the server's sentence, the
- *  actions, and the footer that says who owes an answer and by when. */
+/** The chrome all three share: the head with its provenance mark, the fact block, the actions, and
+ *  the footer that says who owes an answer and by when. */
 function ItemCard({
   row,
   heading,
   tone,
   now,
   id,
-  subject,
   children,
 }: {
   row: ProjectOpenItemRow;
@@ -771,8 +947,6 @@ function ItemCard({
   tone: 'owner' | 'coordinator';
   now: number;
   id?: string;
-  /** The item's own title, for a card whose heading is something else. */
-  subject?: string;
   children?: ReactNode;
 }): JSX.Element {
   return (
@@ -791,8 +965,7 @@ function ItemCard({
         </span>
       </div>
       <div className="approval-body is-plan project-open-item-body">
-        {subject ? <p className="project-open-item-subject">{subject}</p> : null}
-        {row.detailLine ? <p className="project-open-item-detail">{row.detailLine}</p> : null}
+        <ItemFactRows row={row} />
         <div className="project-open-item-actions">{children}</div>
       </div>
       <div className="project-open-item-foot">{ownerLine(row, now)}</div>

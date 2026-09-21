@@ -11,6 +11,7 @@ import { CardActionButton, CardActions } from './CardAction';
 import { blockerHeadline, type ProjectBlocker } from './ProjectBlockers';
 import { FROM_ORBIT, FROM_ORBIT_TITLE } from './ProjectProgressStatus';
 import { api } from '../api';
+import { checkDuration } from '../lib/checkDuration';
 import { encodeId } from '../lib/idCodec';
 import {
   projectOpenItemsQuery,
@@ -109,23 +110,6 @@ export function promotionHeading(promotion: ProjectPromotionView): string {
 /** Whether a check ran and ended the way it was asked to. */
 function passed(check: IntegrationCheckResult): boolean {
   return !check.timedOut && check.exitCode === check.expectedExitCode;
-}
-
-/**
- * How long a check took, to the second.
- *
- * Not `formatSpan`: that one rounds to whole minutes, which is right for "this has been waiting
- * 2h 10m" and wrong here — a check's duration is a measurement of a command, and "6m" for 6m 12s
- * reads as a rounded-off estimate of something that was timed exactly.
- */
-export function checkDuration(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`;
-  return `${s}s`;
 }
 
 /** One check, as the mock writes it: the command and what it took, after the verdict. */

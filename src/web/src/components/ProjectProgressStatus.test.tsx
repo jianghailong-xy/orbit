@@ -4,7 +4,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { CoordinatorFuseUsage, CoordinatorWakeups, ProjectOpenItemRow } from '@orbit/shared';
+import type {
+  CoordinatorFuseUsage,
+  CoordinatorWakeups,
+  OpenItemFacts,
+  ProjectOpenItemRow,
+} from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CoordinatorProgressRows,
@@ -39,6 +44,23 @@ function inFuture(ms: number): string {
   return new Date(NOW + ms).toISOString();
 }
 
+/** What the item's payload holds, as the server reads it into the row (§7.5). Every key is absent
+ *  unless a test gives one, which is also the shape an item an older build opened arrives in. */
+function facts(over: Partial<OpenItemFacts> = {}): OpenItemFacts {
+  return {
+    task: null,
+    targetRef: null,
+    targetSha: null,
+    files: [],
+    nothingLanded: false,
+    check: null,
+    branchUnchanged: false,
+    errorCode: null,
+    failure: null,
+    ...over,
+  };
+}
+
 function item(over: Partial<ProjectOpenItemRow> = {}): ProjectOpenItemRow {
   return {
     itemId: '3mZLAZL3OvQix77hxsBQYH',
@@ -59,6 +81,16 @@ function item(over: Partial<ProjectOpenItemRow> = {}): ProjectOpenItemRow {
     delivery: { state: 'DELIVERED', sessionId: '34OAa5LxnQ1JXpUOfN21W', at: at(117 * MINUTE) },
     actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
     question: null,
+    facts: facts({
+      task: { id: '34OEE9DwfWYjo3aRFuBgo', title: '有存活 Monitor 的 warm engine 不回收（带硬上限）' },
+      failure: {
+        how: 'ACCEPTANCE_EXIT_MISMATCH',
+        exitCode: 1,
+        expectedExitCode: 0,
+        attempt: 2,
+        limit: 3,
+      },
+    }),
     ...over,
   };
 }
@@ -70,7 +102,31 @@ const CONFLICT = item({
   detailLine: '3 files conflict with project/bg-jobs · nothing landed',
   waitingSince: at(18 * MINUTE),
   escalateAt: inFuture(102 * MINUTE),
+  facts: facts({
+    task: { id: '34OEE9DwfWYjo3aRFuBgo', title: 'runner 托管作业支持「事件发生时叫醒会话」' },
+    targetRef: 'project/bg-jobs',
+    targetSha: 'b70a4460d0e3a5a4b1c1f5d0f9f1e6a1b2c3d4e5',
+    files: ['src/runner-go/session_pool.go', 'src/runner-go/background.go', 'src/runner-go/mcp.go'],
+    nothingLanded: true,
+  }),
 });
+
+/** The tail of the failing check's output, longer than the block keeps folded — what a reader needs
+ *  from a log is its END, so the folded form has to be the last lines and not the first. */
+const CHECK_TAIL = [
+  'go: downloading github.com/orbit/runner v0.3.1',
+  'ok  \torbit\t0.412s',
+  '?   \torbit/cmd\t[no test files]',
+  '=== RUN   TestSessionPoolReclaimsWarm',
+  '--- PASS: TestSessionPoolReclaimsWarm (0.11s)',
+  '=== RUN   TestBackgroundJobExit',
+  '--- PASS: TestBackgroundJobExit (0.28s)',
+  '=== RUN   TestScheduleWakeupSurvivesWarmEviction',
+  '--- FAIL: TestScheduleWakeupSurvivesWarmEviction (2.31s)',
+  '    wake_test.go:88: wake not delivered after eviction',
+  'FAIL',
+  'FAIL\torbit\t341.207s',
+].join('\n');
 
 const CHECK_FAILED = item({
   itemId: '2Ae0EwGDfgvMRtD6k76fP0',
@@ -79,6 +135,19 @@ const CHECK_FAILED = item({
   detailLine: 'go test exited 1 after 5m 40s · TestScheduleWakeupSurvivesWarmEviction',
   waitingSince: at(5 * MINUTE),
   escalateAt: inFuture(115 * MINUTE),
+  facts: facts({
+    task: { id: '34OEE9DwfWYjo3aRFuBgo', title: '核实 ScheduleWakeup 是否随 warm 回收丢失' },
+    check: {
+      name: 'TASK_ACCEPTANCE',
+      command: 'cd src/runner-go && go test -count=1 ./...',
+      expectedExitCode: 0,
+      exitCode: 1,
+      timedOut: false,
+      durationMs: 5 * MINUTE + 40 * 1000,
+      outputTail: CHECK_TAIL,
+    },
+    branchUnchanged: true,
+  }),
 });
 
 const QUESTION = item({
@@ -94,6 +163,9 @@ const QUESTION = item({
   sessionId: null,
   delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
   actions: ['ANSWER'],
+  // A question is its own card, and its payload is the question itself rather than an exception's
+  // — the server serves it as `question` and serves no facts for one.
+  facts: null,
   question: {
     question: 't4 and t7 both change session_pool.go. Which first?',
     options: [{ label: 'Start t4 first, then t7 once t4 lands' }, { label: 'Hold both' }],
@@ -139,6 +211,9 @@ const PAUSED = item({
   fuseEpisodeId: '5Grmtl4G1LatjDDEmX492i',
   delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
   actions: ['RESUME'],
+  // A pause's payload is the pause — what it spent, what is still running, what resuming does — and
+  // the card for it writes its own sentence rather than drawing rows.
+  facts: null,
 });
 
 const PROMOTION = item({
@@ -155,6 +230,8 @@ const PROMOTION = item({
   promotionId: '3fFMHLbE7JTsr3vHFOzIDM',
   delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
   actions: ['REVIEW'],
+  // A merge approval is drawn from the candidate itself, by the card that decides it.
+  facts: null,
 });
 
 function client(items: { needsYou: ProjectOpenItemRow[]; withCoordinator: ProjectOpenItemRow[] }) {
@@ -262,11 +339,15 @@ describe('ProjectExceptionCards — the same items in the coordinator’s conver
       () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
 
-    expect(html).toContain('Merge conflict: runner 托管作业支持「事件发生时叫醒会话」');
-    expect(html).toContain('3 files conflict with project/bg-jobs · nothing landed');
-    expect(html).toContain('Checks failed on the combined tree: 核实 ScheduleWakeup 是否随 warm 回收丢失');
-    expect(html).toContain('go test exited 1 after 5m 40s');
-    expect(html).toContain('Task failed: 有存活 Monitor 的 warm engine 不回收（带硬上限）');
+    // Each card is its kind's own heading, and what the item is about is a row under it rather
+    // than a second half of the heading (§7.5, mock 5).
+    expect(html).toContain('Merge conflict — needs a fix on the task branch');
+    expect(html).toContain('runner 托管作业支持「事件发生时叫醒会话」');
+    expect(html).toContain('src/runner-go/session_pool.go');
+    expect(html).toContain('Checks failed on the combined tree');
+    expect(html).toContain('核实 ScheduleWakeup 是否随 warm 回收丢失');
+    expect(html).toContain('cd src/runner-go &amp;&amp; go test -count=1 ./...');
+    expect(html).toContain('Task failed');
     expect(html).toContain('attempt 2 of 3 in this chain');
 
     // The footer every exception card carries (§7.5).
@@ -284,8 +365,8 @@ describe('ProjectExceptionCards — the same items in the coordinator’s conver
     );
 
     expect(html).toContain('Now yours — no one acted on this for 2h');
-    expect(html).toContain('Task failed: 有存活 Monitor 的 warm engine 不回收（带硬上限）');
-    expect(html).toContain('Owner: you · waiting 2h 6m');
+    expect(html).toContain('有存活 Monitor 的 warm engine 不回收（带硬上限）');
+    expect(html).toContain('Owner: you · waiting 2h 6m · came to the owner at 2h');
     expect(html).not.toContain('goes to the owner');
   });
 
@@ -327,6 +408,106 @@ describe('ProjectExceptionCards — the same items in the coordinator’s conver
       { needsYou: [], withCoordinator: [] },
       () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
     )).toBe('');
+  });
+});
+
+/**
+ * The exception card's fact block (mock 5's left column, §7.5).
+ *
+ * The four kinds each have something of their own to say — a conflict names the files and where the
+ * work was going, a failed check names the command, what it returned and the tail of what it
+ * printed, a failed task says how it failed and where its chain stands — and every one of those
+ * facts was a key of the item's own payload the whole time. What was missing was the rows.
+ */
+describe('the exception card’s fact block', () => {
+  function card(row: ProjectOpenItemRow): string {
+    return paint(
+      row.assignee === 'OWNER'
+        ? { needsYou: [row], withCoordinator: [] }
+        : { needsYou: [], withCoordinator: [row] },
+      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+  }
+
+  it('draws the check that failed: its command, its exit code and its output’s tail', () => {
+    const html = card(CHECK_FAILED);
+
+    // The command as the payload carries it, escaped by the renderer like any other markup.
+    expect(html).toContain('cd src/runner-go &amp;&amp; go test -count=1 ./...');
+    expect(html).toContain('exit 1');
+    expect(html).toContain('after 5m 40s');
+    // The tail, from the end of the log — which is where the reason a check is red always is.
+    expect(html).toContain('FAIL: TestScheduleWakeupSurvivesWarmEviction');
+    expect(html).toContain('wake_test.go:88: wake not delivered after eviction');
+    // Folded past a few lines like any other block of output, and folded from the END: the lines it
+    // hides are the ones before the failure, not the failure.
+    expect(html).toContain('Show 6 more lines');
+    expect(html).not.toContain('go: downloading github.com/orbit/runner v0.3.1');
+    // And the branch the check disagreed on, which the payload says it left alone.
+    expect(html).toContain('unchanged — the task passed on its own branch');
+  });
+
+  it('draws a conflict’s files, and says the target branch did not move', () => {
+    const html = card(CONFLICT);
+
+    expect(html).toContain('src/runner-go/session_pool.go');
+    expect(html).toContain('src/runner-go/background.go');
+    expect(html).toContain('src/runner-go/mcp.go');
+    expect(html).toContain('project/bg-jobs');
+    expect(html).toContain('b70a446');
+    expect(html).toContain('nothing landed');
+  });
+
+  it('names the task in its own row rather than in the heading', () => {
+    const html = card(CHECK_FAILED);
+    const TASK = '核实 ScheduleWakeup 是否随 warm 回收丢失';
+
+    // The heading is the kind's line and nothing else: what an item is about is a row, not a second
+    // half of the heading, so the two never arrive as one run-on sentence.
+    expect(html).toContain('Checks failed on the combined tree');
+    expect(html).not.toContain(`Checks failed on the combined tree: ${TASK}`);
+    expect(html).toContain(`<span class="criteria-decision-k">Task</span><span class="criteria-decision-v">${TASK}</span>`);
+
+    // The same where the item has become the owner's: an escalation heading, then the task.
+    const escalated = card({
+      ...CHECK_FAILED,
+      assignee: 'OWNER',
+      assigneeReason: 'ESCALATED',
+      waitingSince: at(2 * HOUR + 6 * MINUTE),
+      escalateAt: at(6 * MINUTE),
+      escalatedAt: at(6 * MINUTE),
+    });
+    expect(escalated).toContain('Now yours — no one acted on this for 2h');
+    expect(escalated).not.toContain(`Checks failed on the combined tree: ${TASK}`);
+    expect(escalated).toContain(`<span class="criteria-decision-k">Task</span><span class="criteria-decision-v">${TASK}</span>`);
+    expect(card(CONFLICT)).not.toContain('Merge conflict: runner 托管作业支持「事件发生时叫醒会话」');
+  });
+
+  it('says in the footer when an item becomes the owner’s, and when it did', () => {
+    // While the coordinator has it, the footer says when it stops being the coordinator's (§7.5).
+    expect(card(CONFLICT)).toContain('Owner: coordinator · waiting 18m · goes to the owner in 1h 42m');
+    // And once the clock has made it the owner's, the same sentence in the past tense: how long the
+    // coordinator had it before the wait ran out. That is what the escalation heading above it is
+    // about, and the footer was the one line that did not say it.
+    expect(card(ESCALATED)).toContain('Owner: you · waiting 2h 6m · came to the owner at 2h');
+  });
+
+  it('draws what it can when the payload carries none of it, rather than throwing', () => {
+    // An item whose payload this build cannot read at all: the card is the card it was before the
+    // rows existed — the kind's heading, the server's own sentence about the fact, and its doors.
+    const unreadable = card(item({ facts: null }));
+    expect(unreadable).toContain('Task failed');
+    expect(unreadable).toContain('attempt 2 of 3 in this chain');
+    expect(unreadable).toContain('Retry');
+    expect(unreadable).toContain('Owner: coordinator · waiting 1h 58m');
+
+    // And a payload with every key absent: the heading and the doors, and no row invented for a
+    // fact nobody recorded.
+    const bare = card(item({ kind: 'INTEGRATION_CONFLICT', facts: facts({}) }));
+    expect(bare).toContain('Merge conflict — needs a fix on the task branch');
+    expect(bare).not.toContain('<span class="criteria-decision-k">');
+    expect(bare).toContain('Cancel task');
+    expect(bare).toContain('Owner: coordinator');
   });
 });
 

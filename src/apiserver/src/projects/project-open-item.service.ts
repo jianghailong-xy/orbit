@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import type { OpenItemFacts } from '@orbit/shared';
+
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
@@ -28,6 +30,7 @@ import {
   TASK_FAILURE_CHAIN_LIMIT,
   coordinatorQuestion,
   openItemActions,
+  openItemFacts,
   openItemMessage,
   openItemTurnId,
   ownerAnswerMessage,
@@ -119,6 +122,9 @@ export interface OpenItemRow {
   >;
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
+  /** What the item's payload holds, as the rows its card draws (§7.5); null when the payload is
+   *  not a shape this build reads, which leaves the card drawing what it drew before. */
+  facts: OpenItemFacts | null;
 }
 
 /** A question filed, as `ask_owner` answers its caller (§5.2 R7). */
@@ -1018,6 +1024,17 @@ export class ProjectOpenItemService {
       },
     });
     const keys = rows.flatMap((row) => row.deliveries);
+    // The tasks these items are about, read once for the whole page: the card's first row names
+    // what the item is about, and a task's title is not a column of the item. A task that is gone
+    // leaves the row undrawn rather than drawn empty.
+    const taskIds = unique(rows.map((row) => row.taskId));
+    const tasks = taskIds.length > 0
+      ? await this.prisma.task.findMany({
+          where: { id: { in: taskIds } },
+          select: { id: true, title: true },
+        })
+      : [];
+    const titles = new Map(tasks.map((task) => [task.id, task.title]));
     const turns = keys.length > 0
       ? await this.prisma.conversationTurn.findMany({
           where: {
@@ -1035,12 +1052,18 @@ export class ProjectOpenItemService {
       const question = row.kind === 'COORDINATOR_QUESTION'
         ? (row.payload as unknown as CoordinatorQuestion)
         : null;
+      const title = row.taskId ? titles.get(row.taskId) : undefined;
       return {
         itemId: row.id,
         kind: row.kind as OpenItemKind,
         title: row.title,
         detailLine: question ? questionDetailLine(question) : detailLine(row.kind, row.payload),
         question,
+        facts: openItemFacts(
+          row.kind,
+          row.payload,
+          row.taskId && title ? { id: row.taskId, title } : null,
+        ),
         assignee: row.assignee as OpenItemAssignee,
         assigneeReason: row.assigneeReason as OpenItemAssigneeReason,
         waitingSince: row.waitingSince,

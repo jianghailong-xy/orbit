@@ -212,6 +212,50 @@ export interface CoordinatorQuestion {
 }
 
 /**
+ * What an exception item's payload holds, as the rows its card draws (§7.5, mock 5).
+ *
+ * The payload is a column of the item's own row — the runner's report of the job that did not land,
+ * or the failure the platform recorded — and until this shape it was read once, turned into the
+ * item's one sentence, and served to nobody. A card could say a check had failed but not which
+ * command failed, with what exit code, or whether the branch it failed on had moved; every one of
+ * those facts was in the row the whole time (`project_open_item.payload`).
+ *
+ * Every field is a key of that payload, typed, and every absent key is null or false rather than
+ * missing: a payload an older build wrote leaves a row the card can skip, never a hole it falls
+ * into. The card's own words for them are the card's — this is the data, not the copy.
+ */
+export interface OpenItemFacts {
+  /** The task the item is about, when it names one. Null for a promotion's item: a job that lands
+   *  the project's own branch is about no single task, and the item's title says what it was about
+   *  instead. */
+  task: { id: string; title: string } | null;
+  /** The branch an integration was moving work into, and the tip it was moving (INTEGRATION_*). */
+  targetRef: string | null;
+  targetSha: string | null;
+  /** The paths a conflicting merge could not reconcile (INTEGRATION_CONFLICT). */
+  files: string[];
+  /** Whether the target branch is where it was — the first thing a reader asks a conflict. */
+  nothingLanded: boolean;
+  /** The check that disagreed on the combined tree, whole: its command, verdict, how long it took
+   *  and the tail of what it printed (INTEGRATION_CHECK_FAILED). */
+  check: IntegrationCheckResult | null;
+  /** Whether the task's own branch passed — the check failed only combined with it. */
+  branchUnchanged: boolean;
+  /** The code an integration job ended with (INTEGRATION_ERROR). */
+  errorCode: string | null;
+  /** Why an attempt failed, and where its chain stands (TASK_FAILED). */
+  failure: {
+    how: string | null;
+    exitCode: number | null;
+    expectedExitCode: number | null;
+    /** How many failures this replace-chain has now had, this one included, and where it gives up
+     *  (§4.5): the last one is the owner's rather than the coordinator's. */
+    attempt: number;
+    limit: number;
+  } | null;
+}
+
+/**
  * One open exception, as `GET /projects/:id/open-items` serves it (§4.8).
  *
  * `detailLine` is the server's own sentence about what happened, in the words of the fact that
@@ -239,6 +283,10 @@ export interface ProjectOpenItemRow<Instant = string> {
   actions: OpenItemAction[];
   /** Present for a `COORDINATOR_QUESTION` and null for every other kind. */
   question: CoordinatorQuestion | null;
+  /** What the item's payload holds, as the rows its card draws; null when the payload is not a
+   *  shape this build reads — an item an older build opened, a pause, a question — and the card
+   *  then draws what it drew before this existed. */
+  facts: OpenItemFacts | null;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
