@@ -8598,6 +8598,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * auto-run, and has an assignee bound to a runner. Each run is best-effort and isolated
    * so one failure doesn't stop the others. Downstream chains flow naturally: the workspace
    * marking that dependent DONE re-enters update() and triggers the next layer.
+   *
+   * It is also where "this task is DONE" is ANSWERED, for the doors that settle a task without
+   * going through `update()`: the evidence judgment and the owner's own Confirm done each write the
+   * DONE row inside a transaction of their own, and each comes back through here to release what
+   * the completion unblocked. The answer to the task's open exception items (§4.2) belongs on that
+   * same edge rather than at each of those doors, because it is derived from the committed row and
+   * not from what the door believes it just wrote. `update()` is the one door that settles its own
+   * task knowing it did, and it answers there, where it writes.
    */
   async dispatchDependentsAfterCompletion(ownerId: string, doneTaskId: string): Promise<void> {
     try {
@@ -8608,6 +8616,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // — which is where most tasks actually settle — so the fact is delivered from here rather
       // than from each door's own idea of what it committed. In `finally` because a dispatch that
       // failed still leaves the completed row behind, and that row is the fact.
+      //
+      // The answer to the task's open exception items, read off that same committed row rather than
+      // taken on this call's word: `resolveByFact` closes only what the task says is over (done,
+      // cancelled, replaced, being attempted again), so arriving here for a task that is not
+      // finished answers nothing, and arriving twice answers nothing the second time. Being derived
+      // is what makes it safe to hold here instead of at each door — and it is said first, ahead of
+      // the delivery below, because it cannot fail: the delivery can, and a throw from it must not
+      // take the answer to a failure this completion has already resolved with it.
+      await this.openItems?.resolveByFact([doneTaskId]);
       //
       // It runs BEFORE the release below, which it did not used to. Delivering the fact is how
       // this edge finds out whether the delivery it just settled is one a person has to look at,
