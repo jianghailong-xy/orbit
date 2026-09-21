@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Build the probe app, run it against the stub, and screenshot it. Evidence only.
 #
-#   bash .ios-probe/run.sh [out-dir] [simulator-name]
+#   bash .ios-probe/run.sh [out-dir]
 #
-# Runs on a macOS host with Xcode + xcodegen + node. The simulator reaches the stub on the host's
-# own loopback as 127.0.0.1, which is why the server is started here rather than anywhere else.
+# One launch, one screenshot: three cards do not fit a phone's portrait screen, so the device is an
+# iPad (taller, and the same iOS views) — and a second launch of the same app is what wedged the
+# simulator twice before this. The app is asked for every card at once with `-shot all`.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${1:-$HERE/out}"
-SIM_NAME="${2:-iPhone 17 Pro}"
 PORT=8931
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -35,10 +35,6 @@ echo "== generate =="
 cd "$HERE" && xcodegen generate || exit 1
 
 echo "== build =="
-# Built for the simulator SDK with no `-destination`: the product is a simulator app, and naming a
-# device here only adds a way to fail on a runner whose Xcode ships different devices.
-# The log is kept whatever happens: a CI round that fails with only "** BUILD FAILED **" is a round
-# spent on nothing.
 xcodebuild -project Probe.xcodeproj -scheme Probe -sdk iphonesimulator -configuration Debug \
   -derivedDataPath "$HERE/.dd" build > "$OUT/build.log" 2>&1
 BUILT=$?
@@ -47,16 +43,13 @@ tail -3 "$OUT/build.log"
 
 echo "== simulator =="
 xcrun simctl list runtimes | grep -i ios || true
-# Ask for the newest iPhone the runtimes here actually have; the name in $SIM_NAME wins when it is
-# there, and otherwise the first available one is used (reported either way, because the device
-# decides the screenshot's size).
-UDID=$(xcrun simctl list devices available | grep -m1 "$SIM_NAME (" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
-if [ -z "${UDID:-}" ]; then
-  SIM_NAME=$(xcrun simctl list devices available | grep -oE "^    iPhone [^(]*" | head -1 | xargs)
-  UDID=$(xcrun simctl list devices available | grep -m1 "$SIM_NAME (" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
-fi
-echo "device: $SIM_NAME ($UDID)"
-[ -n "${UDID:-}" ] || { echo "no available iPhone simulator"; exit 1; }
+# An iPad first: the three cards do not fit a phone screen in portrait, and one screenshot that
+# holds all of them is worth more than three that each hold one. Both families are iOS.
+DEVICE=$(xcrun simctl list devices available | sed -nE 's/^    ((iPad|iPhone)[^(]*) \(.*/\1/p' \
+         | sed -E 's/ +$//' | (grep '^iPad' || true; grep '^iPhone' || true) | head -1)
+UDID=$(xcrun simctl list devices available | grep -m1 "$DEVICE (" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+echo "device: $DEVICE ($UDID)"
+[ -n "${UDID:-}" ] || { echo "no available iPhone/iPad simulator"; exit 1; }
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
 
@@ -65,50 +58,25 @@ xcrun simctl uninstall "$UDID" io.orbitd.probe 2>/dev/null || true
 xcrun simctl install "$UDID" "$APP" || exit 1
 
 echo "== run =="
-# Plain launch, no `--console-pty`: the app's own output is not what this needs (the screenshot and
-# the stub's request log are), and a pty in a redirected CI shell is one more way for the launch to
-# end in nothing. SIMCTL_CHILD_ is how simctl forwards an environment variable to the app.
-#
-# Each launch is watched and killed at a deadline, and every step is stamped: `simctl launch` can hang
-# on a wedged simulator, and a job that hangs takes the whole round with it while saying nothing.
 stamp() { date -u +%H:%M:%S; }
-
-shoot() { # <name> <deadline-seconds> <args…>
-  local name="$1" deadline="$2"; shift 2
-  echo "[$(stamp)] launch $name $*"
-  SIMCTL_CHILD_PROBE_PORT="$PORT" xcrun simctl launch --terminate-running-process "$UDID" \
-    io.orbitd.probe "$@" > "$OUT/launch-$name.log" 2>&1 &
-  local pid=$! waited=0
-  while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$deadline" ]; do sleep 1; waited=$((waited + 1)); done
-  if kill -0 "$pid" 2>/dev/null; then
-    echo "[$(stamp)] launch $name STILL RUNNING after ${deadline}s — killing it and shooting anyway"
-    kill -9 "$pid" 2>/dev/null
-  else
-    wait "$pid"; echo "[$(stamp)] launch $name exit: $? — $(cat "$OUT/launch-$name.log")"
-  fi
-  # The console's context load + the ruler read are two round trips against a local stub.
-  sleep 12
-  xcrun simctl io "$UDID" screenshot "$OUT/$name.png" && echo "[$(stamp)] shot $name"
-}
-
-# Once with every card (which is what says the delivery works as a whole — the trace line names all
-# of them), then once per card: three cards do not fit one phone screen.
-shoot probe-all 60 -shot all
-shoot probe-0-pause 60 -shot 0
-shoot probe-1-escalated 60 -shot 1
-shoot probe-2-open 60 -shot 2
-echo "[$(stamp)] shots done"
+SIMCTL_CHILD_PROBE_PORT="$PORT" xcrun simctl launch --terminate-running-process "$UDID" \
+  io.orbitd.probe -shot all > "$OUT/launch.log" 2>&1 &
+PID=$!
+WAITED=0
+while kill -0 "$PID" 2>/dev/null && [ "$WAITED" -lt 60 ]; do sleep 1; WAITED=$((WAITED + 1)); done
+if kill -0 "$PID" 2>/dev/null; then
+  echo "[$(stamp)] launch still running after ${WAITED}s — shooting anyway"
+  kill -9 "$PID" 2>/dev/null
+else
+  wait "$PID"; echo "[$(stamp)] launch exit: $? — $(cat "$OUT/launch.log")"
+fi
+sleep 14
+xcrun simctl io "$UDID" screenshot "$OUT/probe-all.png" && echo "[$(stamp)] shot probe-all"
 
 echo "== app diagnostics =="
-# If the app never drew anything, this is where the reason is: its own os_log lines, and any crash
-# report the host wrote for it.
 xcrun simctl spawn "$UDID" log show --style compact --last 3m \
-  --predicate 'process == "OrbitProbe" OR composedMessage CONTAINS "OrbitProbe"' 2>&1 | tail -30
-ls -t ~/Library/Logs/DiagnosticReports 2>/dev/null | head -5
-for f in $(ls -t ~/Library/Logs/DiagnosticReports/OrbitProbe* 2>/dev/null | head -1); do
-  echo "--- $f"; head -40 "$f"
-done
+  --predicate 'process == "OrbitProbe" OR composedMessage CONTAINS "OrbitProbe"' 2>&1 | tail -20
 
 echo "== stub log =="
-cat "$OUT/server.log"
-ls -la "$OUT"/probe.png
+tail -20 "$OUT/server.log"
+ls -la "$OUT"/*.png
