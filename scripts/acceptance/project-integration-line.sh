@@ -8,8 +8,8 @@
 # WHAT IT PROVES
 # ==============
 # That a code task reaching DONE is landed on its project's integration line by the PLATFORM — with
-# no agent, no message, and nobody pressing anything — and that the four ways that can go are each
-# what the contract says:
+# no agent, no message, and nobody pressing anything — and that the ways that can go are each what
+# the contract says:
 #
 #   clean          → the branch lands, a receipt records it, and the task waiting downstream is
 #                    released (§2.5 J8, J10)
@@ -19,8 +19,11 @@
 #                    command's exit code and output (§2.4 J-S5)
 #   two at once    → they land one after the other, each on a target the other had already moved,
 #                    and each one's landed tree is the tree its own checks ran on (§2.1 J1, J2)
+#   needs JS deps  → the tree the checks run in came out of git and carries no node_modules, so the
+#                    platform lays the tree's own recipe down before them: without that, whether a
+#                    task passes is a question about the SHAPE of its acceptance command (§2.4 J-S5)
 #
-# The last one is the reason this is an end-to-end script and not a unit test. "The tree that landed
+# "Two at once" is the reason this is an end-to-end script and not a unit test: "the tree that landed
 # is the tree that was tested" is only interesting when something else is moving the target
 # underneath, and only a real queue, a real runner and a real repository can move it.
 #
@@ -31,7 +34,9 @@
 # session took a worktree on a branch — producing those through a real engine would mean an LLM, and
 # nothing under test is downstream of one. The DONE itself is never seeded: every case drives it
 # through `POST /api/tasks/:id/owner-confirmation`, so the enqueue happens in the transaction the
-# product itself writes (§2.3 J-T1a).
+# product itself writes (§2.3 J-T1a). The one case whose check needs JS dependencies borrows this
+# checkout's installed `node_modules` for its fixture repository — what an installed checkout has,
+# and what the real recipe links from (`new_js_repo` in lib/integration-line-fixture.sh).
 
 set -euo pipefail
 
@@ -723,6 +728,94 @@ case_main_sync_conflict_holds_the_queue() {
     "$(git -C "$work" rev-parse project/holdqueue)" "$(origin_tip "$origin" refs/heads/project/holdqueue)"
 }
 
+# ── case 12: a check that needs node_modules, in a tree that came out of git ────────────────────
+#
+# The false red of 2026-09-21, observed the first time this line ran in production: the combination
+# tree is staged from git objects and git carries no `node_modules`, so a task whose acceptance
+# command was `cd src/web && npx vitest run …` was judged CHECK_FAILED with
+# `Cannot find package '@vitejs/plugin-react'` — a correct implementation refused by the line for the
+# SHAPE of its command. A command that runs in the session's own worktree (overlaid) is not one the
+# line may refuse, so the platform lays the tree's environment down before the checks: the
+# repository's own `scripts/worktree-overlay.sh`, run in the tree (contract §2.4 J-S5).
+#
+# What the case holds to that, in both directions:
+#   * the failing half must fail on vitest's OWN output — an assertion — and not on a package that
+#     was not there. That is what separates "the tree was prepared" from "the command happened to
+#     fail anyway", and it is why the control command is a real failing spec rather than `false`.
+#   * the landing half must LAND, with the check's output showing vitest ran, and land exactly the
+#     tree it tested: the recipe writes only gitignored paths, so J-S6a's tree is untouched.
+case_js_check_runs_on_the_prepared_tree() {
+  local work origin ws project
+  work="$(new_js_repo jsdeps)"
+  origin="$(repo_origin_of jsdeps)"
+  ws="$(new_workspace 'jsdeps' "$work" "$origin")"
+  project="$(new_project jsdeps "$ws" "$origin")"
+  local base; base="$(git -C "$work" rev-parse main)"
+
+  # ── the landing half ─────────────────────────────────────────────────────────────────────────
+  new_task_branch "$work" task/js-ok extra.txt 'from the js task' >/dev/null
+  local ok_task
+  ok_task="$(new_code_task "$project" 'js ok' "$ws" task/js-ok "$base" \
+    'cd src/web && npx vitest run src/lib/sums.test.ts')"
+
+  confirm_task_done "$ok_task"
+  wait_for_job_state "$ok_task" LANDED 420
+
+  assert_eq 'the js task landed' 'LANDED' "$(job_state_of "$ok_task")"
+  assert_eq 'its acceptance check passed' 'TASK_ACCEPTANCE:0' \
+    "$(sql "SELECT string_agg(c->>'name' || ':' || COALESCE(c->>'exitCode', 'null'), ',')
+              FROM project_integration_job j, jsonb_array_elements(j.checks) c
+             WHERE j.task_id = '$ok_task'" | tr -d '[:space:]')"
+  # The check's own output, not merely its exit code: this is vitest's summary, so the command ran
+  # against installed dependencies instead of failing on the way in.
+  assert_eq 'and vitest really ran in that tree' 'true' \
+    "$(sql "SELECT (c->>'outputTail' LIKE '%Test Files%passed%')::text
+              FROM project_integration_job j, jsonb_array_elements(j.checks) c
+             WHERE j.task_id = '$ok_task' AND c->>'name' = 'TASK_ACCEPTANCE'" | tr -d '[:space:]')"
+  assert_eq 'the landed tree is the tested tree' \
+    "$(job_column_of "$ok_task" tested_tree_sha)" "$(job_column_of "$ok_task" landed_tree_sha)"
+  assert_eq 'one MERGED receipt for the landing' 1 \
+    "$(sql "SELECT count(*) FROM session_merge_receipt
+             WHERE task_id = '$ok_task' AND result = 'MERGED' AND target_branch = 'project/jsdeps'" | tr -d '[:space:]')"
+  assert_eq 'the line holds the task work' 'from the js task' \
+    "$(git -C "$work" show "$(origin_tip "$origin" refs/heads/project/jsdeps)":extra.txt | tr -d '\n')"
+
+  # ── the negative control: the same shape, on a spec that really fails ────────────────────────
+  local target_before; target_before="$(origin_tip "$origin" refs/heads/project/jsdeps)"
+  new_task_branch "$work" task/js-bad other.txt 'x' >/dev/null
+  local bad_task
+  bad_task="$(new_code_task "$project" 'js bad' "$ws" task/js-bad "$base" \
+    'cd src/web && npx vitest run src/lib/broken.test.ts')"
+
+  confirm_task_done "$bad_task"
+  wait_for_job_state "$bad_task" CHECK_FAILED 420
+
+  assert_eq 'the target branch did not move' "$target_before" \
+    "$(origin_tip "$origin" refs/heads/project/jsdeps)"
+  assert_eq 'nothing was recorded as landed' '' "$(job_column_of "$bad_task" landed_sha)"
+  assert_eq 'an INTEGRATION_CHECK_FAILED item is open' 1 \
+    "$(sql "SELECT count(*) FROM project_open_item
+             WHERE project_id = '$project' AND kind = 'INTEGRATION_CHECK_FAILED' AND state = 'OPEN'" | tr -d '[:space:]')"
+  assert_eq 'the item names the task acceptance check' 'TASK_ACCEPTANCE' \
+    "$(sql "SELECT payload->'check'->>'name' FROM project_open_item
+             WHERE project_id = '$project' AND kind = 'INTEGRATION_CHECK_FAILED'" | tr -d '[:space:]')"
+  assert_eq 'the item carries the exit code vitest returned' '1' \
+    "$(sql "SELECT payload->'check'->>'exitCode' FROM project_open_item
+             WHERE project_id = '$project' AND kind = 'INTEGRATION_CHECK_FAILED'" | tr -d '[:space:]')"
+  # The heart of the control: the failure it carries is the assertion failing, NOT a dependency that
+  # was missing. A tree that was never prepared fails this assertion by saying `Cannot find package`.
+  assert_eq 'and it is the spec failing, not a missing package' 'true' \
+    "$(sql "SELECT ((payload->'check'->>'outputTail' LIKE '%Test Files%failed%')
+                    AND (payload->'check'->>'outputTail' NOT LIKE '%Cannot find package%'))::text
+              FROM project_open_item
+             WHERE project_id = '$project' AND kind = 'INTEGRATION_CHECK_FAILED'" | tr -d '[:space:]')"
+  assert_eq 'the item says the branch is unchanged' 'true' \
+    "$(sql "SELECT payload->>'branchUnchanged' FROM project_open_item
+             WHERE project_id = '$project' AND kind = 'INTEGRATION_CHECK_FAILED'" | tr -d '[:space:]')"
+  assert_eq 'no receipt was written' 0 \
+    "$(sql "SELECT count(*) FROM session_merge_receipt WHERE task_id = '$bad_task'" | tr -d '[:space:]')"
+}
+
 # ── the register ───────────────────────────────────────────────────────────────────────────────
 # One function per case, listed here. Later tasks append their own (§9.2) and do not edit these.
 CASES=(
@@ -737,6 +830,7 @@ CASES=(
   case_project_done_flips_on_merge
   case_main_line_task_branch_promotion
   case_main_sync_conflict_holds_the_queue
+  case_js_check_runs_on_the_prepared_tree
 )
 
 main() {

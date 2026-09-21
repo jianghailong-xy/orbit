@@ -384,13 +384,15 @@ interface IntegrationJobCommand {
 | **J-S2 MAIN_SYNC**（仅 `PROJECT_BRANCH`） | U 不是 T0 的祖先时，在 T0 上 `git merge --no-ff -m "Merge <upstream> into <target>" U` → M = `main_sync_sha`，base = M；否则 base = T0 | 冲突 → `CONFLICT`（`phase = MAIN_SYNC`，冲突路径来自 `git diff --name-only --diff-filter=U`） |
 | **J-S3 已包含** | S 是 base 的祖先 → `ALREADY_LANDED`，不推送，丢弃 M | |
 | **J-S4 REBASE / MERGE** | fork = `git merge-base S base`；`git rev-list --merges fork..S` 非空 → **MERGE 模式** `git merge --no-ff S`（保住合并提交里的冲突解法）；否则 `git rebase --onto base <fork 或 sessionBaseSha> S`。结果 C = `tested_sha` | 冲突 → `CONFLICT`（`phase = REBASE` 或 `MERGE`） |
-| **J-S5 CHECK** | 在 C 上依次跑任务验收命令（有 `acceptance_command` 时）与合并检查命令（有配置时），逐条比对退出码 | 任一不一致 → `CHECK_FAILED`（什么都不推送） |
+| **J-S5 CHECK** | 组合树自带 `scripts/worktree-overlay.sh` 时先运行它（见下方「检查前的铺环境」），再在 C 上依次跑任务验收命令（有 `acceptance_command` 时）与合并检查命令（有配置时），逐条比对退出码 | 铺环境失败或超时 → `ERROR / CHECK_TREE_UNPREPARED`；任一退出码不一致 → `CHECK_FAILED`（什么都不推送） |
 | **J-S6a 落地前核对** | `tested_tree_sha = git rev-parse C^{tree}`；要求 `HEAD = C` 且 `git status --porcelain --untracked-files=no` 为空（检查不得改动或提交已跟踪文件） | → `ERROR / CHECK_MUTATED_TREE` |
 | **J-S6 PUSH** | REMOTE：`git push <remote> C:<target_ref>`（不带 force，只能 fast-forward）；RUNNER_LOCAL：`git update-ref <target_ref> C T0`。随后在 workDir 前移本地目标 ref（同 `rebaseFastForward`：目标在根 checkout 上时 `merge --ff-only`，否则 `branch -f`） | 非 fast-forward 被拒 → 回 J-S1，至多 2 轮 → `ERROR / TARGET_MOVED`；其他 → `ERROR / PUSH_REJECTED` |
 | **J-S7 VERIFY** | `git fetch <remote> <target_ref>`；要求远端 tip = C 且 `C^{tree} = tested_tree_sha`；`landed_sha = C`，`landed_tree_sha` = 其树；`ahead_of_upstream = git rev-list --count U..C` | 不一致 → `ERROR / LANDED_TREE_MISMATCH`（不写回执） |
 | **J-S8 REPORT** | 回报 `LANDED` 与全部字段 | 回报失败按 `mergeOutcomes` 的做法缓存结果重发，不重跑 git |
 
 每步开始前检查 `cancelRequested`，`PUSH` 之后不再检查。任务验收命令原本在会话的活 worktree 里跑，包括未提交的改动；J-S5 在已提交的组合树上重跑，这两者的差异正是本步要抓的。
+
+**检查前的铺环境（J-S5、M-S3）**：组合树出自 git 对象，因此**没有 `node_modules`**。仓库自带 `scripts/worktree-overlay.sh` 时，检查之前先在树里运行它（会话 worktree 铺的就是同一个脚本、同一个路径，只有一份配方法），这样 `cd src/web && npx vitest run …` 这类「直接要 JS 依赖」的验收命令与 `bash scripts/run-pg-spec.sh …` 这类自带铺设的命令在组合树上同样能跑。它只写 gitignored 路径（`node_modules/`、`dist/`）：既不进 `C^{tree}`，也不出现在 J-S6a 的 `git status --porcelain --untracked-files=no` 里，所以「落地的树 = 测过的树」不受影响——被判定的始终是提交，铺环境只是让检查跑得起来。没有这个脚本的仓库跳过本步；脚本失败或超时 → `ERROR / CHECK_TREE_UNPREPARED`：检查从未在它能跑的树里跑过，那不是对工作的判决。
 
 ### 2.5 回执与派发下游
 
@@ -422,7 +424,7 @@ interface IntegrationJobCommand {
 
 ### 2.6 失败
 
-**J12（`error_code` 闭集）**：`FETCH_FAILED`、`SOURCE_BRANCH_MISSING`、`BASE_REF_NOT_FOUND`、`TARGET_MOVED`、`PUSH_REJECTED`、`CHECK_MUTATED_TREE`、`LANDED_TREE_MISMATCH`、`PROMOTION_TREE_NONDETERMINISTIC`（§3）、`RUNNER_DRAINING`、`INTEGRATION_REPOSITORY_UNKNOWN`（入队前拒绝）。
+**J12（`error_code` 闭集）**：`FETCH_FAILED`、`SOURCE_BRANCH_MISSING`、`BASE_REF_NOT_FOUND`、`TARGET_MOVED`、`PUSH_REJECTED`、`CHECK_TREE_UNPREPARED`、`CHECK_MUTATED_TREE`、`LANDED_TREE_MISMATCH`、`PROMOTION_TREE_NONDETERMINISTIC`（§3）、`RUNNER_DRAINING`、`INTEGRATION_REPOSITORY_UNKNOWN`（入队前拒绝）。
 
 `CONFLICT` → `INTEGRATION_CONFLICT`，`CHECK_FAILED` → `INTEGRATION_CHECK_FAILED`，`ERROR` → `INTEGRATION_ERROR`，负责人默认协调会话（§4.2）。待办行与作业终态同一事务写下；目标分支没有变动（J-S6 之前的失败）或已核对不一致（J-S7），两种情况都写进待办的 payload。
 
@@ -542,7 +544,7 @@ interface TaskIntegrationView {
 |---|---|---|
 | M-S1 | fetch upstream 与源；U = upstream tip | 同左；U′ = 当前 upstream tip |
 | M-S2 | `PROJECT_BRANCH`：在 U 上 `git merge --no-ff -m "Merge <source> into <upstream>" <source_sha>`；`TASK_BRANCH`：在 U 上 rebase 源 | U′ = `upstream_sha_checked` → 重做同一合并；否则回报进度 `upstreamMoved` 并在 U′ 上重做 |
-| M-S3 | 跑检查：`PROJECT_BRANCH` 跑合并检查；`TASK_BRANCH` 跑任务验收命令与合并检查 | U′ 未变：要求重做的合并树 = `merge_tree_sha`，不等 → `ERROR / PROMOTION_TREE_NONDETERMINISTIC`；U′ 变了：重跑检查 |
+| M-S3 | 跑检查（组合树自带 `scripts/worktree-overlay.sh` 时先运行它，同 J-S5）：`PROJECT_BRANCH` 跑合并检查；`TASK_BRANCH` 跑任务验收命令与合并检查 | U′ 未变：要求重做的合并树 = `merge_tree_sha`，不等 → `ERROR / PROMOTION_TREE_NONDETERMINISTIC`；U′ 变了：重跑检查 |
 | M-S4 | 回报 `READY { upstreamShaChecked, mergeTreeSha, commitsAhead, filesChanged, includedLandedShas }`，`includedLandedShas` 为逐个 `merge-base --is-ancestor` 核实过的候选 | 落地前核对（同 J-S6a）→ 推送 upstream（不 force）→ 前移本地 upstream → 远端核对（同 J-S7）→ 回报 `LANDED` |
 
 ### 3.5 项目 DONE 投影与文档改动
@@ -1333,3 +1335,4 @@ SELECT count(*) FROM project_coordinator_wake
 ## 附录 B　修订记录
 
 - **v1 草案**（2026-09-13）：首版。九节：集成线、集成作业、main 同步与合入 main、例外待办、阻塞请求的回复、保险丝与 blocker、读模型、迁移与兼容、任务对照；附录 A 列 20 个待定问题与默认做法。
+- **v1 修订 1**（2026-09-21）：§2.4 增「检查前的铺环境」（J-S5 与 M-S3 跑检查前，先在组合树里运行仓库自带的 `scripts/worktree-overlay.sh`），J12 增 `CHECK_TREE_UNPREPARED`。缘由：2026-09-21 集成线第一次在真实运行中跑起来时，一条验收命令为 `cd src/web && npx vitest run …` 的任务被判 `CHECK_FAILED`——组合树是纯 git 树，没有 `node_modules`，命令死在 `Cannot find package '@vitejs/plugin-react'`，与实现无关。选「组合树应当被铺好」而不是「验收命令必须自包含」：后者要判的是命令的形状，而形状不是错——同一条命令在会话 worktree（已铺 overlay）里是通过的，判据 6 要的是同一条命令在同一种树上得到同一个判决；把约束改写成「作者必须自带铺设」还会让今天所有以前端命令声明的任务追溯性地作废，而作者写的命令在别处是正确的。铺环境写在平台一侧只有一处，且不动「落地的树 = 测过的树」的判定（`node_modules`/`dist` 均 gitignored，不进 `C^{tree}`，也不出现在 J-S6a 的 `git status --porcelain --untracked-files=no` 里）。

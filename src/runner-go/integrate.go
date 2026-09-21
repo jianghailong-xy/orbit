@@ -234,6 +234,13 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	// ── J-S5 CHECK ────────────────────────────────────────────────────────────────────────────
 	if len(cmd.Checks) > 0 {
 		report("CHECK", nil)
+		// The tree the checks are about to run in gets its own environment recipe first. A tree
+		// that could not be prepared has measured nothing, so it stops the job instead of letting
+		// the checks fail for a reason that is not the work's.
+		if err := prepareIntegrationTree(scratch); err != nil {
+			markUnprepared(&result, err)
+			return result
+		}
 	}
 	for _, spec := range cmd.Checks {
 		outcome := runIntegrationCheck(scratch, spec)
@@ -472,6 +479,12 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	if !landing || moved {
 		if len(cmd.Checks) > 0 {
 			report("CHECK", nil)
+			// M-S3's checks run on the same kind of tree J-S5's do, and need the same recipe: a
+			// promotion of a TASK_BRANCH runs the task's own acceptance command (M-F2).
+			if err := prepareIntegrationTree(scratch); err != nil {
+				markUnprepared(&result, err)
+				return result
+			}
 		}
 		for _, spec := range cmd.Checks {
 			outcome := runIntegrationCheck(scratch, spec)
@@ -614,6 +627,78 @@ func advanceLocalRef(repoRoot, targetRef, tested string) {
 		return
 	}
 	_, _ = git(repoRoot, "branch", "-f", branch, tested)
+}
+
+// The repository's own environment recipe, run in the combination tree before any check (J-S5,
+// M-S3). The path is the recipe's, not this file's invention: it is the script a session worktree
+// runs to make a bare checkout buildable and testable, and the checks belong in the tree it makes.
+const integrationPrepareScript = "scripts/worktree-overlay.sh"
+
+// How long the recipe may take. It is a build step — linking node_modules, compiling the shared
+// package — so it is budgeted like one, and a tree that cannot be prepared in ten minutes is a
+// machine problem the job reports rather than waits on.
+const integrationPrepareTimeout = 10 * time.Minute
+
+// prepareIntegrationTree runs the combination tree's own environment recipe, when it has one.
+//
+// THE RED THIS EXISTS TO PREVENT
+// ==============================
+// The scratch worktree comes out of git, and git does not carry `node_modules`. So the result of a
+// check used to come down to the SHAPE of the command: `bash scripts/run-pg-spec.sh …` lays its own
+// environment down and landed, while `cd src/web && npx vitest run …` — a command that is perfectly
+// good in the session worktree it was written and run in — died in the combination tree with
+// `Cannot find package '@vitejs/plugin-react'`. Work that is right, refused by the line, as a
+// failed check. The command is the task author's to write for the tree they work in; making the
+// combination tree one of those trees is the platform's job, and it is one place, not one rule per
+// author to remember.
+//
+// WHAT IT DOES NOT MOVE
+// =====================
+// "the tree that lands is the tree that was tested" is a claim about the COMMIT: J-S6a reads
+// `C^{tree}` and refuses a check that touched a tracked file. The recipe writes gitignored paths
+// only (`node_modules/`, `dist/`), which no tree hash covers and which J-S6a's other half —
+// `git status --porcelain --untracked-files=no` — does not report. So the tree that is pushed is
+// still the tree git produced, and the checks ran in it rather than in a copy of it.
+//
+// A repository without the recipe is not prepared and not refused: the checks run in exactly the
+// tree git produced, which is what every case before this one measured.
+func prepareIntegrationTree(scratch string) error {
+	script := filepath.Join(scratch, filepath.FromSlash(integrationPrepareScript))
+	if info, err := os.Stat(script); err != nil || info.IsDir() {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), integrationPrepareTimeout)
+	defer cancel()
+	started := time.Now()
+	// The same shell the checks get (`bash -lc`, runner environment): what the recipe lays down has
+	// to be what those commands resolve against, PATH and all.
+	cmd := exec.CommandContext(ctx, "bash", "-lc", "bash "+integrationPrepareScript)
+	cmd.Dir = scratch
+	cmd.WaitDelay = 5 * time.Second
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return fmt.Errorf("%s did not finish within %s: %s",
+			integrationPrepareScript, integrationPrepareTimeout, tailOf(string(output), 2000))
+	}
+	if err != nil {
+		return fmt.Errorf("%s failed (%v): %s", integrationPrepareScript, err, tailOf(string(output), 2000))
+	}
+	logln("integration: prepared", scratch, "with", integrationPrepareScript,
+		fmt.Sprintf("in %dms", time.Since(started).Milliseconds()))
+	return nil
+}
+
+// markUnprepared is the job's answer when the tree's recipe could not be run. It is an ERROR and
+// not a CHECK_FAILED on purpose: the checks never got a tree they could be judged in, so nothing
+// here is a verdict about the work — and a verdict that says "your command failed" about an
+// environment that was never laid down is the same false red one layer down.
+func markUnprepared(result *integrationResult, err error) {
+	result.State, result.Phase = "ERROR", "CHECK"
+	result.ErrorCode = "CHECK_TREE_UNPREPARED"
+	result.ErrorDetail = map[string]any{
+		"command": integrationPrepareScript,
+		"detail":  clip(err.Error(), 2000),
+	}
 }
 
 // runIntegrationCheck runs one command in the scratch worktree under its own budget.

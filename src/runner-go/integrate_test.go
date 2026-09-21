@@ -47,6 +47,16 @@ func (r *integrationRepo) write(name, content string) {
 	}
 }
 
+// writeIn is write for a file whose parent directories do not exist yet (`scripts/…`): the recipe
+// this suite's subject lives at one of those paths.
+func (r *integrationRepo) writeIn(name, content string) {
+	r.t.Helper()
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(r.work, name)), 0o755); err != nil {
+		r.t.Fatalf("mkdir for %s: %v", name, err)
+	}
+	r.write(name, content)
+}
+
 func (r *integrationRepo) commit(message string) string {
 	r.t.Helper()
 	mustRun(r.t, r.work, "git", "add", "-A")
@@ -450,5 +460,118 @@ func TestPromotionOfATaskBranchRebasesAndFastForwards(t *testing.T) {
 	}
 	if body, _ := git(r.work, "show", landed.LandedSha+":a.txt"); body != "from a" {
 		t.Fatalf("the landed commit does not carry the task's file: %q", body)
+	}
+}
+
+// TestIntegrationPreparesTheTreeBeforeTheChecks is the other half of a check: the command is one a
+// task author wrote for a tree with an environment in it, and the combination tree comes out of git
+// with none. So the tree's own recipe (scripts/worktree-overlay.sh) runs first, and what it lays
+// down is what the check then finds. Without this the check is a false red about work that is fine
+// — the shape of the command decided the verdict, which is the bug this pins shut.
+func TestIntegrationPreparesTheTreeBeforeTheChecks(t *testing.T) {
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	// The recipe is the PROJECT's: what the line integrates is what the tree carries. It writes an
+	// untracked path, which is what the real one does (`node_modules/`, `dist/`) — and J-S6a, which
+	// refuses a check that touched the TREE, must not read that as a mutated tree.
+	r.writeIn("scripts/worktree-overlay.sh",
+		"#!/usr/bin/env bash\nset -eu\nmkdir -p node_modules\necho ready > node_modules/.ready\n")
+	r.commit("project branch: the environment recipe")
+	r.push("project/line")
+	r.checkoutNew("task/i", "main")
+	r.write("i.txt", "from i\n")
+	r.commit("task i")
+	r.push("task/i")
+	r.checkout("main")
+
+	check := IntegrationCheckSpec{
+		Name: "TASK_ACCEPTANCE", Command: "test -f node_modules/.ready",
+		ExpectedExitCode: 0, TimeoutSeconds: 60,
+	}
+	result := runIntegrationJob(r.command("task/i", "project/line", check), silent)
+	if result.State != "LANDED" {
+		t.Fatalf("state = %s (%s %s), want LANDED: the recipe did not run, or running it refused the tree",
+			result.State, result.ErrorCode, result.Phase)
+	}
+	if len(result.Checks) != 1 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 0 {
+		t.Fatalf("checks = %+v, want the task acceptance to have passed in the prepared tree", result.Checks)
+	}
+	if result.LandedTreeSha == "" || result.LandedTreeSha != result.TestedTreeSha {
+		t.Fatalf("landed tree %q != tested tree %q", result.LandedTreeSha, result.TestedTreeSha)
+	}
+}
+
+// TestIntegrationRefusesWhenTheRecipeFails: a recipe that could not run means the checks never got a
+// tree they could be judged in. That is an ERROR, not a red check — reporting it as the task's
+// command failing would be the same false red one layer down, and it is the machine that is broken.
+func TestIntegrationRefusesWhenTheRecipeFails(t *testing.T) {
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.writeIn("scripts/worktree-overlay.sh",
+		"#!/usr/bin/env bash\necho 'no node_modules in the main checkout' >&2\nexit 2\n")
+	r.commit("project branch: a recipe that cannot run")
+	r.push("project/line")
+	before := r.originRev("refs/heads/project/line")
+	r.checkoutNew("task/j", "main")
+	r.write("j.txt", "from j\n")
+	r.commit("task j")
+	r.push("task/j")
+	r.checkout("main")
+
+	check := IntegrationCheckSpec{
+		Name: "TASK_ACCEPTANCE", Command: "exit 0", ExpectedExitCode: 0, TimeoutSeconds: 60,
+	}
+	result := runIntegrationJob(r.command("task/j", "project/line", check), silent)
+	if result.State != "ERROR" || result.ErrorCode != "CHECK_TREE_UNPREPARED" {
+		t.Fatalf("state = %s / %s, want ERROR / CHECK_TREE_UNPREPARED", result.State, result.ErrorCode)
+	}
+	if result.Phase != "CHECK" {
+		t.Fatalf("phase = %q, want CHECK", result.Phase)
+	}
+	// The check itself would have passed. It did not run: what is reported is the tree, not a verdict.
+	if len(result.Checks) != 0 {
+		t.Fatalf("checks = %+v, want none — no check ran in an unprepared tree", result.Checks)
+	}
+	if detail, _ := result.ErrorDetail["detail"].(string); !strings.Contains(detail, "no node_modules in the main checkout") {
+		t.Fatalf("errorDetail = %+v, want the recipe's own output in it", result.ErrorDetail)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Fatalf("the target moved: %s -> %s", before, got)
+	}
+}
+
+// TestPromotionPreparesTheTreeBeforeTheChecks is M-S3's half of the same step. A promotion of a
+// TASK_BRANCH runs the TASK'S OWN acceptance command (M-F2) on the same kind of tree J-S5 does, so
+// the tree's recipe has to run there too — and this is the path a MAIN line's tasks take, which is
+// where a command that needs JS dependencies is most likely to be declared.
+func TestPromotionPreparesTheTreeBeforeTheChecks(t *testing.T) {
+	r := newIntegrationRepo(t)
+	r.writeIn("scripts/worktree-overlay.sh",
+		"#!/usr/bin/env bash\nset -eu\nmkdir -p node_modules\ntouch node_modules/.ready\n")
+	r.commit("the environment recipe, on the upstream")
+	r.push("main")
+
+	r.checkoutNew("task/k", "main")
+	r.write("k.txt", "from k\n")
+	r.commit("task k")
+	r.push("task/k")
+	r.checkout("main")
+	mainTip := r.originRev("refs/heads/main")
+
+	check := r.promotionCommand("CHECK_PROMOTION", "task/k", "TASK_BRANCH")
+	check.SessionBaseSha = r.rev("main")
+	check.Checks = []IntegrationCheckSpec{
+		{Name: "TASK_ACCEPTANCE", Command: "test -f node_modules/.ready", ExpectedExitCode: 0, TimeoutSeconds: 60},
+	}
+	result := runIntegrationJob(check, silent)
+	if result.State != "READY" {
+		t.Fatalf("state = %s (%s %s), want READY: the recipe did not run in the promotion's tree",
+			result.State, result.ErrorCode, result.Phase)
+	}
+	if len(result.Checks) != 1 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 0 {
+		t.Fatalf("checks = %+v, want the task acceptance to have passed", result.Checks)
+	}
+	if got := r.originRev("refs/heads/main"); got != mainTip {
+		t.Fatalf("a check pushed: main is %s, want %s", got, mainTip)
 	}
 }

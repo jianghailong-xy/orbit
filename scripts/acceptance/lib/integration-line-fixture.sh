@@ -292,6 +292,110 @@ new_repo() {
 
 repo_origin_of() { printf '%s\n' "$FIX_SCRATCH/repos/$1.origin"; }
 
+# A symlink, refreshed only when nothing real is in the way — `worktree-overlay.sh`'s link().
+fixture_link() { if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"; fi; }
+
+# A repository whose acceptance command needs JS dependencies (case 12).
+#
+# The red it reproduces: the integration line stages the combination tree OUT OF GIT, git carries no
+# `node_modules`, and a command shaped `cd src/web && npx vitest run …` — a perfectly good command in
+# the session worktree it was written in — dies there with `Cannot find package '@vitejs/plugin-react'`.
+# Two things make it runnable, and both are what the real repository has:
+#
+#   * `scripts/worktree-overlay.sh`, committed on main: the repository's own recipe for a tree that
+#     has no `node_modules`. The runner runs it before the checks (contract §2.4 J-S5). What this
+#     fixture's copy holds is that script's SHAPE — link the main checkout's installed deps into the
+#     tree — not the product repository's recipe, which is its own subject and would need this repo's
+#     workspaces, Prisma client and shared build to exist before it could run here.
+#   * an installed `node_modules` in the checkout the job is claimed from, which is the repository's
+#     own main checkout. The fixture borrows the host checkout's real one (vitest, vite,
+#     `@vitejs/plugin-react` and their dependencies): this fixture npm-installs nothing, and the
+#     dependency set is not the thing under test.
+new_js_repo() {
+  local name="$1"
+  local repo; repo="$(new_repo "$name")"
+  # Fail with that sentence rather than as a check that was missing a package 300 seconds later.
+  [ -d "$REPO_ROOT/node_modules/vitest" ] || \
+    fail "no vitest under $REPO_ROOT/node_modules — run scripts/worktree-overlay.sh in the main checkout first"
+  [ -d "$REPO_ROOT/node_modules/@vitejs/plugin-react" ] || \
+    fail "no @vitejs/plugin-react under $REPO_ROOT/node_modules — run scripts/worktree-overlay.sh first"
+
+  mkdir -p "$repo/scripts" "$repo/src/web/src/lib"
+  printf 'node_modules\ndist/\n' > "$repo/.gitignore"
+  printf '{"name":"js-fixture","private":true}\n' > "$repo/package.json"
+  # `type: module`: the config below is ESM, and vite warns about loading ESM as CommonJS without it.
+  printf '{"name":"web","private":true,"type":"module"}\n' > "$repo/src/web/package.json"
+  cat > "$repo/src/web/vite.config.ts" <<'VITE_CONFIG'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  test: { environment: 'node', include: ['src/**/*.test.ts'] },
+});
+VITE_CONFIG
+  cat > "$repo/src/web/src/lib/sums.ts" <<'SUMS'
+export const sum = (a: number, b: number): number => a + b;
+SUMS
+  # The spec the acceptance command of the landing task runs: it passes, and only where vitest can
+  # actually start — which is the whole question the case asks.
+  cat > "$repo/src/web/src/lib/sums.test.ts" <<'PASSING_SPEC'
+import { expect, test } from 'vitest';
+
+import { sum } from './sums';
+
+test('adds two numbers', () => {
+  expect(sum(2, 3)).toBe(5);
+});
+PASSING_SPEC
+  # The negative control's subject: a real failure of a real assertion, in the same prepared tree.
+  cat > "$repo/src/web/src/lib/broken.test.ts" <<'FAILING_SPEC'
+import { expect, test } from 'vitest';
+
+import { sum } from './sums';
+
+test('adds two numbers', () => {
+  expect(sum(2, 3)).toBe(6);
+});
+FAILING_SPEC
+  cat > "$repo/scripts/worktree-overlay.sh" <<'OVERLAY'
+#!/usr/bin/env bash
+# The repository's environment recipe: a git worktree has no node_modules of its own, so this lays
+# one down from the main checkout before anything is built or tested.
+set -uo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")"
+
+link() { if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"; fi; }
+
+[ -d "$MAIN/node_modules" ] || { echo "js-repo-overlay: no node_modules in $MAIN" >&2; exit 2; }
+link "$MAIN/node_modules" "$REPO/node_modules"
+
+WEB="$REPO/src/web/node_modules"
+mkdir -p "$WEB"
+for d in "$MAIN/src/web/node_modules"/* "$MAIN/src/web/node_modules"/.[!.]*; do
+  [ -e "$d" ] || continue
+  case "$(basename "$d")" in .vite|.vite-temp|@orbit) continue ;; esac
+  link "$d" "$WEB/$(basename "$d")"
+done
+echo "js-repo-overlay: $REPO borrows its node_modules from $MAIN"
+OVERLAY
+  git -C "$repo" add -A
+  git -C "$repo" commit --quiet -m 'js fixture: a repository whose checks need node_modules'
+  git -C "$repo" push --quiet origin main
+
+  # The installed checkout the recipe links FROM. Gitignored, so it is invisible to every tree hash
+  # and to J-S6a — the same property the product's overlay relies on.
+  mkdir -p "$repo/src/web/node_modules"
+  for d in "$REPO_ROOT/src/web/node_modules"/*; do
+    [ -e "$d" ] || continue
+    fixture_link "$d" "$repo/src/web/node_modules/$(basename "$d")"
+  done
+  fixture_link "$REPO_ROOT/node_modules" "$repo/node_modules"
+  printf '%s\n' "$repo"
+}
+
 # A branch with one commit touching `file`, pushed to origin. This is what a finished task's work
 # looks like from the outside, which is all the integration line reads.
 new_task_branch() {
