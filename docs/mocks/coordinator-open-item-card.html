@@ -1,0 +1,180 @@
+<!doctype html>
+<!-- Design mock: an exception item's delivery to the coordinator conversation is a CARD (web).
+     Geometry copied from the live transcript: the control-plane card .bgwake / .bgwake-wrap in
+     src/web/src/index.css (right-aligned, min(560px, 88%)), the open-item card's chips and file
+     list from ProjectProgressStatus.tsx, and the palette above from index.css :root.
+     "As it is today" reuses .chat-user, which is what a delivery draws as now: the whole text in
+     the person's own bubble, signed with their name. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Coordinator delivery: exception item card</title>
+<style>
+  :root {
+    --bg-base:#ffffff; --bg-raised:#ffffff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa;
+    --bg-hover:#f5f6f7; --bg-hover-strong:#e3e6eb; --fill-inset:rgba(0,0,0,0.05);
+    --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+    --brand:#3370ff; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-solid:#2ea121; --success-bg:#e8f6ec; --success-border:#b6e7c4;
+    --error:#cf3b35; --error-solid:#d4380d; --error-bg:#fdeceb; --error-border:#ffccc7;
+    --warning:#c2710c; --warning-solid:#fa8c16; --warning-bg:#fff4e6; --warning-border:#ffd591;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px; background:#eef0f3;
+         font:14px/1.5 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; color:var(--text-1); }
+  h1 { font-size:15px; margin:0 0 14px; color:var(--text-2); font-weight:600; }
+  h2.tag { font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--text-3);
+           font-weight:600; margin:0 0 8px; }
+  .stack { display:flex; flex-direction:column; gap:26px; max-width:1180px; }
+  .scope { position:relative; }
+  .scope.new::after { content:''; position:absolute; inset:-7px; border:1.5px dashed #ff6a00;
+                      border-radius:10px; pointer-events:none; }
+  .transcript { width:640px; padding:14px 16px; background:#f4f5f7; border:1px solid var(--border);
+                border-radius:10px; }
+
+  /* ---- as it is today: the delivery is one user bubble, in the person's own name ---- */
+  .chat-user-wrap { display:flex; justify-content:flex-end; margin:8px 0; }
+  .chat-msg.chat-user { max-width:88%; padding:10px 12px; border-radius:12px; background:var(--brand-tint);
+                        border:1px solid var(--brand-border); white-space:pre-wrap; font-size:13px; }
+  .chat-user-count { display:block; margin-top:6px; font-size:11px; color:var(--text-3); }
+
+  /* ---- the card: the control plane's own, like the background-wake card ---- */
+  .bgwake-wrap { display:flex; justify-content:flex-end; margin:8px 0; }
+  .bgwake { width:min(560px,88%); padding:10px 12px; border:1px solid var(--warning-border);
+            border-radius:12px; background:var(--warning-bg); color:var(--text-1); }
+  .bgwake-title { display:flex; align-items:center; gap:6px; color:var(--warning); font-weight:600; }
+  .oic-kind { margin-left:auto; flex:none; font-size:11px; line-height:18px; padding:0 8px;
+              border-radius:9px; background:var(--bg-raised); border:1px solid var(--warning-border);
+              color:var(--text-2); font-weight:500; }
+  .oic-title { margin:4px 0 2px; font-weight:600; overflow-wrap:anywhere; }
+  .oic-where { font-size:12px; color:var(--text-2); }
+  .oic-where a { color:var(--brand); text-decoration:none; }
+  .oic-why { margin:8px 0 0; }
+  .oic-files { margin:6px 0 0; padding:8px 10px; list-style:none; border-radius:8px;
+               background:var(--bg-raised); font-family:var(--font-mono); font-size:12px; }
+  .oic-files li { overflow-wrap:anywhere; }
+  .oic-more { margin-top:6px; background:none; border:0; padding:0; color:var(--brand);
+              font:inherit; font-size:12px; cursor:pointer; }
+  .oic-facts { margin:8px 0 0; padding:8px 10px; border-radius:8px; background:var(--bg-raised);
+               display:flex; gap:6px; align-items:flex-start; font-size:12px; }
+  .oic-facts.is-unknown { color:var(--text-2); }
+  .oic-facts.is-landed { color:var(--success); }
+  .oic-actions { margin:8px 0 0; display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; }
+  .oic-actions-label { color:var(--text-2); }
+  .oic-chip { padding:1px 8px; border-radius:9px; background:var(--bg-raised);
+              border:1px solid var(--border); color:var(--text-1); font-size:12px; }
+  .oic-links { margin:6px 0 0; font-size:12px; display:flex; gap:12px; }
+  .oic-links a { color:var(--brand); text-decoration:none; }
+  .oic-meta { margin:8px 0 0; padding-top:6px; border-top:1px solid var(--bg-hover-strong);
+              font-size:11px; color:var(--text-3); display:flex; gap:10px; }
+  .oic-raw { margin-top:4px; font-size:12px; color:var(--text-2); }
+  .oic-raw summary { cursor:pointer; color:var(--text-2); }
+  .oic-raw pre { margin:6px 0 0; padding:8px 10px; border-radius:8px; background:var(--bg-raised);
+                 font-family:var(--font-mono); font-size:11px; white-space:pre-wrap; max-height:150px;
+                 overflow:auto; }
+</style>
+</head>
+<body>
+<div class="stack">
+
+  <div>
+    <h1>1 · Today — the delivery is 30 lines of text inside the reader’s own bubble</h1>
+    <div class="transcript">
+      <div class="chat-user-wrap"><div class="chat-msg chat-user">【例外待办】Task failed: 回填历史 user 事件的 controlPlaneNote
+
+项目 3CuIHiSJZBQ7nLVUwc7ekz 的任务 34SfQ6TdVFeGdcFpEQJyQ 失败了：验收命令的退出码与声明不一致。
+验收命令的退出码是 1，声明要求 0。
+这是这条取代链上的第 2 次失败（上限 3 次；到第 3 次，待办不再发给你，直接交给账号所有者）。
+
+这条待办的负责人是你，要判断的是下一步：重新运行（task_start）、另起一个取代它的任务（task_create 带 supersedesTaskId）、还是取消（task_update 置 CANCELLED）。失败原因先用 task_get（taskId 传 34SfQ6TdVFeGdcFpEQJyQ）读任务评论与它的会话，不要照着这条消息猜。
+任务重新跑起来、被取代、被取消或完成之后，这条待办由平台自己关闭，你不用回报。平台自己关不掉的情况——这项工作已经用别的方式在目标分支上了，或者你已经另行处理过——用 open_item_resolve 写明理由把它关掉，理由会留在待办上。
+<span class="chat-user-count">≈ 8 lines shown of 11 · nobody typed this, and it is signed with the reader’s name</span></div></div>
+    </div>
+  </div>
+
+  <div class="scope new">
+    <h2 class="tag">2 · Proposed — the same delivery, drawn from a structured payload</h2>
+    <div class="transcript">
+      <div class="bgwake-wrap">
+        <div class="bgwake">
+          <div class="bgwake-title">
+            <span>⚠</span><span>Exception item</span><span class="oic-kind">Task failed</span>
+          </div>
+          <div class="oic-title">Task failed: 回填历史 user 事件的 controlPlaneNote</div>
+          <div class="oic-where">Task <a href="#">回填历史 user 事件的 controlPlaneNote</a></div>
+
+          <div class="oic-why">The acceptance command disagreed with what the task declared — exit 1, expected 0 · attempt 2 of 3 in this chain.</div>
+
+          <div class="oic-facts is-unknown">
+            <span>◌</span>
+            <span>No merge receipt for this work — Orbit cannot tell whether it has landed.</span>
+          </div>
+
+          <div class="oic-actions">
+            <span class="oic-actions-label">The coordinator can:</span>
+            <span class="oic-chip">Retry the task</span>
+            <span class="oic-chip">Cancel the task</span>
+          </div>
+          <div class="oic-links">
+            <a href="#">Open the task ↗</a>
+            <a href="#">Open the failed session ↗</a>
+          </div>
+
+          <div class="oic-meta"><span>Item 34SfQ6TdVFeGdcFpEQJyQ</span><span>· a notification, not an interruption</span></div>
+          <details class="oic-raw"><summary>What the coordinator was told</summary><pre>【例外待办】Task failed: 回填历史 user 事件的 controlPlaneNote
+
+项目 3CuIHiSJZBQ7nLVUwc7ekz 的任务 34SfQ6TdVFeGdcFpEQJyQ 失败了：验收命令的退出码与声明不一致。
+…（原文逐字，折起来，需要时展开）</pre></details>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2 class="tag">3 · A conflicting merge — the file list folds after three, and the landing is known</h2>
+    <div class="transcript">
+      <div class="bgwake-wrap">
+        <div class="bgwake">
+          <div class="bgwake-title">
+            <span>⚠</span><span>Exception item</span><span class="oic-kind">Integration conflict</span>
+          </div>
+          <div class="oic-title">Merge conflict: 回填历史 user 事件的 controlPlaneNote</div>
+          <div class="oic-where">Task <a href="#">回填历史 user 事件的 controlPlaneNote</a></div>
+
+          <div class="oic-why">git refused the merge into refs/heads/project/34ODoUKJGEsfbgcJDGS4q; the target branch did not move. The platform will not retry it by itself.</div>
+          <div class="oic-files">
+            <li>src/apiserver/src/projects/coordinator-delivery.service.ts</li>
+            <li>src/apiserver/src/projects/project-open-item.ts</li>
+            <li>src/web/src/components/Transcript.tsx</li>
+            <li>src/web/src/lib/deliveredMessage.ts</li>
+            <li>src/web/src/index.css</li>
+            <li>docs/project-integration-line-contract.md</li>
+          </div>
+          <div><button class="oic-more">▸ Show 3 more files</button></div>
+
+          <div class="oic-facts is-landed">
+            <span>✔</span>
+            <span>Already on main — a merge receipt records this work there.</span>
+          </div>
+
+          <div class="oic-actions">
+            <span class="oic-actions-label">The coordinator can:</span>
+            <span class="oic-chip">Retry the task</span>
+            <span class="oic-chip">Cancel the task</span>
+          </div>
+          <div class="oic-links">
+            <a href="#">Open the task ↗</a>
+            <a href="#">Open the failed session ↗</a>
+          </div>
+
+          <div class="oic-meta"><span>Item 34Rn7bKdTQe2mZxpQv8Hs4</span><span>· a notification, not an interruption</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

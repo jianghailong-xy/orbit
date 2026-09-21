@@ -65,6 +65,9 @@ import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
 import { parseWatchWake } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
+import { parseOpenItemDelivery } from '../lib/openItemDelivery';
+import type { OpenItemDeliveryCard as OpenItemDelivery } from '@orbit/shared';
+import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
 
@@ -303,6 +306,11 @@ type TextNode = {
   // What the control plane recorded, when it stored this `user` event, as appended at delivery
   // (`controlPlaneNote`). Already taken out of `text`; drawn under it, in the same bubble.
   note?: string;
+  // An exception item's delivery, when the control plane recorded the item's own fields beside the
+  // echo (`openItemDelivery`, lib/openItemDelivery). This is nobody's message: the card is drawn
+  // instead of a bubble, and the text below is the paragraph the agent was handed, folded. NOT the
+  // `delivery` above, which is how far a message got on its way into the engine.
+  itemCard?: OpenItemDelivery;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -526,6 +534,10 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // Where the person's words end is what the apiserver recorded when it stored the event,
         // never a guess from the text (see lib/deliveredMessage).
         const recorded = splitRecordedNote(p);
+        // The item an exception delivery is about, when the control plane recorded one (see
+        // lib/openItemDelivery). Read off the event rather than out of the text, so a delivery that
+        // carries no card keeps the reading it has always had.
+        const itemCard = parseOpenItemDelivery(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -544,6 +556,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             seq: ev.seq,
             text: recorded ? recorded.text : p.text ? String(p.text) : '',
             note: recorded?.note,
+            itemCard,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -997,6 +1010,23 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
             seq={node.seq}
             ts={node.ts}
             linkable={!exporting}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+          />
+        );
+      }
+      // An exception item's delivery is the control plane's too, and for a stronger reason than the
+      // wake below: nobody typed it at all. What the turn says is a paragraph written for the AGENT
+      // — the tools to call, the ids to call them with — so drawing it as a message is both wrong
+      // about who sent it and unreadable as a record: the item's kind, its title, the files a merge
+      // conflicted on and whether the work has landed are all in the payload recorded beside it
+      // (lib/openItemDelivery). With no payload the turn keeps its old reading.
+      if (node.itemCard) {
+        return (
+          <OpenItemDeliveryCard
+            card={node.itemCard}
+            text={node.text}
+            seq={node.seq}
+            ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
           />
         );

@@ -27,6 +27,7 @@ import {
   SESSION_ENDING_SELECT,
   TASK_FAILURE_CHAIN_LIMIT,
   coordinatorQuestion,
+  openItemActions,
   openItemMessage,
   openItemTurnId,
   ownerAnswerMessage,
@@ -1058,29 +1059,19 @@ export class ProjectOpenItemService {
               : handed
                 ? { state: 'DELIVERED', sessionId: sent.sessionId, at: handed }
                 : { state: 'QUEUED', sessionId: sent.sessionId, at: sent.createdAt },
-        actions: row.fuseEpisodeId
-          ? ['RESUME']
-          : question
-          ? ['ANSWER']
-          // A merge into main is decided on its own card, which says what would land and what the
-          // checks came to (§7.5, mock 4). The row is the way in, the same way a question's row is.
-          : row.promotionId
-          ? ['REVIEW']
-          : row.taskId
-            ? row.assignee === 'COORDINATOR'
-              // The coordinator's own: it can be looked at, run again, or stopped.
-              ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
-              // An escalated item's route back is through the coordinator that should have had it
-              // (§4.7) — the owner's press is to ask again, not to retry work the coordinator
-              // owns — and to stop the task outright. The asking press is listed only while there
-              // is a conversation to ask (see `askable` above); the card leaves it undrawn then,
-              // and the wait that ran into this escalation is the one thing left to say.
-              : [
-                  ...(askable ? ['ASK_COORDINATOR_AGAIN' as const] : []),
-                  'OPEN_TASK_SESSION',
-                  'CANCEL_TASK',
-                ]
-            : [],
+        // One derivation, shared with the card recorded beside an item's delivery
+        // (`openItemActions`): the same row read twice must not offer two sets of doors. The
+        // asking press is listed only while there is a conversation to ask (see `askable` above);
+        // the card leaves it undrawn then, and the wait that ran into this escalation is the one
+        // thing left to say.
+        actions: openItemActions({
+          kind: row.kind,
+          assignee: row.assignee,
+          taskId: row.taskId,
+          promotionId: row.promotionId,
+          fuseEpisodeId: row.fuseEpisodeId,
+          askable,
+        }),
       };
     });
     return {

@@ -1,3 +1,5 @@
+import type { OpenItemDeliveryCard } from '@orbit/shared';
+
 import { buildResumeContinuation } from './resume-continuation';
 
 /**
@@ -43,5 +45,31 @@ export function withControlPlaneNote(
   delete stored.controlPlaneNote;
   const note = authored === undefined ? null : controlPlaneNoteOf(payload.text, authored);
   if (note !== null) stored.controlPlaneNote = note;
+  return stored;
+}
+
+/**
+ * The same rule for the reading a control-plane turn is drawn FROM rather than the one appended to
+ * it: `openItemDelivery` is what an exception item's delivery carries beside its words — the item's
+ * kind, its title, the files a merge conflicted on, the doors that exist, and the landing the
+ * platform already knew (`OpenItemDeliveryCard`).
+ *
+ * A delivery to the coordinator is 30 lines of prose and, without this, nothing else: the fields the
+ * item was opened with are rendered into that paragraph and dropped, so a client draws the turn as
+ * a message somebody typed and a reader has to take the paragraph's word for everything in it.
+ *
+ * `null` is the ordinary case and not a failure — most turns are a person's — so a card of null
+ * means the payload is stored with the field ABSENT rather than empty, the same way a note that was
+ * not recorded leaves no key. And a card arriving from the runner is dropped for the same reason a
+ * note is: only the control plane knows what it wrote for a turn.
+ */
+export function withOpenItemDelivery(
+  payload: Record<string, unknown>,
+  card: OpenItemDeliveryCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.openItemDelivery;
+  if (card !== null) stored.openItemDelivery = card;
   return stored;
 }

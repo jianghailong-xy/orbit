@@ -4,19 +4,24 @@ import { test } from 'node:test';
 
 import {
   CreatorType,
+  Prisma,
   PrismaClient,
+  RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
   SessionRunSource,
   TaskStatus,
 } from '@prisma/client';
+import { RunEventType } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
+import { ProjectOpenItemService } from './project-open-item.service';
 import { completeHumanTaskForPgTest } from '../tasks/task-completion-test-helper';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -59,6 +64,10 @@ interface Stack {
   judgments: CoordinatorJudgmentService;
   sessions: SessionsService;
   projects: ProjectsService;
+  /** The item door: what queues a delivery on a project's coordinator conversation (§4.4). */
+  openItems: ProjectOpenItemService;
+  /** The runner's event door, which is where a delivery's echo — and the card beside it — is stored. */
+  api: RunnerApiController;
 }
 
 /**
@@ -69,14 +78,126 @@ function connect(): Stack {
   const db = prismaClientFor(URL!);
   const prisma = db as unknown as PrismaService;
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
-  const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
+  const queue = new Proxy({}, { get: () => () => undefined }) as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
   return {
     db,
     sessions,
     judgments: new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
     projects: new ProjectsService(prisma, new ProjectAcceptanceService(prisma), sessions),
+    openItems: new ProjectOpenItemService(prisma, sessions),
+    // The runner's event door, over this stack's own client: the ingest is where a delivery's echo
+    // is stored, so it is the only place the payload a client reads can be asserted from. Every
+    // port it does not use in this file answers as a proxy (the shape every fixture here uses for
+    // realtime/queue), and the three that are given a body are the ones the door would otherwise
+    // dereference.
+    api: new RunnerApiController(
+      prisma,
+      queue,
+      realtime,
+      new Proxy({}, { get: () => async () => undefined }) as never,
+      {} as never,
+      { expand: async (_ownerId: string, content?: string) => content } as never,
+      { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
+    ),
   };
+}
+
+/**
+ * One project with a coordinator conversation of record, a task, and the runner both are assigned
+ * to — the state an exception item's delivery is made in (§4.4 X-D1).
+ *
+ * Written rather than driven, deliberately: what this file is about is what a DELIVERY records, and
+ * the failure paths that open an item are `project-exception-todos.pg.spec.ts`' own subject. The
+ * items here are rows, and the delivery below is the real door.
+ */
+async function deliveryWorld(db: PrismaClient, label: string) {
+  const ownerId = randomUUID();
+  const runnerId = randomUUID();
+  const workspaceId = randomUUID();
+  const projectId = randomUUID();
+  const coordinatorSessionId = randomUUID();
+  await db.user.create({
+    data: { id: ownerId, email: `${label}-${ownerId}@judge.invalid`, name: label, passwordHash: 'x' },
+  });
+  await db.runner.create({
+    data: {
+      id: runnerId, ownerId, name: `${label}-runner`, tokenHash: `hash-${runnerId}`,
+      status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(),
+      lastHeartbeatAt: new Date(),
+    },
+  });
+  await db.workspace.create({
+    data: { id: workspaceId, ownerId, runnerId, name: `${label}-ws`, enabled: true },
+  });
+  // The conversation first: a project's pointer at one is guarded (COORDINATOR_POINTER_INVALID), so
+  // the row it names has to exist before the write that names it.
+  await db.session.create({
+    data: {
+      id: coordinatorSessionId, ownerId, creatorId: ownerId, workspaceId,
+      assignedRunnerId: runnerId, title: `coordinator: ${label}`, prompt: `coordinator: ${label}`,
+      provider: 'claude', status: RunStatus.AWAITING_INPUT,
+      dispatchOrigin: SessionDispatchOrigin.USER, titleManagedByProject: true, numTurns: 1,
+      startedAt: new Date(), runtimeSessionId: `runtime-${coordinatorSessionId}`,
+    },
+  });
+  await db.project.create({
+    data: {
+      id: projectId, ownerId, title: `${label} 项目`, coordinatorEnabled: true,
+      coordinatorSessionId, coordinatorWorkspaceId: workspaceId,
+    },
+  });
+  return { ownerId, runnerId, workspaceId, projectId, coordinatorSessionId };
+}
+
+/** A task of that project, and an open exception item about it, owed to the coordinator. */
+async function itemFor(
+  db: PrismaClient,
+  w: Awaited<ReturnType<typeof deliveryWorld>>,
+  label: string,
+  payload: Record<string, unknown>,
+): Promise<{ taskId: string; itemId: string }> {
+  const taskId = randomUUID();
+  await db.task.create({
+    data: {
+      id: taskId, ownerId: w.ownerId, projectId: w.projectId, assigneeId: w.workspaceId,
+      title: `${label} 的任务`, creatorType: CreatorType.USER, creatorId: w.ownerId,
+      status: TaskStatus.IN_PROGRESS, completionCriterion: 'EVIDENCE_JUDGMENT',
+    },
+  });
+  const now = new Date();
+  const item = await db.projectOpenItem.create({
+    data: {
+      projectId: w.projectId, ownerId: w.ownerId, kind: 'INTEGRATION_CONFLICT', state: 'OPEN',
+      assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', taskId,
+      // The key an integration failure is filed under (`integrationDedupeKey`: `IC:` + the job).
+      dedupeKey: `IC:${randomUUID()}`,
+      title: `Merge conflict: ${label}`, payload: payload as Prisma.InputJsonValue,
+      waitingSince: now, assignedAt: now,
+    },
+    select: { id: true },
+  });
+  return { taskId, itemId: item.id };
+}
+
+/** The runner echoing a turn it was handed, up the door its transcript is posted to. */
+async function echoTurn(
+  stack: Stack,
+  runnerId: string,
+  sessionId: string,
+  turnId: string,
+  text: string,
+): Promise<void> {
+  const last = await stack.db.runEvent.aggregate({ where: { sessionId }, _max: { seq: true } });
+  await stack.api.events({ id: runnerId }, sessionId, {
+    events: [{
+      seq: (last._max.seq ?? 0) + 1,
+      type: RunEventType.USER,
+      ts: new Date().toISOString(),
+      turnId,
+      payload: { text },
+    }],
+  });
 }
 
 interface Fixture {
@@ -544,6 +665,144 @@ test('nothing left over from the control loop fires on a judgment session',
       );
     } finally {
       await client.end();
+    }
+  });
+
+/**
+ * What a delivery to the coordinator RECORDS: the item's own fields, beside the paragraph that was
+ * rendered from them.
+ *
+ * The turn a coordinator is handed for an exception item is 30 lines of prose, and until this the
+ * paragraph was all the record held — the kind, the title, the files a merge conflicted on, the
+ * doors that exist, all rendered once and dropped. A client drawing that turn had nothing to draw
+ * it from but the words, so it drew them as a message the reader had typed, and the one thing the
+ * platform already knew (whether the task's work had landed) had to be re-checked by hand every
+ * time an item came round.
+ *
+ * End to end rather than at the composer: the item goes out through the delivery door, the runner
+ * echoes the turn it was handed up the event door, and what is asserted is the payload that was
+ * STORED — which is the only thing a client ever sees. The card is read live off the item's columns
+ * and the task's receipts at that moment, so the second item below has its receipt written first,
+ * and the two together witness the fold in both of its answerable states.
+ *
+ * The negative half is in the same test on purpose: a turn nobody delivered a card for — the
+ * ordinary message — must carry no such field at all, so that "there is a card here" is a fact about
+ * the delivery rather than about user events in general.
+ */
+test('an exception item delivered to the coordinator records its facts beside the text',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = connect();
+    try {
+      const w = await deliveryWorld(stack.db, 'item-card');
+      const files = ['src/web/src/components/Transcript.tsx', 'src/apiserver/src/main.ts', 'docs/x.md'];
+      const plain = await itemFor(stack.db, w, 'no-receipt', {
+        jobKind: 'LAND_TASK', phase: 'LAND_TASK', targetRef: 'refs/heads/project/34ODoUKJ',
+        files,
+      });
+      const landed = await itemFor(stack.db, w, 'landed', {
+        jobKind: 'LAND_TASK', phase: 'LAND_TASK', targetRef: 'refs/heads/project/34ODoUKJ', files: [],
+      });
+      // The one receipt the fold reads: MERGED into the branch "on main" means for a project with no
+      // binding (the legacy pair, `LEGACY_LANDING_BRANCHES`). A receipt names the run that merged, so
+      // the session it belongs to has to exist — the fold reads the task, not the session, but the
+      // row carries the foreign key either way.
+      const landedSessionId = randomUUID();
+      await stack.db.session.create({
+        data: {
+          id: landedSessionId, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId,
+          assignedRunnerId: w.runnerId, taskId: landed.taskId, title: 'landed', prompt: 'landed',
+          provider: 'claude', status: RunStatus.SUCCEEDED, dispatchOrigin: SessionDispatchOrigin.USER,
+          branch: 'orbit/item-card',
+        },
+      });
+      await stack.db.sessionMergeReceipt.create({
+        data: {
+          sessionId: landedSessionId, taskId: landed.taskId, projectId: w.projectId,
+          ownerId: w.ownerId, sourceBranch: 'orbit/item-card', sourceSha: 'b'.repeat(40),
+          targetBranch: 'main', targetShaBefore: 'a'.repeat(40), targetShaAfter: 'c'.repeat(40),
+          result: 'MERGED', recordedBy: 'AGENT', idempotencyKey: `landed:${landed.taskId}`,
+        },
+      });
+
+      await stack.openItems.deliver(plain.itemId);
+      await stack.openItems.deliver(landed.itemId);
+
+      const turns = await stack.db.conversationTurn.findMany({
+        where: { sessionId: w.coordinatorSessionId, clientTurnId: { startsWith: 'open-item:v1:' } },
+        select: { id: true, content: true, clientTurnId: true },
+        orderBy: { seq: 'asc' },
+      });
+      assert.equal(turns.length, 2, 'both items were queued on the coordinator');
+      for (const turn of turns) {
+        await echoTurn(stack, w.runnerId, w.coordinatorSessionId, turn.id, turn.content ?? '');
+      }
+
+      const stored = await stack.db.runEvent.findMany({
+        where: { sessionId: w.coordinatorSessionId, type: RunEventType.USER },
+        select: { turnId: true, payload: true },
+      });
+      const byTurn = new Map(stored.map((event) => [event.turnId, event.payload as {
+        text?: string;
+        controlPlaneNote?: string;
+        openItemDelivery?: Record<string, any>;
+      }]));
+      assert.equal(byTurn.size, 2, 'two echoes were stored');
+      for (const turn of turns) {
+        const payload = byTurn.get(turn.id)!;
+        assert.equal(payload.text, turn.content, 'the echo is what the engine read, kept whole');
+        assert.equal(
+          'controlPlaneNote' in payload,
+          false,
+          'nothing was appended to this message, so there is no note',
+        );
+      }
+
+      const first = byTurn.get(turns[0]!.id)!.openItemDelivery!;
+      assert.equal(first.kind, 'INTEGRATION_CONFLICT');
+      assert.equal(first.title, 'Merge conflict: no-receipt');
+      assert.deepEqual(first.files, files, 'the conflicting files are fields, not a paragraph');
+      assert.equal(first.targetRef, 'refs/heads/project/34ODoUKJ');
+      assert.deepEqual(
+        first.actions,
+        ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+        'the doors the coordinator has on it, the same list the project read serves',
+      );
+      assert.equal(first.task?.id, plain.taskId, 'the card names the task the item is about');
+      assert.equal(first.task?.title, 'no-receipt 的任务');
+      assert.equal(first.task?.sessionId, null, 'no attempt was recorded for this item');
+      assert.deepEqual(
+        first.landing,
+        { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
+        'no receipt is no evidence — never "not landed"',
+      );
+
+      const second = byTurn.get(turns[1]!.id)!.openItemDelivery!;
+      assert.equal(second.title, 'Merge conflict: landed');
+      assert.deepEqual(second.landing, {
+        receipts: 1, state: 'ON_UPSTREAM', upstream: 'main', integration: 'main',
+      }, 'a merge receipt into main is the one thing that answers it');
+
+      // The negative half: an ordinary message turn of the same conversation. Nothing delivered a
+      // card for it, so the payload carries no such field — not an empty one.
+      const messageTurn = await stack.sessions.createTurn(w.ownerId, w.coordinatorSessionId, {
+        clientTurnId: `message:v1:${randomUUID()}`,
+        content: 'hello from the person who owns this conversation',
+      });
+      await echoTurn(
+        stack, w.runnerId, w.coordinatorSessionId, messageTurn.turnId,
+        'hello from the person who owns this conversation',
+      );
+      const plainEvent = await stack.db.runEvent.findFirstOrThrow({
+        where: { sessionId: w.coordinatorSessionId, turnId: messageTurn.turnId, type: RunEventType.USER },
+        select: { payload: true },
+      });
+      assert.equal(
+        'openItemDelivery' in (plainEvent.payload as Record<string, unknown>),
+        false,
+        'a message nobody delivered for is not a card',
+      );
+    } finally {
+      await stack.db.$disconnect();
     }
   });
 

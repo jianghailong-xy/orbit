@@ -112,6 +112,7 @@ import {
   ActivateTurnLeasesResponse,
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
+  type OpenItemDeliveryCard,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -158,7 +159,13 @@ import {
 } from '../sessions/current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
-import { type TaskFailure, recordTaskFailure, returnQueuedTurns } from '../projects/project-open-item';
+import {
+  type TaskFailure,
+  openItemIdOfTurn,
+  readOpenItemDeliveryCard,
+  recordTaskFailure,
+  returnQueuedTurns,
+} from '../projects/project-open-item';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -207,7 +214,7 @@ import {
   waitingScheduledWakeup,
 } from '../tasks/owner-confirmation-read';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
-import { withControlPlaneNote } from './control-plane-note';
+import { withControlPlaneNote, withOpenItemDelivery } from './control-plane-note';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
@@ -4264,15 +4271,31 @@ export class RunnerApiController {
       const userTurns = userTurnIds.length > 0
         ? await tx.conversationTurn.findMany({
             where: { sessionId, id: { in: userTurnIds } },
-            select: { id: true, content: true },
+            select: { id: true, content: true, clientTurnId: true },
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
+      // The turns the control plane opened for an exception item, and the card each was drawn from
+      // (project-open-item.ts `readOpenItemDeliveryCard`). Which turns those are is the turn's own
+      // key — `open-item:v1:` is the prefix `openItemTurnId` mints — so this reads the item's
+      // columns and the task's merge receipts for exactly the deliveries that have a card, and
+      // reads nothing at all for a batch of ordinary messages.
+      const deliveryCards = new Map<string, OpenItemDeliveryCard>();
+      for (const turn of userTurns) {
+        const itemId = openItemIdOfTurn(turn.clientTurnId);
+        if (!itemId) continue;
+        const card = await readOpenItemDeliveryCard(tx, itemId);
+        if (card) deliveryCards.set(turn.id, card);
+      }
       for (const e of durable) {
         if (e.type !== RunEventType.USER) continue;
         e.payload = withControlPlaneNote(
           e.payload,
           e.turnId ? authoredUserText.get(e.turnId) : undefined,
+        );
+        e.payload = withOpenItemDelivery(
+          e.payload,
+          (e.turnId ? deliveryCards.get(e.turnId) : undefined) ?? null,
         );
       }
       if (durable.length > 0) {
