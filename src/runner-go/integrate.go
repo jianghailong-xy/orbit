@@ -81,17 +81,23 @@ func runIntegrationJob(cmd IntegrationJobCommand, report integrationReporter) in
 	if cmd.CancelRequested {
 		return integrationResult{State: "CANCELLED", Phase: "FETCH"}
 	}
-	repoRoot, err := git(cmd.WorkDir, "rev-parse", "--show-toplevel")
+	// The workspace a job is claimed from is stored with a leading ~ (the product's own spelling of
+	// "this runner's home"), and `git -C` does not expand one — unresolved, a `~/…` work dir dies
+	// right here as "cannot change to '~/orbit': No such file or directory", which is what a
+	// project's FIRST landing hits. Same expansion the session path does in sessionExecDir, done
+	// once so the checkout check and the scratch worktree both work from the resolved path.
+	workDir := expandTilde(cmd.WorkDir)
+	repoRoot, err := git(workDir, "rev-parse", "--show-toplevel")
 	if err != nil || repoRoot == "" {
 		return errorResult("FETCH", "FETCH_FAILED", map[string]any{
-			"detail": fmt.Sprintf("%s is not a git checkout: %v", cmd.WorkDir, err),
+			"detail": fmt.Sprintf("%s is not a git checkout: %v", workDir, err),
 		})
 	}
 	lock := integrationLock(repoRoot, cmd.TargetRef)
 	lock.Lock()
 	defer lock.Unlock()
 
-	scratch := filepath.Join(filepath.Dir(cmd.WorkDir), integrateScratchPrefix+cmd.JobID)
+	scratch := filepath.Join(filepath.Dir(workDir), integrateScratchPrefix+cmd.JobID)
 	defer removeIntegrationWorktree(repoRoot, scratch)
 
 	one := integrateOnce
