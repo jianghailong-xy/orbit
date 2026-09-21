@@ -1,0 +1,58 @@
+# XcodeGen spec for the probe app — EVIDENCE ONLY, never shipped and never a gate.
+#
+# It is a second iOS target over the SAME shared sources `src/ios/project.yml` compiles
+# (`../macos/OrbitApp/Sources/OrbitApp`, minus the macOS-only files), so the cards it draws are the
+# cards the real client draws rather than a copy of them. What differs is the entry point: instead
+# of the app, a probe screen that points a real `ConsoleModel` at `.ios-probe/probe-server.mjs` and
+# renders the cards its read files.
+name: Probe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  OrbitKit:
+    path: ../src/macos/OrbitKit
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+
+targets:
+  Probe:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources
+      - path: ../src/macos/OrbitApp/Sources/OrbitApp
+        name: Shared
+        excludes:
+          # The same macOS-only files the iOS client excludes — the app entry among them, which is
+          # why this target can carry a `@main` of its own.
+          - "OrbitApp.swift"
+          - "HotKeyManager.swift"
+          - "UpdaterModel.swift"
+          - "RunnerControl.swift"
+          - "Views/RunnerControlPane.swift"
+          - "Views/MenuBarContent.swift"
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.probe
+        PRODUCT_NAME: OrbitProbe
+        INFOPLIST_FILE: Sources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGNING_ALLOWED: NO
+        TARGETED_DEVICE_FAMILY: "1"
+
+# Explicit shared scheme, as `src/ios/project.yml` has one, so `-scheme Probe` resolves OrbitKit.
+schemes:
+  Probe:
+    build:
+      targets:
+        Probe: all
