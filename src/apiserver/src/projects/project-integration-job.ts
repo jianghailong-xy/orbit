@@ -500,10 +500,17 @@ async function queueLandTask(
 /**
  * The project's other finished code tasks, given a route at the moment the line starts (L3 step 4).
  *
- * "Finished" is DONE and not yet on this line's target. A task whose work already sits there is not
- * offered again — the runner would answer ALREADY_LANDED, which is a correct answer and a wasted
- * claim on a repository's serial slot, and the owner would be shown a card for a merge that has
- * nothing in it.
+ * "Finished" is DONE and not yet on this line: not on its target, and not on its upstream. A task
+ * whose work already sits there is not offered again — the runner would answer ALREADY_LANDED,
+ * which is a correct answer and a wasted claim on a repository's serial slot, and the owner would
+ * be shown a card for a merge that has nothing in it.
+ *
+ * The upstream half is what a project branch makes true by construction: J-S2 MAIN_SYNC merges the
+ * upstream into the target whenever the upstream tip is not an ancestor of it, so work that is on
+ * the upstream is on the branch already, and a landing for it has nothing to replay — it can only
+ * come back as a CONFLICT against a branch that moved on without it. J-S3 cannot tell either,
+ * because this platform's own merges are rebases: the source sha those receipts name is an ancestor
+ * of nothing. Work that reaches the upstream later arrives on the branch at the next MAIN_SYNC.
  *
  * Which route is the same one the triggering task took, from the same line: a project branch
  * back-fills `LAND_TASK` rows, and a MAIN line back-fills candidates. Without the second half a
@@ -518,6 +525,9 @@ async function backfillFinishedCodeTasks(
   },
 ): Promise<string[]> {
   const targetBranch = shortBranchName(input.codebase.integrationRef);
+  // The branches whose content the line already holds. On a MAIN line this is one branch, because
+  // the binding's target and its upstream are the same ref (L3 step 2).
+  const landedBranches = [...new Set([targetBranch, shortBranchName(input.codebase.upstreamRef)])];
   const candidates = await tx.task.findMany({
     where: {
       ownerId: input.ownerId,
@@ -535,7 +545,7 @@ async function backfillFinishedCodeTasks(
         select: WORK_SESSION_SELECT,
       },
       mergeReceipts: {
-        where: { targetBranch, result: { in: ['MERGED', 'ALREADY_MERGED'] } },
+        where: { targetBranch: { in: landedBranches }, result: { in: ['MERGED', 'ALREADY_MERGED'] } },
         take: 1,
         select: { id: true },
       },

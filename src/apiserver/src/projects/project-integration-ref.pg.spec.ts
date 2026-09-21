@@ -6,7 +6,7 @@ import { Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { uuidToBase62 } from '@orbit/shared';
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -32,6 +32,7 @@ import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectFuseService } from './project-fuse.service';
+import { enqueueForDoneTask } from './project-integration-job';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
@@ -48,7 +49,9 @@ import { TaskCheckpointService } from './task-checkpoint.service';
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/project-integration-ref.pg.spec.ts
  *
  * Project acceptance criterion 4, cases as `docs/project-integration-line-contract.md` §1.7 lists
- * them, plus §8.8's C1 compatibility case and L5's owner-only door.
+ * them, plus §8.8's C1 compatibility case and L5's owner-only door. The last three cases are L3
+ * step 4's back-fill (J-T1d): which finished code tasks a line that has just started still owes a
+ * landing to.
  *
  * WHAT IS REAL
  * ============
@@ -425,6 +428,57 @@ async function integrate(stack: Stack, f: Fixture, taskId: string): Promise<unkn
   }));
 }
 
+/**
+ * Settle a code task DONE. Written straight to the row: this file is about what the queue reads
+ * off finished work, not about the door a status write goes through.
+ */
+async function done(stack: Stack, taskId: string): Promise<void> {
+  await stack.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.DONE } });
+}
+
+/** The integration jobs the platform has queued for one task, oldest first. */
+async function jobsFor(stack: Stack, taskId: string) {
+  const read = await stack.sql.query(
+    `SELECT "kind", "state", "target_ref" FROM "project_integration_job"
+      WHERE "task_id" = $1::uuid ORDER BY "created_at", "id"`,
+    [taskId],
+  );
+  return read.rows as Array<{ kind: string; state: string; target_ref: string }>;
+}
+
+/**
+ * Two DONE code tasks with an edge between them — the shape the default rule sends through a
+ * project branch — each with the worktree session that names its branch.
+ *
+ * The prerequisite is settled DONE before the dependent's work session is written: 0200's
+ * `session_dispatch_dependency_check` refuses, at commit, a session that starts work on a task
+ * whose prerequisite tail is not DONE.
+ */
+async function finishedPair(
+  stack: Stack,
+  f: Fixture,
+  label: string,
+): Promise<{ trigger: string; other: string; otherWork: string }> {
+  const trigger = await codeTask(stack, f, `${label}: the task that opens the line`);
+  const other = await codeTask(stack, f, `${label}: the other finished code task`,
+    { dependsOnTaskIds: [trigger] });
+  await done(stack, trigger);
+  await workSession(stack, f, trigger, `${label}-${f.publicId}-trigger`);
+  const otherWork = await workSession(stack, f, other, `${label}-${f.publicId}-other`);
+  await done(stack, other);
+  return { trigger, other, otherWork };
+}
+
+/**
+ * Settle one code task and see it through the transaction that queues its integration.
+ *
+ * This — not `startOnFirstIntegration` — is the door the back-fill rides on (L3 step 4): the same
+ * transaction starts the line and offers the project's other finished code tasks the same route.
+ */
+async function enqueue(stack: Stack, f: Fixture, taskId: string) {
+  return stack.db.$transaction((tx) => enqueueForDoneTask(tx, f.ownerId, taskId));
+}
+
 async function codebaseRow(stack: Stack, f: Fixture) {
   const read = await stack.sql.query(
     `SELECT * FROM "project_codebase" WHERE "project_id" = $1::uuid AND "slot" = 'primary'`,
@@ -769,5 +823,81 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       'into another branch': 'UNKNOWN',
     });
     assert.deepEqual(await codebaseRow(stack, f), [], 'reading landing bound nothing');
+  });
+
+  // L3 step 4 (J-T1d): the transaction that starts the line also offers the project's other
+  // finished code tasks the route the line just took, so their dependents do not wait on a landing
+  // nobody will queue. "Already landed" is what spares a task that offer, and a project branch
+  // absorbs its upstream in J-S2 MAIN_SYNC (runner `integrate.go`: when the upstream tip is not an
+  // ancestor of the target, the job merges it in) — so a merge receipt into that upstream is
+  // landing evidence for the line, and a task that has one has nothing left to land.
+  await t.test('a finished code task whose merge receipt points at the line’s upstream is not '
+    + 'back-filled onto the branch that absorbs it', async () => {
+    const f = await project(stack, 'upstream');
+    const { trigger, other, otherWork } = await finishedPair(stack, f, 'upstream');
+    const recorded = await stack.receipts.record(f.ownerId, otherWork, {
+      result: 'MERGED',
+      targetBranch: 'main',
+      sourceSha: sha('a'),
+      targetShaBefore: sha('b'),
+      targetShaAfter: sha('c'),
+    } as never, 'AGENT');
+    assert.equal(recorded.created, true, 'the receipt into main was not recorded');
+
+    const outcome = await enqueue(stack, f, trigger);
+
+    assert.equal(outcome.enqueued, true, `the line never started: ${JSON.stringify(outcome)}`);
+    assert.deepEqual(lineOf(await integrationOf(door, f)), {
+      line: 'PROJECT_BRANCH',
+      ref: `project/${f.publicId}`,
+      upstreamRef: 'main',
+      source: 'DEFAULT_RULE',
+      locked: true,
+    }, 'two code tasks with a dependency between them go through a project branch');
+    assert.deepEqual(await jobsFor(stack, other), [],
+      'a task whose merge receipt points at the line’s upstream was offered a landing anyway: the '
+        + 'project branch absorbs main, so that job has nothing to land and can only end as a '
+        + 'CONFLICT against a branch that moved once the work was already on it');
+    assert.equal(outcome.enqueued && outcome.alsoQueuedTaskIds.includes(other), false,
+      'the back-fill named a task that is already on the line’s upstream');
+    // And the task that opened the line is still queued: the line's first integration is its own
+    // work, and a back-fill that skipped everything would land nothing at all.
+    assert.deepEqual((await jobsFor(stack, trigger)).map((job) => job.kind), ['LAND_TASK']);
+  });
+
+  await t.test('a finished code task with no landing evidence at all is still back-filled', async () => {
+    const f = await project(stack, 'nothing');
+    const { trigger, other } = await finishedPair(stack, f, 'nothing');
+
+    const outcome = await enqueue(stack, f, trigger);
+
+    assert.equal(outcome.enqueued, true, `the line never started: ${JSON.stringify(outcome)}`);
+    assert.deepEqual(await jobsFor(stack, other), [
+      { kind: 'LAND_TASK', state: 'QUEUED', target_ref: `refs/heads/project/${f.publicId}` },
+    ], 'the back-fill stopped offering a project’s finished code tasks a landing at all');
+    assert.equal(outcome.enqueued && outcome.alsoQueuedTaskIds.includes(other), true,
+      'the back-fill left a finished code task with no landing evidence behind');
+  });
+
+  await t.test('a finished code task whose merge receipt points at another project’s branch is '
+    + 'still back-filled', async () => {
+    const f = await project(stack, 'elsewhere');
+    const other = await project(stack, 'elsewhere-other');
+    const pair = await finishedPair(stack, f, 'elsewhere');
+    const recorded = await stack.receipts.record(f.ownerId, pair.otherWork, {
+      result: 'MERGED',
+      targetBranch: `project/${other.publicId}`,
+      sourceSha: sha('a'),
+      targetShaBefore: sha('b'),
+      targetShaAfter: sha('c'),
+    } as never, 'AGENT');
+    assert.equal(recorded.created, true, 'the receipt into the other project’s branch was not recorded');
+
+    const outcome = await enqueue(stack, f, pair.trigger);
+
+    assert.equal(outcome.enqueued, true, `the line never started: ${JSON.stringify(outcome)}`);
+    assert.deepEqual(await jobsFor(stack, pair.other), [
+      { kind: 'LAND_TASK', state: 'QUEUED', target_ref: `refs/heads/project/${f.publicId}` },
+    ], 'a receipt into some other project’s branch was read as landing on this project’s line');
   });
 });
