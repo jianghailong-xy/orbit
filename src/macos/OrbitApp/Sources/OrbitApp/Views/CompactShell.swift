@@ -413,26 +413,69 @@ private struct CornerCutout: Shape {
 /// Guarded twice on purpose: only while the drawer is open, and only for a bar whose leading margin
 /// has actually collapsed *and* which really is off the leading edge. A later iOS that stops
 /// collapsing the margin therefore leaves this a no-op rather than over-correcting it to 32pt.
+///
+/// One pass is not enough. UIKit zeroes the margin on *every* bar layout, and the card is laid out
+/// on every frame of the slide — so a single pass after the settle leaves the title pinned to the
+/// card's edge for the whole slide and then snapping back. The margin is therefore re-asserted once
+/// per frame through the slide and its settle, which is what keeps the title in one place while the
+/// card moves (traced frame by frame on an iOS 26.5 simulator).
 private struct NavBarLeadingMargin: UIViewRepresentable {
     /// What the margin is at the window's leading edge, and what the collapsed state is restored
     /// to. iOS 26.5: `layoutMargins.leading` 16 → 0, `UISearchBarTextField` x 16 → 8.
     private static let leading: CGFloat = 16
+    /// How long to keep re-asserting after the state flips: the slide is `.snappy(duration: 0.25)`,
+    /// and the pass following the settle is the one that has to stick.
+    private static let trackingWindow: TimeInterval = 0.6
 
-    func makeUIView(context: Context) -> UIView { UIView(frame: .zero) }
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        context.coordinator.view = view
+        return view
+    }
 
     func updateUIView(_ view: UIView, context: Context) {
-        // After the slide has settled — until then the card is still at the window's origin, where
-        // there is nothing to put back. Re-armed on every update, so a later bar layout that
-        // re-collapses the margin is fixed again on the next render.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak view] in
-            guard let window = view?.window else { return }
-            for bar in window.orbitNavigationBars {
-                let offLeadingEdge = bar.convert(bar.bounds, to: window).minX != 0
-                guard offLeadingEdge, bar.directionalLayoutMargins.leading == 0 else { continue }
-                bar.directionalLayoutMargins.leading = Self.leading
-                bar.setNeedsLayout()
-                bar.layoutIfNeeded()
+        Self.restore(from: view)
+        context.coordinator.track()
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// A display link rather than a timer: it ticks with the frames the bar is being laid out on,
+    /// and stops itself once the slide is over — nothing re-lays the bar out while the drawer is
+    /// open (the peek's tap closes it, so the card underneath cannot be scrolled), and anything that
+    /// does, a rotation, re-renders and starts a fresh pass.
+    final class Coordinator: NSObject {
+        weak var view: UIView?
+        private var link: CADisplayLink?
+        private var deadline = Date.distantPast
+
+        func track() {
+            deadline = Date().addingTimeInterval(NavBarLeadingMargin.trackingWindow)
+            guard link == nil else { return }
+            let link = CADisplayLink(target: self, selector: #selector(tick))
+            link.add(to: .main, forMode: .common)
+            self.link = link
+        }
+
+        @objc private func tick() {
+            guard Date() < deadline else {
+                link?.invalidate()
+                link = nil
+                return
             }
+            if let view { NavBarLeadingMargin.restore(from: view) }
+        }
+    }
+
+    private static func restore(from view: UIView?) {
+        guard let window = view?.window else { return }
+        for bar in window.orbitNavigationBars {
+            let offLeadingEdge = bar.convert(bar.bounds, to: window).minX != 0
+            guard offLeadingEdge, bar.directionalLayoutMargins.leading == 0 else { continue }
+            bar.directionalLayoutMargins.leading = leading
+            bar.setNeedsLayout()
+            bar.layoutIfNeeded()
         }
     }
 }
