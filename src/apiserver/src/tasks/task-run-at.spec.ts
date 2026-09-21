@@ -194,20 +194,33 @@ test('a prerequisite finishing does not start a task scheduled for later', async
   // scheduled one is held — and held, not dropped: its run_at is untouched, so the sweep starts
   // it when it comes due.
   assert.deepEqual(executed, [OTHER_TASK_ID]);
-  assert.equal(raw.statements.length, 1, 'one chain read finds every released dependent');
+  // Exactly one CHAIN read, found by what it selects rather than by position. This is the read that
+  // must not multiply: the old spelling evaluated a function of every row of `task_dependency` —
+  // 40s of pool-holding scan per completion. The pass also reads the MATERIALISATION BUDGET before
+  // its loop (the sweep's own two aggregate statements, so that this edge refuses in the world the
+  // sweep refuses in) — a fixed cost of the pass rather than a per-candidate one, which is what the
+  // total pins: a budget read inside the loop would be N statements for N released dependents, and
+  // this fixture releases two.
+  const chainReads = raw.statements.filter((s) => /WITH RECURSIVE chain AS \(/.test(s.text));
+  assert.equal(chainReads.length, 1, 'one chain read finds every released dependent');
+  assert.equal(
+    raw.statements.length,
+    3,
+    'the pass reads the budget once (two statements) and walks the dependency chain once',
+  );
+  const chain = chainReads[0];
   // The relation is resolved the other way round now — which names resolve to this completion,
   // rather than what each stored edge resolves to — because the old spelling evaluated a function
   // of every row of `task_dependency` (40s of pool-holding scan per completion; see
   // `dispatchDependentsOf`). What the one read must still say: the completion is resolved through
   // supersession chains, the EDGE side is scoped to this owner, and the ids it carries are this
   // owner and this completion and nothing else.
-  assert.match(raw.statements[0].text, /WITH RECURSIVE chain AS \(/);
-  assert.match(raw.statements[0].text, /p\."superseded_by_task_id" = c\."id"/);
-  assert.match(raw.statements[0].text, /dependent\."owner_id" = \$\d+::uuid/);
-  assert.match(raw.statements[0].text, /d\."depends_on_task_id" IN \(SELECT "id" FROM chain\)/);
+  assert.match(chain.text, /p\."superseded_by_task_id" = c\."id"/);
+  assert.match(chain.text, /dependent\."owner_id" = \$\d+::uuid/);
+  assert.match(chain.text, /d\."depends_on_task_id" IN \(SELECT "id" FROM chain\)/);
   // The ids the read carries, in the order the statement binds them: the completion it resolves,
   // then the owner scope, applied at the chain's seed and again on each edge side.
-  assert.deepEqual(raw.statements[0].values, ['done-task', OWNER_ID, OWNER_ID, OWNER_ID]);
+  assert.deepEqual(chain.values, ['done-task', OWNER_ID, OWNER_ID, OWNER_ID]);
 });
 
 test('a dependent whose schedule has already passed is started by its prerequisite', async () => {
