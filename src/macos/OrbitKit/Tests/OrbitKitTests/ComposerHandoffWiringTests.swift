@@ -288,4 +288,66 @@ final class ComposerHandoffWiringTests: XCTestCase {
                                + "starts an ordinary turn and nothing else")
         }
     }
+
+    /// The exception card's `Chat about this` — the fifth control wearing
+    /// `Approvals.chatAction` — arms the composer with the item it was drawn for, and its send
+    /// reaches no door either: what the owner types is a message TO the coordinator, which then
+    /// decides what to do with the doors it has (`ExceptionCards.chatContext`).
+    func testTheExceptionCardsChatAboutThisArmsTheComposer() throws {
+        let file = try source(Self.cardPath)
+        let card = try section(file, from: "private struct OwnerItemCardView: View",
+                               to: "/// The one merge a person is asked to confirm")
+
+        // Read as STATEMENTS, for the reason the settlement card's test gives: a commented-out
+        // call still contains its own words, and the day the handoff is undone is the day this
+        // check exists for.
+        let press = try section(card, from: "// And the other way out, which is a sentence",
+                                to: "Text(ExceptionCards.ownerLine(row))")
+        let statements = press.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("//") }
+        XCTAssertTrue(statements.contains("console.startOwnerItemReply(row, isPause: isPause)"),
+                      "the press must hand the reply to the composer, with the row and the kind it "
+                          + "was drawn for; without the row there is no item to talk about")
+        XCTAssertTrue(statements.contains("Text(Approvals.chatAction).approvalActionLabel()"),
+                      "and it is labelled from the word every composer handoff shares")
+
+        let console = try source(Self.consolePath)
+        XCTAssertTrue(console.contains("ExceptionCards.chatContext(projectTitle: projectTitle,"),
+                      "the item the send carries is built in OrbitKit, where its words are proved")
+        let arming = try section(console, from: "func startOwnerItemReply(",
+                                 to: "func cancelChatReply")
+        for piece in ["target: .ownerItem(context:", "banner: ExceptionCards.chatBanner(row",
+                      "placeholder: ExceptionCards.chatPlaceholder"] {
+            XCTAssertTrue(arming.contains(piece),
+                          "an armed item reply carries \(piece) — the bar and the placeholder are "
+                              + "what says which item this is about")
+        }
+
+        let reroute = try section(console, from: "// An armed reply answers a question",
+                                  to: "// Resume eligibility depends on")
+        XCTAssertTrue(reroute.contains("if reply.target.needsText, text.isEmpty { return }"),
+                      "a message that IS the whole point must not be sent empty")
+        guard let branchAt = reroute.range(of: "case .ownerItem(let context):") else {
+            throw WiringError.missing("the send's owner-item branch")
+        }
+        let branch = String(reroute[branchAt.upperBound...])
+        let sent = branch.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("//") }
+            .joined(separator: " ")
+        // A raw string, so the assertion reads as the line it is looking for: what is being
+        // matched is source text, escapes and all.
+        XCTAssertTrue(
+            sent.contains(#"await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)""#),
+            "the typed sentence must go out as an ordinary turn with the item in front of it")
+        XCTAssertTrue(sent.contains("overrideAttachments: []"),
+                      "and with none of the composer's staged chips: an attachment cannot say what "
+                          + "should be done about an exception")
+        for door in ["decideOwnerConfirmation", "replyToQuestion", "api."] {
+            XCTAssertFalse(branch.contains(door),
+                           "the item reply was routed through \(door): it answers no call, so it "
+                               + "starts an ordinary turn and nothing else")
+        }
+    }
 }
