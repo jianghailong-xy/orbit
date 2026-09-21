@@ -8708,6 +8708,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         status: true,
         autoRunWhenReady: true,
         runAt: true,
+        // The list this candidate belongs to, because that is the batch whose budget the dispatch
+        // below spends — read in the same statement as the rest of what decides the candidate.
+        listId: true,
         assignee: { select: { id: true, runnerId: true } },
         // The moment this unlock IS (0137), read here because it is what NAMES this dispatch: two
         // passes — a second apiserver, or this one after a restart — over the same moment are one
@@ -8719,6 +8722,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dispatchEpoch: { select: { epoch: true } },
       },
     });
+    // The sweep's own budget, read once for the pass exactly as the sweep reads it.
+    //
+    // This edge exists to be the sweep's LATENCY — "a process crash here loses latency, not work,
+    // because the periodic READY sweep observes the same dependency watermark" is what the runner's
+    // own door says about it — and a second door into the same dispatch cannot carry a second set
+    // of rules. The rule it was skipping is about the WORK, not about which door is asking: the
+    // task table is already the durable queue, so materialising a run while its list has no free
+    // slot buys nothing and costs that list its own sweep, because the copy is counted: `free`
+    // goes negative and nothing materialises there again until the queue drains below the ceiling.
+    // 2026-09-21, the WARC list: six runs arrived this way onto a cap-of-one list, took `free` to
+    // -6, stopped the list's auto-run for good, and then sat queued for ten hours — which from
+    // outside read as a runner that would not pick work up. Refused here, the task stays OPEN and
+    // READY, and the sweep this edge anticipates materialises it the moment a slot frees.
+    const budget = await this.materialisationBudget();
     const now = new Date();
     for (const dep of dependents) {
       if ((states.get(dep.id) ?? 'NONE') !== 'READY') continue;
@@ -8730,6 +8747,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // the later of the two is the one that fires.
       if (dep.runAt && dep.runAt > now) continue;
       if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
+      if (!takeBudget(budget, dep.assignee.runnerId, dep.listId)) continue; // left to the sweep
       const epoch = dep.dispatchEpoch?.epoch ?? 0n;
       try {
         // Carrying WHICH MOMENT this scan read, so `execute` can prove it is still acting on it:

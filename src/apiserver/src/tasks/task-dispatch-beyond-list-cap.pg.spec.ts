@@ -25,11 +25,14 @@
  *     with: six rows were already queued, so the sweep's free count was negative and no automatic
  *     door would start them.
  *
- * Two doors carry the `dep:` token: `reconcileReadyTasks` (the sweep, which spends the ceiling as a
+ * Two doors carry the `dep:` token: `reconcileReadyTasks` (the sweep) and
+ * `dispatchDependentsAfterCompletion` (the completion edge). Only the first spent the ceiling as a
  * MATERIALISATION budget — "is there any point creating another session", counting PENDING because
- * it is already queued for the next free slot, a2cbd3543) and `dispatchDependentsAfterCompletion`
- * (the completion edge, which does not read the budget at all: `dispatchReadyTask` goes straight to
- * `execute`). This spec runs both of them, and the manual door besides, over one fixture.
+ * it is already queued for the next free slot (a2cbd3543) — while the second went straight to
+ * `execute`. That asymmetry was the incident, and the fix closes it: a completion edge is the
+ * sweep's LATENCY, not a second scheduler, and the rule it skipped is about the WORK rather than
+ * about which door asked. Both now spend the same budget, read once per pass. This spec runs both
+ * doors, and the manual one besides, over one fixture.
  *
  * What is asserted, against a real PostgreSQL and by COUNTING SESSIONS rather than by watching a
  * call — "was it materialised" is the question, and the run that exists afterwards is its evidence:
@@ -37,20 +40,20 @@
  *   (1) the SWEEP materialises one session and then refuses, at the cap: a second task that is
  *       genuinely READY, opted into auto-run and assigned is left OPEN with no session, and its
  *       receipt is never even opened;
- *   (2) the COMPLETION EDGE materialises the very run the sweep refused, with the list at its cap
- *       and no budget consulted — same world, same instant, the other door, and the count goes past
- *       the cap. That contrast is the whole answer, and the last case holds it to it: with the cap
- *       raised, the SWEEP dispatches the very tasks it refused in (1) and (2), so the cap is what
- *       held them;
- *   (3) the MANUAL door is not bounded by it either, and it says which door it was on the row it
+ *   (2) the COMPLETION EDGE refuses in that same world and for that same reason: the run it would
+ *       have materialised is not there, its dependent is still OPEN in the durable queue, and the
+ *       batch's count does not pass the cap. Before 2026-09-21 this case asserted the OPPOSITE —
+ *       that is what the fix changed, the two assertions are not interchangeable, and the mutation
+ *       that reverses the fix turns exactly this case red;
+ *   (3) the MANUAL door is not bounded by the cap, and it says which door it was on the row it
  *       writes (`dispatch_origin = USER`, `run_source = MANUAL`) — the discriminator the incident's
  *       six automatic rows and three manual rows differ by;
- *   (4) the side effect of going over: once the batch is past its cap the sweep's free count is
- *       negative and it materialises nothing more, however READY the work is — a list that has gone
- *       over its own cap stops its own auto-run until enough sessions leave the non-terminal set,
- *       which is why the incident's last three rows are ones a person started by hand;
+ *   (4) the cap being spent still bounds the sweep: at the cap its free count is zero, and it
+ *       materialises nothing more however READY the work is. The incident's shape of this was the
+ *       stronger `free < 0` that the completion edge's copies produced; the copies are gone, the
+ *       bound is not;
  *   (5) the claim is untouched by any of it: `claimSessionForRunner` still hands out exactly the cap
- *       — one row of the two queued — so the sessions past the cap queue, they do not run.
+ *       — the one row that is queued — so nothing past the cap can run.
  *
  * Destructive: it seeds rows, so it runs only against a disposable server.
  */
@@ -286,7 +289,7 @@ suite('which door materialises a run past a list cap, on real PostgreSQL', async
     assert.equal((await queued(db, f.listId)).length, 1, 'a later sweep materialised past the cap');
   });
 
-  await t.test('the completion edge materialises past the cap, and the sweep then cannot', async () => {
+  await t.test('the completion edge spends the same budget the sweep does', async () => {
     const f = await fixture('completion-edge', 1);
 
     await sweep({ db, tasks, queue });
@@ -299,44 +302,53 @@ suite('which door materialises a run past a list cap, on real PostgreSQL', async
     assert.equal(await sessionsOfTask(db, f.b), 0, 'the sweep materialised `b` at a full cap');
 
     // The completion edge, as the doors call it (`runner-api`, `update`, the evidence judgment and
-    // the owner's confirmation all reach this one method).
+    // the owner's confirmation all reach this one method). It is the sweep's LATENCY — a crash here
+    // loses latency, not work, because the periodic sweep observes the same watermark — so it
+    // spends the same budget, in the same world, and refuses for the same reason. Six runs reached
+    // a cap-of-one list through here on 2026-09-21 and took that list's own budget negative.
     await tasks.dispatchDependentsAfterCompletion(f.ids.ownerId, f.a);
 
     const after = await queued(db, f.listId);
     assert.deepEqual(
-      after.map((row) => row.taskId).sort(),
-      [f.b, f.x].sort(),
-      'the completion edge did not materialise the dependent it unblocked',
+      after.map((row) => row.taskId),
+      [f.x],
+      'the completion edge materialised a dependent the sweep had just refused',
     );
-    assert.equal(after.length, 2, 'the run the completion edge materialised is not the second one');
-    // The row it created is a normal batch row: it carries the list and the ceiling in force, so
-    // the claim below is the gate it is queued behind and not the runner's.
-    const created = after.find((row) => row.taskId === f.b)!;
-    assert.equal(created.cap, 1, 'the run it materialised does not carry the list ceiling');
-    assert.equal(created.status, 'PENDING');
+    assert.equal(
+      await sessionsOfTask(db, f.b),
+      0,
+      'the completion edge materialised `b` past the cap',
+    );
+    // Refused, not lost: `b` stays OPEN in the table that is already the durable queue, and the
+    // sweep materialises it the moment a slot frees — which is what `the control` case asserts.
+    const refused = await db.task.findUniqueOrThrow({
+      where: { id: f.b },
+      select: { status: true },
+    });
+    assert.equal(refused.status, 'OPEN', 'the refused dependent left the durable queue');
 
-    // (3) The side effect, as a property of this same batch: `free = 1 - 2` is negative, so the
-    // sweep materialises nothing more however READY the work is. `p3` is settled here to give it a
-    // genuine candidate to refuse.
+    // (3) The side effect the copy used to cause, now only reachable by hand: the list is at its
+    // cap, so `free` is zero and the sweep materialises nothing more however READY the work is.
+    // `p3` is settled here to give it a genuine candidate to refuse.
     await completeHumanTaskForPgTest(db, f.ids.ownerId, f.p3, 'p3');
     await sweep({ db, tasks, queue });
     assert.equal(
       await sessionsOfTask(db, f.y),
       0,
-      'the sweep materialised into a batch that is already over its cap',
+      'the sweep materialised into a batch that is already at its cap',
     );
     assert.equal(
       (await queued(db, f.listId)).length,
-      2,
-      'the batch grew while it was over its own cap',
+      1,
+      'the batch grew while it was at its own cap',
     );
 
-    // (4) And the cap still holds where it is authoritative: the claim. Two rows are queued under a
-    // ceiling of one, and the claim hands out one of them — the second asks again and is answered
-    // null, because the first is now RUNNING and `batchActiveTurns` counts it.
+    // (4) And the cap still holds where it is authoritative: the claim. One row is queued under a
+    // ceiling of one, and the claim hands it out — a second ask is answered null, because the first
+    // is now RUNNING and `batchActiveTurns` counts it.
     const runner = { id: f.ids.runnerId, supportedProviders: [] };
     const first = await queue.claimSessionForRunner(runner, 0);
-    assert.ok(first, 'the claim offered nothing from a batch with two queued runs');
+    assert.ok(first, 'the claim offered nothing from a batch with one queued run');
     assert.ok(
       after.some((row) => row.id === first!.sessionId),
       'the claim handed out a session that is not one of this batch',
@@ -352,7 +364,7 @@ suite('which door materialises a run past a list cap, on real PostgreSQL', async
       1,
       'more than one run of the batch is RUNNING',
     );
-    assert.equal(claimed.length, 2, 'claiming changed how many runs the batch holds');
+    assert.equal(claimed.length, 1, 'claiming changed how many runs the batch holds');
   });
 
   await t.test('the manual door is not bounded by the cap either, and says so on the row', async () => {
