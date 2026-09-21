@@ -534,6 +534,11 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // argument in front of them as a card before anything here is called. Nobody signs for anybody
     // else, so the reason that keeps `listProjectHandoffs` a GET does not apply.
     'resolveBlocker',
+    // §4.7's second item door, and the half of it that belongs on the machine door: the item is the
+    // coordinator's — a landing of its project did not go through — and the one ending the platform
+    // cannot produce for itself is work that landed by hand. The owner's half of the same door is the
+    // user API's, which is why this one takes the acting session and refuses without it.
+    'resolveOpenItem',
     'updateProject',
   ]);
   const verbs = Object.fromEntries(
@@ -552,6 +557,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
     resolveBlocker: RequestMethod.POST,
+    resolveOpenItem: RequestMethod.POST,
     updateProject: RequestMethod.PATCH,
   });
 });

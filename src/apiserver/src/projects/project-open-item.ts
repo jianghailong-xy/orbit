@@ -192,6 +192,14 @@ export interface OwnerAnswer {
 
 /** Longest question a card shows and a turn carries (§5.2 R7). */
 export const MAX_QUESTION_CHARS = 2_000;
+/**
+ * Longest reason a hand-closing carries (§4.7's "标记已处理").
+ *
+ * The same bound as a question, and for a comparable reason: this sentence is what somebody reads
+ * where the platform could not decide for itself, so it should be a sentence. Longer than that is a
+ * report, and a report's home is a task comment or the conversation, not a column on a card.
+ */
+export const MAX_OPEN_ITEM_RESOLUTION_NOTE = 2_000;
 /** A choice is between alternatives; more than four is a conversation, not a card. */
 const MAX_OPTIONS = 4;
 
@@ -756,9 +764,10 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
  * replay of the same key compares the content byte for byte.
  *
  * It says what happened, that this item is theirs, and which decisions the platform will NOT make on
- * its own — a failed task is retried, replaced or cancelled by somebody who looked at it. It does
- * not offer a verb that does not exist: closing an item by hand is the door §4.7 adds, and until
- * that lands an item ends when its task does.
+ * its own — a failed task is retried, replaced or cancelled by somebody who looked at it. The one
+ * verb it does offer is the door §4.7 adds: an item the platform cannot close for itself — because
+ * what ended it is not a fact it can read, work that landed by hand being the case that made this a
+ * hole — is closed by its assignee, through `open_item_resolve`, with a reason.
  *
  * An integration item says what the payload knows — the files it conflicted on, the check that
  * disagreed and what it returned, the error code — because the reader's first question is which of
@@ -776,6 +785,12 @@ export function openItemMessage(item: OpenItemMessageSource): string {
   } & IntegrationItemPayload;
   const notice = `待办编号 ${uuidToBase62(item.id)}。这是一条通知，不是打断：你正在跑的那一轮不会被它中断，`
     + '你是在那一轮结束之后才读到它的，所以以你自己刚读到的库里状态为准。';
+  // The one ending the platform cannot produce for itself, and the only place a coordinator is told
+  // the door exists: work that landed by HAND — a replay of the branch that the platform never saw —
+  // leaves the item saying "this did not land" for ever, because the branch tip is not an ancestor of
+  // anything and no job will ever report a landing for it again.
+  const handClose = '平台自己关不掉的情况——这项工作已经用别的方式在目标分支上了，或者你已经另行处理过——'
+    + '用 open_item_resolve 写明理由把它关掉，理由会留在待办上。';
   if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
     const taskId = item.taskId ? uuidToBase62(item.taskId) : null;
     return `【例外待办】${item.title}\n\n`
@@ -787,7 +802,7 @@ export function openItemMessage(item: OpenItemMessageSource): string {
         ? `先读这条任务（task_get，taskId 传 ${taskId}，评论与它的会话都在上面），再决定是重新跑`
           + '（task_start）、另起一个取代它的任务（task_create 带 supersedesTaskId），还是取消'
           + '（task_update 置 CANCELLED）。任务落地、被取消或被取代之后，这条待办由平台自己关闭，'
-          + '你不用回报。\n'
+          + `你不用回报。${handClose}\n`
         : '这条待办身后没有任务：它来自一次晋升（把项目分支合入 main）的作业，那种作业不为任何单个'
           + '任务做事，今天也没有一条属于协调会话的重试门——需要重跑时找账号所有者说明，不要自己造一条作业。\n')
       + `\n${notice}`;
@@ -814,7 +829,8 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     + `这条待办的负责人是你，要判断的是下一步：重新运行（task_start）、另起一个取代它的任务`
     + `（task_create 带 supersedesTaskId）、还是取消（task_update 置 CANCELLED）。`
     + `失败原因先用 task_get（taskId 传 ${taskId}）读任务评论与它的会话，不要照着这条消息猜。\n`
-    + `任务重新跑起来、被取代、被取消或完成之后，这条待办由平台自己关闭，你不用回报。\n\n`
+    + `任务重新跑起来、被取代、被取消或完成之后，这条待办由平台自己关闭，你不用回报。`
+    + `${handClose}\n\n`
     + notice;
 }
 

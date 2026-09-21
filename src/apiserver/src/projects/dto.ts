@@ -25,7 +25,7 @@ import { ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
-import { MAX_QUESTION_CHARS } from './project-open-item';
+import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
 import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -516,6 +516,17 @@ export class ConfirmPromotionDto {
 export class AnswerOpenItemDto {
   @IsOptional() @IsInt() @Min(0) @Max(3) option?: number;
   @IsOptional() @IsString() @MaxLength(4_000) text?: string;
+}
+
+/**
+ * The assignee closing an item it has handled (§4.7's "标记已处理").
+ *
+ * One field, and it is required: a hand-closed item is one the platform could not verify — the
+ * reason is the whole of what the record gains. The service restates both the requirement and the
+ * length, so a caller that reaches it another way is held to the same rule.
+ */
+export class ResolveOpenItemDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
 }
 
 export class RecordMergeEvidenceDto {

@@ -738,12 +738,12 @@ RETURNING id, project_id;
 | 动作 | 入口 | 权限 | 效果 |
 |---|---|---|---|
 | 重试集成 | MCP `integration_retry { taskId }`；`POST /projects/:id/tasks/:taskId/integration/retry` | 当前协调会话或 owner | J-T1b |
-| 标记已处理 | MCP `open_item_resolve { itemId, note }`；`POST /projects/:id/open-items/:itemId/resolve` | 协调会话只能处理 COORDINATOR 待办；owner 不限 | `RESOLVED / HANDLED`，`note` 必填 |
+| 标记已处理 | MCP `open_item_resolve { itemId, note }`；`POST /projects/:id/open-items/:itemId/resolve`（owner 走用户门，协调会话走 runner 门带 `X-Orbit-Session-Id`） | 负责人本人：COORDINATOR 待办只由**当前**协调会话关，owner 不限；问题由提问会话撤回（R12） | `RESOLVED / HANDLED`（问题为 `WITHDRAWN`），`note` 必填、≤2000 字符；`PROMOTION_APPROVAL` 与 `FUSE_PAUSED` 各有自己的门，此入口拒绝（`OPEN_ITEM_HAS_ITS_OWN_DOOR`） |
 | 交给 owner | MCP `open_item_hand_over { itemId, note }`；web「Hand to owner」 | 协调会话或 owner | OWNER / `HANDED_OVER`，推送 |
 | 让协调会话再看一次 | web「Ask the coordinator again」：`POST …/open-items/:itemId/return-to-coordinator` | owner | COORDINATOR / `DEFAULT`，重置 `waiting_since` 与 `escalate_at`，走 X-D4 第 1 条 |
 | 列表 | MCP `open_item_list { projectId }`；`GET /projects/:id/open-items?state=` | 项目内会话或 owner | 读 |
 
-MCP 工具加在 `src/runner-go/mcp.go`（描述 + case）、`transport.go`（HTTP 方法）、`runner-projects.controller.ts`（路由），并在 `cli_mcp_parity_test.go` 登记 CLI 能力或豁免。错误码：`OPEN_ITEM_NOT_OPEN`（409）、`OPEN_ITEM_NOT_COORDINATOR_ITEM`（409）、`OPEN_ITEM_OWNER_ONLY`（403）、`INTEGRATION_RETRY_NOT_APPLICABLE`（409）。
+MCP 工具加在 `src/runner-go/mcp.go`（描述 + case）、`transport.go`（HTTP 方法）、`runner-projects.controller.ts`（路由），并在 `cli_mcp_parity_test.go` 登记 CLI 能力或豁免。错误码：`OPEN_ITEM_NOT_OPEN`（409）、`OPEN_ITEM_NOT_COORDINATOR_ITEM`（409）、`OPEN_ITEM_COORDINATOR_ONLY`（403）、`OPEN_ITEM_HAS_ITS_OWN_DOOR`（409）、`OPEN_ITEM_OWNER_ONLY`（403）、`INTEGRATION_RETRY_NOT_APPLICABLE`（409）。
 
 ### 4.8 读模型
 

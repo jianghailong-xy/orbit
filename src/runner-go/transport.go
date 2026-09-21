@@ -1273,6 +1273,28 @@ func (t *Transport) askOwner(sessionID, id string, body map[string]interface{}) 
 	return out, err
 }
 
+// resolveOpenItem closes one of the project's exception items, with the reason the assignee gives
+// (contract §4.7's "标记已处理").
+//
+// The session header is the authority, not decoration — the server checks it against the project's
+// own coordinator pointer and refuses anything else, so an item can only be closed by the
+// conversation it is assigned to (or by the account owner, through the door that takes their own
+// credential). The reason is a required argument rather than an optional one for the same reason it
+// is required on the server: a hand-closed item is one the platform could not verify.
+func (t *Transport) resolveOpenItem(sessionID, id, itemID, note string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(itemID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/open-items/"+url.PathEscape(itemID)+"/resolve",
+		map[string]interface{}{"note": note}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 func (t *Transport) taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
