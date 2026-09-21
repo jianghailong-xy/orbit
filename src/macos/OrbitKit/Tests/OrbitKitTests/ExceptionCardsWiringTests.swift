@@ -151,8 +151,30 @@ final class ExceptionCardsWiringTests: XCTestCase {
                       "which press this card offers is the server's answer, not this client's guess")
         XCTAssertTrue(card.contains("guard !sending, pressable(row) else { return }"),
                       "and the press re-checks it against the row it was rendered from")
+        // The other two controls, on the same rule: the link only where the server listed the
+        // action and there is a screen to reach, the cancel only where it listed that one.
+        XCTAssertTrue(card.contains("if let target = ExceptionCards.openTarget(row) {"),
+                      "the way in must be drawn from the server's own target, never a guessed route")
+        XCTAssertTrue(card.contains("if ExceptionCards.cancelable(row) {"),
+                      "and the way out only where the door was listed")
         XCTAssertFalse(card.contains(".disabled(false)"),
                        "no control may be pinned open")
+    }
+
+    /// The way out asks first — the press ends an attempt for good — and it is answered with the
+    /// browser's own question, word and promise.
+    func testTheCancelAsksBeforeItWrites() throws {
+        let card = try card()
+        XCTAssertTrue(card.contains("Button(role: .destructive) { confirmingCancel = true }"),
+                      "the card's own press must open the confirmation, not write")
+        let dialog = try section(card, from: ".confirmationDialog(ExceptionCards.cancelTitle",
+                                 to: "/// What happened, in three lines")
+        XCTAssertTrue(dialog.contains("Button(ExceptionCards.cancelConfirm, role: .destructive)"),
+                      "the writing press lives in the dialog's confirm")
+        XCTAssertTrue(dialog.contains("Text(ExceptionCards.cancelBody)"),
+                      "and the dialog carries what the press leaves alone, in the browser's words")
+        XCTAssertTrue(card.contains("guard !sending, ExceptionCards.cancelable(row) else { return }"),
+                      "the confirm re-checks the row it was opened for")
     }
 
     // MARK: the press goes through the doors
@@ -168,6 +190,9 @@ final class ExceptionCardsWiringTests: XCTestCase {
         let doors = try section(try source(Self.consolePath),
                                 from: "func returnEscalatedItem(",
                                 to: "/// M-T4: merge it.")
+        XCTAssertTrue(doors.contains("api.updateTask(taskID, ExceptionCards.cancelRequest)"),
+                      "and the cancel is the task status write the rest of the app uses, carrying "
+                          + "the request `ExceptionCards` builds and nothing else")
         XCTAssertTrue(doors.contains("api.returnOpenItemToCoordinator(projectID: projectID,"),
                       "the hand-back is `POST /projects/:id/open-items/:itemId/return-to-coordinator`")
         XCTAssertTrue(doors.contains("api.resumeProjectFuse(projectID: projectID, episodeID: episodeID)"),

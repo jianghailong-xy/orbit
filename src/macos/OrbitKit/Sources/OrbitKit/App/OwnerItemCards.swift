@@ -316,15 +316,32 @@ public enum ExceptionCards {
     public static let askCoordinatorAgain = "Ask the coordinator again"
     /// Mock 6 ①'s press (§6.3 F-T4): the coordinator stops being paused and starts working again.
     public static let resume = "Resume"
+    /// The way in to the attempt the item is about — the failed run itself, or the task when
+    /// there is no run to show. A link, not a write (`ACTION_LABEL`'s `OPEN_TASK_SESSION`).
+    public static let openTaskSession = "Open task session"
+    /// Stopping the task outright — the browser's `CANCEL_TASK_MODAL_*`, which is a confirm and not
+    /// a press: it ends an attempt for good.
+    public static let cancelTitle = "Cancel this task?"
+    public static let cancelConfirm = "Cancel task"
+    public static let cancelBody =
+        "It is recorded as cancelled: no further run starts on it, and the failed-attempt notices "
+        + "it opened close with it. Its branch and history stay where they are."
+    /// What the door takes: the status write every other task-status press in this app sends
+    /// (`TaskReopen.request` is its counterpart). Nothing else about the task is touched.
+    public static var cancelRequest: UpdateTaskRequest { UpdateTaskRequest(status: .cancelled) }
     /// What a card whose item the read no longer carries says about itself. Native-only copy, and
     /// deliberately so: the browser re-derives its cards from the read on every render and the card
     /// simply goes, which leaves a reader who just pressed something with nothing to read.
     public static let gone = "This exception is no longer open."
     /// The read did not come back. Native-only, like the question card's `unreadable`.
     public static let unreadable = "Couldn’t read this exception — pull to retry."
-    /// The two receipts, drawn only for a press made on THIS screen: what it sent, and where.
+    /// The receipts, drawn only for a press made on THIS screen: what it sent, and where. All three
+    /// are native-only words, and deliberately so — the browser re-derives its cards from the read
+    /// and the card simply goes, which leaves a reader who just pressed something with nothing to
+    /// read.
     public static let returned = "Sent back to the coordinator"
     public static let resumed = "Resumed"
+    public static let cancelled = "Cancelled"
     /// `Owner: you · waiting 2h 10m` — the browser's `ownerLine`, owner arm.
     public static let ownerPrefix = "Owner: you"
     /// What a refused resume says, in the browser's headline (`FusePauseCard`'s alert).
@@ -370,6 +387,24 @@ public enum ExceptionCards {
     /// coordinating it draws no button rather than a button whose only answer is a refusal.
     public static func askable(_ row: ProjectOpenItemRow) -> Bool {
         row.actions.contains(.askCoordinatorAgain)
+    }
+
+    /// Whether the task may be stopped from here: the server lists `CANCEL_TASK`, and the press
+    /// acts on the task the item names — a row without one offers no such button (the browser's own
+    /// `writeTarget` rule).
+    public static func cancelable(_ row: ProjectOpenItemRow) -> Bool {
+        row.actions.contains(.cancelTask) && row.taskId != nil
+    }
+
+    /// Where "Open task session" goes, or nil when there is nowhere to go: the attempt the item is
+    /// about when one is recorded, else the task itself — the browser's `actionHref`, whose two
+    /// routes are the two screens both clients have. Nil also when the server did not list the
+    /// action, so a link is drawn exactly when the server offered the door.
+    public static func openTarget(_ row: ProjectOpenItemRow) -> Route? {
+        guard row.actions.contains(.openTaskSession) else { return nil }
+        if let sessionId = row.sessionId, !sessionId.isEmpty { return .session(sessionId) }
+        if let taskId = row.taskId, !taskId.isEmpty { return .task(taskId) }
+        return nil
     }
 
     /// §7.5's heading for an item that BECAME the owner's, one per way it happened — the browser's
