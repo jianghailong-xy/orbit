@@ -13875,11 +13875,31 @@ button.composer-usage:focus-visible {
   line-height: 1.6;
   color: var(--text-2);
 }
-.project-open-item-subject {
-  margin: 0 0 6px;
-  font-size: 13px;
+/* The card's fact block (mock 5): the rows under the heading, and the tail of what a failed check
+   printed under the Check row. The label and value cells are the merge confirmation card's own two
+   classes, so a row reads the same on both cards; the two treatments below are the ones that card
+   wears as `promotion-mono` / `promotion-bad`. */
+.project-open-item-fact + .project-open-item-fact {
+  margin-top: 2px;
+}
+.project-open-item-mono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+}
+.project-open-item-bad {
+  color: var(--error);
   font-weight: 600;
-  color: var(--text-1);
+}
+.project-open-item-log {
+  margin: 4px 0 2px;
+  padding: 8px 10px;
+  background: var(--fill-inset);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.project-open-item-log .chat-pre {
+  font-size: 11.5px;
+  line-height: 1.55;
 }
 .project-open-item-actions {
   display: flex;

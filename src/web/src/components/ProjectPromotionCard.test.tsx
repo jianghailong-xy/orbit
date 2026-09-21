@@ -136,6 +136,9 @@ function blockedItem(over: Partial<ProjectOpenItemRow> = {}): ProjectOpenItemRow
     delivery: { state: 'DELIVERED', sessionId: SESSION_ID, at: at(12 * MINUTE) },
     actions: ['OPEN_COORDINATOR'],
     question: null,
+    // A conflict's payload would carry its files and its target; this card draws the item only for
+    // the way in it offers, so the block is not what is under test here.
+    facts: null,
     ...over,
   };
 }

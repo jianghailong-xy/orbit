@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>07 exception card actions</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="mock.css">
+<style>
+  .approval-card { margin: 0; }
+  .approval-body.is-plan { padding: 10px 14px 6px; }
+  .neutral-card { border: 1px solid var(--border) !important; background: var(--bg-raised) !important; }
+  .neutral-card .approval-head { background: var(--bg-subtle) !important; border-bottom-color: var(--border-subtle) !important; }
+  .owner-card { border: 1px solid var(--warning-border) !important; background: var(--warning-bg) !important; }
+  .owner-card .approval-head { background: var(--warning-bg) !important; border-bottom-color: var(--warning-border) !important; }
+  .who-line { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-2); padding: 0 14px 10px; }
+  .acts { padding: 8px 14px 10px; }
+  .a-btn.linkq { border-color: transparent; background: transparent; color: var(--text-2); padding: 5px 4px; text-decoration: underline; text-underline-offset: 2px; }
+  .a-btn.linkq.dangerq { color: var(--error); }
+  .rowdiff { font-size: 12px; color: var(--text-3); margin: 6px 2px 0; }
+  .rowdiff b { color: var(--warning); }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.body.setAttribute('data-h',String(Math.ceil(s.getBoundingClientRect().height)))})</script>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1 zh">7 · 例外待办卡的动作行：四个等重按钮 → 一个主按钮 + 一个随类型变的次按钮</h1>
+  <p class="m-sub zh">两列的卡片本体是同一个（事实块 Task / Into / Files / After a fix、Task / Check / 日志尾 / Branch、Task / How / Retries 按效果图 5 补齐，不在这次确认的范围里）；差别只在动作行：左列保持现在的写法（动作由服务端顺序决定轻重，四个控件一样大），右列是提议——每类一个主按钮（这类待办真正要做的下一步）+ 一个次按钮，<b>看</b>和<b>停</b>的动作降成行尾的文字链接。</p>
+
+  <div class="m-grid2">
+    <!-- ── 左：现在线上 ───────────────────────────────────────────────────── -->
+    <div class="m-col">
+      <div class="m-stage-l zh"><span class="m-k">现</span>动作行保持现在的写法：所有动作等重</div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">合并冲突（协调会话在处理）</div>
+        <div class="approval-card neutral-card">
+          <div class="approval-head head-flex"><span>Merge conflict — needs a fix on the task branch</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">runner 托管作业支持「事件发生时叫醒会话」</span>
+              <span class="k">Into</span><span class="v"><span class="a-mono">project/bg-jobs</span> at <span class="a-mono">b70a446</span> · nothing landed</span>
+              <span class="k">Files</span><span class="v"><span class="a-mono">src/runner-go/session_pool.go · background.go · mcp.go</span></span>
+              <span class="k">After a fix</span><span class="v">push to the task branch — Orbit re-integrates and re-checks on its own</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn">Open coordinator</span><span class="a-btn">Open task session</span><span class="a-btn primary">Retry</span><span class="a-btn danger">Cancel task</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--brand)"></span>Owner: coordinator · waiting 18m · goes to the owner at 2h</div>
+        </div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">合并后检查失败（协调会话在处理）</div>
+        <div class="approval-card neutral-card">
+          <div class="approval-head head-flex"><span>Checks failed on the combined tree</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">核实 ScheduleWakeup 是否随 warm 回收丢失</span>
+              <span class="k">Check</span><span class="v"><span class="a-mono">cd src/runner-go &amp;&amp; go test -count=1 ./...</span> · <span class="bad">exit 1</span> after 5m 40s</span>
+            </div>
+            <div class="m-log">--- FAIL: TestScheduleWakeupSurvivesWarmEviction (2.31s)
+    wake_test.go:88: wake not delivered after eviction
+FAIL	orbit	341.207s</div>
+            <div class="kv"><span class="k">Branch</span><span class="v">unchanged — the task passed on its own branch; it fails only on the combined tree</span></div>
+          </div>
+          <div class="acts"><span class="a-btn">Open coordinator</span><span class="a-btn">Open task session</span><span class="a-btn primary">Retry</span><span class="a-btn danger">Cancel task</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--brand)"></span>Owner: coordinator · waiting 5m · goes to the owner at 2h</div>
+        </div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">任务失败（协调会话在处理）</div>
+        <div class="approval-card neutral-card">
+          <div class="approval-head head-flex"><span class="bad">Task failed</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">有存活 Monitor 的 warm engine 不回收（带硬上限）</span>
+              <span class="k">How</span><span class="v">the acceptance command exited 1 (expected 0)</span>
+              <span class="k">Retries</span><span class="v">attempt 2 of 3 in this chain — the 3rd failure goes straight to the owner</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn">Open coordinator</span><span class="a-btn">Open task session</span><span class="a-btn primary">Retry</span><span class="a-btn danger">Cancel task</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--brand)"></span>Owner: coordinator · waiting 1h 58m · goes to the owner in 2m</div>
+        </div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k">现</span>升级给你（负责人是你）—— owner 看到的这批单</div>
+        <div class="approval-card owner-card m-mark"><span class="m-n">!</span>
+          <div class="approval-head head-flex"><span class="criteria-decision-heading">Now yours — no one acted on this for 2h</span><span class="criteria-provenance">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">有存活 Monitor 的 warm engine 不回收（带硬上限）</span>
+              <span class="k">How</span><span class="v">the acceptance command exited 1 (expected 0)</span>
+              <span class="k">Retries</span><span class="v">attempt 2 of 3 in this chain — the 3rd failure goes straight to the owner</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Ask the coordinator again</span><span class="a-btn">Open task session</span><span class="a-btn danger">Cancel task</span><span class="a-btn">Mark as handled</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--warning-solid)"></span>Owner: you · waiting 2h 6m · came to the owner at 2h</div>
+        </div>
+        <div class="rowdiff zh">四个控件一样重，主按钮是服务端顺序里的第一个写动作。<b>这批单里真正用到的是 Mark as handled，它在最右边、最不起眼。</b></div>
+      </div>
+    </div>
+
+    <!-- ── 右：提议 ──────────────────────────────────────────────────────── -->
+    <div class="m-col">
+      <div class="m-stage-l zh"><span class="m-k new">提议</span>一个主按钮 + 一个次按钮，其余降为文字链接</div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">合并冲突（协调会话在处理）</div>
+        <div class="approval-card neutral-card m-mark"><span class="m-n">1</span>
+          <div class="approval-head head-flex"><span>Merge conflict — needs a fix on the task branch</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">runner 托管作业支持「事件发生时叫醒会话」</span>
+              <span class="k">Into</span><span class="v"><span class="a-mono">project/bg-jobs</span> at <span class="a-mono">b70a446</span> · nothing landed</span>
+              <span class="k">Files</span><span class="v"><span class="a-mono">src/runner-go/session_pool.go · background.go · mcp.go</span></span>
+              <span class="k">After a fix</span><span class="v">push to the task branch — Orbit re-integrates and re-checks on its own</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Open task session</span><span class="a-btn">Retry</span><span class="a-btn linkq">Open coordinator</span><span class="a-btn linkq dangerq">Cancel task</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--brand)"></span>Owner: coordinator · waiting 18m · goes to the owner at 2h</div>
+        </div>
+        <div class="rowdiff zh">主按钮从 <b>Retry</b> 换成 <b>Open task session</b>（效果图 5 这一栏）：冲突要的是去任务分支上把冲突改掉，Retry 是更重的一步。</div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">合并后检查失败（协调会话在处理）</div>
+        <div class="approval-card neutral-card m-mark"><span class="m-n">2</span>
+          <div class="approval-head head-flex"><span>Checks failed on the combined tree</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">核实 ScheduleWakeup 是否随 warm 回收丢失</span>
+              <span class="k">Check</span><span class="v"><span class="a-mono">cd src/runner-go &amp;&amp; go test -count=1 ./...</span> · <span class="bad">exit 1</span> after 5m 40s</span>
+            </div>
+            <div class="m-log">--- FAIL: TestScheduleWakeupSurvivesWarmEviction (2.31s)
+    wake_test.go:88: wake not delivered after eviction
+FAIL	orbit	341.207s</div>
+            <div class="kv"><span class="k">Branch</span><span class="v">unchanged — the task passed on its own branch; it fails only on the combined tree</span></div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Open task session</span><span class="a-btn">Retry</span><span class="a-btn linkq">Open coordinator</span><span class="a-btn linkq dangerq">Cancel task</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--brand)"></span>Owner: coordinator · waiting 5m · goes to the owner at 2h</div>
+        </div>
+        <div class="rowdiff zh">同上。检查失败的下一步是去那条任务上把红的改掉。</div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">任务失败（协调会话在处理）</div>
+        <div class="approval-card neutral-card m-mark"><span class="m-n">3</span>
+          <div class="approval-head head-flex"><span class="bad">Task failed</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">有存活 Monitor 的 warm engine 不回收（带硬上限）</span>
+              <span class="k">How</span><span class="v">the acceptance command exited 1 (expected 0)</span>
+              <span class="k">Retries</span><span class="v">attempt 2 of 3 in this chain — the 3rd failure goes straight to the owner</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Retry</span><span class="a-btn">Open task session</span><span class="a-btn linkq">Open coordinator</span><span class="a-btn linkq dangerq">Cancel task</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--brand)"></span>Owner: coordinator · waiting 1h 58m · goes to the owner in 2m</div>
+        </div>
+        <div class="rowdiff zh">这一类主按钮就是 <b>Retry</b>（效果图 5 也是），「看协调会话」和「停任务」降到链接。</div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">提议</span>升级给你：Mark as handled 放哪？（两个方案，请指一个）</div>
+        <div class="approval-card owner-card m-mark"><span class="m-n">4</span>
+          <div class="approval-head head-flex"><span class="criteria-decision-heading">Now yours — no one acted on this for 2h</span><span class="criteria-provenance">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">有存活 Monitor 的 warm engine 不回收（带硬上限）</span>
+              <span class="k">How</span><span class="v">the acceptance command exited 1 (expected 0)</span>
+              <span class="k">Retries</span><span class="v">attempt 2 of 3 in this chain — the 3rd failure goes straight to the owner</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Ask the coordinator again</span><span class="a-btn">Open task session</span><span class="a-btn linkq dangerq">Cancel task</span><span class="a-btn linkq">Mark as handled</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--warning-solid)"></span>Owner: you · waiting 2h 6m · came to the owner at 2h</div>
+        </div>
+        <div class="rowdiff zh"><b>方案 B（推荐）</b>：Mark as handled 是行尾文字链接，和「停任务」并列、同样轻。<br>它只出现在负责人是你的例外卡上，一次点击后弹窗要理由（需要理由，因为平台自己核不出来）。</div>
+
+        <div class="approval-card owner-card m-mark" style="margin-top:12px"><span class="m-n">5</span>
+          <div class="approval-head head-flex"><span class="criteria-decision-heading">Now yours — no one acted on this for 2h</span><span class="criteria-provenance">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">有存活 Monitor 的 warm engine 不回收（带硬上限）</span>
+              <span class="k">How</span><span class="v">the acceptance command exited 1 (expected 0)</span>
+              <span class="k">Retries</span><span class="v">attempt 2 of 3 in this chain — the 3rd failure goes straight to the owner</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Ask the coordinator again</span><span class="a-btn">Open task session</span><span class="a-btn">Mark as handled</span><span class="a-btn linkq dangerq">Cancel task</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--warning-solid)"></span>Owner: you · waiting 2h 6m · came to the owner at 2h</div>
+        </div>
+        <div class="rowdiff zh"><b>方案 C</b>：Mark as handled 是第三个按钮，和次按钮一样重——这批单里真正用到的就是它，所以让它一直看得见；代价是动作行仍是三个按钮（这一栏比实际卡片窄，这一行在这里已经换行了）。</div>
+      </div>
+
+      <ul class="m-notes zh" style="margin-top:0">
+        <li><span class="m-n">1</span><span><b>主按钮 = 这类待办要做的下一步</b>，从服务端列出的门里挑（不是新造的门）。<b>次按钮</b>是同一件事的另一种做法（冲突/检查失败：Retry；任务失败：Open task session）。</span></li>
+        <li><span class="m-n">2</span><span><b>看和停降级为文字链接</b>：Open coordinator（去看协调会话）与 Cancel task（停掉任务）。这些都还在，只是不再和主按钮抢注意力；Cancel task 仍要确认才写。</span></li>
+        <li><span class="m-n">3</span><span><b>效果图 5 里的 `Hand to owner` / `View full log` 今天没有对应的门</b>（服务端不给这两个动作：没有「交给 owner」的入口，也没有单独的完整日志接口），所以次按钮取的是今天真实存在的动作。要补这两个门是另一件事，可以另开任务。</span></li>
+        <li><span class="m-n">4</span><span><b>要你定的两处：</b>① 冲突和检查失败的主按钮从 Retry 换成 Open task session（同意/不同意）；② Mark as handled 用方案 B（行尾链接，推荐）还是方案 C（第三个按钮）。确认后我再接线，并把这张图随改动一起提交。</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>
