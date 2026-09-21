@@ -1,6 +1,7 @@
 import type {
   BgShell,
   ConversationTurnKind,
+  OpenItemDeliveryCard,
   SessionCapabilities,
   SessionTurnIntent,
   SessionTurnPlacement,
@@ -524,6 +525,9 @@ export interface ActiveSessionTurn {
   deliveryCode?: string;
   deliveryReason?: string;
   attachments?: { id: string; mimeType: string }[];
+  /** An exception item's delivery carries the item's own fields beside its words (`OpenItemDeliveryCard`),
+   *  read by the same function the runner's echo is read by. Absent on every turn a person typed. */
+  openItemDelivery?: OpenItemDeliveryCard;
 }
 
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores

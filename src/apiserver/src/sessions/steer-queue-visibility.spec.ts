@@ -3,6 +3,10 @@ import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import {
+  openItemMessage,
+  openItemTurnId,
+} from '../projects/project-open-item';
 
 /**
  * What a reopened console can still see of a message sent mid-turn.
@@ -21,18 +25,86 @@ import { SessionsService } from './sessions.service';
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 
+// One exception item's delivery, for the tests at the foot of this file (§4.4 X-D2): the turn it
+// was queued as, and the reading its card is drawn from.
+const ITEM_ID = '44444444-4444-4444-8444-444444444444';
+const TASK_ID = '55555555-5555-4555-8555-555555555555';
+const PROJECT_ID = '66666666-6666-4666-8666-666666666666';
+const TASK_TITLE = '回填历史 user 事件的 controlPlaneNote';
+const ITEM_TITLE = `Task failed: ${TASK_TITLE}`;
+const ASSIGNED_AT = new Date('2026-09-21T12:00:00.000Z');
+const FAILURE = {
+  how: 'ACCEPTANCE_EXIT_MISMATCH',
+  exitCode: 1,
+  expectedExitCode: 0,
+  chain: { rootTaskId: TASK_ID, failuresInChain: 2, limit: 3 },
+};
+/** The item's own columns, as the delivery's card reads them. */
+const ITEM_ROW = {
+  id: ITEM_ID,
+  kind: 'TASK_FAILED',
+  title: ITEM_TITLE,
+  payload: FAILURE,
+  taskId: TASK_ID,
+  sessionId: SESSION_ID,
+  projectId: PROJECT_ID,
+  assignee: 'COORDINATOR',
+  promotionId: null,
+  fuseEpisodeId: null,
+};
+/** The key `project-open-item.service` queues a delivery under — how a turn says it is one. */
+const ITEM_TURN = openItemTurnId(ITEM_ID, ASSIGNED_AT);
+/** The paragraph the agent is handed: the turn's content, and the prose the card folds away. */
+const ITEM_MESSAGE = openItemMessage({
+  id: ITEM_ID,
+  kind: 'TASK_FAILED',
+  title: ITEM_TITLE,
+  projectId: PROJECT_ID,
+  taskId: TASK_ID,
+  payload: FAILURE,
+});
+/** The paragraph above as fields — what a client draws instead of it, and what has to be identical
+ *  to the card the runner's echo carries, or the delivery redraws itself as it lands. */
+const ITEM_CARD = {
+  itemId: ITEM_ID,
+  kind: 'TASK_FAILED',
+  title: ITEM_TITLE,
+  task: { id: TASK_ID, title: TASK_TITLE, sessionId: SESSION_ID },
+  files: [],
+  targetRef: null,
+  check: null,
+  errorCode: null,
+  failure: {
+    how: 'ACCEPTANCE_EXIT_MISMATCH',
+    exitCode: 1,
+    expectedExitCode: 0,
+    attempt: 2,
+    limit: 3,
+  },
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  landing: {
+    receipts: 0,
+    state: 'NOT_KNOWN',
+    upstream: 'main',
+    integration: `project/${PROJECT_ID}`,
+  },
+};
+
 function makeService(
   rows: Array<Record<string, unknown>>,
   announcedTurnIds: string[] = [],
   failedDeliveryTurnIds: string[] = [],
   /** What each successive deleteMany matches, in call order. Default: nothing, anywhere. */
   deleteCounts: number[] = [],
+  /** The exception item one of those turns is a delivery of, when one of them is one. */
+  openItem: Record<string, unknown> | null = null,
 ) {
   let deletes = 0;
   const filters: Record<string, unknown>[] = [];
   const orderings: Record<string, unknown>[] = [];
   const eventFilters: Record<string, unknown>[] = [];
   const deleteFilters: Record<string, unknown>[] = [];
+  const itemReads: string[] = [];
   const session = {
     id: SESSION_ID,
     ownerId: OWNER_ID,
@@ -86,6 +158,27 @@ function makeService(
         ];
       },
     },
+    // What an exception item's delivery reads to become a card (project-open-item.ts
+    // `readOpenItemDeliveryCard`): the item's own row, the task it is about with its merge receipts,
+    // and the project's landing branches.
+    projectOpenItem: {
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        itemReads.push(where.id);
+        return openItem && openItem.id === where.id ? openItem : null;
+      },
+    },
+    task: {
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        openItem && openItem.taskId === where.id
+          ? { id: where.id, title: TASK_TITLE, mergeReceipts: [] }
+          : null,
+    },
+    projectCodebase: {
+      findFirst: async () => ({
+        upstreamRef: 'refs/heads/main',
+        integrationRef: `refs/heads/project/${PROJECT_ID}`,
+      }),
+    },
     $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
   } as never;
   const service = new SessionsService(
@@ -93,7 +186,7 @@ function makeService(
     { notifySessionQueued: () => undefined } as never,
     { notifyInbox: () => undefined, publishQueuedTurnsChanged: () => undefined } as never,
   );
-  return { service, filters, orderings, eventFilters, deleteFilters };
+  return { service, filters, orderings, eventFilters, deleteFilters, itemReads };
 }
 
 const CREATED_AT = new Date('2026-08-26T12:34:56.000Z');
@@ -473,4 +566,93 @@ test('a message that settled undelivered can be discarded, unlike a steer in fli
   // UNCONFIRMED too: "we cannot prove the engine read it" is still not a message the person can
   // reach any other way, and leaving it is the same dead end.
   assert.deepEqual([...where.deliveryStatus.in].sort(), ['FAILED', 'UNCONFIRMED']);
+});
+
+/**
+ * An exception item's delivery, in the projection the tab paints it from before its `user` event
+ * exists (§4.4 X-D1, X-D2).
+ *
+ * The delivery is queued as an ordinary turn, so GET /sessions/:id/turns?view=active is the only
+ * thing a client can draw it from until a runner leases the turn and echoes it. A projection that
+ * carried the words and not the card therefore made the delivery render as a message somebody
+ * typed, and then redraw itself as a card in the same place a few seconds later — the flicker the
+ * owner reported. The card itself is the reading the ingest path takes for that echo, by the same
+ * function on the same rows; these assertions are about its FIELDS, because a second derivation of
+ * them is exactly what would show up as the delivery changing shape as it lands.
+ *
+ * Read back as JSON rather than as the TypeScript type, because that is the client's copy: a field
+ * the mapper drops on the way out is a field no client can draw, however it is spelled here.
+ */
+const asWire = (rows: unknown): Array<Record<string, unknown>> =>
+  JSON.parse(JSON.stringify(rows)) as Array<Record<string, unknown>>;
+
+test("an exception item's delivery carries its card in the active projection", async () => {
+  const h = makeService(
+    [row('item-turn', 'message', ITEM_MESSAGE, { clientTurnId: ITEM_TURN })],
+    [],
+    [],
+    [],
+    ITEM_ROW,
+  );
+
+  const [wire] = asWire(await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active'));
+
+  // The turn is still the paragraph the agent is handed — the card is recorded BESIDE it, it does
+  // not replace what the coordinator reads.
+  assert.equal(wire.content, ITEM_MESSAGE);
+  assert.equal(wire.placement, 'accepted');
+  assert.deepEqual(wire.openItemDelivery, ITEM_CARD, 'the client has nothing to draw a card from');
+  assert.deepEqual(h.itemReads, [ITEM_ID], 'read once, for the turn that is one');
+});
+
+test("a delivery still waiting behind a running turn carries its card too", async () => {
+  const h = makeService(
+    [
+      row('running', 'message', 'working now', { seq: 1, status: 'IN_FLIGHT' }),
+      row('item-turn', 'message', ITEM_MESSAGE, { seq: 2, clientTurnId: ITEM_TURN }),
+    ],
+    [],
+    [],
+    [],
+    ITEM_ROW,
+  );
+
+  const listed = asWire(await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active'));
+
+  // The queued tail draws the same turn the transcript will: leaving this row text-only would move
+  // the flicker to the moment it reaches the head rather than removing it.
+  assert.deepEqual(
+    listed.map((turn) => [turn.turnId, turn.placement]),
+    [['running', 'accepted'], ['item-turn', 'queued']],
+  );
+  assert.deepEqual(listed[1].openItemDelivery, ITEM_CARD);
+});
+
+test('an ordinary queued turn carries no card and costs no read', async () => {
+  const h = makeService(
+    [
+      row('running', 'message', 'working now', { seq: 1, status: 'IN_FLIGHT' }),
+      row('typed', 'message', 'and then deploy', { seq: 2, clientTurnId: 'not-an-item-turn' }),
+      // A turn id that merely CONTAINS the marker is not one: the prefix is the whole of what makes
+      // a turn a delivery.
+      row('embedded', 'message', 'and one more', { seq: 3, clientTurnId: `x${ITEM_TURN}` }),
+    ],
+    [],
+    [],
+    [],
+    ITEM_ROW,
+  );
+
+  const listed = asWire(await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active'));
+
+  assert.deepEqual(Object.keys(listed[1]).sort(), [
+    'attachments',
+    'content',
+    'createdAt',
+    'kind',
+    'placement',
+    'turnId',
+  ]);
+  assert.deepEqual(Object.keys(listed[2]).sort(), Object.keys(listed[1]).sort());
+  assert.deepEqual(h.itemReads, [], 'nothing is read for a turn that is not a delivery');
 });

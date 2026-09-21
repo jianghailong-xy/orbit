@@ -604,10 +604,11 @@ struct TranscriptView: View {
     // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
     // region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. A wake is still the turn the bar points back at, but
-        // it is not the person's question: it gets its card's own title and line (`StickySummary`),
-        // so the bar can't say "your question" above a card reading "not typed by you".
-        let summary = StickySummary.of(text: bubble.text, note: bubble.note)
+        // What this turn was and what it said. A wake — or an exception item's delivery — is still
+        // the turn the bar points back at, but it is not the person's question: it gets its card's
+        // own title and line (`StickySummary`), so the bar can't say "your question" above a card
+        // reading "not typed by you".
+        let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -1054,9 +1055,24 @@ struct TranscriptItemView: View {
     var body: some View {
         switch item {
         case .user(let b):
-            // A turn a watch queued is the watch's to show, not a message the user typed: it opens
-            // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
-            if let wake = WatchWakeText.parse(b.text) {
+            // An exception item's delivery is the control plane's too, and for a stronger reason
+            // than the wakes below: nobody typed it at all. What the turn says is a paragraph
+            // written for the AGENT — the tools to call, the ids to call them with — so drawing it
+            // as a message is both wrong about who sent it and unreadable as a record: the item's
+            // kind, its title, the files a merge conflicted on and whether the work has landed are
+            // all in the payload recorded beside it (`openItemDelivery`, `OpenItemDelivery.parse`).
+            // With no payload the turn keeps its old reading — this is checked FIRST, as the browser
+            // checks it (`NodeView`).
+            if let card = b.itemCard {
+                // The note the same turn carried rides inside the card (`b.attached`): nobody typed
+                // this turn either, so the control plane's words do not go back into a bubble in the
+                // reader's own name — the same rule the wake card applies to a mixed note.
+                OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
+                                         undelivered: b.undelivered || b.delivery == "failed",
+                                         attached: b.attached)
+            } else if let wake = WatchWakeText.parse(b.text) {
+                // A turn a watch queued is the watch's to show, not a message the user typed: it opens
+                // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
                 WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
                                   undelivered: b.undelivered || b.delivery == "failed")
             } else if let background = BackgroundWakeText.parse(b.note) {

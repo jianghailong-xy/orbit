@@ -35,6 +35,29 @@ final class PublicIDTests: XCTestCase {
         XCTAssertEqual(PublicID.storageKey("not an id"), "not an id")
     }
 
+    /// The encode direction, against the same vector — the one the console's card footers draw an
+    /// item's id with ("Item 341DOGTVEs0Fk0gAn1mje"), where the payload carries the uuid.
+    func testEncodesUUIDToTheSameBase62TheOtherClientsProduce() {
+        XCTAssertEqual(PublicID.toPublic(uuid), base62)
+        XCTAssertEqual(PublicID.toPublic(uuid.uppercased()), base62)
+    }
+
+    /// Total the same way `storageKey` is, and idempotent: a payload already carrying the public
+    /// spelling is left alone rather than crashing the card that draws it.
+    func testEncodingIsIdempotentAndTotal() {
+        XCTAssertEqual(PublicID.toPublic(base62), base62)
+        XCTAssertEqual(PublicID.toPublic("not an id"), "not an id")
+        XCTAssertEqual(PublicID.toPublic(""), "")
+        XCTAssertEqual(PublicID.toPublic("019fcbf3-0fa8-7f83-9302-46b25389cb1"), "019fcbf3-0fa8-7f83-9302-46b25389cb1")
+    }
+
+    /// Leading zeros are stripped by both directions, so an id at the low end of the space still
+    /// round-trips to the spelling the server hands out.
+    func testEncodesASmallValueIntoItsShortestSpelling() {
+        XCTAssertEqual(PublicID.toPublic("00000000-0000-0000-0000-000000000001"), "1")
+        XCTAssertEqual(PublicID.toPublic("00000000-0000-0000-0000-000000000000"), "0")
+    }
+
     /// Leading zeros are stripped by the encoder, so the decoder has to re-pad them — otherwise
     /// every id with high-order zero bits decodes short and lands on the wrong cache entry.
     func testDecodesASmallValueIntoAFullyPaddedUUID() {
