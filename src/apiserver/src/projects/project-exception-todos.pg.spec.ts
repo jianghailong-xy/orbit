@@ -20,7 +20,7 @@ import {
   RunStatus as SharedRunStatus,
   TaskStatus as DeclaredTaskStatus,
 } from '@orbit/shared';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, HttpException } from '@nestjs/common';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -403,6 +403,10 @@ interface ItemRow {
   escalatedAt: Date | null;
   resolution: string | null;
   resolvedBy: string | null;
+  resolvedByUserId: string | null;
+  resolvedBySessionId: string | null;
+  resolutionNote: string | null;
+  resolvedAt: Date | null;
 }
 
 async function tableExists(db: PrismaClient, table: string): Promise<boolean> {
@@ -421,7 +425,10 @@ async function items(db: PrismaClient, projectId: string): Promise<ItemRow[]> {
            "integration_job_id" AS "integrationJobId",
            "title", "payload", "waiting_since" AS "waitingSince", "assigned_at" AS "assignedAt",
            "escalate_at" AS "escalateAt", "escalated_at" AS "escalatedAt",
-           "resolution", "resolved_by" AS "resolvedBy"
+           "resolution", "resolved_by" AS "resolvedBy",
+           "resolved_by_user_id" AS "resolvedByUserId",
+           "resolved_by_session_id" AS "resolvedBySessionId",
+           "resolution_note" AS "resolutionNote", "resolved_at" AS "resolvedAt"
       FROM "project_open_item"
      WHERE "project_id" = ${projectId}::uuid
      ORDER BY "created_at", "id"`);
@@ -1625,6 +1632,329 @@ async function refusalOf(run: () => Promise<unknown>): Promise<string | undefine
   }
   return undefined;
 }
+
+/**
+ * §4.7's second terminal door onto an item: its assignee closes it, saying why.
+ *
+ * Read through an optional shape, for the reason the file's header gives: on a tree without the door
+ * every case below has to fail on an assertion rather than on `tsc`, and `typeof` on a missing
+ * method is exactly the red that names what is missing.
+ */
+interface ResolveDoor {
+  resolveOpenItem?: (
+    ownerId: string,
+    projectId: string,
+    itemId: string,
+    given: { note: string },
+    actor: { kind: 'OWNER' } | { kind: 'SESSION'; sessionId: string },
+  ) => Promise<{ itemId: string; state: string; resolution: string }>;
+}
+
+/** The status and the code a refusal carries, from whichever HTTP shape it was thrown in. */
+async function denied(run: () => Promise<unknown>): Promise<{ status: number; code?: string; message: string }> {
+  const thrown = await run().then(() => null, (error: unknown) => error);
+  assert.ok(thrown instanceof HttpException, `the door answered instead of refusing: ${thrown}`);
+  const body = thrown.getResponse();
+  const shaped = typeof body === 'string' ? { message: body } : (body as { code?: string; message?: string });
+  return { status: thrown.getStatus(), code: shaped.code, message: shaped.message ?? '' };
+}
+
+/** One door, called by whoever is pressing it: the owner in the app, or the item's coordinator. */
+function door(stack: Stack): (
+  w: World,
+  itemId: string,
+  actor: { kind: 'OWNER' } | { kind: 'SESSION'; sessionId: string },
+  note: string,
+) => Promise<{ itemId: string; state: string; resolution: string }> {
+  const items = stack.openItems as unknown as ResolveDoor;
+  assert.equal(
+    typeof items.resolveOpenItem,
+    'function',
+    'the assignee of an item needs a door to close it through (§4.7: nothing else can end an '
+      + 'integration item whose work was landed off the line)',
+  );
+  return (w, itemId, actor, note) => items.resolveOpenItem!(w.ownerId, w.projectId, itemId, { note }, actor);
+}
+
+/** The item as it stands now, read the way every other case in this file reads one. */
+async function itemNow(stack: Stack, w: World, itemId: string): Promise<ItemRow> {
+  const row = (await items(stack.db, w.projectId)).find((candidate) => candidate.id === itemId);
+  assert.ok(row, `item ${itemId} is gone from the project`);
+  return row;
+}
+
+/** A landing the runner reported as conflicted, which is the item this whole door exists for. */
+async function conflictedLanding(
+  stack: Stack,
+  label: string,
+): Promise<{ w: World; task: Attempt; item: ItemRow }> {
+  const w = await integratingWorld(stack, label, 'PARKED');
+  const { task, job } = await claimedLanding(stack, w, label);
+  await reportFailure(stack, w, job, {
+    state: 'CONFLICT',
+    phase: 'REBASE',
+    sourceSha: 'a'.repeat(40),
+    targetShaBefore: 'c'.repeat(40),
+    conflicts: ['src/apiserver/src/projects/project-open-item.ts'],
+  });
+  const item = await onlyItemFor(stack.db, w, task.taskId, 'the landing conflicted');
+  assert.equal(item.assignee, 'COORDINATOR');
+  return { w, task, item };
+}
+
+/**
+ * The coordinator closing a conflict it has already dealt with by hand.
+ *
+ * This is the case the door exists for, and it is the one the platform cannot decide for itself:
+ * the work was landed by the coordinator's own replay (cherry-pick then a fast-forward), so the
+ * task's branch tip is not an ancestor of anything and no job will ever report a landing for it.
+ * What closes the item is the assignee saying so — with a reason, on the row, for whoever reads it.
+ */
+test('the coordinator closes a conflicting landing it handled, and the reason and the actor stay on the row',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const { w, item } = await conflictedLanding(stack, 'handled');
+      const note = '已在集成线上：这批工作是协调会话自己重放落地的（cherry-pick + ff），'
+        + '集成线重放同一条分支才会与 main 上那份内容相撞，没有东西要再集成一次';
+
+      const closed = await door(stack)(w, item.id, { kind: 'SESSION', sessionId: w.coordinatorSessionId! }, note);
+      assert.equal(closed.state, 'RESOLVED');
+      assert.equal(closed.resolution, 'HANDLED', '§4.2: a hand-closed item reads HANDLED');
+
+      const after = await itemNow(stack, w, item.id);
+      assert.equal(after.state, 'RESOLVED');
+      assert.equal(after.resolution, 'HANDLED');
+      assert.equal(after.resolvedBy, 'COORDINATOR', 'the row says which side ended it');
+      assert.equal(after.resolvedBySessionId, w.coordinatorSessionId, 'and which conversation');
+      assert.equal(after.resolvedByUserId, null);
+      assert.equal(after.resolutionNote, note, 'the reason is the audit trail §4.7 asks for');
+      assert.ok(after.resolvedAt, 'and when');
+
+      // The reader's view is what a card is drawn from, and the card is gone: the item is neither
+      // waiting for the owner nor the coordinator's any more.
+      const open = await stack.openItems.list(w.ownerId, w.projectId);
+      assert.deepEqual(
+        [...open.needsYou, ...open.withCoordinator].filter((row) => row.itemId === item.id),
+        [],
+        'a closed item is not on anybody\'s card',
+      );
+      // The delivery it was queued with is left exactly as it was: the turn in the coordinator's
+      // conversation is the record of what it was told, and retracting a message already read is
+      // not something a door can do.
+      assert.equal((await itemTurns(stack.db, w.coordinatorSessionId!)).length, 1);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('nobody but the assignee closes an item: a stranger session and the owner\'s are both refused',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const { w, task, item } = await conflictedLanding(stack, 'not-assignee');
+      const other = await integratingWorld(stack, 'not-assignee-elsewhere', 'PARKED');
+
+      for (const [what, actor] of [
+        ['the run that produced the branch', { kind: 'SESSION' as const, sessionId: task.sessionId }],
+        ['another project\'s coordinator', { kind: 'SESSION' as const, sessionId: other.coordinatorSessionId! }],
+      ] as const) {
+        const refused = await denied(() => door(stack)(w, item.id, actor, 'nothing to do with me'));
+        assert.equal(refused.status, 403, `${what} may not close this project's item`);
+        assert.equal(refused.code, 'OPEN_ITEM_COORDINATOR_ONLY');
+      }
+
+      const after = await itemNow(stack, w, item.id);
+      assert.equal(after.state, 'OPEN', 'a refusal closes nothing');
+      assert.equal(after.resolution, null);
+      assert.equal(after.resolutionNote, null, 'and writes no reason on a row nobody ended');
+      assert.equal((await itemTurns(stack.db, w.coordinatorSessionId!)).length, 1, 'and queues no turn');
+
+      // The clock can move an item out from under the conversation that was carrying it (§4.6
+      // X-E1): once it is the owner's, the coordinator's press is the wrong one — the assignee the
+      // door follows is the assignment the row has NOW.
+      const escalated = await world(stack, 'not-assignee-escalated', 'PARKED');
+      const started = await attempt(stack, escalated, 'not-assignee-escalated', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, escalated, started);
+      const ownerItem = await escalate(stack, escalated, started);
+      const refused = await denied(() => door(stack)(escalated, ownerItem.id, {
+        kind: 'SESSION',
+        sessionId: escalated.coordinatorSessionId!,
+      }, 'I am not the one holding this'));
+      assert.equal(refused.status, 409);
+      assert.equal(refused.code, 'OPEN_ITEM_NOT_COORDINATOR_ITEM');
+      assert.equal((await itemNow(stack, escalated, ownerItem.id)).state, 'OPEN');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an item that has already ended keeps the ending it got, and cannot be rewritten by hand',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // Ended by a platform fact first — the task was cancelled, so nobody is going to land it
+      // (§4.2) — and then pressed by the conversation that was carrying it.
+      const { w, task, item } = await conflictedLanding(stack, 'already-ended');
+      await stack.tasks.update(w.ownerId, task.taskId, { status: DeclaredTaskStatus.CANCELLED });
+      const ended = await itemNow(stack, w, item.id);
+      assert.equal(ended.resolution, 'TASK_CLOSED', 'the platform ended it on the task fact');
+
+      const refused = await denied(() => door(stack)(w, item.id, {
+        kind: 'SESSION',
+        sessionId: w.coordinatorSessionId!,
+      }, '说清楚为什么关掉它'));
+      assert.equal(refused.status, 409);
+      assert.equal(refused.code, 'OPEN_ITEM_NOT_OPEN');
+
+      const after = await itemNow(stack, w, item.id);
+      assert.equal(after.resolution, 'TASK_CLOSED', 'the ending it already had is the one it keeps');
+      assert.equal(after.resolvedBy, 'PLATFORM');
+      assert.equal(after.resolutionNote, null, 'and a second press does not write its reason over it');
+      assert.equal(after.resolvedAt!.getTime(), ended.resolvedAt!.getTime());
+
+      // The same for an item this door closed itself: one ending, and the row keeps it.
+      const second = await conflictedLanding(stack, 'already-ended-twice');
+      const close = door(stack);
+      await close(second.w, second.item.id, {
+        kind: 'SESSION',
+        sessionId: second.w.coordinatorSessionId!,
+      }, '第一次按下时说的理由');
+      const again = await denied(() => close(second.w, second.item.id, {
+        kind: 'SESSION',
+        sessionId: second.w.coordinatorSessionId!,
+      }, '第二次按下时说的理由'));
+      assert.equal(again.code, 'OPEN_ITEM_NOT_OPEN');
+      const kept = await itemNow(stack, second.w, second.item.id);
+      assert.equal(kept.resolutionNote, '第一次按下时说的理由');
+      assert.equal(kept.resolvedBy, 'COORDINATOR');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('the coordinator withdraws its own question, and a question is not another session\'s to close',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'withdraw', 'PARKED');
+      const asked = await stack.openItems.askOwner(w.ownerId, w.projectId, w.coordinatorSessionId!, {
+        question: 'Two ready tasks both rewrite session_pool.go. Which one starts first?',
+        clientQuestionId: 'withdraw-1',
+      });
+      const question = await itemNow(stack, w, asked.itemId);
+      assert.equal(question.assignee, 'OWNER', 'a question is the owner\'s');
+      assert.equal(question.dedupeKey, 'CQ:withdraw-1');
+
+      // A stranger: the question is not a session's to end, and certainly not one that did not ask it.
+      const bystander = await attempt(stack, w, 'withdraw', { taskStatus: TaskStatus.IN_PROGRESS });
+      const refused = await denied(() => door(stack)(w, asked.itemId, {
+        kind: 'SESSION',
+        sessionId: bystander.sessionId,
+      }, 'someone else\'s question'));
+      assert.equal(refused.status, 409);
+      assert.equal(refused.code, 'OPEN_ITEM_NOT_COORDINATOR_ITEM');
+      assert.equal((await itemNow(stack, w, asked.itemId)).state, 'OPEN');
+
+      // The one that asked it withdraws it (§5.2 R12), which is the one ending of a question that
+      // is not the owner's answer.
+      const withdrawn = await door(stack)(w, asked.itemId, {
+        kind: 'SESSION',
+        sessionId: w.coordinatorSessionId!,
+      }, '自己搞清楚了：两条都改同一个文件，先起 t4');
+      assert.equal(withdrawn.resolution, 'WITHDRAWN');
+      const after = await itemNow(stack, w, asked.itemId);
+      assert.equal(after.state, 'RESOLVED');
+      assert.equal(after.resolvedBy, 'COORDINATOR');
+      assert.equal(after.resolvedBySessionId, w.coordinatorSessionId);
+      assert.equal(after.resolutionNote, '自己搞清楚了：两条都改同一个文件，先起 t4');
+      const open = await stack.openItems.list(w.ownerId, w.projectId);
+      assert.deepEqual(open.needsYou.filter((row) => row.itemId === asked.itemId), [], 'the card is gone');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('the reason is required: a press with no note writes nothing', { skip, timeout: 180_000 }, async () => {
+  const stack = await connect();
+  try {
+    const { w, item } = await conflictedLanding(stack, 'note-required');
+    for (const note of ['', '   ', '\n\t ']) {
+      const refused = await denied(() => door(stack)(w, item.id, {
+        kind: 'SESSION',
+        sessionId: w.coordinatorSessionId!,
+      }, note));
+      assert.equal(refused.status, 400, `a note of ${JSON.stringify(note)} is not a reason`);
+    }
+    const after = await itemNow(stack, w, item.id);
+    assert.equal(after.state, 'OPEN', 'a press without a reason ends nothing');
+    assert.equal(after.resolutionNote, null);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('the owner closes what is theirs, and the two kinds that have a press of their own are not closed by hand',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // The owner's press on an item the clock handed them (§4.6 X-E1): resolved_by USER, and the
+      // row keeps both the reason and that it was a person rather than a conversation.
+      const escalated = await world(stack, 'owner-closes', 'PARKED');
+      const started = await attempt(stack, escalated, 'owner-closes', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, escalated, started);
+      const owned = await escalate(stack, escalated, started);
+      const closed = await door(stack)(escalated, owned.id, { kind: 'OWNER' }, '看过了：这条失败是环境问题，重跑一次即可');
+      assert.equal(closed.state, 'RESOLVED');
+      assert.equal(closed.resolution, 'HANDLED');
+      const after = await itemNow(stack, escalated, owned.id);
+      assert.equal(after.resolvedBy, 'USER');
+      assert.equal(after.resolvedByUserId, escalated.ownerId);
+      assert.equal(after.resolvedBySessionId, null);
+      assert.equal(after.resolutionNote, '看过了：这条失败是环境问题，重跑一次即可');
+
+      // A promotion's card is the owner's to CONFIRM or DECLINE, and a pause is theirs to resume.
+      // Closing either by hand would leave what it is about undecided with no card in front of
+      // anybody, so the door refuses and names the press that does it (§4.2's per-kind endings).
+      const promoted = await integratingWorld(stack, 'promotion-card', 'PARKED');
+      const { job } = await claimedLanding(stack, promoted, 'promotion-card');
+      await reportLanding(stack, promoted, job);
+      const candidate = await stack.promotions.considerCandidate(promoted.projectId);
+      assert.ok(candidate, `the landing left no candidate to promote — ${await jobsOf(stack.db, promoted.projectId)}`);
+      const [check] = await stack.jobs.dispatch({
+        runnerId: promoted.runnerId,
+        leaseOwner: 'lease-promotion-card',
+        draining: false,
+        capabilities: [INTEGRATION_JOB_CLAIM],
+      });
+      assert.equal(check?.kind, 'CHECK_PROMOTION');
+      const readied = await reportFailure(stack, promoted, check!, {
+        state: 'READY',
+        phase: 'CHECK',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        upstreamSha: 'f'.repeat(40),
+        testedSha: 'd'.repeat(40),
+        testedTreeSha: 'e'.repeat(40),
+        aheadOfUpstream: 1,
+        filesChanged: 3,
+        checks: [],
+      });
+      assert.equal(readied.accepted, true);
+      const card = (await items(stack.db, promoted.projectId)).find((row) => row.kind === 'PROMOTION_APPROVAL');
+      assert.ok(card, `the passing check opened no approval card — ${await jobsOf(stack.db, promoted.projectId)}`);
+      assert.equal(card.assignee, 'OWNER');
+
+      const refused = await denied(() => door(stack)(promoted, card.id, { kind: 'OWNER' }, '不打算合了'));
+      assert.equal(refused.status, 409);
+      assert.equal(refused.code, 'OPEN_ITEM_HAS_ITS_OWN_DOOR');
+      const kept = await itemNow(stack, promoted, card.id);
+      assert.equal(kept.state, 'OPEN', 'the card is still in front of the owner, undecided');
+      assert.equal(kept.resolutionNote, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
 
 test('hands it back with the window restarted, and queues it on the coordinator afresh',
   { skip, timeout: 180_000 }, async () => {

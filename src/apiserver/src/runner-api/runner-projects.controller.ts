@@ -18,6 +18,7 @@ import {
   AskOwnerDto,
   CreateProjectDto,
   RecordMergeEvidenceDto,
+  ResolveOpenItemDto,
   ResolveProjectBlockerDto,
   UpdateProjectDto,
 } from '../projects/dto';
@@ -284,6 +285,35 @@ export class RunnerProjectsController {
     @Body() dto: AskOwnerDto,
   ) {
     return this.openItems.askOwner(runner.ownerId, id, sessionId?.trim(), dto);
+  }
+
+  /**
+   * A coordinator closing an item it has carried (contract §4.7's "标记已处理").
+   *
+   * The item is the coordinator's because a landing of its project did not go through, and the one
+   * ending the platform cannot produce for itself is work that landed by hand: the branch tip stops
+   * being an ancestor of anything once the replay is pushed, so no job will ever report a landing for
+   * it and the item would stay open for ever. Its assignee is the only one who knows, so the
+   * conversation the project is coordinated from is given the press — and the reason is required,
+   * because a hand-closed item is one the platform could not verify.
+   *
+   * The acting session is the authority here, exactly as it is for a question: the service checks it
+   * against the project's own coordinator pointer. A header that is missing or blank is NOT read as
+   * the account owner — the owner's press is the user API's, and a machine credential reaching it by
+   * omitting a header is the one confusion this route must not have.
+   */
+  @Post('projects/:id/open-items/:itemId/resolve')
+  resolveOpenItem(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
+    @Body() dto: ResolveOpenItemDto,
+  ) {
+    return this.openItems.resolveOpenItem(runner.ownerId, id, itemId, dto, {
+      kind: 'SESSION',
+      sessionId: sessionId?.trim() ?? '',
+    });
   }
 
   /**

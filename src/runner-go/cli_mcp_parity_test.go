@@ -37,6 +37,12 @@ var cliParityExemptTools = map[string]string{
 	// sends no session header and is refused every time, so the command would be one that can only
 	// fail; inside one, the coordinator reaches it over MCP.
 	"ask_owner": "asks as the project's coordinator session: a terminal outside one is refused by the server",
+	// open_item_resolve closes an item AS the project's coordinator conversation, and the server
+	// checks the acting session against the project's own coordinator pointer (contract §4.7). A
+	// terminal outside a session sends no session header, and the door deliberately does not read a
+	// missing header as the account owner — the owner's press is the user API's — so the command
+	// would be one that can only fail; inside one, the coordinator reaches it over MCP.
+	"open_item_resolve": "closes an item as the project's coordinator session: a terminal outside one is refused by the server",
 }
 
 // Params whose CLI spelling is not the mechanical --kebab-case of the MCP name.

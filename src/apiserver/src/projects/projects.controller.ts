@@ -17,6 +17,7 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
   AnswerOpenItemDto,
+  ResolveOpenItemDto,
   ConfirmAcceptanceCriteriaDto,
   CreateProjectDto,
   DecideCriteriaChangeDto,
@@ -502,6 +503,25 @@ export class ProjectsController {
     @Param('itemId', PublicIdPipe) itemId: string,
   ) {
     return this.openItems.returnToCoordinator(user.userId, id, itemId);
+  }
+
+  /**
+   * The owner closing an item they have handled (contract §4.7's "标记已处理").
+   *
+   * The same door as the two above, on the same credential, and the owner is not restricted by whose
+   * item it is: an integration conflict the coordinator never got to, or one the clock escalated to
+   * the owner, is still theirs to end. What is required is the reason — a hand-closed item is one
+   * the platform could not verify, so the sentence is the whole of what the record gains — and the
+   * item must still be open, because an ending is final (its row is guarded against rewrite).
+   */
+  @Post(':id/open-items/:itemId/resolve')
+  resolveOpenItem(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
+    @Body() dto: ResolveOpenItemDto,
+  ) {
+    return this.openItems.resolveOpenItem(user.userId, id, itemId, dto, { kind: 'OWNER' });
   }
 
   @Post(':id/blockers/:blockerId/resolve')

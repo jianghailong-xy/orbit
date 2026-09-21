@@ -18,6 +18,7 @@ import {
   AskedQuestion,
   CoordinatorQuestion,
   INTEGRATION_ITEM_KINDS,
+  MAX_OPEN_ITEM_RESOLUTION_NOTE,
   OpenItemAssignee,
   OpenItemAssigneeReason,
   OpenItemKind,
@@ -44,6 +45,31 @@ export const OPEN_ITEM_ALREADY_COORDINATORS = 'OPEN_ITEM_ALREADY_COORDINATORS';
 /** A project with no coordinator conversation — or one that has ended — has nobody to ask again
  *  (§4.7). */
 export const OPEN_ITEM_NO_COORDINATOR = 'OPEN_ITEM_NO_COORDINATOR';
+/** The item is not the coordinator's to close: an item assigned to the owner — an escalation, a
+ *  question, a merge card, a pause — is theirs (§4.7). */
+export const OPEN_ITEM_NOT_COORDINATOR_ITEM = 'OPEN_ITEM_NOT_COORDINATOR_ITEM';
+/** Only the conversation an item is assigned to may close it by hand (§4.7), or the owner. */
+export const OPEN_ITEM_COORDINATOR_ONLY = 'OPEN_ITEM_COORDINATOR_ONLY';
+/** This kind is decided by a press of its own — confirming a merge, or resuming a paused project
+ *  (§4.2, §4.7). */
+export const OPEN_ITEM_HAS_ITS_OWN_DOOR = 'OPEN_ITEM_HAS_ITS_OWN_DOOR';
+
+/**
+ * The kinds this door ends, and what each ending is called (§4.2).
+ *
+ * The integration kinds come from the constant rather than being listed again, so a fifth
+ * `INTEGRATION_*` state the pipeline can stop in does not arrive without a way to close it. The two
+ * that are absent are absent on purpose: `PROMOTION_APPROVAL` is decided by confirming or declining
+ * the merge and `FUSE_PAUSED` by resuming the project, and closing either by hand would leave what
+ * it is about — a promotion nobody decided, a project standing still — with no card in front of
+ * anybody.
+ */
+const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'>> = {
+  ...Object.fromEntries(INTEGRATION_ITEM_KINDS.map((kind) => [kind, 'HANDLED' as const])),
+  TASK_FAILED: 'HANDLED',
+  // §5.2 R12: a question is withdrawn, not handled, and who withdraws it is who asked it.
+  COORDINATOR_QUESTION: 'WITHDRAWN',
+};
 
 /**
  * How many already-answered questions one binding reconsiders (§5.2 R11).
@@ -116,6 +142,13 @@ export interface OpenItemReturned {
   /** The wait starts over, which is the whole of what "ask again" gives the coordinator. */
   waitingSince: Date;
   escalateAt: Date;
+}
+
+/** An item its assignee closed by hand, and what that ending is called (§4.7). */
+export interface OpenItemResolved {
+  itemId: string;
+  state: 'RESOLVED';
+  resolution: 'HANDLED' | 'WITHDRAWN';
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
@@ -589,6 +622,148 @@ export class ProjectOpenItemService {
     // committed row at the next drain point rather than costing the owner a 500.
     await this.guarded('returnToCoordinator', () => this.deliver(itemId));
     return { itemId, assignee: 'COORDINATOR', waitingSince: now, escalateAt };
+  }
+
+  /**
+   * The assignee closes an item it has handled, saying why (§4.7's "标记已处理"; §5.2 R12 for a
+   * question).
+   *
+   * WHY THIS DOOR EXISTS. Every other ending of an item is a fact the platform can read for itself:
+   * a task that moved on, a landing that happened, a promotion that was decided, an answer that came
+   * back. The one it cannot is work that landed BY HAND — a coordinator that replayed a branch onto
+   * the target itself, before the integration line was carrying it, or because the line is not what
+   * moves that work. Nothing about that leaves a row the platform can read, and the branch tip it
+   * landed from stops being an ancestor of anything the moment the replay is pushed, so the item
+   * about it says "this did not land" and goes on saying it: the platform does not retry, and the
+   * task never runs again. The assignee knows. So the assignee is given a way to say so, and what it
+   * says is written down — who closed it, which conversation, when, and why.
+   *
+   * WHO PRESSES. The item's assignee, which is the whole of "只有当前负责人能关": for an item the
+   * project's coordinator is carrying, the conversation the project is coordinated FROM — read at
+   * this moment, so a project that rotated its coordinator is closed by the one it has — and, for
+   * anything at all, the account owner through the door that takes their own credential. A question
+   * is the one kind whose assignee does not end it: it is the owner's to answer, and the conversation
+   * that ASKED it that may withdraw it (R12).
+   *
+   * WHAT IT REFUSES. An item that is not OPEN: an ending is final, both here and in the row's own
+   * guard trigger (`project_open_item_terminal_guard`), and a second press would write its reason
+   * over an ending somebody else's fact produced. A session that is not the item's: an item is a fact
+   * about one project's work, not a general-purpose write. A press with no reason, because the reason
+   * IS what this door adds — the platform could not verify the ending, so the sentence is the
+   * evidence. And the two kinds that have a press of their own (see `HAND_CLOSABLE_RESOLUTIONS`).
+   */
+  async resolveOpenItem(
+    ownerId: string,
+    projectId: string,
+    itemId: string,
+    given: { note: string },
+    /** Who is pressing. Named rather than inferred from a nullable session id: an owner's press and
+     *  a conversation's are authorized differently, and a door that reached the owner's branch by
+     *  OMITTING the session would be one any machine credential could open as the owner. */
+    actor: { kind: 'OWNER' } | { kind: 'SESSION'; sessionId: string },
+  ): Promise<OpenItemResolved> {
+    const item = await this.prisma.projectOpenItem.findFirst({
+      where: { id: itemId, projectId, ownerId },
+      select: {
+        id: true,
+        kind: true,
+        state: true,
+        assignee: true,
+        askedBySessionId: true,
+        project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
+      },
+    });
+    if (!item) throw new NotFoundException('item not found');
+    const notOpen = (): ConflictException => new ConflictException({
+      code: OPEN_ITEM_NOT_OPEN,
+      message:
+        'this item is no longer open. An ending is final: what it was about has already been '
+        + 'answered by a fact or by somebody else, and a second press would write over that.',
+    });
+    if (item.state !== 'OPEN') throw notOpen();
+    const resolution = HAND_CLOSABLE_RESOLUTIONS[item.kind];
+    if (!resolution) {
+      throw new ConflictException({
+        code: OPEN_ITEM_HAS_ITS_OWN_DOOR,
+        message:
+          'this item is decided by a press of its own: confirm or decline the merge on its card, or '
+          + 'resume the project. Closing it here would leave what it is about undecided and with no '
+          + 'card in front of anybody.',
+      });
+    }
+    const note = given.note?.trim();
+    if (!note) {
+      throw new BadRequestException(
+        'a reason is required: this door is how an ending the platform could not see gets written '
+        + 'down, so the sentence you give is the whole of its evidence.',
+      );
+    }
+    if (note.length > MAX_OPEN_ITEM_RESOLUTION_NOTE) {
+      throw new BadRequestException(`a reason is at most ${MAX_OPEN_ITEM_RESOLUTION_NOTE} characters`);
+    }
+
+    let resolvedBy: 'USER' | 'COORDINATOR';
+    let resolvedByUserId: string | null = null;
+    let resolvedBySessionId: string | null = null;
+    if (actor.kind === 'OWNER') {
+      resolvedBy = 'USER';
+      resolvedByUserId = ownerId;
+    } else {
+      const sessionId = actor.sessionId?.trim();
+      if (item.kind === 'COORDINATOR_QUESTION') {
+        // R12: the question is the owner's, and the conversation that asked it may take it back.
+        if (!sessionId || item.askedBySessionId !== sessionId) {
+          throw new ConflictException({
+            code: OPEN_ITEM_NOT_COORDINATOR_ITEM,
+            message:
+              'this is a question, so it is not the coordinator\'s to close: the owner answers it, '
+              + 'and the conversation that asked it is the one that may withdraw it.',
+          });
+        }
+      } else {
+        if (item.assignee !== 'COORDINATOR') {
+          throw new ConflictException({
+            code: OPEN_ITEM_NOT_COORDINATOR_ITEM,
+            message:
+              'this item is the account owner\'s — it is theirs because they were asked, or because '
+              + 'nobody acted and it escalated to them. Closing it is their press.',
+          });
+        }
+        const coordinatorSessionId = item.project.coordinatorEnabled
+          ? item.project.coordinatorSessionId
+          : null;
+        if (!sessionId || sessionId !== coordinatorSessionId) {
+          throw new ForbiddenException({
+            code: OPEN_ITEM_COORDINATOR_ONLY,
+            message:
+              'this item is the project\'s coordinator\'s to close, and this session is not the '
+              + 'conversation the project is coordinated from. An item is closed by its assignee: '
+              + 'that conversation, or the account owner.',
+          });
+        }
+      }
+      resolvedBy = 'COORDINATOR';
+      resolvedBySessionId = sessionId!;
+    }
+
+    const settled = await this.prisma.projectOpenItem.updateMany({
+      where: { id: itemId, state: 'OPEN' },
+      data: {
+        state: 'RESOLVED',
+        resolution,
+        resolvedAt: new Date(),
+        resolvedBy,
+        resolvedByUserId,
+        resolvedBySessionId,
+        resolutionNote: note,
+      },
+    });
+    if (settled.count === 0) {
+      // Somebody else's fact, or another press, moved it between the read and the write — so the
+      // press is told to read again rather than reporting a close it did not make.
+      throw notOpen();
+    }
+    return { itemId, state: 'RESOLVED', resolution };
   }
 
   /**

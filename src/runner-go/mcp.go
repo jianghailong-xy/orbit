@@ -552,6 +552,26 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		return toolResult("The question is with the account owner. Their answer will arrive as a "+
 			"message in this conversation; nothing is waiting on this call.\n"+prettyJSON(raw), false)
 
+	case "open_item_resolve":
+		id := getString(args, "projectId")
+		itemID := getString(args, "itemId")
+		if id == "" || itemID == "" {
+			return toolResult("projectId and itemId are required", true)
+		}
+		note := strings.TrimSpace(getString(args, "note"))
+		if note == "" {
+			return toolResult("note is required: this door is how an ending the platform could "+
+				"not see gets written down, so the sentence you give is the whole of its evidence", true)
+		}
+		// The acting session IS the authority here, exactly as it is for ask_owner: the server
+		// checks it against the project's own coordinator pointer, so a call made from anywhere
+		// else is refused rather than closing somebody else's item.
+		raw, err := s.t.resolveOpenItem(s.sessionID, id, itemID, note)
+		if err != nil {
+			return toolResult("resolve open item failed: "+err.Error(), true)
+		}
+		return toolResult("The item is closed, with your reason on it.\n"+prettyJSON(raw), false)
+
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -2523,6 +2543,40 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"new question.",
 				},
 			}, "projectId", "question"),
+		},
+		{
+			"name": "open_item_resolve",
+			"description": "Close one of this project's exception items that you have handled, and " +
+				"say why. Every other ending of an item is a fact the platform reads for itself — a " +
+				"task that moved on, a landing that happened, a promotion that was decided — and " +
+				"this is the one it cannot: work that landed BY HAND, outside the integration line " +
+				"(a branch you replayed onto the target yourself), leaves no row it can read and a " +
+				"branch tip that stops being an ancestor of anything, so the item about it goes on " +
+				"saying \"this did not land\" and nothing will ever close it. Only the item's " +
+				"assignee may close it that way: the conversation the project is coordinated from " +
+				"for an item that is yours, and the account owner in the app for anything. A question " +
+				"is withdrawn by the conversation that asked it. The reason is required — it is the " +
+				"whole of what the record gains, since nobody could verify the ending — and an item " +
+				"that has already ended (by a fact or by an earlier press) is refused rather than " +
+				"rewritten: an ending is final. An item whose kind has a press of its own, a merge " +
+				"card or a paused project, is refused here: it is decided by confirming, declining or " +
+				"resuming, and closing it by hand would leave what it is about with no card in front " +
+				"of anybody.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project the item is filed under, as shown in its web UI URL (/projects/<id>).",
+				},
+				"itemId": map[string]interface{}{
+					"type":        "string",
+					"description": "The item, as project_get or the \"open items\" list spells it.",
+				},
+				"note": map[string]interface{}{
+					"type": "string",
+					"description": "Why this no longer needs anybody. Up to 2000 characters, and it " +
+						"stays on the row as the reason the item was closed by hand.",
+				},
+			}, "projectId", "itemId", "note"),
 		},
 		{
 			"name": "project_delete",
