@@ -582,6 +582,10 @@ interface ProjectPromotionView {
 }
 ```
 
+`GET /projects/:id/promotions/merged` → `ProjectPromotionView[]`，最近的合入在前（上限 20 条）：这次合入留下的**记录**，会话把它画在**它发生的那一刻**（`ProjectPromotionReceipt`，`WorkspaceView` 用 `decisionReceiptAnchor` 按 `merged.at` 落位）。
+
+自己的读接口而不是 `current` 的加宽：`current` 是**现在在问**的那个候选，下一个候选一出现它就换人——从它画出来的回执，每次分支再被提议都会说成另一次合入；而在它换人之前，同一张卡就一直待在会话底部，压在之后每一条消息下面（owner 2026-09-21 的报告）。`MERGED` 行是终态且不可变（`project_promotion_terminal_guard`），自带 `merged_sha` / `merged_at`，所以它读回来永远是它当时那次合入。项目页没有转录可以落位，仍按 `current` 画 C 状态那一张。
+
 ### 3.7 测试
 
 `scripts/acceptance/project-integration-line.sh` 追加判据 7 的用例：
@@ -593,6 +597,10 @@ interface ProjectPromotionView {
 5. `case_project_done_flips_on_merge`：项目 DONE 在合入前后翻转
 
 `src/web/src/components/ProjectPromotionCard.test.tsx`：`renders READY with tasks, checks and the merge button`、`renders RECHECKING with the merge button disabled and a cancel`、`renders MERGED as a receipt`、`renders BLOCKED with the merge button disabled and the handler`。
+
+`src/web/src/components/WorkspaceView.promotionAtMerge.test.tsx`：合入的记录画在它发生的那一刻而不是卡片区、`current` 前进后它仍说自己那次合入、没有合入过的项目一张都不画、卡片区不再为已合入的晋升留一张卡。
+
+`src/apiserver/src/projects/project-promotion-read.spec.ts`：`merged` 只读 `MERGED` 行且最近在前、一次合入带回它自己的提交与任务、二十条历史只各问一次表、没有合入过就不读任务表。
 
 ---
 
@@ -1005,7 +1013,7 @@ interface AskOwnerDto {
 ### 7.0 传输
 
 - 类型集中在新文件 `src/shared/src/project-progress.ts`。web 今天在 `ProjectsPage.tsx` 里各自重声明项目类型，本项目的新字段不再重声明；Swift 在 OrbitKit 里镜像同名类型。
-- 新读接口：`GET /projects/:id/integration`（§1.6）、`GET /projects/:id/open-items`（§4.8）、`GET /projects/:id/promotions/current`（§3.6）、`GET /projects/:id/blockers`（§6.7）。都不放进 `ProjectsService.get`，避免抬高 `project-get-query-count.pg.spec.ts` 的语句数（§1.4 的一条除外）。
+- 新读接口：`GET /projects/:id/integration`（§1.6）、`GET /projects/:id/open-items`（§4.8）、`GET /projects/:id/promotions/current`（§3.6）、`GET /projects/:id/promotions/merged`（§3.6）、`GET /projects/:id/blockers`（§6.7）。都不放进 `ProjectsService.get`，避免抬高 `project-get-query-count.pg.spec.ts` 的语句数（§1.4 的一条除外）。
 - 实时：新增控制事件 `project.progress.changed { id: projectId }`（`ControlEventType`、`RunEventType`、`controlTypeFor` 各加一项），在作业、待办、晋升、暂停段的事务提交后发布；`useControlPlane` 让 `['project', id, …]` 与 `['projects']` 失效。今天没有任何事件刷新项目页，轮询兜底：列表 60 秒、进度 15 秒、会话卡片区 20 秒。
 
 **V0（读模型没有自己的状态）**：本节每个字段都是已提交行的纯函数，不写任何行，也不缓存结论。显示状态的转移就是底层行的转移，刷新由下表的已提交事实触发：
@@ -1097,6 +1105,8 @@ interface ProjectListAttention {
 ### 7.5 卡片（效果图 4、5、6）
 
 会话页卡片区（`WorkspaceView` 的 `<Transcript>` 之后）按既有模式挂 `Session*Card({ projectId })`，React key 带前缀，查询 `['project', id, …]`，每 20 秒轮询，只在项目协调会话里渲染。项目页 Open items 的 `Review` / `Answer` 展开同一组件。
+
+**卡片区只放"现在为真"的东西**（2026-09-21）：已经发生的合入是**记录**，画在它发生的那一刻（§3.6 的 `merged` + `ProjectPromotionReceipt`），卡片区那一张传 `drawMergedRecord={false}` 不再画它——留在卡片区的记录会压在之后每条消息下面直到项目结束，而下一个候选出现时，同一张卡会改口说另一次合入。另外四条回执（criteria / evidence / owner / settlement）已经按同一条规则落位。
 
 | 组件 | 负责任务 | 状态与文案（英文，取自效果图） |
 |---|---|---|

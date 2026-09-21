@@ -30,6 +30,19 @@ export class ProjectPromotionController {
     return this.promotions.readCurrent(user.userId, projectId);
   }
 
+  /**
+   * The merges this project has already made, newest first — the record each one leaves in the
+   * conversation it was made in, drawn where it happened (`ProjectPromotionReceipt`).
+   *
+   * A read of its own and not a widening of `current`, which is the candidate on offer: that row
+   * moves on to the next one, and a receipt drawn from it describes a different merge every time
+   * the branch is offered again.
+   */
+  @Get('merged')
+  merged(@CurrentUser() user: AuthUser, @Param('projectId', PublicIdPipe) projectId: string) {
+    return this.promotions.readMerged(user.userId, projectId);
+  }
+
   /** M-T4: merge it. 409 when the candidate is not READY, which includes "its checks did not pass". */
   @Post(':promotionId/confirm')
   @HttpCode(200)

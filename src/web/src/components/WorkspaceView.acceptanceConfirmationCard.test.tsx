@@ -229,6 +229,11 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_PUBLIC}/promotions/current`) {
       return reply(null);
     }
+    // Nor has it merged anything, so the conversation draws no record of a merge: the receipts it
+    // holds are the ones this file is about (contract §3.6's `merged`).
+    if (path === `/projects/${PROJECT_PUBLIC}/promotions/merged`) {
+      return reply([]);
+    }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       criteriaReads += 1;
       return reply(PROPOSALS);

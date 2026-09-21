@@ -620,6 +620,29 @@ export const projectPromotionQuery = (projectId: string) =>
   });
 
 /**
+ * The merges this project has already made, newest first (contract §3.6) — the record each one
+ * leaves in the conversation it was made in, drawn at the moment it happened.
+ *
+ * ITS OWN DOOR, not the one above. `current` is the candidate on offer: it moves on to the next one
+ * the branch produces, so a receipt drawn from it says a different merge every time that happens —
+ * and until it does, the card sits at the bottom of the pane describing something that already
+ * happened. A MERGED promotion is terminal and immutable, carrying its own `mergedSha`/`mergedAt`,
+ * so what a reader draws from here is the merge it was, at the moment it was, for as long as the
+ * record exists.
+ *
+ * Polled beside it on the same cadence: a merge is written by a runner reporting in, and this is how
+ * a conversation that is open watches its own merge land.
+ */
+export const projectMergedPromotionsQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'promotions', 'merged'] as const,
+    queryFn: () =>
+      api<ProjectPromotionView[]>(
+        `/projects/${encodeURIComponent(projectId)}/promotions/merged`,
+      ),
+  });
+
+/**
  * Where this project's finished tasks land, and what the queue that lands them is doing right now
  * (contract §1.6, §7.2 V3).
  *

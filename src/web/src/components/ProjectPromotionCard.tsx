@@ -541,13 +541,24 @@ export function ProjectPromotionCard({
  *
  * Reads nothing without a project — an ordinary session coordinates none — and draws nothing while
  * no candidate is asking or telling anything, so neither host has to know whether there is one.
+ *
+ * `drawMergedRecord` is the one thing the two hosts disagree about. A merge that has already
+ * happened is a RECORD, and the conversation draws it where it happened instead
+ * (`ProjectPromotionReceipt`, anchored by `decisionReceiptAnchor`): held here as well it sat at the
+ * bottom of the pane for the life of the project, under every later message and in conversations
+ * started long afterwards, and once the branch was offered again this same strip described a
+ * different merge in the same place. The project page has no transcript to draw a moment into, so it
+ * keeps the record where it always was — beside the branch it is about.
  */
 export function ProjectPromotion({
   projectId,
   now = Date.now(),
+  drawMergedRecord = true,
 }: {
   projectId: string | null | undefined;
   now?: number;
+  /** Whether a merge this project already made is drawn HERE. See this function's own note. */
+  drawMergedRecord?: boolean;
 }): JSX.Element | null {
   const promotion = useQuery({
     ...projectPromotionQuery(projectId ?? ''),
@@ -566,6 +577,7 @@ export function ProjectPromotion({
   });
   const current = promotion.data;
   if (!projectId || !current) return null;
+  if (!drawMergedRecord && current.state === 'MERGED') return null;
   const rows = [...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])];
   return (
     <ProjectPromotionCard
@@ -575,5 +587,48 @@ export function ProjectPromotion({
       project={project.data ?? null}
       now={now}
     />
+  );
+}
+
+/**
+ * The record a merge leaves, drawn where it happened: which commit it put on main, which branch it
+ * came from, and the tasks it carried.
+ *
+ * A RECORD IS NOT A QUESTION, so it is not the card the strip draws: no press is on it, and where it
+ * lands is the caller's — `WorkspaceView` anchors it at `merged.at` with `decisionReceiptAnchor`,
+ * the rule the criteria, evidence, owner and settlement receipts beside it are drawn by, and a
+ * moment older than every event the client holds is drawn nowhere.
+ *
+ * WHAT IT SAYS IS THE MERGE'S OWN, read off the terminal row. The two rows the live card adds about
+ * where the branch stands NOW — how many criteria read "on main", how many tasks are still open —
+ * are deliberately not here: they are readings of the present (`project={null}` is that choice,
+ * made once rather than at every call site), and a record that re-reads the present is a record that
+ * says something different every time somebody scrolls past it.
+ */
+export function ProjectPromotionReceipt({
+  promotion,
+  now = Date.now(),
+}: {
+  promotion: ProjectPromotionView;
+  /** Passed in so a test reads a fixed clock; the hosts give it `Date.now()`. */
+  now?: number;
+}): JSX.Element | null {
+  if (promotion.state !== 'MERGED' || !promotion.merged) return null;
+  return (
+    <div
+      className="approval-card project-promotion is-merged project-promotion-receipt"
+      id={`promotion-receipt-${promotion.promotionId}`}
+      data-state={promotion.state}
+    >
+      <div className="approval-head project-promotion-head">
+        <span className="criteria-decision-heading">{promotionHeading(promotion)}</span>
+        <span className="criteria-provenance prov-neutral" title={FROM_ORBIT_TITLE}>
+          {FROM_ORBIT}
+        </span>
+      </div>
+      <div className="approval-body is-plan project-promotion-body">
+        <MergedRows promotion={promotion} project={null} now={now} />
+      </div>
+    </div>
   );
 }

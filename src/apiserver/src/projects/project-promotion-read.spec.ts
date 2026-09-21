@@ -60,6 +60,9 @@ interface Reads {
   sync?: Record<string, unknown>;
   runs?: Record<string, unknown>;
   tasks?: Record<string, unknown>;
+  /** How many times the whole read asked the task table, for a history that must ask it once. */
+  taskQueries?: number;
+  merged?: Record<string, unknown>;
 }
 
 /**
@@ -70,6 +73,8 @@ interface Reads {
 function prismaStub(
   over: {
     promotion?: Record<string, unknown>;
+    /** The merges already made, as `/promotions/merged` reads them back. */
+    mergedRows?: Array<Record<string, unknown>>;
     tasks?: Array<{ id: string; title: string }>;
     syncAt?: Date | null;
     /** The finished checks of this project, newest first, as how long each one took in ms. */
@@ -92,10 +97,17 @@ function prismaStub(
     projectOpenItem: { updateMany: async () => ({ count: 0 }) },
   };
   return {
-    projectPromotion: { findFirst: async () => row(over.promotion) },
+    projectPromotion: {
+      findFirst: async () => row(over.promotion),
+      findMany: async (args: Record<string, unknown>) => {
+        reads.merged = args;
+        return (over.mergedRows ?? []).map((each) => row(each));
+      },
+    },
     task: {
       findMany: async (args: Record<string, unknown>) => {
         reads.tasks = args;
+        reads.taskQueries = (reads.taskQueries ?? 0) + 1;
         return over.tasks ?? [];
       },
     },
@@ -250,4 +262,105 @@ test('the answer to a confirmation is the same rows the card was drawn from', as
     { taskId: 'task-1', title: '后台作业不再阻塞 merge/commit，merge/commit 前也不驱逐 engine' },
     { taskId: 'task-2', title: 'runner 发版重启杀掉 runner 托管作业：有的记成 drain_cap' },
   ]);
+});
+
+/**
+ * The merges a project has already made (§3.6's `merged`): the record each one leaves in the
+ * conversation, drawn at the moment it happened.
+ *
+ * What is worth a spec here is that this is a read of MERGED rows and nothing else — a receipt drawn
+ * from the live candidate would describe a different merge the moment the branch was offered again —
+ * and that reading twenty of them costs one question per table rather than two per row.
+ */
+async function merged(over: Parameters<typeof prismaStub>[0] = {}): Promise<ProjectPromotionView[]> {
+  return new ProjectPromotionService(prismaStub(over)).readMerged('owner-1', 'project-1');
+}
+
+test('the merges already made come back newest first, and only this project’s own', async () => {
+  const reads: Reads = {};
+  const view = await merged({
+    mergedRows: [
+      { id: 'promo-2', state: 'MERGED', mergedSha: 'b'.repeat(40), mergedAt: new Date('2026-09-13T11:00:00.000Z') },
+      { id: 'promo-1', state: 'MERGED', mergedSha: 'a'.repeat(40), mergedAt: new Date('2026-09-13T09:00:00.000Z') },
+    ],
+    reads,
+  });
+
+  assert.deepEqual(view.map((each) => each.promotionId), ['promo-2', 'promo-1']);
+  assert.equal(reads.merged?.orderBy && (reads.merged.orderBy as Record<string, unknown>).mergedAt, 'desc');
+  const where = reads.merged?.where as Record<string, unknown>;
+  assert.equal(where.projectId, 'project-1');
+  assert.equal(where.ownerId, 'owner-1');
+  // Only a row that reached the merge: a candidate still on offer, one that was turned down and one
+  // the branch moved past are all still questions about what to do next, not records of what was
+  // done, and the strip is where those belong.
+  assert.equal(where.state, 'MERGED');
+  assert.deepEqual(where.mergedSha, { not: null });
+  assert.deepEqual(where.mergedAt, { not: null });
+  // Bounded, because a record older than the window a conversation has loaded is drawn nowhere.
+  assert.equal(typeof reads.merged?.take, 'number');
+  assert.ok((reads.merged!.take as number) > 0);
+});
+
+test('a merge carries the commit it put on main, and nothing about a re-check', async () => {
+  const mergedAt = new Date('2026-09-13T11:00:00.000Z');
+  const [view] = await merged({
+    mergedRows: [{
+      state: 'MERGED',
+      mergedSha: 'd0bae85bc5c687634550ae95bb5a0e4f749f3560',
+      mergedAt,
+      confirmedByUserId: 'user-1',
+      includedTaskIds: ['task-2', 'task-1'],
+    }],
+    tasks: [
+      { id: 'task-1', title: '后台作业不再阻塞 merge/commit' },
+      { id: 'task-2', title: 'runner 托管作业在 session 结束路径上被杀仍无终态事件' },
+    ],
+  });
+
+  assert.deepEqual(view?.merged, {
+    sha: 'd0bae85bc5c687634550ae95bb5a0e4f749f3560',
+    byUserId: 'user-1',
+    at: mergedAt,
+  });
+  // The card's own rule, inherited: the row's order, and a task the table no longer holds left out.
+  assert.deepEqual(view?.tasks, [
+    { taskId: 'task-2', title: 'runner 托管作业在 session 结束路径上被杀仍无终态事件' },
+    { taskId: 'task-1', title: '后台作业不再阻塞 merge/commit' },
+  ]);
+  assert.equal(view?.recheck, null);
+});
+
+test('a history of twenty merges asks each table once, not twice per row', async () => {
+  const reads: Reads = {};
+  const view = await merged({
+    mergedRows: [1, 2, 3].map((n) => ({
+      id: `promo-${n}`,
+      state: 'MERGED',
+      mergedSha: String(n).repeat(40),
+      mergedAt: new Date(Date.parse('2026-09-13T11:00:00.000Z') - n * HOUR),
+      includedTaskIds: [`task-${n}`],
+    })),
+    tasks: [1, 2, 3].map((n) => ({ id: `task-${n}`, title: `task ${n}` })),
+    reads,
+  });
+
+  assert.equal(view.length, 3);
+  // One question, whatever the length of the history: every row's ids went into the same read.
+  assert.equal(reads.taskQueries, 1);
+  assert.deepEqual(reads.tasks?.where && (reads.tasks.where as Record<string, unknown>).id,
+    { in: ['task-1', 'task-2', 'task-3'] });
+  assert.deepEqual(view.map((each) => each.tasks), [
+    [{ taskId: 'task-1', title: 'task 1' }],
+    [{ taskId: 'task-2', title: 'task 2' }],
+    [{ taskId: 'task-3', title: 'task 3' }],
+  ]);
+});
+
+test('a project that has merged nothing is answered without reading a task table', async () => {
+  const reads: Reads = {};
+  const view = await merged({ mergedRows: [], reads });
+
+  assert.deepEqual(view, []);
+  assert.equal(reads.taskQueries, undefined);
 });
