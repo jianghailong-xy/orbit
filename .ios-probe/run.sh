@@ -35,10 +35,11 @@ echo "== generate =="
 cd "$HERE" && xcodegen generate || exit 1
 
 echo "== build =="
+# Built for the simulator SDK with no `-destination`: the product is a simulator app, and naming a
+# device here only adds a way to fail on a runner whose Xcode ships different devices.
 # The log is kept whatever happens: a CI round that fails with only "** BUILD FAILED **" is a round
 # spent on nothing.
-xcodebuild -project Probe.xcodeproj -scheme Probe -sdk iphonesimulator \
-  -destination "platform=iOS Simulator,name=$SIM_NAME" \
+xcodebuild -project Probe.xcodeproj -scheme Probe -sdk iphonesimulator -configuration Debug \
   -derivedDataPath "$OUT/dd" build > "$OUT/build.log" 2>&1
 BUILT=$?
 if [ $BUILT -ne 0 ]; then tail -80 "$OUT/build.log"; exit 1; fi
@@ -46,9 +47,16 @@ tail -3 "$OUT/build.log"
 
 echo "== simulator =="
 xcrun simctl list runtimes | grep -i ios || true
+# Ask for the newest iPhone the runtimes here actually have; the name in $SIM_NAME wins when it is
+# there, and otherwise the first available one is used (reported either way, because the device
+# decides the screenshot's size).
 UDID=$(xcrun simctl list devices available | grep -m1 "$SIM_NAME (" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+if [ -z "${UDID:-}" ]; then
+  SIM_NAME=$(xcrun simctl list devices available | grep -oE "^    iPhone [^(]*" | head -1 | xargs)
+  UDID=$(xcrun simctl list devices available | grep -m1 "$SIM_NAME (" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+fi
 echo "device: $SIM_NAME ($UDID)"
-[ -n "$UDID" ] || { echo "no simulator named $SIM_NAME"; exit 1; }
+[ -n "${UDID:-}" ] || { echo "no available iPhone simulator"; exit 1; }
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
 
