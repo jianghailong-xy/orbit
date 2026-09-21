@@ -16,6 +16,7 @@ import {
   OPEN_COORDINATOR,
   ProjectPromotion,
   ProjectPromotionCard,
+  ProjectPromotionReceipt,
   type PromotionProjectView,
 } from './ProjectPromotionCard';
 import { FROM_ORBIT } from './ProjectProgressStatus';
@@ -393,6 +394,53 @@ describe('state C — it merged, and the card is the receipt', () => {
 
   it('asks for nothing: a receipt has no presses', () => {
     expect(card(merged)).not.toContain('<button');
+  });
+});
+
+/**
+ * The same state C as a record, drawn in the conversation at the moment it happened
+ * (`WorkspaceView.promotionAtMerge.test.tsx`): what it says is the merge's OWN, and the two rows
+ * about where the branch stands now are the live card's business rather than the record's.
+ */
+describe('the record a merge leaves', () => {
+  const merged = promotion({
+    state: 'MERGED',
+    merged: {
+      sha: '324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
+      byUserId: '2p7QMFOwEGtL5oaTxZHihm',
+      at: at(2 * MINUTE),
+    },
+  });
+
+  it('says the commit it put on main, the branch it came from, and what it carried', () => {
+    const html = markup(<ProjectPromotionReceipt promotion={merged} now={NOW} />);
+    expect(html).toContain('Merged into main');
+    expect(html).toContain('324cf00');
+    expect(html).toContain('merge of project/bg-jobs');
+    expect(html).toContain('2m ago');
+    // How many tasks arrived on main — the count is the record's, and the names are the live card's
+    // (`Now on main`), the same split state C already draws in the strip.
+    expect(html).toContain('4 tasks');
+    expect(html).toContain('project/bg-jobs keeps going');
+  });
+
+  it('reads no present tense into it, and asks for nothing', () => {
+    const html = markup(<ProjectPromotionReceipt promotion={merged} now={NOW} />);
+    // `project` is never handed to a record (the two rows the live card adds are readings of NOW,
+    // and a record that re-reads the present says something different every time it is scrolled
+    // past), so the tally and the open-task count are not on it.
+    expect(html).not.toContain('of 6 met on this branch');
+    expect(html).not.toContain('still open');
+    expect(html).not.toContain('<button');
+  });
+
+  it('is drawn for nothing that has not merged', () => {
+    for (const state of ['READY', 'CONFIRMED', 'RECHECKING', 'BLOCKED'] as const) {
+      expect(
+        markup(<ProjectPromotionReceipt promotion={promotion({ state })} now={NOW} />),
+        `${state} was drawn as a record of a merge`,
+      ).toBe('');
+    }
   });
 });
 

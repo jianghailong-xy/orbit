@@ -36,6 +36,9 @@ import {
 /** How many finished checks the "typical" a re-check is measured against is taken from (§3.6). */
 const CHECK_TYPICAL_SAMPLE = 5;
 
+/** How many merges back a conversation is offered records for (§3.6's `merged`), newest first. */
+const MERGED_RECORD_LIMIT = 20;
+
 /**
  * Merging a project's finished work into its upstream (`docs/project-integration-line-contract.md`
  * §3): making the candidate, offering it to the owner, and doing what they decide.
@@ -350,6 +353,54 @@ export class ProjectPromotionService {
   }
 
   /**
+   * The merges this project has already made, newest first (§3.6) — the record each one leaves in
+   * the conversation, drawn at the moment it happened.
+   *
+   * A READ OF ITS OWN RATHER THAN A WIDENING OF `current`, which is what a merge used to be read
+   * from. That row is whichever candidate the branch is offering NOW: it moves on the moment the
+   * next one exists, so a receipt drawn from it described a different merge every time the branch
+   * was offered again — and until it moved, the same card sat at the bottom of the conversation
+   * for the life of the project, under every later message. A row that reached MERGED is a record
+   * of a moment: terminal, immutable (`project_promotion_terminal_guard`), and carrying its own
+   * `merged_sha` and `merged_at`, so it can be read back years later as the merge it was.
+   *
+   * Bounded rather than paginated, because a record is drawn where it happened and a moment older
+   * than the window a conversation has loaded is drawn nowhere (`decisionReceiptAnchor` returns
+   * null for it, and the native clients' `ReceiptAnchor` with it). Terminal rows never move, so
+   * twenty is the recent history of any conversation somebody is still reading.
+   */
+  async readMerged(userId: string, projectId: string): Promise<ProjectPromotionView[]> {
+    const rows = await this.prisma.projectPromotion.findMany({
+      where: {
+        projectId,
+        ownerId: userId,
+        state: 'MERGED',
+        // A MERGED row the terminal edge wrote both of these on. Nothing else reads this door, and
+        // a receipt without a moment to be drawn at has nothing to anchor it.
+        mergedSha: { not: null },
+        mergedAt: { not: null },
+      },
+      orderBy: { mergedAt: 'desc' },
+      take: MERGED_RECORD_LIMIT,
+      select: PROMOTION_COLUMNS,
+    });
+    if (rows.length === 0) return [];
+    // One read for every title the whole history names, and one for when the branch last took the
+    // upstream in — rather than two per row: the same question asked of twenty rows is one query.
+    const [titles, upstreamSyncedAt] = await Promise.all([
+      this.titlesIn(rows.flatMap((row) => row.includedTaskIds), userId),
+      this.lastUpstreamSync(projectId),
+    ]);
+    return rows.map((row) => promotionView(row, {
+      tasks: tasksOfTitles(row.includedTaskIds, titles),
+      upstreamSyncedAt,
+      // A merged row is not re-checking anything: the re-check is a state a landing is IN, and this
+      // one has come out the other side.
+      recheck: null,
+    }));
+  }
+
+  /**
    * The row as the card reads it (§3.6), with the three facts that are questions about other tables
    * answered here rather than in the row itself.
    *
@@ -377,19 +428,17 @@ export class ProjectPromotionService {
   /** What this merge would carry, in the order the row lists it, with the titles the card shows. */
   private async tasksOf(row: PromotionRow): Promise<PromotionTask[]> {
     if (row.includedTaskIds.length === 0) return [];
+    return tasksOfTitles(row.includedTaskIds, await this.titlesIn(row.includedTaskIds, row.ownerId));
+  }
+
+  /** Task titles by id, for the ids the rows being read name — one query however many rows. */
+  private async titlesIn(taskIds: readonly string[], ownerId: string): Promise<Map<string, string>> {
+    if (taskIds.length === 0) return new Map();
     const rows = await this.prisma.task.findMany({
-      where: { id: { in: row.includedTaskIds }, ownerId: row.ownerId },
+      where: { id: { in: [...new Set(taskIds)] }, ownerId },
       select: { id: true, title: true },
     });
-    const titles = new Map(rows.map((task) => [task.id, task.title]));
-    const tasks: PromotionTask[] = [];
-    for (const taskId of row.includedTaskIds) {
-      const title = titles.get(taskId);
-      // A task the row names and the table no longer holds is left out rather than titled with its
-      // own id: the card lists what it would merge, and an id is not one of them.
-      if (title !== undefined) tasks.push({ taskId, title });
-    }
-    return tasks;
+    return new Map(rows.map((task) => [task.id, task.title]));
   }
 
   /**
@@ -432,6 +481,24 @@ export class ProjectPromotionService {
     return runs.flatMap((run) =>
       run.startedAt && run.finishedAt ? [run.finishedAt.getTime() - run.startedAt.getTime()] : []);
   }
+}
+
+/**
+ * A row's task ids as the card lists them, from titles looked up once for every row being read.
+ *
+ * One derivation for the live candidate and for a merge already made, because they are one question
+ * — which of the tasks this row names can still be given a name — and two of them is how the same
+ * merge comes to be described two ways. A task the row names and the table no longer holds is left
+ * out rather than titled with its own id: an id is not a name.
+ */
+function tasksOfTitles(
+  taskIds: readonly string[],
+  titles: ReadonlyMap<string, string>,
+): PromotionTask[] {
+  return taskIds.flatMap((taskId) => {
+    const title = titles.get(taskId);
+    return title === undefined ? [] : [{ taskId, title }];
+  });
 }
 
 /**

@@ -90,6 +90,7 @@ import {
   ownerConfirmationQuery,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
+  projectMergedPromotionsQuery,
   watchesQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
@@ -204,7 +205,7 @@ import {
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
 import { ProjectExceptionCards } from './ProjectProgressStatus';
-import { ProjectPromotion } from './ProjectPromotionCard';
+import { ProjectPromotion, ProjectPromotionReceipt } from './ProjectPromotionCard';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
 import {
@@ -3507,6 +3508,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
   });
 
+  // The merges this project has already made, for the record each one leaves where it happened
+  // (`ProjectPromotionReceipt` below). NOT the read the strip's card is drawn from: that one is the
+  // candidate on offer, and it moves on to the next one — a receipt drawn from it would describe a
+  // different merge every time the branch was offered again, which is exactly what the card at the
+  // bottom of this pane used to do. Polled with the card, because a conversation that is open is
+  // where somebody watches their own merge land.
+  const mergedPromotions = useQuery({
+    ...projectMergedPromotionsQuery(coordinatedProjectId ?? ''),
+    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+    refetchInterval: 20_000,
+  });
+
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
   // the card's own filter over the same read and the project this session coordinates. The strip
   // counts and points at those and no others; a row this conversation draws no card for is counted
@@ -3615,11 +3628,30 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               element: <AcceptanceConfirmationReceipt confirmation={confirmation} />,
             }];
       }),
+      // And the merges this project has made, each at the moment it made it. The strip draws only
+      // the candidate that is asking NOW (`drawMergedRecord={false}` below): held there as well,
+      // this record sat under every later message for the life of the project — in conversations
+      // started long afterwards, and after the project was done — which is where the questions that
+      // are open NOW belong. Anchored by `mergedAt`, which is the terminal edge's own clock on a row
+      // that never moves again; a merge older than every loaded event lands nowhere, like every
+      // other record here.
+      ...(mergedPromotions.data ?? []).flatMap((promotion) => {
+        const mergedAt = promotion.merged?.at;
+        const afterSeq = mergedAt ? decisionReceiptAnchor(transcriptEvents, mergedAt) : null;
+        return afterSeq === null
+          ? []
+          : [{
+              afterSeq,
+              key: `promotion-receipt:${promotion.promotionId}`,
+              element: <ProjectPromotionReceipt promotion={promotion} />,
+            }];
+      }),
     ],
     [
       acceptanceConfirmation.data,
       criteriaDecisions.data,
       criteriaReplies,
+      mergedPromotions.data,
       pendingDecisions.data,
       ownerConfirmation.data,
       selectedId,
@@ -6554,13 +6586,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   is coordinating it (mock 4, §3.3): what would land on main, what the checks came
                   to, and — while it is under way or blocked — why nobody is being asked to press
                   anything yet. Read from the candidate itself rather than from any turn, so it is
-                  the same card the project page shows and it becomes a receipt when it merges.
-                  Keyed apart from its siblings for the reason the evidence card's note gives
-                  below. */}
+                  the same card the project page shows.
+                  ASKING, NOT RECORDING: once this merge has happened it is a fact about a moment,
+                  and the conversation draws it at that moment (`mergedPromotions` above) rather than
+                  keeping it here under everything that came afterwards. Keyed apart from its
+                  siblings for the reason the evidence card's note gives below. */}
               {selected && selectedId && !selectedTrashed && (
                 <ProjectPromotion
                   key={`promotion:${selectedId}`}
                   projectId={coordinatedProjectId}
+                  drawMergedRecord={false}
                 />
               )}
               {/* A question THIS conversation put to the account owner, drawn where it was asked

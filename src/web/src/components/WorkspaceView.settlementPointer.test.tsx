@@ -291,6 +291,11 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_PUBLIC}/promotions/current`) {
       return reply(null);
     }
+    // Nor has it merged anything, so no record of a merge is drawn into the transcript these cases
+    // count the pinned line against (contract §3.6's `merged`).
+    if (path === `/projects/${PROJECT_PUBLIC}/promotions/merged`) {
+      return reply([]);
+    }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       return reply(proposalsOf(server.proposals));
     }

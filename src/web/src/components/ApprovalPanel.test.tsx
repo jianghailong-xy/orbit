@@ -589,6 +589,11 @@ describe('one waiting completion decision on the session page', () => {
       if (path === `/projects/${PROJECT_ID}/promotions/current`) {
         return reply(null);
       }
+      // Nor has it merged anything, so the conversation draws no record of a merge: the cards on
+      // this page are the ones this file is about (contract §3.6's `merged`).
+      if (path === `/projects/${PROJECT_ID}/promotions/merged`) {
+        return reply([]);
+      }
       if (path.startsWith(`/projects/${PROJECT_ID}/acceptance/criteria-decisions/pending`)) {
         return reply({ readAt: '2026-09-10T13:27:00Z', projectId: PROJECT_ID, count: 0, oldestAgeSeconds: null, decidableCount: 0, pending: [] });
       }
