@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import {
+  CreatorType,
   Prisma,
   PrismaClient,
   RunStatus,
@@ -19,6 +20,7 @@ import {
   RunEventType,
   RunStatus as SharedRunStatus,
   TaskStatus as DeclaredTaskStatus,
+  uuidToBase62,
 } from '@orbit/shared';
 import { ConflictException, HttpException } from '@nestjs/common';
 
@@ -30,6 +32,8 @@ import { ReaperService } from '../realtime/reaper.service';
 import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
+import { TaskCompletionEvidenceService } from '../tasks/task-completion-evidence.service';
+import { TaskOwnerConfirmationService } from '../tasks/task-owner-confirmation.service';
 import { TasksService } from '../tasks/tasks.service';
 import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
@@ -66,6 +70,11 @@ import { WakeDispositionService } from './wake-disposition.service';
  * The items and their deliveries are read with SQL, so the same file compiles and runs against a tree
  * that has no item table at all: there, every case reads "nothing was opened" and fails on the
  * assertion rather than on a missing symbol.
+ *
+ * The same is read from the other end: the two gates that settle a task inside a transaction of
+ * their own — the evidence judgment and the owner's own Confirm done — answer the item an earlier
+ * attempt of that task left open, because the item is answered by the task SETTLING rather than by
+ * whichever door happened to write the DONE.
  *
  * The integration sources (§4.2) are driven the same way: a code task's DONE queues its landing,
  * the runner claims it off the heartbeat and reports what happened to it, and the four terminal
@@ -108,6 +117,10 @@ interface Stack {
   convergence: CoordinatorConvergenceService;
   /** The item door the owner's card presses (§4.7). */
   openItems: ProjectOpenItemService;
+  /** The judgment gate: an independent run's CONFIRM is what settles an EVIDENCE_JUDGMENT task. */
+  evidence: TaskCompletionEvidenceService;
+  /** The owner's own gate: their press in the app is what settles an OWNER_CONFIRMED task. */
+  confirmations: TaskOwnerConfirmationService;
 }
 
 /** The production wiring over one client, with the real completion-input router behind task writes. */
@@ -138,6 +151,12 @@ async function connect(): Promise<Stack> {
   );
   const openItems = new ProjectOpenItemService(prisma, sessions);
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router, undefined, openItems);
+  // The two completion gates that write DONE inside a transaction of their own rather than through
+  // `tasks.update` — the pair whose exception items an earlier build left open for ever. Wired to
+  // the SAME `tasks` the doors below use, because that is what production wires: they reach the
+  // item table only through it.
+  const evidence = new TaskCompletionEvidenceService(prisma, tasks);
+  const confirmations = new TaskOwnerConfirmationService(prisma, sessions, tasks);
   const jobs = new IntegrationJobRelay(prisma, openItems);
   // Whoever an integration result has to tell reaches a device, and reaches it from here: the
   // controller announces the item its result opened (`notifyOwnerItem`, §7.6 V12) with no `await`
@@ -166,7 +185,10 @@ async function connect(): Promise<Stack> {
   // A component that records a failure and never gets to deliver it: what the coordinator's own turn
   // ending has to compensate for.
   const silentReaper = new ReaperService(prisma, realtime);
-  return { db, sessions, tasks, api, reaper, silentReaper, jobs, promotions, convergence, openItems };
+  return {
+    db, sessions, tasks, api, reaper, silentReaper, jobs, promotions, convergence, openItems,
+    evidence, confirmations,
+  };
 }
 
 type CoordinatorShape = 'PARKED' | 'RUNNING' | 'COMPLETED' | 'NONE';
@@ -298,6 +320,10 @@ async function attempt(
     runnerId?: string;
     /** The branch this run took a worktree on, which is what makes the task one to integrate. */
     branch?: string;
+    /** The criterion the task declares, for the doors that settle one of the two judgment lanes. */
+    criterion?: 'EVIDENCE_JUDGMENT' | 'OWNER_CONFIRMED';
+    /** Whether a Project's own release pass may pick this task up when something else completes. */
+    autoRun?: boolean;
   } = {},
 ): Promise<Attempt> {
   const db = stack.db;
@@ -306,6 +332,8 @@ async function attempt(
     title,
     assigneeId: w.workspaceId,
     projectId: w.projectId,
+    ...(options.criterion ? { completionCriterion: options.criterion } : {}),
+    ...(options.autoRun === undefined ? {} : { autoRunWhenReady: options.autoRun }),
     ...(options.supersedesTaskId ? { supersedesTaskId: options.supersedesTaskId } : {}),
     ...(options.acceptance
       ? {
@@ -638,6 +666,95 @@ async function taskStatus(db: PrismaClient, taskId: string): Promise<TaskStatus>
   return (await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { status: true } })).status;
 }
 
+/**
+ * One task whose attempt ended with the task still OPEN, and the failure item that ending left.
+ *
+ * The runner it was attempted on never comes back and the reaper's sweep is what reads that:
+ * `ATTEMPT_LOST_RUNNER_OFFLINE` is the one ending that leaves an item OPEN over a task that is not
+ * itself FAILED, which is the state the two settling doors have to answer. A task written FAILED
+ * would be the wrong fixture for either of them, and not by accident: both gates settle under
+ * `status IN (OPEN, IN_PROGRESS)`, so a task that had already failed is not one they can complete.
+ */
+async function strandedAttempt(
+  stack: Stack,
+  w: World,
+  label: string,
+  criterion: 'EVIDENCE_JUDGMENT' | 'OWNER_CONFIRMED',
+  autoRun = true,
+): Promise<Attempt> {
+  const lostRunner = randomUUID();
+  await stack.db.runner.create({
+    data: {
+      id: lostRunner,
+      ownerId: w.ownerId,
+      name: `${label}-lost`,
+      tokenHash: `hash-${lostRunner}`,
+      status: RunnerStatus.ONLINE,
+      capabilities: [],
+      capabilitiesReportedAt: new Date(),
+      lastHeartbeatAt: new Date(Date.now() - 10 * 60_000),
+    },
+  });
+  const a = await attempt(stack, w, label, {
+    taskStatus: TaskStatus.IN_PROGRESS,
+    runnerId: lostRunner,
+    criterion,
+    autoRun,
+  });
+  await sweep(stack.reaper);
+  assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.OPEN, 'the task is back in the pool');
+  const item = await onlyItemFor(stack.db, w, a.taskId, 'the stranded attempt left its item behind');
+  assert.equal(item.kind, 'TASK_FAILED');
+  assert.equal(item.state, 'OPEN');
+  assert.equal(item.payload.how, 'ATTEMPT_LOST_RUNNER_OFFLINE');
+  return a;
+}
+
+/** The project's one stated criterion, and the key an evidence envelope quotes it by. */
+async function statedCriterion(stack: Stack, w: World, text: string): Promise<string> {
+  const id = randomUUID();
+  await stack.db.projectAcceptanceCriterionDefinition.create({
+    data: {
+      id,
+      projectId: w.projectId,
+      ordinal: 1,
+      text,
+      verificationMethod: 'the judgement door reads one CONFIRM against the current revision',
+      // Written by the definition's own BEFORE trigger; the placeholder only has to satisfy the
+      // column's 64-hex CHECK on the way in.
+      contentHash: '0'.repeat(64),
+    },
+  });
+  return uuidToBase62(id);
+}
+
+/** A run of ANOTHER task: the independent session a decision about this task may come from. */
+async function independentRun(
+  stack: Stack,
+  w: World,
+  label: string,
+): Promise<{ taskId: string; sessionId: string }> {
+  const review = await bareTask(stack, w, `${label}-review`);
+  const sessionId = randomUUID();
+  await stack.db.session.create({
+    data: {
+      id: sessionId,
+      ownerId: w.ownerId,
+      creatorId: w.ownerId,
+      taskId: review.taskId,
+      workspaceId: w.workspaceId,
+      assignedRunnerId: w.runnerId,
+      title: `${label}-review`,
+      prompt: 'judge the evidence',
+      provider: 'claude',
+      status: RunStatus.AWAITING_INPUT,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: true,
+    },
+  });
+  return { taskId: review.taskId, sessionId };
+}
+
 function assertEscalatesAfterDefault(item: ItemRow): void {
   assert.ok(item.escalateAt, 'an item with the coordinator carries the moment it goes to the owner');
   assert.equal(
@@ -844,6 +961,150 @@ test('a FAILED filed through task_update opens one item, and closing the task re
     await stack.db.$disconnect();
   }
 });
+
+/*
+ * THE TWO GATES THAT WRITE DONE ON THEIR OWN
+ * ==========================================
+ * The evidence judgment and the owner's press in the app each settle a task inside a transaction of
+ * their own, so neither goes through `TasksService.update` — and the answer to the task's open
+ * exception items used to live only on that one path. A task that settled through either gate kept
+ * the failure item an earlier attempt had opened: an assignee, a card in front of the owner, and a
+ * promise the escalation notice had already made in so many words (the platform closes this itself
+ * once the task runs again, is replaced, is cancelled, or completes). The promise was the only
+ * thing missing an implementation.
+ *
+ * These three cases pin it where the fact is: the door that SETTLES the task answers its items,
+ * whether or not that door is the one that opens them, and a door that runs without settling
+ * anything answers nothing at all.
+ */
+const JUDGED_CRITERION =
+  'the exception item a settled task left open is answered by whatever settled the task';
+
+test('the evidence judgment settles the task, and answers the failure item an earlier attempt opened',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'judgment-settles', 'PARKED');
+      const a = await strandedAttempt(stack, w, 'judgment-settles', 'EVIDENCE_JUDGMENT');
+      const criterionKey = await statedCriterion(stack, w, JUDGED_CRITERION);
+      await stack.db.toolCall.create({
+        data: {
+          sessionId: a.sessionId,
+          name: 'Bash',
+          toolUseId: 'toolu_stranded_judgment',
+          input: { command: 'npm test -w @orbit/apiserver', description: 'the suite' },
+          isError: false,
+        },
+      });
+      await stack.evidence.submit(
+        w.ownerId,
+        a.taskId,
+        { type: CreatorType.AGENT, id: w.workspaceId },
+        {
+          sourceSessionId: a.sessionId,
+          evidence: {
+            claim: 'the suite passed on this branch',
+            criterion: { key: criterionKey, text: JUDGED_CRITERION },
+            checks: [{ kind: 'TOOL_CALL', ref: 'toolu_stranded_judgment' }],
+            gaps: [],
+          },
+        },
+      );
+      // Half of the negative control, inside the run that settles: submitting evidence is not
+      // completing the task, and the item is exactly where it was. What closes it is the DONE.
+      assert.equal(
+        (await onlyItemFor(stack.db, w, a.taskId, 'nothing has settled yet')).state,
+        'OPEN',
+      );
+
+      const review = await independentRun(stack, w, 'judgment-settles');
+      await stack.evidence.decide(
+        w.ownerId,
+        a.taskId,
+        { type: CreatorType.AGENT, id: w.workspaceId },
+        { decidingSessionId: review.sessionId, evidenceRevision: '1', decision: 'CONFIRM' },
+      );
+
+      assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE);
+      const answered = await onlyItemFor(stack.db, w, a.taskId, 'the judgment settled the task');
+      assert.equal(answered.state, 'RESOLVED');
+      assert.equal(answered.resolution, 'TASK_DONE');
+      assert.equal(answered.resolvedBy, 'PLATFORM');
+      assert.ok(answered.resolvedAt, 'an answered item carries when it was answered');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('the owner\'s own Confirm done settles the task, and answers the failure item an earlier attempt opened',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'owner-settles', 'PARKED');
+      const a = await strandedAttempt(stack, w, 'owner-settles', 'OWNER_CONFIRMED');
+      assert.equal(
+        (await onlyItemFor(stack.db, w, a.taskId, 'nothing has settled yet')).state,
+        'OPEN',
+      );
+
+      const receipt = await stack.confirmations.decide(
+        w.ownerId,
+        a.taskId,
+        { door: 'USER', userId: w.ownerId },
+        { decision: 'CONFIRM' },
+      );
+
+      assert.equal(receipt.completed, true, 'the owner\'s press is what settles this lane');
+      assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE);
+      const answered = await onlyItemFor(stack.db, w, a.taskId, 'the owner settled the task');
+      assert.equal(answered.state, 'RESOLVED');
+      assert.equal(answered.resolution, 'TASK_DONE');
+      assert.equal(answered.resolvedBy, 'PLATFORM');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('settling one task answers its item and leaves another task\'s item OPEN',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'settles-one', 'PARKED');
+      const settled = await strandedAttempt(stack, w, 'settles-one', 'OWNER_CONFIRMED');
+      // A second task in the same project, in the same state and with an item of its own: the
+      // negative control for the fold. Resolving exceptions is keyed on the task that settled, and
+      // a pass that answered every open item of the project — or answered one for the wrong task —
+      // would take this one with it.
+      //
+      // Left out of auto-run on purpose, and it is what makes this a control rather than a race.
+      // A Project RELEASES its ready tasks when something in it completes, and a task that is
+      // picked up again answers its own failure item (`RETRIED`, §4.2's fourth fact) — correctly,
+      // and for its own reasons. Opting this one out of auto-run keeps that second, unrelated
+      // answer out of the assertion: what is being read here is whether the settling of the first
+      // task reaches the second, and nothing else.
+      const untouched = await strandedAttempt(stack, w, 'settles-other', 'OWNER_CONFIRMED', false);
+
+      await stack.confirmations.decide(
+        w.ownerId,
+        settled.taskId,
+        { door: 'USER', userId: w.ownerId },
+        { decision: 'CONFIRM' },
+      );
+
+      assert.equal(await taskStatus(stack.db, settled.taskId), TaskStatus.DONE);
+      assert.equal(await taskStatus(stack.db, untouched.taskId), TaskStatus.OPEN);
+      assert.equal(
+        (await onlyItemFor(stack.db, w, settled.taskId, 'the settled task')).state,
+        'RESOLVED',
+      );
+      const stillOpen = await onlyItemFor(stack.db, w, untouched.taskId, 'the untouched task');
+      assert.equal(stillOpen.state, 'OPEN', 'a task that is not DONE keeps its item');
+      assert.equal(stillOpen.resolution, null);
+      assert.equal(stillOpen.resolvedAt, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
 
 test('a merge conflict opens one item owned by the coordinator, and queues it on the coordinator',
   { skip, timeout: 180_000 }, async () => {
