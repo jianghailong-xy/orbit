@@ -309,6 +309,10 @@ struct AgentPanes: View {
     /// Whether the iOS list is grouped by tag instead of by recency (iOS list only).
     @State private var groupByTag = false
     #if os(iOS)
+    /// Whether the title's workspace switcher is open. The title slot is the switcher here for the
+    /// same reason it is on the new-session draft (see `WorkspaceTitleSwitcher`): the workspace is
+    /// the standing context of everything below it, and the bar's title is where you look to read it.
+    @State private var showWorkspaceSwitcher = false
     /// What came back for the current query. The list searches in place — the hits replace its
     /// sections — rather than opening the palette sheet over the very list you're looking at.
     @State private var hits: [SessionSearchHit] = []
@@ -456,6 +460,13 @@ struct AgentPanes: View {
                 }
                 .accessibilityLabel("Start a new session with \(agent.name)")
             }
+            // The title slot is the workspace switcher, exactly as it is on the new-session draft
+            // (`WorkspaceTitleSwitcher`). The workspace you are in is the standing context of the
+            // whole list, so the bar's title is where you read it and now also where you change it —
+            // one tap instead of opening the drawer and hunting for the row.
+            ToolbarItem(placement: .principal) {
+                WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
+            }
             #else
             // macOS: the wide window toolbar keeps the platform-idiomatic layout — New Session
             // (leading), a compact centered segmented scope switcher (principal), and a settings gear.
@@ -486,6 +497,17 @@ struct AgentPanes: View {
         .sheet(isPresented: $showSettings) {
             AgentSettingsSheet(agents: agents, agent: agent)
         }
+        #if os(iOS)
+        // The same picker the draft's title opens. Selecting there *composes* with the workspace
+        // because a draft is what that screen is for; here it *enters* it — `openAgent` is what the
+        // drawer's rows and ⌘1…⌘9 call, so a switch from the title lands exactly where they do.
+        .sheet(isPresented: $showWorkspaceSwitcher) {
+            AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id,
+                             configuredProviders: app.agents?.configuredProviders ?? []) { id in
+                app.openAgent(id)
+            }
+        }
+        #endif
         // The tag picker for the row whose "Tags…" action was tapped (list-owned for reliable
         // presentation). Works on both platforms; the filter chips / grouping above are iOS-only.
         .sheet(item: $taggingSession) { s in
@@ -944,21 +966,11 @@ struct NewSessionView: View {
     }
 
     /// "Which agent am I about to task", as a compact switcher. Sits in the navigation bar on iOS
-    /// (title slot) and under the hero on macOS, which has no bar here — one definition so the two
-    /// don't drift. Name and chevron only: the brand mark is the hero's job, and repeating it here
-    /// in miniature said nothing the screen wasn't already saying.
+    /// (title slot) and under the hero on macOS, which has no bar here. The shape is shared with the
+    /// session list's title (`WorkspaceTitleSwitcher`) so the two can't drift; only the selection's
+    /// meaning is this screen's own — here it composes rather than enters (`composeWithAgent` below).
     private var agentSwitcher: some View {
-        Button { showSwitcher = true } label: {
-            HStack(spacing: 6) {
-                Text(agent.name)
-                    .font(.headline).foregroundStyle(.primary).lineLimit(1)
-                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Workspace: \(agent.name). Switch")
+        WorkspaceTitleSwitcher(name: agent.name) { showSwitcher = true }
     }
 
     /// Engines first, then this account's configured providers. Built from the draft's own

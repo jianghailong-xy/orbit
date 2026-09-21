@@ -155,6 +155,34 @@ struct ProviderSwitchSheet: View {
 /// marks the current one, and reports a pick back to the caller — which switches the composing agent.
 /// A flat list (not runner-grouped) keeps it light; the caller owns the switch so this view needs no
 /// environment (which doesn't always propagate into a sheet).
+/// The navigation bar's title slot, as a switcher: the workspace's name and a down chevron.
+///
+/// One definition for the two screens whose title *is* a workspace — the session list (whose content
+/// all belongs to it) and the new-session draft (which will send into it). They open the same
+/// `AgentSwitchSheet`; what a selection means differs, and only the call site knows that: the list
+/// enters the workspace (`AppModel.openAgent`), the draft composes with it.
+///
+/// Name and chevron only: the brand mark belongs to the new-session hero, and repeating it here in
+/// miniature said nothing the screen wasn't already saying.
+struct WorkspaceTitleSwitcher: View {
+    let name: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(name)
+                    .font(.headline).foregroundStyle(.primary).lineLimit(1)
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Workspace: \(name). Switch")
+    }
+}
+
 struct AgentSwitchSheet: View {
     let agents: [Agent]
     let currentID: String
