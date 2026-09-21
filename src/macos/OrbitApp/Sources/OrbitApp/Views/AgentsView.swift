@@ -270,12 +270,15 @@ struct AgentContentColumn: View {
         // Search, in the list rather than over it. Until it existed the list was only searchable from
         // inside the drawer (or ⌘K, which needs a keyboard), so it looked like it had none.
         // `.navigationBarDrawer` is what keeps the field *below* the workspace title instead of over
-        // it — the system owns that layout, which a hand-placed bar can't do — and `.always` keeps it
-        // visible rather than hidden until you pull down, since not being able to find it is what
-        // started this. Typing searches the server (every workspace, scope and message text); the
-        // hits replace the list's sections until the field is cleared (see `AgentPanes`).
+        // it — the system owns that layout, which a hand-placed bar can't do. `.automatic` rather
+        // than `.always`: the field is still there whenever the list is at its top, which is where
+        // "I can't find it" was reported, and it scrolls away as you read — Mail's, Notes' and
+        // Settings' own behavior, and 56pt of rows back on a phone. (The field is declared on the
+        // column root, so it also exists from that column's first breath in either mode.) Typing
+        // searches the server (every workspace, scope and message text); the hits replace the list's
+        // sections until the field is cleared (see `AgentPanes`).
         .searchable(text: $searchQuery,
-                    placement: .navigationBarDrawer(displayMode: .always),
+                    placement: .navigationBarDrawer(displayMode: .automatic),
                     prompt: "Search sessions")
         // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
         // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
