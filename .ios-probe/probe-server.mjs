@@ -8,12 +8,14 @@ const PORT = Number(process.argv[2] || process.env.PROBE_PORT || 8931);
 const PROJECT = process.env.PROBE_PROJECT || '34ODoUKJGEsfbgcJDGS4q';
 const SESSION = process.env.PROBE_SESSION || '34SgoRKPa0zhBhzdzD5PV';
 
+// Relative to the moment the read is ANSWERED, not to when this process started: the cards' own
+// time lines are then the mock's ("waiting 2h 6m"), however long the runner took to get here.
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
 const minutesAhead = (m) => new Date(Date.now() + m * 60_000).toISOString();
 
 /** The three cards, with the browser's own fixtures (ProjectProgressStatus.test.tsx) — one
  *  exception the coordinator is handling, one that became the owner's, and the pause. */
-const OPEN_ITEMS = {
+const openItems = () => ({
   needsYou: [
     {
       itemId: 'Pamt8Lq7mr2MGZV41pKTo',
@@ -76,7 +78,7 @@ const OPEN_ITEMS = {
       question: null,
     },
   ],
-};
+});
 
 const SESSION_ROW = {
   id: SESSION,
@@ -99,7 +101,7 @@ const server = http.createServer((req, res) => {
   console.log(`${req.method} ${path}`);
 
   if (path === `/api/sessions/${SESSION}`) return json(SESSION_ROW);
-  if (path === `/api/projects/${PROJECT}/open-items`) return json(OPEN_ITEMS);
+  if (path === `/api/projects/${PROJECT}/open-items`) return json(openItems());
   if (path === `/api/projects/${PROJECT}/promotions/current`) return json(null);
   if (path.endsWith('/approvals')) return json([]);
   if (path.endsWith('/turns')) return json([]);
