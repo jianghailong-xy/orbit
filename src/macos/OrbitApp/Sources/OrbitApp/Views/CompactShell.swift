@@ -416,9 +416,13 @@ private struct CornerCutout: Shape {
 ///
 /// One pass is not enough. UIKit zeroes the margin on *every* bar layout, and the card is laid out
 /// on every frame of the slide — so a single pass after the settle leaves the title pinned to the
-/// card's edge for the whole slide and then snapping back. The margin is therefore re-asserted once
-/// per frame through the slide and its settle, which is what keeps the title in one place while the
-/// card moves (traced frame by frame on an iOS 26.5 simulator).
+/// card's edge for the whole slide and then snapping back. The margin is therefore re-asserted
+/// through the slide and its settle, from two points in the frame: a display link, which on a
+/// simulator is enough on its own (traced frame by frame on iOS 26.5), and a run-loop observer on
+/// `beforeWaiting`, because on a device it is not (the reporter's iPhone, on a build carrying only
+/// the display link, showed the title at 1.0pt mid-slide and 17.0pt once settled — every frame of
+/// the slide lost the race, since the display link fires *before* the layout that re-zeroes it and
+/// the observer fires after).
 private struct NavBarLeadingMargin: UIViewRepresentable {
     /// What the margin is at the window's leading edge, and what the collapsed state is restored
     /// to. iOS 26.5: `layoutMargins.leading` 16 → 0, `UISearchBarTextField` x 16 → 8.
@@ -441,27 +445,41 @@ private struct NavBarLeadingMargin: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    /// A display link rather than a timer: it ticks with the frames the bar is being laid out on,
-    /// and stops itself once the slide is over — nothing re-lays the bar out while the drawer is
-    /// open (the peek's tap closes it, so the card underneath cannot be scrolled), and anything that
-    /// does, a rotation, re-renders and starts a fresh pass.
+    /// Two tickers, because one lands on the wrong side of the frame's layout on a device: the
+    /// display link fires before it (and can win the race, which is what the simulator shows), the
+    /// run-loop observer fires at the end of the turn, after it. Both stop themselves once the
+    /// slide is over — nothing re-lays the bar out while the drawer is open (the peek's tap closes
+    /// it, so the card underneath cannot be scrolled), and anything that does, a rotation,
+    /// re-renders and starts a fresh pass.
     final class Coordinator: NSObject {
         weak var view: UIView?
         private var link: CADisplayLink?
+        private var observer: CFRunLoopObserver?
         private var deadline = Date.distantPast
 
         func track() {
             deadline = Date().addingTimeInterval(NavBarLeadingMargin.trackingWindow)
+            NavBarLeadingMargin.restore(from: view)
             guard link == nil else { return }
             let link = CADisplayLink(target: self, selector: #selector(tick))
             link.add(to: .main, forMode: .common)
             self.link = link
+            guard let observer = CFRunLoopObserverCreateWithHandler(
+                kCFAllocatorDefault, CFRunLoopActivity.beforeWaiting.rawValue, true, 0,
+                { [weak self] _, _ in self?.tick() }
+            ) else { return }
+            CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+            self.observer = observer
         }
 
         @objc private func tick() {
             guard Date() < deadline else {
                 link?.invalidate()
                 link = nil
+                if let observer {
+                    CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes)
+                    self.observer = nil
+                }
                 return
             }
             if let view { NavBarLeadingMargin.restore(from: view) }
