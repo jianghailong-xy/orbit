@@ -1853,10 +1853,14 @@ private struct OwnerItemCardView: View {
     let itemID: String
     /// The pause, rather than an exception that became the owner's.
     let isPause: Bool
+    /// "Open task session" is a route, not a write, and it goes wherever the app routes a
+    /// notification's session or task link — the same two screens the browser's link reaches.
+    @Environment(AppModel.self) private var appModel
     @State private var sending = false
     /// What the door took, when the press was made HERE — the receipt, and the only thing this
     /// card remembers. The read then says the item is gone, which is the same fact twice.
     @State private var receipt: String?
+    @State private var confirmingCancel = false
 
     private var standing: OwnerItemStanding { console.ownerItemStanding(itemID) }
 
@@ -1877,13 +1881,29 @@ private struct OwnerItemCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if case .open(let row) = standing {
                 item(row)
-                if pressable(row) {
-                    ApprovalActions {
+                ApprovalActions {
+                    if pressable(row) {
                         Button { press(row) } label: {
                             Text(isPause ? ExceptionCards.resume : ExceptionCards.askCoordinatorAgain)
                                 .approvalActionLabel()
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(sending)
+                    }
+                    // The way in to the attempt this is about, where the server offered it: the
+                    // same two screens the browser's link reaches (its `actionHref`).
+                    if let target = ExceptionCards.openTarget(row) {
+                        Button { appModel.route(to: target) } label: {
+                            Text(ExceptionCards.openTaskSession).approvalActionLabel()
+                        }
+                        .disabled(sending)
+                    }
+                    // And the way out: the task stops here, which ends the attempt for good — so
+                    // it is asked, in the browser's own words.
+                    if ExceptionCards.cancelable(row) {
+                        Button(role: .destructive) { confirmingCancel = true } label: {
+                            Text(ExceptionCards.cancelConfirm).approvalActionLabel()
+                        }
                         .disabled(sending)
                     }
                 }
@@ -1901,6 +1921,17 @@ private struct OwnerItemCardView: View {
             }
         }
         .approvalChrome(.orange, dimmed: receipt != nil || !ExceptionCards.isOpen(standing))
+        // Asked once, in the browser's own words: the press ends an attempt for good, and what it
+        // leaves alone (the branch, the history) is the half a reader has to be told.
+        .confirmationDialog(ExceptionCards.cancelTitle, isPresented: $confirmingCancel,
+                            titleVisibility: .visible) {
+            Button(ExceptionCards.cancelConfirm, role: .destructive) {
+                if case .open(let row) = standing { cancel(row) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ExceptionCards.cancelBody)
+        }
     }
 
     /// What happened, in three lines the server wrote two of: how it became the owner's, what
@@ -1944,6 +1975,17 @@ private struct OwnerItemCardView: View {
             } else {
                 if await console.returnEscalatedItem(row) != nil { receipt = ExceptionCards.returned }
             }
+            sending = false
+        }
+    }
+
+    /// The confirm's own press — made from the dialog, so it does not go through `press`.
+    private func cancel(_ row: ProjectOpenItemRow) {
+        guard !sending, ExceptionCards.cancelable(row) else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            if await console.cancelItemTask(row) { receipt = ExceptionCards.cancelled }
             sending = false
         }
     }

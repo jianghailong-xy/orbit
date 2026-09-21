@@ -2704,6 +2704,24 @@ final class ConsoleModel {
         }
     }
 
+    /// Stop the task this item is about (§4.2: the exceptions it opened close with it, resolution
+    /// `TASK_CLOSED`). No run is stopped by it — a task with a live run is not a FAILED one — so
+    /// the press is about the record, and the card asks before it is made.
+    ///
+    /// Nothing is written to the ITEM: the status write is what closes it, and the re-read then
+    /// finds it gone. The card says so rather than drawing the item as still waiting.
+    func cancelItemTask(_ row: ProjectOpenItemRow) async -> Bool {
+        guard let taskID = row.taskId else { return false }
+        do {
+            _ = try await api.updateTask(taskID, ExceptionCards.cancelRequest)
+            await refreshRulerQuestions(force: true)
+            return true
+        } catch {
+            statusMessage = "That task was not cancelled — \(APIClient.failureReason(error))."
+            return false
+        }
+    }
+
     /// M-T4: merge it. The candidate's own source SHA rides along, so a card rendered before a
     /// newer candidate superseded it is refused rather than merging whatever is on the branch now.
     ///

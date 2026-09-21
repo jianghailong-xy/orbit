@@ -79,6 +79,8 @@
   .btn { min-height: 44px; border-radius: 24px; display: flex; align-items: center;
          justify-content: center; padding: 10px 12px; text-align: center; font-size: 16.5px; }
   .btn.primary { background: var(--blue); color: #fff; font-weight: 440; }
+  .btn.tinted { background: var(--fill); color: var(--blue); }
+  .btn.danger { background: var(--fill); color: var(--red); }
   .foot { font-size: 12px; color: var(--label-2); margin-top: 10px; }
 
   /* what each panel is comparing */
@@ -86,6 +88,19 @@
            place-items: center; font-size: 12.5px; line-height: 1.4; color: #b3261e; text-align: center;
            background: rgba(255,59,48,.05); padding: 12px; }
   .cut { outline: 1.5px dashed #0b57d0; outline-offset: 4px; }
+
+  /* the confirm, as UIKit draws it over the thread */
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.28);
+           display: grid; place-items: center; padding: 0 28px; }
+  .sheet { width: 250px; border-radius: 14px; overflow: hidden;
+           background: rgba(250,250,250,.96); backdrop-filter: blur(20px);
+           box-shadow: 0 10px 30px rgba(0,0,0,.25); text-align: center; }
+  .sheet-title { font-size: 15px; font-weight: 700; padding: 16px 16px 4px; }
+  .sheet-body { font-size: 12.5px; line-height: 1.4; color: var(--label-2); padding: 0 16px 14px; }
+  .sheet-actions { border-top: 1px solid var(--sep); }
+  .sheet-row { padding: 11px 12px; font-size: 16px; color: var(--blue); }
+  .sheet-row.danger { color: var(--red); font-weight: 500; }
+  .sheet-sep { height: 1px; background: var(--sep); }
 
   .tail { padding: 10px 14px 0; }
   .composer { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
@@ -101,7 +116,7 @@
 <h1>异常卡：说“Waiting for approval”却点不进任何东西的那一格</h1>
 <p class="lede">Wikids 狼人杀项目的协调会话：一个任务连挂三次后被升级成 owner 的（服务器把这条 open item 记在协调会话上，
 会话列表、标题栏、“Escalated to you”横幅因此都亮）。web 在同一处画出了这张卡（<code>ProjectExceptionCards</code>），
-原生两端一直没画 —— 所以点进会话是空的。左边是现状，中间是这次补的卡，右边是同一族的另一半（fuse 暂停）。</p>
+原生两端一直没画 —— 所以点进会话是空的。①②是现状与这次补的卡，③是它第三颗按钮的确认框，④是同一族的另一半（fuse 暂停）。</p>
 
 <div class="row">
 
@@ -158,7 +173,11 @@
           <div class="subject">Task failed: P5.1 实现游戏 Route Handlers、鉴权与玩家视图协议</div>
           <div class="detail">The acceptance command disagreed with what the task declared · exit 1,
             expected 0 · attempt 3 of 3 in this chain</div>
-          <div class="actions"><div class="btn primary">Ask the coordinator again</div></div>
+          <div class="actions">
+            <div class="btn primary">Ask the coordinator again</div>
+            <div class="btn tinted">Open task session</div>
+            <div class="btn danger">Cancel task</div>
+          </div>
           <div class="foot">Owner: you · waiting 1d 7h</div>
         </div>
       </div>
@@ -169,13 +188,61 @@
     <figcaption><b>② 本次提交：这张卡（和 web 同一份文案）</b>
       标题 <code>Escalated to you</code> 就是横幅上那三个词 —— 从横幅点进来的人看到的是同一句话。
       正文第一行是 web 的升级句（<code>escalationHeading</code>，五种来路各一句），第二行是出事的任务，第三行是服务器写的原句。
-      按钮 <code>Ask the coordinator again</code> 走 <code>POST /projects/:id/open-items/:itemId/return-to-coordinator</code>：
+      三颗按钮：<code>Ask the coordinator again</code>（写）走 <code>POST /projects/:id/open-items/:itemId/return-to-coordinator</code>：
       条目交回协调会话、项目给它重新计时——不重跑任务，那本来也不是你按的。
       服务器没列出这个门（项目没有活着的协调会话）时按钮不画，而不是画一个按下去必被拒的键。
       底部 <code>Owner: you · waiting …</code> 与 web 的 <code>ownerLine</code> 逐字相同。</figcaption>
   </figure>
 
-  <!-- ── 3. the other half of the family ─────────────────────── -->
+  <!-- ── 3. the confirm ──────────────────────────────────────── -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>10:26</span><span class="right">▮▮▮ 5G ▰</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">Wikids AI 游戏模…<span class="badge">Coordinator</span></div>
+          <div class="s">Waiting for approval · Open · 15h ago</div></div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="thread" style="position: relative;">
+        <div class="spacer"></div>
+        <div class="card">
+          <div class="head"><div class="icon">⚠</div><div class="title">Escalated to you</div></div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">Now yours — no one acted on this for 2h</div>
+          <div class="subject">Task failed: P5.1 实现游戏 Route Handlers、鉴权与玩家视图协议</div>
+          <div class="actions">
+            <div class="btn primary">Ask the coordinator again</div>
+            <div class="btn tinted">Open task session</div>
+            <div class="btn danger">Cancel task</div>
+          </div>
+        </div>
+        <div class="scrim">
+          <div class="sheet">
+            <div class="sheet-title">Cancel this task?</div>
+            <div class="sheet-body">It is recorded as cancelled: no further run starts on it, and the
+              failed-attempt notices it opened close with it. Its branch and history stay where they are.</div>
+            <div class="sheet-actions">
+              <div class="sheet-row danger">Cancel task</div>
+              <div class="sheet-sep"></div>
+              <div class="sheet-row cancel">Cancel</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">↥</span></div></div>
+      <div class="footbar"><span class="on">Auto</span><span>GPT-5.6-Sol</span><span>Ultra</span>
+        <span class="ctx">0%　71%</span></div>
+    </div>
+    <figcaption><b>③ 「Cancel task」按下之前</b>
+      三颗按钮里的最后一颗会先问一次（原生 <code>confirmationDialog</code>，和 app 里 Reopen task 用的是同一个套路）：
+      标题、确认词、以及“留下什么不动”的那句都照抄 web 的 <code>CANCEL_TASK_MODAL_TITLE / OK / BODY</code>。
+      确认后走 <code>PATCH /tasks/:id {"status":"CANCELLED"}</code>——和 web 同一颗门，
+      条目随任务一起关闭（<code>TASK_CLOSED</code>），卡片随即变成「✓ Cancelled」。
+      <code>Open task session</code> 是链接不是写操作，去的是出事那次 run 的会话（没有 run 时去任务页），和 web 的 <code>actionHref</code> 同两条路由。</figcaption>
+  </figure>
+
+  <!-- ── 4. the other half of the family ─────────────────────── -->
   <figure>
     <div class="phone">
       <div class="status"><span>10:26</span><span class="right">▮▮▮ 5G ▰</span></div>
@@ -206,7 +273,7 @@
       <div class="footbar"><span class="on">Auto</span><span>GPT-5.6-Sol</span><span>Ultra</span>
         <span class="ctx">0%　71%</span></div>
     </div>
-    <figcaption><b>③ 同一族的另一半：fuse 暂停</b>
+    <figcaption><b>④ 同一族的另一半：fuse 暂停</b>
       和升级卡同一个组件、同一套琥珀色（“你欠一个动作”），标题 <code>Paused</code> 同样是横幅上那个词；
       正文第一行是条目的 title（服务器写的 <code>The coordinator paused itself</code>），第二行是暂停自己的长句，
       按钮 <code>Resume</code> 走 <code>POST /projects/:id/fuse/:episodeId/resume</code>。
