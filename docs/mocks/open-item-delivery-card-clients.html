@@ -1,0 +1,328 @@
+<!doctype html>
+<!-- Design mock: an exception item's delivery to the coordinator, on iOS and macOS.
+     TODAY: the delivery is a `user` event carrying 30 lines of prose written for the AGENT, so both
+     clients draw it as a bubble the reader typed (MessageBubbles' UserBubbleView).
+     PROPOSED: the payload the control plane records beside that echo (`openItemDelivery`, written by
+     b14b2b604 for the web) is decoded and drawn as the card the web already draws
+     (`OpenItemDeliveryCard.tsx`) — the same words, in the native card language of
+     BackgroundWakeCardView, folding the prose rather than dropping it.
+     Geometry: iPhone 402×874pt (iOS 26 shell), the transcript's 14pt gutters, and the token ramp in
+     OrbitApp/Sources/OrbitApp/Views/Typography.swift (iOS .body 17 / .footnote 13 / .caption2 11;
+     macOS 14 / 12 / 10). Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Exception-item delivery card — iOS + macOS mockup</title>
+<style>
+  :root {
+    --orange: #FF9500;
+    --orange-ink: #B25000;
+    --blue: #007AFF;
+    --green: #248A3D;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --fill-2: rgba(120, 120, 128, .08);
+    --card-bg: rgba(255, 149, 0, .10);
+    --card-line: rgba(255, 149, 0, .35);
+    --thread: #f2f2f7;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 28px 72px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 6px; }
+  .lede { color: #55555e; max-width: 980px; margin: 0 0 10px; }
+  .lede code { font: 12.5px/1.4 var(--mono); background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px; }
+  .note { color: #55555e; max-width: 980px; margin: 0 0 30px; font-size: 13.5px; }
+  .row { display: flex; flex-wrap: nowrap; gap: 40px; align-items: flex-start; }
+  figure { margin: 0; }
+  figure.phone { width: 402px; flex: 0 0 402px; }
+  figure.mac { width: 700px; }
+  figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption > b:first-child { display: block; font-size: 14.5px; color: #16161a; margin-bottom: 3px; }
+  figure.hi figcaption > b:first-child::after {
+    content: 'PROPOSED'; font: 600 10px/1 ui-monospace, Menlo, monospace; color: #fff;
+    background: #1a7f37; padding: 3px 6px; border-radius: 4px; margin-left: 8px; vertical-align: 1px;
+  }
+  figure.hi figcaption > b:first-child::before {
+    content: ''; position: absolute; }
+  .frame { position: relative; }
+  .frame.mark::after {
+    content: ''; position: absolute; inset: -8px; border: 1.5px dashed #ff6a00; border-radius: 56px;
+    pointer-events: none; }
+
+  /* ── phone ─────────────────────────────────────────────────── */
+  .phone {
+    width: 402px; height: 812px; border-radius: 54px; overflow: hidden; background: var(--surface);
+    color: var(--label); display: flex; flex-direction: column; position: relative;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18); border: 1px solid rgba(0,0,0,.08);
+  }
+  .status { height: 56px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 30px 6px; font-size: 15px; font-weight: 600; }
+  .nav { padding: 2px 16px 10px; display: flex; align-items: center; gap: 10px;
+         border-bottom: 1px solid var(--sep); }
+  .nav .back { width: 30px; height: 30px; border-radius: 50%; background: var(--fill);
+               display: grid; place-items: center; font-size: 15px; }
+  .nav .titles { flex: 1; text-align: center; line-height: 1.15; }
+  .nav .t { font-size: 15px; font-weight: 600; }
+  .nav .s { font-size: 11.5px; color: var(--label-2); }
+  .thread { flex: 1; background: var(--thread); padding: 12px 14px 0; overflow: hidden;
+            display: flex; flex-direction: column; gap: 10px; }
+  .thread .spacer { flex: 1 1 auto; }
+  .composer { height: 52px; background: var(--surface); border-top: 1px solid var(--sep);
+              display: flex; align-items: center; padding: 0 16px; color: var(--label-3); font-size: 15px; }
+
+  /* ── mac window ───────────────────────────────────────────── */
+  .window { width: 700px; border-radius: 12px; overflow: hidden; background: var(--surface);
+            box-shadow: 0 14px 44px rgba(0,0,0,.20); border: 1px solid rgba(0,0,0,.10); }
+  .titlebar { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+              background: #ececec; border-bottom: 1px solid rgba(0,0,0,.08); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .titlebar .title { flex: 1; text-align: center; font-size: 12.5px; font-weight: 600; color: #4d4d4d; padding-right: 44px; }
+  .mthread { background: var(--thread); padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── today: the prose, in the reader's own bubble ─────────── */
+  .bubble-wrap { display: flex; justify-content: flex-end; }
+  .bubble { max-width: 86%; padding: 9px 12px; border-radius: 18px; background: var(--blue);
+            color: #fff; font-size: 17px; line-height: 1.35; white-space: pre-wrap; }
+  figure.mac .bubble { font-size: 14px; line-height: 1.45; border-radius: 14px; }
+  .bubble .cut { opacity: .75; font-size: 13px; }
+  .bubble-foot { margin-top: 5px; font-size: 11px; color: rgba(255,255,255,.8); display: block; }
+
+  /* ── the card (native language: BackgroundWakeCardView) ───── */
+  .card { border: 1px solid var(--card-line); background: var(--card-bg); border-radius: 8px;
+          padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .head { display: flex; align-items: center; gap: 6px; }
+  .head .mark { color: var(--orange); font-size: 13px; line-height: 1; }
+  .head .name { color: var(--orange-ink); font-weight: 600; font-size: 13px; }
+  .head .spacer { flex: 1; }
+  .kind { font-size: 11px; font-weight: 500; color: var(--label-2); background: rgba(255,255,255,.75);
+          border: 1px solid var(--card-line); border-radius: 9px; padding: 2px 8px; white-space: nowrap; }
+  .title { font-size: 17px; font-weight: 600; line-height: 1.3; }
+  .where { font-size: 12px; color: var(--label-2); }
+  .where .link { color: var(--blue); }
+  .why { font-size: 17px; line-height: 1.35; }
+  .files { margin: 0; padding: 7px 9px; list-style: none; border-radius: 6px; background: rgba(255,255,255,.75);
+           font: 13px/1.45 var(--mono); display: flex; flex-direction: column; gap: 2px; }
+  .files li { overflow-wrap: anywhere; }
+  .more { font-size: 13px; color: var(--blue); }
+  .facts { display: flex; gap: 6px; align-items: flex-start; padding: 7px 9px; border-radius: 6px;
+           background: rgba(255,255,255,.75); font-size: 12px; }
+  .facts.landed { color: var(--green); }
+  .facts.unknown { color: var(--label-2); }
+  .facts .glyph { line-height: 1.35; }
+  .doors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+  .doors .lead { color: var(--label-2); }
+  .chip { border: 1px solid var(--sep); background: rgba(255,255,255,.8); border-radius: 9px;
+          padding: 2px 8px; font-size: 12px; color: var(--label); white-space: nowrap; }
+  .links { display: flex; gap: 12px; font-size: 12px; }
+  .links span { color: var(--blue); }
+  .meta { border-top: 1px solid rgba(255,149,0,.25); padding-top: 6px; font-size: 11px;
+          color: var(--label-2); }
+  .fold { font-size: 12px; color: var(--label-2); }
+  .fold .pre { margin: 6px 0 0; padding: 7px 9px; border-radius: 6px; background: rgba(255,255,255,.75);
+               font: 12px/1.5 var(--mono); white-space: pre-wrap; max-height: 150px; overflow: hidden;
+               color: var(--label-2); }
+  figure.mac .title { font-size: 14px; }
+  figure.mac .why { font-size: 14px; }
+  figure.mac .files { font-size: 11.5px; }
+  .callout { font-size: 12px; color: #9a6000; background: #fff6e5; border: 1px solid #ffd591;
+             border-radius: 7px; padding: 6px 9px; line-height: 1.45; }
+  .legend { max-width: 1180px; margin: 34px 0 0; font-size: 13.5px; color: #55555e; }
+  .legend b { color: #16161a; }
+  .legend ul { margin: 6px 0 0; padding-left: 20px; }
+  .legend li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<h1>An exception item’s delivery to the coordinator — clients</h1>
+<p class="lede">The control plane already records the item as fields beside the turn’s echo
+  (<code>openItemDelivery</code>, written by <code>b14b2b604</code>; the web draws it as
+  <code>OpenItemDeliveryCard.tsx</code>). iOS and macOS decode the same payload and draw the same card
+  — every fact the web card shows, in the native card language (<code>BackgroundWakeCardView</code>):
+  amber card, glyph + <i>Exception item</i> + kind chip, the title, the task it is about, why it is
+  here, the landing the platform already knew, the doors, and the paragraph the agent read folded at
+  the foot rather than dropped.</p>
+<p class="note">Both shells share this source (<code>src/macos/OrbitKit</code> +
+  <code>src/macos/OrbitApp</code>): iOS draws the same card with the iOS half of the type ramp, which
+  is what the second and third figures differ by. A delivery carrying no <code>openItemDelivery</code>
+  (every event stored before the payload existed) is untouched — it stays the bubble on the left.</p>
+
+<div class="row">
+  <figure class="phone">
+    <div class="frame">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>􀙇 􀙈 􀛨</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">项目推进可靠性：集成线、例外待办与保险丝重做</div>
+          <div class="s">orbit · coordinator</div></div>
+      </div>
+      <div class="thread">
+        <div class="spacer"></div>
+        <div class="bubble-wrap">
+          <div class="bubble">【例外待办】Merge conflict: 回填历史 user 事件的 controlPlaneNote
+
+项目 34ODoUKJGEsfbgcJDGS4q 的一次集成没有把工作放进集成线：
+合并冲突（LAND_TASK），目标分支 refs/heads/project/34ODoUKJGEsfbgcJDGS4q 没有动。
+冲突的文件（4 个）：
+- src/web/src/components/Transcript.tsx
+
+这条待办的负责人是你。平台不会自己重试一次没有落地的集成……
+<span class="cut">（下略 24 行，全是写给 agent 的指令）</span>
+            <span class="bubble-foot">Nobody typed this, and it is signed with the reader’s name.</span>
+          </div>
+        </div>
+        <div class="composer">Message…</div>
+      </div>
+    </div>
+    </div>
+    <figcaption><b>1 · Today (iOS)</b>The delivery is one <code>user</code> event whose text is 30 lines
+      written for the agent — the tools to call, the ids to call them with. Drawn as a bubble, so it
+      reads as something the reader typed. macOS draws the same thing, one type size smaller.</figcaption>
+  </figure>
+
+  <figure class="phone hi">
+    <div class="frame mark">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>􀙇 􀙈 􀛨</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">项目推进可靠性：集成线、例外待办与保险丝重做</div>
+          <div class="s">orbit · coordinator</div></div>
+      </div>
+      <div class="thread">
+        <div class="spacer"></div>
+        <div class="card">
+          <div class="head">
+            <span class="mark">⚠</span><span class="name">Exception item</span>
+            <span class="spacer"></span><span class="kind">Merge conflict</span>
+          </div>
+          <div class="title">Merge conflict: 回填历史 user 事件的 controlPlaneNote</div>
+          <div class="where">Task <span class="link">回填历史 user 事件的 controlPlaneNote</span></div>
+          <div class="why">git refused the merge into refs/heads/project/34ODoUKJGEsfbgcJDGS4q; the
+            target branch did not move. The platform will not retry it by itself.</div>
+          <ul class="files">
+            <li>src/web/src/components/Transcript.tsx</li>
+            <li>src/apiserver/src/projects/coordinator-delivery.service.ts</li>
+            <li>src/web/src/lib/deliveredMessage.ts</li>
+          </ul>
+          <div class="more">Show 3 more files</div>
+          <div class="facts unknown"><span class="glyph">◌</span><span>No merge receipt for this work —
+            Orbit cannot tell whether it has landed.</span></div>
+          <div class="doors">
+            <span class="lead">The coordinator can:</span>
+            <span class="chip">Retry the task</span><span class="chip">Cancel the task</span>
+          </div>
+          <div class="links"><span>Open the task ↗</span><span>Open the failed session ↗</span></div>
+          <div class="meta">Item 3CuIHiSJZBQ7nLVUwc7ekz · a notification, not an interruption · 3m ago</div>
+          <div class="fold">▸ What the coordinator was told
+            <div class="pre">【例外待办】Merge conflict: 回填历史 user 事件的 controlPlaneNote
+
+项目 34ODoUKJGEsfbgcJDGS4q 的一次集成没有把工作放进集成线：…</div>
+          </div>
+        </div>
+        <div class="composer">Message…</div>
+      </div>
+    </div>
+    </div>
+    <figcaption><b>2 · Proposed (iOS)</b>Same turn, same words, drawn from the payload: the kind, the
+      item’s title, the task it is about (tappable — the app’s <code>orbit-task:</code> door), why it
+      is here, the files it conflicted on (folded past three), the landing, the server’s doors, the
+      links, and the paragraph one disclosure away. The bar at the top of the console names this turn
+      off the card, so it can no longer read “↑ Your question” above it.</figcaption>
+  </figure>
+</div>
+
+<div class="row" style="margin-top:34px">
+  <figure class="mac hi">
+    <div class="frame mark">
+    <div class="window">
+      <div class="titlebar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="title">项目推进可靠性：集成线、例外待办与保险丝重做 — orbit</span>
+      </div>
+      <div class="mthread">
+        <div class="card">
+          <div class="head">
+            <span class="mark">⚠</span><span class="name">Exception item</span>
+            <span class="spacer"></span><span class="kind">Task failed</span>
+          </div>
+          <div class="title">Task failed: 回填历史 user 事件的 controlPlaneNote</div>
+          <div class="where">Task <span class="link">回填历史 user 事件的 controlPlaneNote</span></div>
+          <div class="why">The acceptance command disagreed with what the task declared — exit 1,
+            expected 0 · attempt 2 of 3 in this chain.</div>
+          <div class="facts unknown"><span class="glyph">◌</span><span>No merge receipt for this work —
+            Orbit cannot tell whether it has landed.</span></div>
+          <div class="doors">
+            <span class="lead">The coordinator can:</span>
+            <span class="chip">Retry the task</span><span class="chip">Cancel the task</span>
+          </div>
+          <div class="links"><span>Open the task ↗</span><span>Open the failed session ↗</span></div>
+          <div class="meta">Item 34SfQ6TdVFeGdcFpEQJyQ · a notification, not an interruption · 12m ago</div>
+          <div class="fold">▸ What the coordinator was told</div>
+        </div>
+        <div class="card">
+          <div class="head">
+            <span class="mark">⚠</span><span class="name">Exception item</span>
+            <span class="spacer"></span><span class="kind">Merge conflict</span>
+          </div>
+          <div class="title">Merge conflict: 回填历史 user 事件的 controlPlaneNote</div>
+          <div class="where">Task <span class="link">回填历史 user 事件的 controlPlaneNote</span></div>
+          <div class="why">git refused the merge into refs/heads/project/34ODoUKJGEsfbgcJDGS4q; the
+            target branch did not move. The platform will not retry it by itself.</div>
+          <ul class="files"><li>src/web/src/components/Transcript.tsx</li>
+            <li>src/apiserver/src/projects/coordinator-delivery.service.ts</li>
+            <li>src/web/src/lib/deliveredMessage.ts</li></ul>
+          <div class="more">Show 3 more files</div>
+          <div class="facts landed"><span class="glyph">✓</span><span>Already on main — a merge receipt
+            records this work there.</span></div>
+          <div class="doors">
+            <span class="lead">The coordinator can:</span>
+            <span class="chip">Retry the task</span><span class="chip">Cancel the task</span>
+            <span class="chip">Ask the coordinator again</span>
+          </div>
+          <div class="links"><span>Open the task ↗</span><span>Open the failed session ↗</span></div>
+          <div class="meta">Item 34Rn7bKdTQe2mZxpQv8Hs4 · a notification, not an interruption · 26m ago</div>
+        </div>
+      </div>
+    </div>
+    </div>
+    <figcaption><b>3 · Proposed (macOS)</b>The same cards, at the macOS half of the ramp (prose 14pt,
+      meta 10pt). The two landing tones: <b>◌ grey</b> when no receipt answers it (“no receipt is no
+      <i>evidence</i>”, never “it did not land”) and <b>✓ green</b> when a receipt records the work on
+      the target branch. Both are read off the payload — nothing here is inferred from the prose.</figcaption>
+  </figure>
+
+  <div class="legend">
+    <b>What this is, and what it is not</b>
+    <ul>
+      <li><b>The card reads the payload only.</b> Identifying a delivery by the shape of its text is the
+        road the web already backed out of (<code>lib/deliveredMessage.ts</code>); a client that did it
+        would draw half a card for a paragraph it half-recognises.</li>
+      <li><b>Half a card is never drawn.</b> A payload missing <code>itemId</code>, <code>kind</code> or
+        <code>title</code> — or an <code>openItemDelivery</code> that is not an object — decodes to
+        nothing, and the turn keeps the reading it has today (figure 1).</li>
+      <li><b>The prose is kept, folded.</b> “What the coordinator was told” opens the paragraph verbatim,
+        exactly as the web’s <code>&lt;details&gt;</code> does.</li>
+      <li><b>The existing note path keeps its job.</b> <code>AttachedNoteView</code> is untouched: it
+        still draws whatever delivery appended to a message (<code>controlPlaneNote</code>) in the
+        bubble. On a delivery turn the card takes the turn itself — the delivery is the control plane’s,
+        not the reader’s — and anything the same turn carried in its note rides inside the card, the way
+        <code>BackgroundWakeCardView</code> already handles it.</li>
+      <li><b>English copy, held to the web’s.</b> Every string (“Exception item”, the kind labels, the
+        landing sentences, the door names, “a notification, not an interruption”) is the web card’s
+        wording, and a copy-parity test reads the TSX to keep the two ends together.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

@@ -954,6 +954,11 @@ public struct TranscriptReducer: Sendable, Codable {
         // for the same block — arriving with the whole text and no open bubble to fill — would
         // then append the reply a SECOND time, in full, under the partial copy.
         if !steer { flushStreaming() }
+        // An exception item's delivery, when the control plane recorded the item's own fields beside
+        // this echo (`openItemDelivery`, `OpenItemDelivery.parse`). Read off the payload rather than
+        // out of the text, so a delivery that carries no card — every one stored before the payload
+        // existed — keeps the reading it has always had.
+        let itemCard = OpenItemDelivery.parse(ev.payload)
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -984,6 +989,8 @@ public struct TranscriptReducer: Sendable, Codable {
                 if let tid = ev.turnId { b.turnId = tid }    // adopt the id if we matched by text
                 if !body.isEmpty { b.text = body }
                 b.note = recorded?.note
+                // The card is the event's own: it rides whichever row ends up drawing this turn.
+                b.itemCard = itemCard
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
@@ -1002,7 +1009,8 @@ public struct TranscriptReducer: Sendable, Codable {
                                             clientTurnId: cid, turnId: ev.turnId, pending: false,
                                             undelivered: delivery == "failed",
                                             note: recorded?.note,
-                                            steer: steer, delivery: delivery)))
+                                            steer: steer, delivery: delivery,
+                                            itemCard: itemCard)))
     }
 
     private mutating func appendInterrupt(seq: Int) {

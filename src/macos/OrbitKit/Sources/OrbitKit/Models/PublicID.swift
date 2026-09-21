@@ -64,6 +64,28 @@ public enum PublicID {
                        u.8, u.9, u.10, u.11, u.12, u.13, u.14, u.15])
     }
 
+    /// Either spelling in, the base62 public id out — the inverse of ``toUUID``, and total the same
+    /// way web's `routeId` is: a value that is neither spelling comes back unchanged, because an id
+    /// shown on a card is decoration and a crash on the render path is not. Idempotent, so a payload
+    /// already carrying the public spelling is left alone.
+    ///
+    /// The clients spent this direction on nothing until now: a native screen had no address bar to
+    /// build a link for. The console's cards print one ("Item 34ShSQc0zVFxWSokxZive"), and they print
+    /// the same spelling the web does.
+    public static func toPublic(_ id: String) -> String {
+        guard let uuid = toUUID(id) else { return id }
+        let hex = uuid.replacingOccurrences(of: "-", with: "")
+        var bytes: [UInt8] = []
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            guard let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex),
+                  let byte = UInt8(hex[index..<next], radix: 16) else { return id }
+            bytes.append(byte)
+            index = next
+        }
+        return base62(bytes)
+    }
+
     /// The 16 bytes of a value, big-endian, as Base62. Internal to `newToken`; `toUUID` is the
     /// inverse and `PublicIDTests` pins them against the other clients' shared vector.
     static func base62(_ bytes: [UInt8]) -> String {
