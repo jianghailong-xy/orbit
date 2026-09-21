@@ -316,19 +316,21 @@ public enum ExceptionCards {
     public static let askCoordinatorAgain = "Ask the coordinator again"
     /// Mock 6 ①'s press (§6.3 F-T4): the coordinator stops being paused and starts working again.
     public static let resume = "Resume"
-    /// The way in to the attempt the item is about — the failed run itself, or the task when
-    /// there is no run to show. A link, not a write (`ACTION_LABEL`'s `OPEN_TASK_SESSION`).
-    public static let openTaskSession = "Open task session"
-    /// Stopping the task outright — the browser's `CANCEL_TASK_MODAL_*`, which is a confirm and not
-    /// a press: it ends an attempt for good.
-    public static let cancelTitle = "Cancel this task?"
-    public static let cancelConfirm = "Cancel task"
-    public static let cancelBody =
-        "It is recorded as cancelled: no further run starts on it, and the failed-attempt notices "
-        + "it opened close with it. Its branch and history stay where they are."
-    /// What the door takes: the status write every other task-status press in this app sends
-    /// (`TaskReopen.request` is its counterpart). Nothing else about the task is touched.
-    public static var cancelRequest: UpdateTaskRequest { UpdateTaskRequest(status: .cancelled) }
+    /// What the composer's bar says the reply is about, and what the empty composer asks for —
+    /// `Approvals.chatAction` is the button, these are what arming it says (`ComposerView`).
+    ///
+    /// Two prefixes because the two cards are two things: a pause is not an exception, and a
+    /// coordinator reading "About this exception: The coordinator paused itself" would be told the
+    /// wrong noun by the card that knows better.
+    public static let chatPrefix = "About this exception: "
+    public static let pauseChatPrefix = "About this pause: "
+    /// What the armed composer asks for. A message, not an answer: no door is waiting on it.
+    public static let chatPlaceholder = "Say what the coordinator should do…"
+
+    /// The bar's one line, for one row: the card's own word for what this is, then the item.
+    public static func chatBanner(_ row: ProjectOpenItemRow, isPause: Bool) -> String {
+        (isPause ? pauseChatPrefix : chatPrefix) + row.title
+    }
     /// What a card whose item the read no longer carries says about itself. Native-only copy, and
     /// deliberately so: the browser re-derives its cards from the read on every render and the card
     /// simply goes, which leaves a reader who just pressed something with nothing to read.
@@ -341,7 +343,6 @@ public enum ExceptionCards {
     /// read.
     public static let returned = "Sent back to the coordinator"
     public static let resumed = "Resumed"
-    public static let cancelled = "Cancelled"
     /// `Owner: you · waiting 2h 10m` — the browser's `ownerLine`, owner arm.
     public static let ownerPrefix = "Owner: you"
     /// What a refused resume says, in the browser's headline (`FusePauseCard`'s alert).
@@ -389,23 +390,6 @@ public enum ExceptionCards {
         row.actions.contains(.askCoordinatorAgain)
     }
 
-    /// Whether the task may be stopped from here: the server lists `CANCEL_TASK`, and the press
-    /// acts on the task the item names — a row without one offers no such button (the browser's own
-    /// `writeTarget` rule).
-    public static func cancelable(_ row: ProjectOpenItemRow) -> Bool {
-        row.actions.contains(.cancelTask) && row.taskId != nil
-    }
-
-    /// Where "Open task session" goes, or nil when there is nowhere to go: the attempt the item is
-    /// about when one is recorded, else the task itself — the browser's `actionHref`, whose two
-    /// routes are the two screens both clients have. Nil also when the server did not list the
-    /// action, so a link is drawn exactly when the server offered the door.
-    public static func openTarget(_ row: ProjectOpenItemRow) -> Route? {
-        guard row.actions.contains(.openTaskSession) else { return nil }
-        if let sessionId = row.sessionId, !sessionId.isEmpty { return .session(sessionId) }
-        if let taskId = row.taskId, !taskId.isEmpty { return .task(taskId) }
-        return nil
-    }
 
     /// §7.5's heading for an item that BECAME the owner's, one per way it happened — the browser's
     /// `escalationHeading`, verbatim. Nil for an item that was the owner's from the start, which is
@@ -460,5 +444,27 @@ public enum ExceptionCards {
     /// `ownerLine` — the coordinator arm belongs to the rows this client does not draw.
     public static func ownerLine(_ row: ProjectOpenItemRow, now: Date = Date()) -> String {
         "\(ownerPrefix) · waiting \(waited(row, now: now))"
+    }
+
+    /// What the next send carries ahead of the typed sentence: the item as it stands.
+    ///
+    /// `chatBanner` says which item in the bar; this is what the COORDINATOR is told, and it needs
+    /// more: the conversation it is about to be read in may not have seen this item since it went
+    /// quiet, and the item is not in that transcript — it is a row in the project's own list. So the
+    /// title, the server's sentence and the item's id ride with the message, and the id is there so
+    /// an answer about an item that has since moved can be told apart from one about this one (the
+    /// same reason the plan's seal rides with `planChangeContext`).
+    public static func chatContext(projectTitle: String?, row: ProjectOpenItemRow,
+                                   isPause: Bool, now: Date = Date()) -> String {
+        let what = isPause ? "pause" : "exception"
+        var out = "About the \(what)"
+        if let projectTitle { out += " in “\(projectTitle)”" }
+        out += isPause
+            ? " — the coordinator stopped itself, and only the owner can lift it:"
+            : " that is the owner's now — no one acted on it for \(waitedBeforeEscalation(row)):"
+        out += "\n\n\(row.title)"
+        if !row.detailLine.isEmpty { out += "\n\(row.detailLine)" }
+        out += "\n\n(open item \(row.itemId), waiting since \(row.waitingSince))"
+        return out
     }
 }

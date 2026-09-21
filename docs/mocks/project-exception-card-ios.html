@@ -89,24 +89,20 @@
            background: rgba(255,59,48,.05); padding: 12px; }
   .cut { outline: 1.5px dashed #0b57d0; outline-offset: 4px; }
 
-  /* the confirm, as UIKit draws it over the thread */
-  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.28);
-           display: grid; place-items: center; padding: 0 28px; }
-  .sheet { width: 250px; border-radius: 14px; overflow: hidden;
-           background: rgba(250,250,250,.96); backdrop-filter: blur(20px);
-           box-shadow: 0 10px 30px rgba(0,0,0,.25); text-align: center; }
-  .sheet-title { font-size: 15px; font-weight: 700; padding: 16px 16px 4px; }
-  .sheet-body { font-size: 12.5px; line-height: 1.4; color: var(--label-2); padding: 0 16px 14px; }
-  .sheet-actions { border-top: 1px solid var(--sep); }
-  .sheet-row { padding: 11px 12px; font-size: 16px; color: var(--blue); }
-  .sheet-row.danger { color: var(--red); font-weight: 500; }
-  .sheet-sep { height: 1px; background: var(--sep); }
-
   .tail { padding: 10px 14px 0; }
   .composer { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
               border: 1px solid var(--sep); border-radius: 22px; color: var(--label-3); font-size: 15px; }
   .composer .send { margin-left: auto; width: 30px; height: 30px; border-radius: 50%;
                     background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 13px; }
+  /* The reply bar the composer grows when a card hands it a sentence (ComposerView): the card's
+     own words on the left, the ✕ to let go on the right. */
+  .replybar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+              font-size: 12.5px; color: var(--blue); }
+  .replybar .x { margin-left: auto; width: 18px; height: 18px; border-radius: 50%;
+                 background: var(--fill); color: var(--label-2); display: grid; place-items: center;
+                 font-size: 11px; }
+  .composer.focused { border-color: rgba(0,122,255,.55); }
+  .caret { color: var(--label-2); }
   .footbar { display: flex; align-items: center; gap: 14px; padding: 10px 18px 26px;
              font-size: 13px; color: var(--label-2); }
   .footbar .on { color: var(--label); font-weight: 600; }
@@ -116,7 +112,7 @@
 <h1>异常卡：说“Waiting for approval”却点不进任何东西的那一格</h1>
 <p class="lede">Wikids 狼人杀项目的协调会话：一个任务连挂三次后被升级成 owner 的（服务器把这条 open item 记在协调会话上，
 会话列表、标题栏、“Escalated to you”横幅因此都亮）。web 在同一处画出了这张卡（<code>ProjectExceptionCards</code>），
-原生两端一直没画 —— 所以点进会话是空的。①②是现状与这次补的卡，③是它第三颗按钮的确认框，④是同一族的另一半（fuse 暂停）。</p>
+原生两端一直没画 —— 所以点进会话是空的。②③是这次要做的样子：一颗主写 + <code>Chat about this</code> 接进输入框；④是同一族的 fuse 暂停。</p>
 
 <div class="row">
 
@@ -151,7 +147,7 @@
       原生端只画了四种 owner 卡里的两种（协调者的问题、合并确认），升级给你的异常与 fuse 暂停这两类一张都没画。</figcaption>
   </figure>
 
-  <!-- ── 2. this commit ──────────────────────────────────────── -->
+  <!-- ── 2. the card, in the house's action style ────────────── -->
   <figure>
     <div class="phone">
       <div class="status"><span>10:26</span><span class="right">▮▮▮ 5G ▰</span></div>
@@ -175,8 +171,7 @@
             expected 0 · attempt 3 of 3 in this chain</div>
           <div class="actions">
             <div class="btn primary">Ask the coordinator again</div>
-            <div class="btn tinted">Open task session</div>
-            <div class="btn danger">Cancel task</div>
+            <div class="btn tinted">Chat about this</div>
           </div>
           <div class="foot">Owner: you · waiting 1d 7h</div>
         </div>
@@ -185,16 +180,15 @@
       <div class="footbar"><span class="on">Auto</span><span>GPT-5.6-Sol</span><span>Ultra</span>
         <span class="ctx">0%　71%</span></div>
     </div>
-    <figcaption><b>② 本次提交：这张卡（和 web 同一份文案）</b>
-      标题 <code>Escalated to you</code> 就是横幅上那三个词 —— 从横幅点进来的人看到的是同一句话。
-      正文第一行是 web 的升级句（<code>escalationHeading</code>，五种来路各一句），第二行是出事的任务，第三行是服务器写的原句。
-      三颗按钮：<code>Ask the coordinator again</code>（写）走 <code>POST /projects/:id/open-items/:itemId/return-to-coordinator</code>：
-      条目交回协调会话、项目给它重新计时——不重跑任务，那本来也不是你按的。
-      服务器没列出这个门（项目没有活着的协调会话）时按钮不画，而不是画一个按下去必被拒的键。
-      底部 <code>Owner: you · waiting …</code> 与 web 的 <code>ownerLine</code> 逐字相同。</figcaption>
+    <figcaption><b>② 这张卡（和 web 同一份文案，按钮按原生那套）</b>
+      标题 <code>Escalated to you</code> 就是横幅上那三个词；正文第一行是 web 的升级句（<code>escalationHeading</code>，
+      五种来路各一句），第二行是出事的任务，第三行是服务器原句；底部 <code>Owner: you · waiting …</code> 与 web 的 <code>ownerLine</code> 逐字相同。
+      <b>按钮只有两颗</b>，跟确认卡/问题卡/创建卡同一个规矩（composer-handoff 那张图里的原话是「不加第三颗按钮」）：
+      <code>Ask the coordinator again</code> 是唯一的写操作（<code>POST …/return-to-coordinator</code>：条目交回协调会话、重新计时，不重跑任务），
+      <code>Chat about this</code> 把主语交给输入框（下一格）。服务器没列出那个门时（项目没有活着的协调会话）主键不画，而不是画一个按下去必被拒的键。</figcaption>
   </figure>
 
-  <!-- ── 3. the confirm ──────────────────────────────────────── -->
+  <!-- ── 3. Chat about this, as the composer receives it ─────── -->
   <figure>
     <div class="phone">
       <div class="status"><span>10:26</span><span class="right">▮▮▮ 5G ▰</span></div>
@@ -204,7 +198,7 @@
           <div class="s">Waiting for approval · Open · 15h ago</div></div>
         <div class="share">⇧</div>
       </div>
-      <div class="thread" style="position: relative;">
+      <div class="thread">
         <div class="spacer"></div>
         <div class="card">
           <div class="head"><div class="icon">⚠</div><div class="title">Escalated to you</div></div>
@@ -213,33 +207,23 @@
           <div class="subject">Task failed: P5.1 实现游戏 Route Handlers、鉴权与玩家视图协议</div>
           <div class="actions">
             <div class="btn primary">Ask the coordinator again</div>
-            <div class="btn tinted">Open task session</div>
-            <div class="btn danger">Cancel task</div>
-          </div>
-        </div>
-        <div class="scrim">
-          <div class="sheet">
-            <div class="sheet-title">Cancel this task?</div>
-            <div class="sheet-body">It is recorded as cancelled: no further run starts on it, and the
-              failed-attempt notices it opened close with it. Its branch and history stay where they are.</div>
-            <div class="sheet-actions">
-              <div class="sheet-row danger">Cancel task</div>
-              <div class="sheet-sep"></div>
-              <div class="sheet-row cancel">Cancel</div>
-            </div>
+            <div class="btn tinted">Chat about this</div>
           </div>
         </div>
       </div>
-      <div class="tail"><div class="composer">＋ Message…<span class="send">↥</span></div></div>
+      <div class="tail">
+        <div class="replybar">💬 <span>About this exception: Task failed: P5.1 实现游戏 Route Handlers、鉴权与玩家视图协议</span><span class="x">✕</span></div>
+        <div class="composer focused">＋ <span class="caret">Say what the coordinator should do…</span><span class="send">↥</span></div>
+      </div>
       <div class="footbar"><span class="on">Auto</span><span>GPT-5.6-Sol</span><span>Ultra</span>
         <span class="ctx">0%　71%</span></div>
     </div>
-    <figcaption><b>③ 「Cancel task」按下之前</b>
-      三颗按钮里的最后一颗会先问一次（原生 <code>confirmationDialog</code>，和 app 里 Reopen task 用的是同一个套路）：
-      标题、确认词、以及“留下什么不动”的那句都照抄 web 的 <code>CANCEL_TASK_MODAL_TITLE / OK / BODY</code>。
-      确认后走 <code>PATCH /tasks/:id {"status":"CANCELLED"}</code>——和 web 同一颗门，
-      条目随任务一起关闭（<code>TASK_CLOSED</code>），卡片随即变成「✓ Cancelled」。
-      <code>Open task session</code> 是链接不是写操作，去的是出事那次 run 的会话（没有 run 时去任务页），和 web 的 <code>actionHref</code> 同两条路由。</figcaption>
+    <figcaption><b>③ 按下 <code>Chat about this</code> 之后</b>
+      和另外四张卡同一条路：输入框上方出现 <b>About this exception: &lt;条目标题&gt;</b>，
+      占位符变成 <b>Say what the coordinator should do…</b>，光标自动落进去，卡片留在原地、主键仍然可按。
+      这一发送是<b>普通一轮</b>（和“plan change”那条一样，不答任何门）—— 协调者收到的是「这个卡住的东西，你要怎么处理」，
+      它自己有能力去文件替代任务或停掉它，这正是你在这条会话里真正想说的话。按 <b>✕</b> 退出。
+      <b>这一格是这次新加的唯一文案</b>（前缀 + 占位符），别的一字未改。</figcaption>
   </figure>
 
   <!-- ── 4. the other half of the family ─────────────────────── -->
@@ -255,17 +239,17 @@
       <div class="thread">
         <div class="spacer"></div>
         <div class="card">
-          <div class="head">
-            <div class="icon">❙❙</div>
-            <div class="title">Paused</div>
-          </div>
+          <div class="head"><div class="icon">❙❙</div><div class="title">Paused</div></div>
           <div class="prov">FROM ORBIT</div>
           <div class="why">The coordinator paused itself</div>
           <div class="detail">It spent 6 self-started turns today, past the 5 the project set.
             Spent today: 6 self-started turns · 2 sessions opened · 1 retry on one chain. Tasks keep
             running and landing; task results, merges and your answers still reach it. 3 actions are
             held. What it starts inside its own engine cannot be held: those turns are counted, not held.</div>
-          <div class="actions"><div class="btn primary">Resume</div></div>
+          <div class="actions">
+            <div class="btn primary">Resume</div>
+            <div class="btn tinted">Chat about this</div>
+          </div>
           <div class="foot">Owner: you · waiting 3m</div>
         </div>
       </div>
@@ -275,9 +259,9 @@
     </div>
     <figcaption><b>④ 同一族的另一半：fuse 暂停</b>
       和升级卡同一个组件、同一套琥珀色（“你欠一个动作”），标题 <code>Paused</code> 同样是横幅上那个词；
-      正文第一行是条目的 title（服务器写的 <code>The coordinator paused itself</code>），第二行是暂停自己的长句，
-      按钮 <code>Resume</code> 走 <code>POST /projects/:id/fuse/:episodeId/resume</code>。
-      不画这张的话，同一个坑会在协调者被暂停时再出现一次：列表亮着、会话里没得按。</figcaption>
+      正文第一行是条目的 title（服务器写的 <code>The coordinator paused itself</code>），第二行是暂停自己的长句。
+      主键 <code>Resume</code> 走 <code>POST /projects/:id/fuse/:episodeId/resume</code>，第二颗同样是 <code>Chat about this</code>
+      （前缀换成 <code>About this pause: </code>）。不画这张的话，同一个坑会在协调者被暂停时再出现一次：列表亮着、会话里没得按。</figcaption>
   </figure>
 
 </div>

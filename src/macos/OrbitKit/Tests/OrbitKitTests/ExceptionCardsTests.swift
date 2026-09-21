@@ -121,23 +121,61 @@ final class ExceptionCardsTests: XCTestCase {
         // them, and asserted against what this client draws.
         try require(web, "ASK_COORDINATOR_AGAIN: '\(ExceptionCards.askCoordinatorAgain)'")
         try require(web, "RESUME: '\(ExceptionCards.resume)'")
-        try require(web, "OPEN_TASK_SESSION: '\(ExceptionCards.openTaskSession)'")
-        try require(web, "CANCEL_TASK: '\(ExceptionCards.cancelConfirm)'")
-        // The one press that asks first: its question, its word and what it promises about what it
-        // leaves alone are the browser's, declaration for declaration.
-        XCTAssertEqual(ExceptionCards.cancelTitle, try declaration(web, "CANCEL_TASK_MODAL_TITLE"))
-        XCTAssertEqual(ExceptionCards.cancelConfirm, try declaration(web, "CANCEL_TASK_MODAL_OK"))
-        XCTAssertEqual(ExceptionCards.cancelBody, try declaration(web, "CANCEL_TASK_MODAL_BODY"))
     }
 
-    /// The cancel press writes exactly what the browser's does — `PATCH /tasks/:id` with the status
-    /// and nothing else. A request that also carried the empty defaults of this client's update
-    /// type would clear fields nobody asked it to touch.
-    func testTheCancelWritesOnlyTheStatus() throws {
-        let data = try JSONEncoder().encode(ExceptionCards.cancelRequest)
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        XCTAssertEqual(json.keys.sorted(), ["status"], "only the status travels")
-        XCTAssertEqual(json["status"] as? String, "CANCELLED")
+    /// The card's second control is the one every other Orbit card uses to hand its reply to the
+    /// composer — one word for one thing (`Approvals.chatAction`) — and the two sentences that
+    /// control arms are this card's own: the composer has to say WHAT the reply is about, and the
+    /// coordinator is told WHICH item, since the item is not in that transcript.
+    ///
+    /// The prefix and the placeholder are native-only, and deliberately so: the browser's card
+    /// answers this item with a door and says nothing about it (its two presses are the server's
+    /// own list), so there is no counterpart to compare them against — the family they belong to is
+    /// the composer handoffs, whose other members' words are compared where those live
+    /// (`ComposerHandoffWiringTests`).
+    func testTheChatHandoffSaysWhatTheReplyIsAbout() {
+        let escalated = row()
+        XCTAssertEqual(ExceptionCards.chatBanner(escalated, isPause: false),
+                       "\(ExceptionCards.chatPrefix)\(escalated.title)")
+        XCTAssertTrue(ExceptionCards.chatPrefix.hasSuffix(": "),
+                      "the bar's line runs into the item's title")
+        XCTAssertTrue(ExceptionCards.chatPlaceholder.hasSuffix("…"),
+                      "and the composer asks for the sentence a message needs")
+
+        let pause = row { $0.kind = .fusePaused; $0.assigneeReason = .defaultReason
+                          $0.escalatedAt = nil; $0.title = "The coordinator paused itself" }
+        XCTAssertEqual(ExceptionCards.chatBanner(pause, isPause: true),
+                       "\(ExceptionCards.pauseChatPrefix)\(pause.title)")
+        XCTAssertNotEqual(ExceptionCards.chatPrefix, ExceptionCards.pauseChatPrefix,
+                          "a pause is not an exception, and the coordinator reading the bar "
+                              + "would be told the wrong noun by the card that knows better")
+    }
+
+    /// What the coordinator is told: the item, in full, because its own list may not have carried
+    /// it to the reader — and the item's address, so an answer about an item that has since moved
+    /// can be told apart from one about this one.
+    func testTheContextCarriesTheItemAndWhereItIs() {
+        let escalated = row()
+        let context = ExceptionCards.chatContext(projectTitle: "Wikids", row: escalated,
+                                                 isPause: false, now: now)
+        XCTAssertTrue(context.contains("“Wikids”"), "the project it is about is named")
+        XCTAssertTrue(context.contains(escalated.title))
+        XCTAssertTrue(context.contains(escalated.detailLine))
+        XCTAssertTrue(context.contains(escalated.itemId),
+                      "the id is the address the coordinator acts on")
+        XCTAssertTrue(context.contains("no one acted on it for 2h"),
+                      "how it became the owner's, in the web's own words")
+
+        let pause = row { $0.kind = .fusePaused; $0.assigneeReason = .defaultReason
+                          $0.escalatedAt = nil }
+        let paused = ExceptionCards.chatContext(projectTitle: nil, row: pause, isPause: true,
+                                               now: now)
+        XCTAssertTrue(paused.contains("the coordinator stopped itself"))
+        XCTAssertFalse(paused.contains("no one acted on it"),
+                       "a pause did not escalate, and saying it did would be a lie about why it "
+                          + "is the owner's")
+        XCTAssertFalse(paused.contains(" in “"),
+                       "a session with no project names none rather than an empty one")
     }
 
     /// §7.5's five headings, taken from the switch arms themselves rather than from a phrase a
@@ -273,25 +311,6 @@ final class ExceptionCardsTests: XCTestCase {
         XCTAssertFalse(ExceptionCards.resumable(row { $0.fuseEpisodeId = "ep"; $0.actions = [] }))
     }
 
-    /// The way in and the way out, on the same rule: the attempt the item is about when one is
-    /// recorded and the task otherwise, and a press only where the server listed the door.
-    func testTheWayInAndTheWayOut() {
-        let escalated = row()
-        XCTAssertEqual(ExceptionCards.openTarget(escalated), .session(escalated.sessionId!),
-                       "the failed run itself is what a reader wants to look at")
-        XCTAssertEqual(ExceptionCards.openTarget(row { $0.sessionId = nil }),
-                       .task(escalated.taskId!),
-                       "and the task when there is no attempt recorded")
-        XCTAssertNil(ExceptionCards.openTarget(row { $0.sessionId = nil; $0.taskId = nil }),
-                     "nowhere to go is no link")
-        XCTAssertNil(ExceptionCards.openTarget(row { $0.actions = [.askCoordinatorAgain] }),
-                     "a link is drawn only where the server listed the action")
-
-        XCTAssertTrue(ExceptionCards.cancelable(escalated))
-        XCTAssertFalse(ExceptionCards.cancelable(row { $0.taskId = nil }),
-                       "the press acts on the task the item names")
-        XCTAssertFalse(ExceptionCards.cancelable(row { $0.actions = [.askCoordinatorAgain] }))
-    }
 
     // MARK: the row as the server serves it
 

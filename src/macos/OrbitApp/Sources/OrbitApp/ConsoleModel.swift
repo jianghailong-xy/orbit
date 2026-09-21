@@ -49,6 +49,21 @@ struct QuestionReply: Equatable, Sendable {
         /// next send is an ordinary turn, with this plan carried in front of the typed message
         /// because nothing in the session holds it.
         case planChange(context: String)
+        /// One of the project's owner items — the escalated exception, the pause — discussed
+        /// rather than answered: the next send is an ordinary turn, with the item carried in front
+        /// of the typed sentence. What it says reaches the coordinator as its next message, which
+        /// is the conversation this card is drawn in.
+        case ownerItem(context: String)
+
+        /// Whether the typed sentence IS the message: the two that reach no door carry nothing but
+        /// text (an attachment cannot say what should change), so an empty composer leaves the bar
+        /// armed rather than sending the context back with no question attached.
+        var needsText: Bool {
+            switch self {
+            case .planChange, .ownerItem: return true
+            case .approval, .ownerConfirmation, .evidenceDecision: return false
+            }
+        }
     }
 
     let target: Target
@@ -668,10 +683,11 @@ final class ConsoleModel {
             // one failed poll.
             let standing = evidenceStanding(row.taskId, row.evidenceRevision)
             if !EvidenceDecisions.isOpen(standing) { replyContext = nil }
-        case .planChange:
-            // Nothing answers a plan change another way: no call is pending on it, so there is no
-            // question that can go out from under the reader mid-sentence. It stays armed until it
-            // is sent or the bar is dismissed.
+        case .planChange, .ownerItem:
+            // Nothing answers either of these another way: no call is pending on them, so there is
+            // no question that can go out from under the reader mid-sentence — and a sentence about
+            // an item that has since moved is still one the coordinator can act on. They stay armed
+            // until they are sent or the bar is dismissed.
             break
         }
     }
@@ -1281,10 +1297,11 @@ final class ConsoleModel {
         // An armed reply answers a question rather than starting a turn, so it goes to that
         // question's own door. (Mirrors the web reroute.)
         if let reply = replyContext {
-            // A plan change carries the typed sentence and nothing else — an attachment cannot say
-            // what should change — so an empty composer leaves the bar armed rather than sending
-            // the plan back with no question attached (web: `if (!c) return`).
-            if case .planChange = reply.target, text.isEmpty { return }
+            // The two targets that answer no door carry the typed sentence and nothing else — an
+            // attachment cannot say what should change or what to do — so an empty composer leaves
+            // the bar armed rather than sending the context back with no question attached
+            // (web: `if (!c) return`).
+            if reply.target.needsText, text.isEmpty { return }
             if fromComposer { composerText = "" }
             replyContext = nil
             switch reply.target {
@@ -1307,6 +1324,11 @@ final class ConsoleModel {
             // at an idle agent, with the project, its criteria and their seal carried in front of
             // the message. Handed back to `send` whole, with the composer already cleared above —
             // the card that armed it is untouched, and its own Start is still the other way out.
+            // Discussing an item that became the owner's reaches no door either: the coordinator
+            // is told about it in words and decides what to do with the doors it has.
+            case .ownerItem(let context):
+                await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)",
+                           overrideAttachments: [])
             case .planChange(let context):
                 // Says outright that it carries no attachments, rather than leaving that to how
                 // its text arrived: a question about a plan is the typed sentence and nothing else
@@ -2027,6 +2049,17 @@ final class ConsoleModel {
             placeholder: AcceptanceConfirmations.planChangePlaceholder)
     }
 
+    /// Talk about an item that became the owner's rather than pressing anything: the next composer
+    /// send is an ordinary turn to the coordinator, with the item carried in front of it. The card
+    /// stays, and its own press stays live — the two ways out are a door and a sentence.
+    func startOwnerItemReply(_ row: ProjectOpenItemRow, isPause: Bool) {
+        replyContext = QuestionReply(
+            target: .ownerItem(context: ExceptionCards.chatContext(projectTitle: projectTitle,
+                                                                   row: row, isPause: isPause)),
+            banner: ExceptionCards.chatBanner(row, isPause: isPause),
+            placeholder: ExceptionCards.chatPlaceholder)
+    }
+
     func cancelChatReply() { replyContext = nil }
 
     /// Resolve a pending question conversationally (deny + the typed text → claude reads it as
@@ -2701,24 +2734,6 @@ final class ConsoleModel {
         } catch {
             statusMessage = "\(ExceptionCards.notResumed) — \(APIClient.failureReason(error))."
             return nil
-        }
-    }
-
-    /// Stop the task this item is about (§4.2: the exceptions it opened close with it, resolution
-    /// `TASK_CLOSED`). No run is stopped by it — a task with a live run is not a FAILED one — so
-    /// the press is about the record, and the card asks before it is made.
-    ///
-    /// Nothing is written to the ITEM: the status write is what closes it, and the re-read then
-    /// finds it gone. The card says so rather than drawing the item as still waiting.
-    func cancelItemTask(_ row: ProjectOpenItemRow) async -> Bool {
-        guard let taskID = row.taskId else { return false }
-        do {
-            _ = try await api.updateTask(taskID, ExceptionCards.cancelRequest)
-            await refreshRulerQuestions(force: true)
-            return true
-        } catch {
-            statusMessage = "That task was not cancelled — \(APIClient.failureReason(error))."
-            return false
         }
     }
 
