@@ -40,7 +40,7 @@ echo "== build =="
 # The log is kept whatever happens: a CI round that fails with only "** BUILD FAILED **" is a round
 # spent on nothing.
 xcodebuild -project Probe.xcodeproj -scheme Probe -sdk iphonesimulator -configuration Debug \
-  -derivedDataPath "$OUT/dd" build > "$OUT/build.log" 2>&1
+  -derivedDataPath "$HERE/.dd" build > "$OUT/build.log" 2>&1
 BUILT=$?
 if [ $BUILT -ne 0 ]; then tail -80 "$OUT/build.log"; exit 1; fi
 tail -3 "$OUT/build.log"
@@ -60,24 +60,32 @@ echo "device: $SIM_NAME ($UDID)"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
 
-APP="$OUT/dd/Build/Products/Debug-iphonesimulator/OrbitProbe.app"
+APP="$HERE/.dd/Build/Products/Debug-iphonesimulator/OrbitProbe.app"
 xcrun simctl uninstall "$UDID" io.orbitd.probe 2>/dev/null || true
 xcrun simctl install "$UDID" "$APP" || exit 1
 
 echo "== run =="
-# `simctl launch` only forwards environment to the app through the SIMCTL_CHILD_ prefix.
-SIMCTL_CHILD_PROBE_PORT="$PORT" xcrun simctl launch --console-pty "$UDID" io.orbitd.probe \
-  > "$OUT/app.log" 2>&1 &
-LAUNCH=$!
+# Plain launch, no `--console-pty`: the app's own output is not what this needs (the screenshot and
+# the stub's request log are), and a pty in a redirected CI shell is one more way for the launch to
+# end in nothing. SIMCTL_CHILD_ is how simctl forwards an environment variable to the app.
+SIMCTL_CHILD_PROBE_PORT="$PORT" xcrun simctl launch --terminate-running-process "$UDID" io.orbitd.probe \
+  > "$OUT/launch.log" 2>&1
+echo "launch exit: $? — $(cat "$OUT/launch.log")"
 # The console's context load + the ruler read are two round trips against a local stub; the cards
-# are on screen well inside this, and the dump below says whether they were.
-sleep 12
+# are on screen well inside this.
+sleep 15
 xcrun simctl io "$UDID" screenshot "$OUT/probe.png" || true
-kill $LAUNCH 2>/dev/null
-sleep 1
 
-echo "== app log =="
-cat "$OUT/app.log" 2>/dev/null | tail -20
+echo "== app diagnostics =="
+# If the app never drew anything, this is where the reason is: its own os_log lines, and any crash
+# report the host wrote for it.
+xcrun simctl spawn "$UDID" log show --style compact --last 3m \
+  --predicate 'process == "OrbitProbe" OR composedMessage CONTAINS "OrbitProbe"' 2>&1 | tail -30
+ls -t ~/Library/Logs/DiagnosticReports 2>/dev/null | head -5
+for f in $(ls -t ~/Library/Logs/DiagnosticReports/OrbitProbe* 2>/dev/null | head -1); do
+  echo "--- $f"; head -40 "$f"
+done
+
 echo "== stub log =="
 cat "$OUT/server.log"
 ls -la "$OUT"/probe.png
