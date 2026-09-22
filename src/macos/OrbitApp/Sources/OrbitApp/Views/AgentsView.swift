@@ -378,11 +378,23 @@ struct AgentPanes: View {
                     }
                 }
             } else {
-                ForEach(SessionTimeGrouping.sections(shownSessions, pinnedFirst: view == .open && tagFilter == nil)) { section in
-                    Section {
+                // The leading "Today" keeps no title. A list that opens on today — which is nearly
+                // always — would be saying something its rows already say (each carries its own time
+                // on the right), and the 28pt of header it costs is half a row back. `Pinned`, when
+                // it leads, and every later bucket keep theirs: those are the ones that answer
+                // "where am I" once the list has scrolled. (Bucketing itself is untouched — see
+                // `SessionTimeGrouping`; this is only whether a given section draws its title. The
+                // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
+                // — the reporter picked the first: never draw it, rather than only once it pins.)
+                ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
+                    if index == 0, section.title == "Today" {
                         ForEach(section.sessions) { sessionRow($0) }
-                    } header: {
-                        Text(section.title).textCase(nil)
+                    } else {
+                        Section {
+                            ForEach(section.sessions) { sessionRow($0) }
+                        } header: {
+                            Text(section.title).textCase(nil)
+                        }
                     }
                 }
             }
@@ -618,6 +630,12 @@ struct AgentPanes: View {
     #endif
 
     // The sessions to show: the agent list, narrowed to the tag filter chip when one is active.
+    /// The recency sections the list draws, split out of the `ForEach` so the leading one can be
+    /// rendered without its title (see the list body).
+    private var timeSections: [SessionTimeSection] {
+        SessionTimeGrouping.sections(shownSessions, pinnedFirst: view == .open && tagFilter == nil)
+    }
+
     private var shownSessions: [Session] {
         guard let f = tagFilter else { return agents.agentSessions }
         return SessionFilter.withTag(agents.agentSessions, tagID: f)
