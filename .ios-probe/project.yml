@@ -1,0 +1,53 @@
+# XcodeGen spec for the tail-pinning × reasoning-fold probe — EVIDENCE ONLY, never shipped and never
+# a gate. `.ios-probe/**` is not in client.yml's push paths, so pushing probe iterations does not
+# create a run that would contend with the dispatch (same ref, `cancel-in-progress`).
+#
+# It renders the *arrangement* the complaint lives in — a `List` (iOS 26 runtime), the transcript's
+# own scroll tracker, a reasoning row that streams in a 160pt self-scrolling box and then folds to
+# one line, and the follow-on `scrollTo` on every state revision — rather than the real console,
+# which would need AppModel/ConsoleModel and a stub server. It DOES take OrbitKit as a package: the
+# decision under test is the shipped `TailPinning`, and a probe that re-implemented it would answer
+# a different question than the one on the owner's phone.
+name: Probe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    # iOS 26 deliberately: the probe is evidence-only, and the APIs under test
+    # (`onScrollPhaseChange` / `onScrollGeometryChange`) must not be fenced off by a guard — as they
+    # are in the app, whose floor is 17.0 and which is where the owner's report comes from.
+    iOS: "26.0"
+  createIntermediateGroups: true
+
+packages:
+  OrbitKit:
+    path: ../src/macos/OrbitKit
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+
+targets:
+  Probe:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Sources
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.probe
+        PRODUCT_NAME: OrbitProbe
+        INFOPLIST_FILE: Sources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGNING_ALLOWED: NO
+        TARGETED_DEVICE_FAMILY: "1"
+
+# Explicit shared scheme, as `src/ios/project.yml` has one, so `-scheme Probe` resolves.
+schemes:
+  Probe:
+    build:
+      targets:
+        Probe: all
