@@ -1,0 +1,44 @@
+# XcodeGen spec for the pull-to-refresh × search-field probe — EVIDENCE ONLY, never shipped and
+# never a gate. `.ios-probe/**` is not in client.yml's push paths, so pushing probe iterations does
+# not create a run that would contend with the dispatch (same ref, `cancel-in-progress`).
+#
+# Deliberately NOT the shared-sources arrangement `src/ios/project.yml` uses. This probe reproduces
+# the *arrangement* — a List + `.refreshable` + a `.navigationBarDrawer` search field + the top
+# safe-area inset the real list carries — rather than rendering the real column, which would need a
+# stub server for AppModel/AgentsModel and OrbitKit on the Mac runner. What it answers ("does the
+# spinner land on the field, and which spelling decides that?") does not depend on the app's data.
+name: Probe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    # iOS 26 deliberately: the probe is evidence-only, and the APIs under test (the drawer
+    # search field as iOS 26 renders it) must not be fenced off by an availability guard.
+    iOS: "26.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+
+targets:
+  Probe:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.probe
+        PRODUCT_NAME: OrbitProbe
+        INFOPLIST_FILE: Sources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGNING_ALLOWED: NO
+        TARGETED_DEVICE_FAMILY: "1"
+
+# Explicit shared scheme, as `src/ios/project.yml` has one, so `-scheme Probe` resolves.
+schemes:
+  Probe:
+    build:
+      targets:
+        Probe: all

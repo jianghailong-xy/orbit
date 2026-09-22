@@ -1,0 +1,303 @@
+import SwiftUI
+import UIKit
+
+/// EVIDENCE ONLY — where the pull-to-refresh spinner lands relative to the session list's search
+/// field, on an iOS 26 simulator. Never shipped, never a gate; the delivered branch does not carry
+/// this directory (see `.ios-probe/run.sh`).
+///
+/// The complaint: on the phone, pulling the session list down draws the refresh spinner *on top of*
+/// the "Search sessions" field. The field is the system's `.navigationBarDrawer` drawer, declared on
+/// the column root (`AgentContentColumn`), and the list beneath it carries `.refreshable` — an
+/// arrangement that has existed since August, with one change on 2026-09-21: the display mode went
+/// `.always` → `.automatic` (commit 2e031c06d), so the field now hides as you scroll.
+///
+/// This probe renders that arrangement — a `List` + `.refreshable` + a drawer search field + the
+/// same top safe-area inset the real list carries — in each of the spellings that could decide
+/// where the spinner goes, and dumps the measured frames so the answer is a number, not an
+/// impression. It is a reproduction of the *arrangement*, not a render of the real column: what it
+/// answers does not depend on the app's data, and a bare target has no OrbitKit to compile.
+///
+/// The variant comes from the environment. `run.sh` builds once and relaunches the same binary per
+/// variant, screenshots while the refresh is held, and collects the geometry dump.
+@main
+struct ProbeApp: App {
+    var body: some Scene { WindowGroup { ProbeRoot() } }
+}
+
+/// The spellings under test.
+enum Variant: String, CaseIterable {
+    /// Today's real spelling: `.searchable` on the column root, `displayMode: .automatic`.
+    case autoParent
+    /// The same with the field pinned visible — the arrangement from 2026-08-04 to 2026-09-21.
+    case alwaysParent
+    /// `.searchable` on the `List` itself rather than on the view above it.
+    case autoOnList
+    /// `.automatic` plus `.searchPresentationToolbarBehavior(.avoidHidingContent)`.
+    case autoAvoid
+    /// `.refreshable` moved up to the column root, `.searchable` left on the `List`.
+    case autoRefreshOnRoot
+    /// `.automatic` with the list's top safe-area inset removed.
+    case autoNoInset
+    /// Control: the same list with no search field at all — where the spinner lands by itself.
+    case plain
+}
+
+/// How the pull is driven. `.afterScroll` first scrolls the list down (which hides the drawer
+/// field under `.automatic`) and then pulls — the sequence a reader actually performs, and the one
+/// that leaves the field's height to be re-added mid-gesture.
+enum PullStyle: String, CaseIterable {
+    case fromTop
+    case afterScroll
+}
+
+struct ProbeRoot: View {
+    @State private var query = ""
+
+    private let variant = Variant(rawValue: ProcessInfo.processInfo.environment["PROBE_VARIANT"] ?? "")
+        ?? .autoParent
+    private let pullStyle = PullStyle(rawValue: ProcessInfo.processInfo.environment["PROBE_PULL"] ?? "")
+        ?? .fromTop
+
+    var body: some View {
+        screen
+            .task { await drive() }
+    }
+
+    // MARK: the list
+
+    /// The session list, reduced to what its layout depends on: a plain `List` of two-line rows in
+    /// one recency section, with the field's drawer declared around it (see `screen`).
+    private var list: some View {
+        List {
+            Section {
+                ForEach(0..<30, id: \.self) { i in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Session \(i)")
+                        Text("Waiting for you · \(i)m")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 6)
+                }
+            } header: {
+                Text("Today")
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle("orbit")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await holdRefresh() }
+    }
+
+    private var listWithoutRefresh: some View {
+        List {
+            Section {
+                ForEach(0..<30, id: \.self) { i in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Session \(i)")
+                        Text("Waiting for you · \(i)m")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 6)
+                }
+            } header: {
+                Text("Today")
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle("orbit")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The real list's `.safeAreaInset(edge: .top)`: on the phone it carries the "needs you" banner,
+    /// which renders nothing when nothing is waiting — a zero-height inset, which is its state here.
+    private func inset(_ content: some View) -> some View {
+        content.safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { EmptyView() } }
+    }
+
+    // MARK: the variants
+
+    @ViewBuilder
+    private var screen: some View {
+        switch variant {
+        case .autoParent:
+            NavigationStack {
+                inset(list).modifier(DrawerSearch(text: $query, mode: .automatic))
+            }
+        case .alwaysParent:
+            NavigationStack {
+                inset(list).modifier(DrawerSearch(text: $query, mode: .always))
+            }
+        case .autoOnList:
+            NavigationStack {
+                inset(list.modifier(DrawerSearch(text: $query, mode: .automatic)))
+            }
+        case .autoAvoid:
+            NavigationStack {
+                inset(list)
+                    .modifier(DrawerSearch(text: $query, mode: .automatic))
+                    .searchPresentationToolbarBehavior(.avoidHidingContent)
+            }
+        case .autoRefreshOnRoot:
+            NavigationStack {
+                inset(listWithoutRefresh)
+                    .modifier(DrawerSearch(text: $query, mode: .automatic))
+                    .refreshable { await holdRefresh() }
+            }
+        case .autoNoInset:
+            NavigationStack {
+                list.modifier(DrawerSearch(text: $query, mode: .automatic))
+            }
+        case .plain:
+            NavigationStack {
+                inset(list)
+            }
+        }
+    }
+
+    // MARK: driving the pull
+
+    /// Holds the refresh open long enough to be screenshotted: the spinner is only on screen while
+    /// the refresh action is running.
+    private func holdRefresh() async {
+        try? await Task.sleep(for: .seconds(90))
+    }
+
+    @MainActor
+    private func drive() async {
+        // The drawer field, the List and the refresh control all appear on the first layout passes.
+        try? await Task.sleep(for: .seconds(3))
+
+        guard let window = keyWindow() else {
+            report("no key window")
+            return
+        }
+        guard let scroll = firstScrollView(in: window) else {
+            report("no scroll view in the window")
+            return
+        }
+
+        if pullStyle == .afterScroll {
+            scroll.setContentOffset(CGPoint(x: 0, y: 240), animated: false)
+            try? await Task.sleep(for: .seconds(1.2))
+        }
+
+        // Past the threshold: the drawer field is (re-)revealed while the content is already
+        // displaced — the moment the complaint's screenshot catches.
+        let pull = scroll.adjustedContentInset.top + 140
+        scroll.setContentOffset(CGPoint(x: 0, y: -pull), animated: false)
+        try? await Task.sleep(for: .milliseconds(150))
+        if let control = refreshControl(in: window) {
+            control.beginRefreshing()
+            control.sendActions(for: .valueChanged)
+        }
+        try? await Task.sleep(for: .seconds(2))
+
+        report("", window: window, scroll: scroll)
+    }
+
+    // MARK: evidence
+
+    @MainActor
+    private func keyWindow() -> UIWindow? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
+    }
+
+    private func firstScrollView(in window: UIView) -> UIScrollView? {
+        descendants(of: window).compactMap { $0 as? UIScrollView }.first
+    }
+
+    private func refreshControl(in window: UIView) -> UIRefreshControl? {
+        (descendants(of: window).first { $0 is UIRefreshControl } as? UIRefreshControl)
+            ?? descendants(of: window).compactMap { $0 as? UIScrollView }.first?.refreshControl
+    }
+
+    private func descendants(of view: UIView) -> [UIView] {
+        view.subviews + view.subviews.flatMap { descendants(of: $0) }
+    }
+
+    private func name(_ view: UIView) -> String { String(describing: type(of: view)) }
+
+    /// The measured answer: every frame that decides this, in window coordinates, plus the one line
+    /// that says whether the spinner and the field actually collide.
+    @MainActor
+    private func report(_ note: String, window: UIWindow? = nil, scroll: UIScrollView? = nil) {
+        var out = "variant=\(variant.rawValue) pull=\(pullStyle.rawValue) ios=\(UIDevice.current.systemVersion)\n"
+        if !note.isEmpty { out += "note=\(note)\n" }
+
+        guard let window else {
+            out += "OVERLAP=unknown (no window)\n"
+            write(out)
+            return
+        }
+
+        let all = descendants(of: window)
+        let searchish = all.filter { name($0).lowercased().contains("search") }
+        let controls = all.filter { $0 is UIRefreshControl }
+        let navBars = all.filter { $0 is UINavigationBar }
+        let cells = all.filter { name($0).contains("ListCell") || name($0).contains("CellContentView") }
+
+        func rect(_ view: UIView) -> CGRect { view.convert(view.bounds, to: window) }
+
+        for bar in navBars { out += "navbar \(name(bar)) \(rect(bar))\n" }
+        for view in searchish { out += "search \(name(view)) \(rect(view))\n" }
+        for control in controls { out += "refreshControl \(name(control)) \(rect(control))\n" }
+        if let scroll {
+            out += "scroll \(name(scroll)) \(rect(scroll)) inset=\(scroll.adjustedContentInset) offset=\(scroll.contentOffset)\n"
+            out += "refreshControlProperty=\(scroll.refreshControl.map(name) ?? "nil")\n"
+        }
+        for cell in cells.prefix(2) { out += "cell \(name(cell)) \(rect(cell))\n" }
+
+        // The verdict: does the spinner's frame intersect the field's (or, failing a field, the
+        // navigation bar's)?
+        let spinnerBand = controls.map(rect) + [CGRect(x: 0, y: 0, width: window.bounds.width, height: 0)]
+        let fieldBand = (searchish.isEmpty ? navBars : searchish).map(rect)
+        var overlap: CGRect = .null
+        for band in fieldBand {
+            for spinner in spinnerBand where !spinner.isNull && spinner.height > 0 {
+                let hit = band.intersection(spinner)
+                if !hit.isNull && hit.width > 0 && hit.height > 0 { overlap = hit }
+            }
+        }
+        out += "OVERLAP=\(overlap.isNull ? "NO" : "YES") \(overlap.isNull ? "" : "\(overlap)")\n"
+        out += "--- tree ---\n" + tree(of: window, depth: 0)
+
+        write(out)
+    }
+
+    private func tree(of view: UIView, depth: Int) -> String {
+        guard depth <= 6 else { return "" }
+        var out = String(repeating: "  ", count: depth) + "\(name(view)) \(view.frame)\n"
+        for sub in view.subviews {
+            if name(sub).contains("ScrollIndicator") { continue }
+            out += tree(of: sub, depth: depth + 1)
+        }
+        return out
+    }
+
+    private func write(_ text: String) {
+        print(text)
+        guard let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        else { return }
+        try? text.write(to: dir.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
+        // Written last, and empty: `run.sh` polls for it as the "the pull is engaged" signal.
+        try? "".write(to: dir.appendingPathComponent("done"), atomically: true, encoding: .utf8)
+    }
+}
+
+/// `.searchable` with the drawer placement, as a modifier so the spelling can be applied either to
+/// the column root (what the app does) or to the `List` itself — one of the things under test.
+private struct DrawerSearch: ViewModifier {
+    @Binding var text: String
+    let mode: SearchFieldPlacement.NavigationBarDrawerDisplayMode
+
+    func body(content: Content) -> some View {
+        content.searchable(text: $text,
+                           placement: .navigationBarDrawer(displayMode: mode),
+                           prompt: "Search sessions")
+    }
+}
