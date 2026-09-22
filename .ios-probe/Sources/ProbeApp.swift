@@ -373,14 +373,14 @@ struct ProbeRoot: View {
         if variant == .lag {
             // A tool-result-sized burst under the reasoning row (one publish, ~4000 characters),
             // then the fold — the transcript is behind its tail for both.
-            Trace.shared.log("BURST-ISSUED")
+            // Both in ONE publish, because that is how they arrive: the runner posts a batch, and
+            // a tool result and the durable event that closes the reasoning around it land in the
+            // same reducer call — one frame, one follow, one layout pass.
             rows.append(PRow(id: UUID().uuidString, kind: .prose("tool result — "
                 + String(repeating: "a long line of tool output that the transcript has to lay out. ", count: 70))))
-            revision += 1
-            try? await Task.sleep(for: .milliseconds(60))
-            mark("POST-BURST")
             settle(thinkingID)
-            Trace.shared.log("FOLD issued")
+            revision += 1
+            Trace.shared.log("FOLD issued (with the burst, same publish)")
             for step in 0..<8 {
                 try? await Task.sleep(for: .milliseconds(150))
                 mark("POST-FOLD+\(step * 150)ms")
