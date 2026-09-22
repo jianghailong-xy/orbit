@@ -1298,6 +1298,8 @@ struct DeliveredDecisionCardView: View {
                 OwnerItemCardView(console: console, itemID: itemID, isPause: true)
             case .promotionApproval(let promotionID):
                 PromotionApprovalCardView(console: console, promotionID: promotionID)
+            case .promotionReceipt(let promotion):
+                PromotionReceiptCard(promotion: promotion)
             }
         }
         // A card re-derives itself when it comes into view, on top of the reads the console runs
@@ -2181,6 +2183,39 @@ private struct PromotionApprovalCardView: View {
             await run()
             acting = false
         }
+    }
+}
+
+/// The record a merge leaves, drawn where it HAPPENED: which commit went onto main, which branch it
+/// came from, and what it carried (§3.6; web's `ProjectPromotionReceipt`).
+///
+/// A RECORD IS NOT A QUESTION, so it is not the card above and shares none of its presses. Where it
+/// lands is the caller's — the console anchors it at `mergedAt` (`PromotionCards.receipts`), the rule
+/// the four receipts beside it are drawn by — and a moment older than every loaded row is drawn
+/// nowhere, rather than at the tail.
+///
+/// WHAT IT SAYS IS THE MERGE'S OWN, read off the terminal row this record carries and not off the
+/// candidate the branch is offering now. The two rows are the ones the card above draws once it has
+/// merged, which is the whole of what a merge leaves behind here; what is deliberately absent is
+/// anything read from the project as it stands TODAY, because a record that re-reads the present says
+/// something different every time somebody scrolls past it.
+private struct PromotionReceiptCard: View {
+    let promotion: ProjectPromotionView
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "arrow.triangle.merge",
+                           title: PromotionCards.title(promotion),
+                           tone: .orange)
+            Text(PromotionCards.provenance)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 6) {
+                CardRow(label: "Commit", value: PromotionCards.mergedLine(promotion))
+                CardRow(label: "Now on main", value: PromotionCards.tasksLine(promotion))
+            }
+        }
+        .approvalChrome(.orange, dimmed: true)
     }
 }
 

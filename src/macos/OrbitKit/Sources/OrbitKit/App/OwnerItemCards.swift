@@ -266,6 +266,54 @@ public enum PromotionCards {
     public static func shortRef(_ ref: String) -> String {
         ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
     }
+
+    // MARK: the record a merge leaves
+
+    /// One merge this conversation draws as a record, and the item it belongs after.
+    public struct Receipt: Equatable, Sendable, Identifiable {
+        public let promotion: ProjectPromotionView
+        /// The transcript item that was last at or before the merge. A card delivered live anchors
+        /// to the item that was last when it ARRIVED; a record has no arrival of its own on a device
+        /// that was not there, so it is anchored by the merge's own clock instead (`ReceiptAnchor`).
+        public let afterItemID: String
+
+        public init(promotion: ProjectPromotionView, afterItemID: String) {
+            self.promotion = promotion
+            self.afterItemID = afterItemID
+        }
+
+        /// The row this record is drawn in — the card's own address rather than a second spelling of
+        /// it, so the id the console dedupes on and the id the transcript draws cannot drift.
+        public var id: String {
+            DeliveredDecisionCard(kind: .promotionReceipt(promotion: promotion)).id
+        }
+    }
+
+    /// The receipts this conversation draws, each where its merge HAPPENED — the fifth of the five
+    /// records placed that way, beside the criteria decision's, the evidence decision's, the owner
+    /// decision's and the standard set's confirmation.
+    ///
+    /// WHERE THIS USED TO BE DRAWN. A merge was drawn by the conversation's card strip, off
+    /// `GET /projects/:id/promotions/current` — the candidate the branch is offering NOW. That row
+    /// moves on to the next candidate the branch produces, so the receipt for a merge sat at the
+    /// bottom of the pane for the life of the project: under every later message, in conversations
+    /// started long afterwards, and after the project was done. The account owner's report,
+    /// 2026-09-21, on this client: `✓ Merged into main · df444ca · merge of project/34ODo… · 41m`,
+    /// fixed at the bottom of a conversation the merge was not the last thing in. Web was fixed the
+    /// same way and from a read of its own (`GET /projects/:id/promotions/merged`, `mergedAt` as the
+    /// anchor — `ProjectPromotionReceipt`); this is that read, and this is that anchor.
+    ///
+    /// A merge whose moment is older than everything loaded is NOT drawn: the window this console
+    /// holds starts at the tail, so a record with no anchor has no honest place to go, and drawing it
+    /// at the tail instead is the defect itself.
+    public static func receipts(merged: [ProjectPromotionView],
+                                items: [TranscriptItem]) -> [Receipt] {
+        merged.compactMap { promotion in
+            guard let at = promotion.merged?.at,
+                  let anchor = ReceiptAnchor.after(items: items, at: at) else { return nil }
+            return Receipt(promotion: promotion, afterItemID: anchor)
+        }
+    }
 }
 
 // MARK: - an exception that became the owner's

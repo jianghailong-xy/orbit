@@ -2197,9 +2197,11 @@ final class ConsoleModel {
             switch card.kind {
             case .criteriaDecision(let intentID):
                 return CriteriaDecisions.isOpen(criteriaStanding(intentID))
-            // A record of an answer, not a question: nothing is waiting on the reader.
+            // A record of an answer, not a question: nothing is waiting on the reader. A merge's
+            // receipt is one of these — the merge already happened, and pointing a reader at it
+            // would be pointing them at something with nothing to press.
             case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
-                 .acceptanceConfirmationReceipt:
+                 .acceptanceConfirmationReceipt, .promotionReceipt:
                 return false
             case .acceptanceConfirmation:
                 return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
@@ -2306,11 +2308,28 @@ final class ConsoleModel {
         do {
             let current = try await api.currentPromotion(projectID: projectID)
             promotion = current
-            if let current, PromotionCards.stage(current) != nil {
-                deliver(.promotionApproval(promotionID: current.promotionId))
+            if let current, let stage = PromotionCards.stage(current) {
+                // A merge that has HAPPENED is neither asking nor telling anything now: it is a
+                // record, and the conversation draws it where it happened (`adoptPromotionReceipts`
+                // below) rather than at the tail. Left here it sat under every later message for the
+                // life of the project — the account owner's report, 2026-09-21. The project page,
+                // which has no transcript to draw a moment into, keeps its card (web's
+                // `drawMergedRecord`).
+                if stage == .merged {
+                    close(.promotionApproval(promotionID: current.promotionId))
+                } else {
+                    deliver(.promotionApproval(promotionID: current.promotionId))
+                }
             }
         } catch {
             // Left exactly as it was: the card says what it last read, not that the merge vanished.
+        }
+        // And the merges already made, each drawn where it happened. Its own read rather than the
+        // candidate above: that one moves on to the next candidate the branch produces, and a
+        // receipt drawn from it would describe a different merge every time that happened. Nothing
+        // is kept here: what the conversation holds is the record itself, once it is placed.
+        if let merged = try? await api.mergedPromotions(projectID: projectID) {
+            adoptPromotionReceipts(merged)
         }
         if settlementHeldOnConfirmation { deliver(.acceptanceConfirmation) }
         // A press that arrived before this read now has its row to land on.
@@ -2449,6 +2468,26 @@ final class ConsoleModel {
                   !decisionCards.contains(where: { $0.id == receipt.id }) else { continue }
             decisionCards.append(DeliveredDecisionCard(
                 kind: .ownerDecisionReceipt(taskID: receipt.taskId, decisionID: receipt.decided.id),
+                afterItemID: receipt.afterItemID))
+        }
+    }
+
+    /// The same, for the merges this project has already made: each drawn where it HAPPENED, off the
+    /// merge's own clock (`PromotionCards.receipts`).
+    ///
+    /// This is the fifth of the five records placed that way, and the last to be: the merge's receipt
+    /// was drawn by the card strip off the candidate on offer, so it sat at the bottom of the pane
+    /// for the life of the project — and once the branch was offered again, the same strip described
+    /// a different merge in the same place. The card that ASKED for a merge is let go of by the read
+    /// that says it merged (`refreshRulerQuestions`), which is where the strip stops drawing it; what
+    /// is adopted here is the record that replaces it. A merge whose moment is older than everything
+    /// loaded is not drawn at all — see `PromotionCards.receipts`.
+    private func adoptPromotionReceipts(_ merged: [ProjectPromotionView]) {
+        for receipt in PromotionCards.receipts(merged: merged, items: state.items) {
+            guard !closedCards.contains(receipt.id),
+                  !decisionCards.contains(where: { $0.id == receipt.id }) else { continue }
+            decisionCards.append(DeliveredDecisionCard(
+                kind: .promotionReceipt(promotion: receipt.promotion),
                 afterItemID: receipt.afterItemID))
         }
     }
