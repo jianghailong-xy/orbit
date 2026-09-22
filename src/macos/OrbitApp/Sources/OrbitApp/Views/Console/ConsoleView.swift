@@ -371,7 +371,11 @@ struct TranscriptView: View {
             #endif
             .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
             .defaultScrollAnchor(.bottom)
-            .modifier(ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck))
+            .modifier(ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck
+                                    #if os(iOS)
+                                    , scroll: transcriptScroll
+                                    #endif
+                                    ))
             // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
             // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
             // the keyboard), so reading it here doesn't churn.
@@ -612,6 +616,11 @@ struct TranscriptView: View {
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
+            // The person moving the transcript themselves, said outright rather than inferred: this
+            // client decides "a reader did that" from the platform's own drag reports, and an
+            // animated jump to a row is not one — without this line the next publish would drag them
+            // back to the tail.
+            atBottom = false
             // Same coast fix as the jump-to-latest disc: cancel the momentum so `proxy.scrollTo` isn't
             // swallowed by the deceleration, then scroll to the question row on the next runloop.
             transcriptScroll.halt()
@@ -979,11 +988,39 @@ private struct ScrollTracker: ViewModifier {
     @Binding var atBottom: Bool
     let ruler: QuestionRuler
     let recompute: () -> Void
+    #if os(iOS)
+    /// The List's own `UIScrollView`, for the one fact UIKit knows better than any geometry: whether
+    /// a finger is on it. See `readerIsMoving`.
+    let scroll: TranscriptScroll
+    #endif
     /// Whether the reader is the one moving the list: a finger on it, or the momentum of one.
     /// `.animating` is SwiftUI moving it (a jump-to-latest, the sticky header) and `.idle` is it
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
     /// needs the difference to tell a drag up from the clamp a row that shrank forces.
     @State private var readerDriven = false
+
+    /// What the platform can say about that — see `TailPinning.ReaderEvidence`. iOS reports drags,
+    /// measured with a synthesized one on the simulator: `interacting` for the finger and
+    /// `decelerating` for its coast, each with the offset following it. macOS keeps the geometry
+    /// rule, where a fall over content that did not resize is the only evidence of a reader there
+    /// is.
+    #if os(iOS)
+    private static let evidence = TailPinning.ReaderEvidence.reported
+    #else
+    private static let evidence = TailPinning.ReaderEvidence.inferred
+    #endif
+
+    /// The reader's own movement, from the phase plus — on iOS — UIKit's unambiguous "a finger is
+    /// down", so a drag is never missed because SwiftUI happened to be animating something else.
+    private var readerIsMoving: Bool {
+        if readerDriven { return true }
+        #if os(iOS)
+        guard let v = scroll.view else { return false }
+        return v.isTracking || v.isDragging
+        #else
+        return false
+        #endif
+    }
 
     func body(content: Content) -> some View {
         if #available(macOS 15, iOS 18, *) {
@@ -997,7 +1034,8 @@ private struct ScrollTracker: ViewModifier {
                                      bottomGap: Double(geo.contentSize.height - geo.visibleRect.maxY))
                 } action: { was, now in
                     atBottom = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
-                                                  readerDriven: readerDriven)
+                                                  readerDriven: readerIsMoving,
+                                                  evidence: Self.evidence)
                     ruler.contentOffset = CGFloat(now.offset)
                     recompute()
                 }

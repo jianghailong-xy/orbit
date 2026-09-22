@@ -62,6 +62,22 @@ enum Variant: String {
     }
 }
 
+/// Which tail-pinning the run is testing, so one dispatch can answer "does this reproduce as
+/// shipped?" and "does the fix stop it?" against the same script.
+///
+///   before — the shipped rule and reader signal: the reader is *inferred* from geometry, and the
+///            phase is the only thing that reports one.
+///   after  — `TailPinning.ReaderEvidence.reported` plus UIKit's "a finger is down", which is what
+///            `ConsoleView`'s iOS tracker now passes.
+enum Fix: String {
+    case before
+    case after
+
+    static var current: Fix {
+        Fix(rawValue: ProcessInfo.processInfo.environment["PROBE_FIX"] ?? "") ?? .before
+    }
+}
+
 // MARK: - The trace
 
 /// Everything the probe learns, in order, written to Documents at the end. `print` is not a
@@ -217,6 +233,18 @@ private struct ProbeTracker: ViewModifier {
     let handle: ScrollHandle
     @State private var readerDriven = false
 
+    /// The reader signal the run is testing: the phase alone (as shipped), or the phase plus
+    /// UIKit's own "a finger is down" (what the fix passes on iOS).
+    private var readerIsMoving: Bool {
+        let phase = readerDriven
+        guard Fix.current == .after else { return phase }
+        return phase || handle.isReader
+    }
+
+    private var evidence: TailPinning.ReaderEvidence {
+        Fix.current == .after ? .reported : .inferred
+    }
+
     func body(content: Content) -> some View {
         content
             .onScrollPhaseChange { _, phase in
@@ -354,7 +382,7 @@ struct ProbeRoot: View {
     @MainActor
     private func script() async {
         let variant = Variant.current
-        Trace.shared.log("START variant=\(variant.rawValue) nearBottom=\(Int(TailPinning.nearBottom))")
+        Trace.shared.log("START variant=\(variant.rawValue) fix=\(Fix.current.rawValue) nearBottom=\(Int(TailPinning.nearBottom))")
         for i in 0..<40 {
             rows.append(PRow(id: UUID().uuidString, kind: .prose("history row \(i) — "
                 + String(repeating: "the transcript is long enough to scroll. ", count: 6 + (i % 5) * 5))))
@@ -397,6 +425,7 @@ struct ProbeRoot: View {
             Trace.shared.snapshot()
             Trace.shared.write(extra: [
                 "VERDICT variant": variant.rawValue,
+                "VERDICT fix": Fix.current.rawValue,
                 "VERDICT atBottom_end": atBottom ? "1" : "0",
                 "VERDICT tail_end": lagTail,
                 "VERDICT gap_end": "\(handle.gap)",
@@ -491,6 +520,7 @@ struct ProbeRoot: View {
         Trace.shared.snapshot()
         Trace.shared.write(extra: [
             "VERDICT variant": variant.rawValue,
+            "VERDICT fix": Fix.current.rawValue,
             "VERDICT atBottom_end": atBottom ? "1" : "0",
             "VERDICT tail_end": tail,
             "VERDICT gap_end": "\(handle.gap)",

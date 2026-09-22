@@ -94,8 +94,10 @@ collect() {  # collect <variant> — pull what the app wrote, whatever happened
   sleep 1
 }
 
-run() {  # run <variant>
-  local variant="$1"
+run() {  # run <variant> [fix] — fix is `before` (as shipped) or `after` (the fix)
+  local variant="$1" fix="${2:-before}"
+  local name="$variant"
+  [ "$fix" = "after" ] && name="$variant-after"
   rm -f "$DOCS/done" "$DOCS/report.txt" "$DOCS/shot.png"
 
   if [ "$variant" = "swipe" ]; then
@@ -106,29 +108,36 @@ run() {  # run <variant>
       -destination "id=$UDID" -derivedDataPath "$HERE/.dd" \
       -only-testing:ProbeUITests \
       CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-      > "$OUT/test-$variant.log" 2>&1
+      > "$OUT/test-$name.log" 2>&1
     local code=$?
-    if [ $code -ne 0 ]; then echo "[$variant] xcodebuild test exited $code"; tail -30 "$OUT/test-$variant.log"; fi
-    collect "$variant"
+    if [ $code -ne 0 ]; then echo "[$name] xcodebuild test exited $code"; tail -30 "$OUT/test-$name.log"; fi
+    collect "$name"
     return
   fi
 
-  SIMCTL_CHILD_PROBE_VARIANT="$variant" \
-    xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE" > "$OUT/launch-$variant.log" 2>&1
-  collect "$variant"
+  SIMCTL_CHILD_PROBE_VARIANT="$variant" SIMCTL_CHILD_PROBE_FIX="$fix" \
+    xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE" > "$OUT/launch-$name.log" 2>&1
+  collect "$name"
 }
 
-VARIANTS="${VARIANTS:-disclosure plain nofold jump swipe}"
+# `variant` or `variant:after` — the `lag` variant runs both ways, because the question it answers
+# is whether the fix changes it, and one dispatch should be able to say so.
+RUNS="${RUNS:-disclosure plain nofold jump swipe lag:before lag:after}"
 
 echo "== run =="
-for variant in $VARIANTS; do run "$variant"; done
+for entry in $RUNS; do
+  variant="${entry%%:*}"
+  fix="${entry##*:}"
+  [ "$fix" = "$variant" ] && fix=before
+  run "$variant" "$fix"
+done
 
 echo "== verdict =="
 # The conclusion, in the log rather than only in the artifact: the frames behind each line are in
 # the matching .txt.
 grep -H "^VERDICT" "$OUT"/*.txt 2>/dev/null | sed 's|'"$OUT"'/||'
 echo "== gesture =="
-grep -H "GESTURE\|PHASE" "$OUT"/swipe.txt 2>/dev/null | sed 's|'"$OUT"'/||' | head -40
+grep -H "GESTURE\|PHASE" "$OUT"/swipe*.txt 2>/dev/null | sed 's|'"$OUT"'/||' | head -40
 echo "== fold frame =="
 grep -H -A3 -B3 "FOLD issued" "$OUT"/*.txt 2>/dev/null | sed 's|'"$OUT"'/||' | head -80
 
