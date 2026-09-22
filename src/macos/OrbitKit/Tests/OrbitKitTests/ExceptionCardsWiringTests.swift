@@ -219,7 +219,7 @@ final class ExceptionCardsWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("ForEach(ExceptionCards.presses(row), id: \\.action)"),
                       "the doors and their order are `ExceptionCards.presses` — the browser's own "
                           + "rule, so the two cards cannot disagree about what leads")
-        XCTAssertTrue(card.contains("weighted(press.tier)"),
+        XCTAssertTrue(card.contains("weighted(cardPress.tier)"),
                       "and the weight is the model's, applied to the style and to nothing else")
         XCTAssertTrue(card.contains("if tier == .primary {") && card.contains(".borderedProminent"),
                       "a primary press is the one prominent control on the card")
