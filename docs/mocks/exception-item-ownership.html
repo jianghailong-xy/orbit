@@ -1,0 +1,433 @@
+<!doctype html>
+<!-- Design mock: WHO an exception item belongs to, and what is allowed to move it.
+     The item card is .approval-card.project-open-item-card (ItemCard / EscalatedItemCard in
+     src/web/src/components/ProjectProgressStatus.tsx), the delivery card in the coordinator's
+     transcript is .bgwake + .oic-* (OpenItemDeliveryCard.tsx), the fact rows are
+     .criteria-decision-kv, and the palette is index.css :root. Geometry copied, not shipped code.
+     The timestamps are the live ones from the FineWeb run of 2026-09-22 15:25 (UTC), read out of
+     project_open_item / conversation_turn. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Exception items: ownership is a decision, delivery is a retry</title>
+<style>
+  :root {
+    --bg-base:#ffffff; --bg-raised:#ffffff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa;
+    --bg-hover:#f5f6f7; --bg-hover-strong:#e3e6eb; --fill-inset:rgba(0,0,0,0.05);
+    --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+    --brand:#3370ff; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-bg:#e8f6ec; --success-border:#b6e7c4;
+    --error:#cf3b35; --error-bg:#fdeceb; --error-border:#ffccc7;
+    --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:28px 30px 60px; background:#eef0f3; color:var(--text-1);
+         font:14px/1.5 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans CJK SC",sans-serif; }
+  h1 { font-size:20px; margin:0 0 8px; letter-spacing:-.01em; }
+  .lede { max-width:1120px; margin:0 0 22px; color:var(--text-2); font-size:13.5px; line-height:1.7; }
+  .lede code, .note code, figcaption code { font:12px/1 var(--font-mono); background:rgba(0,0,0,.06);
+         padding:1px 4px; border-radius:4px; }
+  .lede b, .note b { color:var(--text-1); }
+  .stack { display:flex; flex-direction:column; gap:26px; max-width:1150px; }
+  .panel { background:var(--bg-base); border:1px solid var(--border); border-radius:12px;
+           padding:16px 18px 18px; }
+  h2.tag { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--text-3);
+           font-weight:700; margin:0 0 4px; }
+  h2.tag .now { color:var(--error); }
+  h2.tag .new { color:var(--success); }
+  .cap { font-size:13px; color:var(--text-2); line-height:1.65; margin:0 0 14px; max-width:1000px; }
+  .cap b { color:var(--text-1); }
+  .scope { position:relative; }
+  .scope.new::after { content:''; position:absolute; inset:-8px; border:1.5px dashed #ff6a00;
+                      border-radius:12px; pointer-events:none; }
+  .scope.bad::after { content:''; position:absolute; inset:-8px; border:1.5px dashed var(--error);
+                      border-radius:12px; pointer-events:none; }
+  .scope-note { font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+  .scope-note.bad { color:var(--error); }
+  .scope-note.new { color:#c25e00; }
+
+  /* ---- transcript canvas ---- */
+  .thread { width:800px; padding:12px 14px; background:var(--bg-sunken);
+            border:1px solid var(--border); border-radius:10px; }
+
+  /* ---- the item card: .approval-card.project-open-item-card ---- */
+  .approval-card { border:1px solid var(--brand); border-radius:10px; background:var(--brand-tint);
+                   margin:10px 0; overflow:hidden; }
+  .approval-card.is-coordinator { border-color:var(--border); background:var(--bg-raised); }
+  .approval-card.is-owner { border-color:var(--warning-border); background:var(--warning-bg); }
+  .approval-head { padding:10px 14px; font-size:13.5px; font-weight:600; color:var(--text-1);
+                   background:var(--brand-tint); border-bottom:1px solid var(--brand-border);
+                   display:flex; align-items:center; gap:8px; }
+  .approval-card.is-owner .approval-head { background:var(--warning-bg);
+                   border-bottom-color:var(--warning-border); }
+  .approval-card.is-coordinator .approval-head { background:var(--bg-subtle);
+                   border-bottom-color:var(--border-subtle); }
+  .approval-body { padding:4px 14px; max-height:360px; overflow:auto; font-size:13.5px;
+                   color:var(--text-1); }
+  .approval-body.is-plan { max-height:none; }
+  .project-open-item-card .approval-body { background:var(--bg-raised); padding:10px 14px; }
+  .project-open-item-heading { min-width:0; }
+  .criteria-provenance { flex:none; margin-left:auto; padding:2px 7px; border:1px solid var(--warning-border);
+                   border-radius:4px; background:var(--bg-raised); color:var(--warning); font-size:11px;
+                   font-weight:600; letter-spacing:.04em; }
+  .criteria-provenance.prov-neutral { border-color:var(--border); color:var(--text-3); }
+  .criteria-decision-kv { display:flex; gap:8px; font-size:12.5px; color:var(--text-2); line-height:1.7; }
+  .criteria-decision-k { flex:none; width:96px; color:var(--text-3); }
+  .criteria-decision-v { flex:1; min-width:0; }
+  .project-open-item-mono { font-family:var(--font-mono); font-size:11.5px; }
+  .project-open-item-bad { color:var(--error); font-weight:600; }
+  .project-open-item-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; }
+  .project-open-item-action { display:inline-flex; align-items:center; height:26px; padding:0 10px;
+                   border:1px solid var(--border); border-radius:6px; background:var(--bg-raised);
+                   color:var(--text-1); font-size:12.5px; text-decoration:none; }
+  .project-open-item-action.is-primary { background:var(--brand); border-color:var(--brand);
+                   color:#fff; font-weight:600; }
+  .project-open-item-action.is-secondary { border-color:var(--brand-border); color:var(--brand);
+                   font-weight:600; }
+  .project-open-item-quiet { font-size:12.5px; color:var(--text-2); text-decoration:underline;
+                   text-underline-offset:2px; }
+  .project-open-item-foot { padding:8px 14px; border-top:1px solid var(--border-subtle);
+                   font-size:12px; color:var(--text-2); }
+  .project-open-item-remedy { margin-top:8px; font-size:12.5px; color:var(--warning); }
+
+  /* ---- the delivery card in the coordinator's transcript: .bgwake + .oic-* ---- */
+  .bgwake-wrap { display:flex; justify-content:flex-end; margin:8px 0; }
+  .bgwake { width:min(560px,92%); padding:10px 12px; border:1px solid var(--warning-border);
+            border-radius:12px; background:var(--warning-bg); color:var(--text-1); }
+  .bgwake.is-returned { border-color:var(--border); background:var(--bg-subtle); }
+  .bgwake-title { display:flex; align-items:center; gap:6px; color:var(--warning); font-weight:600; }
+  .bgwake.is-returned .bgwake-title { color:var(--text-2); }
+  .oic-kind { margin-left:auto; flex:none; font-size:11px; line-height:18px; padding:0 8px;
+              border-radius:9px; background:var(--bg-raised); border:1px solid var(--warning-border);
+              color:var(--text-2); font-weight:500; }
+  .oic-title { margin:4px 0 2px; font-weight:600; overflow-wrap:anywhere; }
+  .oic-where { font-size:12px; color:var(--text-2); }
+  .oic-where a { color:var(--brand); text-decoration:none; }
+  .oic-why { margin:8px 0 0; }
+  .oic-facts { margin:8px 0 0; padding:8px 10px; border-radius:8px; background:var(--bg-raised);
+               display:flex; gap:6px; align-items:flex-start; font-size:12px; color:var(--text-2); }
+  .oic-actions { margin:8px 0 0; display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; }
+  .oic-actions-label { color:var(--text-2); }
+  .oic-chip { padding:1px 8px; border-radius:9px; background:var(--bg-raised);
+              border:1px solid var(--border); color:var(--text-1); font-size:12px; }
+  .oic-links { margin:6px 0 0; font-size:12px; display:flex; gap:12px; }
+  .oic-links a { color:var(--brand); text-decoration:none; }
+  .oic-meta { margin:8px 0 0; padding-top:6px; border-top:1px solid var(--bg-hover-strong);
+              font-size:11px; color:var(--text-3); display:flex; gap:10px; }
+
+  /* ---- timeline ---- */
+  .tl { display:grid; grid-template-columns:118px minmax(0,1fr); gap:6px 16px; align-items:start; }
+  .tl .when { font-family:var(--font-mono); font-size:11.5px; color:var(--text-3);
+              text-align:right; padding-top:16px; }
+  .tl .what { min-width:0; }
+  .tl .stamp { font-family:var(--font-mono); font-size:11.5px; color:var(--text-3); }
+  .verdict { margin:2px 0 0; font-size:12.5px; line-height:1.6; }
+  .verdict.bad { color:var(--error); }
+  .verdict.ok { color:var(--success); }
+  .verdict.mut { color:var(--text-2); }
+
+  /* ---- small parts ---- */
+  .cols { display:flex; gap:22px; align-items:flex-start; flex-wrap:wrap; }
+  .cols > * { flex:1 1 440px; min-width:0; }
+  .keys { display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; }
+  .key { flex:1 1 300px; border:1px solid var(--border-subtle); border-radius:10px; padding:10px 12px;
+         background:var(--bg-subtle); }
+  .key h4 { margin:0 0 5px; font-size:12.5px; }
+  .key p { margin:0; font-size:12px; color:var(--text-2); line-height:1.6; }
+  .key.missing { border-color:var(--error-border); background:var(--error-bg); }
+  .key.missing h4 { color:var(--error); }
+  .rule { display:flex; align-items:center; gap:16px; margin-bottom:12px; }
+  .node { border:1px solid var(--border); border-radius:8px; padding:8px 14px; background:var(--bg-subtle);
+          font-weight:600; font-size:13px; }
+  .node.owner { border-color:var(--warning-border); background:var(--warning-bg); color:var(--warning); }
+  .node.coord { border-color:var(--border); }
+  .arrow { font-size:19px; color:var(--text-3); }
+  .moves { margin:0; padding-left:22px; display:flex; flex-direction:column; gap:5px;
+           font-size:12.5px; line-height:1.6; color:var(--text-2); }
+  .moves b { color:var(--text-1); }
+  .gap { color:var(--error); font-weight:600; }
+  .notmove { margin-top:10px; font-size:12.5px; color:var(--error); }
+  .note { max-width:1120px; font-size:13px; line-height:1.7; color:var(--text-2); }
+  .note b { color:var(--text-1); }
+  .flag { display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.04em;
+          text-transform:uppercase; border-radius:999px; padding:1px 8px; margin-bottom:6px; }
+  .flag.now { background:#ffd9d4; color:#8f1d13; }
+  .flag.new { background:#d9f2e0; color:#14532d; }
+  .flag.delta { background:#ffe6cc; color:#8a4b00; }
+  .grp { margin:12px 2px 4px; font-size:11.5px; font-weight:650; letter-spacing:.03em;
+         text-transform:uppercase; color:var(--text-3); }
+</style>
+</head>
+<body>
+<div class="stack">
+
+  <div>
+    <h1>例外待办的归属：一次按压为什么弹回来 / 交出去就该留住</h1>
+    <p class="lede">
+      <b>归属（assignee）是一个决定，投递（delivery）是一次重试。</b>今天 <code>coordinator_enabled</code> 被读在了<b>投递</b>的位置上：
+      协调会话每回合结束，<code>deliverOwed</code> 按当前开关重算「这个项目欠它什么」，开关关着 → 落回
+      <code>handToOwner(NO_COORDINATOR)</code>（<code>project-open-item.service.ts:301/359</code>）。
+      于是每次重投都在<b>重做决定</b>：owner 亲手塞给它的一条，在下一次重投时被当成没发生过。
+      下面五格：①是今天（真实时间戳），②③④是设计，⑤是这些格子共同遵守的一条规则。
+    </p>
+  </div>
+
+  <!-- ① 今天 -->
+  <div class="panel">
+    <h2 class="tag"><span class="now">① 今天</span> · 一次按压的完整往返（FineWeb，2026-09-22 15:25 UTC）</h2>
+    <p class="cap">
+      按下去是好的：待办转给协调会话、turn 入队。坏在<b>下一步</b> —— 它当时正在跑的那一轮一结束，
+      drain 就把这条待办<strong>拿回去判给了 owner</strong>，而那条被按出的 turn 还在队列里等后面才被读到。
+    </p>
+    <div class="thread">
+      <div class="tl">
+        <div class="when">23:25:39.998</div>
+        <div class="what">
+          <div class="approval-card project-open-item-card is-owner">
+            <div class="approval-head project-open-item-head">
+              <span class="project-open-item-heading">Now yours — this project has no coordinator (waiting 0s)</span>
+              <span class="criteria-provenance">FROM ORBIT</span>
+            </div>
+            <div class="approval-body is-plan">
+              <div class="criteria-decision-kv"><span class="criteria-decision-k">Task</span>
+                <span class="criteria-decision-v">[Merge][CC-MAIN-2025-26] 000_00024 → RocksDB</span></div>
+              <div class="criteria-decision-kv"><span class="criteria-decision-k">How</span>
+                <span class="criteria-decision-v">the acceptance command exited <span class="project-open-item-bad">-1</span> (expected 0)</span></div>
+              <div class="criteria-decision-kv"><span class="criteria-decision-k">Retries</span>
+                <span class="criteria-decision-v">attempt 1 of 3 in this chain — the 3rd failure goes straight to the owner</span></div>
+              <div class="project-open-item-actions">
+                <span class="project-open-item-action is-primary">Ask the coordinator again</span>
+                <span class="project-open-item-action">Open task session</span>
+                <span class="project-open-item-quiet">Cancel task</span>
+                <span class="project-open-item-quiet">Mark as handled</span>
+              </div>
+            </div>
+            <div class="project-open-item-foot">Owner: you · waiting 0s</div>
+          </div>
+          <p class="verdict mut">owner 按下「Ask the coordinator again」——待办转 COORDINATOR、<code>waiting_since</code> 与 <code>escalate_at</code> 重置为 2h。</p>
+        </div>
+
+        <div class="when">23:25:40.415</div>
+        <div class="what">
+          <div class="bgwake-wrap"><div class="bgwake">
+            <div class="bgwake-title"><span>⚠</span><span>Exception item</span><span class="oic-kind">Task failed</span></div>
+            <div class="oic-title">Task failed: [Merge][CC-MAIN-2025-26] 000_00024 → RocksDB</div>
+            <div class="oic-why">The acceptance command disagreed with what the task declared — exit -1, expected 0 · attempt 1 of 3 in this chain.</div>
+            <div class="oic-facts"><span>◌</span><span>No merge receipt for this work — Orbit cannot tell whether it has landed.</span></div>
+            <div class="oic-actions"><span class="oic-actions-label">The coordinator can:</span>
+              <span class="oic-chip">Retry the task</span><span class="oic-chip">Cancel the task</span></div>
+            <div class="oic-meta"><span>Item 34TtQislSz5aPFZdkpuHFU</span><span>· a notification, not an interruption</span></div>
+          </div></div>
+          <p class="verdict mut">投递写成了一轮，排在协调会话<b>正在跑的那一轮后面</b>（忙不是拒绝，是队列）。</p>
+        </div>
+
+        <div class="when">23:25:44.468<br>→ .759</div>
+        <div class="what">
+          <div class="scope bad">
+            <div class="approval-card project-open-item-card is-owner">
+              <div class="approval-head project-open-item-head">
+                <span class="project-open-item-heading">Now yours — this project has no coordinator (waiting 0s)</span>
+                <span class="criteria-provenance">FROM ORBIT</span>
+              </div>
+              <div class="approval-body is-plan">
+                <div class="criteria-decision-kv"><span class="criteria-decision-k">Task</span>
+                  <span class="criteria-decision-v">[Merge][CC-MAIN-2025-26] 000_00024 → RocksDB</span></div>
+                <div class="project-open-item-actions">
+                  <span class="project-open-item-action is-primary">Ask the coordinator again</span>
+                  <span class="project-open-item-action">Open task session</span>
+                  <span class="project-open-item-quiet">Cancel task</span>
+                  <span class="project-open-item-quiet">Mark as handled</span>
+                </div>
+              </div>
+              <div class="project-open-item-foot">Owner: you · waiting 0s</div>
+            </div>
+          </div>
+          <p class="verdict bad"><span class="scope-note bad">回弹 · 0.29 秒</span> 上一轮 <code>turn_end</code> 触发 drain → 这条又回到 owner 的桌上，钟从 0 重新走。句子还是那句假的「这个项目没有协调会话」——会话就在那儿，下一秒就要读它。</p>
+        </div>
+
+        <div class="when">23:25:44.803</div>
+        <div class="what">
+          <div class="bgwake-wrap"><div class="bgwake">
+            <div class="bgwake-title"><span>⚠</span><span>Exception item</span><span class="oic-kind">Task failed</span></div>
+            <div class="oic-title">Task failed: [Merge][CC-MAIN-2025-26] 000_00024 → RocksDB</div>
+            <div class="oic-actions"><span class="oic-actions-label">The coordinator can:</span>
+              <span class="oic-chip">Retry the task</span><span class="oic-chip">Cancel the task</span></div>
+            <div class="oic-meta"><span>read at 23:25:44.803 — after it was already taken back</span></div>
+          </div></div>
+          <p class="verdict bad">协调会话这<strong>才</strong>读到它。它能给出的答案只能是「无终态变化，继续等」——而这条已经不是它的了；23:25:52.683 它这一轮结束，另外两条用同一条路弹回来。<b>16 分钟里这批 3 条待办被投递 14 次</b>（每次约 $0.78，全是「再看一眼」）。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 设计 -->
+  <div class="panel">
+    <h2 class="tag"><span class="new">② 设计</span> · 归属交出去就留住，回来只有三条路</h2>
+    <p class="cap">
+      同一个按压，改的只是 drain 的一个变量：<b>「跳过」判据用 ledger（<code>item + 当前协调会话 + 该次 assigned_at</code> 的活投递），不再只活在开关分支里</b>；
+      「交回 owner」判据只在<b>没有会话 / 会话已结束</b>时成立。owner 那次按压花掉的同意，不会在下一次重投时被退回来。
+    </p>
+    <div class="thread">
+      <div class="tl">
+        <div class="when">+0s</div>
+        <div class="what">
+          <div class="approval-card project-open-item-card is-owner">
+            <div class="approval-head project-open-item-head">
+              <span class="project-open-item-heading">Now yours — your coordinator is not taking work on its own (waiting 12s)</span>
+              <span class="criteria-provenance">FROM ORBIT</span>
+            </div>
+            <div class="approval-body is-plan">
+              <div class="criteria-decision-kv"><span class="criteria-decision-k">Task</span>
+                <span class="criteria-decision-v">[Merge][CC-MAIN-2025-26] 000_00024 → RocksDB</span></div>
+              <div class="criteria-decision-kv"><span class="criteria-decision-k">How</span>
+                <span class="criteria-decision-v">the acceptance command exited <span class="project-open-item-bad">-1</span> (expected 0)</span></div>
+              <div class="project-open-item-actions">
+                <span class="project-open-item-action is-primary">Ask the coordinator again</span>
+                <span class="project-open-item-action">Open task session</span>
+                <span class="project-open-item-quiet">Cancel task</span>
+                <span class="project-open-item-quiet">Mark as handled</span>
+              </div>
+              <div class="project-open-item-remedy">Turn the coordinator on in the project's settings, or ask it to take this one.</div>
+            </div>
+            <div class="project-open-item-foot">Owner: you · waiting 12s</div>
+          </div>
+          <p class="verdict mut">按下去。卡片的句子先说实话：「有会话，只是它不自己接活」——而不是「没有协调会话」。</p>
+        </div>
+
+        <div class="when">+0.4s</div>
+        <div class="what">
+          <div class="scope new">
+            <div class="approval-card project-open-item-card is-coordinator">
+              <div class="approval-head project-open-item-head">
+                <span class="project-open-item-heading">Task failed</span>
+                <span class="criteria-provenance prov-neutral">FROM ORBIT</span>
+              </div>
+              <div class="approval-body is-plan">
+                <div class="criteria-decision-kv"><span class="criteria-decision-k">Task</span>
+                  <span class="criteria-decision-v">[Merge][CC-MAIN-2025-26] 000_00024 → RocksDB</span></div>
+                <div class="criteria-decision-kv"><span class="criteria-decision-k">How</span>
+                  <span class="criteria-decision-v">the acceptance command exited <span class="project-open-item-bad">-1</span> (expected 0)</span></div>
+                <div class="project-open-item-actions">
+                  <span class="project-open-item-action is-primary">Retry the task</span>
+                  <span class="project-open-item-action is-secondary">Open task session</span>
+                  <span class="project-open-item-quiet">Open coordinator</span>
+                  <span class="project-open-item-quiet">Cancel task</span>
+                  <span class="project-open-item-quiet">Hand to the owner</span>
+                </div>
+              </div>
+              <div class="project-open-item-foot">Owner: coordinator · waiting 0s · goes to you in 2h</div>
+            </div>
+          </div>
+          <p class="verdict ok">卡片离开 owner 那组，落在「With the coordinator」。<b>「Hand to the owner」是今天缺的那道门</b>（<code>HANDED_OVER</code> 在 DB CHECK、web/push 文案、契约门表里都有，没有写入者）——它说的是「这不是我该定的」，不等于「我处理完了」。</p>
+        </div>
+
+        <div class="when">+0.5s</div>
+        <div class="what">
+          <p class="verdict ok">协调会话读到它（队列照旧）。它这一轮结束时的 drain 发现<b>这条已投递过</b> → 跳过，不弹回。
+            它给出的判断落在待办上：重跑（<code>Retry the task</code>）／写明理由关掉／交回 owner。</p>
+        </div>
+
+        <div class="when">之后</div>
+        <div class="what">
+          <div class="keys">
+            <div class="key"><h4>① 本人结清</h4><p>重跑、取消、或写明理由关掉（<code>open_item_resolve</code>）。任务重新跑起来 / 完成 / 被取代，平台按事实自己关。</p></div>
+            <div class="key missing"><h4>② 交回 owner</h4><p>协调会话说「这不是我该定的」→ <code>OWNER / HANDED_OVER</code>，卡片回到「Needs you」，钟不再走。契约有、实现缺。</p></div>
+            <div class="key"><h4>③ 时钟到点</h4><p>2h 内没人动它 → <code>ESCALATED</code>，句子换成「Now yours — no one acted on this for 2h」。这是 owner 的兜底，也是<b>唯一</b>由时间驱动的归属变化。</p></div>
+          </div>
+          <div class="approval-card project-open-item-card is-owner" style="max-width:800px;margin-top:12px">
+            <div class="approval-head project-open-item-head">
+              <span class="project-open-item-heading">Now yours — no one acted on this for 2h</span>
+              <span class="criteria-provenance">FROM ORBIT</span>
+            </div>
+            <div class="project-open-item-foot">Owner: you · waiting 2h · came to the owner at 2h</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 文案 -->
+  <div class="panel">
+    <h2 class="tag"><span class="new">③ 文案</span> · 一个 reason 一个真相：<code>NO_COORDINATOR</code> 今天一名两义</h2>
+    <p class="cap">
+      <code>deliver</code> 的同一个 <code>null</code> 分支同时表示两件事，web 一律画成第一句
+      （<code>ProjectProgressStatus.tsx:109</code>）。第二句才是 FineWeb 今天的真相。
+    </p>
+    <div class="cols">
+      <div>
+        <span class="flag now">今天</span>
+        <div class="approval-card project-open-item-card is-owner">
+          <div class="approval-head project-open-item-head">
+            <span class="project-open-item-heading">Now yours — this project has no coordinator (waiting 2m)</span>
+            <span class="criteria-provenance">FROM ORBIT</span>
+          </div>
+          <div class="project-open-item-foot">Owner: you · waiting 2m</div>
+        </div>
+        <p class="verdict bad">假话：会话不但存在，1 分钟前刚把这个项目的一条待办读完、答了「无终态变化」。读者据此做的下一个动作就是错的。</p>
+      </div>
+      <div>
+        <span class="flag new">设计</span>
+        <div class="approval-card project-open-item-card is-owner">
+          <div class="approval-head project-open-item-head">
+            <span class="project-open-item-heading">Now yours — your coordinator is not taking work on its own (waiting 2m)</span>
+            <span class="criteria-provenance">FROM ORBIT</span>
+          </div>
+          <div class="project-open-item-foot">Owner: you · waiting 2m</div>
+        </div>
+        <p class="verdict ok">两句分开：「没有会话」（原句保留，动作是绑定/换一个）与「有会话、开关关着」（动作在卡上那行 remedy）。
+          判据仍是<b>会话</b>——开关只管自动交付，不管人叫不叫得动。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 该收回时 -->
+  <div class="panel">
+    <h2 class="tag"><span class="new">④ 边界</span> · 该收回的时候，卡片要说出来</h2>
+    <p class="cap">
+      有<strong>正当</strong>的收回：会话结束了、owner 自己在别处把它关掉了、协调会话交回了 owner。
+      那时投递 ledger 里已经有这门语言——<code>returned_at</code> / <code>return_code</code>（迁移 <code>0278</code> 建表时就写了「被从队列上收回」），
+      <b>今天有列、有读、没有写入者</b>。补上写入者之后，被收回的那一轮读到的不是一张列着门的卡片：
+    </p>
+    <div class="thread">
+      <div class="bgwake-wrap"><div class="bgwake is-returned">
+        <div class="bgwake-title"><span>↩</span><span>Exception item</span><span class="oic-kind">Taken back</span></div>
+        <div class="oic-title">Task failed: [Merge][CC-MAIN-2025-26] 000_00024 → RocksDB</div>
+        <div class="oic-facts"><span>·</span><span>Taken back before you read it — the owner has this one now, so no doors are listed.</span></div>
+        <div class="oic-meta"><span>Item 34TtQislSz5aPFZdkpuHFU</span><span>· a notification, not an interruption</span></div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ⑤ 规则 -->
+  <div class="panel">
+    <h2 class="tag">⑤ 这五格共同遵守的一条规则</h2>
+    <p class="cap">归属只由<b>可枚举的事件</b>改变；投递与重投是重试，不是决定，永远不在这个列表里。</p>
+    <div class="rule">
+      <span class="node owner">OWNER</span>
+      <span class="arrow">⇄</span>
+      <span class="node coord">COORDINATOR</span>
+    </div>
+    <ol class="moves">
+      <li><b>平台开单</b> —— 开关关着时一开就是 owner 的（自动交付不走）；开关开着才交给协调会话</li>
+      <li><b>owner 的按压</b> —— Ask the coordinator again：把这一条交给它，钟重置为 2h</li>
+      <li><b>时钟到点</b> —— ESCALATED：2h 内没人动，回到 owner</li>
+      <li><b>协调会话交回</b> —— HANDED_OVER：「这不是我该定的」<span class="gap">（契约有、实现缺）</span></li>
+      <li><b>本人结清</b> —— HANDLED 写明理由，或由事实关闭（任务重跑、完成、被取代、落地）</li>
+      <li><b>负责人不可达</b> —— 会话结束 / 没有会话：COORDINATOR_ENDED（这时交回 owner 是对的）</li>
+    </ol>
+    <p class="notmove">✗ 不在其中：投递、重投、drain 时对开关的重新求值 —— 那是重试。</p>
+  </div>
+
+  <p class="note">
+    <b>这一版按三条推导画（都可以反过来，告诉我改图）：</b>
+    F1 已投递过的待办在开关关掉后<b>保留</b>在协调会话手里（同意在写 turn 时就花掉了；撤回只停未来的自动路由；2h 时钟是兜底）；
+    F2 <b>权力随归属走</b>——被交给它的那条，它结得掉（今天 <code>resolveOpenItem:773</code> 把开关也挂在「你算不算协调会话」上）；
+    F3 手动模式<b>有名字</b>（③）。
+    未动的是自动那一半：四个 wake producer、预算表、fuse 照旧看开关——那是「别自行动手」。
+  </p>
+
+</div>
+</body>
+</html>

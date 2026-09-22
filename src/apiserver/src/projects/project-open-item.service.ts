@@ -356,6 +356,16 @@ export class ProjectOpenItemService {
       ? item.project.coordinatorSessionId
       : null;
     if (!sessionId) {
+      // A TURN THAT IS ALREADY WRITTEN IS NOT THE PLATFORM REACHING FOR A COORDINATOR. The switch
+      // decides THIS delivery; an item whose assignment has already been put in front of the
+      // project's conversation is not one of those — its turn exists (queued, or read and answered),
+      // and the consent that paid for it was spent when that turn was written: by the owner's own
+      // press, or by an automatic hand-over made while the switch was on. Handing it back here is a
+      // reader re-deciding an assignment nobody asked it to re-decide, and it is what made the press
+      // a treadmill with a longer stride than the one `returnToCoordinator` closed: press → the
+      // coordinator reads it → the next drain takes it back → press again (the account owner's
+      // report, 2026-09-22: the exemption held in the press's own call and nowhere else).
+      if (await this.carried(item.id, item.assignedAt, item.project.coordinatorSessionId)) return;
       await this.handToOwner(item.id, item.assignedAt, 'NO_COORDINATOR');
       return;
     }
@@ -711,7 +721,7 @@ export class ProjectOpenItemService {
         state: true,
         assignee: true,
         askedBySessionId: true,
-        project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
+        project: { select: { coordinatorSessionId: true } },
       },
     });
     if (!item) throw new NotFoundException('item not found');
@@ -770,10 +780,13 @@ export class ProjectOpenItemService {
               + 'nobody acted and it escalated to them. Closing it is their press.',
           });
         }
-        const coordinatorSessionId = item.project.coordinatorEnabled
-          ? item.project.coordinatorSessionId
-          : null;
-        if (!sessionId || sessionId !== coordinatorSessionId) {
+        // The conversation, not the switch — the reading `returnToCoordinator` and `deliver` spell
+        // out (§4.7). An item arrives on a coordinator either by an automatic hand-over the switch
+        // authorized or by the owner's own press, and once it is its assignee's, its assignee ends
+        // it: an assignment that cannot be closed is an item with no ending but its clock. Gated on
+        // the switch, an item handed to a switched-off coordinator could only be ended by the owner
+        // — the dead end the press was made exempt from the switch to avoid.
+        if (!sessionId || sessionId !== item.project.coordinatorSessionId) {
           throw new ForbiddenException({
             code: OPEN_ITEM_COORDINATOR_ONLY,
             message:
@@ -1196,6 +1209,34 @@ export class ProjectOpenItemService {
         createdAt: new Date(),
       },
     });
+  }
+
+  /**
+   * Whether this assignment has already been put in front of that conversation (§4.4 X-D2).
+   *
+   * The ledger's own answer to "has anybody been told", and the one `deliver` asks before it decides
+   * that an item the platform may not hand over belongs to the owner. The row is not a hope: it is
+   * written inside `createTurn`'s transaction, so a live one under this item, this conversation and
+   * this assignment is the turn itself — already queued or already read. `returnedAt: null` is the
+   * other half of it: a delivery that was taken back is a delivery that was not made, and the item
+   * goes wherever the switch says it goes.
+   */
+  private async carried(
+    itemId: string,
+    assignedAt: Date,
+    sessionId: string | null,
+  ): Promise<boolean> {
+    if (!sessionId) return false;
+    const carried = await this.prisma.projectOpenItemDelivery.count({
+      where: {
+        itemId,
+        sessionId,
+        purpose: 'ITEM',
+        returnedAt: null,
+        clientTurnId: openItemTurnId(itemId, assignedAt),
+      },
+    });
+    return carried > 0;
   }
 
   /** An item nobody's coordinator can read is the owner's (§4.4 X-D6). */
