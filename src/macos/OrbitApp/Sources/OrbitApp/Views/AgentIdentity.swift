@@ -164,6 +164,19 @@ struct ProviderSwitchSheet: View {
 ///
 /// Name and chevron only: the brand mark belongs to the new-session hero, and repeating it here in
 /// miniature said nothing the screen wasn't already saying.
+///
+/// `.fixedSize()` is load-bearing, not tidiness. iOS 26 hands a *custom* item in the leading slot a
+/// proposal far narrower than the item's own content: measured on an iPhone 17 Pro Max simulator
+/// (`.ios-probe` probe, iOS 26 — the same arrangement the shipped bar has), the label drew the name
+/// at 14.7pt against an ideal of 37.7pt for `orbit`, and 14.7 against 125.3 for `wikova-develop`
+/// — i.e. a two-letter "or" on a bar with ~190pt of empty space beside it. Nothing else in the bar
+/// was doing it: removing the two trailing buttons, or the `.navigationBarDrawer` search field,
+/// left the name at 14.7. `.fixedSize()` makes the control answer with its ideal width instead, and
+/// both names then measure FULL; so does a `Menu`. `.layoutPriority(1)` on the name does not (still
+/// 14.7), and neither does dropping the `Button` for a bare `Text` (31.7 of 37.7).
+///
+/// The one case this does not cover is a name wider than the bar itself, which would be clipped
+/// rather than truncated — today's longest workspace name is 125pt against ~250pt of room.
 struct WorkspaceTitleSwitcher: View {
     let name: String
     let action: () -> Void
@@ -179,6 +192,7 @@ struct WorkspaceTitleSwitcher: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .fixedSize()
         .accessibilityLabel("Workspace: \(name). Switch")
     }
 }

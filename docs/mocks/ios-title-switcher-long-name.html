@@ -211,7 +211,11 @@ static func nameBudget(columnWidth: CGFloat, chrome: CGFloat = 132) -> CGFloat {
       落地时的连带改动：<code>.navigationTitle(a.name)</code> 必须让位（标题槽空出来后，它会在中间再画一遍同一个名字）。
       这一笔带走的是<b>返回按钮的标签</b>——推入的页面（会话详情、新会话草稿）从「‹ orbit」变成「‹ Back」，因为返回标签就是上一页的标题。
       不接受的话，退路是在那两页上加 <code>.navigationBarBackButtonDisplayMode(.minimal)</code>，只留一个箭头。<br>
-      另：iOS 26 会把相邻的 leading 项并进同一块玻璃（右胶囊就是这么来的），所以这一版有可能画成「☰ + 名字 + ⌄ 一个胶囊」，要上机才知道。
+      另：iOS 26 会把相邻的 leading 项并进同一块玻璃（右胶囊就是这么来的），所以这一版有可能画成「☰ + 名字 + ⌄ 一个胶囊」，要上机才知道。<br>
+      <b>上线后实测（beta.106，iPhone 17 Pro Max / iOS 26）</b>：玻璃确实并成一块、位置也对，但名字只画出<b>两个字</b>——
+      iOS 26 给 leading 上的自定义项一个很小的宽度提案：<code>orbit</code> 只拿到 14.7pt（理想 37.7），<code>wikova-develop</code> 同样 14.7（理想 125.3），
+      而旁边空着 ≈190pt。去掉右侧两个按钮、去掉搜索框都还是 14.7，所以不是被挤。<code>Menu</code> 和 <code>.fixedSize()</code> 都实测画全，
+      <code>.layoutPriority(1)</code> 不行（仍是 14.7）。也就是说：这一格「全名照画」只有配上 <code>.fixedSize()</code> 才成立（探针：<code>.ios-probe/</code>，分支 <code>orbit/ios-title-slot-shots</code>）。
     </figcaption>
   </figure>
 
