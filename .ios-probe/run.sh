@@ -118,7 +118,7 @@ run() {  # run <variant> [fix] — fix is `before` (as shipped) or `after` (the 
   if [ "$variant" = "swipe" ]; then
     # The gesture variant is driven by the UI test (only a test can synthesize a touch); the app
     # writes the same trace, and waits for the drag rather than for a fixed moment in it.
-    with_limit 900 xcodebuild test \
+    TEST_RUNNER_PROBE_FIX="$fix" with_limit 900 xcodebuild test \
       -project "$HERE/Probe.xcodeproj" -scheme Probe \
       -destination "id=$UDID" -derivedDataPath "$HERE/.dd" \
       -only-testing:ProbeUITests \

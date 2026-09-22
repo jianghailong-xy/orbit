@@ -14,6 +14,11 @@ final class ProbeUITests: XCTestCase {
     func testTheReaderScrollsBackWhileTheReplyStreams() throws {
         let app = XCUIApplication()
         app.launchEnvironment["PROBE_VARIANT"] = "swipe"
+        // `run.sh` passes the fix through with the `TEST_RUNNER_` prefix, which xcodebuild forwards
+        // to this process; the app is launched by the test, so it has to be handed on explicitly.
+        if let fix = ProcessInfo.processInfo.environment["PROBE_FIX"] {
+            app.launchEnvironment["PROBE_FIX"] = fix
+        }
         app.launch()
 
         Thread.sleep(forTimeInterval: 4)
