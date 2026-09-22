@@ -2851,14 +2851,23 @@ function ToolResult({
 }) {
   const text = resultText(content);
   const images = resultImages(content);
+  // An oversized image reaches the preview as a block with no `data` (see MAX_IMAGE_PAYLOAD), so
+  // `images` is empty for a card that has a picture coming. That counts as output: the card is
+  // open on the block, and rendering nothing would leave it a picture-shaped hole.
+  const imagePending = images.length === 0 && hasResultImage(content);
   // A successful tool with no output renders nothing; but an error with no output must
   // still surface — otherwise a failed tool looks like it never ran.
-  if (!text && images.length === 0 && !isError) return null;
+  if (!text && images.length === 0 && !imagePending && !isError) return null;
   return (
     <div
       data-seq={seq}
       className={`chat-result${isError ? ' is-error' : ''}${compact ? ' compact' : ''}`}
     >
+      {imagePending && (
+        <div className="chat-result-image-loading" aria-label="loading image">
+          <LoadingOutlined spin />
+        </div>
+      )}
       {images.length > 0 && (
         <div className="chat-images">
           {images.map((src, i) => (

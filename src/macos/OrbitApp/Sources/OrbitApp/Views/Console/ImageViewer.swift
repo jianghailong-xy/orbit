@@ -76,6 +76,10 @@ struct SessionImagePreview: Equatable {
     let open: (_ key: String, _ fallback: [PreviewImage], _ fallbackIndex: Int) -> Void
     /// An open tool card hands over the screenshot bytes it fetched back, so they join the pages.
     let rememberToolImages: (_ cardID: String, _ images: [Data]) -> Void
+    /// The same bytes, read back: a card asks here before it asks the server (see
+    /// `ToolCardView.resolveFull`). nil outside the console, and for a card that has fetched
+    /// nothing back — the answer then being "ask the server", not "there is nothing".
+    var toolImages: (_ cardID: String) -> [Data]? = { _ in nil }
 
     static func == (lhs: SessionImagePreview, rhs: SessionImagePreview) -> Bool {
         lhs.consoleID == rhs.consoleID && lhs.ns == rhs.ns

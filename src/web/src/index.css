@@ -5634,6 +5634,21 @@ button.composer-usage:focus-visible {
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.06);
 }
+/* A result image whose bytes the server dropped from the preview (see MAX_IMAGE_PAYLOAD): the card
+   opens on the image block, so until the untrimmed payload lands there is a picture-shaped hole
+   where the picture is going. Reserve that slot — the cap .chat-result .chat-image itself lands
+   in, so the swap barely moves the transcript — and spin, so an open card never reads as a broken
+   one. The spinner is the only content: this box is a shape, not a chip. */
+.chat-result-image-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 760px);
+  height: 520px;
+  border-radius: 8px;
+  background: var(--fill-inset);
+  color: var(--text-3);
+}
 .md .ant-image {
   display: block;
   width: fit-content;

@@ -72,11 +72,13 @@ struct ConsoleView: View {
                     imagePreviewTarget = ImagePreviewTarget(index: fallbackIndex, id: key)
                 }
             },
-            rememberToolImages: { cardID, images in fetched.byCard[cardID] = images })
+            rememberToolImages: { cardID, images in fetched.byCard[cardID] = images },
+            toolImages: { fetched.byCard[$0] })
     }
 
     /// Screenshot bytes that open tool cards fetched back, by card. A reference, not state: filling it
-    /// needn't re-render the console, only be there when the viewer next gathers its pages.
+    /// needn't re-render the console, only be there when the viewer next gathers its pages — and for a
+    /// card the List has since recycled, to be there in the first place (see `ToolCardView.images`).
     private final class FetchedToolImages {
         var byCard: [String: [Data]] = [:]
     }

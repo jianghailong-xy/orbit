@@ -45,6 +45,7 @@ import {
   sampleTail,
   type TailScrollSample,
 } from '../lib/tailPinning';
+import { memoizeEventFull } from '../lib/eventFull';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
@@ -174,6 +175,7 @@ import {
   listApprovals,
   listQueuedTurns,
   mergeSessionToMain,
+  type EventPageEvent,
   type PermissionRule,
   pinSession,
   purgeSession,
@@ -1712,9 +1714,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const oldestSeqNow = useCallback(() => oldestSeqRef.current, []);
   // Pull back the untrimmed payload of an event the server clipped to a preview (see
   // MAX_EVENT_PAYLOAD). The transcript calls this when the user expands such a card, so a big
-  // Read output or Write body only crosses the network if someone actually opens it.
-  const fetchEventFull = useCallback(
-    (seq: number) => getSessionEventFull(selectedId ?? '', seq),
+  // Read output or Write body only crosses the network if someone actually opens it — and, because
+  // a remounted row is a new card with no memory of the first ask, only once (see
+  // lib/eventFull.ts). Rebuilt per session: seqs are per session, so a memo outliving the switch
+  // would answer this session's 99323 with the last session's.
+  const fetchEventFull = useMemo(
+    () => memoizeEventFull((seq: number) => getSessionEventFull(selectedId ?? '', seq)),
     [selectedId],
   );
   // Recompute, on scroll and after content changes: are we at the bottom, and which top-level
