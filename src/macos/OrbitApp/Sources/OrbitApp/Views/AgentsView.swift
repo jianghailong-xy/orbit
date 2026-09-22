@@ -270,15 +270,21 @@ struct AgentContentColumn: View {
         // Search, in the list rather than over it. Until it existed the list was only searchable from
         // inside the drawer (or ⌘K, which needs a keyboard), so it looked like it had none.
         // `.navigationBarDrawer` is what keeps the field *below* the workspace title instead of over
-        // it — the system owns that layout, which a hand-placed bar can't do. `.automatic` rather
-        // than `.always`: the field is still there whenever the list is at its top, which is where
-        // "I can't find it" was reported, and it scrolls away as you read — Mail's, Notes' and
-        // Settings' own behavior, and 56pt of rows back on a phone. (The field is declared on the
-        // column root, so it also exists from that column's first breath in either mode.) Typing
+        // it — the system owns that layout, which a hand-placed bar can't do. `.always`, not the
+        // `.automatic` that 2e031c06d shipped: the list below carries `.refreshable`, and on iOS 26
+        // the two disagree about where the drawer's 60pt goes. Measured on an iOS 26.2 simulator
+        // (the `.ios-probe/` probe on this branch's `-shots` sibling, frames in window coordinates):
+        // under `.automatic` the navigation bar grows to 62–236 and the field is drawn at its bottom
+        // (176–236), while the refresh control still takes the band above it (116–176) — the spinner
+        // is drawn over the bar's drawer rather than below it, which on the phone that reported this
+        // is the field itself. Under `.always` the bar is 62–176, the field 116–176 *inside* it, and
+        // the control 176–236: below both, like Mail's. So the 56pt a scrolling-away field gives
+        // back is what this trades for a spinner that stays off the field. (The field is declared on
+        // the column root, so it also exists from that column's first breath in either mode.) Typing
         // searches the server (every workspace, scope and message text); the hits replace the list's
         // sections until the field is cleared (see `AgentPanes`).
         .searchable(text: $searchQuery,
-                    placement: .navigationBarDrawer(displayMode: .automatic),
+                    placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "Search sessions")
         // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
         // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
