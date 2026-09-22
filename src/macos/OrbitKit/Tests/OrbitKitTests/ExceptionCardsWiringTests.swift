@@ -16,7 +16,13 @@ import XCTest
 ///  - the needs-you banner's press lands on that card, by the item's own address;
 ///  - the card re-derives its standing from the console's read on every render and keeps none;
 ///  - the button is drawn and enabled by the server's own action list, never by a constant;
-///  - the press goes through the console's doors, which are the two POSTs the browser uses.
+///  - the fact block is the model's rows off the payload, and a payload this build cannot read still
+///    draws the server's own sentence;
+///  - the action row is the model's presses in the model's weights, and a door this client has no
+///    press for draws nothing;
+///  - the owner's own ending is offered last, off the kind and the assignee, and never sent without
+///    a reason;
+///  - the presses go through the console's doors, which are the POSTs the browser makes.
 ///
 /// This is a weaker instrument than the web card's DOM test and it is used because it is the
 /// strongest one available where these tests run. What it cannot see is layout.
@@ -173,17 +179,115 @@ final class ExceptionCardsWiringTests: XCTestCase {
                       "and it wears the word every other composer handoff wears")
         XCTAssertTrue(handoff.contains(".buttonStyle(.bordered)"),
                       "the handoff is the secondary control, beside the one write")
-        XCTAssertFalse(card.contains("TextField"),
-                       "the card must not take text: the composer does")
+        // The card takes text in exactly one place — the reason the owner's own ending requires —
+        // and never for the handoff: what the coordinator is told is typed in the composer.
+        XCTAssertFalse(handoff.contains("TextField"),
+                       "the handoff must not take text: the composer does")
+        XCTAssertEqual(card.components(separatedBy: "TextField").count - 1, 1,
+                       "one field on this card, and it is the ending's reason (§4.7)")
         XCTAssertFalse(card.contains("confirmationDialog"),
-                       "and it has nothing to confirm — the one press it still makes is a hand-back")
+                       "and nothing to confirm: the ending asks for a reason, not for a yes")
+    }
+
+    // MARK: the payload is what is drawn
+
+    /// The fact block is `ExceptionCards.facts`, which reads the row's payload — and the card draws
+    /// its rows rather than composing a sentence of its own. A view that re-derived any of it would
+    /// be the second rendering of one fact the browser's own head comment warns about.
+    func testTheCardDrawsTheFactBlockFromTheRowsAndNotFromTheSentence() throws {
+        let card = try card()
+        XCTAssertTrue(card.contains("switch ExceptionCards.facts(row)"),
+                      "the block is the model's rows, chosen by the payload")
+        XCTAssertTrue(card.contains("case .rows(let block):") && card.contains("ForEach(block.rows"),
+                      "a payload this build reads draws its rows")
+        XCTAssertTrue(card.contains("case .detailLine(let line):"),
+                      "and one it does not still draws the server's own sentence — the negative "
+                          + "control, which is what every card drew before the rows existed")
+        XCTAssertFalse(card.contains("row.detailLine"),
+                      "the sentence comes back through the model, in the arm that decides it — never "
+                          + "straight off the row, which would print it beside the rows")
+        XCTAssertTrue(card.contains("block.logTail") && card.contains("tail.shown"),
+                      "a failed check's log is folded from its end, in the model's own lines")
+        XCTAssertFalse(card.contains("outputTail"),
+                      "and the block is what reads the payload: the view draws strings")
+    }
+
+    /// The action row is the model's presses in the model's order, and the tier picks the style —
+    /// nothing here decides WHICH presses exist or which of them leads.
+    func testThePressesComeFromTheModelInItsOwnWeights() throws {
+        let card = try card()
+        XCTAssertTrue(card.contains("ForEach(ExceptionCards.presses(row), id: \\.action)"),
+                      "the doors and their order are `ExceptionCards.presses` — the browser's own "
+                          + "rule, so the two cards cannot disagree about what leads")
+        XCTAssertTrue(card.contains("weighted(press.tier)"),
+                      "and the weight is the model's, applied to the style and to nothing else")
+        XCTAssertTrue(card.contains("if tier == .primary {") && card.contains(".borderedProminent"),
+                      "a primary press is the one prominent control on the card")
+        XCTAssertFalse(card.contains("ExceptionCards.retry") || card.contains("ExceptionCards.cancelTask"),
+                       "a door this client has no press for draws nothing: a control that goes "
+                          + "nowhere is worse than no control")
+    }
+
+    // MARK: the owner's own ending
+
+    /// The ending is drawn from the KIND and the assignee — never from the server's action list,
+    /// which does not carry it — and it is the last and lightest thing in the row (方案 B).
+    func testTheEndingIsTheOwnersAndIsDrawnLast() throws {
+        let card = try card()
+        XCTAssertTrue(card.contains("if !isPause && ExceptionCards.markable(row) {"),
+                      "offered where the item is the owner's and its kind is one the door closes by "
+                          + "hand — the pause, the question and the merge have doors of their own")
+        let row = try section(card, from: "// The owner's own ending, drawn last and quietest",
+                              to: "Text(ExceptionCards.ownerLine(row))")
+        XCTAssertTrue(row.contains("markHandledButton()"),
+                      "and it comes after the handoff, at the end of the action row")
+
+        let button = try section(card, from: "private func markHandledButton() -> some View {",
+                                 to: "/// Whether the door would take the press from here.")
+        XCTAssertTrue(button.contains("Text(ExceptionCards.markHandled)"),
+                      "it wears the browser's own word")
+        XCTAssertTrue(button.contains(".buttonStyle(.plain)"),
+                      "drawn in the quiet weight, not as a third button (方案 B)")
+        XCTAssertTrue(button.contains("askingToHandle = true"),
+                      "and it asks before it writes: the reason is required")
+    }
+
+    /// The reason is what the press carries, and an empty one is not a press: the field's submit
+    /// guards it, the console's door guards it again, and what travels is the trimmed sentence.
+    func testTheReasonIsRequiredBeforeAnythingIsSent() throws {
+        let card = try card()
+        let submit = try section(card, from: "private func markHandled() {",
+                                 to: "/// The press re-reads what the button was rendered from")
+        XCTAssertTrue(submit.contains("ExceptionCards.markHandledRequest(reason) != nil else { return }"),
+                      "the field holds the door's own line: a reason the server would refuse is not "
+                          + "a press, so nothing is sent and the words stay on screen")
+        XCTAssertTrue(submit.contains("console.markItemHandled(row, note: reason)"),
+                      "and the press goes through the console, which owns the credential")
+        XCTAssertTrue(submit.contains("case .open(let row) = standing"),
+                      "re-read against the standing it was drawn from, like every other press here")
+        XCTAssertTrue(card.contains("TextField(ExceptionCards.markHandledReason"),
+                      "the field asks for what the browser's dialog asks for")
+
+        let doors = try section(try source(Self.consolePath),
+                                from: "func markItemHandled(",
+                                to: "/// Lift the pause")
+        XCTAssertTrue(doors.contains("ExceptionCards.markHandledRequest(note)"),
+                      "the console holds the same line as the field — a disabled button is not a "
+                          + "rule about what is sent")
+        XCTAssertTrue(doors.contains("api.resolveOpenItem(projectID: projectID, itemID: row.itemId,"),
+                      "the ending is `POST /projects/:id/open-items/:itemId/resolve`")
+        XCTAssertTrue(doors.contains("await refreshRulerQuestions(force: true)"),
+                      "and it re-reads the item list the card is derived from")
+        XCTAssertTrue(doors.contains("statusMessage = \"\\(ExceptionCards.notMarkedHandled)"),
+                      "a refused ending says so, in the browser's own headline")
     }
 
     // MARK: the press goes through the doors
 
-    /// The two presses are the two POSTs the browser makes — the hand-back (§4.7) and the resume
-    /// (§6.3 F-T4) — and the card reaches them through the console, which re-reads afterwards.
-    func testThePressesAreTheBrowsersTwoDoors() throws {
+    /// The presses are the POSTs the browser makes — the hand-back (§4.7), the resume (§6.3 F-T4)
+    /// and the ending, which the console test above reads — and the card reaches them through the
+    /// console, which re-reads afterwards.
+    func testThePressesAreTheBrowsersOwnDoors() throws {
         let card = try card()
         XCTAssertTrue(card.contains("await console.resumeFuse(row)")
                       && card.contains("await console.returnEscalatedItem(row)"),
