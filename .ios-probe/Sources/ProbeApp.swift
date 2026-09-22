@@ -41,6 +41,15 @@ enum Variant: String {
     /// A programmatic scroll UP to an older row (the sticky header's jump-back) mid-stream: what
     /// phase does a scroll nobody's finger caused report as, and does it un-pin?
     case jump
+    /// The arrangement the app is in when it streams: the transcript is BEHIND its tail — the
+    /// sample's gap is above the near-bottom slack — which is the app's own documented state
+    /// ("each programmatic scroll is reported a frame late, by which time newer rows have grown the
+    /// content, so a position-only test reads a large gap"). The first three runs never produced a
+    /// sample like that (their gap was 0 or negative throughout), so the fold always landed on a
+    /// transcript that was AT the bottom. Here a burst of content lands under the streaming
+    /// reasoning row and the row folds immediately after it, which is the shape of a turn: a tool
+    /// result arrives, and the stretch of reasoning that explains it settles.
+    case lag
     /// A REAL finger: the UI test drags the list up while the reply streams, and the app then
     /// re-pins the way the jump-to-latest disc does, waits for the fold — and asks whether the
     /// fold un-pins a tail the reader left long ago. This is the arrangement the owner's phone is
@@ -360,6 +369,40 @@ struct ProbeRoot: View {
         for _ in 0..<30 {
             try? await Task.sleep(for: .milliseconds(80))
             stream(thinkingID, String(repeating: "reasoning words ", count: 6))
+        }
+        if variant == .lag {
+            // A tool-result-sized burst under the reasoning row (one publish, ~4000 characters),
+            // then the fold — the transcript is behind its tail for both.
+            Trace.shared.log("BURST-ISSUED")
+            rows.append(PRow(id: UUID().uuidString, kind: .prose("tool result — "
+                + String(repeating: "a long line of tool output that the transcript has to lay out. ", count: 70))))
+            revision += 1
+            try? await Task.sleep(for: .milliseconds(60))
+            mark("POST-BURST")
+            settle(thinkingID)
+            Trace.shared.log("FOLD issued")
+            for step in 0..<8 {
+                try? await Task.sleep(for: .milliseconds(150))
+                mark("POST-FOLD+\(step * 150)ms")
+            }
+            for i in 0..<6 {
+                try? await Task.sleep(for: .milliseconds(200))
+                rows.append(PRow(id: UUID().uuidString, kind: .prose("reply row \(i) — "
+                    + String(repeating: "the answer keeps being written. ", count: 8))))
+                revision += 1
+            }
+            try? await Task.sleep(for: .milliseconds(400))
+            mark("END")
+            let lagTail = handle.tail
+            Trace.shared.snapshot()
+            Trace.shared.write(extra: [
+                "VERDICT variant": variant.rawValue,
+                "VERDICT atBottom_end": atBottom ? "1" : "0",
+                "VERDICT tail_end": lagTail,
+                "VERDICT gap_end": "\(handle.gap)",
+                "VERDICT reproduce": (atBottom && handle.gap <= 80) ? "NO" : "YES",
+            ])
+            return
         }
         if variant == .swipe {
             // The reader's own drag, whenever the UI test delivers it: the reply keeps streaming
