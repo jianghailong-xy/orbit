@@ -362,27 +362,58 @@ struct ProbeRoot: View {
             stream(thinkingID, String(repeating: "reasoning words ", count: 6))
         }
         if variant == .swipe {
-            // The reader's own drag: wait for the finger (or the coast it leaves), then let the
-            // stream run on with nobody touching anything, re-pin the way the disc does, and fold.
+            // The reader's own drag, whenever the UI test delivers it: the reply keeps streaming
+            // slowly underneath, and this waits for the finger rather than for a schedule (the
+            // runner made the test swipe 13s in, not the 5s its own sleep asked for).
+            Trace.shared.log("GESTURE-WINDOW-OPEN")
             var seen: Date?
-            for tick in 21..<90 {
-                try? await Task.sleep(for: .milliseconds(80))
-                stream(thinkingID, String(repeating: "reasoning words ", count: 6))
-                if seen == nil, (handle.isReader || handle.phaseDriven || (handle.view?.isDecelerating ?? false)) {
+            let deadline = Date().addingTimeInterval(40)
+            var n = 0
+            while seen == nil, Date() < deadline {
+                try? await Task.sleep(for: .milliseconds(100))
+                n += 1
+                if n % 5 == 0 { stream(thinkingID, String(repeating: "reasoning words ", count: 6)) }
+                if handle.isReader || handle.phaseDriven || (handle.view?.isDecelerating ?? false) {
                     seen = Date()
                     Trace.shared.log("GESTURE-SEEN uikit[\(handle.flags)] phaseDriven=\(handle.phaseDriven ? 1 : 0)")
                 }
-                // A second or so of quiet after the gesture: nobody is touching the list any more.
-                if let at = seen, Date().timeIntervalSince(at) > 1.5, !(handle.view?.isDecelerating ?? false) { break }
-                if tick == 89 { Trace.shared.log("GESTURE-NEVER-SEEN") }
+            }
+            if seen == nil { Trace.shared.log("GESTURE-NEVER-SEEN") }
+            // Everything stopped moving: the finger is gone and so is the coast it left.
+            var quiet = 0
+            while quiet < 15, Date() < deadline {
+                try? await Task.sleep(for: .milliseconds(100))
+                if !(handle.isReader || handle.view?.isDecelerating ?? false) { quiet += 1 } else { quiet = 0 }
             }
             mark("POST-GESTURE")
             // The disc's own action, verbatim in effect: halt the coast, scroll to the tail row, and
             // declare the reader pinned. This is where the reader was when the complaint happened.
-            handle.view?.setContentOffset(handle.view?.contentOffset ?? .zero, animated: false)
             atBottom = true
             Trace.shared.log("REPINNED (disc action)")
             try? await Task.sleep(for: .milliseconds(500))
+            // The app's real shape: the reasoning row settles and the answer's first row arrives in
+            // the same publish (the reducer's `finalizeThinking` and the next `text_delta`).
+            settle(thinkingID)
+            rows.append(PRow(id: UUID().uuidString, kind: .prose("the answer begins — "
+                + String(repeating: "and it keeps being written after the reasoning settles. ", count: 8))))
+            revision += 1
+            Trace.shared.log("FOLD issued (with the answer's first row)")
+            try? await Task.sleep(for: .milliseconds(1500))
+            mark("POST-FOLD")
+            for step in 0..<6 {
+                try? await Task.sleep(for: .milliseconds(200))
+                mark("POST-FOLD+\(1500 + (step + 1) * 200)ms")
+            }
+            let swipeTail = handle.tail
+            Trace.shared.snapshot()
+            Trace.shared.write(extra: [
+                "VERDICT variant": variant.rawValue,
+                "VERDICT atBottom_end": atBottom ? "1" : "0",
+                "VERDICT tail_end": swipeTail,
+                "VERDICT gap_end": "\(handle.gap)",
+                "VERDICT reproduce": (atBottom && handle.gap <= 80) ? "NO" : "YES",
+            ])
+            return
         }
         mark("STREAMING-DONE")
 

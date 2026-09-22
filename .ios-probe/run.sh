@@ -77,6 +77,12 @@ DOCS="$CONTAINER/Documents"
 
 collect() {  # collect <variant> — pull what the app wrote, whatever happened
   local variant="$1"
+  # Recomputed every time: `xcodebuild test` reinstalls the app, and the data container it ends up
+  # with is not always the one `simctl install` left behind — reading the old path is how the first
+  # swipe run produced a passing test and no trace at all.
+  local container
+  container=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data 2>/dev/null)
+  if [ -n "$container" ]; then DOCS="$container/Documents"; fi
   local waited=0
   while [ ! -f "$DOCS/done" ] && [ "$waited" -lt 90 ]; do sleep 1; waited=$((waited + 1)); done
   if [ ! -f "$DOCS/done" ]; then
