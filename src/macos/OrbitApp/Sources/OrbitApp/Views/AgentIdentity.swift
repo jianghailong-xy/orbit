@@ -182,8 +182,10 @@ struct ProviderSwitchSheet: View {
 ///
 /// Its sibling on the session list's bar is the item's *shared background*: iOS 26 would group this
 /// control with the drawer button into one glass platter, so `AgentsView` declares the item with
-/// `.sharedBackgroundVisibility(.hidden)` and the name draws on the bar instead (iOS 26 only —
-/// measured in the simulator, `.ios-probe` on `orbit/ios-title-slot-shots`).
+/// `.sharedBackgroundVisibility(.hidden)` and the name draws on the bar instead. iOS 26 only, and
+/// measured on an iPhone 17 Pro Max simulator like the widths above: with the system's shared
+/// background the two share one 102pt platter, without it the name sits on the bar beside the
+/// drawer button's own circle.
 struct WorkspaceTitleSwitcher: View {
     let name: String
     let action: () -> Void

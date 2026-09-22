@@ -532,12 +532,14 @@ struct AgentPanes: View {
             //
             // Its shared background is switched off, so the name is *drawn on the bar* rather than
             // inside a platter with the drawer button: iOS 26 groups adjacent leading items into one
-            // glass capsule by itself, which put `[☰ or ⌄]` on one pill (beta.106). Measured in the
-            // simulator (`.ios-probe` on `orbit/ios-title-slot-shots`): with the default the two
-            // share a 102pt platter; with `.hidden` the drawer button keeps its own circle and the
-            // name sits bare beside it, both workspace names FULL width. The modifier is iOS 26 only
-            // — below that the bar draws no platters at all, so the fallback branch is the same item
-            // with nothing to hide.
+            // glass capsule by itself, which put `[☰ or ⌄]` on one pill (beta.106). Measured on an
+            // iPhone 17 Pro Max simulator: with the default the two share a 102pt platter; with
+            // `.hidden` the drawer button keeps its own circle and the name sits bare beside it, both
+            // workspace names FULL width. (The probe app that measured it was throwaway and is not
+            // kept; the harness it was built from is the `.ios-probe` app on
+            // `orbit/loading-c855b1-shots`, which is a different arrangement but the same scaffold.)
+            // The modifier is iOS 26 only — below that the bar draws no platters at all, so the
+            // fallback branch is the same item with nothing to hide.
             if #available(iOS 26.0, *) {
                 ToolbarItem(placement: .topBarLeading) {
                     WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }

@@ -102,7 +102,7 @@
   代价是超过上限截断。你这台 440pt 机上的上限是 <b>158pt</b>：<code>wikova-develop</code> 实测 125.3pt，<b>完整画下、不截断</b>。<br>
   <b>案 2（备选）</b>：留在左边，但在 ☰ 和标题之间插一个 <code>ToolbarSpacer</code>，两块玻璃分开。全名永远在，代价是标题永远在左、且这个 API 是 iOS 26 才有的（要加 availability 判断）。<br>
   <b>最终选的（这张图里没有）</b>：留在左边、<b>连玻璃都不要</b>——<code>.sharedBackgroundVisibility(.hidden)</code> 把这一项的共享背景关掉，
-  名字直接画在 bar 上、☰ 保留自己的圆玻璃。模拟器实测（<code>.ios-probe</code>，分支 <code>orbit/ios-title-slot-shots</code>）：
+  名字直接画在 bar 上、☰ 保留自己的圆玻璃。模拟器实测（iPhone 17 Pro Max / iOS 26）：
   <code>orbit</code> 与 <code>wikova-develop</code> 都完整画下，且不再和 ☰ 共用一个 platter。
 </p>
 

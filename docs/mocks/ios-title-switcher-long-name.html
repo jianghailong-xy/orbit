@@ -215,7 +215,7 @@ static func nameBudget(columnWidth: CGFloat, chrome: CGFloat = 132) -> CGFloat {
       <b>上线后实测（beta.106，iPhone 17 Pro Max / iOS 26）</b>：玻璃确实并成一块、位置也对，但名字只画出<b>两个字</b>——
       iOS 26 给 leading 上的自定义项一个很小的宽度提案：<code>orbit</code> 只拿到 14.7pt（理想 37.7），<code>wikova-develop</code> 同样 14.7（理想 125.3），
       而旁边空着 ≈190pt。去掉右侧两个按钮、去掉搜索框都还是 14.7，所以不是被挤。<code>Menu</code> 和 <code>.fixedSize()</code> 都实测画全，
-      <code>.layoutPriority(1)</code> 不行（仍是 14.7）。也就是说：这一格「全名照画」只有配上 <code>.fixedSize()</code> 才成立（探针：<code>.ios-probe/</code>，分支 <code>orbit/ios-title-slot-shots</code>）。
+      <code>.layoutPriority(1)</code> 不行（仍是 14.7）。也就是说：这一格「全名照画」只有配上 <code>.fixedSize()</code> 才成立（iPhone 17 Pro Max / iOS 26 模拟器实测；那一轮的一次性探针未随仓库保留）。
     </figcaption>
   </figure>
 
