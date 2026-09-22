@@ -89,15 +89,20 @@ final class ExceptionCardsTests: XCTestCase {
         var taskId: String? = "01a03f58-40bd-76ac-85c1-d9c6b29f8ca9"
         var sessionId: String? = "489fc485-949c-533a-9b56-7712a68762ef"
         var fuseEpisodeId: String?
+        /// Where the item is on its way to the coordinator: the address `Open coordinator` reaches.
+        var delivery: ProjectOpenItemRow.Delivery?
         var actions: [ProjectOpenItemAction] = [.askCoordinatorAgain, .openTaskSession, .cancelTask]
         var question: CoordinatorQuestion?
+        /// What the item's payload holds, as the read serves it (§7.5). Nil for an older item.
+        var facts: OpenItemFacts?
 
         func build() -> ProjectOpenItemRow {
             ProjectOpenItemRow(itemId: itemId, kind: kind, title: title, detailLine: detailLine,
                                waitingSince: waitingSince, assignee: assignee,
                                assigneeReason: assigneeReason, escalateAt: escalateAt,
                                escalatedAt: escalatedAt, taskId: taskId, sessionId: sessionId,
-                               fuseEpisodeId: fuseEpisodeId, actions: actions, question: question)
+                               fuseEpisodeId: fuseEpisodeId, delivery: delivery, actions: actions,
+                               question: question, facts: facts)
         }
     }
 
@@ -392,5 +397,336 @@ final class ExceptionCardsTests: XCTestCase {
         {"episode":{"id":"ep"},"resumedAt":"2026-09-21T12:00:00.000Z","held":[{"id":"h"}]}
         """.utf8))
         XCTAssertEqual(resumed.resumedAt, "2026-09-21T12:00:00.000Z")
+    }
+
+    // MARK: the fact block (§7.5, mock 5)
+
+    /// (a) A check that disagreed on the combined tree. The card said "Checks failed" and nothing
+    /// about the check: not which command ran, what it returned, or why. Every one of those was a
+    /// field of the item's payload the whole time, and this is the row that draws them.
+    func testAFailedCheckDrawsItsCommandItsVerdictAndItsLog() throws {
+        let decoded = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+        {"itemId":"01a0bb0b","kind":"INTEGRATION_CHECK_FAILED",
+         "title":"Checks failed on the combined tree: 核实 ScheduleWakeup 是否随 warm 回收丢失",
+         "detailLine":"the merge check exited 1", "assignee":"OWNER","assigneeReason":"ESCALATED",
+         "waitingSince":"2026-09-19T19:01:41.497Z","escalatedAt":"2026-09-19T21:02:23.903Z",
+         "taskId":"01a03f58","sessionId":"489fc485","promotionId":null,"fuseEpisodeId":null,
+         "delivery":{"state":"NOT_REQUIRED","sessionId":null,"at":null},
+         "actions":["ASK_COORDINATOR_AGAIN","OPEN_TASK_SESSION","CANCEL_TASK"],"question":null,
+         "facts":{"task":{"id":"01a03f58","title":"核实 ScheduleWakeup 是否随 warm 回收丢失"},
+                  "targetRef":"project/bg-jobs","targetSha":"b70a4461c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7",
+                  "files":[],"nothingLanded":false,
+                  "check":{"name":"MERGE_CHECK",
+                           "command":"cd src/runner-go && go test -count=1 ./...",
+                           "expectedExitCode":0,"exitCode":1,"timedOut":false,
+                           "durationMs":340000,
+                           "outputTail":"\\u001b[31m--- FAIL: TestScheduleWakeup\\u001b[0m\\n    wake_test.go:88: wake not delivered\\nFAIL\\torbit\\t341.207s"},
+                  "branchUnchanged":true,"errorCode":null,"failure":null}}
+        """.utf8))
+        XCTAssertEqual(decoded.kind, .integrationCheckFailed)
+        guard case .rows(let block) = ExceptionCards.facts(decoded) else {
+            return XCTFail("a payload this build reads draws rows, not the server's sentence")
+        }
+        // The mock's own rows, in its own words, from the payload's own fields.
+        XCTAssertEqual(block.rows, [
+            ExceptionCards.FactRow(label: "Task", value: "核实 ScheduleWakeup 是否随 warm 回收丢失"),
+            ExceptionCards.FactRow(label: "Into", value: "project/bg-jobs at b70a446"),
+            ExceptionCards.FactRow(
+                label: "Check",
+                value: "cd src/runner-go && go test -count=1 ./... · exit 1 after 5m 40s"),
+            ExceptionCards.FactRow(label: "Branch", value: ExceptionCards.branchUnchanged),
+        ])
+        try requireTheBrowsersWords()
+        // The tail is the last 16 KB of what the check printed, with its colour off — an ESC byte
+        // is invisible in a native Text, so what would show is literal "[31m" garbage.
+        let tail = try XCTUnwrap(block.logTail)
+        XCTAssertEqual(tail.lines, ["--- FAIL: TestScheduleWakeup", "    wake_test.go:88: wake not delivered",
+                                    "FAIL\torbit\t341.207s"])
+        XCTAssertEqual(tail.shown, tail.lines, "three lines fit under the fold")
+        XCTAssertNil(tail.more)
+    }
+
+    /// A tail longer than the fold keeps its END on screen and offers the rest: the reason a check
+    /// is red is the last thing it printed, which is the whole reason this block folds from there.
+    func testALongCheckLogIsFoldedFromTheEnd() throws {
+        let written = (1...9).map { "line \($0)" }
+        let check = IntegrationCheckResult(name: "MERGE_CHECK", command: "go test ./...",
+                                           exitCode: 1, durationMs: 1_000,
+                                           outputTail: written.joined(separator: "\n"))
+        let facts = OpenItemFacts(check: check)
+        guard case .rows(let block) = ExceptionCards.facts(row { $0.kind = .integrationCheckFailed
+                                                                  $0.facts = facts }) else {
+            return XCTFail("a check draws rows")
+        }
+        let tail = try XCTUnwrap(block.logTail)
+        XCTAssertEqual(tail.hidden, 3)
+        XCTAssertEqual(tail.shown, Array(written.suffix(6)), "the last lines are the ones drawn")
+        XCTAssertEqual(tail.more, "Show 3 more lines")
+        XCTAssertEqual(ExceptionCards.CheckTail.less, "Show less")
+        // A check that printed nothing draws no block at all: there is nothing to fold.
+        XCTAssertNil(ExceptionCards.CheckTail.of("   \n  "))
+        XCTAssertNil(ExceptionCards.CheckTail.of(nil))
+    }
+
+    /// (b) A conflicting merge: the files git could not reconcile, and the fact the reader asks
+    /// first — whether the branch it was landing on moved while this failed.
+    func testAConflictDrawsTheFilesAndWhetherTheTargetMoved() throws {
+        let decoded = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+        {"itemId":"01a0bb0b","kind":"INTEGRATION_CONFLICT","title":"Merge conflict",
+         "detailLine":"git refused the merge into project/bg-jobs","assignee":"OWNER",
+         "assigneeReason":"ESCALATED","waitingSince":"2026-09-19T19:01:41.497Z",
+         "escalatedAt":"2026-09-19T21:02:23.903Z","taskId":"01a03f58","sessionId":"489fc485",
+         "actions":["ASK_COORDINATOR_AGAIN","OPEN_TASK_SESSION","CANCEL_TASK"],
+         "facts":{"task":{"id":"01a03f58","title":"runner 托管作业支持「事件发生时叫醒会话」"},
+                  "targetRef":"project/bg-jobs","targetSha":"b70a4461c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7",
+                  "files":["src/runner-go/session_pool.go","background.go","mcp.go"],
+                  "nothingLanded":true,"branchUnchanged":false}}
+        """.utf8))
+        guard case .rows(let block) = ExceptionCards.facts(decoded) else {
+            return XCTFail("a conflict's payload draws rows")
+        }
+        XCTAssertEqual(block.rows, [
+            ExceptionCards.FactRow(label: "Task", value: "runner 托管作业支持「事件发生时叫醒会话」"),
+            ExceptionCards.FactRow(
+                label: "Into",
+                value: "project/bg-jobs at b70a446 · nothing landed"),
+            ExceptionCards.FactRow(
+                label: "Files",
+                value: "src/runner-go/session_pool.go · background.go · mcp.go", mono: true),
+            ExceptionCards.FactRow(label: "After a fix", value: ExceptionCards.afterAFix),
+        ])
+        XCTAssertNil(block.logTail, "a conflict has no check output to fold")
+        // `nothing landed` is the payload's own answer and not inferred from the ref: a target that
+        // DID move draws the same row without it.
+        let moved = OpenItemFacts(targetRef: "project/bg-jobs", targetSha: "b70a446")
+        guard case .rows(let quietly) = ExceptionCards.facts(row { $0.facts = moved }) else {
+            return XCTFail("a ref draws rows")
+        }
+        XCTAssertEqual(quietly.rows, [ExceptionCards.FactRow(label: "Into", value: "project/bg-jobs at b70a446")])
+    }
+
+    /// A failed task's two rows: why the attempt failed and where its chain stands (§4.5) — the
+    /// second of which is what says whether this is still the coordinator's to retry.
+    func testAFailedTaskDrawsWhyAndWhereItsChainStands() {
+        let failure = OpenItemFacts.Failure(how: "ACCEPTANCE_EXIT_MISMATCH", exitCode: 1,
+                                            expectedExitCode: 0, attempt: 2, limit: 3)
+        guard case .rows(let block) = ExceptionCards.facts(row { $0.facts = OpenItemFacts(failure: failure) })
+        else { return XCTFail("a failed task's payload draws rows") }
+        XCTAssertEqual(block.rows, [
+            ExceptionCards.FactRow(label: "How", value: "the acceptance command exited 1 (expected 0)"),
+            ExceptionCards.FactRow(label: "Retries",
+                                   value: "attempt 2 of 3 in this chain — the 3rd failure goes "
+                                       + "straight to the owner"),
+        ])
+        // The last failure of a chain is the owner's rather than the coordinator's, and the row says
+        // which of the two it is looking at.
+        let last = OpenItemFacts.Failure(how: "RUN_FAILED", attempt: 3, limit: 3)
+        XCTAssertEqual(ExceptionCards.chainStanding(last),
+                       "attempt 3 of 3 in this chain — this one is the owner's")
+        // An unknown reason is still a sentence rather than a blank, and one with no exit code
+        // quotes none — the browser's own two fallbacks.
+        XCTAssertEqual(ExceptionCards.howFailed(OpenItemFacts.Failure(how: "SOMETHING_NEW")),
+                       "the task failed")
+        XCTAssertEqual(ExceptionCards.howFailed(OpenItemFacts.Failure(how: "RUN_FAILED")),
+                       "a turn of the run failed")
+        XCTAssertEqual(ExceptionCards.ordinal(1), "1st")
+        XCTAssertEqual(ExceptionCards.ordinal(11), "11th")
+        XCTAssertEqual(ExceptionCards.ordinal(22), "22nd")
+        // The counts are the payload's: a row that guessed "attempt 1 of 3" would be describing a
+        // chain nobody read, so a payload without them draws no such row.
+        XCTAssertNil(ExceptionCards.chainStanding(OpenItemFacts.Failure(how: "RUN_FAILED")))
+        guard case .rows(let partial) =
+                ExceptionCards.facts(row { $0.facts = OpenItemFacts(failure: .init(how: "RUN_FAILED")) })
+        else { return XCTFail("rows") }
+        XCTAssertEqual(partial.rows.map(\.label), ["How"])
+    }
+
+    /// (e) The negative control: a payload this build cannot read — an item an older build opened,
+    /// a pause, a question — draws exactly what the card drew before the rows existed, and one
+    /// missing every key draws no rows rather than throwing or showing blanks.
+    func testAPayloadWithoutTheKeysDrawsWhatTheCardDrewBefore() throws {
+        let older = row { $0.facts = nil }
+        XCTAssertEqual(ExceptionCards.facts(older), .detailLine(older.detailLine),
+                       "no payload is the server's own sentence, not an empty block")
+
+        let empty = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+        {"itemId":"x","kind":"INTEGRATION_ERROR","title":"t","detailLine":"the job ended early",
+         "waitingSince":"2026-09-19T19:01:41.497Z","assignee":"OWNER","facts":{}}
+        """.utf8))
+        guard case .rows(let block) = ExceptionCards.facts(empty) else {
+            return XCTFail("a payload this build reads draws its rows, empty when it names nothing")
+        }
+        XCTAssertTrue(block.rows.isEmpty)
+        XCTAssertNil(block.logTail)
+
+        // And a check whose payload carries no output — older builds wrote none — draws its verdict
+        // and no log, rather than a block with an empty pre in it.
+        let quiet = row { $0.kind = .integrationCheckFailed
+                          $0.facts = OpenItemFacts(check: IntegrationCheckResult(
+                              name: "MERGE_CHECK", command: "npm test", exitCode: 1, durationMs: 48_000)) }
+        guard case .rows(let rows) = ExceptionCards.facts(quiet) else { return XCTFail("rows") }
+        XCTAssertEqual(rows.rows, [ExceptionCards.FactRow(label: "Check",
+                                                          value: "npm test · exit 1 after 48s")])
+        XCTAssertNil(rows.logTail)
+    }
+
+    /// The two sentences this card must not have invented: every label and every word around a value
+    /// is the browser's, taken from mock 5 through `ItemFactRows`.
+    private func requireTheBrowsersWords() throws {
+        let web = try webSource()
+        for label in ["Task", "Into", "Files", "After a fix", "Check", "Branch", "How", "Retries",
+                      "Error"] {
+            try require(web, "label=\"\(label)\"")
+        }
+        try require(web, "' · nothing landed'")
+        try require(web, ExceptionCards.afterAFix)
+        try require(web, ExceptionCards.branchUnchanged)
+        try require(web, " after ${checkDuration(check.durationMs)}")
+        try require(web, "return check.timedOut ? 'timed out' : 'no exit code'")
+        try require(web, "'the acceptance command exited'")
+        try require(web, "'a turn of the run failed'")
+        try require(web, "'the runner finished the run as failed'")
+        try require(web, "'the run stopped on an API or sign-in error and was reaped'")
+        try require(web, "'its runner went offline and the attempt was taken back'")
+        try require(web, "'its runtime never started and the attempt was taken back'")
+        try require(web, "'somebody filed it as failed'")
+        try require(web, "?? 'the task failed'")
+        try require(web, "`attempt ${failure.attempt} of ${failure.limit} in this chain`")
+        try require(web, "— this one is the owner's")
+        try require(web, "failure goes straight to the owner")
+        try require(web, "`exit ${check.exitCode}`")
+        try require(web, "`Show ${hidden} more lines`")
+        try require(web, "'Show less'")
+        try require(web, "const CHECK_TAIL_LINES = \(ExceptionCards.CheckTail.foldedLines)")
+        // The browser's own ordinal, which the mock uses for the failure that stops being the
+        // coordinator's.
+        try require(web, "['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'")
+    }
+
+    /// (c) The three weights of the action row (mock 7 方案 B), door by door: the press this kind of
+    /// exception is asking for leads, the same step taken another way sits beside it, and the two
+    /// doors that only look or only stop come after them, quiet.
+    func testTheThreeWeightsAreTheMockAndTheBrowsersOwn() throws {
+        // The three kinds the mock draws, for the coordinator. A conflict and a red combined-tree
+        // check both want the branch fixed, so the way onto that branch leads and a fresh run is the
+        // alternative; a task that failed wants another run.
+        let coordinator: [ProjectOpenItemAction] = [.openCoordinator, .openTaskSession, .retry,
+                                                    .cancelTask]
+        func served(_ kind: ProjectOpenItemKind,
+                    _ actions: [ProjectOpenItemAction],
+                    assignee: ProjectOpenItemAssignee = .coordinator)
+            -> [(ProjectOpenItemAction, ExceptionCards.PressTier)] {
+            let row = row { $0.kind = kind; $0.actions = actions; $0.assignee = assignee
+                            $0.assigneeReason = assignee == .owner ? .escalated : .defaultReason
+                            // A live coordinator conversation to look in on: the address
+                            // `Open coordinator` reaches, without which it is not drawn at all.
+                            $0.delivery = .init(state: "DELIVERED", sessionId: "489fc485") }
+            return ExceptionCards.presses(row).map { ($0.action, $0.tier) }
+        }
+        let conflict = served(.integrationConflict, coordinator)
+        XCTAssertEqual(conflict.map { $0.0 },
+                       [.openTaskSession, .retry, .openCoordinator, .cancelTask],
+                       "the pair first, then the rest of the server's list in its own order")
+        XCTAssertEqual(conflict.map { $0.1 }, [.primary, .secondary, .link, .link])
+        let red = served(.integrationCheckFailed, coordinator)
+        XCTAssertEqual(red.map { $0.0 },
+                       [.openTaskSession, .retry, .openCoordinator, .cancelTask])
+        XCTAssertEqual(red.map { $0.1 }, [.primary, .secondary, .link, .link])
+        let failed = served(.taskFailed, coordinator)
+        XCTAssertEqual(failed.map { $0.0 }, [.retry, .openTaskSession, .openCoordinator, .cancelTask])
+        XCTAssertEqual(failed.map { $0.1 }, [.primary, .secondary, .link, .link])
+        // A kind the mock does not draw keeps the server's own order rather than being handed a
+        // step nobody asked for: the same pair, taken from where the server listed them.
+        let error = served(.integrationError, coordinator)
+        XCTAssertEqual(error.map { $0.0 }, [.openTaskSession, .retry, .openCoordinator, .cancelTask])
+        XCTAssertEqual(error.map { $0.1 }, [.primary, .secondary, .link, .link])
+
+        // The owner's card: the work is not theirs to run again, so the way back to the coordinator
+        // leads and the run sits beside it (mock 7, 方案 B's fourth card).
+        let owner = served(.taskFailed, [.askCoordinatorAgain, .openTaskSession, .cancelTask],
+                           assignee: .owner)
+        XCTAssertEqual(owner.map { $0.0 }, [.askCoordinatorAgain, .openTaskSession, .cancelTask])
+        XCTAssertEqual(owner.map { $0.1 }, [.primary, .secondary, .link])
+        // A door the row carries no address for is not drawn at all — never drawn and refused.
+        let unaddressed = row { $0.kind = .taskFailed; $0.taskId = nil; $0.sessionId = nil
+                                $0.assignee = .owner
+                                $0.actions = [.askCoordinatorAgain, .openTaskSession, .retry,
+                                              .cancelTask] }
+        XCTAssertEqual(ExceptionCards.drawn(unaddressed), [.askCoordinatorAgain],
+                       "the two task doors need a task, and ASK_COORDINATOR_AGAIN needs only the item")
+        XCTAssertEqual(ExceptionCards.presses(unaddressed).map(\.tier), [.primary])
+        // An action this build cannot name is not a press, and never becomes one.
+        let unknown = row { $0.actions = [.unknown, .askCoordinatorAgain] }
+        XCTAssertEqual(ExceptionCards.drawn(unknown), [.askCoordinatorAgain])
+
+        // The words the two cards share, and the mock's own shape for them.
+        let web = try webSource()
+        try require(web, "OPEN_TASK_SESSION: '\(ExceptionCards.openTaskSession)'")
+        try require(web, "const LEADING_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([")
+        for action in ["OPEN_TASK_SESSION", "RETRY", "ASK_COORDINATOR_AGAIN"] {
+            try require(web, "'\(action)',")
+        }
+        try require(web, "INTEGRATION_CONFLICT: 'OPEN_TASK_SESSION'")
+        try require(web, "INTEGRATION_CHECK_FAILED: 'OPEN_TASK_SESSION'")
+        try require(web, "TASK_FAILED: 'RETRY'")
+    }
+
+    /// (d) The owner's own ending (§4.7, mock 7 方案 B): offered only where the item is theirs and
+    /// its kind is one the door closes by hand, drawn last and quietest, and never sent without a
+    /// reason — the door requires one.
+    func testTheOwnersEndingIsOfferedLastAndNeverSentWithoutAReason() throws {
+        XCTAssertTrue(ExceptionCards.markable(row()))
+        // An item the coordinator is still carrying is the coordinator's to close (§4.7).
+        XCTAssertFalse(ExceptionCards.markable(row { $0.assignee = .coordinator
+                                                      $0.assigneeReason = .defaultReason }))
+        // The three kinds with doors of their own: a question is answered, a merge is decided, a
+        // pause is resumed — the server's `HAND_CLOSABLE_RESOLUTIONS` refuses all three.
+        for kind: ProjectOpenItemKind in [.coordinatorQuestion, .promotionApproval, .fusePaused,
+                                          .unknown] {
+            XCTAssertFalse(ExceptionCards.markable(row { $0.kind = kind }),
+                           "\(kind.rawValue) is not closed by hand")
+        }
+        for kind: ProjectOpenItemKind in [.integrationConflict, .integrationCheckFailed,
+                                          .integrationError, .taskFailed] {
+            XCTAssertTrue(ExceptionCards.markable(row { $0.kind = kind }))
+        }
+
+        // The reason is required: empty is not a press at all, and what travels is the trimmed one.
+        XCTAssertNil(ExceptionCards.markHandledRequest(""))
+        XCTAssertNil(ExceptionCards.markHandledRequest("   \n\t "))
+        XCTAssertEqual(ExceptionCards.markHandledRequest("  landed by hand  ")?.note, "landed by hand")
+
+        // It is drawn after the server's own doors and never as one of the pair: it is not on the
+        // server's list at all, which is why it is the last thing in the row and the lightest — and
+        // why an item nothing listed still has it.
+        let unlisted = row { $0.actions = [] }
+        XCTAssertTrue(ExceptionCards.presses(unlisted).isEmpty,
+                      "the row's own list decides the doors: none listed is none drawn")
+        XCTAssertTrue(ExceptionCards.markable(unlisted),
+                      "and the ending is drawn from the KIND rather than from that list, which is "
+                      + "why a project whose work was landed by hand had no press at all")
+        XCTAssertEqual(ExceptionCards.presses(row()).last?.tier, .link,
+                       "the doors the server lists end the row; the ending comes after them")
+
+        // Every word of it is the browser's, including the two sentences the dialog is about.
+        let web = try webSource()
+        XCTAssertEqual(ExceptionCards.markHandled, try declaration(web, "MARK_HANDLED"))
+        XCTAssertEqual(ExceptionCards.markHandledTitle,
+                       try declaration(web, "MARK_HANDLED_MODAL_TITLE"))
+        XCTAssertEqual(ExceptionCards.markHandledBody,
+                       try declaration(web, "MARK_HANDLED_MODAL_BODY"))
+        try require(web, "Why is it no longer open?")
+        try require(web, "headline=\"The item was not closed\"")
+        // And the same four kinds the browser closes by hand, in the same set the server's own door
+        // names.
+        for kind in ["INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR",
+                     "TASK_FAILED"] {
+            try require(web, "'\(kind)',")
+        }
+        // The door and its receipt, as the wire serves them.
+        let resolved = try JSONDecoder().decode(OpenItemResolved.self, from: Data("""
+        {"itemId":"01a0bb0b","state":"RESOLVED","resolution":"HANDLED"}
+        """.utf8))
+        XCTAssertEqual(resolved.resolution, "HANDLED")
     }
 }

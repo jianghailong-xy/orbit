@@ -128,6 +128,28 @@ public enum ProjectOpenItemAction: String, Codable, Sendable {
 
 /// One exception item as `GET /projects/:id/open-items` serves it (§4.8).
 public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
+    /// Where this item is on its way to the coordinator (§4.4), which is the address `Open
+    /// coordinator` reaches. Read for the same reason as every other field here: a press is drawn
+    /// only where this row carries what it would need.
+    public struct Delivery: Codable, Equatable, Sendable {
+        public let state: String
+        public let sessionId: String?
+        public let at: String?
+
+        public init(state: String, sessionId: String? = nil, at: String? = nil) {
+            self.state = state
+            self.sessionId = sessionId
+            self.at = at
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
+            sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+            at = try c.decodeIfPresent(String.self, forKey: .at)
+        }
+    }
+
     public let itemId: String
     public let kind: ProjectOpenItemKind
     public let title: String
@@ -147,12 +169,21 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let taskId: String?
     /// The attempt this item is about, when one is recorded: the run whose failure opened it.
     public let sessionId: String?
+    /// The merge candidate this item is about, for a `PROMOTION_APPROVAL`; the address `Review`
+    /// reaches. Nil for every other kind.
+    public let promotionId: String?
     /// The pause this item is, for a `FUSE_PAUSED`; nil for every other kind.
     public let fuseEpisodeId: String?
+    /// Where this item is on its way to the coordinator, or that it is not owed to one.
+    public let delivery: Delivery?
     /// The presses the server offers on this item.
     public let actions: [ProjectOpenItemAction]
     /// What was asked, for a `COORDINATOR_QUESTION`; nil for every other kind.
     public let question: CoordinatorQuestion?
+    /// What the item's payload holds, as the rows its card draws (§7.5); nil when the payload is
+    /// not a shape this build reads — an item an older build opened, a pause, a question — which
+    /// leaves the card drawing the server's own sentence, as it did before the rows existed.
+    public let facts: OpenItemFacts?
 
     public var id: String { itemId }
 
@@ -160,8 +191,10 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 waitingSince: String, assignee: ProjectOpenItemAssignee = .owner,
                 assigneeReason: ProjectOpenItemAssigneeReason = .defaultReason,
                 escalateAt: String? = nil, escalatedAt: String? = nil, taskId: String? = nil,
-                sessionId: String? = nil, fuseEpisodeId: String? = nil,
-                actions: [ProjectOpenItemAction] = [], question: CoordinatorQuestion? = nil) {
+                sessionId: String? = nil, promotionId: String? = nil,
+                fuseEpisodeId: String? = nil, delivery: Delivery? = nil,
+                actions: [ProjectOpenItemAction] = [], question: CoordinatorQuestion? = nil,
+                facts: OpenItemFacts? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -173,9 +206,12 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.escalatedAt = escalatedAt
         self.taskId = taskId
         self.sessionId = sessionId
+        self.promotionId = promotionId
         self.fuseEpisodeId = fuseEpisodeId
+        self.delivery = delivery
         self.actions = actions
         self.question = question
+        self.facts = facts
     }
 
     public init(from decoder: Decoder) throws {
@@ -192,9 +228,97 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         escalatedAt = try c.decodeIfPresent(String.self, forKey: .escalatedAt)
         taskId = try c.decodeIfPresent(String.self, forKey: .taskId)
         sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        promotionId = try c.decodeIfPresent(String.self, forKey: .promotionId)
         fuseEpisodeId = try c.decodeIfPresent(String.self, forKey: .fuseEpisodeId)
+        delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery)
         actions = try c.decodeIfPresent([ProjectOpenItemAction].self, forKey: .actions) ?? []
         question = try c.decodeIfPresent(CoordinatorQuestion.self, forKey: .question)
+        facts = try c.decodeIfPresent(OpenItemFacts.self, forKey: .facts)
+    }
+}
+
+/// What an open item's payload holds, as the rows its card draws (§7.5), mirroring `@orbit/shared`'s
+/// `OpenItemFacts` — which is the server's own reading of the item's `payload` column, the same one
+/// the browser draws (`ProjectProgressStatus.tsx`'s `ItemFactRows`).
+///
+/// Every field is the reading's own answer, absence included: a key the payload did not carry is nil
+/// or empty here rather than defaulted to something plausible, and the row that would have drawn it
+/// is skipped. That is what lets an item an older build opened draw the card it was, instead of a
+/// card with blanks in it — and it is why nothing here is re-derived from `detailLine`: two
+/// renderings of one fact are two things free to disagree.
+public struct OpenItemFacts: Codable, Equatable, Sendable {
+    /// The task the item is about, when it names one: the card's first row.
+    public struct Task: Codable, Equatable, Sendable {
+        public let id: String
+        public let title: String
+        public init(id: String, title: String) {
+            self.id = id
+            self.title = title
+        }
+    }
+
+    /// Why an attempt failed and where its chain stands (§4.3, §4.5). Both counts absent rather
+    /// than defaulted: a row that guessed "attempt 1 of 3" would be describing a chain nobody read.
+    public struct Failure: Codable, Equatable, Sendable {
+        public let how: String?
+        public let exitCode: Int?
+        public let expectedExitCode: Int?
+        public let attempt: Int?
+        public let limit: Int?
+
+        public init(how: String? = nil, exitCode: Int? = nil, expectedExitCode: Int? = nil,
+                    attempt: Int? = nil, limit: Int? = nil) {
+            self.how = how
+            self.exitCode = exitCode
+            self.expectedExitCode = expectedExitCode
+            self.attempt = attempt
+            self.limit = limit
+        }
+    }
+
+    public let task: Task?
+    /// The branch an integration was moving work into, and the tip it was moving (INTEGRATION_*).
+    public let targetRef: String?
+    public let targetSha: String?
+    /// The paths a conflicting merge could not reconcile (INTEGRATION_CONFLICT).
+    public let files: [String]
+    /// Whether the target branch is where it was — the first thing a reader asks a conflict.
+    public let nothingLanded: Bool
+    /// The check that disagreed on the combined tree (INTEGRATION_CHECK_FAILED).
+    public let check: IntegrationCheckResult?
+    /// Whether the task's own branch passed — the check failed only combined with it.
+    public let branchUnchanged: Bool
+    /// The code an integration job ended with (INTEGRATION_ERROR).
+    public let errorCode: String?
+    /// Why a task's attempt failed, and where its chain stands (TASK_FAILED).
+    public let failure: Failure?
+
+    public init(task: Task? = nil, targetRef: String? = nil, targetSha: String? = nil,
+                files: [String] = [], nothingLanded: Bool = false,
+                check: IntegrationCheckResult? = nil, branchUnchanged: Bool = false,
+                errorCode: String? = nil, failure: Failure? = nil) {
+        self.task = task
+        self.targetRef = targetRef
+        self.targetSha = targetSha
+        self.files = files
+        self.nothingLanded = nothingLanded
+        self.check = check
+        self.branchUnchanged = branchUnchanged
+        self.errorCode = errorCode
+        self.failure = failure
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        task = try c.decodeIfPresent(Task.self, forKey: .task)
+        targetRef = try c.decodeIfPresent(String.self, forKey: .targetRef)
+        targetSha = try c.decodeIfPresent(String.self, forKey: .targetSha)
+        files = try c.decodeIfPresent([String].self, forKey: .files) ?? []
+        nothingLanded = try c.decodeIfPresent(Bool.self, forKey: .nothingLanded) ?? false
+        check = try c.decodeIfPresent(IntegrationCheckResult.self, forKey: .check)
+        branchUnchanged = try c.decodeIfPresent(Bool.self, forKey: .branchUnchanged) ?? false
+        errorCode = try c.decodeIfPresent(String.self, forKey: .errorCode)
+        failure = try c.decodeIfPresent(Failure.self, forKey: .failure)
     }
 }
 
@@ -270,6 +394,29 @@ public struct OwnerAnswerRequest: Codable, Sendable {
     }
 }
 
+/// The owner's reason, as `POST /projects/:id/open-items/:itemId/resolve` takes it (§4.7). The
+/// reason is required by the door (`ResolveOpenItemDto.note`), so there is no request without one —
+/// `ExceptionCards.markHandledRequest` is the only place one is built.
+public struct OpenItemResolveRequest: Codable, Sendable {
+    public let note: String
+    public init(note: String) { self.note = note }
+}
+
+/// An item its assignee closed by hand, and what that ending is called (§4.7).
+public struct OpenItemResolved: Codable, Equatable, Sendable {
+    public let itemId: String
+    public let state: String
+    /// `HANDLED` for an exception the owner dealt with themselves, `WITHDRAWN` for a question its
+    /// asker took back. The card draws the press for the first and none for the second.
+    public let resolution: String
+
+    public init(itemId: String, state: String = "RESOLVED", resolution: String = "HANDLED") {
+        self.itemId = itemId
+        self.state = state
+        self.resolution = resolution
+    }
+}
+
 /// Where a merge candidate is (§3.3). Terminal states are `MERGED`, `DECLINED`, `CANCELLED`,
 /// `SUPERSEDED`; the card draws the live ones.
 public enum PromotionState: String, Codable, Sendable {
@@ -298,15 +445,20 @@ public struct IntegrationCheckResult: Codable, Equatable, Sendable {
     public let exitCode: Int?
     public let timedOut: Bool?
     public let durationMs: Int?
+    /// The last 16 KB of combined output — what a person reads to know why it is red. Absent on the
+    /// merge card's checks, which draw the measurement and not the log; the exception card's fact
+    /// block draws it, so it is read here rather than re-declared for one caller.
+    public let outputTail: String?
 
     public init(name: String, command: String, expectedExitCode: Int? = 0, exitCode: Int? = 0,
-                timedOut: Bool? = false, durationMs: Int? = nil) {
+                timedOut: Bool? = false, durationMs: Int? = nil, outputTail: String? = nil) {
         self.name = name
         self.command = command
         self.expectedExitCode = expectedExitCode
         self.exitCode = exitCode
         self.timedOut = timedOut
         self.durationMs = durationMs
+        self.outputTail = outputTail
     }
 
     /// Whether this one passed: the exit code the check declared, and not a timeout.

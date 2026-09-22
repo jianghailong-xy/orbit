@@ -390,6 +390,382 @@ public enum ExceptionCards {
         row.actions.contains(.askCoordinatorAgain)
     }
 
+    // MARK: - the fact block (§7.5, mock 5)
+
+    /// One row of the card's fact block: a label, its value, and whether the value is a machine
+    /// string — the rows the browser draws in its mono face end to end (the files a merge conflicted
+    /// on, an integration's error code).
+    ///
+    /// The VALUE is the browser's own string, character for character, and nothing here composes one
+    /// of its own: the block is a reading of the item's payload, and a second reading of the same
+    /// fact is the thing free to disagree with the row beside it.
+    public struct FactRow: Equatable, Sendable {
+        public let label: String
+        public let value: String
+        public let mono: Bool
+
+        public init(label: String, value: String, mono: Bool = false) {
+            self.label = label
+            self.value = value
+            self.mono = mono
+        }
+    }
+
+    /// What a failed check printed, folded from the END (mock 5) — which is where the reason a check
+    /// is red always is. The browser's `CheckOutputTail`: the last `foldedLines` lines are what is
+    /// drawn while folded, and the rest is offered.
+    public struct CheckTail: Equatable, Sendable {
+        /// The browser's `CHECK_TAIL_LINES`.
+        public static let foldedLines = 6
+        public static let less = "Show less"
+
+        /// Every line the check printed, with its ANSI colour codes stripped — the browser's
+        /// `stripAnsi`, because those codes are invisible in a native `Text` and what would show is
+        /// literal "[41m" garbage.
+        public let lines: [String]
+        /// How many lines the fold keeps back. Zero when the whole tail fits.
+        public let hidden: Int
+
+        /// The lines drawn while folded: the last of them, or all of them when they fit.
+        public var shown: [String] {
+            hidden == 0 ? lines : Array(lines.suffix(Self.foldedLines))
+        }
+        /// "Show 3 more lines", or nil when every line is already on screen.
+        public var more: String? { hidden > 0 ? "Show \(hidden) more lines" : nil }
+
+        /// The tail as the card draws it, or nil when the check printed nothing (which is what the
+        /// browser's `outputTail.trim() !== ''` decides too).
+        public static func of(_ outputTail: String?) -> CheckTail? {
+            guard let outputTail else { return nil }
+            let cleaned = strippingAnsi(outputTail)
+            guard !cleaned.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            let lines = cleaned.components(separatedBy: "\n")
+            return CheckTail(lines: lines, hidden: Swift.max(0, lines.count - foldedLines))
+        }
+
+        /// The browser's `stripAnsi` (`src/web/src/lib/ansi.ts`): real ESC-prefixed CSI sequences
+        /// only, so a literal "arr[0]" someone printed is left alone.
+        static func strippingAnsi(_ text: String) -> String {
+            guard text.contains("\u{1B}") else { return text }
+            guard let re = try? NSRegularExpression(pattern: "\u{1B}\\[[0-9;?]*[ -/]*[@-~]") else {
+                return text
+            }
+            return re.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
+                                               withTemplate: "")
+        }
+    }
+
+    /// What the card draws where a payload was read: the rows, and the failed check's own log.
+    public struct FactBlock: Equatable, Sendable {
+        public let rows: [FactRow]
+        public let logTail: CheckTail?
+
+        public init(rows: [FactRow], logTail: CheckTail? = nil) {
+            self.rows = rows
+            self.logTail = logTail
+        }
+    }
+
+    /// What a card draws in place of the item's sentence. `detailLine` is what every card drew
+    /// before the rows existed, and it is what a row with no readable payload still draws — the
+    /// server's own sentence, never a card with blanks in it.
+    public enum ItemFacts: Equatable, Sendable {
+        case detailLine(String)
+        case rows(FactBlock)
+    }
+
+    /// The fact block of §7.5, from the payload the row carries — the browser's `ItemFactRows`,
+    /// field for field (`ProjectProgressStatus.tsx`). The one place the two may differ is the font a
+    /// row is drawn in; the rows, their order and every word in them are the same.
+    public static func facts(_ row: ProjectOpenItemRow) -> ItemFacts {
+        guard let facts = row.facts else { return .detailLine(row.detailLine) }
+        var rows: [FactRow] = []
+        if let task = facts.task { rows.append(FactRow(label: taskLabel, value: task.title)) }
+        if let targetRef = facts.targetRef {
+            var into = targetRef
+            if let sha = facts.targetSha { into += " at \(String(sha.prefix(7)))" }
+            if facts.nothingLanded { into += nothingLanded }
+            rows.append(FactRow(label: intoLabel, value: into))
+        }
+        if !facts.files.isEmpty {
+            rows.append(FactRow(label: filesLabel, value: facts.files.joined(separator: " · "),
+                                mono: true))
+        }
+        // Only where the item is about a task: the press this sentence describes is a push to that
+        // task's branch, and a promotion's failure has no task branch to push to.
+        if facts.task != nil && !facts.files.isEmpty {
+            rows.append(FactRow(label: afterAFixLabel, value: afterAFix))
+        }
+        if let check = facts.check {
+            rows.append(FactRow(label: checkLabel,
+                                value: "\(check.command) · \(checkVerdict(check)) after "
+                                    + checkDuration(check.durationMs ?? 0)))
+        }
+        if facts.branchUnchanged {
+            rows.append(FactRow(label: branchLabel, value: branchUnchanged))
+        }
+        if let failure = facts.failure {
+            rows.append(FactRow(label: howLabel, value: howFailed(failure)))
+            if let standing = chainStanding(failure) {
+                rows.append(FactRow(label: retriesLabel, value: standing))
+            }
+        }
+        if let errorCode = facts.errorCode {
+            rows.append(FactRow(label: errorLabel, value: errorCode, mono: true))
+        }
+        return .rows(FactBlock(rows: rows, logTail: CheckTail.of(facts.check?.outputTail)))
+    }
+
+    /// The block's labels, in mock 5's words.
+    public static let taskLabel = "Task"
+    public static let intoLabel = "Into"
+    public static let filesLabel = "Files"
+    public static let afterAFixLabel = "After a fix"
+    public static let checkLabel = "Check"
+    public static let branchLabel = "Branch"
+    public static let howLabel = "How"
+    public static let retriesLabel = "Retries"
+    public static let errorLabel = "Error"
+    /// What a conflict's target-branch row says about the branch it could not move.
+    public static let nothingLanded = " · nothing landed"
+    /// What a fix is expected to do, and the one thing it does not ask the reader to do.
+    public static let afterAFix =
+        "push to the task branch — Orbit re-integrates and re-checks on its own"
+    /// The whole sentence of a check that failed only combined with the task's own branch.
+    public static let branchUnchanged =
+        "unchanged — the task passed on its own branch; it fails only on the combined tree"
+
+    /// How a check ended, in the words the mock uses for it: the code it returned, or that its budget
+    /// ran out while it was still running.
+    public static func checkVerdict(_ check: IntegrationCheckResult) -> String {
+        if let exitCode = check.exitCode { return "exit \(exitCode)" }
+        return check.timedOut == true ? "timed out" : "no exit code"
+    }
+
+    /// How long a check took, as the browser's `checkDuration` measures it
+    /// (`src/web/src/lib/checkDuration.ts`): `48s`, `6m 12s`, `1h 4m`.
+    ///
+    /// Deliberately not `PromotionCards.duration`, which floors the same measurement where the web
+    /// rounds: the merge card has floored it since before this card existed, and one client
+    /// disagreeing with the other by a second is not this card's to fix.
+    public static func checkDuration(_ ms: Int) -> String {
+        let seconds = Swift.max(0, Int((Double(ms) / 1_000).rounded()))
+        let h = seconds / 3_600, m = (seconds % 3_600) / 60, s = seconds % 60
+        if h > 0 { return m > 0 ? "\(h)h \(m)m" : "\(h)h" }
+        if m > 0 { return s > 0 ? "\(m)m \(s)s" : "\(m)m" }
+        return "\(s)s"
+    }
+
+    /// Why an attempt failed, in the browser's `howFailed` words — the same sentence whether or not
+    /// it knows the reason, because a card that went blank on an unknown one would say less than the
+    /// row beside it.
+    public static func howFailed(_ failure: OpenItemFacts.Failure) -> String {
+        let how: [String: String] = [
+            "ACCEPTANCE_EXIT_MISMATCH": "the acceptance command exited",
+            "RUN_FAILED": "a turn of the run failed",
+            "RUNNER_FINALIZED_FAILED": "the runner finished the run as failed",
+            "REAPED_API_ERROR": "the run stopped on an API or sign-in error and was reaped",
+            "ATTEMPT_LOST_RUNNER_OFFLINE": "its runner went offline and the attempt was taken back",
+            "ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED":
+                "its runtime never started and the attempt was taken back",
+            "REPORTED_FAILED": "somebody filed it as failed",
+        ]
+        let said = failure.how.flatMap { how[$0] } ?? "the task failed"
+        guard let exitCode = failure.exitCode else { return said }
+        return "\(said) \(exitCode) (expected \(failure.expectedExitCode ?? 0))"
+    }
+
+    /// Where the attempt's chain stands (§4.5): how many failures it has had, and that the last one
+    /// is the owner's rather than the coordinator's. Nil when the payload carried no counts — the
+    /// browser's row needs both, and a card that guessed "attempt 1 of 3" would be describing a
+    /// chain nobody read.
+    public static func chainStanding(_ failure: OpenItemFacts.Failure) -> String? {
+        guard let attempt = failure.attempt, let limit = failure.limit else { return nil }
+        let standing = "attempt \(attempt) of \(limit) in this chain"
+        return attempt >= limit
+            ? "\(standing) — this one is the owner's"
+            : "\(standing) — the \(ordinal(limit)) failure goes straight to the owner"
+    }
+
+    /// `3rd`, `1st`, `12th` — the mock counts the failure that stops being the coordinator's.
+    public static func ordinal(_ n: Int) -> String {
+        let teens = n % 100
+        if teens >= 11 && teens <= 13 { return "\(n)th" }
+        switch n % 10 {
+        case 1: return "\(n)st"
+        case 2: return "\(n)nd"
+        case 3: return "\(n)rd"
+        default: return "\(n)th"
+        }
+    }
+
+    // MARK: - the card's three weights (mock 7, 方案 B)
+
+    /// The three weights a card's presses are drawn in: the press this kind of exception is asking
+    /// for, the other way to take that step, and — behind both — the doors that only look or only
+    /// stop, drawn quiet so they stop competing with the press.
+    public enum PressTier: String, Equatable, Sendable {
+        case primary
+        case secondary
+        case link
+    }
+
+    /// One press of a card, by the action the server named and the weight the card gave it.
+    public struct CardPress: Equatable, Sendable {
+        public let action: ProjectOpenItemAction
+        public let tier: PressTier
+
+        public init(action: ProjectOpenItemAction, tier: PressTier) {
+            self.action = action
+            self.tier = tier
+        }
+    }
+
+    /// The doors a card may LEAD with: go onto the work, run the task again, hand the item back.
+    /// The rest of an item's list is a way to LOOK (`Open coordinator`) or to STOP (`Cancel task`),
+    /// which the mock demotes to quiet links (mock 7's rule 2).
+    static let leadingActions: Set<ProjectOpenItemAction> = [
+        .openTaskSession, .retry, .askCoordinatorAgain,
+    ]
+
+    /// What the way onto the work is called, in the browser's `ACTION_LABEL` spelling. The other
+    /// doors of that map are drawn by cards this one is not: the pause's `Resume`, the merge's
+    /// `Review`, and the two the owner's card reaches through its own controls.
+    public static let openTaskSession = "Open task session"
+
+    /// What the next step is for a kind of exception, where the design names one (mock 7 ①②③). A
+    /// conflict and a failed combined-tree check both want the branch fixed, so the way onto that
+    /// branch leads; a task that failed wants another run. A kind this map has no answer for keeps
+    /// the server's own order rather than being handed a step nobody asked for.
+    static let kindNextStep: [ProjectOpenItemKind: ProjectOpenItemAction] = [
+        .integrationConflict: .openTaskSession,
+        .integrationCheckFailed: .openTaskSession,
+        .taskFailed: .retry,
+    ]
+
+    /// The kinds an owner closes by hand (§4.7's "标记已处理"): the exceptions, which are the ones a
+    /// person sometimes answers in a way the platform cannot read. A question is the owner's to
+    /// ANSWER rather than to close, and a merge approval and a paused project each have a press of
+    /// their own — the server's own door refuses all three.
+    static let handClosableKinds: Set<ProjectOpenItemKind> = [
+        .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed,
+    ]
+
+    /// Whether this row carries the address a press would need, in the shape the browser's
+    /// `actionHref` / `writeTarget` answer it. A press the row cannot reach is not drawn, never
+    /// drawn and refused: the two task presses act on the task the item is about, and the rest are
+    /// about the item itself.
+    public static func addressed(_ row: ProjectOpenItemRow, _ action: ProjectOpenItemAction) -> Bool {
+        switch action {
+        case .askCoordinatorAgain, .answer: return true
+        case .retry, .cancelTask: return row.taskId != nil
+        case .review: return row.promotionId != nil
+        case .openCoordinator: return row.delivery?.sessionId != nil
+        case .openTaskSession: return row.sessionId != nil || row.taskId != nil
+        case .resume: return true
+        case .unknown: return false
+        }
+    }
+
+    /// The presses a card draws: the same list the server serves, minus what this build cannot draw
+    /// and minus the doors this row carries no address for. Never more than the server listed, so a
+    /// card cannot come to offer something no door answers.
+    public static func drawn(_ row: ProjectOpenItemRow) -> [ProjectOpenItemAction] {
+        row.actions.filter { $0 != .unknown && addressed(row, $0) }
+    }
+
+    /// The presses a card leads with, in the order it draws them: the step this kind of exception is
+    /// asking for, then the same step taken another way — the browser's `leadingDoors`, from the
+    /// server's own list, so a card never offers a door that is not there.
+    public static func leadingDoors(_ row: ProjectOpenItemRow,
+                                    _ actions: [ProjectOpenItemAction]) -> [ProjectOpenItemAction] {
+        let leading = actions.filter { leadingActions.contains($0) }
+        // An item that has become the owner's leads with the way back to the coordinator that should
+        // have had it (§4.7): the work is not the owner's to run again, and the server lists no
+        // RETRY for one.
+        let next = row.assignee == .owner ? ProjectOpenItemAction.askCoordinatorAgain
+                                          : kindNextStep[row.kind]
+        guard let next, leading.contains(next) else { return leading }
+        return [next] + leading.filter { $0 != next }
+    }
+
+    /// The card's whole action row, in the weights of mock 7 方案 B: the pair it leads with in their
+    /// own order, then the rest of the server's list — so a card reads left to right as what to do,
+    /// what else would do it, and the ways in and out.
+    ///
+    /// `Mark as handled` is NOT one of these: see `markable`.
+    public static func presses(_ row: ProjectOpenItemRow) -> [CardPress] {
+        let actions = drawn(row)
+        let leading = leadingDoors(row, actions)
+        let primary = leading.first
+        let secondary = leading.dropFirst().first
+        return (leading + actions.filter { !leading.contains($0) }).map { action in
+            CardPress(action: action,
+                      tier: action == primary ? .primary : action == secondary ? .secondary : .link)
+        }
+    }
+
+    // MARK: - the owner's own ending (§4.7, mock 7 方案 B)
+
+    /// The press the card wears, and the dialog it opens. The browser's `MARK_HANDLED` and its two
+    /// sentences, verbatim: what the press ends, and why the reason is required.
+    public static let markHandled = "Mark as handled"
+    public static let markHandledTitle = "Mark this item as handled?"
+    public static let markHandledBody =
+        "It stops being something this project owes anyone. The reason is what the record gains, "
+        + "because nothing on the line could verify the ending for itself — the task, its branch and "
+        + "its history stay where they are."
+    /// What the field asks for, in the browser's own label.
+    public static let markHandledReason = "Why is it no longer open?"
+    /// What a refused ending says, in the browser's own headline.
+    public static let notMarkedHandled = "The item was not closed"
+    /// What the receipt says, for a press made on this screen. Native-only, like the hand-back's:
+    /// the browser re-derives its cards from the read and the card simply goes.
+    public static let handled = "Marked as handled"
+    /// The door's own ceiling (`MAX_OPEN_ITEM_RESOLUTION_NOTE`), so the field stops where the
+    /// server's validation would.
+    public static let markHandledMaxLength = 2_000
+
+    /// Whether the owner may close this item themselves, in the browser's own rule: the item is
+    /// theirs, and its kind is one the door closes by hand (`HAND_CLOSABLE_KINDS`, which names the
+    /// same set as the server's `HAND_CLOSABLE_RESOLUTIONS`). Offered on the owner's card only —
+    /// an item still with the coordinator is the coordinator's to close (§4.7).
+    public static func markable(_ row: ProjectOpenItemRow) -> Bool {
+        row.assignee == .owner && handClosableKinds.contains(row.kind)
+    }
+
+    /// What the press sends, or nil when it may not be made: the door requires the reason
+    /// (`ResolveOpenItemDto.note`), so an empty one is not a press at all. Trimmed, exactly as the
+    /// browser trims before it asks.
+    public static func markHandledRequest(_ note: String) -> OpenItemResolveRequest? {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return OpenItemResolveRequest(note: trimmed)
+    }
+
+    /// The task this item is about, as the app's own `orbit-task:` door — what the `Open task
+    /// session` press reaches when the attempt that opened the item has no session left. Nil when
+    /// the item is about no task, or when the id cannot name one.
+    public static func taskLink(_ row: ProjectOpenItemRow) -> URL? {
+        link(row.taskId, scheme: "orbit-task")
+    }
+
+    /// The attempt that opened the item, for the reader who wants the run itself.
+    public static func sessionLink(_ row: ProjectOpenItemRow) -> URL? {
+        link(row.sessionId, scheme: "orbit-session")
+    }
+
+    /// Where `Open task session` goes, in the browser's own order: the attempt that opened the item
+    /// when there is one, the task when there is not.
+    public static func openTaskSessionLink(_ row: ProjectOpenItemRow) -> URL? {
+        sessionLink(row) ?? taskLink(row)
+    }
+
+    private static func link(_ id: String?, scheme: String) -> URL? {
+        guard let id, PublicID.toUUID(id) != nil else { return nil }
+        return URL(string: "\(scheme):\(id)")
+    }
+
 
     /// §7.5's heading for an item that BECAME the owner's, one per way it happened — the browser's
     /// `escalationHeading`, verbatim. Nil for an item that was the owner's from the start, which is

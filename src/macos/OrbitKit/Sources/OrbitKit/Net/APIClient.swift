@@ -448,6 +448,17 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/open-items/\(itemID)/return-to-coordinator")
     }
 
+    /// Mark an exception as handled by hand, with the reason that ending needs (§4.7, mock 7 方案 B).
+    ///
+    /// The owner's own credential and no acting session, like the two doors beside it. The reason is
+    /// required by the door and is the whole of what the record gains: nothing on the line could
+    /// verify the ending for itself — work that landed by hand leaves no receipt behind — so the row
+    /// keeps who closed it and why.
+    public func resolveOpenItem(projectID: String, itemID: String,
+                                _ req: OpenItemResolveRequest) async throws -> OpenItemResolved {
+        try await post("projects/\(projectID)/open-items/\(itemID)/resolve", body: req)
+    }
+
     /// Lift the pause on the coordinator (§6.3 F-T4, mock 6 ①) — the owner's alone. Resuming
     /// without raising anything is what the plain press means, so no limits travel with it.
     public func resumeProjectFuse(projectID: String, episodeID: String) async throws -> FuseResumed {
