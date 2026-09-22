@@ -461,6 +461,17 @@ public final class APIClient: @unchecked Sendable {
         return current
     }
 
+    /// The merges this project has already made, newest first (§3.6) — what the conversation draws
+    /// each record from, at the moment it happened.
+    ///
+    /// ITS OWN DOOR, not `currentPromotion` above: that one is the candidate on offer, and it moves
+    /// on to the next candidate the branch produces, so a receipt drawn from it describes a
+    /// different merge every time that happens. A MERGED row is terminal, immutable, and carries its
+    /// own `mergedSha`/`mergedAt`.
+    public func mergedPromotions(projectID: String) async throws -> [ProjectPromotionView] {
+        try await get("projects/\(projectID)/promotions/merged")
+    }
+
     /// M-T4: merge it. The candidate's source SHA travels with the press, so a card rendered before
     /// a newer candidate superseded it is refused rather than merging something else.
     public func confirmPromotion(projectID: String, promotionID: String,

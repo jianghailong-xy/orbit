@@ -82,6 +82,17 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// is being asked about (§3.6). The candidate is the address because a new one is a new
         /// question: the tasks it carries and the tree it was checked on are both different.
         case promotionApproval(promotionID: String)
+        /// A merge this project has already MADE, drawn where it happened (§3.6) — the record the
+        /// conversation it was made in is left with, which is not the candidate on offer above
+        /// (`PromotionCards.receipts`).
+        ///
+        /// The row carries the merge ITSELF and not its address, like `criteriaDecisionReceipt` and
+        /// for the same reason: a candidate is re-derived from the read on every render because what
+        /// the branch is offering moves on, while a merge that has happened is terminal and
+        /// immutable (`project_promotion_terminal_guard`) and carries its own `mergedSha`/`mergedAt`.
+        /// The read serves the newest twenty of them, and a record falling out of that window is not
+        /// a reason to take it out of the conversation it happened in.
+        case promotionReceipt(promotion: ProjectPromotionView)
         /// One question the project's coordinator put to its owner (§5.2 R7), by the item the
         /// answer door takes — the same address the push payload and the Needs-you bar carry.
         case coordinatorQuestion(itemID: String)
@@ -140,6 +151,11 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // The two owner cards, in the web's own DOM spelling (`question-<itemId>`), because the bar
         // above the transcript and the push that opens it both point at these by id.
         case .promotionApproval(let promotionID): return "promotion-\(promotionID)"
+        // The web receipt's element id, `promotion-receipt-${promotion.promotionId}` — beside the
+        // live card's id rather than equal to it: for one merge both rows can be on screen at once
+        // while the card is being let go of, and a duplicate id costs the List its diff.
+        case .promotionReceipt(let promotion):
+            return "promotion-receipt-\(promotion.promotionId)"
         case .coordinatorQuestion(let itemID):    return "question-\(itemID)"
         // The exception cards' ids, in the web's own spelling too: `open-item-<itemId>` is what
         // `ProjectProgressStatus.tsx` gives the two exception cards, and `fuse-<itemId>` is what
@@ -229,17 +245,19 @@ public enum DeliveryAnchor {
         // happened before the read that found them. (The exception cards arrived after the fact:
         // a task failed, a clock ran out, and the read that publishes the item runs later still.)
         //
-        // All FOUR receipts are placed by the door's own clock rather than here —
+        // All FIVE receipts are placed by the door's own clock rather than here —
         // `CriteriaDecisions.receipts`, `EvidenceDecisions.receipts`,
-        // `AcceptanceConfirmations.receipt` and `OwnerConfirmations.receipts`: a record has no
-        // arrival of its own on a device that was not there. They answer the same question this
-        // switch asks — where a row delivered RIGHT NOW would go — and none of them is delivered
-        // that way. The last of them arrived here first, and the owner's iOS screenshot of
-        // 2026-09-20 is what that cost: three records stacked under the newest row.
+        // `AcceptanceConfirmations.receipt`, `OwnerConfirmations.receipts` and
+        // `PromotionCards.receipts`: a record has no arrival of its own on a device that was not
+        // there. They answer the same question this switch asks — where a row delivered RIGHT NOW
+        // would go — and none of them is delivered that way. The last of them arrived here first,
+        // and the owner's iOS screenshot of 2026-09-20 is what that cost: three records stacked
+        // under the newest row.
         case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
-             .promotionApproval, .coordinatorQuestion, .escalatedItem, .fusePause:
+             .promotionApproval, .promotionReceipt, .coordinatorQuestion, .escalatedItem,
+             .fusePause:
             return items.last?.id
         }
     }
