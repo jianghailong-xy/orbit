@@ -1924,6 +1924,15 @@ function isLocalFileSrc(src: string): boolean {
 // sit. Either id spelling, because a checkout is named after whatever the claim carried. The
 // artifact route is what turns one of these back into bytes (the runner reads the file), so this is
 // also the gate on what gets a download affordance instead of an inert chip.
+// Whether a path names something worth drawing rather than handing over — the same reading the
+// native clients make (AttachmentLink.looksLikeImage), so one reply looks the same in all three.
+// The extension is all there is before the bytes are in hand, and it is enough: an agent's mock
+// ends in .png because that is what it wrote. SVG is deliberately absent — a browser draws it, but
+// neither native client decodes it, and a chip on two clients beats a picture on one.
+function looksLikeImagePath(src: string): boolean {
+  return /\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i.test(src.split(/[?#]/)[0] ?? src);
+}
+
 function isLegacyArtifactSrc(src: string): boolean {
   return isLocalFileSrc(src) && /\/\.orbit\/(?:uploads|worktrees)\/[0-9a-z-]{16,}\//i.test(src);
 }
@@ -1950,6 +1959,9 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
     );
   }
   if (typeof src === 'string' && isLegacyArtifactSrc(src)) {
+    if (looksLikeImagePath(src)) {
+      return <LocalArtifactImage artifactPath={src} alt={typeof alt === 'string' ? alt : 'Image'} />;
+    }
     return <LocalArtifactFile artifactPath={src} label={fileLabel(src)} />;
   }
   if (typeof src === 'string' && isLocalImageSrc(src)) {
@@ -1961,6 +1973,47 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
     );
   }
   return <img {...rest} className="md-image" src={src} alt={alt ?? ''} />;
+}
+
+// An image a reply named by its path: the mock an agent drew, in the session's own directories. The
+// bytes are on the runner, so they come through the artifact route — fetched when the row appears,
+// and drawn in place, because a reader who linked a picture meant to show one.
+//
+// A file that does not come back as an image, or does not come back at all (a checkout GC'd since,
+// a runner that is gone), falls back to the chip a non-image path gets: same reading, and the
+// click retries it. Static export falls back too — the route is a live fetch and those bytes were
+// never embedded.
+function LocalArtifactImage({ artifactPath, alt }: { artifactPath: string; alt: string }) {
+  const resolve = useContext(ArtifactResolverContext);
+  const exp = useContext(ExportCtx);
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!resolve || exp) return;
+    let active = true;
+    let made: string | null = null;
+    resolve(artifactPath)
+      .then((u) => {
+        if (active) {
+          made = u;
+          setUrl(u);
+        } else {
+          URL.revokeObjectURL(u); // unmounted before the fetch resolved
+        }
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [artifactPath, resolve, exp]);
+  if (exp || failed) {
+    return <LocalArtifactFile artifactPath={artifactPath} label={alt || fileLabel(artifactPath)} />;
+  }
+  if (!url) return <span className="md-image md-image-loading" />;
+  return <ChatImage src={url} className="md-image" alt={alt || 'Image'} />;
 }
 
 function LocalArtifactFile({

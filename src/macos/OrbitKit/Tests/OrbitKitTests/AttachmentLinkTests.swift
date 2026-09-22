@@ -72,6 +72,28 @@ final class AttachmentLinkTests: XCTestCase {
         XCTAssertNil(AttachmentLink.runnerArtifactPath(source: "/etc/passwd", sessionID: session))
     }
 
+    /// Which files are worth fetching before anybody asks: a mock the agent drew is a picture, a
+    /// document it wrote is not.
+    func testLooksLikeImageReadsTheExtension() {
+        for path in [
+            "/root/.orbit/uploads/01a0c992-61c0-727a-bbbb-d985dd45d0e0/claude-title-slot-1-diagnosis-and-A.png",
+            "/root/.orbit/worktrees/s/docs/mocks/card.JPEG",
+            "/tmp/shot.heic",
+            "/tmp/anim.webp",
+        ] {
+            XCTAssertTrue(AttachmentLink.looksLikeImage(path: path), path)
+        }
+        for path in [
+            "/root/.orbit/uploads/s/report.pdf",
+            "/root/.orbit/uploads/s/notes.md",
+            "/root/.orbit/uploads/s/vector.svg",   // web draws it; neither native client decodes it
+            "/root/.orbit/uploads/s/no-extension",
+            "",
+        ] {
+            XCTAssertFalse(AttachmentLink.looksLikeImage(path: path), path)
+        }
+    }
+
     func testFileNameFromPath() {
         XCTAssertEqual(AttachmentLink.fileName(inPath: "/root/.orbit/worktrees/s/docs/mocks/card.png"), "card.png")
         XCTAssertEqual(AttachmentLink.fileName(inPath: "/root/.orbit/uploads/s/a%20b.pdf"), "a b.pdf")

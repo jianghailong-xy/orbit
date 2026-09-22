@@ -79,6 +79,19 @@ public enum AttachmentLink {
         return runnerArtifactPath(url, sessionID: sessionID)
     }
 
+    /// Whether a path names something the clients can draw as a picture. The extension is all there
+    /// is to go on before the bytes are in hand, and it is enough: an agent's mock ends in `.png`
+    /// because that is what it wrote.
+    ///
+    /// What this decides is whether an unreachable-path chip is *worth fetching unprompted* — a
+    /// reader who linked an image meant to show it, and one who linked a PDF meant to hand it over.
+    /// SVG is deliberately absent: web draws it, but neither native client's `PlatformImage(data:)`
+    /// decodes it, so fetching one here would only produce the chip it started as.
+    public static func looksLikeImage(path: String) -> Bool {
+        let ext = (path.split(separator: ".").last.map(String.init) ?? "").lowercased()
+        return ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff"].contains(ext)
+    }
+
     /// The file name at the end of a path — what a save or a share sheet should call it, since the
     /// artifact route serves the bytes without one.
     public static func fileName(inPath path: String) -> String {

@@ -72,6 +72,20 @@ final class RunnerArtifactWiringTests: XCTestCase {
                "a fetched file that is not an image is no longer handed to the platform")
     }
 
+    /// A path that names an image is fetched unprompted and drawn where the chip was — the feature
+    /// this pair exists for: a mock the agent drew should read as a picture, not as something to poke.
+    func testAnImagePathIsFetchedAndDrawnInPlace() throws {
+        let markdown = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/MarkdownView.swift")
+        let view = try section(markdown, from: "private struct MarkdownImageView: View",
+                              to: "/// Inline-only Markdown")
+        expect(view, "AttachmentLink.looksLikeImage(path: path)",
+               "nothing decides any more whether a path is worth fetching unprompted")
+        expect(view, "inlineImage = image",
+               "fetched image bytes are no longer held for drawing")
+        expect(view, ".task(id: inlineFetchPath)",
+               "the fetch no longer runs when the row appears")
+    }
+
     /// A prose link to the same kind of file: it keeps its link (rather than being drawn as plain
     /// text) exactly when the artifact route can serve it, and the tap downloads it.
     func testAProseLinkToTheSessionsOwnFileIsDownloadable() throws {
