@@ -2761,6 +2761,26 @@ final class ConsoleModel {
         }
     }
 
+    /// Mark an exception as handled by hand, with the reason the door requires (§4.7, mock 7 方案 B).
+    /// The owner's ending for an item nobody has to act on any more — and the reason is the whole of
+    /// what the record gains, because nothing on the line could verify the ending for itself.
+    ///
+    /// The press is refused here rather than sent and refused, for the same reason the browser holds
+    /// the same line: a reason the door would reject is not a press, and the field it came from is
+    /// still on screen when this returns nil.
+    func markItemHandled(_ row: ProjectOpenItemRow, note: String) async -> OpenItemResolved? {
+        guard let projectID, let request = ExceptionCards.markHandledRequest(note) else { return nil }
+        do {
+            let receipt = try await api.resolveOpenItem(projectID: projectID, itemID: row.itemId,
+                                                        request)
+            await refreshRulerQuestions(force: true)
+            return receipt
+        } catch {
+            statusMessage = "\(ExceptionCards.notMarkedHandled) — \(APIClient.failureReason(error))."
+            return nil
+        }
+    }
+
     /// Lift the pause (§6.3 F-T4, mock 6 ①) — the owner's alone, and the one press that starts a
     /// stopped conversation again. The episode the card was drawn from rides along, so a press
     /// made after the pause was lifted is refused by the door rather than resuming the next one.
