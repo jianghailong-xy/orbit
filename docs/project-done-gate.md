@@ -21,8 +21,10 @@ built. So this is a re-deliberation of that decision and not the correction of a
 - every criterion the project states reads `satisfied` **and** `landing = 'LANDED'`, from the two
   readers `project_get` already serves (`project-criterion-satisfaction.ts`,
   `project-criterion-landing.ts`) — not a second definition of either. `landing = 'LANDED'` means
-  the serving tasks are all on the project's UPSTREAM; work that has only reached its project branch
-  reads `ON_INTEGRATION_LINE` and does not count
+  the serving tasks THAT HAVE A COMMIT TO LAND are all on the project's UPSTREAM; work that has only
+  reached its project branch reads `ON_INTEGRATION_LINE` and does not count, and work that declares
+  itself `codeless` — SR5's escape hatch: it resolves no source, so it has no commit of its own —
+  takes no part in the conjunction at all rather than holding it off `LANDED` for ever
   (`docs/project-integration-line-contract.md` §1.4, §3.5 M11). So for a project that integrates on a
   branch of its own, the status is `OPEN` until the account owner confirms the merge into main, and
   flips when the receipts for that merge are written; and

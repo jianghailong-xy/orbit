@@ -56,10 +56,28 @@ import type { PrismaService } from '../prisma/prisma.service';
  * itself for a project that goes straight to main, a `project/<id>` branch for one that does not
  * (`docs/project-integration-line-contract.md` §1.4). Work merged into the project branch has
  * landed somewhere real, and it is not on main. So a task answers ON_UPSTREAM or
- * ON_INTEGRATION_LINE, and a criterion is LANDED only when all of its work is on the upstream;
- * work that has only reached the project branch reads ON_INTEGRATION_LINE. The two readings answer
- * two questions — "has this prerequisite landed" wants the task's, "is the project done" wants the
- * criterion's — and neither of them is a NOT_LANDED.
+ * ON_INTEGRATION_LINE, and a criterion is LANDED only when all of its work THAT HAS A COMMIT TO LAND
+ * is on the upstream; work that has only reached the project branch reads ON_INTEGRATION_LINE. The
+ * two readings answer two questions — "has this prerequisite landed" wants the task's, "is the
+ * project done" wants the criterion's — and neither of them is a NOT_LANDED.
+ *
+ * WORK THAT WAS NEVER GOING TO LAND
+ * ---------------------------------
+ * One kind of serving task breaks that conjunction and always did: work that declares it needs no
+ * code. An acceptance task whose deliverable is evidence, a documentation task inside a code project
+ * — SR5's escape hatch, recorded on the task itself as `codeless` — resolves no source, so it has no
+ * branch, and no receipt can ever put its work on `main`. A criterion demanding a landing from one
+ * was demanding something that was never going to exist. On 2026-09-22 a project of 48 finished
+ * tasks could not reach DONE for exactly this reason: its criterion 12 was served by two landed
+ * tasks and one zero-commit acceptance task, and it read ON_INTEGRATION_LINE for ever.
+ *
+ * §2.5 J9 already exempts the very same tasks from a dependent's wait, in SR27's words — a "write
+ * the docs" prerequisite must not make the task after it demand a checkpoint that was never going to
+ * exist. This lane reads the same declaration through `taskHasNothingToLand` and lets such work out
+ * of the roll-up. It is not a way round the landing judgment: a task that ran a branch keeps
+ * participating whatever its receipts say and whatever its title says, and work on the project
+ * branch keeps reading ON_INTEGRATION_LINE. Only the declaration gets anything out — see
+ * `taskHasNothingToLand` for why the declaration and not a task's session history.
  *
  * WHAT THIS DELIBERATELY DOES NOT DO
  * ----------------------------------
@@ -157,11 +175,15 @@ export interface LandingReceiptFacts {
 }
 
 /**
- * One piece of work serving a criterion, as this lane needs it: nothing but the merges recorded
- * against its session branches. It carries no identity on purpose — a task is named here only when
- * something can be said about it, and "has no receipt" is not something that can be said.
+ * One piece of work serving a criterion, as this lane needs it: whether it has a commit to land at
+ * all, and nothing else but the merges recorded against its session branches. It carries no identity
+ * on purpose — a task is named here only when something can be said about it, and "has no receipt"
+ * is not something that can be said.
+ *
+ * `codeless` is §1.1 `isCodeTask`'s first half, and `taskHasNothingToLand` below is what reads it.
  */
 export interface LandingServingTask {
+  codeless: boolean;
   mergeReceipts: ReadonlyArray<LandingReceiptFacts>;
 }
 
@@ -278,24 +300,74 @@ export function lineStartedSql(alias: string): string {
 }
 
 /**
- * The fold: one criterion is LANDED when every task serving it is on the upstream, and
- * ON_INTEGRATION_LINE when every one of them landed on one of the two branches and not all of them
- * on the upstream.
+ * Whether this work has nothing to land at all — the task's own declaration that it needs no code.
  *
- * A conjunction, for the same reason clause 2 of the work side's answer is one — three tasks serve
- * a criterion and one of them landed is not a criterion whose work is on main, and saying LANDED
- * there would be the false green this lane exists to break up. A criterion nobody serves has no
- * evidence to stand on either, so it is UNKNOWN rather than vacuously landed.
+ * §1.1 `isCodeTask` has two halves and this reads the FIRST: a task that declares itself `codeless`
+ * "needs no code, even though its project is bound to a codebase", which is SR5's escape hatch for
+ * the research, documentation and evidence work inside an otherwise code-bearing project. Its
+ * schema comment says what that buys here: "a codeless task resolves no SOURCE" — so it has no
+ * branch, no commit of its own, and no receipt can ever put its work on `main`. A criterion that
+ * demanded a landing from one would be demanding something that was never going to exist, which is
+ * SR27's rule one contract over: "a 'write the docs' prerequisite must not make the task after it
+ * demand a checkpoint that was never going to exist". §2.5 J9 exempts the very same tasks from a
+ * dependent's wait, and `ProjectIntegrationBuckets.doneNotIntegrated` already calls them "DONE work
+ * with nothing to land". This is that same answer arriving at §1.4.
+ *
+ * WHY ONLY THE DECLARATION, AND NOT §1.1's SECOND HALF
+ * ----------------------------------------------------
+ * `isCodeTask`'s other half — whether the NEWEST work session ran in a worktree on a branch — is
+ * deliberately NOT read here, and the difference is what this lane is FOR. §1.1 asks it to decide
+ * dispatch and closure, where "the latest attempt is not a branch-bearing one" is the right input.
+ * This lane is an audit of where work IS, and a receipt is attached to the TASK rather than to the
+ * session it was recorded against: a task that landed from one attempt and then ran another without
+ * a worktree is a task whose work is really on the integration line, and reading it as "nothing to
+ * land" would say LANDED over it. That is the false green this lane exists to break up. The
+ * declaration has no such gap: a task that declares it needs no code has no branch on any of its
+ * sessions, which is why `codeless` and not the session relation is the fact read here.
+ *
+ * It is also not an exemption for acceptance or evidence work as such: a task that ran a branch HAS
+ * commits of its own, whatever its receipt says and whatever its title says, and this answers false
+ * for it. It goes on withholding LANDED until those commits reach the upstream. Only work that
+ * DECLARES it has no code is out of the roll-up.
+ */
+export function taskHasNothingToLand(task: LandingServingTask): boolean {
+  return task.codeless;
+}
+
+/**
+ * The fold: one criterion is LANDED when every task serving it THAT HAS A COMMIT TO LAND is on the
+ * upstream, and ON_INTEGRATION_LINE when every one of those landed on one of the two branches and
+ * not all of them on the upstream.
+ *
+ * Work with nothing to land (`taskHasNothingToLand`) is not delivery and does not take part in
+ * either: it neither withholds LANDED nor supplies it. So a criterion served by three tasks, two of
+ * them on `main` and the third an acceptance task that declares it needs no code, is LANDED — and
+ * before this rule it could not be, at any time, by any receipt, which left every project holding
+ * such a task unable to reach DONE (2026-09-22: 48 finished tasks, one of them a criteria-12
+ * acceptance task). A criterion served only by such work is LANDED too — all of zero commits are on
+ * the upstream, and §2.5 J9 answers TRUE for the same facts one level down ("nothing left to wait
+ * for"). But one that NOBODY serves is still UNKNOWN, which is the case that answer has always been
+ * about: nothing is filed under the criterion, so there is nothing to stand on.
+ *
+ * A conjunction otherwise, for the same reason clause 2 of the work side's answer is one — three
+ * tasks serve a criterion and one of them landed is not a criterion whose work is on main, and
+ * saying LANDED there would be the false green this lane exists to break up.
  */
 export function criterionLanding(
   definitions: ReadonlyArray<CriterionWithLandingFacts>,
   branches: LandingBranches,
 ): CriterionLandingAnswer[] {
   return definitions.map((definition) => {
-    const tasks = definition.servingTasks.map((task) => taskLanding(task.mergeReceipts, branches));
+    const delivery = definition.servingTasks.filter((task) => !taskHasNothingToLand(task));
+    const tasks = delivery.map((task) => taskLanding(task.mergeReceipts, branches));
     let landing: CriterionLanding = 'UNKNOWN';
-    if (tasks.length > 0 && tasks.every((task) => task === 'ON_UPSTREAM')) landing = 'LANDED';
-    else if (tasks.length > 0 && !tasks.includes('NOT_KNOWN')) landing = 'ON_INTEGRATION_LINE';
+    if (delivery.length === 0) {
+      landing = definition.servingTasks.length > 0 ? 'LANDED' : 'UNKNOWN';
+    } else if (tasks.every((task) => task === 'ON_UPSTREAM')) {
+      landing = 'LANDED';
+    } else if (!tasks.includes('NOT_KNOWN')) {
+      landing = 'ON_INTEGRATION_LINE';
+    }
     return { definitionId: definition.id, landing };
   });
 }
@@ -318,6 +390,10 @@ export async function readLandingBranches(
  * criterion and not one per task. It reads the criterion rows again rather than borrowing the work
  * side's, which keeps this lane genuinely bolted on: the three clauses are untouched, and nothing
  * here can change the answer they fold.
+ *
+ * `codeless` rides along as a scalar on the same `task` row the receipts hang off, so reading what
+ * `taskHasNothingToLand` needs costs this read no statement at all — which is why the project detail
+ * page's fixed cost does not move for it.
  */
 export function readCriterionLandingFacts(
   prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition'>,
@@ -330,7 +406,13 @@ export function readCriterionLandingFacts(
       id: true,
       servingTasks: {
         where: { ownerId },
-        select: { mergeReceipts: { select: { result: true, targetBranch: true } } },
+        select: {
+          // SR5's escape hatch: work that declares it needs no code has nothing to land, and the
+          // fold lets it out of the roll-up rather than waiting for a commit that cannot exist. Read
+          // the same way §2.5 J9 reads it for a dependent's wait.
+          codeless: true,
+          mergeReceipts: { select: { result: true, targetBranch: true } },
+        },
       },
     },
   });

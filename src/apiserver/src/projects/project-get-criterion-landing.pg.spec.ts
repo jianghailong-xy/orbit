@@ -32,6 +32,19 @@
  * performs against 0193/0230's fence, and receipts through `MergeReceiptService.record` — the door
  * an agent uses to record a merge it made itself, which is how this work actually lands.
  *
+ * THE WORK THAT WAS NEVER GOING TO LAND
+ * -------------------------------------
+ * Cases 8–10 are about a criterion whose work includes a task that declares it needs no code — SR5's
+ * escape hatch, which an acceptance task whose deliverable is evidence takes. On 2026-09-22 a project
+ * of 48 finished tasks could not reach DONE because one such task held its criterion at
+ * ON_INTEGRATION_LINE for ever: it has no commit of its own, so no receipt can ever put its work on
+ * `main`, and the fold read that as "not there yet". §2.5 J9 already answers this question for the
+ * other lane (a codeless prerequisite is not made to wait for a landing it can never have), and case
+ * 8 is that answer arriving at the criterion. Case 9 is the guard that keeps it honest, and the two
+ * differ by exactly one thing: the declaration. Everything else about their third task — the branch
+ * it ran, the receipt that names the project line — is the same, and without the declaration the
+ * criterion must go on withholding LANDED.
+ *
  *   PATH=/opt/node26/bin:$PATH \
  *   OUTCOME_RELEASE_API_SPEC_REGEX='project-get-criterion-landing\.pg\.spec\.js$' \
  *   OUTCOME_RELEASE_API_JOBS=1 bash scripts/outcome-reconciler-full-api.sh
@@ -112,6 +125,21 @@ test('GET /projects/:id says whether the work settled AND whether it landed, sep
   await prisma.project.create({
     data: { id: projectId, ownerId, title: 'The project whose work may or may not be on main' },
   });
+  // The project's own binding (§1.4). Its upstream is `main` and its line is a project branch,
+  // which is the only shape in which a receipt can read ON_INTEGRATION_LINE at all: the legacy pair
+  // is one branch named twice, so every criterion above is unaffected by this row — `main` is still
+  // the upstream their receipts name.
+  const PROJECT_LINE = `project/${projectId}`;
+  await prisma.projectCodebase.create({
+    data: {
+      ownerId,
+      projectId,
+      canonicalRepoUrl: 'ssh://git@example.invalid/the-project',
+      upstreamRef: 'refs/heads/main',
+      integrationRef: `refs/heads/${PROJECT_LINE}`,
+      refAuthority: 'REMOTE',
+    },
+  });
 
   /**
    * Settle an EXECUTABLE task exactly as `runnerApi.turnComplete` settles one: `status = 'DONE'`
@@ -174,13 +202,22 @@ test('GET /projects/:id says whether the work settled AND whether it landed, sep
   const SETTLED_AND_LANDS = 'the work for this one settled, and its branch reaches main';
   const SETTLED_ONLY = 'the work for this one settled, and nothing says where it went';
   const UNSETTLED_BUT_LANDS = 'the work for this one is on main and is still not finished';
+  /** Case 8: finished work, one piece of which never had a commit of its own to land. */
+  const NOTHING_TO_LAND = 'the work for this one settled, and one piece of it ran no branch';
+  /** Case 9: the guard — the work carries commits, and only the project branch has them. */
+  const ITS_OWN_WORK_ON_THE_LINE = 'the work for this one carries commits and only the line has them';
+  /** Case 10: work that ran on branches, none of which landed anywhere. */
+  const NEVER_LANDED = 'none of the work for this one has landed anywhere';
 
-  const [landsAt, settledAt, unsettledAt] = criteriaFromDefinitions(
-    (await projects.update(ownerId, projectId, {
-      acceptanceCriteriaItems: [SETTLED_AND_LANDS, SETTLED_ONLY, UNSETTLED_BUT_LANDS]
-        .map((text) => ({ text, verificationMethod: METHOD })),
-    } as never)).acceptanceCriteriaItems,
-  );
+  const [landsAt, settledAt, unsettledAt, nothingToLandAt, onTheLineAt, neverLandedAt] =
+    criteriaFromDefinitions(
+      (await projects.update(ownerId, projectId, {
+        acceptanceCriteriaItems: [
+          SETTLED_AND_LANDS, SETTLED_ONLY, UNSETTLED_BUT_LANDS,
+          NOTHING_TO_LAND, ITS_OWN_WORK_ON_THE_LINE, NEVER_LANDED,
+        ].map((text) => ({ text, verificationMethod: METHOD })),
+      } as never)).acceptanceCriteriaItems,
+    );
 
   const EXECUTABLE_DECLARATION = {
     completionCriterion: 'EXECUTABLE',
@@ -220,6 +257,84 @@ test('GET /projects/:id says whether the work settled AND whether it landed, sep
     completionCriterion: 'VERIFICATION',
   } as never);
   const unsettledSession = await sessionFor(unsettledTask.id, 'orbit/work-merged-unchecked');
+
+  /**
+   * One finished piece of code work: an EXECUTABLE task settled through the fence, and the worktree
+   * session on its branch. Having run a branch is the whole of §1.1's second half — it is what says
+   * a task carries commits of its own — so every task below that is meant to have some gets one.
+   */
+  async function finishedWork(title: string, criterionKey: string, branch: string) {
+    const task = await tasks.create(ownerId, {
+      title, projectId, criterionKey, ...EXECUTABLE_DECLARATION,
+    } as never);
+    await settleExecutable(task.id);
+    return sessionFor(task.id, branch);
+  }
+
+  /** One receipt, through the door an agent records a merge it made itself with. */
+  function mergeRecorded(
+    sessionId: string,
+    body: {
+      result: string; sourceSha: string; targetBranch: string;
+      targetShaBefore?: string; targetShaAfter?: string;
+    },
+  ) {
+    return receipts.record(ownerId, sessionId, body as never, 'AGENT');
+  }
+
+  // ── 8. finished work, one piece of which had no commit of its own ──────────────────────────────
+  // Two pieces reached main. The third is an acceptance task whose deliverable is evidence, declared
+  // codeless — SR5's escape hatch, "this task needs no code, even though its project is bound to a
+  // codebase". It resolves no SOURCE, so it has no branch, no commit of its own and no receipt; and
+  // before this unit, no way to stop holding its criterion at ON_INTEGRATION_LINE for ever.
+  //
+  // The declaration is written on the row directly, which is how the product writes it today: the
+  // column is declared by the schema and read by three lanes (source resolution, §2.5 J9's wait,
+  // and the integration backfill), and no DTO carries it yet. `dependency-landed-on-integration-ref`
+  // declares its codeless prerequisite the same way.
+  for (const [nibble, branch] of [['b', 'orbit/nothing-to-land-1'], ['c', 'orbit/nothing-to-land-2']]) {
+    const session = await finishedWork(`the part that reached main (${branch})`, nothingToLandAt.key, branch);
+    await mergeRecorded(session, {
+      result: 'MERGED', sourceSha: sha(nibble), targetBranch: 'main',
+      targetShaBefore: sha('0'), targetShaAfter: sha(nibble),
+    });
+  }
+  const evidenceOnlyTask = await tasks.create(ownerId, {
+    title: 'the acceptance task that only produces evidence',
+    projectId,
+    criterionKey: nothingToLandAt.key,
+    ...EXECUTABLE_DECLARATION,
+  } as never);
+  await settleExecutable(evidenceOnlyTask.id);
+  await prisma.task.update({
+    where: { id: evidenceOnlyTask.id },
+    data: { codeless: true },
+  });
+
+  // ── 9. the guard: the same two landed pieces, and a third whose commits are only on the line ───
+  // The third ran a branch, so it has commits of its own, and its only receipt names the project's
+  // own line — the shape the finished UI-acceptance task of 2026-09-22 actually has. It must go on
+  // withholding LANDED: the read cannot tell a branch that carried nothing from one whose work is
+  // on the line and not yet on main, and guessing is the false green this lane exists to break up.
+  for (const [nibble, branch] of [['d', 'orbit/own-work-1'], ['e', 'orbit/own-work-2']]) {
+    const session = await finishedWork(`the part that reached main (${branch})`, onTheLineAt.key, branch);
+    await mergeRecorded(session, {
+      result: 'MERGED', sourceSha: sha(nibble), targetBranch: 'main',
+      targetShaBefore: sha('0'), targetShaAfter: sha(nibble),
+    });
+  }
+  const ownWorkOnTheLine = await finishedWork(
+    'the work whose commits are only on the project branch', onTheLineAt.key, 'orbit/own-work-on-the-line',
+  );
+  await mergeRecorded(ownWorkOnTheLine, {
+    result: 'ALREADY_MERGED', sourceSha: sha('f'), targetBranch: PROJECT_LINE,
+    targetShaBefore: sha('1'), targetShaAfter: sha('1'),
+  });
+
+  // ── 10. work that ran branches, and landed none of them ────────────────────────────────────────
+  for (const branch of ['orbit/never-landed-1', 'orbit/never-landed-2', 'orbit/never-landed-3']) {
+    await finishedWork(`the work that never landed (${branch})`, neverLandedAt.key, branch);
+  }
 
   /** Every read this spec takes, so the invariant at the end is over all of them and not a rerun. */
   const satisfiedOverTime: boolean[][] = [];
@@ -348,4 +463,35 @@ test('GET /projects/:id says whether the work settled AND whether it landed, sep
             + '`satisfied` says the work settled, and no landing state is an input to that');
       }
     });
+
+  // ═══ 8. finished work with nothing to land does not hold its criterion off the upstream ═══════
+  await t.test('a criterion with a piece that declares it needs no code reads LANDED', async () => {
+    assert.deepEqual(answerOf(await detail(), NOTHING_TO_LAND),
+      { satisfied: true, clauses: [], landing: 'LANDED' },
+      'the acceptance task resolves no SOURCE, so it has no branch of its own, no commit of its own '
+        + 'and no receipt — there is nothing of it that could be on main. A fold that demanded a '
+        + 'landing from it would leave this criterion, and with it the whole project, at '
+        + 'ON_INTEGRATION_LINE for ever, which is what happened to 48 finished tasks on 2026-09-22');
+  });
+
+  // ═══ 9. the guard: the same rows, one declaration short ═══════════════════════════════════════
+  await t.test('work whose own commits are only on the line still reads ON_INTEGRATION_LINE',
+    async () => {
+      assert.deepEqual(answerOf(await detail(), ITS_OWN_WORK_ON_THE_LINE),
+        { satisfied: true, clauses: [], landing: 'ON_INTEGRATION_LINE' },
+        'the third task ran a branch, so it carries commits of its own and its only receipt names '
+          + 'the project line. This is the shape the finished UI-acceptance task actually has, and '
+          + 'it differs from case 8 by the declaration alone: reading LANDED here is the false green '
+          + 'this lane exists to break up, because the read cannot tell a branch that carried '
+          + 'nothing from one whose work is on the line, and it may not guess between them');
+    });
+
+  // ═══ 10. and work that landed nothing is never reported as landed ══════════════════════════════
+  await t.test('a criterion none of whose work landed is not LANDED', async () => {
+    const neverLanded = answerOf(await detail(), NEVER_LANDED);
+    assert.deepEqual(neverLanded, { satisfied: true, clauses: [], landing: 'UNKNOWN' },
+      'three branches and no receipt: absence of evidence is not evidence of absence, and it is '
+        + 'certainly not a landing');
+    assert.notEqual(neverLanded.landing, 'LANDED');
+  });
 });
