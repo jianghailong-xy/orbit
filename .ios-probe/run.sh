@@ -76,8 +76,8 @@ shot() {  # shot <variant> <pull-style>
   sleep 1
 }
 
-VARIANTS="${VARIANTS:-autoParent autoSelfSpinnerWin autoSelfSpinnerRow plain}"
-PULLS="${PULLS:-fromTop afterScroll}"
+VARIANTS="${VARIANTS:-bare bareRefresh bareSearchAuto bareSearchAlways ownField autoParent}"
+PULLS="${PULLS:-fromTop}"
 
 echo "== run =="
 for variant in $VARIANTS; do

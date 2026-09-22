@@ -49,6 +49,18 @@ enum Variant: String, CaseIterable {
     /// one an app could ship, because it can only ever reach its own list's control.
     case autoSelfSpinnerWin
     case autoSelfSpinnerRow
+    /// The decomposition controls for the band between the navigation bar and the first row — the
+    /// "lots of whitespace under the search field" report. One modifier at a time, so the band can
+    /// be attributed: the list itself, the refresh control, and each drawer display mode. A band
+    /// that survives all of them is iOS 26's own; one that only appears with `.refreshable` is the
+    /// refresh control's; one that only appears with a drawer is the drawer's reservation.
+    case bare
+    case bareRefresh
+    case bareSearchAuto
+    case bareSearchAlways
+    /// The hand-drawn alternative: the same bare list with our own 40pt field as its first row and
+    /// no drawer at all — what ③ in the mock would be built from.
+    case ownField
 }
 
 /// How the pull is driven. `.afterScroll` first scrolls the list down (which hides the drawer
@@ -98,6 +110,44 @@ struct ProbeRoot: View {
         .navigationTitle("orbit")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await holdRefresh() }
+    }
+
+    /// The list with nothing around it — no searchable, no refresh control, no extra inset: the
+    /// baseline the band is measured against.
+    private var bareList: some View {
+        List {
+            Section {
+                ForEach(0..<30, id: \.self) { i in row(i) }
+            } header: {
+                Text("Today")
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle("orbit")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The same list, with our own field as its first row: no drawer, so no drawer band — and the
+    /// field goes where the rows go.
+    private var ownFieldList: some View {
+        List {
+            Text("Search all sessions")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .frame(height: 40)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 6, trailing: 16))
+                .listRowSeparator(.hidden)
+            Section {
+                ForEach(0..<30, id: \.self) { i in row(i) }
+            } header: {
+                Text("Today")
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle("orbit")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     /// The same list, with the reach-in riding a zero-height first row: from there the walk up the
@@ -210,6 +260,16 @@ struct ProbeRoot: View {
             NavigationStack {
                 inset(list)
             }
+        case .bare:
+            NavigationStack { bareList }
+        case .bareRefresh:
+            NavigationStack { bareList.refreshable { await holdRefresh() } }
+        case .bareSearchAuto:
+            NavigationStack { bareList.modifier(DrawerSearch(text: $query, mode: .automatic)) }
+        case .bareSearchAlways:
+            NavigationStack { bareList.modifier(DrawerSearch(text: $query, mode: .always)) }
+        case .ownField:
+            NavigationStack { ownFieldList.refreshable { await holdRefresh() } }
         case .autoSelfSpinnerWin:
             NavigationStack {
                 ownIndicator(list).background(ClearRefreshSpinner(scope: .window))
