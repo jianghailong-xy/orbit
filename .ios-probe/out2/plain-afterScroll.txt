@@ -1,0 +1,19 @@
+variant=plain pull=afterScroll ios=26.2 refreshHandler=ran
+navbar UIKitNavigationBar (0.0, 62.0, 402.0, 54.0)
+refreshControl UIKitRefreshControl (0.0, 116.0, 402.0, 60.0)
+scroll UpdateCoalescingCollectionView (0.0, 0.0, 402.0, 874.0) inset=UIEdgeInsets(top: 176.0, left: 0.0, bottom: 34.0, right: 0.0) offset=(0.0, -256.0)
+refreshControlProperty=UIKitRefreshControl
+cell _UICollectionViewListCellContentView (0.0, 318.33333333333337, 402.0, 80.0)
+cell _UICollectionViewListCellContentView (0.0, 398.33333333333337, 402.0, 80.0)
+SYSTEM=tintClear=NO ownIndicator=0
+OVERLAP=NO 
+--- tree ---
+UIWindow (0.0, 0.0, 402.0, 874.0)
+  UITransitionView (0.0, 0.0, 402.0, 874.0)
+    UIDropShadowView (0.0, 0.0, 402.0, 874.0)
+      _UIHostingView<ModifiedContent<AnyView, RootModifier>> (0.0, 0.0, 402.0, 874.0)
+        UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> (0.0, 0.0, 402.0, 874.0)
+          UILayoutContainerView (0.0, 0.0, 402.0, 874.0)
+            UINavigationTransitionView (0.0, 0.0, 402.0, 874.0)
+            UIKitNavigationBar (0.0, 62.0, 402.0, 54.0)
+            FloatingBarContainerView (0.0, 0.0, 402.0, 874.0)

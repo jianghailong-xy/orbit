@@ -43,7 +43,12 @@ enum Variant: String, CaseIterable {
     /// The proposal: `.automatic` back (the field hides as you read and is revealed by the pull),
     /// with the system's mis-placed spinner made invisible and this probe drawing its own in the
     /// list's top band — below the field, where the reveal does not reach.
-    case autoSelfSpinner
+    ///
+    /// Two ways to reach the control: sweeping the window, and from a zero-height row *inside* the
+    /// list. The first proves whether clearing the tint hides the glyph at all; the second is the
+    /// one an app could ship, because it can only ever reach its own list's control.
+    case autoSelfSpinnerWin
+    case autoSelfSpinnerRow
 }
 
 /// How the pull is driven. `.afterScroll` first scrolls the list down (which hides the drawer
@@ -93,6 +98,52 @@ struct ProbeRoot: View {
         .navigationTitle("orbit")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await holdRefresh() }
+    }
+
+    /// The same list, with the reach-in riding a zero-height first row: from there the walk up the
+    /// superview chain is guaranteed to arrive at *this* list's collection view.
+    private var listWithReachInRow: some View {
+        List {
+            ClearRefreshSpinner(scope: .inList)
+                .frame(height: 0)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            Section {
+                ForEach(0..<30, id: \.self) { i in row(i) }
+            } header: {
+                Text("Today")
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle("orbit")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await holdRefresh() }
+    }
+
+    private func row(_ i: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Session \(i)")
+            Text("Waiting for you · \(i)m")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 6)
+    }
+
+    /// The app's own indicator, in the list's top band — below the field the pull reveals.
+    private func ownIndicator(_ content: some View) -> some View {
+        content.safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                if refreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.top, 10)
+                        .padding(.bottom, 4)
+                }
+                EmptyView()
+            }
+        }
     }
 
     private var listWithoutRefresh: some View {
@@ -159,21 +210,14 @@ struct ProbeRoot: View {
             NavigationStack {
                 inset(list)
             }
-        case .autoSelfSpinner:
+        case .autoSelfSpinnerWin:
             NavigationStack {
-                list
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        VStack(spacing: 0) {
-                            if refreshing {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .padding(.top, 10)
-                                    .padding(.bottom, 4)
-                            }
-                            EmptyView()
-                        }
-                    }
-                    .background(ClearRefreshSpinner())
+                ownIndicator(list).background(ClearRefreshSpinner(scope: .window))
+                    .modifier(DrawerSearch(text: $query, mode: .automatic))
+            }
+        case .autoSelfSpinnerRow:
+            NavigationStack {
+                ownIndicator(listWithReachInRow)
                     .modifier(DrawerSearch(text: $query, mode: .automatic))
             }
         }
@@ -264,7 +308,11 @@ struct ProbeRoot: View {
         let controls = all.filter { $0 is UIRefreshControl }
         // The system spinner lives inside its control; ours is a bare activity indicator.
         let indicators = all.filter { name($0).contains("ActivityIndicator") }
-        let own = indicators.filter { view in !all.contains { $0 is UIRefreshControl && view.isDescendant(of: $0) } }
+        let controlsFirst = all.first { $0 is UIRefreshControl }
+        let own = indicators.filter { view in
+            guard let control = controlsFirst else { return true }
+            return !view.isDescendant(of: control)
+        }
         let navBars = all.filter { $0 is UINavigationBar }
         let cells = all.filter { name($0).contains("ListCell") || name($0).contains("CellContentView") }
 
@@ -291,7 +339,12 @@ struct ProbeRoot: View {
                 if !hit.isNull && hit.width > 0 && hit.height > 0 { overlap = hit }
             }
         }
-        out += "SYSTEM=\(controls.isEmpty ? "no control" : "tintClear=\(controls.first?.tintColor == .clear ? "YES" : "NO")") ownIndicator=\(own.count)\n"
+        let tint = controls.first.map { $0.tintColor == .clear ? "YES" : "NO" } ?? "no control"
+        let glyphHidden = controls.first.map { control in
+            all.filter { $0 is UIActivityIndicatorView && $0.isDescendant(of: control) }
+                .map { "\($0.alpha)\($0.isHidden ? "/hidden" : "")" }.joined(separator: ",")
+        } ?? "-"
+        out += "SYSTEM=tintClear=\(tint) glyph=\(glyphHidden.isEmpty ? "none" : glyphHidden) ownIndicator=\(own.count)\n"
         out += "OVERLAP=\(overlap.isNull ? "NO" : "YES") \(overlap.isNull ? "" : "\(overlap)")\n"
         out += "--- tree ---\n" + tree(of: window, depth: 0)
 
@@ -335,8 +388,11 @@ private struct DrawerSearch: ViewModifier {
 /// Makes the system's refresh spinner invisible: on iOS 26 it is drawn in the navigation bar's
 /// drawer band — on the search field, for the reporter — and the pull it belongs to is the one that
 /// reveals that field. The control keeps working (it is what runs the refresh action); only its
-/// glyph goes, and the app draws its own indicator where the reveal cannot reach it.
+/// glyph goes, and the app draws its own indicator where the reveal cannot reach.
 private struct ClearRefreshSpinner: UIViewRepresentable {
+    enum Scope { case window, inList }
+    let scope: Scope
+
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: .zero)
         view.isUserInteractionEnabled = false
@@ -344,10 +400,23 @@ private struct ClearRefreshSpinner: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UIView, context: Context) {
+        // Off the layout pass: the control is UIKit's, and it may not exist yet on the first update.
         DispatchQueue.main.async {
-            var node: UIView? = view
-            while let current = node, !(current is UIScrollView) { node = current.superview }
-            (node as? UIScrollView)?.refreshControl?.tintColor = .clear
+            switch scope {
+            case .window:
+                guard let window = view.window else { return }
+                for scroll in descendants(of: window).compactMap({ $0 as? UIScrollView }) {
+                    scroll.refreshControl?.tintColor = .clear
+                }
+            case .inList:
+                var node: UIView? = view
+                while let current = node, !(current is UIScrollView) { node = current.superview }
+                (node as? UIScrollView)?.refreshControl?.tintColor = .clear
+            }
         }
+    }
+
+    private func descendants(of view: UIView) -> [UIView] {
+        view.subviews + view.subviews.flatMap { descendants(of: $0) }
     }
 }

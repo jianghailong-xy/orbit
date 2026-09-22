@@ -1,0 +1,25 @@
+variant=autoSelfSpinner pull=fromTop ios=26.2 refreshHandler=ran
+navbar UIKitNavigationBar (0.0, 62.0, 402.0, 174.0)
+search UIKitSearchBar (0.0, 176.0, 402.0, 60.0)
+search UISearchBarBackground (0.0, 176.0, 402.0, 60.0)
+search _UISearchBarSearchContainerView (0.0, 176.0, 402.0, 60.0)
+search UISearchBarTextField (16.0, 177.0, 370.0, 44.0)
+search UISearchBarTextFieldLabel (55.333333333333336, 189.0, 123.33333333333331, 20.333333333333343)
+refreshControl UIKitRefreshControl (0.0, 116.0, 402.0, 60.0)
+indicator SwiftUIActivityIndicatorView (194.0, 246.0, 14.0, 14.0) OWN
+scroll UpdateCoalescingCollectionView (0.0, 0.0, 402.0, 874.0) inset=UIEdgeInsets(top: 264.0, left: 0.0, bottom: 34.0, right: 0.0) offset=(0.0, -404.0)
+refreshControlProperty=UIKitRefreshControl
+cell _UICollectionViewListCellContentView (0.0, 444.33333333333337, 402.0, 80.0)
+cell _UICollectionViewListCellContentView (0.0, 524.3333333333333, 402.0, 80.0)
+SYSTEM=tintClear=NO ownIndicator=1
+OVERLAP=NO 
+--- tree ---
+UIWindow (0.0, 0.0, 402.0, 874.0)
+  UITransitionView (0.0, 0.0, 402.0, 874.0)
+    UIDropShadowView (0.0, 0.0, 402.0, 874.0)
+      _UIHostingView<ModifiedContent<AnyView, RootModifier>> (0.0, 0.0, 402.0, 874.0)
+        UIKitPlatformViewHost<PlatformViewControllerRepresentableAdaptor<NavigationStackRepresentable>> (0.0, 0.0, 402.0, 874.0)
+          UILayoutContainerView (0.0, 0.0, 402.0, 874.0)
+            UINavigationTransitionView (0.0, 0.0, 402.0, 874.0)
+            UIKitNavigationBar (0.0, 62.0, 402.0, 174.0)
+            FloatingBarContainerView (0.0, 0.0, 402.0, 874.0)

@@ -76,7 +76,7 @@ shot() {  # shot <variant> <pull-style>
   sleep 1
 }
 
-VARIANTS="${VARIANTS:-autoParent alwaysParent autoSelfSpinner plain}"
+VARIANTS="${VARIANTS:-autoParent autoSelfSpinnerWin autoSelfSpinnerRow plain}"
 PULLS="${PULLS:-fromTop afterScroll}"
 
 echo "== run =="
