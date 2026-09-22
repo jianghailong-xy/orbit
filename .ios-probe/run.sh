@@ -12,6 +12,21 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${1:-$HERE/out}"
+
+# `timeout` is GNU coreutils and macOS does not ship it: a round was spent on
+# `timeout: command not found` and one line of build log. Hand-rolled, portable watchdog instead.
+with_limit() {  # with_limit <seconds> <cmd...>
+  local secs="$1"; shift
+  "$@" &
+  local pid=$!
+  ( sleep "$secs"; kill -TERM "$pid" 2>/dev/null ) &
+  local watchdog=$!
+  wait "$pid"
+  local rc=$?
+  kill -TERM "$watchdog" 2>/dev/null
+  wait "$watchdog" 2>/dev/null
+  return $rc
+}
 BUNDLE=io.orbitd.probe
 mkdir -p "$OUT"
 
@@ -27,7 +42,7 @@ cd "$HERE" && xcodegen generate || exit 1
 echo "== build =="
 # The log is kept whatever happens: a round that ends in "** BUILD FAILED **" alone is a round
 # spent on nothing.
-timeout 1200 xcodebuild -project Probe.xcodeproj -scheme Probe -sdk iphonesimulator \
+with_limit 1200 xcodebuild -project Probe.xcodeproj -scheme Probe -sdk iphonesimulator \
   -destination "generic/platform=iOS Simulator" \
   -derivedDataPath "$HERE/.dd" build > "$OUT/build.log" 2>&1
 BUILT=$?
@@ -66,7 +81,7 @@ if [ -z "${UDID:-}" ]; then
 fi
 echo "device: $UDID"
 xcrun simctl boot "$UDID" 2>/dev/null || true
-timeout 300 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
+with_limit 300 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
 
 APP="$HERE/.dd/Build/Products/Debug-iphonesimulator/OrbitProbe.app"
 xcrun simctl uninstall "$UDID" "$BUNDLE" 2>/dev/null || true
@@ -103,7 +118,7 @@ run() {  # run <variant> [fix] — fix is `before` (as shipped) or `after` (the 
   if [ "$variant" = "swipe" ]; then
     # The gesture variant is driven by the UI test (only a test can synthesize a touch); the app
     # writes the same trace, and waits for the drag rather than for a fixed moment in it.
-    timeout 900 xcodebuild test \
+    with_limit 900 xcodebuild test \
       -project "$HERE/Probe.xcodeproj" -scheme Probe \
       -destination "id=$UDID" -derivedDataPath "$HERE/.dd" \
       -only-testing:ProbeUITests \
