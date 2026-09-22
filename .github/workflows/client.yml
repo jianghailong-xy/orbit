@@ -43,6 +43,13 @@ on:
         description: "Run the iOS tail-pinning / reasoning-fold probe (trace, evidence only)"
         type: boolean
         default: false
+      # Which Mac image the probe runs on. The owner's phone is on iOS 27, and the simulator
+      # runtime is what the List's scroll behaviour belongs to, so the probe has to be able to run
+      # there — `xcode-27` is the only image carrying an iOS 27 simulator.
+      probe_runner:
+        description: "Runner image for the probe (xcode-27 = iOS 27 simulators, macos-26 = iOS 26)"
+        type: string
+        default: "xcode-27"
 
 concurrency:
   group: client-${{ github.ref }}
@@ -147,12 +154,13 @@ jobs:
   # sample, and what the List's own UIScrollView reported at each one. Asked for with
   # `gh workflow run client.yml --ref <branch> -f probe=true`.
   #
-  # macos-26: the scroll machinery under test is the platform's, and the owner's phone is on the
-  # newest iOS — a run on an older runtime answers about an older List.
+  # The scroll machinery under test is the *platform's*, so the runtime is the experiment: the
+  # owner's phone is on iOS 27 (Darwin 27.0.0) and the first two runs of this probe were on iOS 26.5
+  # simulators. `probe_runner` selects the image; both print the runtime they ran on.
   ios-probe:
     name: iOS probe (tail pinning across a reasoning fold, evidence only)
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.probe == 'true'
-    runs-on: macos-26
+    runs-on: ${{ github.event.inputs.probe_runner || 'macos-26' }}
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7
