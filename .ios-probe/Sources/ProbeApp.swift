@@ -40,6 +40,10 @@ enum Variant: String, CaseIterable {
     case autoNoInset
     /// Control: the same list with no search field at all — where the spinner lands by itself.
     case plain
+    /// The proposal: `.automatic` back (the field hides as you read and is revealed by the pull),
+    /// with the system's mis-placed spinner made invisible and this probe drawing its own in the
+    /// list's top band — below the field, where the reveal does not reach.
+    case autoSelfSpinner
 }
 
 /// How the pull is driven. `.afterScroll` first scrolls the list down (which hides the drawer
@@ -52,6 +56,8 @@ enum PullStyle: String, CaseIterable {
 
 struct ProbeRoot: View {
     @State private var query = ""
+    /// Whether the refresh action is running — what the hand-drawn indicator keys off.
+    @State private var refreshing = false
 
     private let variant = Variant(rawValue: ProcessInfo.processInfo.environment["PROBE_VARIANT"] ?? "")
         ?? .autoParent
@@ -153,6 +159,23 @@ struct ProbeRoot: View {
             NavigationStack {
                 inset(list)
             }
+        case .autoSelfSpinner:
+            NavigationStack {
+                list
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        VStack(spacing: 0) {
+                            if refreshing {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .padding(.top, 10)
+                                    .padding(.bottom, 4)
+                            }
+                            EmptyView()
+                        }
+                    }
+                    .background(ClearRefreshSpinner())
+                    .modifier(DrawerSearch(text: $query, mode: .automatic))
+            }
         }
     }
 
@@ -161,6 +184,7 @@ struct ProbeRoot: View {
     /// Holds the refresh open long enough to be screenshotted: the spinner is only on screen while
     /// the refresh action is running.
     private func holdRefresh() async {
+        await MainActor.run { refreshing = true }
         try? await Task.sleep(for: .seconds(90))
     }
 
@@ -226,7 +250,7 @@ struct ProbeRoot: View {
     /// that says whether the spinner and the field actually collide.
     @MainActor
     private func report(_ note: String, window: UIWindow? = nil, scroll: UIScrollView? = nil) {
-        var out = "variant=\(variant.rawValue) pull=\(pullStyle.rawValue) ios=\(UIDevice.current.systemVersion)\n"
+        var out = "variant=\(variant.rawValue) pull=\(pullStyle.rawValue) ios=\(UIDevice.current.systemVersion) refreshHandler=\(refreshing ? "ran" : "NEVER RAN")\n"
         if !note.isEmpty { out += "note=\(note)\n" }
 
         guard let window else {
@@ -238,6 +262,9 @@ struct ProbeRoot: View {
         let all = descendants(of: window)
         let searchish = all.filter { name($0).lowercased().contains("search") }
         let controls = all.filter { $0 is UIRefreshControl }
+        // The system spinner lives inside its control; ours is a bare activity indicator.
+        let indicators = all.filter { name($0).contains("ActivityIndicator") }
+        let own = indicators.filter { view in !all.contains { $0 is UIRefreshControl && view.isDescendant(of: $0) } }
         let navBars = all.filter { $0 is UINavigationBar }
         let cells = all.filter { name($0).contains("ListCell") || name($0).contains("CellContentView") }
 
@@ -246,6 +273,7 @@ struct ProbeRoot: View {
         for bar in navBars { out += "navbar \(name(bar)) \(rect(bar))\n" }
         for view in searchish { out += "search \(name(view)) \(rect(view))\n" }
         for control in controls { out += "refreshControl \(name(control)) \(rect(control))\n" }
+        for view in indicators { out += "indicator \(name(view)) \(rect(view)) \(view.isDescendant(of: controls.first ?? window) ? "system" : "OWN")\n" }
         if let scroll {
             out += "scroll \(name(scroll)) \(rect(scroll)) inset=\(scroll.adjustedContentInset) offset=\(scroll.contentOffset)\n"
             out += "refreshControlProperty=\(scroll.refreshControl.map(name) ?? "nil")\n"
@@ -254,7 +282,7 @@ struct ProbeRoot: View {
 
         // The verdict: does the spinner's frame intersect the field's (or, failing a field, the
         // navigation bar's)?
-        let spinnerBand = controls.map(rect) + [CGRect(x: 0, y: 0, width: window.bounds.width, height: 0)]
+        let spinnerBand = (controls + indicators).map(rect) + [CGRect(x: 0, y: 0, width: window.bounds.width, height: 0)]
         let fieldBand = (searchish.isEmpty ? navBars : searchish).map(rect)
         var overlap: CGRect = .null
         for band in fieldBand {
@@ -263,6 +291,7 @@ struct ProbeRoot: View {
                 if !hit.isNull && hit.width > 0 && hit.height > 0 { overlap = hit }
             }
         }
+        out += "SYSTEM=\(controls.isEmpty ? "no control" : "tintClear=\(controls.first?.tintColor == .clear ? "YES" : "NO")") ownIndicator=\(own.count)\n"
         out += "OVERLAP=\(overlap.isNull ? "NO" : "YES") \(overlap.isNull ? "" : "\(overlap)")\n"
         out += "--- tree ---\n" + tree(of: window, depth: 0)
 
@@ -299,5 +328,26 @@ private struct DrawerSearch: ViewModifier {
         content.searchable(text: $text,
                            placement: .navigationBarDrawer(displayMode: mode),
                            prompt: "Search sessions")
+    }
+}
+
+
+/// Makes the system's refresh spinner invisible: on iOS 26 it is drawn in the navigation bar's
+/// drawer band — on the search field, for the reporter — and the pull it belongs to is the one that
+/// reveals that field. The control keeps working (it is what runs the refresh action); only its
+/// glyph goes, and the app draws its own indicator where the reveal cannot reach it.
+private struct ClearRefreshSpinner: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        DispatchQueue.main.async {
+            var node: UIView? = view
+            while let current = node, !(current is UIScrollView) { node = current.superview }
+            (node as? UIScrollView)?.refreshControl?.tintColor = .clear
+        }
     }
 }

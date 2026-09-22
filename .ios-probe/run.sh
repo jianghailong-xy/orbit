@@ -76,7 +76,7 @@ shot() {  # shot <variant> <pull-style>
   sleep 1
 }
 
-VARIANTS="${VARIANTS:-autoParent alwaysParent autoOnList autoAvoid autoRefreshOnRoot autoNoInset plain}"
+VARIANTS="${VARIANTS:-autoParent alwaysParent autoSelfSpinner plain}"
 PULLS="${PULLS:-fromTop afterScroll}"
 
 echo "== run =="
