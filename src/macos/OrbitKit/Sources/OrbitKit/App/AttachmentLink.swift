@@ -60,14 +60,21 @@ public enum AttachmentLink {
     /// the id are accepted, because a checkout is named after whichever one the claim carried.
     public static func runnerArtifactPath(_ url: URL, sessionID: String) -> String? {
         guard isRunnerLocalPath(url) else { return nil }
+        // Compared as UUIDs rather than as strings, because the two spellings meet here and it is
+        // whichever spelling each side happens to hold: the client is handed public ids (a session
+        // opened from the list is `34THmsocm…`), while a path in a reply was written by the agent
+        // under whatever the claim carried — on this deployment, the UUID. Listing both spellings of
+        // the session and looking for one of them in the path missed exactly that pair, which is one
+        // client fetching nothing while the server, the runner and the web (which never compares
+        // ids) all answered fine.
+        guard let wanted = PublicID.toUUID(sessionID) else { return nil }
         let path = url.path.isEmpty ? url.absoluteString : url.path
         let parts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-        let names: Set<String> = [sessionID.lowercased(), PublicID.toPublic(sessionID).lowercased()]
         for i in parts.indices where i + 3 < parts.count {
             guard parts[i] == ".orbit", parts[i + 1] == "uploads" || parts[i + 1] == "worktrees" else {
                 continue
             }
-            if names.contains(parts[i + 2].lowercased()) { return path }
+            if PublicID.toUUID(parts[i + 2]) == wanted { return path }
         }
         return nil
     }

@@ -36,6 +36,21 @@ final class AttachmentLinkTests: XCTestCase {
         let session = "01a0c8ed-3b0b-742c-a7ee-93f0de502852"
         let publicID = PublicID.toPublic(session)
 
+        // The pair that shipped broken: the client holds a public id (that is what the list and the
+        // API hand it) while the path in the reply carries the UUID the agent wrote. Comparing
+        // spellings instead of ids answered "no" to every such path, and the client never fetched.
+        // The real case, from session 01a0c992: its public id and one of its own mocks.
+        XCTAssertEqual(
+            AttachmentLink.runnerArtifactPath(
+                URL(string: "/root/.orbit/uploads/01a0c992-61c0-727a-bbbb-d985dd45d0e0/x.png")!,
+                sessionID: "34THmsocmJ9D6ZiNAJTeK"),
+            "/root/.orbit/uploads/01a0c992-61c0-727a-bbbb-d985dd45d0e0/x.png")
+        // And the mirror: a public id in the path, a UUID in hand.
+        XCTAssertEqual(
+            AttachmentLink.runnerArtifactPath(
+                URL(string: "/root/.orbit/worktrees/\(publicID)/docs/mocks/card.png")!, sessionID: session),
+            "/root/.orbit/worktrees/\(publicID)/docs/mocks/card.png")
+
         XCTAssertEqual(
             AttachmentLink.runnerArtifactPath(
                 URL(string: "/root/.orbit/worktrees/\(session)/docs/mocks/card.png")!, sessionID: session),
