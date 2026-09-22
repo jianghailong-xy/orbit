@@ -3732,6 +3732,11 @@ html[data-theme='dark'] .session-tag-chip {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* The transcript does its own anchoring when a page of older messages lands above the viewport
+     (WorkspaceView's prepend anchor). The browser's scroll anchoring adjusts for the same growth,
+     one layout later, and the two compensations fight: the reader is thrown a page down from
+     wherever they were reading. Ours is the one that can tell a prepend from a fold, so it wins. */
+  overflow-anchor: none;
 }
 /* Canonical completion-repair obligations sit outside the transcript scroller: the command has
    already finished, so burying this behind a stale Running transcript would recreate the product
@@ -5300,9 +5305,39 @@ button.composer-usage:focus-visible {
   font-size: 13px;
   padding: 10px 4px;
 }
-.chat-loading-older {
+/* What is above the loaded window: a page in flight, or the way back to the first message. Sticky
+   inside the scroller — it has to stay reachable wherever the reader is, and the top of the content
+   is not a place they can stop: arriving there pulls in the next page, which lands anchored and
+   leaves them a page below it. Zero-height so it floats over the transcript rather than indenting
+   it, and transparent apart from the pill itself. */
+.chat-older-top {
+  position: sticky;
+  top: 10px;
+  z-index: 4;
+  height: 0;
   text-align: center;
-  opacity: 0.75;
+  pointer-events: none;
+}
+.chat-older-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  pointer-events: auto;
+}
+button.chat-jump-start {
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+button.chat-jump-start:hover {
+  background: var(--bg-sunken);
+  color: var(--text-1);
 }
 /* Transcript placeholder while an unvisited session's tail page is in flight. Geometry tracks
    .chat-user / .chat-assistant so the skeleton occupies the same columns the real messages will,

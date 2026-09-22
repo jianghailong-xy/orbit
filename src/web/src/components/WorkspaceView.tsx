@@ -665,6 +665,11 @@ const OLDER_PAGE = 200;
 const RESEED_AFTER_STALLED_RECONNECTS = 3;
 // Distance from the top (px) at which scrolling up pulls in the next older page.
 const LOAD_OLDER_AT = 400;
+// A ceiling on the pages "Jump to the beginning" may pull in at once — the same one ⌘F's jump
+// runs under (SessionFind's MAX_LOAD_PAGES), for the same reason: 30 pages is well past the
+// deepest session in this deployment, so it bounds a runaway without being a working limit. A
+// session deeper than that keeps the control, and a second press carries on from where it left.
+const JUMP_TO_START_PAGES = 30;
 // What the sticky bar calls a turn the person typed. A wake carries its own label on its card
 // instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
 // screen contradicting itself — which is what the account owner photographed on 2026-09-17.
@@ -1576,13 +1581,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // already running instead of being told "no".
   const loadingOlderRef = useRef<Promise<boolean> | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  // Render mirror of hasMoreOlderRef, refreshed by measure() the way setAtBottom is: it decides
+  // whether the top of the transcript offers the way back to the first message.
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
+  // stamped as one that wants the top (see prependAnchorRef).
+  const jumpingToStartRef = useRef(false);
   // True from the moment a session with no cached transcript is selected until its tail page
   // lands (or gives up). Drives the skeleton: without it an unvisited session paints a blank
   // pane for the whole fetch, since an ended session matches none of the empty-state notes.
   const [seeding, setSeeding] = useState(false);
   // Set by loadOlder just before it prepends a page; a layout effect reads it to compensate
-  // scrollTop so the viewport stays put instead of jumping when older content grows above.
-  const prependAnchorRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
+  // scrollTop so the viewport stays put instead of jumping when older content grows above. `toTop`
+  // marks a page fetched by the walk to the beginning, which wants the top rather than the
+  // position it was at — carried on the anchor, not read off the walk's flag when the page lands,
+  // because the last page commits after the walk has already finished.
+  const prependAnchorRef = useRef<{ prevHeight: number; prevTop: number; toTop: boolean } | null>(null);
   // Re-opens the transcript SSE after a `final` event paused it and the session was
   // resumed in place (set by the SSE effect, called by the liveness watcher below).
   const resumeStreamRef = useRef<(() => void) | null>(null);
@@ -1687,7 +1701,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         for (const e of fresh) if (typeof e.seq === 'number') seen.current.add(e.seq);
         if (fresh.length) {
           const el = scrollRef.current;
-          if (el) prependAnchorRef.current = { prevHeight: el.scrollHeight, prevTop: el.scrollTop };
+          if (el) {
+            prependAnchorRef.current = {
+              prevHeight: el.scrollHeight,
+              prevTop: el.scrollTop,
+              toTop: jumpingToStartRef.current,
+            };
+          }
           accRef.current = [...fresh, ...accRef.current];
           setEvents(accRef.current);
         }
@@ -1708,6 +1728,33 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     loadingOlderRef.current = inFlight;
     return inFlight;
   }, [selectedId]);
+  // Walk the pages back until the session's first message is loaded, then sit at the top.
+  //
+  // Scrolling up alone can't get there: each page lands with the reader's position anchored
+  // (below), which puts them a page BELOW the top again, so the start recedes once per page and a
+  // long session's first message is unreachable in practice. This is that loop, made explicit —
+  // and bounded, so it can't become an unattended full-history download.
+  const jumpToStart = useCallback(async (): Promise<void> => {
+    if (jumpingToStartRef.current) return;
+    const session = selectedIdRef.current;
+    jumpingToStartRef.current = true;
+    // Leaving the tail is the whole point, so say so before the first page lands: a transcript
+    // still counting itself pinned re-scrolls to the bottom on every content change, which would
+    // undo each page of this walk as it arrives.
+    atBottomRef.current = false;
+    setAtBottom(false);
+    try {
+      for (let page = 0; page < JUMP_TO_START_PAGES && hasMoreOlderRef.current; page++) {
+        if (!(await loadOlder())) break; // that was the end of it (or the session was switched)
+      }
+    } finally {
+      jumpingToStartRef.current = false;
+    }
+    // Each page the walk pulled in lands pinned to the top (the anchor branch below); this catches
+    // the case where the walk ended without one — nothing more to load, or the cap was hit. Not
+    // when the reader has moved on to another session, whose transcript this is now.
+    if (selectedIdRef.current === session) scrollRef.current?.scrollTo({ top: 0 });
+  }, [loadOlder]);
   // The tail-first window's edges, read through callbacks because they live in refs (kept out of
   // render for cost). ⌘F needs both: whether older events exist, and how far back it has loaded.
   const hasOlderNow = useCallback(() => hasMoreOlderRef.current, []);
@@ -1742,6 +1789,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     );
     lastSampleRef.current = sample;
     setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
+    setHasMoreOlder(hasMoreOlderRef.current); // same bail-out; drives the way back to the start
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
@@ -2842,7 +2890,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Reset tail-first lazy-loading state for the session being opened.
     prependAnchorRef.current = null;
     loadingOlderRef.current = null;
+    jumpingToStartRef.current = false; // a walk to the start belongs to the session it was run on
     setLoadingOlder(false);
+    setHasMoreOlder(false); // measure() re-reads it once this session's window is established
     if (!selectedId) {
       accRef.current = [];
       setEvents([]);
@@ -3435,7 +3485,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (!anchor) return;
     prependAnchorRef.current = null;
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight - anchor.prevHeight + anchor.prevTop;
+    if (!el) return;
+    // A page the walk to the beginning asked for has no position to hold: keep the top of what has
+    // loaded in view, so the last page leaves the reader looking at the start of the conversation.
+    el.scrollTop = anchor.toTop ? 0 : el.scrollHeight - anchor.prevHeight + anchor.prevTop;
   }, [events]);
 
   useEffect(() => {
@@ -6594,7 +6647,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </div>
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
-              {loadingOlder && <div className="chat-note chat-loading-older">Loading earlier messages…</div>}
+              {/* A tail-first transcript always has more above it: while a page is in flight this
+                  says so, and otherwise it is the way to the first message, which scrolling alone
+                  never reaches (see jumpToStart). Pinned to the top of the viewport rather than
+                  left at the top of the content — content-top is only on screen for the instant
+                  before the page it triggers lands and re-anchors the view a page below it. */}
+              {(loadingOlder || hasMoreOlder) && (
+                <div className="chat-older-top">
+                  {loadingOlder ? (
+                    <span className="chat-older-pill">Loading earlier messages…</span>
+                  ) : (
+                    <button type="button" className="chat-older-pill chat-jump-start" onClick={() => void jumpToStart()}>
+                      <ArrowUpOutlined /> Jump to the beginning
+                    </button>
+                  )}
+                </div>
+              )}
               {placeholder === 'queued' && showQueuedNotice && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
