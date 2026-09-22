@@ -310,6 +310,19 @@ struct TranscriptView: View {
     @State private var transcriptScroll = TranscriptScroll()
     #endif
 
+    /// The transcript's scroll observer, carrying the iOS-only UIKit handle where there is one.
+    /// A helper rather than a `#if` in the call's argument list: conditional compilation does not
+    /// parse there (`expected ')' in expression list`), which is what the first version of this
+    /// landed as — two red compile gates.
+    private func tracker(ruler: QuestionRuler) -> some ViewModifier {
+        #if os(iOS)
+        return ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck,
+                             scroll: transcriptScroll)
+        #else
+        return ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck)
+        #endif
+    }
+
     /// Whether the load-earlier row is offered at all. Gated to the same floor as `ScrollTracker`:
     /// below it `atBottom` can never leave true, so the follow-on publish of a prepended page would
     /// yank the reader straight back to the live tail — worse than today's no-paging. The legacy
@@ -371,11 +384,7 @@ struct TranscriptView: View {
             #endif
             .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
             .defaultScrollAnchor(.bottom)
-            .modifier(ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck
-                                    #if os(iOS)
-                                    , scroll: transcriptScroll
-                                    #endif
-                                    ))
+            .modifier(tracker(ruler: ruler))
             // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
             // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
             // the keyboard), so reading it here doesn't churn.
