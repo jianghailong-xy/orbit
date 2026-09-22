@@ -529,8 +529,24 @@ struct AgentPanes: View {
             // are drawn side by side in docs/mocks/ios-title-switcher-long-name.html (the chosen one
             // is B). The drawer button is declared a level up (`drawerToggle`, on the section root),
             // which is the item this one follows.
-            ToolbarItem(placement: .topBarLeading) {
-                WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
+            //
+            // Its shared background is switched off, so the name is *drawn on the bar* rather than
+            // inside a platter with the drawer button: iOS 26 groups adjacent leading items into one
+            // glass capsule by itself, which put `[☰ or ⌄]` on one pill (beta.106). Measured in the
+            // simulator (`.ios-probe` on `orbit/ios-title-slot-shots`): with the default the two
+            // share a 102pt platter; with `.hidden` the drawer button keeps its own circle and the
+            // name sits bare beside it, both workspace names FULL width. The modifier is iOS 26 only
+            // — below that the bar draws no platters at all, so the fallback branch is the same item
+            // with nothing to hide.
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarLeading) {
+                    WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .topBarLeading) {
+                    WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
+                }
             }
             #else
             // macOS: the wide window toolbar keeps the platform-idiomatic layout — New Session

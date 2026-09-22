@@ -155,7 +155,9 @@ struct ProviderSwitchSheet: View {
 /// marks the current one, and reports a pick back to the caller — which switches the composing agent.
 /// A flat list (not runner-grouped) keeps it light; the caller owns the switch so this view needs no
 /// environment (which doesn't always propagate into a sheet).
-/// The navigation bar's title slot, as a switcher: the workspace's name and a down chevron.
+/// The workspace switcher: the workspace's name and a down chevron — the navigation bar's title
+/// slot on the new-session draft, and its leading edge on the session list (whose title slot cannot
+/// hold a custom view once the name is long: see `AgentsView`'s toolbar).
 ///
 /// One definition for the two screens whose title *is* a workspace — the session list (whose content
 /// all belongs to it) and the new-session draft (which will send into it). They open the same
@@ -177,6 +179,11 @@ struct ProviderSwitchSheet: View {
 ///
 /// The one case this does not cover is a name wider than the bar itself, which would be clipped
 /// rather than truncated — today's longest workspace name is 125pt against ~250pt of room.
+///
+/// Its sibling on the session list's bar is the item's *shared background*: iOS 26 would group this
+/// control with the drawer button into one glass platter, so `AgentsView` declares the item with
+/// `.sharedBackgroundVisibility(.hidden)` and the name draws on the bar instead (iOS 26 only —
+/// measured in the simulator, `.ios-probe` on `orbit/ios-title-slot-shots`).
 struct WorkspaceTitleSwitcher: View {
     let name: String
     let action: () -> Void
