@@ -31,10 +31,16 @@ struct OpenItemDeliveryCardView: View {
     /// would draw the control plane's own words in the reader's name (web parity:
     /// `BackgroundWakeCardView.attached`).
     var attached: (kind: String, text: String)?
+    /// Withdraws a delivery that is still queued behind the running turn. Nil once a runner has
+    /// taken it — by then the turn is the transcript's, and there is nothing left to take back
+    /// (web parity: the queue's own line, drawn at the card's foot).
+    var onCancelQueued: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
     @State private var allFiles = false
     @State private var showingRaw = false
+
+    private var queued: Bool { onCancelQueued != nil }
 
     /// The card's one tone. An exception item is the project's business and asks nothing of whoever
     /// is watching, so it is drawn in the product's attention colour rather than an alarm's.
@@ -72,12 +78,33 @@ struct OpenItemDeliveryCardView: View {
             }
             raw
             if let attached { AttachedNoteEntry(attached: attached) }
+            if let onCancelQueued { queuedFoot(onCancelQueued) }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(tone.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(tone.opacity(0.35), lineWidth: 1))
+        // Dashed while it is still queued — the browser's `.oic.is-queued` border, so the one card
+        // reads as two states rather than as two cards (`BackgroundWakeCardView`).
+        .overlay(
+            RoundedRectangle(cornerRadius: 8).strokeBorder(
+                tone.opacity(0.35),
+                style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
+        )
+    }
+
+    /// The queue's own line at the card's foot, in the words a queued message already uses: a
+    /// delivery is withdrawn by an ordinary cancel — the item stays owed, and the next chance the
+    /// control plane gets files a new turn for it — so unlike a watch's wake this asks nothing first.
+    private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            Button("Cancel") { cancel() }
+                .buttonStyle(.plain)
+                .font(.orbitMeta)
+                .foregroundStyle(.tint)
+                .contentShape(Rectangle())
+        }
     }
 
     /// "Exception item · Merge conflict" — what this turn is, before what it is about.

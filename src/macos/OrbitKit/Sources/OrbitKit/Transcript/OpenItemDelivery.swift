@@ -144,7 +144,16 @@ public struct OpenItemDelivery: Sendable, Equatable, Codable {
     /// makes it one, and a payload missing any of them is not drawn at all — never half a card. Every
     /// other field is optional and defaults, exactly as the web's reader defaults it.
     public static func parse(_ payload: JSONValue) -> OpenItemDelivery? {
-        guard case .object(let card)? = payload["openItemDelivery"],
+        parseCard(payload["openItemDelivery"])
+    }
+
+    /// The same reading for the card itself rather than a payload that carries it: the queued-turn
+    /// projection (`QueuedTurnInfo.openItemDelivery`) hands over the object the echo would have put
+    /// under that key, and one function reads both so the card a client draws while the delivery
+    /// waits is the very card the echo is drawn as. A value that is not an object, or one missing
+    /// the three fields that make a card one, is nil — never half a card.
+    public static func parseCard(_ value: JSONValue?) -> OpenItemDelivery? {
+        guard case .object(let card)? = value,
               let itemId = nonEmptyString(card["itemId"]),
               let kind = card["kind"]?.stringValue,
               let title = nonEmptyString(card["title"]) else { return nil }

@@ -617,13 +617,24 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     public let content: String
     /// Optional for rolling compatibility with a server that predates attachment refs on this list.
     public let attachments: [Attachment]?
+    /// An exception item's delivery carries the item's own fields beside its words, as an object of
+    /// the same shape a `user` event records under `openItemDelivery` — held raw so the ONE reader of
+    /// that shape reads this too (`OpenItemDelivery.parseCard`), rather than a second decoding of the
+    /// same fields drifting from the echo's. Absent on every ordinary message, and on every server
+    /// that predates the field, which is why the queue's bubble then keeps its old reading: the
+    /// paragraph, with no card drawn from it.
+    public let openItemDelivery: JSONValue?
+    /// The card this queued turn is, read by the same function the runner's echo is read by. Nil
+    /// unless `openItemDelivery` is one.
+    public var itemCard: OpenItemDelivery? { OpenItemDelivery.parseCard(openItemDelivery) }
 
     public init(turnId: String, kind: String? = nil, content: String,
-                attachments: [Attachment]? = nil) {
+                attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
         self.attachments = attachments
+        self.openItemDelivery = openItemDelivery
     }
 }
 

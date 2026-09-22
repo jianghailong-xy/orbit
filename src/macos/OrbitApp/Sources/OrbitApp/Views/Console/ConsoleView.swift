@@ -586,10 +586,20 @@ struct TranscriptView: View {
             // No `AnchorRow` — a queued turn hasn't been asked yet, so it's never the sticky
             // "Your question" (web's `:not(.chat-queued)`).
             //
-            // A wake a watch queued is the card the transcript draws once a runner takes it, so it
-            // keeps that shape while it waits and its payload stays folded. Withdrawing is offered
-            // only once the server `turnId` is known — the DELETE keys on it.
-            if let wake = WatchWakeText.parse(bubble.text) {
+            // An exception item's delivery is nobody's message the moment it is QUEUED, not the
+            // moment a runner takes it: its words are written for the AGENT, so read as a message
+            // they are wrong about who sent them and everything the item is opened with is prose —
+            // for as long as the turn waits, and redrawn the instant it is taken. The card comes off
+            // the projection (`QueuedTurnInfo.itemCard`), never out of the text's shape, and this is
+            // checked FIRST as the transcript's own row checks it (`TranscriptItemView`): the shape
+            // must not depend on which of the two states the turn is in. A delivery's paragraph is
+            // neither of the two wake blocks below, so nothing is shadowed by the order.
+            if let card = bubble.itemCard {
+                OpenItemDeliveryCardView(card: card, text: bubble.text, ts: bubble.ts,
+                                         undelivered: bubble.undelivered,
+                                         onCancelQueued: bubble.turnId == nil
+                                             ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let wake = WatchWakeText.parse(bubble.text) {
                 WatchWakeCardView(wake: wake, text: bubble.text, ts: bubble.ts,
                                   undelivered: bubble.undelivered,
                                   onWithdraw: bubble.turnId == nil
