@@ -76,8 +76,8 @@ shot() {  # shot <variant> <pull-style>
   sleep 1
 }
 
-VARIANTS="${VARIANTS:-bare bareRefresh bareSearchAuto bareSearchAlways ownField autoParent}"
-PULLS="${PULLS:-fromTop}"
+VARIANTS="${VARIANTS:-leadBare leadBareRowSeparatorHidden leadBareSectionSeparatorHidden leadEmptyHeader}"
+PULLS="${PULLS:-none}"
 
 echo "== run =="
 for variant in $VARIANTS; do

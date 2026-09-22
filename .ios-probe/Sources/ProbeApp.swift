@@ -61,6 +61,13 @@ enum Variant: String, CaseIterable {
     /// The hand-drawn alternative: the same bare list with our own 40pt field as its first row and
     /// no drawer at all — what ③ in the mock would be built from.
     case ownField
+    /// The leading section with no title, four ways — the hairline report (β98). `leadSection` is
+    /// the shape the app ships now; the others are candidate fixes, judged by whether the line above
+    /// the first row is gone *and* the 28pt the title cost stays gone (the report prints both).
+    case leadBare
+    case leadBareRowSeparatorHidden
+    case leadBareSectionSeparatorHidden
+    case leadEmptyHeader
 }
 
 /// How the pull is driven. `.afterScroll` first scrolls the list down (which hides the drawer
@@ -69,6 +76,9 @@ enum Variant: String, CaseIterable {
 enum PullStyle: String, CaseIterable {
     case fromTop
     case afterScroll
+    /// Leave the list alone: for questions about what a list looks like at rest (the hairline the
+    /// reporter sees above the first row once the leading header stops being drawn).
+    case none
 }
 
 struct ProbeRoot: View {
@@ -148,6 +158,54 @@ struct ProbeRoot: View {
         .listStyle(.plain)
         .navigationTitle("orbit")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// A list whose leading section is Today's (three rows), followed by a real Yesterday section —
+    /// the shape the hairline is reported in.
+    private func leadList(leading: () -> some View) -> some View {
+        List {
+            leading()
+            Section {
+                ForEach(30..<33, id: \.self) { i in row(i) }
+            } header: {
+                Text("Yesterday").textCase(nil)
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle("orbit")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await holdRefresh() }
+    }
+
+    @ViewBuilder private var leadBareList: some View {
+        leadList {
+            ForEach(0..<3, id: \.self) { i in row(i) }
+        }
+    }
+
+    @ViewBuilder private var leadBareRowSeparatorHiddenList: some View {
+        leadList {
+            ForEach(0..<3, id: \.self) { i in
+                row(i).listRowSeparator(i == 0 ? .hidden : .automatic, edges: i == 0 ? .top : .all)
+            }
+        }
+    }
+
+    @ViewBuilder private var leadBareSectionSeparatorHiddenList: some View {
+        leadList {
+            ForEach(0..<3, id: \.self) { i in row(i) }
+                .listSectionSeparator(.hidden, edges: .top)
+        }
+    }
+
+    @ViewBuilder private var leadEmptyHeaderList: some View {
+        leadList {
+            Section {
+                ForEach(0..<3, id: \.self) { i in row(i) }
+            } header: {
+                EmptyView()
+            }
+        }
     }
 
     /// The same list, with the reach-in riding a zero-height first row: from there the walk up the
@@ -270,6 +328,14 @@ struct ProbeRoot: View {
             NavigationStack { bareList.modifier(DrawerSearch(text: $query, mode: .always)) }
         case .ownField:
             NavigationStack { ownFieldList.refreshable { await holdRefresh() } }
+        case .leadBare:
+            NavigationStack { leadBareList }
+        case .leadBareRowSeparatorHidden:
+            NavigationStack { leadBareRowSeparatorHiddenList }
+        case .leadBareSectionSeparatorHidden:
+            NavigationStack { leadBareSectionSeparatorHiddenList }
+        case .leadEmptyHeader:
+            NavigationStack { leadEmptyHeaderList }
         case .autoSelfSpinnerWin:
             NavigationStack {
                 ownIndicator(list).background(ClearRefreshSpinner(scope: .window))
@@ -306,6 +372,11 @@ struct ProbeRoot: View {
             return
         }
 
+        if pullStyle == .none {
+            try? await Task.sleep(for: .seconds(1.5))
+            report("", window: window, scroll: scroll)
+            return
+        }
         if pullStyle == .afterScroll {
             scroll.setContentOffset(CGPoint(x: 0, y: 240), animated: false)
             try? await Task.sleep(for: .seconds(1.2))
