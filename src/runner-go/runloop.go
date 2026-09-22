@@ -186,6 +186,38 @@ const takeoverConflictLimit = 5
 // the conflict clears — e.g. the server fails the abandoned operation over.
 const reclaimRetryInterval = 45 * time.Second
 
+// How long to wait before retry number N of a claim that failed at the transport, in the shape
+// `reclaimMissingSessions` uses: the first retry is quick so a blip costs nothing, and doubling to a
+// cap keeps a long outage to a handful of attempts a minute instead of a storm.
+const (
+	claimRetryInitialDelay = 250 * time.Millisecond
+	claimRetryMaxDelay     = 5 * time.Second
+)
+
+// The wait before the `failures`-th consecutive claim retry (1-based), doubling from the initial
+// delay to the cap.
+func claimRetryDelayAfter(failures int) time.Duration {
+	delay := claimRetryInitialDelay
+	for i := 1; i < failures && delay < claimRetryMaxDelay; i++ {
+		delay *= 2
+	}
+	if delay > claimRetryMaxDelay {
+		return claimRetryMaxDelay
+	}
+	return delay
+}
+
+// Waits out that backoff, and reports false when the loop's context ended instead: a shutdown must
+// not be held up by a retry wait.
+func claimRetryWait(ctx context.Context, failures int) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(claimRetryDelayAfter(failures)):
+		return true
+	}
+}
+
 // worktreeGCInterval is how often a RUNNING runner re-sweeps its session checkouts. Startup used
 // to be the only sweep, so a checkout finalization could not remove — a lease loss returns before
 // finalization even reports — leaked until the process restarted. Five minutes is far shorter than
@@ -1439,6 +1471,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		gcUploads(liveSet)
 	}
 
+	// Consecutive claim failures at the transport, which is what the retry backoff below is paced by.
+	claimFailures := 0
 	for loopCtx.Err() == nil {
 		// Sessions set aside by an earlier reclaim have authoritative rows but no local
 		// supervisor; their inbox is never polled until a takeover succeeds. Keep retrying
@@ -1522,8 +1556,22 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
+			// Back off before trying again. Retrying a broken claim immediately turns one bad request
+			// into a storm, and it is worse here than anywhere else: every attempt above also runs
+			// the reclaim reconciliation, so each failed claim costs two requests against a link
+			// that is already failing. On 2026-09-21, while the edge in front of the control plane
+			// flapped, this loop produced bursts of hundreds of `claim failed` + `inbox poll failed`
+			// lines an hour, none of it the control plane's doing. Capped, so a long outage is a
+			// handful of attempts a minute while a recovery is still noticed within the cap.
+			claimFailures++
+			if !claimRetryWait(loopCtx, claimFailures) {
+				break
+			}
 			continue
 		}
+		// The control plane answered — with work or without — so the link is healthy and the next
+		// failure starts its wait over.
+		claimFailures = 0
 		if job == nil {
 			continue
 		}
