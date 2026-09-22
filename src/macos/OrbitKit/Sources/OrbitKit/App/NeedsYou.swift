@@ -147,16 +147,43 @@ public enum NeedsYouLogic {
     /// that has to answer "is this mine to go and do now" at a glance. A conversation that names no
     /// project says only the first half rather than trailing an empty separator.
     static func ownerItemText(_ item: SessionOwnerItem, project: String?) -> String {
-        let what: String
-        switch item.kind {
-        case .promotionApproval: what = "Approve merge to main"
-        case .coordinatorQuestion: what = "Question from coordinator"
-        case .escalated: what = "Escalated to you"
-        case .fusePaused: what = "Paused"
-        case .unknown: what = "Needs you"
-        }
+        let what = kindWord(item.kind) ?? "Needs you"
         guard let project, !project.isEmpty else { return what }
         return "\(what) · \(project)"
+    }
+
+    /// Which of the four, in the words the banner and the card share, and nothing else — no project,
+    /// no count. Nil for a kind this build does not know, which every caller falls back from rather
+    /// than naming (§7.6 V13).
+    ///
+    /// Separate from `ownerItemText` because a session ROW says this half alone: a row has one line
+    /// and the project it is about is the conversation the row already names. Both readers take the
+    /// words from here, so the row above a bar can never spell one of the four differently from the
+    /// bar itself.
+    public static func kindWord(_ kind: OwnerItemKind) -> String? {
+        switch kind {
+        case .promotionApproval: return "Approve merge to main"
+        case .coordinatorQuestion: return "Question from coordinator"
+        case .escalated: return "Escalated to you"
+        case .fusePaused: return "Paused"
+        case .unknown: return nil
+        }
+    }
+
+    /// The word for the item a row says it is waiting on: the oldest one, which is the same item the
+    /// banner names, so the row and the bar above it point at the same card. Nil when nothing on the
+    /// row is a kind this build can name.
+    public static func oldestItemWord(_ items: [SessionOwnerItem]?) -> String? {
+        guard let items else { return nil }
+        var oldest: (word: String, at: Date)?
+        for item in items {
+            guard let word = kindWord(item.kind) else { continue }
+            // An unparseable instant sorts last rather than first, exactly as it does for the
+            // banner: it must not beat an item whose wait is known.
+            let at = RelativeTime.parse(item.since) ?? Date.distantFuture
+            if oldest == nil || at < oldest!.at { oldest = (word, at) }
+        }
+        return oldest?.word
     }
 
     /// One session names its workspace; several collapse to a count. The workspace name (not the

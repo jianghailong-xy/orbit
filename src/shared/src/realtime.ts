@@ -7,7 +7,7 @@ import {
   SessionState,
 } from './enums';
 import type { SessionCapabilities } from './dto';
-import type { SessionOwnerItem } from './project-progress';
+import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
 
 /**
  * The user-scoped control-plane stream's wire protocol (`GET /api/events`).
@@ -139,8 +139,11 @@ export interface ControlSessionSummary {
   pendingApprovals: number;
   /** What `pendingApprovals` is counting, when one word says it better than "approval":
    *  `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
-   *  owner to confirm it done. Null otherwise; absent from an older control plane. */
-  waitingKind?: 'OWNER_CONFIRMATION' | null;
+   *  owner to confirm it done, and `OWNER_ITEM` when everything counted is one of the four things a
+   *  project waits on its owner in person for (`ownerItems`, oldest first) — the row then says that
+   *  item's own word rather than "Waiting for approval". Null otherwise; absent from an older
+   *  control plane. */
+  waitingKind?: SessionWaitingKind | null;
   /** Which of the four owner items are waiting on this conversation, oldest first (§7.6 V13) — so
    *  the "needs you" banner can name one and open its card instead of only counting. Always sent
    *  by a server that knows about them, as `[]` when none: a client folds this summary into a row
@@ -208,7 +211,7 @@ export interface ControlApproval {
   approvalId: string;
   pendingApprovals: number;
   /** Overwritten together with `pendingApprovals`; see `ControlSessionSummary.waitingKind`. */
-  waitingKind?: 'OWNER_CONFIRMATION' | null;
+  waitingKind?: SessionWaitingKind | null;
 }
 
 /** `data` for `background.task`. */

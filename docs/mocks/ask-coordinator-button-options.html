@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>Escalated 卡上的「Ask the coordinator again」：今天 / A / B</title>
+<style>
+  :root {
+    --orange: #FF9500;
+    --blue: #007AFF;
+    --red: #FF3B30;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --fill-2: rgba(120, 120, 128, .08);
+    --glass: rgba(255, 255, 255, .55);
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Liberation Sans",
+          "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1330px; margin: 0 0 26px; }
+  .lede code, figcaption code, .note code {
+    font: 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 34px; align-items: flex-start; margin-bottom: 34px; }
+  figure { margin: 0; }
+  figcaption { margin-top: 14px; width: 393px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  figcaption b:not(:first-child) { display: inline; font-size: inherit; margin: 0; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.a { background: #d6e4ff; color: #14428f; }
+  .tag.b { background: #d9f2e0; color: #14532d; }
+  .mark { outline: 1.5px dashed var(--mark); outline-offset: 3px; border-radius: 8px; }
+
+  .phone {
+    width: 393px; background: var(--surface); overflow: hidden; border-radius: 30px;
+    box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07); color: var(--label);
+    display: flex; flex-direction: column;
+  }
+  .status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 26px 6px; font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-weight: 500; font-size: 14px; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 10px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 24px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+  .ico { width: 19px; height: 19px; fill: none; stroke: var(--label); stroke-width: 1.9;
+         stroke-linecap: round; stroke-linejoin: round; }
+  .nav { padding: 2px 14px 10px; display: flex; align-items: center; gap: 10px; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 40px;
+             background: var(--glass); border-radius: 999px;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { width: 40px; }
+  .nav .titles { flex: 1; text-align: center; line-height: 1.15; min-width: 0; }
+  .nav .t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .nav .s { font-size: 11.5px; color: var(--label-2); white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .badge { background: var(--fill); border-radius: 6px; padding: 2px 6px; font-size: 11px;
+           color: var(--label-2); margin-left: 4px; vertical-align: 1px; }
+
+  .thread { flex: 1; padding: 10px 14px 0; display: flex; flex-direction: column;
+            min-height: 0; overflow: hidden; }
+  .ask { font-size: 13px; color: var(--label-2); padding-bottom: 9px; margin-bottom: 12px;
+         border-bottom: 1px solid var(--sep); }
+  .ask b { color: var(--label); font-weight: 600; }
+  .card { padding: 13px; border-radius: 14px; background: rgba(255, 149, 0, .07);
+          border: 1px solid rgba(255, 149, 0, .28); margin-bottom: 10px; }
+  .card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .card .icon { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+                font-size: 12px; background: rgba(255,149,0,.16); color: #b26a00; flex: none; }
+  .card .title { font-size: 15px; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden;
+                 text-overflow: ellipsis; }
+  .prov { font-size: 12px; color: var(--label-2); margin-bottom: 8px; letter-spacing: .04em; }
+  .why { font-size: 13.5px; font-weight: 600; line-height: 1.45; }
+  .subject { font-size: 13px; line-height: 1.45; color: var(--label-2); margin-top: 3px; }
+  .btn { min-height: 42px; border-radius: 22px; display: flex; align-items: center;
+         justify-content: center; font-size: 16px; margin-top: 10px; }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.tinted { background: var(--fill); color: var(--blue); }
+  .link { font-size: 14px; color: var(--blue); text-align: center; margin-top: 12px; }
+  .card .foot { font-size: 12px; color: var(--label-2); margin-top: 11px; }
+  .tail { padding: 8px 14px 20px; }
+  .composer { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+              border: 1px solid var(--sep); border-radius: 22px; color: var(--label-3); font-size: 15px; }
+  .composer .send { margin-left: auto; width: 30px; height: 30px; border-radius: 9px;
+                    background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 13px; }
+
+  /* 项目页那一格 */
+  .page { padding: 0 16px 16px; }
+  .page h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin: 6px 0 10px; }
+  .pcard { border: 1px solid var(--sep); border-radius: 14px; padding: 13px; background: var(--fill-2); }
+  .pcard .pt { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .pcard .pl { font-size: 13px; color: var(--label-2); line-height: 1.5; }
+  .switchrow { display: flex; align-items: center; justify-content: space-between;
+               margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--sep); }
+  .switchrow .name { font-size: 13.5px; font-weight: 600; }
+  .switchrow .right { display: flex; align-items: center; gap: 8px; font-size: 13px;
+                      color: var(--label-2); }
+  .sw { width: 42px; height: 25px; border-radius: 999px; background: rgba(120,120,128,.28);
+        position: relative; flex: none; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 21px; height: 21px;
+               border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+  .sw.on { background: #34C759; }
+  .sw.on::after { left: auto; right: 2px; }
+  .fine { font-size: 12.5px; color: var(--label-2); line-height: 1.5; }
+  .warn { font-size: 12.5px; color: #b26a00; line-height: 1.5; margin-top: 4px; }
+  .note { max-width: 1330px; font-size: 13.5px; line-height: 1.6; color: #55555e; }
+  .note b { color: #16161a; }
+</style>
+
+<h1>Escalated 卡上的「Ask the coordinator again」：今天 / A / B</h1>
+<p class="lede">
+  这颗键画不画<b>完全由服务端定</b>：卡片只画服务器列出的门（原生 <code>row.actions.contains(.askCoordinatorAgain)</code>，
+  web 同一份 <code>openItemActions</code>），而 <code>askable</code> 今天 = <code>coordinatorEnabled &amp;&amp; 绑定 &amp;&amp; 会话未结束</code>，
+  FineWeb 这个项目开关是关的 —— 所以卡上没有它（①）。② 是 A：判据跟<b>绑定</b>走（跟 badge 同一条），按下去把这<b>一条</b> turn 投给那个会话；
+  ③④ 是 B：不动权限语义，把「为什么没有」说出来，并把 Automatic 开关补到手机的项目页。
+  两颗键的顺序/权重不是这里定的：<code>ExceptionCards.presses</code> 让领头的两颗当主键与次键，其余降成链接，卡自己的
+  <code>Chat about this</code> 排在服务器那几颗之后、<code>Mark as handled</code> 最末。
+</p>
+
+<div class="row">
+
+  <!-- ① 今天 -->
+  <figure>
+    <span class="tag now">今天</span>
+    <div class="phone" style="height:560px">
+      <div class="status"><span>12:38</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">44</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">Coordinator: Fin…</span><span class="badge">Coordinator</span>
+          <span class="s">Escalated to you · Open · just now</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　删 + 搬</div>
+        <div class="card">
+          <div class="head"><span class="icon">⚠</span><span class="title">Escalated to you</span></div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">Now yours — this project has no coordinator (waiting 4h 18m)</div>
+          <div class="subject">[WARC][CC-MAIN-2025-26] 000_00022 的 WARC 依赖</div>
+          <div class="subject">the acceptance command exited -1 (expected 0)</div>
+          <div class="btn primary">Open task session</div>
+          <div class="btn tinted">Chat about this</div>
+          <div class="link">Mark as handled</div>
+          <div class="foot">Owner: you · waiting 4h 18m</div>
+        </div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">■</span></div></div>
+    </div>
+    <figcaption><b>① 今天：两颗键，没有回交的那颗</b>
+      服务器没列 <code>ASK_COORDINATOR_AGAIN</code>，所以卡片连画都不画。
+      <b>而且今天就算画了也按不动</b>：<code>returnToCoordinator</code> 交回后会调 <code>deliver()</code>，那条路仍按开关判 ——
+      没有会话可投递，于是 <code>handToOwner(NO_COORDINATOR)</code> 当场把条目又判回你，表盘转一圈回到原处。
+      门当初就是为此关的（它的注释：<i>handing it back would only start a clock that runs out into this same item</i>）。</figcaption>
+  </figure>
+
+  <!-- ② A -->
+  <figure>
+    <span class="tag a">A</span>
+    <div class="phone" style="height:560px">
+      <div class="status"><span>12:38</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">44</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">Coordinator: Fin…</span><span class="badge">Coordinator</span>
+          <span class="s">Escalated to you · Open · just now</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　删 + 搬</div>
+        <div class="card">
+          <div class="head"><span class="icon">⚠</span><span class="title">Escalated to you</span></div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">Now yours — this project has no coordinator (waiting 4h 18m)</div>
+          <div class="subject">[WARC][CC-MAIN-2025-26] 000_00022 的 WARC 依赖</div>
+          <div class="subject">the acceptance command exited -1 (expected 0)</div>
+          <div class="btn primary mark">Ask the coordinator again</div>
+          <div class="btn tinted mark">Open task session</div>
+          <div class="btn tinted">Chat about this</div>
+          <div class="link">Mark as handled</div>
+          <div class="foot">Owner: you · waiting 4h 18m</div>
+        </div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">■</span></div></div>
+    </div>
+    <figcaption><b>② A：多一颗主键，落在服务器那一列里</b>
+      <code>askable</code> 的判据里去掉开关（跟 badge、卡片、计数同一条：<b>绑定着活着的那条会话</b>），服务器就会列出
+      <code>ASK_COORDINATOR_AGAIN</code> —— 客户端一个字不用改，三端同时出现，而且它自动升成主键、
+      <code>Open task session</code> 让位成次键（<code>presses</code> 的领头规则）。
+      <b>按压的含义</b>：这是你自己的授权 —— 把这一条交回、并给那条会话投一条 turn；四个 wake producer 和自动投递<b>仍然听开关</b>，
+      所以「自动运行」没有因此被打开。回执照旧是既有那句 <code>Sent back to the coordinator</code>，条目从你名下消失，
+      <code>waiting</code> 的表盘从交回那刻重新计时。</figcaption>
+  </figure>
+
+  <!-- ③ B -->
+  <figure>
+    <span class="tag b">B</span>
+    <div class="phone" style="height:560px">
+      <div class="status"><span>12:38</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">44</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">Coordinator: Fin…</span><span class="badge">Coordinator</span>
+          <span class="s">Escalated to you · Open · just now</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　删 + 搬</div>
+        <div class="card">
+          <div class="head"><span class="icon">⚠</span><span class="title">Escalated to you</span></div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">Now yours — this project has no coordinator (waiting 4h 18m)</div>
+          <div class="subject">[WARC][CC-MAIN-2025-26] 000_00022 的 WARC 依赖</div>
+          <div class="subject">the acceptance command exited -1 (expected 0)</div>
+          <div class="fine mark" style="margin-top:8px">
+            This project's coordinator is switched off, so there is nobody to ask again.
+          </div>
+          <div class="btn primary">Open task session</div>
+          <div class="btn tinted">Chat about this</div>
+          <div class="link mark">Open project</div>
+          <div class="link">Mark as handled</div>
+          <div class="foot">Owner: you · waiting 4h 18m</div>
+        </div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">■</span></div></div>
+    </div>
+    <figcaption><b>③ B：不画可按的键，把原因和出口说出来</b>
+      权限语义一个字不动（门仍然只在协调者能行动时开）。卡上多一句解释 + 一个去项目页的入口 ——
+      你真正的出口是那颗开关，而它今天在手机上根本不存在（④）。
+      <b>这句解释是新文案</b>，措辞可改；<code>Open project</code> 沿用的是既有动作名。</figcaption>
+  </figure>
+</div>
+
+<div class="row">
+  <!-- ④ B 的另一半：手机上的 Automatic -->
+  <figure>
+    <span class="tag b">B · 另一半</span>
+    <div class="phone" style="height:432px">
+      <div class="status"><span>12:38</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">44</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">FineWeb × Common Crawl → RocksDB…</span>
+          <span class="s">Open · 109,782 tasks</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="page">
+        <h2>FineWeb × Common Crawl → RocksDB 语料库</h2>
+        <div class="pcard">
+          <div class="pt">Coordinator</div>
+          <div class="pl">Coordinator: Fin… · waiting for you since 4h 18m</div>
+          <div class="switchrow">
+            <span class="name">Automatic</span>
+            <span class="right"><span class="sw"></span>Off</span>
+          </div>
+          <div class="fine" style="margin-top:6px">Nothing here starts or asks on its own.</div>
+          <div class="warn">⚠ 3 exceptions are yours because there was nobody to hand them to.</div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>④ B 的另一半：手机的项目页补上那颗开关</b>
+      web 上它早就有（<code>Automatic</code>，<code>ProjectCoordinatorCard.tsx</code>），手机两端都没有 ——
+      所以「协调者是关的」这件事在手机上既看不见也改不了。开关的文案沿用 web 原句
+      （On：<i>Starts ready tasks on its own…</i>；Off：<i>Nothing here starts or asks on its own.</i>），
+      <b>带 ⚠ 的那行是新增的提案</b>，说的是这个项目此刻的真实处境：3 条异常在你名下，因为当初没人可交。
+      打开它要走 <code>expectedConfigRevision</code> 的 CAS（web 同款），并在刷新落地前先画成按下后的样子。</figcaption>
+  </figure>
+
+  <figure style="align-self:center; max-width:860px">
+    <figcaption style="width:auto; margin-top:0">
+      <b>A 要动的三处（都不动「自动」那一半的开关语义）</b>
+      <code>askable</code> 的判据换绑定；<code>returnToCoordinator</code> 的拒绝理由换同一条判据；
+      交回后的投递新开一条<b>只走负责人按压</b>的路径（自动投递与四个 wake producer 一字不改，census spec 仍绿）。
+      带的测试：<code>owner-item-badge.pg.spec</code> 那一族里加「开关关着、会话还在 → 按键存在且按下去条目真的落到协调者名下」，
+      并像今天的 ④ 那样证明按回旧判据会红。
+      <br><br>
+      <b>B 要动的两处</b>：卡片多一句解释 + <code>Open project</code> 入口（三端文案 parity 测试跟着扩）；
+      手机两个客户端的项目页加 Automatic 开关（走同一颗写 + CAS）。<b>C 不做</b>：一次小按压顺带打开 Automatic，
+      等于给十万任务级的项目上自动运行，副作用比这颗键大得多。
+    </figcaption>
+  </figure>
+</div>
+
+<p class="note">
+  <b>我的建议是 A，但它有一个前提值得你先点头：</b>它把「开关」的意思收窄成
+  <i>「别自行动手」</i>——自动投递、四个 wake producer 一律照旧不动，只有<b>你自己按的这一颗键</b>能把一条 item 送到那条会话面前。
+  如果你要的是「协调者关着的时候，任何东西都不该进那个会话」，那就选 B，并把 ④ 那颗开关当成真正的出口。
+</p>
+</html>

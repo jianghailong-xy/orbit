@@ -818,12 +818,52 @@ const sentLine = (text: string): SessionLine => ({
   tone: 'preview',
 });
 
+// The four owner items, one word each: no project and no count, because a row is one line and the
+// project it is about is the conversation the row already names (contract §7.6 V13). The native
+// banner and card say these same words, and `OwnerItemCardsTests` holds the two ends to each other.
+const OWNER_ITEM_APPROVE_MERGE = 'Approve merge to main';
+const OWNER_ITEM_COORDINATOR_QUESTION = 'Question from coordinator';
+const OWNER_ITEM_ESCALATED = 'Escalated to you';
+const OWNER_ITEM_PAUSED = 'Paused';
+
+/** The kinds this row can name, and the words it says for each. A kind missing here — one this
+ *  build does not know — falls back to the approval wording rather than naming nothing. */
+const OWNER_ITEM_WORDS: Record<string, string> = {
+  PROMOTION_APPROVAL: OWNER_ITEM_APPROVE_MERGE,
+  COORDINATOR_QUESTION: OWNER_ITEM_COORDINATOR_QUESTION,
+  ESCALATED: OWNER_ITEM_ESCALATED,
+  FUSE_PAUSED: OWNER_ITEM_PAUSED,
+};
+
+/**
+ * The item a row names: the oldest one it can name, which is the same item the needs-you bar above
+ * the list points at. Mirrors `NeedsYouLogic.oldestItemWord` — an unparseable instant sorts last
+ * rather than first, so it cannot beat an item whose wait is known.
+ */
+const ownerItemWord = (s: any): string | null => {
+  let oldest: { word: string; at: number } | null = null;
+  for (const item of s.ownerItems ?? []) {
+    const word = OWNER_ITEM_WORDS[item?.kind];
+    if (!word) continue;
+    const at = Date.parse(item?.since ?? '');
+    const key = Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at;
+    if (oldest === null || key < oldest.at) oldest = { word, at: key };
+  }
+  return oldest?.word ?? null;
+};
+
 // What a row that is waiting on you says. The server names the kind when everything it counted is
-// an OWNER_CONFIRMED task's run waiting to be confirmed (`waitingKind`), and that row says so in the
-// confirmation card's words; anything else waiting on you keeps the approval wording. Only the words
-// change — the row still carries no button: the one place to answer is the card in the session.
-const waitingLabel = (s: any): string =>
-  s.waitingKind === 'OWNER_CONFIRMATION' ? WAITING_FOR_CONFIRMATION : 'Waiting for approval';
+// one kind with words of its own (`waitingKind`), and the row says it: an OWNER_CONFIRMED task's run
+// in the confirmation card's words, and one of the four owner items in the words the bar and the
+// card share — a row reading "Waiting for approval" over an escalated exception describes the one
+// thing that is certainly not happening. Anything else waiting on you keeps the approval wording.
+// Only the words change — the row still carries no button: the one place to answer is the card in
+// the session.
+const waitingLabel = (s: any): string => {
+  if (s.waitingKind === 'OWNER_CONFIRMATION') return WAITING_FOR_CONFIRMATION;
+  if (s.waitingKind === 'OWNER_ITEM') return ownerItemWord(s) ?? 'Waiting for approval';
+  return 'Waiting for approval';
+};
 
 export const sessionLine = (s: any, live: boolean): SessionLine => {
   const state = sessionRunStateOf(s);

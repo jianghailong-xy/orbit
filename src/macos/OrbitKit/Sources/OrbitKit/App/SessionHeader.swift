@@ -57,14 +57,23 @@ public enum SessionHeader {
     /// What a session that is waiting on you says — the one word the console header and the list
     /// row share, in the words of whatever is actually waiting.
     ///
-    /// The server names the kind when everything it counted is an OWNER_CONFIRMED task's run waiting
-    /// to be confirmed (`waitingKind`), and that row says so in the confirmation card's own words;
-    /// anything else waiting on you keeps the approval wording. Web parity: `waitingLabel` in
-    /// `WorkspaceView.tsx`, which the copy-parity test reads.
+    /// The server names the kind when everything it counted is one kind with words of its own
+    /// (`waitingKind`), and then the row says it: an OWNER_CONFIRMED task's run in the confirmation
+    /// card's words, and one of the four owner items in the words the banner and the card use, so a
+    /// person who pressed either arrives where the words came from. Anything else waiting on you —
+    /// a blocked tool call, a proposal, a row counting two kinds at once — keeps the approval
+    /// wording. Web parity: `waitingLabel` in `WorkspaceView.tsx`, which the copy-parity test reads.
     public static func waitingWord(for s: Session) -> String {
-        s.waitingKind == .ownerConfirmation ? OwnerConfirmations.waitingForConfirmation
-                                            : "Waiting for approval"
+        switch s.waitingKind {
+        case .ownerConfirmation: return OwnerConfirmations.waitingForConfirmation
+        case .ownerItem:         return NeedsYouLogic.oldestItemWord(s.ownerItems) ?? unnamedWord
+        default:                 return unnamedWord
+        }
     }
+
+    /// What a row waiting on you says when the server named no kind, or named one this build has no
+    /// words for: somebody is waiting, and this is the row's own long-standing way of saying it.
+    static let unnamedWord = "Waiting for approval"
 
     /// The full "run state · lifecycle · when" subtitle. Keeping both dimensions visible prevents
     /// "Succeeded" from being mistaken for Completed. `now` is injectable for deterministic tests.

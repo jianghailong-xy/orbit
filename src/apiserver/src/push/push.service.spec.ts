@@ -547,6 +547,42 @@ test('the four owner item kinds push', async () => {
   }
 });
 
+test('a switched-off coordinator still routes the tap to the conversation the card is drawn in', async () => {
+  // The account owner's report, 2026-09-22: a project confirmed but never started — a bound
+  // coordinator conversation, `coordinatorEnabled` false, and its exceptions handed to the owner
+  // because `deliver()` had nowhere to put them. The card is drawn in that conversation (the
+  // client's read is the binding, never the switch), so the tap has to land on it.
+  const off = ownerItemHarness(
+    openItem({
+      kind: 'TASK_FAILED',
+      assigneeReason: 'NO_COORDINATOR',
+      title: 'Task failed: [WARC] 000_00022 的 WARC 依赖',
+      payload: {},
+      project: {
+        title: 'FineWeb × Common Crawl → RocksDB 语料库',
+        coordinatorEnabled: false,
+        coordinatorSessionId: 'coordinator',
+      },
+    }),
+  );
+  await off.service.notifyOwnerItem('item-1');
+  assert.equal(JSON.parse(off.sent[0].body).sessionID, 'coordinator');
+
+  // And a project that genuinely has no conversation to open still routes nowhere: the card lives
+  // on its page, and the clients ignore a payload naming no session.
+  const unbound = ownerItemHarness(
+    openItem({
+      kind: 'TASK_FAILED',
+      assigneeReason: 'NO_COORDINATOR',
+      title: 'Task failed: [WARC] 000_00022 的 WARC 依赖',
+      payload: {},
+      project: { title: 'FineWeb × Common Crawl → RocksDB 语料库', coordinatorSessionId: null },
+    }),
+  );
+  await unbound.service.notifyOwnerItem('item-1');
+  assert.equal(JSON.parse(unbound.sent[0].body).sessionID, undefined);
+});
+
 test('an item still with the coordinator does not push', async () => {
   // A merge conflict on its way to the coordinator: somebody is on it, and the owner is not them.
   const conflict = openItem({

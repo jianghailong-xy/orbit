@@ -161,9 +161,15 @@ final class OwnerConfirmationCopyParityTests: XCTestCase {
         assertContains(console, "WAITING_FOR_CONFIRMATION,",
                        "the console importing the waiting words")
         assertContains(console,
-                       "s.waitingKind === 'OWNER_CONFIRMATION' ? WAITING_FOR_CONFIRMATION "
-                           + ": 'Waiting for approval'",
+                       "if (s.waitingKind === 'OWNER_CONFIRMATION') return WAITING_FOR_CONFIRMATION;",
                        "the row choosing its words by kind")
+        // And the other named kind: everything counted being one of the four owner items, the row
+        // says that item's own word (`ownerItemWord`) rather than the approval wording nobody is
+        // doing. That branch's words are held to this end's by `OwnerItemCardsTests`.
+        assertContains(console,
+                       "if (s.waitingKind === 'OWNER_ITEM') return ownerItemWord(s) "
+                           + "?? 'Waiting for approval';",
+                       "the row naming the owner item that is waiting")
         // And the header reads it the same way its row does, outside the generating gate: an owner
         // confirmation is held open by no turn, so it is still waiting once the conversation parks.
         assertContains(console,
