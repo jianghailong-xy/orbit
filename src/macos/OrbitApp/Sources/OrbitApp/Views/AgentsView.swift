@@ -239,14 +239,19 @@ struct AgentContentColumn: View {
                 AgentPanes(agents: agents, agent: a, selectedSessionID: $app.selectedAgentSessionID,
                            searchQuery: $searchQuery, rowNavigation: rowNavigation)
                     .id(a.id)
-                    .navigationTitle(a.name)
                     #if os(iOS)
-                    // Inline on the phone too, which used to keep its roomy large title. The title is
-                    // the workspace name, and the drawer already shows that as its selected row — so
-                    // the vertical room the large title spent repeating it came straight out of the
-                    // rows. The regular-width shell has read it this way since the persistent scope
-                    // control took that room; the two shells now agree.
+                    // No title, on either width: the bar's workspace switcher (see the toolbar
+                    // below) moved out of the title slot and into the leading one, and a title left
+                    // behind would draw a second copy of the same name in the centre. `.inline`
+                    // stays even with nothing to draw — a page with no title still reserves the
+                    // *large* title band without it, the trap `ConsoleView` documents on its own
+                    // page. One deliberate cost: a pushed page's back label is the previous page's
+                    // title, so the console and the draft now read "Back" instead of the workspace
+                    // name. (macOS keeps its title: its toolbar is its own layout and nothing there
+                    // moved.)
                     .navigationBarTitleDisplayMode(.inline)
+                    #else
+                    .navigationTitle(a.name)
                     #endif
             } else {
                 switch app.agents?.listPresentation {
@@ -269,14 +274,18 @@ struct AgentContentColumn: View {
         #if os(iOS)
         // Search, in the list rather than over it. Until it existed the list was only searchable from
         // inside the drawer (or ⌘K, which needs a keyboard), so it looked like it had none.
-        // `.navigationBarDrawer` is what keeps the field *below* the workspace title instead of over
-        // it — the system owns that layout, which a hand-placed bar can't do. `.always`, and this is
-        // the second time it has won: the list below carries `.refreshable`, and on iOS 26 the two
-        // disagree about where the drawer's 60pt goes.
+        // `.navigationBarDrawer` is what keeps the field *below* the bar's own content instead of
+        // over it — the system owns that layout, which a hand-placed bar can't do. `.always`, and
+        // this is the second time it has won: the list below carries `.refreshable`, and on iOS 26
+        // the two disagree about where the drawer's 60pt goes.
         //
         // Measured on an iOS 26.2 simulator (the `.ios-probe/` probe on the
-        // `orbit/loading-c855b1-shots` branch; frames in window coordinates). Under `.automatic` the
-        // navigation bar grows to 62–236 and the field is drawn at its bottom (176–236), while the
+        // `orbit/loading-c855b1-shots` branch; frames in window coordinates). Every bottom edge here
+        // was taken while the page still drew an inline title above the field, so with that title
+        // gone the whole arrangement sits a title-line higher; what the numbers decide is the
+        // *relative* order (field inside the bar, control below it), which is unchanged. Under
+        // `.automatic` the navigation bar grows to 62–236 and the field is drawn at its bottom
+        // (176–236), while the
         // refresh control still takes the band above it (116–176) — so the pull that reveals the
         // field draws the spinner *in the bar*, which on the phone that reported this is the field
         // itself. Under `.always` the bar is 62–176, the field 116–176 *inside* it, and the control
@@ -507,11 +516,20 @@ struct AgentPanes: View {
                 }
                 .accessibilityLabel("Start a new session with \(agent.name)")
             }
-            // The title slot is the workspace switcher, exactly as it is on the new-session draft
-            // (`WorkspaceTitleSwitcher`). The workspace you are in is the standing context of the
-            // whole list, so the bar's title is where you read it and now also where you change it —
-            // one tap instead of opening the drawer and hunting for the row.
-            ToolbarItem(placement: .principal) {
+            // The same workspace switcher the new-session draft carries (`WorkspaceTitleSwitcher`),
+            // but at the *leading* slot rather than the title one. In the title slot iOS 26 only
+            // centres a custom title view while its whole ideal width fits what is left of the bar
+            // after reserving the widest side's chrome on both sides — here the two trailing
+            // buttons' glass capsule (measured 107pt wide on a 393pt bar, +16pt margin ≈ 123pt a
+            // side, leaving ≈147pt). Past that the group didn't truncate: it was clamped to the
+            // leading edge (measured 72.3pt = the drawer button's right edge + 12), so the same bar
+            // read centred for `orbit` and left for `wikova-develop`, decided by nothing but how
+            // long the name happened to be. Leading is where that fallback put it anyway, and
+            // without a width cap the whole name shows rather than a truncation — the two spellings
+            // are drawn side by side in docs/mocks/ios-title-switcher-long-name.html (the chosen one
+            // is B). The drawer button is declared a level up (`drawerToggle`, on the section root),
+            // which is the item this one follows.
+            ToolbarItem(placement: .topBarLeading) {
                 WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
             }
             #else
