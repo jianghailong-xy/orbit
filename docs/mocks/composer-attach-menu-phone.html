@@ -1,0 +1,286 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>手机上的 + 菜单 · 与 iOS 对齐</title>
+<style>
+  html, body { margin: 0; background: #eceef2; }
+  body { width: 1415px; padding: 44px 48px; box-sizing: border-box; color: #111;
+         font-family: "Nimbus Sans", "Liberation Sans", "Noto Sans CJK SC", "Noto Sans SC", sans-serif; }
+  h1 { margin: 0 0 6px; font-size: 32px; letter-spacing: -0.3px; }
+  .sub { margin: 0 0 30px; font-size: 18px; color: #555; }
+  .grid { display: grid; grid-template-columns: repeat(3, 413px); column-gap: 40px; row-gap: 34px; }
+  .cap { margin-top: 16px; font-size: 16.5px; line-height: 1.5; color: #444; }
+  .cap b { display: block; margin-bottom: 3px; font-size: 21px; color: #111; }
+
+  .device { width: 413px; height: 872px; border-radius: 62px; background: #1b1b1d; padding: 10px; box-sizing: border-box;
+            box-shadow: 0 22px 50px rgba(0,0,0,.22), inset 0 0 0 1.5px #3a3a3c; }
+  .screen { position: relative; width: 393px; height: 852px; border-radius: 52px; overflow: hidden; background: #fff; }
+  .island { position: absolute; top: 11px; left: 134px; width: 125px; height: 36px; border-radius: 18px; background: #000; z-index: 40; }
+  .home { position: absolute; bottom: 8px; left: 129px; width: 135px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.26); z-index: 40; }
+  .abs { position: absolute; left: 0; right: 0; text-align: center; }
+
+  /* ── status bar ────────────────────────────────────────────────────────────── */
+  .sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 5; }
+  .sb .time { position: absolute; left: 32px; top: 17px; font-size: 16px; font-weight: 700; letter-spacing: .2px; }
+  .sb .right { position: absolute; right: 26px; top: 20px; display: flex; align-items: center; gap: 5px; }
+  .sb .bars i { display: inline-block; width: 3px; margin-right: 2px; background: #000; border-radius: 1px; }
+  .sb .wifi { width: 15px; height: 11px; background: #000; clip-path: polygon(50% 100%, 0 30%, 12% 18%, 50% 55%, 88% 18%, 100% 30%); }
+  .sb .batt { width: 24px; height: 12px; border: 1.4px solid rgba(0,0,0,.35); border-radius: 3.5px; position: relative; }
+  .sb .batt::after { content: ""; position: absolute; inset: 2px; right: 40%; background: #000; border-radius: 1.5px; }
+
+  /* ── headers ───────────────────────────────────────────────────────────────── */
+  .iosnav .back { position: absolute; left: 16px; top: 58px; width: 44px; height: 44px; border-radius: 50%;
+                  background: #f2f2f7; box-shadow: 0 1px 3px rgba(0,0,0,.08); display: flex; align-items: center; justify-content: center; z-index: 5; }
+  .iosnav .back svg { width: 17px; height: 17px; }
+  .iosnav .t { position: absolute; left: 0; right: 0; top: 68px; text-align: center; font-size: 17px; font-weight: 600; z-index: 5; }
+
+  .webhead { position: absolute; left: 0; right: 0; top: 54px; height: 74px; border-bottom: 1px solid #ececec; z-index: 5; background: #fff; }
+  .webhead svg { position: absolute; left: 20px; top: 76px; width: 22px; height: 22px; }
+  .webhead .t { position: absolute; left: 60px; top: 72px; font-size: 20px; font-weight: 650; }
+  .webhead .s { position: absolute; left: 60px; top: 100px; font-size: 13.5px; color: #9a9a9f; }
+
+  /* ── provider hero ─────────────────────────────────────────────────────────── */
+  .tile { position: absolute; background: linear-gradient(180deg, #6a86ff, #3f68ff); display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 10px 26px rgba(63,104,255,.32); }
+  .tile svg { width: 58%; height: 58%; }
+  .chev { width: 10px; height: 10px; vertical-align: 3px; }
+
+  /* ── composer ──────────────────────────────────────────────────────────────── */
+  .box { position: absolute; border: 1px solid #e6e6ea; background: #fff; display: flex; align-items: center; padding: 6px; box-sizing: border-box; }
+  .gbtn { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .gbtn.plus svg { width: 19px; height: 19px; }
+  .gbtn.send svg { width: 30px; height: 30px; }
+  .gbtn.sq { border-radius: 10px; background: #f1f2f4; }
+  .pills { position: absolute; left: 25px; right: 0; height: 20px; font-size: 13.5px; color: #6b6b70; white-space: nowrap; }
+  .pills .m { position: absolute; left: 56px; color: #2b2b30; }
+  .pills .e { position: absolute; left: 203px; color: #6b6b70; }
+  .pills .dot { position: absolute; left: 266px; top: 3px; width: 12px; height: 12px; border: 2px solid #d5d5da; border-radius: 50%; }
+  .pills .dash { position: absolute; left: 285px; top: 9px; width: 17px; height: 2px; border-radius: 1px; background: #c9c9cf; }
+  .pills.ios { left: 33px; }
+  .pills.ios .m { left: 118px; }
+  .pills.ios .e { left: 265px; }
+  .pills.ios .dot { left: 321px; }
+  .pills.ios .dash { left: 338px; }
+
+  /* ── Safari's floating bottom bar (web panels only) ────────────────────────── */
+  .safari i { position: absolute; background: #bdbdbd; }
+  .safari .c { width: 44px; height: 44px; border-radius: 50%; top: 774px; }
+  .safari .pill { left: 91px; top: 772px; width: 212px; height: 58px; border-radius: 29px; }
+  .safari .g { position: absolute; z-index: 2; }
+  .safari .url { position: absolute; left: 91px; top: 772px; width: 212px; height: 58px; z-index: 3; display: flex;
+                 align-items: center; justify-content: center; color: #fff; font-size: 17px; }
+  .safari .burger { left: 112px; top: 793px; }
+  .safari .reload { left: 262px; top: 793px; }
+
+  /* ── the menus ─────────────────────────────────────────────────────────────── */
+  .menu { position: absolute; z-index: 20; background: #fff; overflow: hidden; }
+  .menu .row { display: flex; align-items: center; }
+  .menu .ic { flex: none; display: flex; align-items: center; justify-content: center; }
+  .menu .lb { white-space: nowrap; }
+
+  /* iOS system menu as it renders off the composer's `+` (measured off the phone shot) */
+  .menu.ios { left: 27.5px; width: 250px; bottom: 77px; border-radius: 26px; padding: 10px 0;
+              box-shadow: 0 18px 44px rgba(0,0,0,.17), 0 2px 8px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.07); }
+  .menu.ios .row { height: 42.4px; padding-left: 31px; gap: 16px; font-size: 17px; color: #0a0a0a; }
+  .menu.ios .ic { width: 19px; height: 19px; color: #8a8a8e; }
+  .menu.ios .div { height: 1px; margin: 9.5px 24px; background: #eaeaea; }
+
+  /* web today: antd's default dropdown, measured off the orbited.io phone shot */
+  .menu.web { left: 21px; width: 120px; bottom: 192px; border-radius: 8px; padding: 4px 0;
+              box-shadow: 0 6px 16px rgba(0,0,0,.08), 0 3px 6px -4px rgba(0,0,0,.12), 0 9px 28px 8px rgba(0,0,0,.05); }
+  .menu.web .row { height: 32px; padding: 0 12px; gap: 8px; font-size: 14px; color: rgba(0,0,0,.88); }
+  .menu.web .ic { width: 14px; height: 14px; color: #1f1f1f; }
+
+  /* web fixed: iOS's on-screen order and grouping, sized for a phone */
+  .menu.fixed { left: 22px; width: 250px; bottom: 192px; border-radius: 26px; padding: 10px 0;
+                box-shadow: 0 18px 44px rgba(0,0,0,.17), 0 2px 8px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.07); }
+  .menu.fixed .row { height: 42.4px; padding-left: 31px; gap: 16px; font-size: 17px; color: #0a0a0a; }
+  .menu.fixed .ic { width: 19px; height: 19px; color: #8a8a8e; }
+  .menu.fixed .div { height: 1px; margin: 9.5px 24px; background: #eaeaea; }
+
+  .mark { position: absolute; z-index: 25; border: 1.6px dashed #ff9f0a; border-radius: 30px; pointer-events: none; }
+  .mark.sq { border-radius: 11px; }
+
+  /* ── delta table ───────────────────────────────────────────────────────────── */
+  .note { grid-column: 1 / span 3; border-radius: 30px; background: #fff; padding: 26px 32px 22px; box-sizing: border-box;
+          box-shadow: 0 22px 50px rgba(0,0,0,.12); }
+  .note h2 { margin: 0 0 12px; font-size: 23px; }
+  table { width: 100%; border-collapse: collapse; font-size: 17px; }
+  th { text-align: left; font-size: 15px; color: #111; padding: 8px 10px; border-bottom: 2px solid #eee; }
+  td { padding: 10px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  td:first-child { color: #888; font-weight: 600; width: 130px; }
+  .was { color: #a33; } .now { color: #1d7a3d; }
+</style>
+</head>
+<body>
+<h1>手机上的 <code>+</code> 菜单 · 与 iOS 对齐</h1>
+<p class="sub">三格同为 iPhone 393×852。① iOS 真机（参考）② web 现状（orbited.io 手机截图）③ 改后的 web。
+   几何都按真机截图量过，画出来只是把它搬到一页上。</p>
+
+<div class="grid">
+
+  <!-- ① iOS -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="sb"><span class="time">10:40</span><span class="right">
+        <span class="bars"><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i><i style="height:11px"></i></span>
+        <span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="iosnav">
+        <div class="back"><svg viewBox="0 0 20 20" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4 6.5 10l6 6"/></svg></div>
+        <div class="t">orbit <svg style="width:9px;height:9px;vertical-align:1px" viewBox="0 0 10 10" fill="none" stroke="#8a8a8e" stroke-width="1.6" stroke-linecap="round"><path d="M2 3.8 5 6.8l3-3"/></svg></div>
+      </div>
+      <div class="tile" style="left:164.5px;top:328px;width:64px;height:64px;border-radius:16px;">
+        <svg viewBox="0 0 24 24" fill="#fff"><path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588z"/></svg>
+      </div>
+      <div class="abs" style="top:407px;font-size:25px;font-weight:700;">DeepSeek <svg class="chev" style="width:11px;height:11px;vertical-align:4px" viewBox="0 0 10 10" fill="none" stroke="#8a8a8e" stroke-width="1.6" stroke-linecap="round"><path d="M2 3.8 5 6.8l3-3"/></svg></div>
+      <div class="abs" style="top:458px;font-size:17px;color:#8e8e93;">Send a task to get started.</div>
+      <div class="abs" style="top:482px;font-size:15px;color:#b4b4b9;">DeepSeek V4.1 Flash</div>
+      <div class="box" style="left:16px;right:16px;bottom:58px;height:53px;border-radius:24px;">
+        <div class="gbtn"><svg viewBox="0 0 20 20" fill="none" stroke="#1c1c1e" stroke-width="1.7" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg></div>
+        <div style="flex:1"></div>
+        <div class="gbtn send"><svg viewBox="0 0 24 24" fill="none" stroke="#b0b0b5" stroke-width="1.5"><circle cx="12" cy="12" r="10.3"/><path d="M12 17V7.5M7.6 11.6 12 7.2l4.4 4.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+      <div class="pills ios" style="top:798px;"><span>Auto</span><span class="m">DeepSeek V4.1 Flash</span><span class="e">Max</span><span class="dot"></span><span class="dash"></span></div>
+
+      <div class="mark" style="left:24px;top:519.3px;width:257px;height:259px;"></div>
+      <div class="menu ios">
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.9 5.1 7.3 11.7a2.75 2.75 0 0 0 3.9 3.9l6.6-6.6a4.6 4.6 0 0 0-6.5-6.5L4.7 9.1a6.45 6.45 0 0 0 9.1 9.1l5.4-5.4"/></svg></span><span class="lb">File</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="3.6" width="16" height="12.8" rx="2.6"/><circle cx="6.6" cy="8" r="1.5" fill="#fff"/><path d="M2.6 16 8 10.4l3.3 3.5 2.7-2.3 3.4 4.4z" fill="#fff"/></svg></span><span class="lb">Image</span></div>
+        <div class="div"></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.9" y="4.1" width="16.2" height="11.8" rx="3"/><path d="M5.9 8.4l2.4 2.4-2.4 2.4M11.2 13.2h3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="lb">Shell</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M11.8 1.8 4.6 11.2h4.3l-.7 7 7.2-9.4h-4.3z"/></svg></span><span class="lb">Skill</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.7 6.3 3.2 10l3.5 3.7M13.3 6.3 16.8 10l-3.5 3.7M11.3 4.2 8.7 15.8"/></svg></span><span class="lb">Command</span></div>
+      </div>
+    </div></div>
+    <div class="cap"><b>① iOS（参考）</b>屏幕上从上到下是 File / Image ─ Shell / Skill / Command：命令组贴着 <code>+</code> 键，
+      媒体组在分割线另一侧。宽 250、行高 42.4、字号 17、圆角 26。</div>
+  </div>
+
+  <!-- ② web today -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="sb"><span class="time">10:40</span><span class="right">
+        <span class="bars"><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i><i style="height:11px"></i></span>
+        <span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="webhead">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#1a1a1a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10h-13M9.5 4 3.5 10l6 6"/></svg>
+        <div class="t">New session</div><div class="s">orbit · New session</div>
+      </div>
+      <div class="abs" style="top:285px;font-size:23px;font-weight:650;">Start a new session</div>
+      <div class="abs" style="top:315px;font-size:15px;color:#8d8d92;">Describe the task — Orbit remembers who runs it.</div>
+      <div class="tile" style="left:168.5px;top:351.7px;width:56px;height:56px;border-radius:14px;">
+        <svg viewBox="0 0 24 24" fill="#fff"><path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588z"/></svg>
+      </div>
+      <div class="abs" style="top:425px;font-size:18px;font-weight:650;">DeepSeek <svg class="chev" viewBox="0 0 10 10" fill="none" stroke="#8a8a8e" stroke-width="1.6" stroke-linecap="round"><path d="M2 3.8 5 6.8l3-3"/></svg></div>
+      <div class="abs" style="top:468px;font-size:13.5px;color:#8d8d92;">DeepSeek &nbsp;·&nbsp; DeepSeek V4.1 Flash &nbsp;·&nbsp; <span style="color:#3370ff">Manage</span></div>
+      <div class="box" style="left:12px;right:12px;bottom:142px;height:56px;border-radius:24px;">
+        <div class="gbtn sq"><svg viewBox="0 0 20 20" fill="none" stroke="#1c1c1e" stroke-width="1.7" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg></div>
+        <div style="flex:1"></div>
+        <div class="gbtn sq"><svg viewBox="0 0 24 24" fill="none" stroke="#b0b0b5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></div>
+      </div>
+      <div class="pills" style="top:720px;"><span>Auto</span><span class="m">DeepSeek V4.1 Flash</span><span class="e">Max</span><span class="dot"></span><span class="dash"></span></div>
+      <div class="safari">
+        <i class="c" style="left:32px;"></i><i class="pill"></i><i class="c" style="left:320px;"></i>
+        <svg class="g" style="left:106px;top:791px;" width="26" height="20" viewBox="0 0 26 20" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M2 4h22M2 10h22M2 16h22"/></svg>
+        <svg class="g" style="left:258px;top:791px;" width="24" height="20" viewBox="0 0 24 20" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 9.5a8 8 0 1 1-2.6-5.9M20 2.5v4.2h-4.2"/></svg>
+        <svg class="g" style="left:44px;top:792px;" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 3.5 6 10l6.5 6.5"/></svg>
+        <svg class="g" style="left:332px;top:792px;" width="24" height="20" viewBox="0 0 24 20" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="3" width="15" height="14" rx="3"/><path d="M21 1.5v17"/></svg>
+        <div class="url">orbited.io</div>
+      </div>
+
+      <div class="mark sq" style="left:18px;top:489.7px;width:126px;height:173.6px;"></div>
+      <div class="menu web">
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2.1" y="2.1" width="15.8" height="15.8" rx="1"/><path d="M6.6 7.4 9.7 10.4 6.6 13.4M11.3 13.4h3.1" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="lb">Command</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11.8 1.8 4.6 11.2h4.3l-.7 7 7.2-9.4h-4.3z"/></svg></span><span class="lb">Skill</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="4.4" width="16" height="10.2" rx="1.2"/><path d="M10 14.6v2.2M6.8 16.8h6.4" stroke-linecap="round"/><text x="10" y="11.8" font-size="4.6" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="Nimbus Sans, sans-serif">SQL</text></svg></span><span class="lb">Shell</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="2" y="3.4" width="16" height="13.2" rx="1.2"/><circle cx="6.6" cy="7.8" r="1.1" fill="currentColor" stroke="none"/><path d="M2.6 15.6 8 10.2l3 3 3-2.4 3.4 4"/></svg></span><span class="lb">Image</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.9 5.1 7.3 11.7a2.75 2.75 0 0 0 3.9 3.9l6.6-6.6a4.6 4.6 0 0 0-6.5-6.5L4.7 9.1a6.45 6.45 0 0 0 9.1 9.1l5.4-5.4"/></svg></span><span class="lb">File</span></div>
+      </div>
+    </div></div>
+    <div class="cap"><b>② web 手机（现状）</b>同一个菜单，顺序整个倒过来（命令组在远端、File 贴着 <code>+</code>），
+      没有分组线，块头也只有 iOS 的一半：宽 120、行高 32、字号 14、圆角 8。</div>
+  </div>
+
+  <!-- ③ web fixed -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="sb"><span class="time">10:40</span><span class="right">
+        <span class="bars"><i style="height:5px"></i><i style="height:7px"></i><i style="height:9px"></i><i style="height:11px"></i></span>
+        <span class="wifi"></span><span class="batt"></span></span></div>
+      <div class="webhead">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#1a1a1a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10h-13M9.5 4 3.5 10l6 6"/></svg>
+        <div class="t">New session</div><div class="s">orbit · New session</div>
+      </div>
+      <div class="abs" style="top:285px;font-size:23px;font-weight:650;">Start a new session</div>
+      <div class="abs" style="top:315px;font-size:15px;color:#8d8d92;">Describe the task — Orbit remembers who runs it.</div>
+      <div class="tile" style="left:168.5px;top:351.7px;width:56px;height:56px;border-radius:14px;">
+        <svg viewBox="0 0 24 24" fill="#fff"><path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588z"/></svg>
+      </div>
+      <div class="abs" style="top:425px;font-size:18px;font-weight:650;">DeepSeek <svg class="chev" viewBox="0 0 10 10" fill="none" stroke="#8a8a8e" stroke-width="1.6" stroke-linecap="round"><path d="M2 3.8 5 6.8l3-3"/></svg></div>
+      <div class="abs" style="top:468px;font-size:13.5px;color:#8d8d92;">DeepSeek &nbsp;·&nbsp; DeepSeek V4.1 Flash &nbsp;·&nbsp; <span style="color:#3370ff">Manage</span></div>
+      <div class="box" style="left:12px;right:12px;bottom:142px;height:56px;border-radius:24px;">
+        <div class="gbtn sq"><svg viewBox="0 0 20 20" fill="none" stroke="#1c1c1e" stroke-width="1.7" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg></div>
+        <div style="flex:1"></div>
+        <div class="gbtn sq"><svg viewBox="0 0 24 24" fill="none" stroke="#b0b0b5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></div>
+      </div>
+      <div class="pills" style="top:720px;"><span>Auto</span><span class="m">DeepSeek V4.1 Flash</span><span class="e">Max</span><span class="dot"></span><span class="dash"></span></div>
+      <div class="safari">
+        <i class="c" style="left:32px;"></i><i class="pill"></i><i class="c" style="left:320px;"></i>
+        <svg class="g" style="left:106px;top:791px;" width="26" height="20" viewBox="0 0 26 20" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M2 4h22M2 10h22M2 16h22"/></svg>
+        <svg class="g" style="left:258px;top:791px;" width="24" height="20" viewBox="0 0 24 20" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 9.5a8 8 0 1 1-2.6-5.9M20 2.5v4.2h-4.2"/></svg>
+        <svg class="g" style="left:44px;top:792px;" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 3.5 6 10l6.5 6.5"/></svg>
+        <svg class="g" style="left:332px;top:792px;" width="24" height="20" viewBox="0 0 24 20" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="3" width="15" height="14" rx="3"/><path d="M21 1.5v17"/></svg>
+        <div class="url">orbited.io</div>
+      </div>
+
+      <div class="mark" style="left:19px;top:405px;width:256px;height:259px;"></div>
+      <div class="menu fixed">
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.9 5.1 7.3 11.7a2.75 2.75 0 0 0 3.9 3.9l6.6-6.6a4.6 4.6 0 0 0-6.5-6.5L4.7 9.1a6.45 6.45 0 0 0 9.1 9.1l5.4-5.4"/></svg></span><span class="lb">File</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="3.6" width="16" height="12.8" rx="2.6"/><circle cx="6.6" cy="8" r="1.5" fill="#fff"/><path d="M2.6 16 8 10.4l3.3 3.5 2.7-2.3 3.4 4.4z" fill="#fff"/></svg></span><span class="lb">Image</span></div>
+        <div class="div"></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.9" y="4.1" width="16.2" height="11.8" rx="3"/><path d="M5.9 8.4l2.4 2.4-2.4 2.4M11.2 13.2h3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="lb">Shell</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M11.8 1.8 4.6 11.2h4.3l-.7 7 7.2-9.4h-4.3z"/></svg></span><span class="lb">Skill</span></div>
+        <div class="row"><span class="ic"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.7 6.3 3.2 10l3.5 3.7M13.3 6.3 16.8 10l-3.5 3.7M11.3 4.2 8.7 15.8"/></svg></span><span class="lb">Command</span></div>
+      </div>
+    </div></div>
+    <div class="cap"><b>③ web 改后</b>顺序、分组、块头都按 iOS：命令组回到 <code>+</code> 键这一侧，
+      Image 与 Shell 之间一条两端各缩进 24 的分割线，图标也对齐（Command <code>&lt;/&gt;</code>、Shell <code>&gt;_</code> 框）。
+      菜单变高后顶到供应商标题一带——Safari 的 <code>+</code> 键本来就比 iOS 高 63px，位置使然。</div>
+  </div>
+
+  <div class="note">
+    <h2>差在哪，改什么</h2>
+    <table>
+      <tr><th></th><th>web 手机 · 现在</th><th>改后</th></tr>
+      <tr>
+        <td>顺序</td>
+        <td class="was">Command / Skill / Shell / Image / File 从上往下——File 贴着 <code>+</code> 键</td>
+        <td class="now">File / Image / Shell / Skill / Command——和 iOS 屏幕上一样，命令组在 <code>+</code> 键这一侧</td>
+      </tr>
+      <tr>
+        <td>分组</td>
+        <td class="was">五条并排，没有分组线</td>
+        <td class="now">Image 与 Shell 之间一条分割线（两端各缩进 24）</td>
+      </tr>
+      <tr>
+        <td>块头</td>
+        <td class="was">宽 120 · 行高 32 · 字号 14 · 图标 14 · 圆角 8</td>
+        <td class="now">宽 250 · 行高 42.4 · 字号 17 · 图标 19 · 圆角 26（iOS 实测值）</td>
+      </tr>
+      <tr>
+        <td>图标</td>
+        <td class="was">Command 用 <code>&gt;_</code> 方框，Shell 用 SQL 显示器</td>
+        <td class="now">Command 换成 <code>&lt;/&gt;</code>，Shell 换成 <code>&gt;_</code> 框——与 iOS 同形，颜色也降为次要灰</td>
+      </tr>
+      <tr>
+        <td>作用范围</td>
+        <td class="was">桌面与手机共用一套</td>
+        <td class="now">顺序 / 分组 / 图标：桌面手机一起改；块头尺寸：只改手机（≤600px），桌面保持现在的紧凑密度</td>
+      </tr>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

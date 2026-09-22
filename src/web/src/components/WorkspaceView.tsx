@@ -10,7 +10,6 @@ import {
   CloseCircleFilled,
   CloseOutlined,
   CodeOutlined,
-  ConsoleSqlOutlined,
   DeleteOutlined,
   DisconnectOutlined,
   DownOutlined,
@@ -1217,6 +1216,36 @@ function WaitElapsed({ since }: { since?: string | null }) {
   }, []);
   const label = waitElapsedLabel(since, now);
   return label ? <span className="chat-wait-elapsed">{label}</span> : null;
+}
+
+/**
+ * `</>` — the glyph the native composer's `+` menu gives Command (SF Symbols
+ * `chevron.left.forwardslash.chevron.right`). `@ant-design/icons` v6 has no slash-bracket: its
+ * `CodeOutlined` draws a terminal box, which is the glyph native Shell carries, so the two are not
+ * interchangeable and this one is drawn here. 1em square, so it takes the size its row asks for.
+ *
+ * `className` is not decoration: the menu clones the icon with its own slot class, and a component
+ * that drops it renders a glyph with no size and no gap — the one thing a menu glyph cannot be.
+ */
+function SlashCommandIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      data-glyph="slash-command"
+      viewBox="0 0 20 20"
+      width="1em"
+      height="1em"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M6.7 6.3 3.2 10l3.5 3.7M13.3 6.3 16.8 10l-3.5 3.7M11.3 4.2 8.7 15.8" />
+    </svg>
+  );
 }
 
 /** What withdrawing a queued wake costs: said beside the action, and again when it asks to confirm. */
@@ -7267,24 +7296,37 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             placement="topLeft"
             disabled={composerDisabled}
             menu={{
+              className: 'composer-attach-menu',
+              // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
+              // array's last entry is the one beside the `+` — while the native menu
+              // (ComposerView.swift `addMenu`) hands its items to the system with the first one
+              // nearest the button and gets them back reversed. Hence the native source reads
+              // Command…File and this reads File…Command: both clients put Command under the
+              // thumb and File at the far end, and a divider between the two groups. Pinned by
+              // WorkspaceView.composerMenu.test.tsx, drawn in
+              // docs/mocks/composer-attach-menu-phone.html.
               items: [
                 {
-                  key: 'command',
-                  icon: <CodeOutlined />,
-                  label: 'Command',
-                  disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
-                  onClick: () => insertSlash('command'),
+                  key: 'file',
+                  icon: <PaperClipOutlined />,
+                  label: 'File',
+                  onClick: () => fileInputRef.current?.click(),
                 },
                 {
-                  key: 'skill',
-                  icon: <ThunderboltOutlined />,
-                  label: 'Skill',
-                  disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
-                  onClick: () => insertSlash('skill'),
+                  key: 'image',
+                  icon: <PictureOutlined />,
+                  // One word per action, the way the native composer's `+` menu writes them
+                  // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
+                  // upload can't work in says so on pick, rather than greying the item out.
+                  label: 'Image',
+                  onClick: () => imageInputRef.current?.click(),
                 },
+                { type: 'divider' },
                 {
                   key: 'shell',
-                  icon: <ConsoleSqlOutlined />,
+                  // The terminal box, as native Shell draws it — not `ConsoleSqlOutlined`, whose
+                  // SQL monitor appeared in neither client.
+                  icon: <CodeOutlined />,
                   // Works on a live session, a brand-new draft (sent as the first turn), and
                   // an ended-but-resumable session (sent as the revive turn — the runner
                   // --resumes claude, runs the command, and buffers its output for the next
@@ -7298,19 +7340,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   onClick: insertShell,
                 },
                 {
-                  key: 'image',
-                  icon: <PictureOutlined />,
-                  // One word per action, the way the native composer's `+` menu writes them
-                  // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
-                  // upload can't work in says so on pick, rather than greying the item out.
-                  label: 'Image',
-                  onClick: () => imageInputRef.current?.click(),
+                  key: 'skill',
+                  icon: <ThunderboltOutlined />,
+                  label: 'Skill',
+                  disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
+                  onClick: () => insertSlash('skill'),
                 },
                 {
-                  key: 'file',
-                  icon: <PaperClipOutlined />,
-                  label: 'File',
-                  onClick: () => fileInputRef.current?.click(),
+                  key: 'command',
+                  icon: <SlashCommandIcon />,
+                  label: 'Command',
+                  disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
+                  onClick: () => insertSlash('command'),
                 },
               ],
             }}

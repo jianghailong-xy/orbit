@@ -4922,6 +4922,60 @@ html[data-theme='dark'] .session-tag-chip {
   .composer-pill-workspace .ant-select {
     min-width: 0;
   }
+  /* ── The `+` menu ─────────────────────────────────────────────────────────────────────────
+     One menu, two clients — and the phone is the one that can be held next to the iOS app, so
+     here it takes the native menu's box: 250 wide, 42.4px rows, 17px type, a 26px corner, and a
+     rule between the two groups inset 24 from either edge. Every number is measured off the
+     phone screenshot in docs/mocks/composer-attach-menu-phone.html, and pinned by
+     WorkspaceView.composerMenu.test.tsx so it cannot drift back to antd's defaults.
+     Desktop keeps antd's density on purpose: that menu is a pointer menu at the foot of a pane,
+     and a 250px card there would be the wrong size for the surface it opens on. */
+  .composer-attach-menu.ant-dropdown-menu {
+    /* 250 is where it rests, and it is a floor rather than a width because one row's label is
+       longer than the others: "Shell (session unavailable)" needs the whole 250 before it fits,
+       and a card that wraps THAT into two lines stops looking like the native menu it is
+       copying. So the card grows to fit its widest row, up to what the phone can show. */
+    min-width: 250px;
+    width: max-content;
+    max-width: calc(100vw - 44px);
+    padding: 10px 0;
+    border-radius: 26px;
+    box-shadow:
+      0 18px 44px rgba(0, 0, 0, 0.17),
+      0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+  .composer-attach-menu .ant-dropdown-menu-item {
+    display: flex;
+    align-items: center;
+    height: 42.4px;
+    padding: 0 0 0 31px;
+    border-radius: 0;
+    font-size: 17px;
+    /* antd leaves this to the row it draws; a native menu row is one line, always. */
+    white-space: nowrap;
+  }
+  /* The glyph box and the gap after it: 31 + 19 + 16 lands the word 66 from the card's edge,
+     which is where the native menu has it. */
+  .composer-attach-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+    min-width: 19px;
+    font-size: 19px;
+  }
+  /* Glyphs are drawn in the native menu's secondary tone — but only on a row that can be used,
+     so an unavailable one keeps antd's dimmed colour instead of reading as enabled. */
+  .composer-attach-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled)
+    .ant-dropdown-menu-item-icon {
+    color: #8a8a8e;
+  }
+  .composer-attach-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon + span {
+    margin-inline-start: 16px;
+  }
+  /* The rule between the two groups: 9.5 + 1 + 9.5 = the 20pt band the native menu leaves, and
+     the line itself drawn as the background antd already uses so no border has to be undone. */
+  .composer-attach-menu .ant-dropdown-menu-item-divider {
+    height: 1px;
+    margin: 9.5px 24px;
+    background-color: #eaeaea;
+  }
 }
 /* Popover body: one gauge per subscription window (reuses .runner-util for the bar). */
 .cu-pop {
