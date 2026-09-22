@@ -292,10 +292,15 @@ public enum DeliveryAnchor {
         case .ownerConfirmation:
             return nil
         // Exhaustive rather than defaulted: a card added later has to say which of the two it is.
-        // The owner cards — the question, the merge, the exception that became yours and the pause
-        // — anchor where they arrived, like every question the platform files: what they are about
-        // happened before the read that found them. (The exception cards arrived after the fact:
-        // a task failed, a clock ran out, and the read that publishes the item runs later still.)
+        // The owner cards — the question, the merge — anchor where they arrived, like every
+        // question the platform files: what they are about happened before the read that found
+        // them.
+        //
+        // The exception that became the owner's and the pause they lift are NOT delivered this way
+        // any more: they carry a moment of their own and are placed by it (`exception(_:items:)`).
+        // Their arm here is what that rule falls back to for a stamp nothing can parse — the same
+        // arrival, kept because these two are questions still waiting on the reader: dropping one
+        // for a bad stamp would take away the only thing on screen that can be pressed.
         //
         // All FIVE receipts are placed by the door's own clock rather than here —
         // `CriteriaDecisions.receipts`, `EvidenceDecisions.receipts`,
@@ -312,6 +317,30 @@ public enum DeliveryAnchor {
              .fusePause:
             return items.last?.id
         }
+    }
+
+    /// Where an exception card belongs — the escalation that became the owner's, and the pause they
+    /// are the only one who can lift: at its OWN moment, the point in the conversation it happened
+    /// at.
+    ///
+    /// These two carry a clock the way the five records do (`ExceptionCards.moment`), and they are
+    /// placed the same way, by `ReceiptAnchor` — because arrival is not theirs. A task failed, a
+    /// clock ran out, and the read that publishes the item runs later still: anchored by arrival, a
+    /// card that escalated thirty-four minutes ago landed wherever the reader happened to be when
+    /// that read came back, which on a cold open is the tail. There it read `waiting 34m` under the
+    /// newest message in the conversation — one card telling two different stories about when it
+    /// happened. The account owner's iOS screenshot, 2026-09-22, is what that looks like; its
+    /// counterpart for the records is `ReceiptAnchor`'s own note.
+    ///
+    /// Arrival stays the fallback for a stamp nothing can parse (see `onArrival`): unlike a record,
+    /// which has a row of its own to be read from, this card is the only pressable thing here.
+    public static func exception(_ row: ProjectOpenItemRow,
+                                 items: [TranscriptItem]) -> DeliveredDecisionCard.Placement {
+        let moment = ExceptionCards.moment(row)
+        guard ThinkingSummary.date(moment) != nil else {
+            return .onArrival(afterItemID: items.last?.id)
+        }
+        return .at(moment)
     }
 }
 

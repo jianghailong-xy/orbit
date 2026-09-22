@@ -15,6 +15,7 @@ import type {
 import { api } from '../api';
 import { stripAnsi } from '../lib/ansi';
 import { checkDuration } from '../lib/checkDuration';
+import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
 import { projectOpenItemsQuery } from '../lib/queries';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
@@ -1101,8 +1102,9 @@ function ItemCard({
 }
 
 /** Which card an item is drawn as. The pause is its own because it writes; an item that became the
- *  owner's is its own because its heading is the story of how; everything else is the plain one. */
-function ItemAsCard({
+ *  owner's is its own because its heading is the story of how; everything else is the plain one.
+ *  Exported for the conversation's host, which draws one per row it inserts (`exceptionCardRows`). */
+export function ItemAsCard({
   projectId,
   row,
   now,
@@ -1128,33 +1130,32 @@ function ItemAsCard({
 
 /**
  * Every open exception of this project, as cards, wherever a transcript wants them: the project's
- * coordinator conversation draws these under its own turns, and the project page expands the same
- * components (§7.5).
+ * coordinator conversation draws these INTO its own turns, at the moment each one happened, and the
+ * project page expands the same components (§7.5).
  *
- * Reads nothing without a project — an ordinary session coordinates none — and draws nothing while
- * nothing is open, so neither host has to know whether there is anything to show.
+ * That placement is the whole of this function: the rows, each with the anchor its card is drawn
+ * at. It used to be a component that rendered them as a block under the transcript, which is where
+ * a card with no moment of its own belongs and the one place a card WITH one must not go — an
+ * exception that became the owner's thirty-four minutes ago sat under the newest message in the
+ * conversation, reading `waiting 34m` while sitting as if it had just happened. The moment is
+ * `escalatedAt`, the instant the clock handed the item over and what the card's own heading counts
+ * from, and `waitingSince` where the read does not say (an item that was never the coordinator's
+ * has no escalation instant). Both native clients place these two cards by the same field
+ * (`DeliveryAnchor.exception` → `ReceiptAnchor.place`), so the ends cannot disagree about where the
+ * same exception happened.
+ *
+ * Drawn in `ordered`'s order, which the transcript preserves for rows sharing an anchor (the pause
+ * still leads). A stamp no clock can parse gives a null anchor, which the host drops — the same
+ * three answers `decisionReceiptAnchor` gives everywhere else.
  */
-export function ProjectExceptionCards({
-  projectId,
-  now = Date.now(),
-}: {
-  projectId: string | null | undefined;
-  now?: number;
-}): JSX.Element | null {
-  const items = useQuery({
-    ...projectOpenItemsQuery(projectId ?? ''),
-    enabled: Boolean(projectId),
-    refetchInterval: 20_000,
-  });
-  const rows = ordered(items.data);
-  if (!projectId || rows.length === 0) return null;
-  return (
-    <>
-      {rows.map((row) => (
-        <ItemAsCard key={row.itemId} projectId={projectId} row={row} now={now} />
-      ))}
-    </>
-  );
+export function exceptionCardRows(
+  items: ProjectOpenItemsView | undefined,
+  events: ReadonlyArray<{ seq: number; ts?: string }>,
+): Array<{ row: ProjectOpenItemRow; anchor: ReceiptPlacement | null }> {
+  return ordered(items).map((row) => ({
+    row,
+    anchor: decisionReceiptAnchor(events, row.escalatedAt ?? row.waitingSince),
+  }));
 }
 
 /**

@@ -2202,12 +2202,17 @@ final class ConsoleModel {
     /// pressing a door, not by replying), which is why the row carries the distinction rather than
     /// the bar assuming one.
     var openBelowRows: [BelowRow] {
-        decisionCards.compactMap { card -> BelowRow? in
+        let rows: [(row: BelowRow, at: Int)] = decisionCards.compactMap { card -> (row: BelowRow, at: Int)? in
+            // Where the card sits, read ONCE per card — and here rather than inside `waiting`, which
+            // is a local function: those do not inherit the closure's actor isolation, and
+            // `flowIndex` is main-actor isolated because it reads `state`.
+            let at = flowIndex(of: card)
             // One spelling for both answers, so each case below reads as the question it is: is this
             // card still waiting, and does the reader answer it by replying (`question: true`) or by
             // pressing a door (`false`)?
-            func waiting(_ open: Bool, question: Bool) -> BelowRow? {
-                open ? BelowRow(rowID: card.id, isQuestion: question) : nil
+            func waiting(_ open: Bool, question: Bool) -> (row: BelowRow, at: Int)? {
+                guard open else { return nil }
+                return (BelowRow(rowID: card.id, isQuestion: question), at)
             }
             switch card.kind {
             case .criteriaDecision(let intentID):
@@ -2242,6 +2247,75 @@ final class ConsoleModel {
                 return waiting(ExceptionCards.isOpen(ownerItemStanding(itemID)), question: false)
             }
         }
+        // Oldest in the CONVERSATION first — which is not the order these were delivered in, now
+        // that a card can be placed by a moment rather than by its arrival (`flowIndex`): the
+        // press goes to the one that happened first. Ties keep the delivery order (the sort is by
+        // (place, appended-at)), so the target never depends on how the sort happened to break.
+        return rows.enumerated()
+            .sorted { ($0.element.at, $0.offset) < ($1.element.at, $1.offset) }
+            .map(\.element.row)
+    }
+
+    /// What the needs-you bar above this transcript says, or nil when nothing in it is waiting.
+    ///
+    /// The direction word is the one part of the line this conversation cannot answer by itself: it
+    /// is about the reader's own place, reported by the transcript (`topVisibleItemID`). Everything
+    /// else is the count and what kind of thing it points at (`NeedsYouLogic.below`).
+    var waitingBelow: WaitingBelow? {
+        let rows = openBelowRows
+        guard let first = rows.first else { return nil }
+        return NeedsYouLogic.below(rows: rows, side: side(ofRow: first.rowID))
+    }
+
+    /// Where one delivered card sits in the conversation RIGHT NOW, as an index into `state.items`:
+    /// the item it is drawn after, -1 for one older than everything loaded (drawn at the head of
+    /// the window), and one past the end for one that trails the tail.
+    ///
+    /// The same questions `TranscriptRows.build` answers when it assembles the rows, asked here for
+    /// the ORDER of the bar's rows and for which way the reader has to look.
+    private func flowIndex(of card: DeliveredDecisionCard) -> Int {
+        switch card.placement {
+        case .onArrival(let anchor):
+            guard let anchor, let at = state.items.firstIndex(where: { $0.id == anchor })
+            else { return state.items.count }
+            return at
+        case .at(let moment):
+            switch ReceiptAnchor.place(items: state.items, at: moment) {
+            case .after(let id): return state.items.firstIndex { $0.id == id } ?? state.items.count
+            case .beforeWindow:  return -1
+            // Nothing draws this one (`TranscriptRows.build` drops an unplaceable stamp), so it is
+            // counted as if it were at the tail: the bar must not send the reader to a row that is
+            // not there.
+            case .unplaceable:   return state.items.count
+            }
+        }
+    }
+
+    /// Which way the reader has to look for one of those rows: above when the card is drawn before
+    /// the item at the top of their viewport, below when it is at or after it.
+    ///
+    /// Nil when the reader's place is unknown — nothing has reported it yet, the system is below the
+    /// floor the transcript's scroll geometry needs, or the item it named has since been trimmed out
+    /// of the window — and the bar then says the count and no direction (`NeedsYouLogic.below`).
+    private func side(ofRow rowID: String) -> ReaderSide? {
+        guard let top = topVisibleItemID,
+              let item = state.items.firstIndex(where: { $0.id == top }),
+              let card = decisionCards.first(where: { $0.id == rowID }) else { return nil }
+        return flowIndex(of: card) < item ? .above : .below
+    }
+
+    /// The item straddling the top edge of the reader's viewport, as `TranscriptView` reports it
+    /// (`noteTopVisible`) — the reader's own place, and the one fact the bar's direction word needs.
+    private(set) var topVisibleItemID: String?
+
+    /// Tell the console which item the reader's viewport top is on.
+    ///
+    /// Called from the transcript's scroll tracking, which recomputes on every geometry change; the
+    /// write happens only when the answer CHANGES, so scrolling a long conversation invalidates the
+    /// views that read this a handful of times rather than once a frame.
+    func noteTopVisible(_ itemID: String?) {
+        guard topVisibleItemID != itemID else { return }
+        topVisibleItemID = itemID
     }
 
     /// A row the transcript has been asked to scroll to. The tick rides along so pressing the bar
@@ -2310,9 +2384,14 @@ final class ConsoleModel {
             // drawn), so a build that drew none of them said "Waiting for approval" over a
             // conversation with nothing in it to press. `ExceptionCards.cards` draws the owner's
             // group only — what is still the coordinator's is work in progress, and the agent's.
+            //
+            // Placed by the item's OWN moment rather than by where this device read it
+            // (`DeliveryAnchor.exception`), so the card sits where it became the owner's: read off
+            // the item, the same clock its heading counts its wait from.
             for row in ExceptionCards.cards(items) {
                 deliver(row.kind == .fusePaused ? .fusePause(itemID: row.itemId)
-                                                : .escalatedItem(itemID: row.itemId))
+                                                : .escalatedItem(itemID: row.itemId),
+                        placement: DeliveryAnchor.exception(row, items: state.items))
             }
         }
         // `do` rather than `try?`, because this door answers `null` for "asking nothing" and `try?`
@@ -2383,11 +2462,18 @@ final class ConsoleModel {
         deliver(kind, anchoredAt: DeliveryAnchor.onArrival(of: kind, items: state.items))
     }
 
-    /// …or where it happened, for a record that carries its own moment — a receipt is drawn at the
-    /// point in the conversation it belongs to rather than where the reader happened to be looking
-    /// when the read brought it back.
+    /// …or where it happened, for a card that carries a moment of its own — a receipt, and the two
+    /// owner cards that became the owner's at a time the read can name (`DeliveryAnchor.exception`):
+    /// drawn at the point in the conversation they belong to rather than where the reader happened
+    /// to be looking when the read brought them back.
     private func deliver(_ kind: DeliveredDecisionCard.Kind, anchoredAt anchor: String?) {
-        let card = DeliveredDecisionCard(kind: kind, placement: .onArrival(afterItemID: anchor))
+        deliver(kind, placement: .onArrival(afterItemID: anchor))
+    }
+
+    /// The same, for a card whose whole placement the caller worked out (`DeliveryAnchor`).
+    private func deliver(_ kind: DeliveredDecisionCard.Kind,
+                         placement: DeliveredDecisionCard.Placement) {
+        let card = DeliveredDecisionCard(kind: kind, placement: placement)
         guard !closedCards.contains(card.id), !decisionCards.contains(where: { $0.id == card.id })
         else { return }
         decisionCards.append(card)

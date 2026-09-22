@@ -332,8 +332,12 @@ final class CriteriaDecisionWiringTests: XCTestCase {
         let banner = try source(Self.bannerPath)
         XCTAssertTrue(banner.contains("if let below {"),
                       "the in-conversation question is what the bar says when there is one")
-        XCTAssertTrue(banner.contains("chevron: \"chevron.down\""),
-                      "and it points down, not away: the destination is in this transcript")
+        // It points INTO this transcript, whichever way the card lies: down was the only direction
+        // while every card it counted sat below the reader, and a card placed by its own moment can
+        // be above one — the reader at the live tail, which is where a conversation opens
+        // (`DeliveryAnchor.exception`). The word and the chevron read the same answer.
+        XCTAssertTrue(banner.contains(#"chevron: below.side == .above ? "chevron.up" : "chevron.down""#),
+                      "and it points the way the card lies, rather than away from the conversation")
         XCTAssertTrue(banner.contains("onOpenBelow?(below.rowID)"),
                       "a press scrolls to the card rather than navigating anywhere")
     }

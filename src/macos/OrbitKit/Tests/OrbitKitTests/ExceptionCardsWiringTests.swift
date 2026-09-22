@@ -97,6 +97,19 @@ final class ExceptionCardsWiringTests: XCTestCase {
                           + "payload and the banner carry")
     }
 
+    /// …and each of them is placed by the ITEM'S OWN MOMENT rather than by where this device read
+    /// it: a delivered card anchors where it arrived, and an exception's arrival is the control
+    /// plane's read running after the fact, which on a console opened later is the tail. The card
+    /// then read `waiting 34m` under the newest message in the conversation — one card telling two
+    /// stories about when it happened (the account owner's screenshot, 2026-09-22;
+    /// `ExceptionCardPlacementTests` is the rule this wire feeds).
+    func testEveryOwnerItemIsPlacedByTheMomentItBecameTheOwners() throws {
+        let read = try openItemsRead()
+        XCTAssertTrue(read.contains("placement: DeliveryAnchor.exception(row, items: state.items)"),
+                      "the two exception cards must be placed by the item's own clock; anchoring "
+                          + "them where the read found them is the defect")
+    }
+
     /// The card is drawn in the transcript, and its row id is the browser's own spelling — the
     /// needs-you banner's press names the item, and what it scrolls to has to be this row.
     func testTheTwoCardsHaveRowsAndTheBrowsersIds() throws {

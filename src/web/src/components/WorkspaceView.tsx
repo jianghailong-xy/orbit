@@ -91,6 +91,7 @@ import {
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
   projectMergedPromotionsQuery,
+  projectOpenItemsQuery,
   watchesQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
@@ -205,7 +206,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
-import { ProjectExceptionCards } from './ProjectProgressStatus';
+import { ItemAsCard, exceptionCardRows } from './ProjectProgressStatus';
 import { ProjectPromotion, ProjectPromotionReceipt } from './ProjectPromotionCard';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
@@ -3647,6 +3648,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     refetchInterval: 20_000,
   });
 
+  // What this project still owes somebody, for the exceptions drawn into the transcript at the
+  // moment each happened (`exceptionCardRows` below, `ItemAsCard`). The same read the project page
+  // and the coordinator's other cards use, and polled with the merges above: a conversation that is
+  // open is where somebody watches their own exception arrive and clear.
+  const openItems = useQuery({
+    ...projectOpenItemsQuery(coordinatedProjectId ?? ''),
+    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+    refetchInterval: 20_000,
+  });
+
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
   // the card's own filter over the same read and the project this session coordinates. The strip
   // counts and points at those and no others; a row this conversation draws no card for is counted
@@ -3793,6 +3804,39 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       selectedId,
       transcriptEvents,
     ],
+  );
+
+  // The exceptions this project still owes somebody, drawn into the transcript at the moment each
+  // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
+  // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
+  // two different stories about when it happened. The moment is the item's own (`escalatedAt`, else
+  // `waitingSince`), read off the same fields the card's heading counts its wait from, and placed by
+  // the same rule the records above are (`decisionReceiptAnchor`); both native clients do the same
+  // (`DeliveryAnchor.exception`), so no end can disagree about where one exception goes.
+  //
+  // `dataUpdatedAt` is in the deps because the cards count their wait from NOW: an element built
+  // once and kept would freeze "waiting 2h" at the moment it was built, and react-query's structural
+  // sharing means an unchanged poll leaves `data` the same object. A poll that changed nothing still
+  // moves `dataUpdatedAt`, which is exactly the tick these labels need.
+  const exceptionCards = useMemo(
+    () =>
+      exceptionCardRows(openItems.data, transcriptEvents).flatMap(({ row, anchor }) => {
+        if (anchor === null || !coordinatedProjectId) return [];
+        return [{
+          anchor,
+          moment: row.escalatedAt ?? row.waitingSince,
+          key: `open-item:${row.itemId}`,
+          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} />,
+        }];
+      }),
+    [coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
+  );
+
+  // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
+  // conversation with it (`Transcript` memoizes on this prop).
+  const transcriptInserts = useMemo(
+    () => [...decisionReceipts, ...exceptionCards],
+    [decisionReceipts, exceptionCards],
   );
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
@@ -6704,7 +6748,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                               turnImages={turnImages}
                               artifactSessionId={selectedId}
                               streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
-                              inserts={decisionReceipts}
+                              inserts={transcriptInserts}
                             />
                           </StreamingDraftsCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
@@ -6759,20 +6803,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {selected && selectedId && !selectedTrashed && (
                 <CoordinatorQuestions
                   key={`coordinator-question:${selectedId}`}
-                  projectId={coordinatedProjectId}
-                />
-              )}
-              {/* And the rest of what this project owes somebody, as the same cards the project
-                  page expands (mocks 5 and 6 ①): a conflict or a failed check this conversation is
-                  expected to fix, a task that failed, an item a clock has since made the owner's,
-                  and the pause that stopped this conversation from starting anything. Drawn here
-                  because this is where the coordinator would be told about them, and they are the
-                  answer to "why has nothing moved" for whoever opens this conversation to ask.
-                  Keyed apart from its siblings for the reason the evidence card's note gives
-                  below. */}
-              {selected && selectedId && !selectedTrashed && (
-                <ProjectExceptionCards
-                  key={`open-items:${selectedId}`}
                   projectId={coordinatedProjectId}
                 />
               )}

@@ -181,7 +181,7 @@ struct ConsoleView: View {
                 let console = registry.peek(sessionID)
                 NeedsYouBannerView(
                     excluding: sessionID,
-                    below: NeedsYouLogic.below(rows: console?.openBelowRows ?? []),
+                    below: console?.waitingBelow,
                     onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
             }
         }
@@ -430,6 +430,10 @@ struct TranscriptView: View {
             .onChange(of: console.sessionID) {
                 atBottom = true; ruler.reset(); stuckID = nil
                 console.setReadingHistory(false)
+                // The reader's place went with the transcript that was on screen: the new one has
+                // not been laid out yet, and the bar's direction word must not answer for the
+                // session that just left.
+                console.noteTopVisible(nil)
                 proxy.scrollTo(bottomID, anchor: .bottom)
             }
             // A message the user just sent forces the transcript back to the live tail — even if
@@ -511,6 +515,10 @@ struct TranscriptView: View {
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet.
     private func recomputeStuck() {
         let items = console.state.items
+        // Where the reader is, for the console: the needs-you bar's direction word points at a card
+        // and has to say which way it is. Reported here rather than read off the ruler by the bar,
+        // which is an inset of the whole console and has no ruler of its own.
+        console.noteTopVisible(ruler.topAnchorID)
         var found: String? = nil
         if let anchor = ruler.topAnchorID {
             for item in items {

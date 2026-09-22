@@ -47,11 +47,16 @@ public struct WaitingBelow: Equatable, Sendable {
     public let rowID: String
     /// The one line the bar shows.
     public let text: String
+    /// Which way that row lies, when anything knows — the same answer the line's direction word is
+    /// built from, carried so the bar's chevron can point the same way the words do. Nil is "not
+    /// known", which is also when the line carries no direction word at all.
+    public let side: ReaderSide?
 
-    public init(count: Int, rowID: String, text: String) {
+    public init(count: Int, rowID: String, text: String, side: ReaderSide? = nil) {
         self.count = count
         self.rowID = rowID
         self.text = text
+        self.side = side
     }
 }
 
@@ -73,6 +78,20 @@ public struct BelowRow: Equatable, Sendable {
     }
 }
 
+/// Which way the reader has to look for the rows the bar counts, relative to what they can see.
+///
+/// The bar is drawn above the transcript and its press scrolls to the card, so the word only says
+/// where the card IS — and that is a fact about the reader's own scroll position, which only the
+/// transcript has. The bar was written when every card it counts sat below the reader (a question
+/// arrived at the tail and walked up the conversation as later messages landed), so its line said
+/// `below` and was always true. A card placed by its own moment (`DeliveryAnchor.exception`) can be
+/// anywhere in the conversation, including above the reader — for whom the tail is the ordinary
+/// place to be — and a line pointing the wrong way is worse than no line at all.
+public enum ReaderSide: Equatable, Sendable {
+    case above
+    case below
+}
+
 /// Pure logic behind the "needs you" surfaces, derived from the cross-agent Open snapshot the
 /// clients already hold (every row carries `pendingApprovals` under the same rule the server's
 /// `GET /sessions/counts` applies) — so neither surface costs a request.
@@ -80,9 +99,13 @@ public enum NeedsYouLogic {
 
     /// The bar for what is waiting in THIS conversation, or nil when nothing is.
     ///
-    /// `rows` are the delivered cards that are still open, in the order they appear, so the
-    /// destination is the oldest one — the same FIFO the cross-session bar picks its target by. It
-    /// reports what is ON SCREEN rather than what the server has pending: a card the reader dismissed
+    /// `rows` are the delivered cards that are still open, oldest in the CONVERSATION first, so the
+    /// destination is the one that has been waiting longest — the same FIFO the cross-session bar
+    /// picks its target by. (Oldest in the conversation, not oldest delivered: a card placed by its
+    /// own moment can be delivered after one it happened before, which is why the console orders
+    /// these by where they are drawn rather than by when it appended them.)
+    ///
+    /// It reports what is ON SCREEN rather than what the server has pending: a card the reader dismissed
     /// with "Not yet" is not below them any more, and a bar that counted it would be pointing at
     /// nothing.
     ///
@@ -94,11 +117,18 @@ public enum NeedsYouLogic {
     /// needs-you bar excludes the session on screen), so an exception that scrolled away had nothing
     /// pointing at it (the account owner's report, 2026-09-22). So they are counted, and the bar says
     /// which kind of thing it is pointing at rather than calling every one of them a question.
-    public static func below(rows: [BelowRow]) -> WaitingBelow? {
+    /// `side` is which way the FIRST row — the one the press goes to — sits relative to what the
+    /// reader can see, or nil when nothing has reported where the reader is. A bar that does not
+    /// know which way to point says the count and stops there rather than guessing: the press
+    /// scrolls to the card either way, and a wrong direction sends the reader looking the wrong way
+    /// first.
+    public static func below(rows: [BelowRow], side: ReaderSide?) -> WaitingBelow? {
         guard let first = rows.first else { return nil }
         return WaitingBelow(count: rows.count, rowID: first.rowID,
-                                  text: belowText(count: rows.count,
-                                                  allQuestions: rows.allSatisfy(\.isQuestion)))
+                            text: belowText(count: rows.count,
+                                            allQuestions: rows.allSatisfy(\.isQuestion),
+                                            side: side),
+                            side: side)
     }
 
     /// "1 open question below" while every card below is a question — the words this bar has always
@@ -107,9 +137,11 @@ public enum NeedsYouLogic {
     /// you nothing and the workspace name told you everything), and never a noun that is wrong about
     /// what the press will scroll to — a card reading "Escalated to you" under a line calling it a
     /// question is the same lie as "Waiting for approval" over an escalation.
-    static func belowText(count: Int, allQuestions: Bool) -> String {
-        guard allQuestions else { return "\(count) waiting below" }
-        return "\(count) open question\(count == 1 ? "" : "s") below"
+    /// The direction word is dropped rather than guessed when `side` is nil (see `below`).
+    static func belowText(count: Int, allQuestions: Bool, side: ReaderSide?) -> String {
+        let way = side.map { $0 == .above ? " above" : " below" } ?? ""
+        guard allQuestions else { return "\(count) waiting\(way)" }
+        return "\(count) open question\(count == 1 ? "" : "s")\(way)"
     }
     /// agentID → how many of that agent's sessions are blocked on an approval, for the drawer's
     /// per-agent badge. Agents with nothing waiting are absent rather than zero, so a lookup that

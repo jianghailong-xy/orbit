@@ -111,7 +111,7 @@ final class NeedsYouLogicTests: XCTestCase {
     private func exceptionRow(_ id: String) -> BelowRow { BelowRow(rowID: id, isQuestion: false) }
 
     func testOneQuestionInThisConversationNamesItAndPointsAtIt() {
-        let below = NeedsYouLogic.below(rows: [questionRow("criteria-decision-in-1")])
+        let below = NeedsYouLogic.below(rows: [questionRow("criteria-decision-in-1")], side: .below)
         XCTAssertEqual(below?.count, 1)
         XCTAssertEqual(below?.text, "1 open question below")
         XCTAssertEqual(below?.rowID, "criteria-decision-in-1")
@@ -121,9 +121,37 @@ final class NeedsYouLogicTests: XCTestCase {
     /// the same FIFO the cross-session bar picks its target by.
     func testSeveralQuestionsCountAndTheTapGoesToTheOldest() {
         let below = NeedsYouLogic.below(rows: [questionRow("criteria-decision-in-1"),
-                                               questionRow("acceptance-confirmation")])
+                                               questionRow("acceptance-confirmation")],
+                                        side: .below)
         XCTAssertEqual(below?.text, "2 open questions below")
         XCTAssertEqual(below?.rowID, "criteria-decision-in-1")
+    }
+
+    /// A card placed by its own moment can sit ABOVE a reader who is at the live tail — which is
+    /// where a reader opening a conversation is — and the line has to say so: the press scrolls
+    /// there either way, but a bar pointing the wrong way sends them looking down a conversation
+    /// that goes on for another thousand rows. The chevron reads the same answer (`WaitingBelow.side`).
+    func testACardAboveTheReaderSaysSo() {
+        let above = NeedsYouLogic.below(rows: [exceptionRow("escalated-in-1")], side: .above)
+        XCTAssertEqual(above?.text, "1 waiting above")
+        XCTAssertEqual(above?.side, .above)
+
+        let question = NeedsYouLogic.below(rows: [questionRow("criteria-decision-in-1")], side: .above)
+        XCTAssertEqual(question?.text, "1 open question above")
+    }
+
+    /// Nothing has reported where the reader is: the system may be below the floor the transcript's
+    /// scroll geometry needs, or the transcript may not have been laid out yet. The bar says the
+    /// count and stops — a direction it cannot know is a direction it must not claim.
+    func testWithNoReaderPlaceReportedTheBarDoesNotGuess() {
+        let unknown = NeedsYouLogic.below(rows: [exceptionRow("escalated-in-1")], side: nil)
+        XCTAssertEqual(unknown?.text, "1 waiting")
+        XCTAssertNil(unknown?.side)
+
+        let question = NeedsYouLogic.below(rows: [questionRow("criteria-decision-in-1"),
+                                                  questionRow("acceptance-confirmation")],
+                                           side: nil)
+        XCTAssertEqual(question?.text, "2 open questions")
     }
 
     /// An exception the owner has to press is counted like a question — it leaves the screen the
@@ -132,13 +160,14 @@ final class NeedsYouLogicTests: XCTestCase {
     /// question sends the reader looking for something to say (the account owner's report,
     /// 2026-09-22). One exception, one question: the count is the same and the noun is neither.
     func testAnExceptionBelowIsCountedButNotCalledAQuestion() {
-        let alone = NeedsYouLogic.below(rows: [exceptionRow("escalated-in-1")])
+        let alone = NeedsYouLogic.below(rows: [exceptionRow("escalated-in-1")], side: .below)
         XCTAssertEqual(alone?.count, 1)
         XCTAssertEqual(alone?.text, "1 waiting below")
         XCTAssertEqual(alone?.rowID, "escalated-in-1")
 
         let mixed = NeedsYouLogic.below(rows: [exceptionRow("escalated-in-1"),
-                                               questionRow("criteria-decision-in-1")])
+                                               questionRow("criteria-decision-in-1")],
+                                        side: .below)
         XCTAssertEqual(mixed?.count, 2)
         XCTAssertEqual(mixed?.text, "2 waiting below")
         XCTAssertEqual(mixed?.rowID, "escalated-in-1",
@@ -148,7 +177,7 @@ final class NeedsYouLogicTests: XCTestCase {
     /// Nothing below means no bar at all — absent from the layout rather than present and empty,
     /// the same rule the cross-session bar answers nil for.
     func testNothingBelowIsNoBar() {
-        XCTAssertNil(NeedsYouLogic.below(rows: []))
+        XCTAssertNil(NeedsYouLogic.below(rows: [], side: nil))
     }
 
     // MARK: the four owner items (contract §7.6 V13)

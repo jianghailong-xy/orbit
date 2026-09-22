@@ -812,6 +812,21 @@ public enum ExceptionCards {
     }
 
 
+    /// The moment this item became the owner's — what its card is placed in the conversation by
+    /// (`DeliveryAnchor.exception`, `ReceiptAnchor`).
+    ///
+    /// `escalatedAt` where the read says when the clock handed it over, and `waitingSince` where it
+    /// does not: an item that was never the coordinator's has no escalation instant (a project with
+    /// no coordinator lands one straight on the owner), and every item has this one. The two fields
+    /// the card's own heading and footer already read, so where the card sits in the conversation
+    /// and how long it says it has waited are never two different stories.
+    ///
+    /// A read that says neither, or says something no clock can parse, is not a moment: the caller
+    /// falls back to where the card arrived rather than placing it by a guess.
+    public static func moment(_ row: ProjectOpenItemRow) -> String {
+        row.escalatedAt ?? row.waitingSince
+    }
+
     /// §7.5's heading for an item that BECAME the owner's, one per way it happened — the browser's
     /// `escalationHeading`, verbatim. Nil for an item that was the owner's from the start, which is
     /// every other kind this card draws and says so in its own title.

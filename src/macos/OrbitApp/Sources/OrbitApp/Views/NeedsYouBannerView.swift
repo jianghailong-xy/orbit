@@ -46,8 +46,12 @@ struct NeedsYouBannerView: View {
 
     var body: some View {
         if let below {
+            // The chevron points where the words say the card is: a card placed by its own moment
+            // can be up the conversation from a reader at the live tail, which is the ordinary case
+            // here. Unknown (nothing has reported the reader's place) keeps the old down — the
+            // press scrolls to the row either way.
             bar(text: below.text,
-                chevron: "chevron.down",
+                chevron: below.side == .above ? "chevron.up" : "chevron.down",
                 hint: "Scrolls to the question waiting in this conversation") {
                 onOpenBelow?(below.rowID)
             }
