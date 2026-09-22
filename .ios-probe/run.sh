@@ -27,7 +27,7 @@ cd "$HERE" && xcodegen generate || exit 1
 echo "== build =="
 # The log is kept whatever happens: a round that ends in "** BUILD FAILED **" alone is a round
 # spent on nothing.
-xcodebuild -project Probe.xcodeproj -scheme Probe -sdk iphonesimulator \
+timeout 1200 xcodebuild -project Probe.xcodeproj -scheme Probe -sdk iphonesimulator \
   -destination "generic/platform=iOS Simulator" \
   -derivedDataPath "$HERE/.dd" build > "$OUT/build.log" 2>&1
 BUILT=$?
@@ -66,7 +66,7 @@ if [ -z "${UDID:-}" ]; then
 fi
 echo "device: $UDID"
 xcrun simctl boot "$UDID" 2>/dev/null || true
-xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
+timeout 300 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
 
 APP="$HERE/.dd/Build/Products/Debug-iphonesimulator/OrbitProbe.app"
 xcrun simctl uninstall "$UDID" "$BUNDLE" 2>/dev/null || true
@@ -103,7 +103,7 @@ run() {  # run <variant> [fix] — fix is `before` (as shipped) or `after` (the 
   if [ "$variant" = "swipe" ]; then
     # The gesture variant is driven by the UI test (only a test can synthesize a touch); the app
     # writes the same trace, and waits for the drag rather than for a fixed moment in it.
-    xcodebuild test \
+    timeout 900 xcodebuild test \
       -project "$HERE/Probe.xcodeproj" -scheme Probe \
       -destination "id=$UDID" -derivedDataPath "$HERE/.dd" \
       -only-testing:ProbeUITests \
