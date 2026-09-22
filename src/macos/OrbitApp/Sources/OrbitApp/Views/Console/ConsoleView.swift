@@ -58,6 +58,7 @@ struct ConsoleView: View {
         let fetched = fetchedToolImages
         return SessionImagePreview(
             consoleID: ObjectIdentifier(console),
+            sessionID: console.sessionID,
             ns: imagePreviewNS,
             open: { key, fallback, fallbackIndex in
                 let pages = SessionPreviewImages

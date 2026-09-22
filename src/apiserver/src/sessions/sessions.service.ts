@@ -20,6 +20,7 @@ import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api
 import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { freshRunningBgJobs } from './background-job-activity';
+import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -3476,27 +3477,9 @@ export class SessionsService {
     sessionId: string,
     rawPath: string | undefined,
   ): Promise<{ original: string; file: string; root: string }> {
-    const original = (rawPath ?? '').trim();
-    if (!original) throw new NotFoundException('artifact not found');
-    let decoded = original;
-    try {
-      decoded = decodeURIComponent(original);
-    } catch {
-      // Keep the raw value; the path checks below reject malformed or unsafe values.
-    }
-    if (!path.isAbsolute(decoded) || decoded.split(/[\\/]+/).includes('..')) {
-      throw new NotFoundException('artifact not found');
-    }
-    const normalized = path.normalize(decoded);
-    const parts = normalized.split(path.sep).filter(Boolean);
-    const marker = parts.findIndex(
-      (part, i) => part === '.orbit' && parts[i + 1] === 'uploads' && parts[i + 2] === sessionId,
-    );
-    if (marker < 0 || parts.length <= marker + 3) {
-      throw new NotFoundException('artifact not found');
-    }
-    const root = path.join(path.sep, ...parts.slice(0, marker + 3));
-    return { original: decoded, file: normalized, root };
+    const resolved = resolveLegacyArtifactPath(sessionId, rawPath);
+    if (!resolved) throw new NotFoundException('artifact not found');
+    return resolved;
   }
 
   private async resolveExistingLocalArtifactFile(root: string, file: string): Promise<string | null> {

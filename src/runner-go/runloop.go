@@ -1683,10 +1683,9 @@ func uploadLegacyArtifact(ctx context.Context, t *Transport, req ArtifactCommand
 		return out
 	}
 	clean := filepath.Clean(req.Path)
-	root := uploadsDir(req.SessionID)
-	if !pathWithinRoots(clean, []string{root}) {
+	if !pathWithinRoots(clean, artifactRequestRoots(req.SessionID)) {
 		out.Status = "missing"
-		out.Message = "artifact is outside session uploads or missing"
+		out.Message = "artifact is outside the session's own directories or missing"
 		return out
 	}
 	id, err := t.uploadSessionAttachment(ctx, req.SessionID, clean, attachmentMime(clean))
@@ -1698,6 +1697,30 @@ func uploadLegacyArtifact(ctx context.Context, t *Transport, req ArtifactCommand
 	out.Status = "uploaded"
 	out.AttachmentID = id
 	return out
+}
+
+// artifactRequestRoots are the directories a control-plane artifact request may read from, and
+// they are the whole boundary: a file is only ever read because a session's own transcript named
+// it AND it lives in one of these.
+//
+// The uploads dir is where this started — the scratch a legacy session wrote into. The checkout is
+// the one that matters now: an agent writes its mocks inside the session's worktree, and a client
+// that runs into such a path (a reply from before the runner uploaded them, reply_attachments.go)
+// asks for it by that path. Every spelling of the id is offered because the worktree is created
+// under whichever one the claim carried (setupWorktree), while the request names the session the
+// way the control plane stores it — and the path in the middle came from the agent, i.e. from the
+// checkout's own name.
+func artifactRequestRoots(sessionID string) []string {
+	roots := []string{uploadsDir(sessionID)}
+	seen := map[string]bool{}
+	for _, id := range []string{sessionID, decodeSessionID(sessionID), publicID(sessionID)} {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		roots = append(roots, filepath.Join(worktreesDir(), id))
+	}
+	return roots
 }
 
 func logln(args ...interface{}) {

@@ -43,6 +43,49 @@ public enum AttachmentLink {
         return ["/root/", "/home/", "/tmp/", "/Users/"].contains { path.hasPrefix($0) }
     }
 
+    /// The path of a file the control plane can still serve for `sessionID`, when a transcript names
+    /// one — the file an agent drew, linked by where it wrote it. Nil for everything else, which is
+    /// the great majority of runner-local paths.
+    ///
+    /// Serving it is the artifact route: the client asks by path, the control plane asks the runner,
+    /// and the runner reads the file (only out of that session's own directories). Two directories
+    /// are the session's own, and they are why this is worth offering a tap for:
+    ///
+    ///   `.orbit/uploads/<session>/…`   the scratch older sessions wrote into
+    ///   `.orbit/worktrees/<session>/…` the checkout an agent works in — where the mocks it draws
+    ///                                  and links actually sit
+    ///
+    /// Mirrors the server's own gate (`legacy-artifact-path.ts`), so the clients only offer what the
+    /// API can answer; whether the file is really there is decided on the runner. Both spellings of
+    /// the id are accepted, because a checkout is named after whichever one the claim carried.
+    public static func runnerArtifactPath(_ url: URL, sessionID: String) -> String? {
+        guard isRunnerLocalPath(url) else { return nil }
+        let path = url.path.isEmpty ? url.absoluteString : url.path
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        let names: Set<String> = [sessionID.lowercased(), PublicID.toPublic(sessionID).lowercased()]
+        for i in parts.indices where i + 3 < parts.count {
+            guard parts[i] == ".orbit", parts[i + 1] == "uploads" || parts[i + 1] == "worktrees" else {
+                continue
+            }
+            if names.contains(parts[i + 2].lowercased()) { return path }
+        }
+        return nil
+    }
+
+    /// The same reading on a raw source string (`![alt](/root/…)`), which is what Markdown hands a
+    /// renderer. Nil when the source isn't a URL at all, or isn't one of the session's own files.
+    public static func runnerArtifactPath(source: String, sessionID: String) -> String? {
+        guard let url = URL(string: source) else { return nil }
+        return runnerArtifactPath(url, sessionID: sessionID)
+    }
+
+    /// The file name at the end of a path — what a save or a share sheet should call it, since the
+    /// artifact route serves the bytes without one.
+    public static func fileName(inPath path: String) -> String {
+        let leaf = path.split(separator: "/").last.map(String.init) ?? ""
+        return leaf.isEmpty ? "file" : leaf.removingPercentEncoding ?? leaf
+    }
+
     /// A file name to save a downloaded attachment under. The API serves attachment bytes without a
     /// name, so the id carries the identity and the extension comes from the bytes — without it the
     /// share sheet offers no "Save Image" and Files writes an extension-less blob.

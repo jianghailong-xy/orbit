@@ -64,6 +64,11 @@ struct SessionImagePreview: Equatable {
     /// its closures it would never be equal, and every thumbnail and tool card reading it would
     /// re-render with the console.
     let consoleID: ObjectIdentifier
+    /// The session these images belong to, for the one thing a transcript asks *about* a session
+    /// rather than of its console: a file an agent named by path, which the control plane fetches
+    /// from that session's runner (the artifact route). Read by the chip a path falls back to and by
+    /// a prose link to one.
+    let sessionID: String
     /// The zoom-transition namespace the viewer presents in; a thumbnail marks itself in it.
     let ns: Namespace.ID
     /// Opens on the page `key` names. A thumbnail the session's images don't list — Markdown in a tool
@@ -586,8 +591,9 @@ private func saveToPhotos(_ image: UIImage, onSaved: @escaping (Bool) -> Void) a
 }
 
 /// The topmost presented view controller of the active window — the viewer's own cover while it's up.
+/// Also what `FileHandoff` presents the share sheet from, which is why it isn't private.
 @MainActor
-private func frontmostViewController() -> UIViewController? {
+func frontmostViewController() -> UIViewController? {
     let scene = UIApplication.shared.connectedScenes
         .compactMap { $0 as? UIWindowScene }
         .first { $0.activationState == .foregroundActive }
@@ -598,9 +604,9 @@ private func frontmostViewController() -> UIViewController? {
 }
 
 /// iPad shows the share sheet as a popover, which traps without an anchor: pin it, arrowless, to the
-/// bottom centre of the viewer.
+/// bottom centre of the viewer. `FileHandoff` anchors its sheet the same way.
 @MainActor
-private func anchorAtBottom(_ popover: UIPopoverPresentationController?, of view: UIView) {
+func anchorAtBottom(_ popover: UIPopoverPresentationController?, of view: UIView) {
     guard let popover else { return }
     popover.sourceView = view
     popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.maxY - 1, width: 1, height: 1)

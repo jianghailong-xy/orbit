@@ -99,6 +99,14 @@ final class AttachmentImageStore {
         try? await api.downloadAttachment(id)
     }
 
+    /// Bytes of a file a transcript named by *path* rather than by attachment id — what a tap on an
+    /// unreachable-path chip asks for (the artifact route, which the session's runner answers by
+    /// reading the file). Uncached and one-off, like `data(for:)`: this is a file the reader asked
+    /// for, not something the transcript renders with. Nil on any failure.
+    func artifactData(sessionID: String, path: String) async -> Data? {
+        try? await api.sessionArtifact(sessionID: sessionID, path: path)
+    }
+
     /// Fetch + decode `id` if not already known. Idempotent and dedups concurrent callers.
     ///
     /// Only an answer about the file itself is remembered. This used to latch on any thrown error,

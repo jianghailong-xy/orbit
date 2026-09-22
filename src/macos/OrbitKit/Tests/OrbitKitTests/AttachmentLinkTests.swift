@@ -28,6 +28,56 @@ final class AttachmentLinkTests: XCTestCase {
         XCTAssertFalse(AttachmentLink.isRunnerLocalPath(URL(string: "/tmp/x.png?v=1")!))
     }
 
+    /// The one kind of runner-local path that is not hopeless: a file in the session's own
+    /// directories, which the artifact route can fetch (the runner reads it). Everything else — the
+    /// generated-images dir, /tmp, another session's checkout — stays a chip, because the API would
+    /// only answer 404 and a button that always fails is worse than a label.
+    func testOnlyTheSessionsOwnFilesAreFetchableByPath() {
+        let session = "01a0c8ed-3b0b-742c-a7ee-93f0de502852"
+        let publicID = PublicID.toPublic(session)
+
+        XCTAssertEqual(
+            AttachmentLink.runnerArtifactPath(
+                URL(string: "/root/.orbit/worktrees/\(session)/docs/mocks/card.png")!, sessionID: session),
+            "/root/.orbit/worktrees/\(session)/docs/mocks/card.png")
+        XCTAssertEqual(
+            AttachmentLink.runnerArtifactPath(
+                URL(string: "/root/.orbit/uploads/\(session)/drill/out.json")!, sessionID: session),
+            "/root/.orbit/uploads/\(session)/drill/out.json")
+        // A checkout is named after whichever spelling the claim carried.
+        XCTAssertEqual(
+            AttachmentLink.runnerArtifactPath(
+                URL(string: "/root/.orbit/worktrees/\(publicID)/docs/mocks/card.png")!, sessionID: session),
+            "/root/.orbit/worktrees/\(publicID)/docs/mocks/card.png")
+
+        for path in [
+            "/root/.codex/generated_images/t/exec-1.png",              // the runner's, not the session's
+            "/tmp/mock.png",
+            "/root/.orbit/worktrees/\(session)",                        // the directory itself
+            "/root/.orbit/worktrees/\(session)-other/card.png",         // a name that only looks like it
+            "/root/.orbit/worktrees/01a0c8ec-f319-7345-9e22-2004b7535e93/card.png",   // another session's
+            "https://example.com/card.png",
+        ] {
+            XCTAssertNil(AttachmentLink.runnerArtifactPath(URL(string: path)!, sessionID: session), path)
+        }
+    }
+
+    func testRunnerArtifactPathFromASourceString() {
+        let session = "01a0c8ed-3b0b-742c-a7ee-93f0de502852"
+        XCTAssertEqual(
+            AttachmentLink.runnerArtifactPath(source: "/root/.orbit/worktrees/\(session)/card.png", sessionID: session),
+            "/root/.orbit/worktrees/\(session)/card.png")
+        XCTAssertNil(AttachmentLink.runnerArtifactPath(source: "not a url", sessionID: session))
+        XCTAssertNil(AttachmentLink.runnerArtifactPath(source: "", sessionID: session))
+        XCTAssertNil(AttachmentLink.runnerArtifactPath(source: "/etc/passwd", sessionID: session))
+    }
+
+    func testFileNameFromPath() {
+        XCTAssertEqual(AttachmentLink.fileName(inPath: "/root/.orbit/worktrees/s/docs/mocks/card.png"), "card.png")
+        XCTAssertEqual(AttachmentLink.fileName(inPath: "/root/.orbit/uploads/s/a%20b.pdf"), "a b.pdf")
+        XCTAssertEqual(AttachmentLink.fileName(inPath: "/"), "file")
+    }
+
     func testSuggestedFileNameSniffsExtension() {
         let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
         XCTAssertEqual(AttachmentLink.suggestedFileName(id: "abc123", data: png), "orbit-abc123.png")

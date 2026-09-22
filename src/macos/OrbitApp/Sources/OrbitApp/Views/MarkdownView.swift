@@ -377,6 +377,11 @@ private struct MarkdownImageView: View {
     @State private var previewTarget: ImagePreviewTarget?
     @Environment(\.sessionImagePreview) private var sessionPreview
     @Environment(\.previewOwnerID) private var ownerID
+    /// A file named by path is fetched on the tap (below); the chip says so while it is in flight.
+    @State private var fetching = false
+    /// Where a failed fetch is reported. The app model is what the transcript's own prose links
+    /// report through, for the same reason: nothing else would.
+    @Environment(AppModel.self) private var app: AppModel?
 
     // web `.md-image { max-width: min(100%, 760px); max-height: 70vh }`, rendered at an exact fitted
     // size (below) against a fixed cap — the same approach as the sibling `ChatAttachmentImage` /
@@ -467,14 +472,68 @@ private struct MarkdownImageView: View {
         RoundedRectangle(cornerRadius: 8).fill(.quaternary).frame(width: 200, height: 140)
     }
 
+    /// The chip an image no client can render falls back to. When the source is a file in the
+    /// session's own directories it is also an offer: a tap asks the control plane for the bytes —
+    /// the session's runner reads them — and an image opens in the viewer while anything else is
+    /// handed to the platform. A path nobody can serve stays a label, which is what every one of
+    /// these was before the artifact route could fetch the session's own files.
+    @ViewBuilder
     private var unavailable: some View {
+        if let path = fetchablePath {
+            Button { fetch(path) } label: { chip }
+                .buttonStyle(.plain)
+                .disabled(fetching)
+                .accessibilityHint("Open this file from the session's runner")
+        } else {
+            chip
+        }
+    }
+
+    private var chip: some View {
         HStack(spacing: 6) {
-            Image(systemName: "paperclip").foregroundStyle(.secondary)
+            if fetching {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "paperclip").foregroundStyle(.secondary)
+            }
             Text(alt.isEmpty ? "Image" : alt).lineLimit(1).truncationMode(.middle)
         }
         .font(.orbitLabel)
         .padding(.vertical, 4).padding(.horizontal, 8)
         .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// The path to ask the artifact route for, when this source is one of the session's own files
+    /// (see `AttachmentLink.runnerArtifactPath`) and a console is around to ask through.
+    private var fetchablePath: String? {
+        guard let sessionID = sessionPreview?.sessionID else { return nil }
+        return AttachmentLink.runnerArtifactPath(source: source, sessionID: sessionID)
+    }
+
+    /// Fetch the file, then open it: an image joins the same full-screen viewer a sent image opens,
+    /// anything else goes to the platform (the share sheet on iOS, the file's own application on a
+    /// Mac, which has no such viewer). A fetch that comes back empty — the file is gone, or the path
+    /// was never servable — says so rather than leaving the tap unanswered.
+    private func fetch(_ path: String) {
+        guard !fetching else { return }
+        let preview = sessionPreview
+        fetching = true
+        Task {
+            defer { fetching = false }
+            guard let data = await store.artifactData(sessionID: preview?.sessionID ?? "", path: path) else {
+                app?.showToast("Couldn't open that file", detail: path, tone: .error)
+                return
+            }
+            #if os(iOS)
+            if let image = PlatformImage(data: data), let preview {
+                preview.open(path, [.inline(id: path, image: image)], 0)
+                return
+            }
+            #endif
+            if !FileHandoff.deliver(data, named: AttachmentLink.fileName(inPath: path)) {
+                app?.showToast("Couldn't open that file", detail: path, tone: .error)
+            }
+        }
     }
 
     /// The attachment id from an `orbit-attachment:<id>` source, `nil` for any other scheme — read the

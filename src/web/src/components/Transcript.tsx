@@ -1919,8 +1919,13 @@ function isLocalFileSrc(src: string): boolean {
   return /^\/(?:root|home|tmp|Users)\/[^?#]+$/i.test(src);
 }
 
+// A path inside the session's own directories, as prose names them: the uploads scratch older
+// sessions wrote into, and the checkout an agent works in now — where the mocks it draws and links
+// sit. Either id spelling, because a checkout is named after whatever the claim carried. The
+// artifact route is what turns one of these back into bytes (the runner reads the file), so this is
+// also the gate on what gets a download affordance instead of an inert chip.
 function isLegacyArtifactSrc(src: string): boolean {
-  return isLocalFileSrc(src) && /\/\.orbit\/uploads\/[0-9a-f-]{36}\//i.test(src);
+  return isLocalFileSrc(src) && /\/\.orbit\/(?:uploads|worktrees)\/[0-9a-z-]{16,}\//i.test(src);
 }
 
 function fileLabel(src: string): string {

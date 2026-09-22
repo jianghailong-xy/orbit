@@ -743,6 +743,17 @@ public final class APIClient: @unchecked Sendable {
         try await send(makeRequest("attachments/\(id)", method: "GET", body: Optional<Empty>.none))
     }
 
+    /// Fetch the bytes of a file a session's transcript named by its path — a reply that linked the
+    /// file it just wrote (`![](/root/.orbit/worktrees/<session>/docs/mocks/x.png)`), which no client
+    /// can read for itself. The control plane asks the session's runner to upload the file and hands
+    /// the bytes back (GET /sessions/:id/artifacts); the runner reads only the session's own
+    /// directories, so a path anywhere else answers 404, as does a checkout that has since been GC'd.
+    public func sessionArtifact(sessionID: String, path: String) async throws -> Data {
+        let query = [URLQueryItem(name: "path", value: path)]
+        return try await send(makeRequest("sessions/\(sessionID)/artifacts", method: "GET",
+                                          query: query, body: Optional<Empty>.none))
+    }
+
     // MARK: - request plumbing
 
     /// How far a NAMED run request is resent when no answer comes back, and how long it waits.
