@@ -388,7 +388,18 @@ struct AgentPanes: View {
                 // — the reporter picked the first: never draw it, rather than only once it pins.)
                 ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
                     if index == 0, section.title == "Today" {
-                        ForEach(section.sessions) { sessionRow($0) }
+                        // The list draws a hairline at the top of its first row — the title used to
+                        // sit over it. With the title gone it reads as a stray rule above the first
+                        // session, so that one row drops its top separator (measured on an iOS 26.2
+                        // simulator: hiding the *section* separator, or giving the Section an empty
+                        // header, both leave the line; only this removes it).
+                        ForEach(section.sessions) { session in
+                            if session.id == section.sessions.first?.id {
+                                sessionRow(session).listRowSeparator(.hidden, edges: .top)
+                            } else {
+                                sessionRow(session)
+                            }
+                        }
                     } else {
                         Section {
                             ForEach(section.sessions) { sessionRow($0) }
