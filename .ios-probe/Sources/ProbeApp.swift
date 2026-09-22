@@ -41,6 +41,12 @@ enum Variant: String {
     /// A programmatic scroll UP to an older row (the sticky header's jump-back) mid-stream: what
     /// phase does a scroll nobody's finger caused report as, and does it un-pin?
     case jump
+    /// A REAL finger: the UI test drags the list up while the reply streams, and the app then
+    /// re-pins the way the jump-to-latest disc does, waits for the fold — and asks whether the
+    /// fold un-pins a tail the reader left long ago. This is the arrangement the owner's phone is
+    /// in when the complaint happens: they have touched the transcript at some point in the
+    /// session, and from then on every fold strands the view.
+    case swipe
 
     static var current: Variant {
         Variant(rawValue: ProcessInfo.processInfo.environment["PROBE_VARIANT"] ?? "") ?? .disclosure
@@ -60,6 +66,17 @@ final class Trace {
 
     func log(_ what: String) { lines.append("[\(stamp())] \(what)") }
 
+    /// A picture of the end state, written beside the trace: the trace says where the list is, the
+    /// screenshot is what a reader would see.
+    func snapshot() {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+              let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first else { return }
+        let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
+        let image = renderer.image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? image.pngData()?.write(to: docs.appendingPathComponent("shot.png"))
+    }
+
     func write(extra: [String: String]) {
         var out = lines.joined(separator: "\n") + "\n"
         for key in extra.keys.sorted() { out += "\(key)=\(extra[key] ?? "")\n" }
@@ -75,6 +92,9 @@ final class Trace {
 /// `TranscriptScroll`, reached by `ScrollTouchConfigurator`). This probe only reads it.
 final class ScrollHandle {
     weak var view: UIScrollView?
+    /// What SwiftUI's `onScrollPhaseChange` says about who is moving the list — the fact the
+    /// shipped rule reads today, kept beside UIKit's own answer so the trace can compare them.
+    var phaseDriven = false
 
     /// What UIKit itself reports: the facts SwiftUI's phase is derived from, and the ones the app
     /// could ask for directly.
@@ -94,14 +114,32 @@ final class ScrollHandle {
              + "decel=\(v.isDecelerating ? 1 : 0) pan=\(pan)"
     }
 
+    /// A finger on the list, or the momentum one left behind. UIKit's own answer — the thing the
+    /// fix would read if SwiftUI's phase turns out not to report what its name says.
+    var isReader: Bool { (view?.isTracking ?? false) || (view?.isDragging ?? false) }
+
+    /// How far the viewport's bottom edge sits above the content's end. The negative readings this
+    /// probe produces are the bottom safe area, not a bug: it is computed the way `TailScrollSample`
+    /// computes `bottomGap`, from the same numbers.
+    var gap: Int {
+        guard let v = view else { return .min }
+        return Int(v.contentSize.height - (v.contentOffset.y + v.bounds.height - v.adjustedContentInset.bottom))
+    }
+
     /// The tail row's own visibility — the question the complaint is about, answered without the
-    /// probe's arithmetic: is the last item of the list on screen right now?
+    /// probe's arithmetic where the list is a collection view, and by the gap above where it is
+    /// not (on iOS 26 the SwiftUI List is evidently not one — see the SCROLLVIEW line in the trace).
     var tail: String {
-        guard let cv = view as? UICollectionView else { return "not-a-collectionview" }
+        let gapText = "gap=\(gap)"
+        guard let cv = view as? UICollectionView else {
+            return "not-a-collectionview \(gapText)"
+        }
         let items = cv.indexPathsForVisibleItems
-        guard let last = items.max(by: { ($0.section, $0.item) < ($1.section, $1.item) }) else { return "none" }
+        guard let last = items.max(by: { ($0.section, $0.item) < ($1.section, $1.item) }) else {
+            return "no-visible-items \(gapText)"
+        }
         let total = cv.numberOfItems(inSection: last.section)
-        return "last=\(last.item) of=\(total - 1) atBottom=\(last.item >= total - 1 ? 1 : 0)"
+        return "last=\(last.item) of=\(total - 1) atBottom=\(last.item >= total - 1 ? 1 : 0) \(gapText)"
     }
 }
 
@@ -121,12 +159,25 @@ struct ScrollProbeView: UIViewRepresentable {
         required init?(coder: NSCoder) { fatalError("not used") }
         override func didMoveToWindow() { super.didMoveToWindow(); apply() }
 
+        private var tries = 0
+
         func apply() {
-            guard let v = findScrollView() else { return }
-            if handle.view !== v {
-                handle.view = v
-                Trace.shared.log("SCROLLVIEW \(type(of: v)) frame=\(v.frame) inset=\(v.adjustedContentInset)")
+            if let v = findScrollView() {
+                if handle.view !== v {
+                    handle.view = v
+                    Trace.shared.log("SCROLLVIEW \(type(of: v)) frame=\(v.frame) inset=\(v.adjustedContentInset)")
+                }
+                return
             }
+            // `didMoveToWindow` can fire before the List has built its scroll view, and SwiftUI does
+            // not promise another `updateUIView` — so retry rather than report no-scrollview forever
+            // (that is exactly what the first run of this probe did).
+            tries += 1
+            guard tries < 60 else {
+                Trace.shared.log("SCROLLVIEW never found after \(tries) tries; window=\(String(describing: window))")
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.apply() }
         }
         private func findScrollView() -> UIScrollView? {
             var node: UIView? = superview
@@ -161,6 +212,7 @@ private struct ProbeTracker: ViewModifier {
         content
             .onScrollPhaseChange { _, phase in
                 readerDriven = phase != .idle && phase != .animating
+                handle.phaseDriven = readerDriven
                 Trace.shared.log("PHASE \(phase) readerDriven=\(readerDriven ? 1 : 0) uikit[\(handle.flags)]")
             }
             .onScrollGeometryChange(for: TailScrollSample.self) { geo in
@@ -309,6 +361,29 @@ struct ProbeRoot: View {
             try? await Task.sleep(for: .milliseconds(80))
             stream(thinkingID, String(repeating: "reasoning words ", count: 6))
         }
+        if variant == .swipe {
+            // The reader's own drag: wait for the finger (or the coast it leaves), then let the
+            // stream run on with nobody touching anything, re-pin the way the disc does, and fold.
+            var seen: Date?
+            for tick in 21..<90 {
+                try? await Task.sleep(for: .milliseconds(80))
+                stream(thinkingID, String(repeating: "reasoning words ", count: 6))
+                if seen == nil, (handle.isReader || handle.phaseDriven || (handle.view?.isDecelerating ?? false)) {
+                    seen = Date()
+                    Trace.shared.log("GESTURE-SEEN uikit[\(handle.flags)] phaseDriven=\(handle.phaseDriven ? 1 : 0)")
+                }
+                // A second or so of quiet after the gesture: nobody is touching the list any more.
+                if let at = seen, Date().timeIntervalSince(at) > 1.5, !(handle.view?.isDecelerating ?? false) { break }
+                if tick == 89 { Trace.shared.log("GESTURE-NEVER-SEEN") }
+            }
+            mark("POST-GESTURE")
+            // The disc's own action, verbatim in effect: halt the coast, scroll to the tail row, and
+            // declare the reader pinned. This is where the reader was when the complaint happened.
+            handle.view?.setContentOffset(handle.view?.contentOffset ?? .zero, animated: false)
+            atBottom = true
+            Trace.shared.log("REPINNED (disc action)")
+            try? await Task.sleep(for: .milliseconds(500))
+        }
         mark("STREAMING-DONE")
 
         if variant != .nofold {
@@ -339,11 +414,13 @@ struct ProbeRoot: View {
         mark("END")
 
         let tail = handle.tail
+        Trace.shared.snapshot()
         Trace.shared.write(extra: [
             "VERDICT variant": variant.rawValue,
             "VERDICT atBottom_end": atBottom ? "1" : "0",
             "VERDICT tail_end": tail,
-            "VERDICT reproduce": (atBottom && tail.hasSuffix("atBottom=1")) ? "NO" : "YES",
+            "VERDICT gap_end": "\(handle.gap)",
+            "VERDICT reproduce": (atBottom && handle.gap <= 80) ? "NO" : "YES",
         ])
     }
 

@@ -45,9 +45,28 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         TARGETED_DEVICE_FAMILY: "1"
 
+  # The gesture half: a UI test that delivers the drag the `swipe` script waits for. Only used by
+  # that variant — `run.sh` runs the test for it and `simctl launch` for the rest.
+  ProbeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Probe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.probe.uitests
+        TEST_TARGET_NAME: Probe
+
 # Explicit shared scheme, as `src/ios/project.yml` has one, so `-scheme Probe` resolves.
 schemes:
   Probe:
     build:
       targets:
         Probe: all
+        ProbeUITests: [test]
+    test:
+      targets:
+        - ProbeUITests

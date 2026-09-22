@@ -75,26 +75,44 @@ xcrun simctl install "$UDID" "$APP" || exit 1
 CONTAINER=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
 DOCS="$CONTAINER/Documents"
 
-run() {  # run <variant>
+collect() {  # collect <variant> — pull what the app wrote, whatever happened
   local variant="$1"
-  rm -f "$DOCS/done" "$DOCS/report.txt"
-
-  SIMCTL_CHILD_PROBE_VARIANT="$variant" \
-    xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE" > "$OUT/launch-$variant.log" 2>&1
-
   local waited=0
-  while [ ! -f "$DOCS/done" ] && [ "$waited" -lt 60 ]; do sleep 1; waited=$((waited + 1)); done
+  while [ ! -f "$DOCS/done" ] && [ "$waited" -lt 90 ]; do sleep 1; waited=$((waited + 1)); done
   if [ ! -f "$DOCS/done" ]; then
-    echo "[$variant] no done marker after ${waited}s — shooting anyway"
+    echo "[$variant] no done marker after ${waited}s — collecting anyway"
   fi
-
-  xcrun simctl io "$UDID" screenshot "$OUT/$variant.png" >/dev/null 2>&1
   cp "$DOCS/report.txt" "$OUT/$variant.txt" 2>/dev/null || echo "[$variant] no report"
+  cp "$DOCS/shot.png" "$OUT/$variant.png" 2>/dev/null || echo "[$variant] no screenshot"
   xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1
   sleep 1
 }
 
-VARIANTS="${VARIANTS:-disclosure plain nofold jump}"
+run() {  # run <variant>
+  local variant="$1"
+  rm -f "$DOCS/done" "$DOCS/report.txt" "$DOCS/shot.png"
+
+  if [ "$variant" = "swipe" ]; then
+    # The gesture variant is driven by the UI test (only a test can synthesize a touch); the app
+    # writes the same trace, and waits for the drag rather than for a fixed moment in it.
+    xcodebuild test \
+      -project "$HERE/Probe.xcodeproj" -scheme Probe \
+      -destination "id=$UDID" -derivedDataPath "$HERE/.dd" \
+      -only-testing:ProbeUITests \
+      CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+      > "$OUT/test-$variant.log" 2>&1
+    local code=$?
+    if [ $code -ne 0 ]; then echo "[$variant] xcodebuild test exited $code"; tail -30 "$OUT/test-$variant.log"; fi
+    collect "$variant"
+    return
+  fi
+
+  SIMCTL_CHILD_PROBE_VARIANT="$variant" \
+    xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE" > "$OUT/launch-$variant.log" 2>&1
+  collect "$variant"
+}
+
+VARIANTS="${VARIANTS:-disclosure plain nofold jump swipe}"
 
 echo "== run =="
 for variant in $VARIANTS; do run "$variant"; done
@@ -103,8 +121,10 @@ echo "== verdict =="
 # The conclusion, in the log rather than only in the artifact: the frames behind each line are in
 # the matching .txt.
 grep -H "^VERDICT" "$OUT"/*.txt 2>/dev/null | sed 's|'"$OUT"'/||'
+echo "== gesture =="
+grep -H "GESTURE\|PHASE" "$OUT"/swipe.txt 2>/dev/null | sed 's|'"$OUT"'/||' | head -40
 echo "== fold frame =="
-grep -H -A2 -B2 "FOLD issued" "$OUT"/*.txt 2>/dev/null | sed 's|'"$OUT"'/||' | head -60
+grep -H -A3 -B3 "FOLD issued" "$OUT"/*.txt 2>/dev/null | sed 's|'"$OUT"'/||' | head -80
 
 echo "== files =="
 ls -la "$OUT"/*.png "$OUT"/*.txt 2>/dev/null | sed 's|.*/||'
