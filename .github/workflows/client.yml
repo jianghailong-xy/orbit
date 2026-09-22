@@ -50,6 +50,12 @@ on:
         description: "Runner image for the probe (xcode-27 = iOS 27 simulators, macos-26 = iOS 26)"
         type: string
         default: "xcode-27"
+      # Space-separated `variant` or `variant:after` entries, so one dispatch can ask a single
+      # question instead of re-running the whole set. Empty = run.sh's default list.
+      probe_runs:
+        description: "Which probe runs to make (e.g. `swipe:after`); empty = all of them"
+        type: string
+        default: ""
 
 concurrency:
   group: client-${{ github.ref }}
@@ -174,6 +180,8 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Probe
+        env:
+          RUNS: ${{ github.event.inputs.probe_runs }}
         run: bash .ios-probe/run.sh
       - name: Upload the trace, the screenshots and the build log
         if: always()
