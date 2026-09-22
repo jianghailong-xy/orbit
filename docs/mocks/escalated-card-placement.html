@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>升级给你的那张卡：从「贴底」挪回它成为你的那一刻</title>
+<style>
+  :root {
+    --orange: #FF9500;
+    --blue: #007AFF;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --fill-2: rgba(120, 120, 128, .08);
+    --amber-ink: #b26a00;
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+          "Noto Sans CJK SC", "PingFang SC", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 25px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1450px; margin: 0 0 28px; font-size: 14.5px; }
+  .lede b { color: #16161a; }
+  code { font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+         background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px; }
+  .row { display: flex; flex-wrap: wrap; gap: 36px; align-items: flex-start; }
+  figure { margin: 0; width: 440px; }
+  .tag { display: inline-block; font-size: 12.5px; font-weight: 600; border-radius: 999px;
+         padding: 2px 10px; margin-bottom: 8px; }
+  .tag.now { background: #e3e3e8; color: #55555e; }
+  .tag.new { background: #d6e4ff; color: #14428f; }
+  figcaption { margin-top: 13px; font-size: 13.5px; line-height: 1.55; color: #55555e; }
+  figcaption b:first-child { display: block; font-size: 14.5px; color: #16161a; margin-bottom: 4px; }
+  figcaption b:not(:first-child) { display: inline; font-size: inherit; color: #16161a; }
+
+  /* ── phone：440×956 —— 你截图那台 ─────────────────────────── */
+  .phone {
+    width: 440px; height: 956px; border-radius: 52px; overflow: hidden; background: var(--surface);
+    color: var(--label); display: flex; flex-direction: column; position: relative;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18); border: 1px solid rgba(0,0,0,.08);
+  }
+  .status { height: 56px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 30px 6px; font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+  .status .right { display: flex; gap: 5px; align-items: center; }
+  .nav { padding: 4px 18px 10px; display: flex; align-items: center; gap: 10px; }
+  .nav .back, .nav .share { width: 32px; height: 32px; border-radius: 50%; background: var(--fill);
+                            display: grid; place-items: center; font-size: 15px; flex: none; }
+  .nav .titles { flex: 1; text-align: center; line-height: 1.15; min-width: 0; }
+  .nav .t { font-size: 16.5px; font-weight: 600; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .nav .s { font-size: 12.5px; color: var(--label-2); white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .nav .badge { background: var(--fill); border-radius: 6px; padding: 2px 6px; font-size: 11.5px;
+                color: var(--label-2); margin-left: 4px; vertical-align: 1.5px; }
+
+  /* 会话内那条 needs-you 栏（exception-in-session-locate-bar 刚落地的那条） */
+  .bar { display: flex; align-items: center; gap: 10px; padding: 10px 18px;
+         background: rgba(255,149,0,.10); border-bottom: 1px solid var(--sep); font-size: 16px;
+         flex: none; }
+  .bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); flex: none; }
+  .bar .txt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar .chev { color: var(--label-3); font-size: 13px; flex: none; }
+
+  .thread { flex: 1; padding: 0 16px; overflow: hidden; display: flex; flex-direction: column;
+            min-height: 0; }
+  .thread > * { flex: none; }
+  .thread > .spacer { flex: 1 1 auto; min-height: 0; }
+  .sticky { display: flex; align-items: center; gap: 6px; margin: 0 -16px 10px; padding: 9px 18px;
+            font-size: 14px; color: var(--label-2); border-bottom: 1px solid var(--sep); }
+  .sticky b { color: var(--label); font-weight: 600; }
+  .prose { font-size: 15px; line-height: 1.5; margin-bottom: 11px; }
+  .prose.dim { color: var(--label-2); }
+  .tool { display: flex; align-items: center; gap: 8px; margin: 0 0 13px; font-size: 14px; }
+  .tool .chip { width: 24px; height: 24px; border-radius: 7px; background: var(--fill-2);
+                display: grid; place-items: center; font-size: 12px; color: var(--label-2); }
+  .tool .ok { margin-left: 2px; color: #34C759; font-size: 13px; }
+  .gapnote { text-align: center; font-size: 12.5px; color: #a0a0a8; padding: 3px 0 13px; }
+  .loadmore { display: flex; align-items: center; justify-content: center; gap: 6px;
+              font-size: 13.5px; color: var(--label-3); padding: 5px 0 13px; }
+
+  /* ── 卡片本体（原生那套：琥珀底色 + 发丝边） ────────────── */
+  .card { padding: 14px; border-radius: 16px; background: rgba(255, 149, 0, .07);
+          border: 1px solid rgba(255, 149, 0, .28); margin-bottom: 12px; }
+  .card .head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+  .card .icon { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center;
+                font-size: 13px; background: rgba(255,149,0,.16); color: var(--amber-ink); flex: none; }
+  .card .title { font-size: 17px; font-weight: 700; flex: 1; white-space: nowrap;
+                 overflow: hidden; text-overflow: ellipsis; }
+  .prov { font-size: 12.5px; color: var(--label-2); margin-bottom: 10px; }
+  .why { font-size: 15px; font-weight: 600; line-height: 1.4; }
+  .facts { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .fact { display: flex; gap: 7px; font-size: 13px; line-height: 1.4; }
+  .fact .l { width: 62px; flex: none; color: var(--label-2); }
+  .fact .v { color: var(--label-2); }
+  .actions { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
+  .btn { min-height: 46px; border-radius: 26px; display: flex; align-items: center;
+         justify-content: center; padding: 11px 12px; text-align: center; font-size: 17px; }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.tinted { background: var(--fill); color: var(--blue); }
+  .link { text-align: center; font-size: 16px; color: var(--blue); margin-top: 12px; }
+  .foot { font-size: 12.5px; color: var(--label-2); margin-top: 9px; }
+
+  /* 改动标注 */
+  .mark { position: relative; }
+  .mark:before { content: ''; position: absolute; inset: -7px; border: 2px dashed var(--mark);
+                 border-radius: 18px; pointer-events: none; }
+  .num { position: absolute; top: -14px; right: -14px; width: 21px; height: 21px; border-radius: 11px;
+         background: var(--mark); color: #fff; font-size: 12px; font-weight: 700; line-height: 21px;
+         text-align: center; z-index: 4; }
+  .mark.pill .num { width: auto; padding: 0 9px; }
+
+  .tail { padding: 10px 16px 0; flex: none; }
+  .jobs { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1px solid var(--sep);
+          border-radius: 13px; font-size: 15px; }
+  .jobs .ico { font-size: 13px; color: var(--label-2); }
+  .jobs .n { color: var(--label-2); }
+  .jobs .chev { margin-left: auto; color: var(--label-3); }
+  .composer { display: flex; align-items: center; gap: 10px; margin: 10px 0 0; padding: 10px 13px;
+              border: 1px solid var(--sep); border-radius: 24px; color: var(--label-3); font-size: 16.5px; }
+  .composer .send { margin-left: auto; width: 32px; height: 32px; border-radius: 50%;
+                    background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 14px; }
+  .footbar { display: flex; align-items: center; gap: 15px; padding: 11px 20px 26px;
+             font-size: 14px; color: var(--label-2); }
+  .footbar .on { color: var(--label); font-weight: 600; }
+  .footbar .ctx { margin-left: auto; color: #e8590c; }
+
+  .note { margin-top: 38px; max-width: 1450px; font-size: 14px; line-height: 1.65; color: #3c3c43;
+          background: #fff; border: 1px solid #e2e2e8; border-radius: 12px; padding: 16px 20px; }
+  .note h2 { font-size: 15.5px; margin: 0 0 8px; }
+  .note ul { margin: 6px 0 0; padding-left: 19px; }
+  .note li { margin-top: 6px; }
+  .note .caveat { color: #b3261e; font-weight: 600; }
+  .note .barbox { display: flex; gap: 16px; flex-wrap: wrap; margin: 9px 0 3px; }
+  .note .barline { border: 1px solid var(--sep); border-radius: 10px; overflow: hidden; width: 320px; }
+</style>
+
+<h1>升级给你的那张卡：从「贴底」挪回它成为你的那一刻</h1>
+<p class="lede">
+  同一条会话、同一张卡（<code>NO_COORDINATOR</code>：项目 34m 没有协调者，条目落成 owner 的）。<b>卡片今天的位置由「这台设备读到的时刻」决定，不由「它成为你的时刻」决定</b>：
+  原生把它当 delivered card 投递，锚在投递那一刻窗口里的最后一行（<code>DeliveryAnchor.onArrival</code> → <code>items.last?.id</code>，投递一次就冻住），
+  冷启或晚到的一次读必然落在最底下 —— 卡上写着 <code>waiting 34m</code>，位置却读作「刚刚发生」。
+  改后按条目自己带的 <code>escalatedAt</code>（读不到时退 <code>waitingSince</code>）落位，和五种回执同一条规则（原生 <code>ReceiptAnchor.place</code>、web <code>decisionReceiptAnchor</code>）。
+  正文与时间戳照你截图原样；②③ 里卡片之外的消息是占位，长度压过。
+</p>
+
+<div class="row">
+
+  <!-- ── ① 现在 ────────────────────────────────────────────── -->
+  <figure>
+    <span class="tag now">① 现在 · iOS</span>
+    <div class="phone">
+      <div class="status"><span>1:17</span><span class="right">▮▮▮ 5G ▰ 54</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles">
+          <div class="t">Coordinator: FineWe…<span class="badge">Coordinator</span></div>
+          <div class="s">Escalated to you · Open · just now</div>
+        </div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="bar"><span class="dot"></span><span class="txt">1 waiting below</span><span class="chev">⌄</span></div>
+      <div class="thread">
+        <div class="sticky">↑ <b>Your question</b>　挂</div>
+        <div class="prose">顺便说一句:B 状态文件数 vs C 状态文件数这个比值会在醒来时告诉我积压有多深。今晚已经看到 7 个
+          B 完成在等 merge,如果醒来时变成 10+,那说明下载的并发相对 merge 的串行还是太快,降 B 并发就不是可选项而是必需的了。</div>
+        <div class="spacer"></div>
+        <div class="mark pill"><span class="num">位置不由发生时刻定</span>
+          <div class="card" style="margin-bottom:0">
+            <div class="head"><div class="icon">⚠</div><div class="title">Escalated to you</div></div>
+            <div class="prov">FROM ORBIT</div>
+            <div class="why">Now yours — this project has no coordinator (waiting 34m)</div>
+            <div class="facts">
+              <div class="fact"><span class="l">Task</span><span class="v">[WARC][CC-MAIN-2025-26] 001_00004 的 WARC 依赖</span></div>
+              <div class="fact"><span class="l">How</span><span class="v">the acceptance command exited -1 (expected 0)</span></div>
+              <div class="fact"><span class="l">Retries</span><span class="v">attempt 1 of 3 in this chain — the 3rd failure goes straight to the owner</span></div>
+            </div>
+            <div class="actions">
+              <div class="btn primary">Ask the coordinator again</div>
+              <div class="btn tinted">Open task session</div>
+              <div class="btn tinted">Chat about this</div>
+            </div>
+            <div class="link">Mark as handled</div>
+            <div class="foot">Owner: you · waiting 34m</div>
+          </div>
+        </div>
+      </div>
+      <div class="tail">
+        <div class="jobs"><span class="ico">▤</span>Background processes <span class="n">2 running · 50 total</span><span class="chev">›</span></div>
+        <div class="composer">＋ <span>Message…</span><span class="send">↑</span></div>
+      </div>
+      <div class="footbar"><span class="on">Auto</span><span>DeepSeek</span><span>DeepSeek V4.1 Flash</span><span>Max</span><span class="ctx">◌ 81%</span></div>
+    </div>
+    <figcaption><b>① 现状（你截图那张）</b>
+      卡片压在最新一条消息下面、紧贴 Background processes —— 这是「现在要你答的东西」的位置，而卡片讲的是 34 分钟前的事。
+      位置来自 <code>DeliveryAnchor.onArrival(.escalatedItem)</code>：投递那一刻 <code>state.items.last</code> 的 id，投递后永不重瞄；
+      冷启时若那次读抢在转录首页之前回来，锚点是 <code>nil</code>，就永远画在所有 item 之下。
+      <b>卡上的 <code>waiting 34m</code> 与它所在的位置因此是两句互相打脸的话。</b></figcaption>
+  </figure>
+
+  <!-- ── ② 改后：时刻在窗口内 ─────────────────────────────── -->
+  <figure>
+    <span class="tag new">② 改后 · iOS</span>
+    <div class="phone">
+      <div class="status"><span>1:17</span><span class="right">▮▮▮ 5G ▰ 54</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles">
+          <div class="t">Coordinator: FineWe…<span class="badge">Coordinator</span></div>
+          <div class="s">Escalated to you · Open · just now</div>
+        </div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="bar"><span class="dot"></span><span class="txt">1 waiting below</span><span class="chev">⌄</span></div>
+      <div class="thread">
+        <div class="sticky">↑ <b>Your question</b>　挂</div>
+        <div class="prose dim">001_00004 那轮先不重跑，等它依赖的 WARC 齐了再说。</div>
+        <div class="mark"><span class="num">1</span>
+          <div class="card" style="margin-bottom:0">
+            <div class="head"><div class="icon">⚠</div><div class="title">Escalated to you</div></div>
+            <div class="prov">FROM ORBIT</div>
+            <div class="why">Now yours — this project has no coordinator (waiting 34m)</div>
+            <div class="facts">
+              <div class="fact"><span class="l">Task</span><span class="v">[WARC][CC-MAIN-2025-26] 001_00004 的 WARC 依赖</span></div>
+              <div class="fact"><span class="l">How</span><span class="v">the acceptance command exited -1 (expected 0)</span></div>
+              <div class="fact"><span class="l">Retries</span><span class="v">attempt 1 of 3 in this chain — the 3rd failure goes straight to the owner</span></div>
+            </div>
+            <div class="actions">
+              <div class="btn primary">Ask the coordinator again</div>
+              <div class="btn tinted">Open task session</div>
+              <div class="btn tinted">Chat about this</div>
+            </div>
+            <div class="link">Mark as handled</div>
+            <div class="foot">Owner: you · waiting 34m</div>
+          </div>
+        </div>
+        <div class="gapnote">↓ 这之后 34 分钟里长出来的消息</div>
+        <div class="prose">顺便说一句:B 状态文件数 vs C 状态文件数这个比值会在醒来时告诉我积压有多深。今晚已经看到 7 个
+          B 完成在等 merge,如果醒来时变成 10+,那说明下载的并发相对 merge 的串行还是太快,降 B 并发就不是可选项而是必需的了。</div>
+      </div>
+      <div class="tail">
+        <div class="jobs"><span class="ico">▤</span>Background processes <span class="n">2 running · 50 total</span><span class="chev">›</span></div>
+        <div class="composer">＋ <span>Message…</span><span class="send">↑</span></div>
+      </div>
+      <div class="footbar"><span class="on">Auto</span><span>DeepSeek</span><span>DeepSeek V4.1 Flash</span><span>Max</span><span class="ctx">◌ 81%</span></div>
+    </div>
+    <figcaption><b>② 改后：卡片落在它成为你的那一刻</b>
+      （读者往上翻到那一段，卡片下面的消息被输入框切掉一半 —— 就是往上滚时的样子。）
+      位置由条目自己的 <code>escalatedAt</code> 决定：落在「该时刻之前最后一个有自己时钟的 item」之后（<code>ReceiptAnchor.place</code>，渲染时算、不是投递时算一次），
+      和五种回执同一条规则。<b>卡上那句 <code>waiting 34m</code> 与它所在的行自此同源</b>，而底部只留「现在为真」的东西。
+      读者停在尾部时这张卡在屏幕上方，那条栏就是找它的路（见 ③）。</figcaption>
+  </figure>
+
+  <!-- ── ③ 改后：时刻老于已加载的窗口 ────────────────────── -->
+  <figure>
+    <span class="tag new">③ 改后 · 边界 · iOS</span>
+    <div class="phone">
+      <div class="status"><span>1:17</span><span class="right">▮▮▮ 5G ▰ 54</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles">
+          <div class="t">Coordinator: FineWe…<span class="badge">Coordinator</span></div>
+          <div class="s">Escalated to you · Open · just now</div>
+        </div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="bar mark pill"><span class="num">2</span>
+        <span class="dot"></span><span class="txt">1 waiting above</span><span class="chev">⌃</span></div>
+      <div class="thread">
+        <div class="mark" style="margin-top:12px"><span class="num">1</span>
+          <div class="card" style="margin-bottom:0">
+            <div class="head"><div class="icon">⚠</div><div class="title">Escalated to you</div></div>
+            <div class="prov">FROM ORBIT</div>
+            <div class="why">Now yours — this project has no coordinator (waiting 34m)</div>
+            <div class="facts">
+              <div class="fact"><span class="l">Task</span><span class="v">[WARC][CC-MAIN-2025-26] 001_00004 的 WARC 依赖</span></div>
+              <div class="fact"><span class="l">How</span><span class="v">the acceptance command exited -1 (expected 0)</span></div>
+              <div class="fact"><span class="l">Retries</span><span class="v">attempt 1 of 3 in this chain — the 3rd failure goes straight to the owner</span></div>
+            </div>
+            <div class="actions">
+              <div class="btn primary">Ask the coordinator again</div>
+              <div class="btn tinted">Open task session</div>
+              <div class="btn tinted">Chat about this</div>
+            </div>
+            <div class="link">Mark as handled</div>
+            <div class="foot">Owner: you · waiting 34m</div>
+          </div>
+        </div>
+        <div class="loadmore">⟳ 载入更早的消息</div>
+        <div class="gapnote">↓ 这一页才是你这次打开时加载的</div>
+        <div class="prose dim">好，我先只读不写：把 001_00012 那轮的失败原因和它依赖的那批 WARC 对齐。</div>
+        <div class="spacer"></div>
+      </div>
+      <div class="tail">
+        <div class="jobs"><span class="ico">▤</span>Background processes <span class="n">2 running · 50 total</span><span class="chev">›</span></div>
+        <div class="composer">＋ <span>Message…</span><span class="send">↑</span></div>
+      </div>
+      <div class="footbar"><span class="on">Auto</span><span>DeepSeek</span><span>DeepSeek V4.1 Flash</span><span>Max</span><span class="ctx">◌ 81%</span></div>
+    </div>
+    <figcaption><b>③ 改后：那一刻比已加载的窗口还老</b>
+      和五种回执同一条出口（<code>ReceiptAnchor.Placement.beforeWindow</code>）：画在窗口最顶上、<code>载入更早的消息</code> 之上 ——
+      「比你手上有的都早」是这个设备能给出的最接近事实的位置，随翻页往下走回它真正的位置。<span class="caveat">不沉底</span>（沉底正是这一改要除掉的），也不丢。
+      栏的<b>方向词跟着读者走</b>：读者在尾部、卡在上方 → <code>1 waiting above</code>（②，今天的代码只会说 below）。</figcaption>
+  </figure>
+
+</div>
+
+<p class="note">
+  <b>这一改的边界（写进注释的那种）</b>
+  <ul>
+    <li><b>只动这两类卡：<code>.escalatedItem</code>（升级给你的异常）与 <code>.fusePause</code>（协调者暂停）。</b>
+      其余问题卡照旧 —— owner 确认卡跟尾是 2026-09-16 那次 beta.77 截图定的（它的「到达」比它引用的报告还早，锚在到达点会画到报告上面），
+      <code>OwnerConfirmationPlacementTests</code> 钉着这两半，不碰。</li>
+    <li><b>时刻用卡自己已经在读的那个字段</b>：<code>escalatedAt</code>，读不到时退 <code>waitingSince</code>。
+      服务端不用改：两个字段今天就在 <code>GET /projects/:id/open-items</code> 的载荷里（<code>project-open-item.service.ts:1116</code>）。
+      卡片上那两个时间读的就是这两个字段（<code>noCoordinator</code> 那句 <code>waiting 34m</code> 读 <code>waitingSince</code>，<code>escalated</code> 那句 <code>no one acted on this for …</code> 读 <code>escalatedAt</code> 与它的差），所以位置与卡上那句话永远同一来源。</li>
+    <li><b>栏的方向词改成跟着读者走</b>（<code>NeedsYouLogic.belowText</code>）：卡在读者视口上沿之上说 <code>above</code>，否则维持 <code>below</code> —— 读者停在尾部时就是 ③ 那一格。
+      <div class="barbox">
+        <div class="barline"><div class="bar" style="border-bottom:0">
+          <span class="dot"></span><span class="txt">1 waiting above</span><span class="chev">⌃</span></div></div>
+        <div class="barline"><div class="bar" style="border-bottom:0">
+          <span class="dot"></span><span class="txt">1 waiting below</span><span class="chev">⌄</span></div></div>
+      </div>
+      更省的一条路是去掉方向词（<code>1 waiting</code>）—— 永远不会说错，代价是读者不知道往哪边找。列在这里给你否决。</li>
+    <li><b>栏挑目标要从「投递先后」改成「转录里的先后」</b>：<code>ConsoleModel.openBelowRows</code> 今天按 <code>decisionCards</code> 的顺序取第一个，
+      落位改成按发生时刻之后就与流程顺序不一致了（会有「先投递的卡反而更晚发生」）。按行在 <code>TranscriptRows.build</code> 里的先后排一遍即可。</li>
+    <li><b>web 同一条规则</b>：<code>ProjectExceptionCards</code> 今天画在 transcript 之后的固定槽（<code>WorkspaceView.tsx:6774</code>），
+      改成按 <code>decisionReceiptAnchor(events, escalatedAt ?? waitingSince)</code> 插进行里 —— 和五种回执同一个插入机制，两端不失配。</li>
+    <li><b>不动的</b>：卡片文案、三颗按钮与 <code>Mark as handled</code>、<code>Open task session</code> 的去向、<code>open-item-&lt;id&gt;</code> 这个 row id（栏与推送都按它找人）、
+      <code>ExceptionCards.isOpen</code> 的计数口径。</li>
+    <li><span class="caveat">代价要说清</span>：卡片不再「总在你眼前」，它现在靠那条栏被找到 —— 那条栏正是上一格刚修好的（<code>exception-in-session-locate-bar</code>），
+      所以这次才有得选；没有它的话，这一改等于把卡片藏起来。</li>
+  </ul>
+</p>
+
+</body>
+</html>
