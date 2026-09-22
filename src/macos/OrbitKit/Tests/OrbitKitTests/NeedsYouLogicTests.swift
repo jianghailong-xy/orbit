@@ -107,8 +107,11 @@ final class NeedsYouLogicTests: XCTestCase {
     /// thing it knew about was an approval — which stops the turn and therefore sits at the tail
     /// where you cannot miss it. A held criteria proposal stops nothing, so the conversation runs
     /// on underneath it and it leaves the screen. This is that case.
+    private func questionRow(_ id: String) -> BelowRow { BelowRow(rowID: id, isQuestion: true) }
+    private func exceptionRow(_ id: String) -> BelowRow { BelowRow(rowID: id, isQuestion: false) }
+
     func testOneQuestionInThisConversationNamesItAndPointsAtIt() {
-        let below = NeedsYouLogic.below(rowIDs: ["criteria-decision-in-1"])
+        let below = NeedsYouLogic.below(rows: [questionRow("criteria-decision-in-1")])
         XCTAssertEqual(below?.count, 1)
         XCTAssertEqual(below?.text, "1 open question below")
         XCTAssertEqual(below?.rowID, "criteria-decision-in-1")
@@ -117,15 +120,35 @@ final class NeedsYouLogicTests: XCTestCase {
     /// Several collapse to a count, and the destination is the FIRST in flow order — the oldest,
     /// the same FIFO the cross-session bar picks its target by.
     func testSeveralQuestionsCountAndTheTapGoesToTheOldest() {
-        let below = NeedsYouLogic.below(rowIDs: ["criteria-decision-in-1", "acceptance-confirmation"])
+        let below = NeedsYouLogic.below(rows: [questionRow("criteria-decision-in-1"),
+                                               questionRow("acceptance-confirmation")])
         XCTAssertEqual(below?.text, "2 open questions below")
         XCTAssertEqual(below?.rowID, "criteria-decision-in-1")
     }
 
+    /// An exception the owner has to press is counted like a question — it leaves the screen the
+    /// same way, and inside that conversation there is nothing else pointing at it — but it is not
+    /// CALLED a question: the card it scrolls to reads "Escalated to you", and a line calling that a
+    /// question sends the reader looking for something to say (the account owner's report,
+    /// 2026-09-22). One exception, one question: the count is the same and the noun is neither.
+    func testAnExceptionBelowIsCountedButNotCalledAQuestion() {
+        let alone = NeedsYouLogic.below(rows: [exceptionRow("escalated-in-1")])
+        XCTAssertEqual(alone?.count, 1)
+        XCTAssertEqual(alone?.text, "1 waiting below")
+        XCTAssertEqual(alone?.rowID, "escalated-in-1")
+
+        let mixed = NeedsYouLogic.below(rows: [exceptionRow("escalated-in-1"),
+                                               questionRow("criteria-decision-in-1")])
+        XCTAssertEqual(mixed?.count, 2)
+        XCTAssertEqual(mixed?.text, "2 waiting below")
+        XCTAssertEqual(mixed?.rowID, "escalated-in-1",
+                       "the destination is still the oldest thing waiting, whatever it is")
+    }
+
     /// Nothing below means no bar at all — absent from the layout rather than present and empty,
     /// the same rule the cross-session bar answers nil for.
-    func testNoQuestionsBelowIsNoBar() {
-        XCTAssertNil(NeedsYouLogic.below(rowIDs: []))
+    func testNothingBelowIsNoBar() {
+        XCTAssertNil(NeedsYouLogic.below(rows: []))
     }
 
     // MARK: the four owner items (contract §7.6 V13)

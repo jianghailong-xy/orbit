@@ -150,6 +150,15 @@ export function OpenItemDeliveryCard({
   const [allFiles, setAllFiles] = useState(false);
   const files = allFiles ? card.files : card.files.slice(0, FILES_SHOWN);
   const label = KIND_LABEL[card.kind] ?? 'Exception item';
+  // The line under the bar's label: the kind, then the item's own title — unless the title already
+  // opens with the kind, and then the bar read it twice ("Task failed: Task failed: [WARC]…", the
+  // account owner's screenshot, 2026-09-22). A title that says it already wins: it is the server's
+  // own sentence about this item. `OpenItemDeliveryCard.stickyText` is the same rule on the native
+  // end, and the two ends must stamp the same pair — a bar that dropped half of it on one client
+  // would be a second wording of one turn.
+  const stickyText = card.title.toLowerCase().startsWith(label.toLowerCase())
+    ? card.title
+    : `${label}: ${card.title}`;
   const why = headline(card);
   const landing = landingLine(card);
   const chips = card.actions
@@ -171,7 +180,7 @@ export function OpenItemDeliveryCard({
         className={`oic${queued ? ' is-queued' : ''}`}
         data-seq={seq}
         data-sticky-label="Exception item"
-        data-sticky-text={`${label}: ${card.title}`}
+        data-sticky-text={stickyText}
       >
         <div className="oic-head">
           <span className="oic-mark"><ExclamationCircleFilled /></span>

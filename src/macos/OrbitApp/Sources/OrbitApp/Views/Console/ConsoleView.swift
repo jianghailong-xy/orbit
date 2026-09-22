@@ -178,7 +178,7 @@ struct ConsoleView: View {
                 let console = registry.peek(sessionID)
                 NeedsYouBannerView(
                     excluding: sessionID,
-                    below: NeedsYouLogic.below(rowIDs: console?.openQuestionRowIDs ?? []),
+                    below: NeedsYouLogic.below(rows: console?.openBelowRows ?? []),
                     onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
             }
         }

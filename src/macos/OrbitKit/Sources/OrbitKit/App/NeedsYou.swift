@@ -31,16 +31,17 @@ public struct NeedsYouBanner: Equatable, Sendable {
     }
 }
 
-/// Questions waiting in the conversation ON SCREEN, and where in it they are.
+/// What is waiting in the conversation ON SCREEN, and where in it: a count, the row to scroll to,
+/// and the one line the bar says.
 ///
 /// The bar was cross-session only, and the reason it excluded the session you were looking at was
 /// that "its own approval card is already at the tail of its transcript, so a bar pointing at it
 /// would point at itself". That reason holds for an APPROVAL — it stops the turn, so nothing can
-/// arrive below it — and it does not hold for the two cards a project's ruler is decided from
-/// (`DeliveredDecisionCard`): those stop nothing, the conversation goes on underneath them, and a
-/// question delivered forty messages ago is off-screen and unfindable. So the bar stays, changes
-/// what it says, and points DOWN instead of away.
-public struct OpenQuestionsBelow: Equatable, Sendable {
+/// arrive below it — and it does not hold for the cards a project's ruler is decided from
+/// (`DeliveredDecisionCard`) or for an exception the owner has to press: those stop nothing, the
+/// conversation goes on underneath them, and one delivered forty messages ago is off-screen and
+/// unfindable. So the bar stays, changes what it says, and points DOWN instead of away.
+public struct WaitingBelow: Equatable, Sendable {
     public let count: Int
     /// The row to scroll to — the first of them in flow order, which is the oldest.
     public let rowID: String
@@ -54,28 +55,61 @@ public struct OpenQuestionsBelow: Equatable, Sendable {
     }
 }
 
+/// One row waiting below the fold, and whether it is a QUESTION — the only thing the bar's words
+/// turn on.
+///
+/// It is a question when the reader answers it by replying or choosing: a proposal, an evidence
+/// revision, a standard set, a confirmation, a merge, the coordinator's own question. It is not when
+/// the reader answers it by PRESSING: an exception that became theirs and a pause only they can lift
+/// are cards with doors, and calling those questions told the reader to look for something to say
+/// (see `below`).
+public struct BelowRow: Equatable, Sendable {
+    public let rowID: String
+    public let isQuestion: Bool
+
+    public init(rowID: String, isQuestion: Bool) {
+        self.rowID = rowID
+        self.isQuestion = isQuestion
+    }
+}
+
 /// Pure logic behind the "needs you" surfaces, derived from the cross-agent Open snapshot the
 /// clients already hold (every row carries `pendingApprovals` under the same rule the server's
 /// `GET /sessions/counts` applies) — so neither surface costs a request.
 public enum NeedsYouLogic {
 
-    /// The bar for questions in THIS conversation, or nil when it holds none.
+    /// The bar for what is waiting in THIS conversation, or nil when nothing is.
     ///
-    /// `rowIDs` are the delivered decision cards in the order they appear, so the destination is
-    /// the oldest one — the same FIFO the cross-session bar picks its target by. It reports what is
-    /// ON SCREEN rather than what the server has pending: a card the reader dismissed with "Not
-    /// yet" is not below them any more, and a bar that counted it would be pointing at nothing.
-    public static func below(rowIDs: [String]) -> OpenQuestionsBelow? {
-        guard let first = rowIDs.first else { return nil }
-        return OpenQuestionsBelow(count: rowIDs.count, rowID: first,
-                                  text: belowText(count: rowIDs.count))
+    /// `rows` are the delivered cards that are still open, in the order they appear, so the
+    /// destination is the oldest one — the same FIFO the cross-session bar picks its target by. It
+    /// reports what is ON SCREEN rather than what the server has pending: a card the reader dismissed
+    /// with "Not yet" is not below them any more, and a bar that counted it would be pointing at
+    /// nothing.
+    ///
+    /// THE EXCEPTIONS ARE IN HERE, and they are why the words are not simply "questions". A card the
+    /// owner answers by pressing — an escalation that became theirs, a pause only they can lift — is
+    /// as capable of leaving the screen as a proposal is, and it was excluded on the argument that
+    /// the browser's rail points at decisions rather than at items. What that argument missed is the
+    /// reader: inside a project's coordinator conversation there is no other surface at all (the
+    /// needs-you bar excludes the session on screen), so an exception that scrolled away had nothing
+    /// pointing at it (the account owner's report, 2026-09-22). So they are counted, and the bar says
+    /// which kind of thing it is pointing at rather than calling every one of them a question.
+    public static func below(rows: [BelowRow]) -> WaitingBelow? {
+        guard let first = rows.first else { return nil }
+        return WaitingBelow(count: rows.count, rowID: first.rowID,
+                                  text: belowText(count: rows.count,
+                                                  allQuestions: rows.allSatisfy(\.isQuestion)))
     }
 
-    /// "1 open question below" — never a bare number. The count is the useful part here (unlike the
-    /// cross-session bar, where "1" told you nothing and the workspace name told you everything),
-    /// because the destination is already known: it is this conversation.
-    static func belowText(count: Int) -> String {
-        "\(count) open question\(count == 1 ? "" : "s") below"
+    /// "1 open question below" while every card below is a question — the words this bar has always
+    /// used, unchanged for the case it was built for. Anything else says "2 waiting below": never a
+    /// bare number (the count is the useful part here, unlike the cross-session bar, where "1" told
+    /// you nothing and the workspace name told you everything), and never a noun that is wrong about
+    /// what the press will scroll to — a card reading "Escalated to you" under a line calling it a
+    /// question is the same lie as "Waiting for approval" over an escalation.
+    static func belowText(count: Int, allQuestions: Bool) -> String {
+        guard allQuestions else { return "\(count) waiting below" }
+        return "\(count) open question\(count == 1 ? "" : "s") below"
     }
     /// agentID → how many of that agent's sessions are blocked on an approval, for the drawer's
     /// per-agent badge. Agents with nothing waiting are absent rather than zero, so a lookup that
@@ -99,7 +133,7 @@ public enum NeedsYouLogic {
     ///     nothing can arrive below it — and a bar pointing at that would point at itself. Pass nil
     ///     from a list, which shows no single session. What this exclusion does NOT cover is a
     ///     question that stops no turn and can therefore be pushed out of view by the messages
-    ///     after it: that one is `below(rowIDs:)`, which points down into this same conversation.
+    ///     after it: that one is `below(rows:)`, which points down into this same conversation.
     public static func banner(waiting: [Session], excluding focused: String? = nil) -> NeedsYouBanner? {
         let elsewhere = waiting.filter { $0.id != focused }
         // An owner item wins when there is one, whatever else is waiting: the other rows are a

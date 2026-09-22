@@ -127,6 +127,29 @@ describe('an exception item delivered to the coordinator', () => {
     expect(el!.querySelector('details.oic-raw pre')?.textContent).toBe(TOLD);
   });
 
+  /**
+   * The pair the sticky bar at the top of the transcript reads off the card's root — and the guard
+   * that keeps a title already carrying its kind from being prefixed with it again. A failed task's
+   * title is built as `Task failed: <task>` while its kind label is `Task failed` too, so the bar
+   * read "Task failed: Task failed: [WARC]…" (the account owner's screenshot, 2026-09-22).
+   * `OpenItemDeliveryCard.stickyText` is the same rule on the native end.
+   */
+  it('stamps the kind once: a title that already says it is not prefixed again', async () => {
+    await mount([delivered({ ...CARD, kind: 'TASK_FAILED',
+                             title: 'Task failed: 回填历史 user 事件的 controlPlaneNote' })]);
+    expect(card()!.getAttribute('data-sticky-label')).toBe('Exception item');
+    expect(card()!.getAttribute('data-sticky-text'))
+      .toBe('Task failed: 回填历史 user 事件的 controlPlaneNote');
+
+    // And a title that does NOT say it still gets the kind, so the line names what this is.
+    await act(async () => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    await mount([delivered({ ...CARD, kind: 'TASK_FAILED', title: '[WARC] 000_00022 的 WARC 依赖' })]);
+    expect(card()!.getAttribute('data-sticky-text')).toBe('Task failed: [WARC] 000_00022 的 WARC 依赖');
+  });
+
   it('folds the file list past three, and unfolds it again', async () => {
     await mount([delivered(CARD)]);
 

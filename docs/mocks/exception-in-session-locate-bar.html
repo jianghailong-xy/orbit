@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>会话内那条「定位」栏：异常卡也要有（问题卡已有）</title>
+<style>
+  :root {
+    --orange: #FF9500;
+    --blue: #007AFF;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --fill-2: rgba(120, 120, 128, .08);
+    --glass: rgba(255, 255, 255, .55);
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Liberation Sans",
+          "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1330px; margin: 0 0 26px; }
+  .lede code, figcaption code, .note code {
+    font: 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 34px; align-items: flex-start; margin-bottom: 34px; }
+  figure { margin: 0; }
+  figcaption { margin-top: 14px; width: 393px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  figcaption b:not(:first-child) { display: inline; font-size: inherit; margin: 0; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.a { background: #d6e4ff; color: #14428f; }
+  .tag.b { background: #d9f2e0; color: #14532d; }
+  .tag.c { background: #ffe8c7; color: #8a5300; }
+  .mark { outline: 1.5px dashed var(--mark); outline-offset: 3px; border-radius: 8px; }
+
+  .phone {
+    width: 393px; background: var(--surface); overflow: hidden; border-radius: 30px;
+    box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07); color: var(--label);
+    display: flex; flex-direction: column;
+  }
+  .status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 26px 6px; font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-weight: 500; font-size: 14px; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 10px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 24px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+  .ico { width: 19px; height: 19px; fill: none; stroke: var(--label); stroke-width: 1.9;
+         stroke-linecap: round; stroke-linejoin: round; }
+  .nav { padding: 2px 14px 10px; display: flex; align-items: center; gap: 10px; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 40px;
+             background: var(--glass); border-radius: 999px;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { width: 40px; }
+  .nav .titles { flex: 1; text-align: center; line-height: 1.15; min-width: 0; }
+  .nav .t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .nav .s { font-size: 11.5px; color: var(--label-2); white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .badge { background: var(--fill); border-radius: 6px; padding: 2px 6px; font-size: 11px;
+           color: var(--label-2); margin-left: 4px; vertical-align: 1px; }
+
+  /* 那条 needs-you 栏（NeedsYouBannerView）：琥珀底、7pt 点、右侧 chevron */
+  .bar { display: flex; align-items: center; gap: 9px; padding: 9px 16px;
+         background: rgba(255,149,0,.10); border-bottom: 1px solid var(--sep); font-size: 15px; }
+  .bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); flex: none; }
+  .bar .txt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar .chev { width: 13px; height: 13px; stroke: var(--label-3); fill: none; stroke-width: 2.4;
+               stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  .thread { flex: 1; padding: 10px 14px 0; display: flex; flex-direction: column;
+            min-height: 0; overflow: hidden; }
+  .ask { font-size: 13px; color: var(--label-2); padding-bottom: 9px; margin-bottom: 12px;
+         border-bottom: 1px solid var(--sep); }
+  .ask b { color: var(--label); font-weight: 600; }
+  .prose { font-size: 13.5px; line-height: 1.5; margin-bottom: 10px; }
+  .tool { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; font-size: 13px; }
+  .tool .chip { width: 22px; height: 22px; border-radius: 6px; background: var(--fill-2);
+                display: grid; place-items: center; font-size: 11px; color: var(--label-2); }
+  .ghost { border: 1.5px dashed #b3261e; border-radius: 14px; padding: 12px; font-size: 12.5px;
+           line-height: 1.45; color: #b3261e; text-align: center; background: rgba(255,59,48,.05); }
+  .tail { padding: 8px 14px 20px; }
+  .composer { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+              border: 1px solid var(--sep); border-radius: 22px; color: var(--label-3); font-size: 15px; }
+  .composer .send { margin-left: auto; width: 30px; height: 30px; border-radius: 9px;
+                    background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 13px; }
+  .note { max-width: 1330px; font-size: 13.5px; line-height: 1.6; color: #55555e; }
+  .note b { color: #16161a; }
+  table { border-collapse: collapse; font-size: 13px; margin: 8px 0 0; }
+  td, th { border: 1px solid var(--sep); padding: 5px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--fill-2); font-weight: 600; }
+</style>
+
+<h1>会话内那条「定位」栏：异常卡也要有（问题卡已经有）</h1>
+<p class="lede">
+  行为是确定的，三个格子只是问你<b>那句话怎么说</b>。今天的代码把异常卡排除在这条栏之外，理由写在
+  <code>ConsoleModel.swift:2222</code>：<i>「异常画在它到达的地方，而这条栏指项目的<b>决定</b>（浏览器那条 rail 数的是
+  <code>PendingDecisionRow</code>，不是 open item），所以这两类不在这里计数」</i>——结果是：问题卡滚出屏幕时有一条
+  「N open questions below」指下来、可按、可跳回；<b>异常卡滚出屏幕时什么都没有</b>（needs-you 条在会话内是被
+  <code>excluding:</code> 排除掉的）。三格都是同一条修复：把
+  <code>ExceptionCards.isOpen</code> 的卡（升级给你的异常、fuse 暂停）也数进去，栏往下指、按下滚到卡上 —— 与问题卡同一套
+  <code>NeedsYouLogic.below</code> 机制，一个字的机制都不新写。
+</p>
+
+<div class="row">
+
+  <!-- A -->
+  <figure>
+    <span class="tag a">A · 我建议</span>
+    <div class="phone" style="height:520px">
+      <div class="status"><span>6:25</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">31</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">Coordinator: Fin…</span><span class="badge">Coordinator</span>
+          <span class="s">Escalated to you · Open · just now</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="bar mark">
+        <span class="dot"></span>
+        <span class="txt">2 waiting below</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　这批 parquet 先别动</div>
+        <div class="prose">好，我先只读不写：把 001_00012 那轮的失败原因和它依赖的那批 WARC 对齐，等你回话再动手。</div>
+        <div class="tool"><span class="chip">◫</span><code>orbit · project_get</code></div>
+        <div class="prose">现在两个待办都还是你的：WARC 依赖（4h 18m）和 parquet（2h 14m），都等你说一句话。</div>
+        <div class="ghost">异常卡在这下面（已经滚出屏幕）<br>按上面那条栏会滚到最早的那张（WARC）</div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>
+    </div>
+    <figcaption><b>A：全部是问题时说旧句子；只要掺了异常就说「N waiting below」</b>
+      问题那一档一个字不动（<code>2 open questions below</code>，今天的样子），异常这一档用一句<b>中性的</b>：
+      「2 waiting below」/「1 waiting below」。不点名种类，因为在同一行里既说数又说名会挤掉（标签 1 行、单行省略，
+      <code>lineLimit(1)</code>）。按下 = 滚到<b>最久等待</b>那一张，和栏今天挑目标的口径一致。</figcaption>
+  </figure>
+
+  <!-- B -->
+  <figure>
+    <span class="tag b">B</span>
+    <div class="phone" style="height:520px">
+      <div class="status"><span>6:25</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">31</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">Coordinator: Fin…</span><span class="badge">Coordinator</span>
+          <span class="s">Escalated to you · Open · just now</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="bar mark">
+        <span class="dot"></span>
+        <span class="txt">Escalated to you below</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　这批 parquet 先别动</div>
+        <div class="prose">好，我先只读不写：把 001_00012 那轮的失败原因和它依赖的那批 WARC 对齐，等你回话再动手。</div>
+        <div class="tool"><span class="chip">◫</span><code>orbit · project_get</code></div>
+        <div class="prose">现在两个待办都还是你的：WARC 依赖（4h 18m）和 parquet（2h 14m），都等你说一句话。</div>
+        <div class="ghost">异常卡在这下面（已经滚出屏幕）</div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>
+    </div>
+    <figcaption><b>B：用卡自己的词（和行/标题栏/横幅同一批）</b>
+      最久那条是「升级给你的异常」就说 <code>Escalated to you below</code>，是暂停就说 <code>Paused below</code> ——
+      与你这两天刚统一的那套词完全一致，缺点是<b>没有数</b>（两三个都挤在同一句话里说不出来），
+      而且两句拼起来语序有点生（<code>Question from coordinator below</code>）。</figcaption>
+  </figure>
+
+  <!-- C -->
+  <figure>
+    <span class="tag c">C</span>
+    <div class="phone" style="height:520px">
+      <div class="status"><span>6:25</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">31</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">Coordinator: Fin…</span><span class="badge">Coordinator</span>
+          <span class="s">Escalated to you · Open · just now</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="bar">
+        <span class="dot"></span>
+        <span class="txt">2 open questions below</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　这批 parquet 先别动</div>
+        <div class="prose">好，我先只读不写：把 001_00012 那轮的失败原因和它依赖的那批 WARC 对齐，等你回话再动手。</div>
+        <div class="tool"><span class="chip">◫</span><code>orbit · project_get</code></div>
+        <div class="prose">现在两个待办都还是你的：WARC 依赖（4h 18m）和 parquet（2h 14m），都等你说一句话。</div>
+        <div class="ghost">异常卡在这下面（已经滚出屏幕）</div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>
+    </div>
+    <figcaption><b>C：一个字不改，只把异常也数进去</b>
+      最省事：句子仍是 <code>2 open questions below</code>，只是这两张卡不是问题——按它滚下去，看到的是一张写着
+      「Escalated to you / Now yours…」的卡。<b>列在这里是给你否决用的</b>：房子里的规矩是<b>不拿错名词说事</b>
+      （「Waiting for approval 压在一张 escalated 卡上」就是这两天刚修掉的那类）。</figcaption>
+  </figure>
+</div>
+
+<p class="note">
+  <b>三格共有的行为（不随文案变）：</b>数进去的卡 = <code>ExceptionCards.isOpen</code> 为真的那两张（升级给你的异常、fuse 暂停）＋
+  今天已经在数的那些问题卡；栏只在这一屏里存在（<code>NeedsYouBannerView</code> 的 <code>below:</code> 分支），
+  <b>跨会话的 needs-you 条在会话内本来就是被排除的</b>，所以不会出现两条栏打架；按下 = 滚到最久等待的那一行
+  （<code>NeedsYouLogic.below</code> 的 FIFO，问题卡今天就是这个行为）。
+  <br><br>
+  <b>要动的三处（都很小）：</b><code>ConsoleModel.openQuestionRowIDs</code> 里那句 <code>return false</code> 换成 standing 判断
+  （顺手把它改名成 <code>openBelowRowIDs</code>，它数的已经不只是问题）；<code>NeedsYouLogic.belowText</code> 按选中的档位改；
+  <code>ConsoleModel</code> 的既有测试 + 一条新的 pg 无关单测（这一屏的栏在两种集合下各说一句）。
+  <br><br>
+  <b>顺带一个真 bug（截图里就能看到）：</b>那条粘头上的字是 <code>Task failed: Task failed: [WARC]…</code> ——
+  <code>kindLabel(.taskFailed)</code> 已经是「Task failed」，而 item 的标题自己又以它开头，两处叠了一次。
+  一行就能去重（标题以 kind label 开头时不再前缀），要不要一起改？
+</p>
+</html>

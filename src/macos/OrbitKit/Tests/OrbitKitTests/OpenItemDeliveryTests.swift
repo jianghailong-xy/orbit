@@ -419,10 +419,10 @@ final class OpenItemDeliveryTests: XCTestCase {
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard)
         XCTAssertEqual(summary.label, "↑ Exception item")
         // The kind, then the item's own title — which in this product already opens with the kind
-        // ("Merge conflict: <task>", §4.2), so the bar reads it twice. That is the browser's own
-        // pair, copied rather than improved on: `OpenItemDeliveryCopyParityTests` holds the two ends
-        // to the same words, and a bar that quietly dropped half of one would be a third wording.
-        XCTAssertEqual(summary.text, "Merge conflict: Merge conflict: 回填历史 user 事件的 controlPlaneNote")
+        // ("Merge conflict: <task>", §4.2), so the label is not added a second time. The pair is
+        // still the browser's own: `OpenItemDeliveryCopyParityTests` holds the two ends to the same
+        // words, and both ends carry the same guard.
+        XCTAssertEqual(summary.text, "Merge conflict: 回填历史 user 事件的 controlPlaneNote")
     }
 
     /// A cached transcript written before the card existed rehydrates: the key is absent, so the

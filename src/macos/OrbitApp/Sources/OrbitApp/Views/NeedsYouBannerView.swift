@@ -40,7 +40,7 @@ struct NeedsYouBannerView: View {
     var excluding: String?
     /// Questions in THIS conversation that stop no turn, if any. Nil from a list, and from a console
     /// holding none.
-    var below: OpenQuestionsBelow? = nil
+    var below: WaitingBelow? = nil
     /// Where a press goes when the bar is pointing down: the console scrolls to that row.
     var onOpenBelow: ((String) -> Void)? = nil
 

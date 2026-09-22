@@ -342,8 +342,17 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                           + "question is worse than saying nothing")
         XCTAssertTrue(console.contains("AcceptanceConfirmations.isOpen(acceptanceConfirmation)"),
                       "and the confirmation is counted by the same rule, from the same place")
-        XCTAssertFalse(console.contains("var openQuestionRowIDs: [String] { decisionCards.map(\\.id) }"),
+        XCTAssertFalse(console.contains("decisionCards.map(\\.id)"),
                        "counting every delivered card is exactly the version this replaced")
+        // And the exceptions the bar now counts are counted by their OWN standing, never by being
+        // on screen: a card the server no longer lists is `.gone`, and pointing somebody at it is
+        // the same dead-card failure the two assertions above are about.
+        XCTAssertTrue(console.contains("ExceptionCards.isOpen(ownerItemStanding(itemID))"),
+                      "the exceptions are counted by the same standing rule as the questions")
+        XCTAssertTrue(console.contains("ExceptionCards.isOpen(ownerItemStanding(itemID)), question: false)"),
+                      "and the bar is told they are NOT questions: the card it scrolls to reads "
+                          + "\"Escalated to you\", and a line calling that a question sends the reader "
+                          + "looking for something to say")
     }
 
     func testTheConsoleOnlyAsksAboutARulerItCoordinates() throws {

@@ -2184,49 +2184,64 @@ final class ConsoleModel {
     /// between two of them.
     private static let rulerReadThrottle: TimeInterval = 10
 
-    /// The open questions below the reader, oldest first — what the "needs you" bar counts and
-    /// where a tap on it goes.
+    /// The cards still waiting below the reader, oldest first — what the "needs you" bar counts and
+    /// where a tap on it goes. Each row says whether it is a QUESTION, which is the only thing the
+    /// bar's words turn on (`NeedsYouLogic.below`).
     ///
     /// A card that has gone stale stays ON SCREEN (it is the only thing that can explain what
-    /// happened to the question) but stops being counted here: pointing somebody at a dead card and
-    /// calling it an open question is worse than saying nothing. `isOpen` is OrbitKit's, so the
-    /// one place that decides "still a question" is the same place that decides "answerable" — and
-    /// so the one case where they differ, an unreadable standing, cannot drift apart.
-    var openQuestionRowIDs: [String] {
-        decisionCards.filter { card in
+    /// happened to the question) but stops being counted here: pointing somebody at a dead card is
+    /// worse than saying nothing. `isOpen` is OrbitKit's, so the one place that decides "still
+    /// open" is the same place that decides "answerable" — and so the one case where they differ,
+    /// an unreadable standing, cannot drift apart.
+    ///
+    /// THE EXCEPTIONS ARE IN HERE. They used to be excluded (the note said the browser's rail points
+    /// at decisions, not at open items), and the reader was the thing that argument forgot: inside a
+    /// project's coordinator conversation the needs-you bar excludes the session on screen, so a
+    /// card that scrolled away had nothing at all pointing at it — while a question in the same
+    /// position got a bar and a press that scrolls. They are not questions (the owner answers them by
+    /// pressing a door, not by replying), which is why the row carries the distinction rather than
+    /// the bar assuming one.
+    var openBelowRows: [NeedsYouLogic.BelowRow] {
+        decisionCards.compactMap { card -> NeedsYouLogic.BelowRow? in
+            // One spelling for both answers, so each case below reads as the question it is: is this
+            // card still waiting, and does the reader answer it by replying (`question: true`) or by
+            // pressing a door (`false`)?
+            func waiting(_ open: Bool, question: Bool) -> NeedsYouLogic.BelowRow? {
+                open ? NeedsYouLogic.BelowRow(rowID: card.id, isQuestion: question) : nil
+            }
             switch card.kind {
             case .criteriaDecision(let intentID):
-                return CriteriaDecisions.isOpen(criteriaStanding(intentID))
+                return waiting(CriteriaDecisions.isOpen(criteriaStanding(intentID)), question: true)
             // A record of an answer, not a question: nothing is waiting on the reader. A merge's
             // receipt is one of these — the merge already happened, and pointing a reader at it
             // would be pointing them at something with nothing to press.
             case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
                  .acceptanceConfirmationReceipt, .promotionReceipt:
-                return false
+                return nil
             case .acceptanceConfirmation:
-                return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
+                return waiting(AcceptanceConfirmations.isOpen(acceptanceConfirmation), question: true)
             case .evidenceDecision(let taskID, let evidenceRevision):
-                return EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision))
+                return waiting(EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision)),
+                               question: true)
             case .ownerConfirmation(let taskID, let requestID):
-                return OwnerConfirmations.isOpen(ownerStanding(taskID, requestID))
+                return waiting(OwnerConfirmations.isOpen(ownerStanding(taskID, requestID)),
+                               question: true)
             case .ownerDecisionReceipt:
                 // A receipt is a record, not a question: it stays on screen and is never counted.
-                return false
+                return nil
             case .coordinatorQuestion(let itemID):
-                return CoordinatorQuestions.isOpen(questionStanding(itemID))
+                return waiting(CoordinatorQuestions.isOpen(questionStanding(itemID)), question: true)
             case .promotionApproval(let promotionID):
                 // Only state A is a question. B is landing on its own, C is a receipt and D is
                 // waiting on somebody else — none of the three is something to point a reader at.
-                return PromotionCards.stage(promotionStanding(promotionID)) == .askingYou
-            case .escalatedItem, .fusePause:
-                // An exception is drawn where it arrived — under the turn that was last when the
-                // item was read — and that is where it is answered. The bar above the transcript
-                // points at the project's DECISIONS (the browser's rail counts `PendingDecisionRow`s,
-                // not the open items), so these two are not counted here; what names them is the
-                // needs-you banner, which carries the item itself.
-                return false
+                return waiting(PromotionCards.stage(promotionStanding(promotionID)) == .askingYou,
+                               question: true)
+            case .escalatedItem(let itemID), .fusePause(let itemID):
+                // The owner answers one of these by pressing a door, not by replying — so it counts,
+                // and the bar is told it is not a question (see `openBelowRows`' doc).
+                return waiting(ExceptionCards.isOpen(ownerItemStanding(itemID)), question: false)
             }
-        }.map(\.id)
+        }
     }
 
     /// A row the transcript has been asked to scroll to. The tick rides along so pressing the bar

@@ -314,7 +314,7 @@ final class PromotionReceiptPlacementTests: XCTestCase {
                        "a record is not a question: nothing on it is pressable")
 
         let console = try source(Self.consolePath)
-        let counted = try section(console, from: "var openQuestionRowIDs: [String] {",
+        let counted = try section(console, from: "var openBelowRows: [NeedsYouLogic.BelowRow] {",
                                   to: "\n    /// A row the transcript has been asked to scroll to")
         XCTAssertTrue(counted.contains(".promotionReceipt"),
                       "the record's row must be counted among the receipts — it is not a question, "
