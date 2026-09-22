@@ -2096,12 +2096,12 @@ private struct OwnerItemCardView: View {
     /// for — `Cancel task`, which this console stops by no door of its own — draws nothing at all,
     /// which is the rule the card has always followed: a control that goes nowhere is worse than no
     /// control.
-    @ViewBuilder private func cardPressButton(_ press: ExceptionCards.CardPress,
+    @ViewBuilder private func cardPressButton(_ cardPress: ExceptionCards.CardPress,
                                               row: ProjectOpenItemRow) -> some View {
-        switch press.action {
+        switch cardPress.action {
         case .askCoordinatorAgain:
             if pressable(row) {
-                weighted(press.tier) {
+                weighted(cardPress.tier) {
                     Button { press(row) } label: {
                         Text(ExceptionCards.askCoordinatorAgain).approvalActionLabel()
                     }
@@ -2113,7 +2113,7 @@ private struct OwnerItemCardView: View {
             // when that attempt has no session left. The app's own door for both ids, the one the
             // delivery card's links open and both shells route.
             if let url = ExceptionCards.openTaskSessionLink(row) {
-                weighted(press.tier) {
+                weighted(cardPress.tier) {
                     Button { openURL(url) } label: {
                         Text(ExceptionCards.openTaskSession).approvalActionLabel()
                     }
