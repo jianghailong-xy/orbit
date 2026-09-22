@@ -2201,13 +2201,13 @@ final class ConsoleModel {
     /// position got a bar and a press that scrolls. They are not questions (the owner answers them by
     /// pressing a door, not by replying), which is why the row carries the distinction rather than
     /// the bar assuming one.
-    var openBelowRows: [NeedsYouLogic.BelowRow] {
-        decisionCards.compactMap { card -> NeedsYouLogic.BelowRow? in
+    var openBelowRows: [BelowRow] {
+        decisionCards.compactMap { card -> BelowRow? in
             // One spelling for both answers, so each case below reads as the question it is: is this
             // card still waiting, and does the reader answer it by replying (`question: true`) or by
             // pressing a door (`false`)?
-            func waiting(_ open: Bool, question: Bool) -> NeedsYouLogic.BelowRow? {
-                open ? NeedsYouLogic.BelowRow(rowID: card.id, isQuestion: question) : nil
+            func waiting(_ open: Bool, question: Bool) -> BelowRow? {
+                open ? BelowRow(rowID: card.id, isQuestion: question) : nil
             }
             switch card.kind {
             case .criteriaDecision(let intentID):
