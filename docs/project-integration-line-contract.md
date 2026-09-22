@@ -221,7 +221,10 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 ```
 
 - 任务级：有一条 `result ∈ {MERGED, ALREADY_MERGED}` 且 `target_branch ∈ upstream` 的回执 → `ON_UPSTREAM`；否则有同样结果且 `target_branch ∈ integration` 的回执 → `ON_INTEGRATION_LINE`；其余 → `NOT_KNOWN`。仍然没有 `NOT_LANDED`，沿用该文件「三值」一节的理由。
-- 判据级：服务任务非空且全部 `ON_UPSTREAM` → `LANDED`；服务任务非空、全部是 `ON_UPSTREAM` 或 `ON_INTEGRATION_LINE`、且至少一个不是 `ON_UPSTREAM` → `ON_INTEGRATION_LINE`；其余 → `UNKNOWN`。`MAIN` 线项目不会出现 `ON_INTEGRATION_LINE`。
+- 判据级：服务任务非空且所有**有提交可落**的服务任务全部 `ON_UPSTREAM` → `LANDED`；服务任务非空、所有有提交可落的服务任务都是 `ON_UPSTREAM` 或 `ON_INTEGRATION_LINE`、且至少一个不是 `ON_UPSTREAM` → `ON_INTEGRATION_LINE`；其余 → `UNKNOWN`。`MAIN` 线项目不会出现 `ON_INTEGRATION_LINE`。
+- 「有提交可落」= `task.codeless = false`（§1.1 `isCodeTask` 的前半）。一条声明自己不需要代码的任务（SR5 的逃生口：调研、文档、以证据为交付的验收任务）不解析 SOURCE，因此没有自己的分支、没有自己的提交，也不可能有任何回执把它的工作放到 `main` 上——它不参与这条合取，既不挡 `LANDED` 也不提供 `LANDED`。这与 §2.5 J9 对依赖的豁免是同一条规则（SR27：文档类前置不该让下游等一个永远不会存在的检查点），也让 `ProjectIntegrationBuckets.doneNotIntegrated`（「DONE work with nothing to land」）与 `NOT_APPLICABLE` 的口径在判据这一层成立。**注意这不是给验收类任务开绕过落地判定的口子**：跑过分支的任务就是有自己的提交（无论它的回执或标题怎么说），仍然按原样顶住 `LANDED`；只读声明，不读会话史（`isCodeTask` 的后半读的是**最新**一条会话，而回执挂在**任务**上，用它会漏掉「上一次落地、这一次没分叉」的任务）。
+- 只有 codeless 的服务任务、但确实有服务任务时，判据读 `LANDED`（零个提交全部在 upstream 上，即 J9 的「没有可等的」）；**没有人**服务时仍读 `UNKNOWN`。
+- 零提交的验收任务挡死判据落地判定，是 2026-09-22 在项目 `34ODoUKJGEsfbgcJDGS4q` 实测到的洞：48 条任务全部 DONE、13/14 条判据 `LANDED`，第 12 条被判据名下那条零提交的验收任务钉在 `ON_INTEGRATION_LINE`，项目到不了 DONE。修复只改读数（`project-criterion-landing.ts` 的 `criterionLanding`/`taskHasNothingToLand`），不改判据措辞。
 - `readCriterionLanding` 多读一次代码库行，`ProjectsService.get` 的语句数随之 17 → 18（`project-get-query-count.pg.spec.ts`）。
 
 **L8（两个问题两个读数）**：「前置已落地」（§2.5 J9）用任务级 `ON_UPSTREAM ∨ ON_INTEGRATION_LINE`；项目 DONE（§3.5）用判据级 `LANDED`。`LANDED` 收窄为「在 main 上」，所以 `project-done-derived.ts` 不改一行就满足「项目 DONE 以合入 main 为准」。

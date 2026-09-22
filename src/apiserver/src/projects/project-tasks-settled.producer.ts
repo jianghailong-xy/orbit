@@ -240,6 +240,9 @@ export class ProjectTasksSettledProducer {
               id: true,
               title: true,
               status: true,
+              // SR5's escape hatch, which the fold reads — the same fact `criterionLanding`'s own
+              // reader carries, so the card agrees with the derivation it reports.
+              codeless: true,
               mergeReceipts: { select: { result: true, targetBranch: true } },
             },
           },

@@ -491,6 +491,9 @@ async function expectedTurnId(db: PrismaClient, projectId: string): Promise<stri
           id: true,
           title: true,
           status: true,
+          // SR5's escape hatch, which the landing fold reads: this expectation has to be folded from
+          // the same facts the product's own reader carries, or the mirror can disagree with it.
+          codeless: true,
           mergeReceipts: { select: { result: true, targetBranch: true } },
         },
       },

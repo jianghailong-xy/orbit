@@ -132,6 +132,9 @@ export class CriterionUnlandedProducer {
             select: {
               id: true,
               status: true,
+              // SR5's escape hatch, which the fold reads: work that declares it needs no code has
+              // nothing to land and does not withhold LANDED.
+              codeless: true,
               mergeReceipts: { select: { result: true, targetBranch: true } },
             },
           },

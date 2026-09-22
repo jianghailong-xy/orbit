@@ -669,6 +669,9 @@ function changedPathsOf(reported: unknown): string[] {
 const SERVING_WORK = {
   id: true,
   status: true,
+  // SR5's escape hatch, which the landing fold reads: work that declares it needs no code has
+  // nothing to land, and does not withhold LANDED.
+  codeless: true,
   mergeReceipts: { select: { result: true, targetBranch: true } },
 } as const;
 
