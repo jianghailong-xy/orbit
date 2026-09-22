@@ -468,22 +468,27 @@ describe('the record a confirmation leaves, in the conversation it was made in',
   });
 
   /**
-   * A record older than every event this device holds is a record of a conversation this one is
-   * not: a coordinator conversation opened a month after the set was signed. The native clients
-   * drop it for the same reason (`ReceiptAnchor.after` returns nil), and drawing it anyway is what
-   * put the day-one receipt under the newest message in every conversation the project ever had.
+   * A record older than every event this device holds — a coordinator conversation opened a month
+   * after the set was signed — leads at the HEAD of the window, above the conversation's first row.
+   * Dropping it (what this used to do, and what the native clients did) left the owner with no way
+   * to find the record at all; drawing it at the tail is what put the day-one receipt under the
+   * newest message in every conversation the project ever had.
    */
-  it('is drawn in no conversation whose window begins after it was signed', async () => {
+  it('leads at the head of a conversation whose window begins after it was signed', async () => {
     confirmationStanding = signed(OPENING_AT.replace('03:10:00', '02:00:00'));
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[COORDINATOR_PUBLIC]}, opening`);
     });
     await note(COORDINATOR_PUBLIC, 1);
+    const receipt = document.querySelector<HTMLElement>('.settlement-receipt');
+    expect(receipt, 'the record older than this window was not drawn at all').toBeTruthy();
+    const first = mounted().querySelector<HTMLElement>('[data-seq]');
+    expect(first, 'the conversation drew no event to compare against').toBeTruthy();
     expect(
-      count('.settlement-receipt'),
-      'a record older than every loaded event was drawn — about a conversation this is not',
-    ).toBe(0);
+      receipt!.compareDocumentPosition(first!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the record is not ahead of the first loaded event',
+    ).toBeTruthy();
   });
 
   it('is drawn in no conversation that coordinates no project, which reads nothing for one', async () => {

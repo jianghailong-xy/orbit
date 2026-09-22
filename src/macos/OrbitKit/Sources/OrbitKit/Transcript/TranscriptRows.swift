@@ -104,18 +104,38 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case fusePause(itemID: String)
     }
 
-    public let kind: Kind
-    /// The transcript item that was last when this card arrived — the same anchoring
-    /// `LocalStatusCard` uses, and for the same reason: a question delivered an hour ago must not
-    /// walk back down to the tail every time somebody says something.
-    ///
-    /// Nil is not "unknown": it is a card that FOLLOWS the tail, which `build` renders below every
-    /// item there is. `DeliveryAnchor` says which kind gets which, and why one of them does.
-    public let afterItemID: String?
+    /// Where this row belongs, which is the whole difference between a question and a record.
+    public enum Placement: Equatable, Sendable {
+        /// What a card delivered LIVE gets: after the transcript item that was last when it ARRIVED
+        /// — the same anchoring `LocalStatusCard` uses, and for the same reason: a question
+        /// delivered an hour ago must not walk back down to the tail every time somebody says
+        /// something. Nil is not "unknown": it is a card that FOLLOWS the tail, which `build` renders
+        /// below every item there is. `DeliveryAnchor` says which kind gets which, and why one does.
+        case onArrival(afterItemID: String?)
+        /// What a RECORD of something that happened gets: the door's own clock, which `build`
+        /// resolves against the rows loaded AT RENDER TIME (`ReceiptAnchor.place`). A record has no
+        /// arrival of its own on a device that was not there, so there is nothing to freeze at
+        /// delivery: the same moment answers "which row" on every console, and answers it again
+        /// when the window has moved.
+        ///
+        /// A record whose moment is older than every loaded row is drawn at the HEAD of the
+        /// window — as close to where it happened as this device can get, and it walks down into
+        /// place as older pages arrive. NOT at the tail: that is where what is true NOW goes, and
+        /// it is where these records used to pile up (`ReceiptAnchor.place` has the whole story).
+        case at(String)
+    }
 
-    public init(kind: Kind, afterItemID: String? = nil) {
+    public let kind: Kind
+    public let placement: Placement
+
+    public init(kind: Kind, placement: Placement) {
         self.kind = kind
-        self.afterItemID = afterItemID
+        self.placement = placement
+    }
+
+    /// The id-only spellings below want a row as a NAME (`Receipt.id`), not a placed one.
+    public init(kind: Kind) {
+        self.init(kind: kind, placement: .onArrival(afterItemID: nil))
     }
 
     public var id: String {
@@ -187,19 +207,43 @@ public extension TranscriptItem {
 /// Where a record that arrived from a READ — not from the stream — belongs in the conversation.
 ///
 /// A card delivered live anchors to the item that was last when it ARRIVED. A record has no arrival
-/// of its own on a device that was not there: the criteria decision's receipt and the evidence
-/// decision's are both derived from the answers the server publishes, on every console open and
+/// of its own on a device that was not there: the five records (`CriteriaDecisions.receipts`,
+/// `EvidenceDecisions.receipts`, `AcceptanceConfirmations.receipt`, `OwnerConfirmations.receipts`,
+/// `PromotionCards.receipts`) are derived from what the server publishes, on every console open and
 /// every reload, so they are placed by the door's own clock against the rows' clocks instead. One
 /// function, because two ends of one rule is how a phone and a browser come to disagree about where
 /// the same answer happened.
+///
+/// ASKED AT RENDER TIME, NOT ONCE AT ADOPTION. What this answers is where the moment sits among the
+/// rows THIS console holds RIGHT NOW — and the window moves: the caller keeps the newest
+/// `maxWindowItems` rows and trims their head, so a row that was loaded when the read landed is
+/// gone a day of conversation later. Freezing that row's id at adoption is what put the account
+/// owner's `Decision recorded` cards at the bottom of a conversation they long predated (the iOS
+/// report of 2026-09-22: this session, 3217 rows, the confirmation 1316 rows above the tail — the
+/// row it was pinned to had been trimmed 316 rows earlier, and an anchor that cannot be placed
+/// trails at the tail). Asking again every render makes the answer follow the window instead of
+/// outliving it.
 public enum ReceiptAnchor {
-    /// The id of the LAST item whose own clock is at or before `stamp`.
-    ///
-    /// Nil when every loaded item is later: the moment is then above the window this device holds,
-    /// and drawing the record at the top would put a decision above things that happened first. Nil
-    /// too for a stamp nothing can parse — a record nobody can place is not drawn in the wrong one.
-    public static func after(items: [TranscriptItem], at stamp: String) -> String? {
-        guard let at = ThinkingSummary.date(stamp) else { return nil }
+    /// Where a record belongs among the rows loaded right now.
+    public enum Placement: Equatable, Sendable {
+        /// After this row: the last row whose own clock is at or before the moment.
+        case after(String)
+        /// Older than every loaded row. Drawn at the HEAD of the window, above the load-earlier
+        /// row — as close to where it happened as this device can get, and it walks down into place
+        /// as older pages arrive and the window grows back past its moment.
+        ///
+        /// NOT the tail, which is the other end of the conversation: a record's own stamp on a card
+        /// sitting under everything that happened after it tells the reader the decision was made
+        /// now. Nor is it dropped, which is what the web end does and what the native end did before
+        /// — a record that disappears on a long conversation is a record the owner cannot read.
+        case beforeWindow
+        /// A stamp nothing can parse: a record nobody can place is not drawn in the wrong one.
+        case unplaceable
+    }
+
+    /// Where `stamp` sits among `items` — the whole rule, and the only place it is stated.
+    public static func place(items: [TranscriptItem], at stamp: String) -> Placement {
+        guard let at = ThinkingSummary.date(stamp) else { return .unplaceable }
         var anchor: String?
         for item in items {
             guard let own = item.clock, let when = ThinkingSummary.date(own), when <= at else {
@@ -207,7 +251,15 @@ public enum ReceiptAnchor {
             }
             anchor = item.id
         }
-        return anchor
+        guard let anchor else { return .beforeWindow }
+        return .after(anchor)
+    }
+
+    /// The moment one record carries, for ordering the ones that are all above the window: the head
+    /// of the transcript reads top-down oldest-first, like the conversation it is the head of.
+    public static func ascending(_ a: String, _ b: String) -> Bool {
+        guard let x = ThinkingSummary.date(a), let y = ThinkingSummary.date(b) else { return false }
+        return x < y
     }
 }
 
@@ -308,11 +360,6 @@ public enum TranscriptRows {
                              showWorkingIndicator: Bool,
                              decisionCards: [DeliveredDecisionCard] = []) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
-        // Scroll-up history paging: while older pages remain, the first row is a spinner that pulls
-        // the previous page in when it scrolls into view. Its id moves with the cursor, so a page
-        // too short to push it off-screen re-materializes it and chains the next fetch.
-        if canPageOlder { rows.append(.loadOlder(cursor: state.oldestSeq ?? 0)) }
-
         // A command run before the first transcript event belongs above events that arrive later;
         // the rest are placed after the item that was last at invocation time.
         var anchored: [String: [LocalStatusCard]] = [:]
@@ -320,16 +367,40 @@ public enum TranscriptRows {
             guard let anchor = card.afterItemID else { rows.append(.statusCard(card)); continue }
             anchored[anchor, default: []].append(card)
         }
-        // A delivered decision card anchors the same way — but one whose anchor it cannot place
-        // trails at the TAIL rather than leading at the head. A `/status` result with no anchor ran
-        // before the conversation and belongs above it; an unanswered question belongs where it can
-        // be found.
+        // A delivered decision card follows `placement`: a QUESTION sits where it arrived — and one
+        // whose row it cannot place trails at the TAIL rather than being lost, because it is still
+        // waiting on somebody. A RECORD is resolved against the rows loaded right now, and one whose
+        // moment is above them all leads at the HEAD (see `ReceiptAnchor.Placement`).
         var anchoredDecisions: [String: [DeliveredDecisionCard]] = [:]
         var trailingDecisions: [DeliveredDecisionCard] = []
+        var headRecords: [DeliveredDecisionCard] = []
         for card in decisionCards {
-            guard let anchor = card.afterItemID else { trailingDecisions.append(card); continue }
-            anchoredDecisions[anchor, default: []].append(card)
+            switch card.placement {
+            case .onArrival(nil):
+                trailingDecisions.append(card)
+            case .onArrival(let anchor?):
+                anchoredDecisions[anchor, default: []].append(card)
+            case .at(let moment):
+                switch ReceiptAnchor.place(items: state.items, at: moment) {
+                case .after(let anchor): anchoredDecisions[anchor, default: []].append(card)
+                case .beforeWindow:      headRecords.append(card)
+                case .unplaceable:       break
+                }
+            }
         }
+        // Oldest first: the head of the transcript reads top-down in the order things happened, and
+        // these are its oldest rows. Nothing here is frozen — a page of history reaching back past
+        // one of these moments puts that record back where it HAPPENED, because the placement is
+        // re-derived against the rows that then exist.
+        headRecords.sort { a, b in
+            guard case .at(let x) = a.placement, case .at(let y) = b.placement else { return false }
+            return ReceiptAnchor.ascending(x, y)
+        }
+        rows.append(contentsOf: headRecords.map(TranscriptRow.decisionCard))
+        // …and the load-earlier row goes UNDER them: it is the way up to the rows these records are
+        // older than, so a record's moment being above the window must not hide the control that
+        // pages the window back to it.
+        if canPageOlder { rows.append(.loadOlder(cursor: state.oldestSeq ?? 0)) }
         for item in state.items {
             // An AskUserQuestion / ExitPlanMode tool card duplicates the live interactive approval
             // rendered below while the prompt still awaits an answer — show only the interactive
@@ -348,9 +419,13 @@ public enum TranscriptRows {
         for card in statusCards where card.afterItemID.map({ anchored[$0] != nil }) == true {
             rows.append(.statusCard(card))
         }
-        // Same for a question whose anchor has been paged out of the window: it is still waiting on
+        // Same for a QUESTION whose anchor has been paged out of the window: it is still waiting on
         // somebody, so it is shown at the tail rather than dropped with the item it arrived after.
-        for card in decisionCards where card.afterItemID.map({ anchoredDecisions[$0] != nil }) == true {
+        // Only a question: a record's own moment was resolved against the rows above, and the two
+        // other answers it can give — the head of the window, or nothing at all — are already told.
+        for card in decisionCards {
+            guard case .onArrival(let anchor?) = card.placement,
+                  anchoredDecisions[anchor] != nil else { continue }
             trailingDecisions.append(card)
         }
         rows.append(contentsOf: trailingDecisions.map(TranscriptRow.decisionCard))

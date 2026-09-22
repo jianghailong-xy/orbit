@@ -3621,31 +3621,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // The decisions this conversation has recorded, drawn into the transcript at the moment each was
   // made (`EvidenceDecisionReceipt`, `CriteriaDecisionReceipt`, `OwnerDecisionReceipt`,
   // `AcceptanceConfirmationReceipt`). Memoized because `Transcript` is: a fresh array on every
-  // render would rebuild the whole conversation with it.
+  // render would rebuild the whole conversation with it. Each row carries the moment it is placed
+  // by, because a record whose moment is older than every loaded event leads at the head of the
+  // window and the ones that do are ordered by it (`TranscriptInsert`).
   const decisionReceipts = useMemo(
     () => [
       ...criteriaDecisionReceiptRows(criteriaDecisions.data, transcriptEvents, criteriaReplies)
         .map((row) => ({
-          afterSeq: row.afterSeq,
+          anchor: row.placement,
+          moment: row.settled.decidedAt,
           key: `criteria-receipt:${row.settled.intentId}`,
           element: <CriteriaDecisionReceipt settled={row.settled} reply={row.reply} />,
         })),
       ...(pendingDecisions.data?.decided ?? []).flatMap((decided) => {
-        const afterSeq = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
-        return afterSeq === null
+        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        return anchor === null
           ? []
           : [{
-              afterSeq,
+              anchor,
+              moment: decided.decidedAt,
               key: `evidence-receipt:${decisionRowKey(decided)}`,
               element: <EvidenceDecisionReceipt decided={decided} />,
             }];
       }),
       ...ownerDecisionReceiptsIn(ownerConfirmation.data, selectedId).flatMap((decided) => {
-        const afterSeq = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
-        return afterSeq === null || !ownerConfirmation.data
+        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        return anchor === null || !ownerConfirmation.data
           ? []
           : [{
-              afterSeq,
+              anchor,
+              moment: decided.decidedAt,
               key: `owner-decision-receipt:${decided.id}`,
               element: <OwnerDecisionReceipt view={ownerConfirmation.data} decided={decided} />,
             }];
@@ -3654,16 +3659,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // settlement card's record and not its question: held by the card, it sat at the BOTTOM of
       // the pane for the life of the project — under every later message, in conversations started
       // long after, and after the project was done — which is where the questions that are open NOW
-      // belong. The native clients have always placed it this way (`AcceptanceConfirmations.receipt`
-      // + `ReceiptAnchor.after`), and a moment older than every loaded event is a record of a
-      // conversation this one is not: drawn nowhere, rather than at the top of somebody else's.
+      // belong. The native clients place it the same way (`AcceptanceConfirmations.receipt` +
+      // `ReceiptAnchor.place`), and a moment older than every loaded event puts it at the HEAD of
+      // the window rather than at the bottom of it.
       ...[acceptanceConfirmation.data?.confirmation].flatMap((confirmation) => {
         if (!confirmation) return [];
-        const afterSeq = decisionReceiptAnchor(transcriptEvents, confirmation.confirmedAt);
-        return afterSeq === null
+        const anchor = decisionReceiptAnchor(transcriptEvents, confirmation.confirmedAt);
+        return anchor === null
           ? []
           : [{
-              afterSeq,
+              anchor,
+              moment: confirmation.confirmedAt,
               key: `acceptance-receipt:${confirmation.confirmedAt}`,
               element: <AcceptanceConfirmationReceipt confirmation={confirmation} />,
             }];
@@ -3673,15 +3679,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // this record sat under every later message for the life of the project — in conversations
       // started long afterwards, and after the project was done — which is where the questions that
       // are open NOW belong. Anchored by `mergedAt`, which is the terminal edge's own clock on a row
-      // that never moves again; a merge older than every loaded event lands nowhere, like every
-      // other record here.
+      // that never moves again; a merge older than every loaded event leads at the head, like every
+      // other record here (`decisionReceiptAnchor`).
       ...(mergedPromotions.data ?? []).flatMap((promotion) => {
+        // A candidate with no `merged` is not a record: no moment, so nothing to place.
         const mergedAt = promotion.merged?.at;
-        const afterSeq = mergedAt ? decisionReceiptAnchor(transcriptEvents, mergedAt) : null;
-        return afterSeq === null
+        if (!mergedAt) return [];
+        const anchor = decisionReceiptAnchor(transcriptEvents, mergedAt);
+        return anchor === null
           ? []
           : [{
-              afterSeq,
+              anchor,
+              moment: mergedAt,
               key: `promotion-receipt:${promotion.promotionId}`,
               element: <ProjectPromotionReceipt promotion={promotion} />,
             }];

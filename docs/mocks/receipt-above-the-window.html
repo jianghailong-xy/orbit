@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>回执留在「确认的那个 turn」——三种做法离家多远</title>
+<style>
+  /* 真实 token，抄自 src/web/src/index.css :root（light）；卡片本身抄 .settlement-receipt */
+  :root {
+    --bg-raised:#ffffff; --bg-base:#ffffff; --bg-sunken:#f7f8fa;
+    --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+    --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-solid:#2ea121;
+    --mark:#e8590c;
+    --ios-bg:#f2f2f7; --ios-card:#eaf1ff;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 48px; background:#ececef; color:#16161a;
+         font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",
+         "Noto Serif CJK SC",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.02em; margin:0 0 10px; }
+  .lede { color:#55555e; max-width:1180px; margin:0 0 4px; font-size:14.5px; }
+  .lede b { color:#16161a; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px;
+         background:#e4e4ea; border-radius:4px; padding:1px 5px; }
+  .row { display:flex; gap:40px; align-items:flex-start; margin-top:28px; }
+  figure { margin:0; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#fde8d7; color:#a03e05; }
+  .tag.new { background:#d8ecff; color:#0a5ca8; }
+  .tag.gray { background:#e3e3e8; color:#55555e; }
+  figcaption { margin-top:12px; font-size:13px; line-height:1.6; color:#55555e; width:392px; }
+  figcaption b { color:#16161a; }
+  figcaption ul { margin:6px 0 0; padding-left:17px; }
+  figcaption li { margin-top:3px; }
+
+  /* ── 顶部：对话地图（竖轴 = 这个会话的 3 天） ── */
+  .map { display:flex; gap:34px; align-items:flex-start; background:#fff; border:1px solid #e2e2e8;
+         border-radius:14px; padding:18px 22px; margin-top:22px; max-width:1240px; }
+  .map .rail { position:relative; width:246px; padding-left:22px; flex:none; }
+  .map .rail:before { content:''; position:absolute; left:6px; top:8px; bottom:8px; width:2px;
+                      background:#dcdce4; }
+  .map .stop { position:relative; margin-bottom:24px; }
+  .map .stop:last-child { margin-bottom:0; }
+  .map .stop:before { content:''; position:absolute; left:-21px; top:5px; width:12px; height:12px;
+                      border-radius:6px; background:#c8c8d0; }
+  .map .stop.home:before { background:var(--brand); }
+  .map .stop.now:before { background:var(--mark); }
+  .map .stop .w { font-size:12.5px; color:var(--text-2); font-variant-numeric:tabular-nums; }
+  .map .stop .t { font-size:13.5px; color:#16161a; }
+  .map .stop .d { font-size:12.5px; color:var(--text-3); }
+  .map .gap { font-size:12px; color:var(--text-3); margin:-14px 0 10px; }
+  .bars { flex:1; min-width:0; }
+  .bars h2 { font-size:14px; margin:0 0 2px; }
+  .bars .sub { font-size:12.5px; color:var(--text-2); margin-bottom:12px; }
+  .bar { display:grid; grid-template-columns:132px 1fr 152px; align-items:center; gap:10px;
+         margin-bottom:8px; font-size:13px; }
+  .bar .lab { color:#16161a; }
+  .bar .track { height:16px; background:var(--bg-sunken); border-radius:4px; position:relative; }
+  .bar .fill { height:16px; border-radius:4px; }
+  .bar .fill.now { background:var(--mark); }
+  .bar .fill.b { background:var(--brand); }
+  .bar .v { color:var(--text-2); font-variant-numeric:tabular-nums; }
+  .bar .track .none { position:absolute; inset:0; display:flex; align-items:center; padding-left:9px;
+                      font-size:12px; color:var(--text-3); }
+
+  /* ── 电话框 ── */
+  .phone { width:392px; border-radius:36px; background:var(--ios-bg); overflow:hidden;
+           border:1px solid #d3d3da; box-shadow:0 8px 26px rgba(20,20,30,.14); }
+  .status { display:flex; align-items:center; justify-content:space-between;
+            padding:10px 22px 4px; font-size:13px; font-weight:600; color:#16161a; }
+  .status .right { display:flex; align-items:center; gap:5px; font-size:11.5px; color:#3c3c43; }
+  .nav { display:flex; align-items:center; gap:10px; padding:6px 14px 10px; }
+  .nav .back { width:30px; height:30px; border-radius:15px; background:#fff; color:#3c3c43;
+               font-size:16px; line-height:30px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .nav .title { font-size:15px; font-weight:600; color:#16161a; }
+  .nav .chip { font-size:11px; font-weight:600; color:#55555e; background:#e4e4ea; border-radius:6px;
+               padding:2px 6px; }
+  .nav .sub { font-size:11.5px; color:#8a8a92; text-align:center; margin-top:-2px; }
+  .nav .share { margin-left:auto; color:var(--brand); font-size:17px; }
+  .banner { display:flex; align-items:center; gap:8px; margin:0 12px 8px; padding:9px 12px;
+            background:#fff; border-radius:10px; font-size:13.5px; color:#16161a;
+            box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .banner .dot { width:8px; height:8px; border-radius:4px; background:var(--mark); flex:none; }
+  .banner .txt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .banner .up { color:#8a8a92; }
+  .banner .chev { margin-left:auto; color:#c0c0c8; }
+  .scroll { padding:12px 12px 4px; }
+
+  /* 转录里的普通行 */
+  .assistant { font-size:13.5px; line-height:1.62; color:#1f2329; padding:2px 4px 12px; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px;
+          white-space:pre-wrap; overflow-wrap:normal; }
+  .gapnote { text-align:center; font-size:12px; color:#a0a0a8; padding:2px 0 12px; }
+  .tool { display:flex; align-items:center; gap:8px; padding:9px 11px; margin:0 0 8px;
+          background:#fff; border:1px solid #e6e6ec; border-radius:10px; }
+  .tool .ico { width:20px; height:20px; border-radius:6px; background:var(--brand-tint);
+               color:var(--brand-strong); font-size:10px; line-height:20px; text-align:center; flex:none; }
+  .tool .name { font-size:13px; font-weight:600; color:#1f2329; }
+  .tool .rest { font-size:13px; color:#8a8a92; overflow:hidden; text-overflow:ellipsis;
+                white-space:nowrap; }
+  .tool .ok { margin-left:auto; color:var(--success-solid); font-size:12px; flex:none; }
+  .loadolder { display:flex; justify-content:center; padding:6px 0 10px; }
+  .loadolder i { width:15px; height:15px; border-radius:8px; border:2px solid #c8c8d0;
+                 border-top-color:#8a8a92; display:inline-block; }
+
+  /* ── 回执行 ── */
+  .receipt { border:1px solid #cfe0ff; border-radius:12px; background:var(--ios-card);
+             overflow:hidden; margin-bottom:12px; }
+  .receipt .head { display:flex; align-items:center; gap:8px; padding:11px 13px 0;
+                   font-size:14.5px; font-weight:600; color:var(--brand-strong); }
+  .receipt .tick { width:20px; height:20px; border-radius:10px; background:var(--brand);
+                   color:#fff; font-size:12px; line-height:20px; text-align:center; flex:none; }
+  .receipt .body { padding:6px 13px 12px; }
+  .receipt .claim { font-size:15px; line-height:1.5; color:#16161a; }
+  .receipt .stamp { margin-top:6px; font-size:13px; color:var(--text-2); }
+  .receipt .prov { margin-top:2px; font-size:13px; color:var(--text-2); }
+
+  /* 底部固定区 */
+  .bottom { padding:8px 12px 0; }
+  .jobs { display:flex; align-items:center; gap:8px; padding:11px 13px; background:#fff;
+          border:1px solid #e6e6ec; border-radius:12px; font-size:13.5px; color:#16161a; }
+  .jobs .ico { font-size:12px; color:#8a8a92; }
+  .jobs .n { color:#8a8a92; }
+  .jobs .chev { margin-left:auto; color:#c0c0c8; }
+  .composer { display:flex; align-items:center; gap:10px; margin:9px 0 10px; padding:9px 12px;
+              background:#fff; border:1px solid #e6e6ec; border-radius:22px; }
+  .composer .plus { color:#8a8a92; font-size:17px; }
+  .composer .ph { color:#a8acb3; font-size:14.5px; }
+  .composer .send { margin-left:auto; width:30px; height:30px; border-radius:15px; background:var(--brand); }
+  .pills { display:flex; align-items:center; gap:14px; padding:0 4px 12px; font-size:12.5px; color:#8a8a92; }
+  .pills .gauge { margin-left:auto; color:var(--mark); }
+
+  /* 改动标注 */
+  .mark { position:relative; }
+  .mark:before { content:''; position:absolute; inset:-5px; border:2px dashed var(--mark);
+                 border-radius:11px; pointer-events:none; }
+  .mark.blue:before { border-color:var(--brand); }
+  .num { position:absolute; top:-11px; right:-11px; width:19px; height:19px; border-radius:10px;
+         background:var(--mark); color:#fff; font-size:11.5px; font-weight:700; line-height:19px;
+         text-align:center; z-index:4; }
+  .num.blue { background:var(--brand); }
+  .note { margin-top:34px; max-width:1240px; font-size:13.5px; line-height:1.65; color:#3c3c43;
+          background:#fff; border:1px solid #e2e2e8; border-radius:12px; padding:14px 18px; }
+  .note h2 { font-size:15px; margin:0 0 8px; }
+  .note ul { margin:6px 0 0; padding-left:19px; }
+  .note li { margin-top:5px; }
+  .note .caveat { color:var(--mark); font-weight:600; }
+</style>
+<body>
+
+<h1>回执要留在「确认的那个 turn」——三种做法离家多远</h1>
+<p class="lede">
+  <b>先说「家」在哪。</b>这条确认是 9/19 12:26:49 按的（在项目页/卡片上按的，不是在对话里打的字）。它的家 = 那一刻对话里最后一行之后 —— 也就是你 12:26:42 贴的那条 <code>000751.sst</code> 消息下面，紧接着 agent 说「SST 是 33–36M 这个数…」。
+  <b>手机只留最新 1000 行</b>（<code>maxWindowItems</code>），家的那一行在窗口上方 316 行：<b>不是不想画在那，是那一刻手机手里没有。</b>
+  下面第一张是这场对话的地图，第二行是三种做法「离家的行数」；三格手机是它们实际的样子。
+</p>
+
+<div class="map">
+  <div class="rail">
+    <div class="stop home">
+      <div class="w">9/19 12:26:42</div>
+      <div class="t">家：你按下确认的那一刻</div>
+      <div class="d">回执该在的位置（就在这条消息下面）</div>
+    </div>
+    <div class="gap">↑ 316 行：手机手里没有这一段</div>
+    <div class="stop">
+      <div class="w">9/19 20:54</div>
+      <div class="t">手机窗口的上沿</div>
+      <div class="d">最新 1000 行从这里开始</div>
+    </div>
+    <div class="gap">↓ 1000 行：手机手里有的全部</div>
+    <div class="stop now">
+      <div class="w">9/22 09:39</div>
+      <div class="t">队尾：现在正在发生的事</div>
+      <div class="d">回执现在的落点</div>
+    </div>
+  </div>
+  <div class="bars">
+    <h2>离家的行数（越短越接近「确认的那个 turn」）</h2>
+    <div class="sub">分母 = 这个会话 3217 行；家在第 1316 行（从上往下数）。</div>
+    <div class="bar">
+      <span class="lab">B · 归位后</span>
+      <span class="track"><span class="fill b" style="width:3px"></span></span>
+      <span class="v">0 行 · 就是家</span>
+    </div>
+    <div class="bar">
+      <span class="lab">B · 那一刻没拉进来</span>
+      <span class="track"><span class="fill b" style="width:24%"></span></span>
+      <span class="v">316 行 · 窗口上沿</span>
+    </div>
+    <div class="bar">
+      <span class="lab">A · 不画</span>
+      <span class="track"><span class="none">没有位置（这次打开里不存在）</span></span>
+      <span class="v">—</span>
+    </div>
+    <div class="bar">
+      <span class="lab">现在 · 队尾</span>
+      <span class="track"><span class="fill now" style="width:100%"></span></span>
+      <span class="v">1316 行 · 最远</span>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+
+  <!-- ── 现在 ── -->
+  <figure>
+    <span class="tag now">现在 · iOS —— 距家 1316 行</span>
+    <div class="phone">
+      <div class="status"><span>5:36</span><span class="right">▮▮▮ ⌾ 47</span></div>
+      <div class="nav">
+        <span class="back">‹</span>
+        <span class="title">Coordinator: Fin…</span>
+        <span class="chip">Coordinator</span>
+        <span class="share">⇧</span>
+      </div>
+      <div class="nav sub" style="padding:0 14px 10px;">Waiting for approval · Open · just now</div>
+      <div class="banner"><span class="dot"></span><span class="txt"><span class="up">↑</span> Exception item&nbsp; Task failed: Task failed: [Merge][…</span><span class="chev">›</span></div>
+      <div class="scroll">
+        <div class="assistant">有别的受害者。</div>
+        <div class="tool"><span class="ico">▸_</span><span class="name">Bash</span><span class="rest">Look for other tasks that failed at th…</span><span class="ok">✓</span></div>
+        <div class="assistant">C(000_00021) 已处理完。但顺手查出还有两个 FAILED:</div>
+        <div class="tool"><span class="ico">▸_</span><span class="name">Bash</span><span class="rest">Get the abort reason for B 000_000…</span><span class="ok">✓</span></div>
+
+        <div class="mark"><span class="num">①</span>
+          <div class="receipt" style="margin-bottom:0;">
+            <div class="head"><span class="tick">✓</span>Decision recorded</div>
+            <div class="body">
+              <div class="claim">You started the project on 7 criteria at seal 58176cdb1212</div>
+              <div class="stamp">by you at 9/19 12:26</div>
+              <div class="prov">From Orbit</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom">
+        <div class="jobs"><span class="ico">▤</span>Background processes <span class="n">59 total</span><span class="chev">›</span></div>
+        <div class="composer"><span class="plus">＋</span><span class="ph">Message…</span><span class="send"></span></div>
+        <div class="pills"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4…</span><span>Max</span><span class="gauge">◌ 48%</span></div>
+      </div>
+    </div>
+    <figcaption><b>① 现在：离家 1316 行，最远的一头。</b>卡上写着 9/19 12:26，位置却在 9/22 的对话末尾 —— 和"现在"挤在一起：
+      <ul>
+        <li>位置只在<b>采纳那一刻</b>算一次，存的是那行的 <code>item.id</code>；窗口裁头（天花板 1000 行）把那行丢掉之后，这个 id 在这台机器上再也解析不出来；</li>
+        <li>解析不出来时 <code>TranscriptRows.build</code> 的兜底把卡片画到队尾 —— 那条兜底本来是给"没人答的提问"写的（问题不能丢），回执因此永远沉底。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ── B：窗口顶 ── -->
+  <figure>
+    <span class="tag new">B · 那一刻没拉进来 —— 距家 316 行</span>
+    <div class="phone">
+      <div class="status"><span>5:36</span><span class="right">▮▮▮ ⌾ 47</span></div>
+      <div class="nav">
+        <span class="back">‹</span>
+        <span class="title">Coordinator: Fin…</span>
+        <span class="chip">Coordinator</span>
+        <span class="share">⇧</span>
+      </div>
+      <div class="nav sub" style="padding:0 14px 10px;">Waiting for approval · Open · just now</div>
+      <div class="banner"><span class="dot"></span><span class="txt"><span class="up">↑</span> Exception item&nbsp; Task failed: Task failed: [Merge][…</span><span class="chev">›</span></div>
+      <div class="scroll">
+        <div class="mark blue"><span class="num blue">①</span>
+          <div class="receipt" style="margin-bottom:0;">
+            <div class="head"><span class="tick">✓</span>Decision recorded</div>
+            <div class="body">
+              <div class="claim">You started the project on 7 criteria at seal 58176cdb1212</div>
+              <div class="stamp">by you at 9/19 12:26</div>
+              <div class="prov">From Orbit</div>
+            </div>
+          </div>
+        </div>
+        <div class="loadolder"><i></i></div>
+        <div class="gapnote">— 上面还有 316 行没拉进来 —</div>
+        <div class="tool"><span class="ico">▸_</span><span class="name">Bash</span><span class="rest">watch the first live B download…</span><span class="ok">✓</span></div>
+        <div class="assistant">全部转成 `IN_PROGRESS`。D(000_00008) 也自动接力起来了。</div>
+      </div>
+      <div class="bottom">
+        <div class="jobs"><span class="ico">▤</span>Background processes <span class="n">59 total</span><span class="chev">›</span></div>
+        <div class="composer"><span class="plus">＋</span><span class="ph">Message…</span><span class="send"></span></div>
+        <div class="pills"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4…</span><span>Max</span><span class="gauge">◌ 48%</span></div>
+      </div>
+    </div>
+    <figcaption><b>① 那一刻不在手里时，它贴在窗口的上沿</b> —— 这是"离确认的那个 turn 最近的诚实位置"：比这一屏里所有东西都早，往上翻就能碰到它。
+      <ul>
+        <li>"家不在窗口里"和"没有家"是两件事：现在这版把两件事混成一件（都画队尾）；这一版只承认"上面还有"；</li>
+        <li>落位改成<b>每次渲染按时刻算</b>（"最后一个时钟 ≤ 它的行"，一行都没有就贴窗口上沿），不再把 id 冻结在采纳那一刻；</li>
+        <li>316 行不是终点：往上翻一页它就归位（下一格）。</li>
+      </ul>
+    </figcaption>
+  </figure>
+</div>
+
+<div class="row">
+
+  <!-- ── B：归位 ── -->
+  <figure>
+    <span class="tag new">B · 翻上去之后 —— 距家 0 行（就是家）</span>
+    <div class="phone">
+      <div class="status"><span>5:36</span><span class="right">▮▮▮ ⌾ 47</span></div>
+      <div class="nav">
+        <span class="back">‹</span>
+        <span class="title">Coordinator: Fin…</span>
+        <span class="chip">Coordinator</span>
+        <span class="share">⇧</span>
+      </div>
+      <div class="nav sub" style="padding:0 14px 10px;">Waiting for approval · Open · just now</div>
+      <div class="banner"><span class="dot"></span><span class="txt"><span class="up">↑</span> Exception item&nbsp; Task failed: Task failed: [Merge][…</span><span class="chev">›</span></div>
+      <div class="scroll">
+        <div class="assistant">先把 SST 的账对一下：</div>
+        <div class="tool"><span class="ico">▸_</span><span class="name">Bash</span><span class="rest">ls -lh 000_00001/*.sst | tail</span><span class="ok">✓</span></div>
+        <div class="assistant mono">-rw-r--r-- 1 root root  33M  9月19日 12:14 000751.sst</div>
+        <div class="mark blue"><span class="num blue">①</span>
+          <div class="receipt" style="margin-bottom:0;">
+            <div class="head"><span class="tick">✓</span>Decision recorded</div>
+            <div class="body">
+              <div class="claim">You started the project on 7 criteria at seal 58176cdb1212</div>
+              <div class="stamp">by you at 9/19 12:26</div>
+              <div class="prov">From Orbit</div>
+            </div>
+          </div>
+        </div>
+        <div class="assistant">SST 是 33–36M 这个数，先跟已完成的 000_00000 对一下账——它的 `db_bytes` 和 `sst_files` 都有实测记录。</div>
+      </div>
+      <div class="bottom">
+        <div class="jobs"><span class="ico">▤</span>Background processes <span class="n">59 total</span><span class="chev">›</span></div>
+        <div class="composer"><span class="plus">＋</span><span class="ph">Message…</span><span class="send"></span></div>
+        <div class="pills"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4…</span><span>Max</span><span class="gauge">◌ 48%</span></div>
+      </div>
+    </div>
+    <figcaption><b>① 那一刻进了窗口，它就落在你确认的那条消息下面</b> —— 这就是"留在确认的那个 turn"本身：上面是你 12:26:42 贴的那条 <code>000751.sst</code>，下面是 agent 接着说的那句「SST 是 33–36M…」，回执夹在中间，和当时在场的设备看到的一样。
+      <ul>
+        <li>钉住的是<b>时刻</b>，不是某一行：翻到哪儿，位置自己就对到哪儿；</li>
+        <li>不再是"钉一次就不动"（现在那版钉死了一行，那行一被裁掉就永远沉底）。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ── A ── -->
+  <figure>
+    <span class="tag gray">A · 不画（web 口径）</span>
+    <div class="phone">
+      <div class="status"><span>5:36</span><span class="right">▮▮▮ ⌾ 47</span></div>
+      <div class="nav">
+        <span class="back">‹</span>
+        <span class="title">Coordinator: Fin…</span>
+        <span class="chip">Coordinator</span>
+        <span class="share">⇧</span>
+      </div>
+      <div class="nav sub" style="padding:0 14px 10px;">Waiting for approval · Open · just now</div>
+      <div class="banner"><span class="dot"></span><span class="txt"><span class="up">↑</span> Exception item&nbsp; Task failed: Task failed: [Merge][…</span><span class="chev">›</span></div>
+      <div class="scroll">
+        <div class="tool"><span class="ico">▸_</span><span class="name">Bash</span><span class="rest">watch the first live B download…</span><span class="ok">✓</span></div>
+        <div class="assistant">全部转成 `IN_PROGRESS`。D(000_00008) 也自动接力起来了。</div>
+        <div class="tool"><span class="ico">▸_</span><span class="name">Bash</span><span class="rest">check the merge queue…</span><span class="ok">✓</span></div>
+        <div class="mark"><span class="num">①</span>
+          <div style="border:2px dashed #c8c8d0; border-radius:11px; padding:16px 14px; text-align:center;
+                      font-size:12.5px; color:#8a8a92;">
+            这条记录<b>不画</b>——它的时刻在窗口上方<br>（web 端一直是这样：锚不到就不 insert）
+          </div>
+        </div>
+      </div>
+      <div class="bottom">
+        <div class="jobs"><span class="ico">▤</span>Background processes <span class="n">59 total</span><span class="chev">›</span></div>
+        <div class="composer"><span class="plus">＋</span><span class="ph">Message…</span><span class="send"></span></div>
+        <div class="pills"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4…</span><span>Max</span><span class="gauge">◌ 48%</span></div>
+      </div>
+    </div>
+    <figcaption><b>① 记录在这次打开里不存在。</b>文档今天写下的规则就是这条（"a moment older than every loaded item … is not drawn at all"）。它的价值只有一半：
+      <ul>
+        <li><b>必须做</b>：绝不沉底 —— 锚点行被裁掉后画到队尾是纯错误，A 顺手修掉它；</li>
+        <li>但它不回答你的问题：<b>它离家的距离是"没有"</b>，长会话里这条记录查不到；</li>
+        <li>所以「留在确认的那个 turn」这个要求，<b>只有 B 满足</b>：归位后 0 行，没归位时 316 行且只会变短。</li>
+      </ul>
+    </figcaption>
+  </figure>
+</div>
+
+<div class="note">
+  <h2>这一改的边界（写进注释的那种）</h2>
+  <ul>
+    <li><b>A 的那一半无条件要做：</b>锚点行被裁掉后画到队尾是纯错误。兜底"跟尾"只对提问成立（没人答的问题不能因为翻页丢掉），回执永远不该沉底。</li>
+    <li><b>B 只改"位置怎么来的"：</b>从"采纳那一刻冻结的行 id"换成"渲染时按时刻算"，五条回执共用（criteria / evidence / owner / settlement / merge 的 <code>ReceiptAnchor.place(items:at:)</code>）。</li>
+    <li><b>提问卡不动。</b>owner 确认的<b>问题</b>卡继续跟尾 —— 2026-09-16 beta 截图定的：它的"到达"是控制面 read 触发的，早于本轮自己的转录行，锚在"到达时最后一个 item"会画在它引用的报告上面。<code>OwnerConfirmationPlacementTests</code> 两组用例钉的就是这两半。</li>
+    <li><span class="caveat">B 下刚打开长会话时，这条记录在窗口上沿，不是在队尾</span>：要"不用滚就看得见"，那只能是队尾或常驻区，而队尾正是这次要除掉的东西 —— 记录属于它发生的时刻，不属于你正在看的地方。</li>
+    <li>两端同一条规则：iOS/macOS 共用 OrbitKit 的 <code>TranscriptRows.build</code>；web 是 <code>Transcript.tsx</code> 的 <code>inserts</code>（<code>afterSeq</code> 锚定）。B 落地时 web 把"锚不到就不画"改成"锚不到就贴窗口上沿"。</li>
+  </ul>
+</div>
+
+</body>
+</html>

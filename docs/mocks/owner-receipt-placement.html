@@ -228,7 +228,7 @@
     </div>
     <figcaption><b>每条回执贴住它被确认的那份报告</b>，日期与它相邻的消息一致：
       <ul>
-        <li>位置由 <code>decidedAt</code> 决定：落在"该时刻之前最后一个 item"之后（<code>ReceiptAnchor.after</code>），和 criteria / evidence / settlement 三条回执同一条规则；</li>
+        <li>位置由 <code>decidedAt</code> 决定：落在"该时刻之前最后一个 item"之后（<code>ReceiptAnchor.place</code>，2026-09-22 起这个函数在渲染时算，而不是采纳时算一次），和 criteria / evidence / settlement 三条回执同一条规则；</li>
         <li>底部只留"现在为真"的东西：还在跑的报告、要你答的问题卡（问题卡照旧跟尾，不动）；</li>
         <li>滑到哪一段，就看到那一段当时的决定，不再全挤在末尾。</li>
       </ul>
@@ -240,7 +240,7 @@
   <h2>这一改的边界（写进注释的那种）</h2>
   <ul>
     <li><b>只动回执，不动问题卡。</b>owner 的<b>问题卡</b>必须继续跟尾 —— 这是 2026-09-16 那次 beta 截图定的：它的"到达"是控制面 read 触发的，早于本轮自己的转录行，锚在"到达时最后一个 item"会让卡片画在它引用的报告上面。<code>OwnerConfirmationPlacementTests</code> 两组用例正是钉这两半。</li>
-    <li><span class="caveat">晚于回执打开的会话：这条回执不画。</span>那一刻早于已加载的每个 item（<code>ReceiptAnchor</code> 返回 nil），和另外三条回执一致 —— 不把一条记录画到不属于它的对话里。</li>
+    <li><span class="caveat">晚于回执打开的会话：那一刻早于已加载的每个 item。</span>当时定的口径是"不画"（不把一条记录画到不属于它的对话里）；<b>2026-09-22 改成画在窗口最顶上</b>（<code>ReceiptAnchor.Placement.beforeWindow</code>）—— 不画等于长会话里查不到这条记录，沉底则是本次要除掉的缺陷。见 <code>receipt-above-the-window.html</code>。</li>
     <li>web 端这三张（owner 回执）已经按 <code>decidedAt</code> 落位；settlement 确认那条本会话刚从尾部改到同一个规则。两端自此一条规则。</li>
   </ul>
 </div>

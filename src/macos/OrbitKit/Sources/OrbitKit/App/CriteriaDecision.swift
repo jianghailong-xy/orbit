@@ -868,18 +868,18 @@ public enum CriteriaDecisions {
         return receiptClockFormatter.string(from: date)
     }
 
-    /// One answer this console draws as a record, and the item it belongs after.
+    /// One answer this console draws as a record.
     public struct Receipt: Equatable, Sendable, Identifiable {
         public let settled: SettledCriteriaDecision
-        /// The transcript item that was last at or before the decision. A card delivered live
-        /// anchors to the item that was last when it ARRIVED; a record has no arrival of its own on
-        /// a device that was not there, so it is anchored by the door's clock instead.
-        public let afterItemID: String
 
-        public init(settled: SettledCriteriaDecision, afterItemID: String) {
+        public init(settled: SettledCriteriaDecision) {
             self.settled = settled
-            self.afterItemID = afterItemID
         }
+
+        /// The door's own clock — what the record is placed by. Read off the answer rather than
+        /// captured beside it, so the value the console hands `TranscriptRows.build` and the value
+        /// the card prints cannot be two different moments.
+        public var moment: String { settled.decidedAt }
 
         /// The row id, beside the live card's rather than the same as it: both can be on screen at
         /// once for one intent (a question answered elsewhere is drawn as its receipt while the
@@ -900,17 +900,13 @@ public enum CriteriaDecisions {
     /// that never saw the question still shows what was decided. Web draws the same receipts in the
     /// same place, from the same array (`criteriaDecisionReceiptRows`).
     ///
-    /// An answer whose moment is older than everything loaded is NOT drawn: the window this console
-    /// holds starts at the tail, so a receipt with no anchor has no honest place to go.
-    public static func receipts(queue: PendingCriteriaDecisionQueue?,
-                                items: [TranscriptItem]) -> [Receipt] {
+    /// An answer older than everything this console holds is still drawn: as a ROW it carries the
+    /// moment the door recorded (`decidedAt`), and `TranscriptRows.build` resolves that against the
+    /// rows loaded at render time — inside the window it sits where the decision happened, above it
+    /// it leads at the head (`ReceiptAnchor.Placement`). Nothing is captured here but the answer.
+    public static func receipts(queue: PendingCriteriaDecisionQueue?) -> [Receipt] {
         guard let queue else { return [] }
-        return queue.settled.compactMap { settled in
-            guard let anchor = ReceiptAnchor.after(items: items, at: settled.decidedAt) else {
-                return nil
-            }
-            return Receipt(settled: settled, afterItemID: anchor)
-        }
+        return queue.settled.map { Receipt(settled: $0) }
     }
 
     /// Whether the read says this proposal was answered — what makes its question card give way.
@@ -1255,19 +1251,16 @@ public enum AcceptanceConfirmations {
         return "by you at \(time)"
     }
 
-    /// One confirmation this console draws as a record, and the item it belongs after.
+    /// One confirmation this console draws as a record.
     public struct Receipt: Equatable, Sendable, Identifiable {
         public let confirmation: RecordedStandardSetConfirmation
-        /// The transcript item that was last at or before the confirmation. A card delivered live
-        /// anchors to the item that was last when it ARRIVED; a record has no arrival of its own on
-        /// a device that was not there, so it is anchored by the door's clock instead
-        /// (`ReceiptAnchor`).
-        public let afterItemID: String
 
-        public init(confirmation: RecordedStandardSetConfirmation, afterItemID: String) {
+        public init(confirmation: RecordedStandardSetConfirmation) {
             self.confirmation = confirmation
-            self.afterItemID = afterItemID
         }
+
+        /// The door's own clock — see `CriteriaDecisions.Receipt.moment`.
+        public var moment: String { confirmation.confirmedAt }
 
         /// The row this record is drawn in — the card's own address rather than a second spelling of
         /// it, so the id the console dedupes on and the id the transcript draws cannot drift.
@@ -1277,20 +1270,16 @@ public enum AcceptanceConfirmations {
     }
 
     /// The record this conversation draws, or nothing: a confirmation on record — current or
-    /// superseded by an edit, both of which happened — that can be placed in the transcript this
-    /// device holds. A moment older than every loaded item is not drawn at all, for
-    /// `CriteriaDecisions.receipts`' reason: a decision above the window would be drawn below
-    /// things that happened first.
+    /// superseded by an edit, both of which happened. A moment older than every loaded row is not
+    /// dropped here: the record carries its own `confirmedAt`, and `TranscriptRows.build` puts it at
+    /// the head of the window when that moment is above it (`ReceiptAnchor.Placement`).
     ///
     /// Drawn from the READ and not from the window that pressed. A press kept as this window's own
     /// state lasted exactly as long as the console did: the record of it was gone on the next open,
     /// on the device that made it and on every device that did not.
-    public static func receipt(standing: StandardSetConfirmationStanding?,
-                               items: [TranscriptItem]) -> Receipt? {
-        guard let confirmation = standing?.confirmation,
-              let anchor = ReceiptAnchor.after(items: items, at: confirmation.confirmedAt)
-        else { return nil }
-        return Receipt(confirmation: confirmation, afterItemID: anchor)
+    public static func receipt(standing: StandardSetConfirmationStanding?) -> Receipt? {
+        guard let confirmation = standing?.confirmation else { return nil }
+        return Receipt(confirmation: confirmation)
     }
 
     // MARK: talking about the plan before starting it

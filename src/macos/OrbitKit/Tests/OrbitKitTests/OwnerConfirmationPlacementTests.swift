@@ -57,8 +57,9 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
     /// an anchor in by hand is the point of these tests — it is the thing that was wrong.
     private func deliveredNow(_ kind: DeliveredDecisionCard.Kind,
                               into items: [TranscriptItem]) -> DeliveredDecisionCard {
-        DeliveredDecisionCard(kind: kind, afterItemID: DeliveryAnchor.onArrival(of: kind,
-                                                                               items: items))
+        DeliveredDecisionCard(kind: kind,
+                              placement: .onArrival(afterItemID: DeliveryAnchor.onArrival(
+                                  of: kind, items: items)))
     }
 
     private func rows(items: [TranscriptItem], cards: [DeliveredDecisionCard],
@@ -142,9 +143,9 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
         let evidence = deliveredNow(.evidenceDecision(taskID: taskID, evidenceRevision: "2"),
                                     into: atDelivery)
         let settlement = deliveredNow(.acceptanceConfirmation, into: atDelivery)
-        XCTAssertEqual(criteria.afterItemID, "i1")
-        XCTAssertEqual(evidence.afterItemID, "i1")
-        XCTAssertEqual(settlement.afterItemID, "i1")
+        XCTAssertEqual(criteria.placement, .onArrival(afterItemID: "i1"))
+        XCTAssertEqual(evidence.placement, .onArrival(afterItemID: "i1"))
+        XCTAssertEqual(settlement.placement, .onArrival(afterItemID: "i1"))
         XCTAssertEqual(rows(items: items, cards: [criteria, evidence, settlement]),
                        ["i1", "criteria-decision-in-1", "evidence-decision-\(taskID)@2",
                         "acceptance-confirmation", "i2", "transcript-bottom"])
@@ -168,11 +169,12 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
                               waiting: nil, decisions: decisions)
     }
 
-    /// The card the console adopts for a receipt, built the way `adoptOwnerReceipts` builds it.
+    /// The card the console adopts for a receipt, built the way `adoptOwnerReceipts` builds it: the
+    /// address the card re-derives itself from, and the moment the transcript places it by.
     private func card(_ receipt: OwnerConfirmations.Receipt) -> DeliveredDecisionCard {
         DeliveredDecisionCard(kind: .ownerDecisionReceipt(taskID: receipt.taskId,
                                                           decisionID: receipt.decided.id),
-                              afterItemID: receipt.afterItemID)
+                              placement: .at(receipt.moment))
     }
 
     /// The record of an ANSWERED confirmation is a record of something that happened, not a question
@@ -186,25 +188,27 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
         // The press that answered i3's report: seconds after the report's own clock, an hour before
         // the next row's.
         let receipts = OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-16T11:17:05.000Z")]),
-                                                   sessionID: Self.reportSession, items: items)
-        XCTAssertEqual(receipts.map(\.afterItemID), ["i3"])
+                                                   sessionID: Self.reportSession)
+        XCTAssertEqual(receipts.map(\.moment), ["2026-09-16T11:17:05.000Z"])
         XCTAssertEqual(receipts.map(\.id), [receiptID])
         XCTAssertEqual(rows(items: items, cards: receipts.map(card)),
                        ["i1", "i2", "i3", receiptID, "i4", "transcript-bottom"])
     }
 
-    /// THE SCREENSHOT'S CASE. The conversation ran for a day after the decisions; this console
-    /// holds only the tail of it, so every clocked row is LATER than the three decisions. None can
-    /// be placed, and none is drawn — the stack of three at the bottom of the pane was the arrival
-    /// anchor, and drawing an unplaceable record at the tail would be the same defect spelled out.
-    func testADecisionOlderThanEveryLoadedRowIsNotDrawnAtTheTailInstead() {
+    /// THE SCREENSHOT'S CASE, corrected 2026-09-22. The conversation ran for a day after the
+    /// decisions; this console holds only the tail of it, so every clocked row is LATER than the
+    /// decision. It used to be dropped — "no honest place" — and the console that had adopted it
+    /// earlier kept it, frozen to a row the window then trimmed, so it trailed at the BOTTOM of the
+    /// conversation. Now it leads at the HEAD of the window: as close to where it happened as this
+    /// device can get, and the load-earlier row below it pages the window back to the row itself.
+    func testADecisionOlderThanEveryLoadedRowLeadsAtTheHeadAndNotAtTheTail() {
         let items = [question("i1"), thought("i2"), report("i3")]
-        XCTAssertEqual(
-            OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-15T09:00:00.000Z")]),
-                                        sessionID: Self.reportSession, items: items),
-            [])
-        XCTAssertEqual(rows(items: items, cards: []),
-                       ["i1", "i2", "i3", "transcript-bottom"])
+        let receipts = OwnerConfirmations.receipts(
+            read([decision("d1", at: "2026-09-15T09:00:00.000Z")]),
+            sessionID: Self.reportSession)
+        XCTAssertEqual(receipts.map(\.moment), ["2026-09-15T09:00:00.000Z"])
+        XCTAssertEqual(rows(items: items, cards: receipts.map(card)),
+                       [receiptID, "i1", "i2", "i3", "transcript-bottom"])
     }
 
     /// A newer report while an older decision's receipt is on screen: the receipt keeps its place up
@@ -214,9 +218,13 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
     func testAReceiptAboveAndTheNextQuestionBelowInOneTranscript() {
         let items = [question("i1"), thought("i2"), report("i3")]
         let receipts = OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-16T11:17:05.000Z")]),
-                                                   sessionID: Self.reportSession, items: items)
-        let next = deliveredNow(confirmation(), into: items + [report("i4")])
-        XCTAssertEqual(rows(items: items + [report("i4")], cards: receipts.map(card) + [next]),
+                                                   sessionID: Self.reportSession)
+        // i4 arrives AFTER the press — its own clock says so, which is what keeps it below the
+        // record now that the row is resolved against every loaded row rather than against the
+        // three this device happened to hold when the read came back.
+        let later = report("i4", ts: "2026-09-16T12:00:00.000Z")
+        let next = deliveredNow(confirmation(), into: items + [later])
+        XCTAssertEqual(rows(items: items + [later], cards: receipts.map(card) + [next]),
                        ["i1", "i2", "i3", receiptID, "i4", cardID, "transcript-bottom"])
     }
 
@@ -227,7 +235,7 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
         XCTAssertEqual(
             OwnerConfirmations.receipts(read([decision("d1", at: "2026-09-16T11:17:05.000Z",
                                                        sessionId: "34AnotherSession")]),
-                                        sessionID: Self.reportSession, items: items),
+                                        sessionID: Self.reportSession),
             [])
     }
 
@@ -319,10 +327,11 @@ final class OwnerConfirmationPlacementTests: XCTestCase {
 
         let adopt = try section(source, from: "private func adoptOwnerReceipts(",
                                 to: "/// Where one delivered proposal stands right now")
-        XCTAssertTrue(
-            adopt.contains("OwnerConfirmations.receipts(read, sessionID: sessionID, items: state.items)"),
-            "the receipt's place is the door's own clock, and the console has to ask for it")
-        XCTAssertTrue(adopt.contains("afterItemID: receipt.afterItemID"),
-                      "the adopted row must carry the anchor the rule computed, not one of its own")
+        XCTAssertTrue(adopt.contains("OwnerConfirmations.receipts(read, sessionID: sessionID)"),
+                      "the receipt's place is the door's own clock, and the console has to ask for it")
+        XCTAssertTrue(adopt.contains("placement: .at(receipt.moment)"),
+                      "the adopted row must carry the door's own clock for the transcript to "
+                      + "resolve against the rows it holds at render time — a captured row id is "
+                      + "what the trimmed window outlives")
     }
 }

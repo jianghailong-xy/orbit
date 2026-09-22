@@ -54,10 +54,11 @@ final class PromotionReceiptPlacementTests: XCTestCase {
                              showWorkingIndicator: false, decisionCards: cards).map(\.id)
     }
 
-    /// The row the console adopts for a record, built the way `adoptPromotionReceipts` builds it.
+    /// The row the console adopts for a record, built the way `adoptPromotionReceipts` builds it:
+    /// the merge the card re-derives itself from, and the moment the transcript places it by.
     private func card(_ receipt: PromotionCards.Receipt) -> DeliveredDecisionCard {
         DeliveredDecisionCard(kind: .promotionReceipt(promotion: receipt.promotion),
-                              afterItemID: receipt.afterItemID)
+                              placement: .at(receipt.moment))
     }
 
     /// A conversation that outlived the merge by an hour: the merge landed between `i2` and `i3`, so
@@ -78,14 +79,10 @@ final class PromotionReceiptPlacementTests: XCTestCase {
     func testAMergeIsDrawnWhereItHappenedAndNotAtTheTail() {
         let items = transcript()
         let receipts = PromotionCards.receipts(
-            merged: [merge("pr-1", at: "2026-09-21T09:30:00.000Z", sha: Self.mergedSha)],
-            items: items)
+            merged: [merge("pr-1", at: "2026-09-21T09:30:00.000Z", sha: Self.mergedSha)])
 
-        XCTAssertEqual(receipts.map(\.afterItemID), ["i2"])
+        XCTAssertEqual(receipts.map(\.moment), ["2026-09-21T09:30:00.000Z"])
         XCTAssertEqual(receipts.map(\.id), ["promotion-receipt-pr-1"])
-        XCTAssertNotEqual(receipts.first?.afterItemID, items.last?.id,
-                          "a record anchored at the tail is drawn as though it happened last, "
-                          + "which is the defect the owner reported")
         XCTAssertEqual(rows(items: items, cards: receipts.map(card)),
                        ["i1", "i2", "promotion-receipt-pr-1", "i3", "transcript-bottom"])
     }
@@ -104,20 +101,17 @@ final class PromotionReceiptPlacementTests: XCTestCase {
 
     // MARK: (b) the record nothing can place
 
-    /// THE SCREENSHOT'S CASE, one conversation later. The merge is older than every row this console
-    /// holds, so it cannot be placed: it is NOT drawn, and above all it is not drawn at the tail
-    /// instead — that is the defect rather than a smaller version of it. Web says the same by drawing
-    /// nothing for an anchor `decisionReceiptAnchor` answers `null` for.
-    func testAMergeOlderThanEveryLoadedRowIsNotDrawnAtTheTailInstead() {
+    /// THE SCREENSHOT'S CASE, one conversation later, corrected 2026-09-22. The merge is older than
+    /// every row this console holds, so it cannot be drawn where it happened — it leads at the HEAD
+    /// of the window instead, and above all it is not drawn at the tail, which is where it sat for
+    /// the life of the project and is the report this read exists for.
+    func testAMergeOlderThanEveryLoadedRowLeadsAtTheHeadAndNotAtTheTail() {
         let items = [item("i1", at: "2026-09-22T08:00:00.000Z"),
                      item("i2", at: "2026-09-22T08:30:00.000Z")]
-        XCTAssertEqual(
-            PromotionCards.receipts(merged: [merge("pr-1", at: "2026-09-21T09:30:00.000Z",
-                                                   sha: Self.mergedSha)],
-                                    items: items),
-            [])
-        XCTAssertEqual(rows(items: items, cards: []),
-                       ["i1", "i2", "transcript-bottom"])
+        let receipts = PromotionCards.receipts(
+            merged: [merge("pr-1", at: "2026-09-21T09:30:00.000Z", sha: Self.mergedSha)])
+        XCTAssertEqual(rows(items: items, cards: receipts.map(card)),
+                       ["promotion-receipt-pr-1", "i1", "i2", "transcript-bottom"])
     }
 
     /// And nothing is invented for a row that carries no moment at all: the door serves the merges it
@@ -126,8 +120,9 @@ final class PromotionReceiptPlacementTests: XCTestCase {
         let unmoment = ProjectPromotionView(
             promotionId: "pr-2", state: .merged, sourceRef: "refs/heads/project/34ODo",
             sourceSha: "58f3a4711d0c", upstreamRef: "refs/heads/main", merged: nil)
-        XCTAssertEqual(PromotionCards.receipts(merged: [unmoment], items: transcript()), [])
-        XCTAssertEqual(PromotionCards.receipts(merged: [], items: transcript()), [],
+        XCTAssertEqual(PromotionCards.receipts(merged: [unmoment]), [],
+                       "a candidate on offer is not a record, so no receipt is built for it at all")
+        XCTAssertEqual(PromotionCards.receipts(merged: []), [],
                        "a project that has merged nothing draws nothing")
     }
 
@@ -147,9 +142,10 @@ final class PromotionReceiptPlacementTests: XCTestCase {
                      item("i3", at: "2026-09-21T10:00:00.000Z"),
                      item("i4", at: "2026-09-21T11:00:00.000Z")]
         // Newest first, the way the door serves them.
-        let receipts = PromotionCards.receipts(merged: [second, first], items: items)
+        let receipts = PromotionCards.receipts(merged: [second, first])
 
-        XCTAssertEqual(receipts.map(\.afterItemID), ["i3", "i2"])
+        XCTAssertEqual(receipts.map(\.moment),
+                       ["2026-09-21T10:45:00.000Z", "2026-09-21T09:30:00.000Z"])
         XCTAssertEqual(Set(receipts.map(\.id)).count, 2,
                        "two merges are two rows: one id for both would cost the List its diff and "
                        + "draw the second merge over the first")
@@ -171,7 +167,7 @@ final class PromotionReceiptPlacementTests: XCTestCase {
                            sha: "1f2e3d4c5b6a798807162534435261708f9e0a1b",
                            source: "refs/heads/project/34ODoUKJ")
         let items = transcript()
-        let receipts = PromotionCards.receipts(merged: [second, first], items: items)
+        let receipts = PromotionCards.receipts(merged: [second, first])
         XCTAssertEqual(receipts.count, 2)
 
         let mine = receipts.last
@@ -270,10 +266,11 @@ final class PromotionReceiptPlacementTests: XCTestCase {
         let adopt = try section(console, from: "private func adoptPromotionReceipts(",
                                 to: "\n    /// Where one delivered proposal stands right now")
         let built = statements(adopt).joined(separator: " ")
-        XCTAssertTrue(built.contains("PromotionCards.receipts(merged: merged, items: state.items)"),
+        XCTAssertTrue(built.contains("PromotionCards.receipts(merged: merged)"),
                       "the record's place is the merge's own clock, and the console has to ask for it")
-        XCTAssertTrue(built.contains("afterItemID: receipt.afterItemID"),
-                      "the adopted row must carry the anchor the rule computed, not one of its own")
+        XCTAssertTrue(built.contains("placement: .at(receipt.moment)"),
+                      "the adopted row must carry the merge's own clock for the transcript to "
+                      + "resolve against the rows it holds at render time")
         XCTAssertTrue(built.contains(".promotionReceipt(promotion: receipt.promotion)"),
                       "and it must be drawn as a record rather than as a second question")
     }

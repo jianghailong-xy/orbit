@@ -2387,7 +2387,7 @@ final class ConsoleModel {
     /// point in the conversation it belongs to rather than where the reader happened to be looking
     /// when the read brought it back.
     private func deliver(_ kind: DeliveredDecisionCard.Kind, anchoredAt anchor: String?) {
-        let card = DeliveredDecisionCard(kind: kind, afterItemID: anchor)
+        let card = DeliveredDecisionCard(kind: kind, placement: .onArrival(afterItemID: anchor))
         guard !closedCards.contains(card.id), !decisionCards.contains(where: { $0.id == card.id })
         else { return }
         decisionCards.append(card)
@@ -2409,9 +2409,9 @@ final class ConsoleModel {
     ///
     /// Anchors are captured once: a receipt already delivered keeps the place it was given, so a
     /// read coming round again cannot walk it down the conversation. One whose moment is older than
-    /// everything loaded is not drawn at all — see `CriteriaDecisions.receipts`.
+    /// everything loaded leads at the HEAD of the window — see `ReceiptAnchor.Placement`.
     private func adoptReceipts(_ queue: PendingCriteriaDecisionQueue) {
-        let receipts = CriteriaDecisions.receipts(queue: queue, items: state.items)
+        let receipts = CriteriaDecisions.receipts(queue: queue)
         let answered = Set(receipts.map(\.settled.intentId))
         guard !answered.isEmpty else { return }
         decisionCards.removeAll { card in
@@ -2421,7 +2421,7 @@ final class ConsoleModel {
         for receipt in receipts where !decisionCards.contains(where: { $0.id == receipt.id }) {
             decisionCards.append(DeliveredDecisionCard(
                 kind: .criteriaDecisionReceipt(settled: receipt.settled),
-                afterItemID: receipt.afterItemID))
+                placement: .at(receipt.moment)))
         }
     }
 
@@ -2432,7 +2432,7 @@ final class ConsoleModel {
     /// answered revision is let go of: the receipt says which way it went, which is the thing a
     /// dimmed card could not say. A revision the read does not name keeps its card.
     private func adoptEvidenceReceipts(_ queue: EvidenceDecisionQueue) {
-        let receipts = EvidenceDecisions.receipts(queue: queue, items: state.items)
+        let receipts = EvidenceDecisions.receipts(queue: queue)
         let answered = Set(receipts.map { "\($0.decided.taskId)@\($0.decided.evidenceRevision)" })
         guard !answered.isEmpty else { return }
         decisionCards.removeAll { card in
@@ -2444,7 +2444,7 @@ final class ConsoleModel {
         for receipt in receipts where !decisionCards.contains(where: { $0.id == receipt.id }) {
             decisionCards.append(DeliveredDecisionCard(
                 kind: .evidenceDecisionReceipt(decided: receipt.decided),
-                afterItemID: receipt.afterItemID))
+                placement: .at(receipt.moment)))
         }
     }
 
@@ -2458,13 +2458,13 @@ final class ConsoleModel {
     /// vanishing mid-read. A press made HERE has already closed the card, so nothing is left to
     /// take away — this only adds.
     private func adoptAcceptanceReceipt() {
-        guard let receipt = AcceptanceConfirmations.receipt(standing: acceptanceConfirmation,
-                                                            items: state.items) else { return }
+        guard let receipt = AcceptanceConfirmations.receipt(standing: acceptanceConfirmation)
+        else { return }
         guard !closedCards.contains(receipt.id),
               !decisionCards.contains(where: { $0.id == receipt.id }) else { return }
         decisionCards.append(DeliveredDecisionCard(
             kind: .acceptanceConfirmationReceipt(confirmed: receipt.confirmation),
-            afterItemID: receipt.afterItemID))
+            placement: .at(receipt.moment)))
     }
 
     /// The same, for the decisions this session's runs have already recorded: each drawn where it
@@ -2478,12 +2478,12 @@ final class ConsoleModel {
     /// what `DeliveryAnchor` says — and so is a decision the read stops publishing: a row already
     /// adopted keeps its place, for `adoptReceipts`' reason.
     private func adoptOwnerReceipts(_ read: OwnerConfirmationView) {
-        for receipt in OwnerConfirmations.receipts(read, sessionID: sessionID, items: state.items) {
+        for receipt in OwnerConfirmations.receipts(read, sessionID: sessionID) {
             guard !closedCards.contains(receipt.id),
                   !decisionCards.contains(where: { $0.id == receipt.id }) else { continue }
             decisionCards.append(DeliveredDecisionCard(
                 kind: .ownerDecisionReceipt(taskID: receipt.taskId, decisionID: receipt.decided.id),
-                afterItemID: receipt.afterItemID))
+                placement: .at(receipt.moment)))
         }
     }
 
@@ -2496,14 +2496,14 @@ final class ConsoleModel {
     /// a different merge in the same place. The card that ASKED for a merge is let go of by the read
     /// that says it merged (`refreshRulerQuestions`), which is where the strip stops drawing it; what
     /// is adopted here is the record that replaces it. A merge whose moment is older than everything
-    /// loaded is not drawn at all — see `PromotionCards.receipts`.
+    /// loaded leads at the HEAD of the window — see `ReceiptAnchor.Placement`.
     private func adoptPromotionReceipts(_ merged: [ProjectPromotionView]) {
-        for receipt in PromotionCards.receipts(merged: merged, items: state.items) {
+        for receipt in PromotionCards.receipts(merged: merged) {
             guard !closedCards.contains(receipt.id),
                   !decisionCards.contains(where: { $0.id == receipt.id }) else { continue }
             decisionCards.append(DeliveredDecisionCard(
                 kind: .promotionReceipt(promotion: receipt.promotion),
-                afterItemID: receipt.afterItemID))
+                placement: .at(receipt.moment)))
         }
     }
 

@@ -393,16 +393,22 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     expect(count('.project-promotion-receipt')).toBe(1);
   });
 
-  it('is drawn in no conversation whose window begins after the merge', async () => {
+  it('leads at the head of a conversation whose window begins after the merge', async () => {
     mergesOnRecord = [merged({ merged: { sha: MERGED_SHA, byUserId: 'user-1', at: '2026-09-11T02:00:00Z' } })];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[COORDINATOR_PUBLIC]}, opening`);
     });
+    // Older than every loaded event: drawn ABOVE the conversation's first row, not dropped and not
+    // at the tail (see `decisionReceiptAnchor`) — a record that disappears on a long conversation
+    // is a record the owner cannot find, and one under everything after it says it happened now.
+    const receipt = record()!;
+    const first = mounted().querySelector<HTMLElement>('[data-seq]');
+    expect(first, 'the conversation drew no event to compare against').toBeTruthy();
     expect(
-      count('.project-promotion-receipt'),
-      'a merge older than every loaded event was drawn — about a conversation this is not',
-    ).toBe(0);
+      receipt.compareDocumentPosition(first!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the record is not ahead of the first loaded event',
+    ).toBeTruthy();
   });
 
   it('is drawn in no conversation that coordinates no project, which reads nothing for one', async () => {

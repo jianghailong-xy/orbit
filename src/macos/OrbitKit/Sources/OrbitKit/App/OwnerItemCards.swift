@@ -269,17 +269,18 @@ public enum PromotionCards {
 
     // MARK: the record a merge leaves
 
-    /// One merge this conversation draws as a record, and the item it belongs after.
+    /// One merge this conversation draws as a record.
     public struct Receipt: Equatable, Sendable, Identifiable {
         public let promotion: ProjectPromotionView
-        /// The transcript item that was last at or before the merge. A card delivered live anchors
-        /// to the item that was last when it ARRIVED; a record has no arrival of its own on a device
-        /// that was not there, so it is anchored by the merge's own clock instead (`ReceiptAnchor`).
-        public let afterItemID: String
+        /// The merge's own clock — the other four records read theirs off their payload, and this
+        /// one has to carry it: a promotion with no `merged` is a candidate on offer, not a record,
+        /// and `init?` is what keeps that from becoming a receipt nobody could place.
+        public let moment: String
 
-        public init(promotion: ProjectPromotionView, afterItemID: String) {
+        public init?(promotion: ProjectPromotionView) {
+            guard let at = promotion.merged?.at else { return nil }
             self.promotion = promotion
-            self.afterItemID = afterItemID
+            self.moment = at
         }
 
         /// The row this record is drawn in — the card's own address rather than a second spelling of
@@ -303,16 +304,12 @@ public enum PromotionCards {
     /// same way and from a read of its own (`GET /projects/:id/promotions/merged`, `mergedAt` as the
     /// anchor — `ProjectPromotionReceipt`); this is that read, and this is that anchor.
     ///
-    /// A merge whose moment is older than everything loaded is NOT drawn: the window this console
-    /// holds starts at the tail, so a record with no anchor has no honest place to go, and drawing it
-    /// at the tail instead is the defect itself.
-    public static func receipts(merged: [ProjectPromotionView],
-                                items: [TranscriptItem]) -> [Receipt] {
-        merged.compactMap { promotion in
-            guard let at = promotion.merged?.at,
-                  let anchor = ReceiptAnchor.after(items: items, at: at) else { return nil }
-            return Receipt(promotion: promotion, afterItemID: anchor)
-        }
+    /// A merge older than everything this console holds is still drawn: the record carries the
+    /// merge's own `merged.at`, and the row it belongs in is resolved against the rows loaded at
+    /// render time (`ReceiptAnchor.Placement`) — where it happened when that row is loaded, the head
+    /// of the window when the moment is above it.
+    public static func receipts(merged: [ProjectPromotionView]) -> [Receipt] {
+        merged.compactMap(Receipt.init)
     }
 }
 

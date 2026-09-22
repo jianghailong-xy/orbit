@@ -91,6 +91,12 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
         .user(UserBubble(id: id, text: "…", ts: ts, pending: false, queued: false))
     }
 
+    private func state(_ items: [TranscriptItem]) -> TranscriptState {
+        var s = TranscriptState()
+        s.items = items
+        return s
+    }
+
     /// Three items: before the confirmation, the one it was made on top of, and one after it.
     private func transcript() -> [TranscriptItem] {
         [item("i1", at: "2026-09-17T09:00:00.000Z"),
@@ -105,8 +111,7 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
     /// be telling the reader they confirmed wording they never saw.
     func testTheRecordNamesTheSealThatWasSignedAndNotTheOneStandingNow() throws {
         let standing = staleStanding()
-        let receipt = try XCTUnwrap(AcceptanceConfirmations.receipt(standing: standing,
-                                                                    items: transcript()))
+        let receipt = try XCTUnwrap(AcceptanceConfirmations.receipt(standing: standing))
 
         XCTAssertEqual(receipt.confirmation.criteriaDigest, Self.signed)
         let line = AcceptanceConfirmations.confirmedLine(receipt.confirmation)
@@ -122,14 +127,23 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
     }
 
     /// A record belongs where the DECISION happened — the door's clock, against the rows' own
-    /// clocks — and not where the read happened to bring it in. Here the confirmation landed
-    /// between `i2` and `i3`, so `i2` is what it goes after, however many items arrived later.
+    /// clocks, resolved at RENDER time — and not where the read happened to bring it in. Here the
+    /// confirmation landed between `i2` and `i3`, so `i2` is what it goes after, however many items
+    /// arrived later and whatever the window has since dropped.
     func testTheRecordIsPlacedWhereTheConfirmationHappened() throws {
-        let receipt = try XCTUnwrap(AcceptanceConfirmations.receipt(standing: staleStanding(),
-                                                                    items: transcript()))
-        XCTAssertEqual(receipt.afterItemID, "i2")
-        XCTAssertNotEqual(receipt.afterItemID, transcript().last?.id,
-                          "a record anchored at the tail is drawn as though it happened last")
+        let receipt = try XCTUnwrap(AcceptanceConfirmations.receipt(standing: staleStanding()))
+        let rows = TranscriptRows.build(
+            state: state(transcript()), statusCards: [], canPageOlder: false,
+            showWorkingIndicator: false,
+            decisionCards: [DeliveredDecisionCard(
+                kind: .acceptanceConfirmationReceipt(confirmed: receipt.confirmation),
+                placement: .at(receipt.moment))])
+        XCTAssertEqual(rows.map(\.id),
+                       ["i1", "i2", "acceptance-confirmation-receipt", "i3", "transcript-bottom"],
+                       "a record placed at the tail is drawn as though it happened last")
+        XCTAssertEqual(receipt.moment, "2026-09-17T09:30:00.000Z",
+                       "the row is resolved from the door's own clock, so that is what the card "
+                       + "carries to the transcript")
         XCTAssertEqual(receipt.id, "acceptance-confirmation-receipt")
         XCTAssertNotEqual(receipt.id,
                           DeliveredDecisionCard(kind: .acceptanceConfirmation).id,
@@ -137,24 +151,20 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
                               + "sharing an id costs the List its diff")
     }
 
-    /// What the record is NOT drawn from. An unconfirmed standing has no record on it, and a
-    /// confirmation older than everything this device holds cannot be placed without putting it
-    /// above things that happened first — neither is drawn, and neither is invented.
+    /// What the record is NOT drawn from: an unconfirmed standing has no record on it, and a
+    /// standing this device could not read is not an answer either. Neither is invented. (A
+    /// confirmation older than everything loaded IS drawn — at the head of the window, which is
+    /// `TranscriptRowsTests`' case and the rule of 2026-09-22.)
     func testNoRecordIsDrawnWithoutOneToDraw() throws {
         let material = [ConfirmedCriterionVersion(definitionId: "d1", revision: 1, contentHash: "h1")]
         let unconfirmed = StandardSetConfirmationStanding(
             state: .unconfirmed, confirmed: false,
             currentVersion: StandardSetVersion(digest: Self.moved, material: material),
             confirmation: nil)
-        XCTAssertNil(AcceptanceConfirmations.receipt(standing: unconfirmed, items: transcript()),
+        XCTAssertNil(AcceptanceConfirmations.receipt(standing: unconfirmed),
                      "a set nobody has confirmed has no record to draw")
-        XCTAssertNil(AcceptanceConfirmations.receipt(standing: nil, items: transcript()),
+        XCTAssertNil(AcceptanceConfirmations.receipt(standing: nil),
                      "and a standing this device could not read is not an answer either")
-
-        // Every loaded item is LATER than the confirmation: the moment is above this window.
-        let later = [item("i9", at: "2026-09-18T09:00:00.000Z")]
-        XCTAssertNil(AcceptanceConfirmations.receipt(standing: staleStanding(), items: later),
-                     "a record nobody can place must not be drawn in the wrong one")
     }
 
     /// The words on it, whole: what it is headed, and the stamp under the line saying who signed it.
@@ -188,10 +198,13 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
                                 to: "\n    /// Where one delivered proposal stands")
         let built = statements(adopt).joined(separator: " ")
         XCTAssertTrue(built.contains(
-            "AcceptanceConfirmations.receipt(standing: acceptanceConfirmation, items: state.items)"),
+            "AcceptanceConfirmations.receipt(standing: acceptanceConfirmation)"),
                       "the record must be built from the standing this console read")
         XCTAssertTrue(built.contains(".acceptanceConfirmationReceipt(confirmed: receipt.confirmation)"),
                       "and drawn as a receipt row rather than as a second card")
+        XCTAssertTrue(built.contains("placement: .at(receipt.moment)"),
+                      "with the door's own clock for the transcript to resolve against the rows "
+                      + "the console holds at render time")
     }
 
     /// And the other half of the same rule: the press keeps NO line of its own. An in-memory line

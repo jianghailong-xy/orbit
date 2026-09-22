@@ -211,35 +211,29 @@ final class EvidenceDecisionTests: XCTestCase {
         .assistant(AssistantBubble(id: id, text: "…", streamingText: "", seq: 1, turnId: "t", ts: ts))
     }
 
-    /// The anchor is the last row at or before the door's clock, so the record lands where the
-    /// decision happened — on a device that never saw the card, that is the only honest place.
-    func testAReceiptIsDrawnWhereTheDecisionHappened() {
-        let items = [item("a1", at: "2026-09-16T09:00:00.000Z"),
-                     item("a2", at: "2026-09-16T09:30:00.000Z"),
-                     item("a3", at: "2026-09-16T10:00:00.000Z")]
+    /// The record carries the door's own clock and nothing else: the row it is drawn in is resolved
+    /// at RENDER time against the rows the console holds (`ReceiptAnchor.place`,
+    /// `TranscriptRowsTests`), so a window that has since moved does not leave it pinned to a row
+    /// that no longer exists.
+    func testAReceiptCarriesTheMomentTheRecordIsPlacedBy() {
         let read = EvidenceDecisionQueue(
             decidingSessionId: "s", count: 0, pending: [], waitingOnYou: [],
             decided: [recorded(at: "2026-09-16T09:45:00.000Z")])
-        let receipts = EvidenceDecisions.receipts(queue: read, items: items)
-        XCTAssertEqual(receipts.map(\.afterItemID), ["a2"])
+        let receipts = EvidenceDecisions.receipts(queue: read)
+        XCTAssertEqual(receipts.map(\.moment), ["2026-09-16T09:45:00.000Z"])
         XCTAssertEqual(receipts.map(\.id), ["evidence-decision-receipt-34LMiluvx0jK63cj8arWl@1"])
     }
 
-    /// An answer older than everything this console holds is not drawn — the window starts at the
-    /// tail, so it has no honest place — and the paired control on the same row is one item early
-    /// enough to anchor it. A read that has not come back draws nothing at all.
-    func testAnAnswerOlderThanEverythingLoadedIsNotDrawn() {
+    /// An answer older than everything this console holds is STILL a record this console draws: it
+    /// is the read's answer, and the console hands its moment to the transcript, which puts it at
+    /// the head of the window (`TranscriptRowsTests`). A read that has not come back draws nothing.
+    func testAnAnswerOlderThanTheWindowIsStillDrawn() {
         let read = EvidenceDecisionQueue(
             decidingSessionId: "s", count: 0, pending: [], waitingOnYou: [],
             decided: [recorded(at: "2026-09-16T08:00:00.000Z")])
-        let later = [item("a1", at: "2026-09-16T09:00:00.000Z")]
-        XCTAssertTrue(EvidenceDecisions.receipts(queue: read, items: later).isEmpty)
-        XCTAssertEqual(
-            EvidenceDecisions.receipts(queue: read,
-                                       items: [item("a0", at: "2026-09-16T07:00:00.000Z")] + later)
-                .map(\.afterItemID),
-            ["a0"])
-        XCTAssertTrue(EvidenceDecisions.receipts(queue: nil, items: later).isEmpty)
+        XCTAssertEqual(EvidenceDecisions.receipts(queue: read).map(\.moment),
+                       ["2026-09-16T08:00:00.000Z"])
+        XCTAssertTrue(EvidenceDecisions.receipts(queue: nil).isEmpty)
     }
 
     /// What the question card is let go of by: the read naming that revision's answer.

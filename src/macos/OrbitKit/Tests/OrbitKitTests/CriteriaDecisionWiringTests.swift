@@ -284,8 +284,12 @@ final class CriteriaDecisionWiringTests: XCTestCase {
     /// half — the derivation, or the question giving way — is what turns this red.
     func testTheConsoleDerivesReceiptsFromTheReadAndLetsTheAnsweredQuestionGo() throws {
         let console = try source(Self.consolePath)
-        XCTAssertTrue(console.contains("CriteriaDecisions.receipts(queue: queue, items: state.items)"),
-                      "the receipts are derived from the read's own answers, placed by the items' clocks")
+        XCTAssertTrue(console.contains("CriteriaDecisions.receipts(queue: queue)"),
+                      "the receipts are derived from the read's own answers")
+        XCTAssertTrue(console.contains("placement: .at(receipt.moment)"),
+                      "each carrying the door's own clock — the transcript resolves the row against "
+                      + "the items it holds at RENDER time, which is what a trimmed window cannot "
+                      + "outlive")
         XCTAssertTrue(console.contains("kind: .criteriaDecisionReceipt(settled: receipt.settled)"),
                       "and delivered as rows of their own, carrying the answer they record")
         // The press itself writes nothing: the re-read draws the record, and a press that also

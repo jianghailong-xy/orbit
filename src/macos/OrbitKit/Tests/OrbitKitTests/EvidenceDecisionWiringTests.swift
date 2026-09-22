@@ -208,8 +208,11 @@ final class EvidenceDecisionWiringTests: XCTestCase {
     /// the receipts from them on every refresh and lets go of each revision the read names.
     func testTheConsoleDerivesEvidenceReceiptsFromTheReadAndLetsTheAnsweredQuestionGo() throws {
         let console = try source(Self.consolePath)
-        XCTAssertTrue(console.contains("EvidenceDecisions.receipts(queue: queue, items: state.items)"),
-                      "the receipts are derived from the read's own answers, placed by the items' clocks")
+        XCTAssertTrue(console.contains("EvidenceDecisions.receipts(queue: queue)"),
+                      "the receipts are derived from the read's own answers")
+        XCTAssertTrue(console.contains("placement: .at(receipt.moment)"),
+                      "each carrying the door's own clock — the transcript resolves the row at "
+                      + "render time")
         XCTAssertTrue(console.contains("kind: .evidenceDecisionReceipt(decided: receipt.decided)"),
                       "and delivered as rows of their own, carrying the answer they record")
         let press = try section(console, from: "func decideEvidence", to: "func confirmStandardSet")

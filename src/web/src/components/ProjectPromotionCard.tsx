@@ -597,7 +597,8 @@ export function ProjectPromotion({
  * A RECORD IS NOT A QUESTION, so it is not the card the strip draws: no press is on it, and where it
  * lands is the caller's — `WorkspaceView` anchors it at `merged.at` with `decisionReceiptAnchor`,
  * the rule the criteria, evidence, owner and settlement receipts beside it are drawn by, and a
- * moment older than every event the client holds is drawn nowhere.
+ * moment older than every event the client holds leads at the HEAD of the window — nothing is
+ * drawn at the tail, and nothing is dropped (`decisionReceiptAnchor`).
  *
  * WHAT IT SAYS IS THE MERGE'S OWN, read off the terminal row. The two rows the live card adds about
  * where the branch stands NOW — how many criteria read "on main", how many tasks are still open —

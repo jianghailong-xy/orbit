@@ -497,7 +497,9 @@ export function AcceptanceConfirmationCard({
  * `decisionReceipts`), like the criteria, evidence and owner receipts beside it, and like this
  * record on the native clients (`AcceptanceConfirmations.receipt` +
  * `ReceiptAnchor.after(items:at:)`) — a moment older than every loaded event is a record about a
- * conversation this one is not, and is not drawn at all.
+ * conversation this one is not — it leads at the HEAD of the window instead, above the first row
+ * and above the load-earlier control (`decisionReceiptAnchor`), which is where the native clients
+ * draw it too (`ReceiptAnchor.Placement.beforeWindow`).
  */
 export function AcceptanceConfirmationReceipt({
   confirmation,
