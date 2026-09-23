@@ -271,7 +271,8 @@ export interface ProjectOpenItemRow<Instant = string> {
   assigneeReason: OpenItemAssigneeReason;
   /** When the wait began. Reset when the owner sends an item back to the coordinator (§4.7). */
   waitingSince: Instant;
-  /** When it stops being the coordinator's, frozen at creation; null once it is the owner's. */
+  /** When it stops being the coordinator's: the deadline frozen at creation, moved on while the
+   *  coordinator conversation is still carrying it (§4.6); null once it is the owner's. */
   escalateAt: Instant | null;
   escalatedAt: Instant | null;
   taskId: string | null;

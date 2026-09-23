@@ -160,7 +160,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let assignee: ProjectOpenItemAssignee
     /// Read by the card's heading, which is the owner's one sentence about how the item got here.
     public let assigneeReason: ProjectOpenItemAssigneeReason
-    /// When it stops being the coordinator's, frozen at creation; null once it is the owner's.
+    /// When it stops being the coordinator's: the deadline frozen at creation, moved on while the
+    /// coordinator conversation is still carrying it (§4.6); null once it is the owner's.
     public let escalateAt: String?
     /// When the clock handed it to the owner. Part of the escalated card's heading, which says how
     /// long the coordinator had it before that.
