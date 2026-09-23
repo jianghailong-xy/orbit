@@ -44,7 +44,9 @@
  * HUMAN_ONLY refusal the thing that stops an agent from authorising its own. `(5)` asserts both
  * halves on the row itself, and `(6)` the other door into that column: `ProjectsService.update`
  * takes the switch on its own, with no second field to name — which it did not until 0292, when
- * `assertLevelNamedWhenTurningOn` still answered a one-field request with a 400.
+ * `assertLevelNamedWhenTurningOn` still answered a one-field request with a 400. `(7)` is who
+ * hears of the start: the conversation the project is coordinated from is told, once, which of its
+ * tasks nothing will start but that conversation.
  *
  * WHY THIS IS A `.pg.spec`
  * ------------------------
@@ -61,17 +63,28 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import {
+  CreatorType,
+  RunStatus,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskStatus,
+} from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { QueueService } from '../queue/queue.service';
+import type { RealtimeService } from '../realtime/realtime.service';
+import { SessionsService } from '../sessions/sessions.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { projectStartedTurnId } from './project-started';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -487,5 +500,154 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     // reads the second one everywhere.
     assert.deepEqual(await authorization(switched.id), { enabled: true, revision: '1' },
       'a request naming nothing but the switch turned the coordinator on');
+  });
+
+  // ═══ (7) starting the project tells the conversation holding its work ══════════════════════════
+
+  await t.test('(7) starting the project tells its coordinator which tasks wait on it, once', async () => {
+    // The press lets Orbit start the tasks opted into auto-run. The ones a coordinator filed to
+    // start by hand wait on that coordinator, so the start is said to its conversation — the one
+    // collaborator every other case here goes without, which is why they tell nobody.
+    const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
+    const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
+    const telling = new ProjectAcceptanceService(
+      prisma as unknown as PrismaService,
+      new SessionsService(prisma as unknown as PrismaService, queue, realtime),
+    );
+    const HELD = 'the task its coordinator starts by hand';
+    const AUTOMATIC = 'the task Orbit starts by itself';
+
+    /** A project not yet started, coordinated from a conversation parked where a turn appends —
+     *  on a workspace whose runner is heartbeating — with one task of each kind filed under it. */
+    async function coordinated(label: string, completedAt: Date | null) {
+      const runnerId = randomUUID();
+      const workspaceId = randomUUID();
+      const sessionId = randomUUID();
+      const id = randomUUID();
+      await prisma.runner.create({
+        data: {
+          id: runnerId,
+          ownerId,
+          name: `${label}-runner`,
+          tokenHash: `hash-${runnerId}`,
+          status: RunnerStatus.ONLINE,
+          capabilities: [],
+          capabilitiesReportedAt: new Date(),
+          lastHeartbeatAt: new Date(),
+        },
+      });
+      await prisma.workspace.create({
+        data: { id: workspaceId, ownerId, runnerId, name: `${label}-workspace`, enabled: true },
+      });
+      await prisma.session.create({
+        data: {
+          id: sessionId,
+          ownerId,
+          creatorId: ownerId,
+          workspaceId,
+          assignedRunnerId: runnerId,
+          title: `协调：${label}`,
+          prompt: `协调：${label}`,
+          provider: 'claude',
+          status: RunStatus.AWAITING_INPUT,
+          dispatchOrigin: SessionDispatchOrigin.USER,
+          startedAt: new Date(),
+          runtimeSessionId: randomUUID(),
+          completedAt,
+        },
+      });
+      await prisma.conversationTurn.create({
+        data: {
+          sessionId,
+          seq: 1,
+          clientTurnId: SessionsService.initialTurnClientId(sessionId),
+          kind: 'message',
+          content: `协调：${label}`,
+          status: 'ANSWERED',
+        },
+      });
+      await prisma.project.create({
+        data: {
+          id,
+          ownerId,
+          title: `${label} 的项目`,
+          coordinatorWorkspaceId: workspaceId,
+          coordinatorSessionId: sessionId,
+        },
+      });
+      await prisma.projectRuntime.upsert({ where: { projectId: id }, create: { projectId: id }, update: {} });
+      await projects.update(ownerId, id, {
+        acceptanceCriteriaItems: [{ text: FIRST, verificationMethod: METHOD }],
+      } as never);
+      const heldId = randomUUID();
+      for (const [taskId, title, autoRunWhenReady] of [
+        [heldId, HELD, false],
+        [randomUUID(), AUTOMATIC, true],
+      ] as const) {
+        await prisma.task.create({
+          data: {
+            id: taskId,
+            ownerId,
+            projectId: id,
+            title,
+            creatorType: CreatorType.USER,
+            creatorId: ownerId,
+            assigneeId: workspaceId,
+            status: TaskStatus.OPEN,
+            completionCriterion: 'EXECUTABLE',
+            acceptanceCommand: 'true',
+            acceptanceExpectedExitCode: 0,
+            autoRunWhenReady,
+          },
+        });
+      }
+      assert.deepEqual(await authorization(id), { enabled: false, revision: '0' },
+        'the fixture project is not started yet');
+      return { id, sessionId, heldId };
+    }
+
+    async function turns(sessionId: string): Promise<Array<{ client_turn_id: string; content: string }>> {
+      const { rows } = await sql.query<{ client_turn_id: string; content: string }>(
+        `SELECT "client_turn_id", "content" FROM "conversation_turn"
+          WHERE "session_id" = $1::uuid ORDER BY "seq"`,
+        [sessionId],
+      );
+      return rows;
+    }
+
+    async function start(id: string): Promise<void> {
+      const standing = await telling.standardSetConfirmation(ownerId, id);
+      await telling.confirmStandardSet(ownerId, id, { criteriaDigest: standing.currentVersion.digest });
+    }
+
+    // First, a conversation somebody closed: filed as Completed, which `createTurn` itself would
+    // still queue onto. The project starts; the conversation is not revived to be told.
+    const closed = await coordinated('closed', new Date());
+    await start(closed.id);
+    assert.deepEqual(await authorization(closed.id), { enabled: true, revision: '1' });
+    assert.equal((await turns(closed.sessionId)).length, 1,
+      'a conversation that was closed was written to, which revives it');
+
+    // Then the one that is waiting: told exactly once, with the task it holds by name.
+    const waiting = await coordinated('waiting', null);
+    await start(waiting.id);
+    assert.deepEqual(await authorization(waiting.id), { enabled: true, revision: '1' });
+    const { rows: [confirmation] } = await sql.query<{ id: string }>(
+      `SELECT "id" FROM "project_standard_set_confirmation" WHERE "project_id" = $1::uuid`,
+      [waiting.id],
+    );
+    const told = await turns(waiting.sessionId);
+    assert.equal(told.length, 2, 'starting the project put exactly one message on its conversation');
+    const [, message] = told;
+    assert.equal(message.client_turn_id, projectStartedTurnId(confirmation.id));
+    assert.match(message.content, /^From Orbit · project started/);
+    assert.ok(message.content.includes(`- ${HELD} (${uuidToBase62(waiting.heldId)})`),
+      'the task nothing starts but the coordinator is named');
+    assert.ok(!message.content.includes(AUTOMATIC), 'a task Orbit starts by itself is not');
+
+    // A re-confirmation writes a second confirmation row and starts nothing — so it says nothing.
+    await start(waiting.id);
+    assert.equal((await turns(waiting.sessionId)).length, 2,
+      'a confirmation that started nothing told the coordinator again');
   });
 });
