@@ -103,7 +103,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/integration-job-relay.ts#applyIntegrationJobResult',
     shape: 'TX_RETRIED',
-    locks: 'project_integration_job (rank 60) by primary key, then whatever the writes it implies take: session_merge_receipt (rank 60) for a landing, project_open_item (rank 60) for a failure. Nothing above rank 60 is locked — the foreign keys of both children take `session`, `task` and `project` FOR KEY SHARE, which no status write conflicts with, and the job row itself is the only thing two runners could both want.',
+    locks: 'project_integration_job (rank 60) by primary key, then whatever the writes it implies take: session_merge_receipt (rank 60) for a landing, project_open_item (rank 60) for a failure, and — for a landing that answered ALREADY_LANDED about a branch the task work did not end on — one more project_integration_job row (rank 60) for the generation that branch is owed (`queueLandingBehindTheWork`). Nothing above rank 60 is locked — the foreign keys of the children take `session`, `task` and `project` FOR KEY SHARE, which no status write conflicts with, and the job row itself is the only thing two runners could both want.',
     identity: "The job, and the claim it was reported under: `(id, claim_lease_owner, claim_generation)`. A result from a process whose claim was taken over matches no row and is refused STALE_CLAIM; a result whose response was lost and is resent finds the job already terminal and is answered `accepted: false` rather than applied twice. The receipt below it carries its own key (`mr:v1` over session, source SHA, target branch and result), so even a second application would add no second receipt.",
     isolation: '',
     attempts: 4,

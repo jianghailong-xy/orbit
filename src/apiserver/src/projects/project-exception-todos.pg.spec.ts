@@ -625,6 +625,20 @@ async function claimedLanding(
   });
   assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE, 'the acceptance command agreed');
 
+  // The session that produced this branch has stopped moving: the runner commits a worktree when it
+  // FINISHES the session (SR13), and a landing is not handed over before that (J-T1a,
+  // `task-landing-races-final-commit.pg.spec.ts` — a landing judged earlier answers ALREADY_LANDED
+  // about a branch that is about to grow). The status is left as it was: what the queue reads is
+  // the finish and where HEAD ended, and this spec's cases are about the items a landing opens.
+  await stack.db.session.update({
+    where: { id: a.sessionId },
+    data: {
+      finishedAt: new Date(),
+      worktreeBranch: `orbit/${label}`,
+      worktreeDirty: false,
+    },
+  });
+
   const claimed = await stack.jobs.dispatch({
     runnerId: w.runnerId,
     leaseOwner: `lease-${label}`,
@@ -1299,6 +1313,18 @@ test('a claim with nowhere to run it opens an item the coordinator is told about
       shellOutput: '',
     });
     assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE);
+
+    // The session that produced this branch has stopped moving, as in `claimedLanding`: a landing is
+    // not handed over before the runner's finalize records it (J-T1a, `landingWorkHasSettled`), and
+    // this case is about the other reason a claim ends where it was made.
+    await stack.db.session.update({
+      where: { id: a.sessionId },
+      data: {
+        finishedAt: new Date(),
+        worktreeBranch: 'orbit/unworkable',
+        worktreeDirty: false,
+      },
+    });
 
     const claimed = await stack.jobs.dispatch({
       runnerId: w.runnerId,

@@ -324,15 +324,15 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | # | from | 已提交事实 | to | 附带写入（同一事务） |
 |---|---|---|---|---|
 | J-T1 | — | 入队事实（§2.3） | `QUEUED` | L3（第一条）；同任务更早的 `QUEUED` 行 → `SUPERSEDED` |
-| J-T2 | `QUEUED` | 心跳领取 CAS：该 runner 声明 `integration-job/v1` 且未 draining；同 `serial_key` 无 `RUNNING`；按 `(created_at, id)` 取最早 | `RUNNING` | `claim_generation + 1`、`claim_lease_owner`、`claimed_at`、`heartbeat_at` |
+| J-T2 | `QUEUED` | 心跳领取 CAS：该 runner 声明 `integration-job/v1` 且未 draining；`LAND_TASK` 还要求该任务没有 `finished_at IS NULL` 的工作会话（见 J-T1e）；同 `serial_key` 无 `RUNNING`；按 `(created_at, id)` 取最早 | `RUNNING` | `claim_generation + 1`、`claim_lease_owner`、`claimed_at`、`heartbeat_at` |
 | J-T3 | `RUNNING` | 领取时发现 `heartbeat_at < now() - 10 min`（runner 失联） | `RUNNING`（换认领者） | `claim_generation + 1`。旧认领者的结果回报被 409 `STALE_CLAIM` 拒绝 |
 | J-T4 | `RUNNING` | 进度回报（`phase`、`heartbeat_at`；晋升重检见 M-T7） | `RUNNING` | |
-| J-T5 | `RUNNING` | 结果回报：`LANDED` / `ALREADY_LANDED` | 同名终态 | 回执（J8）；解决该任务的集成类待办（X 表）；提交后边沿见 J9–J11 |
+| J-T5 | `RUNNING` | 结果回报：`LANDED` / `ALREADY_LANDED` | 同名终态 | 回执（J8）；解决该任务的集成类待办（X 表）；提交后边沿见 J9–J11。抢跑的 `ALREADY_LANDED`（判定的领取早于该任务工作结束）不落终态，退回 `QUEUED`（见 J-T1e） |
 | J-T6 | `RUNNING` | 结果回报：`READY`（仅 `CHECK_PROMOTION`） | `READY` | 晋升 → `READY`（M-T2） |
 | J-T7 | `RUNNING` | 结果回报：`CONFLICT` / `CHECK_FAILED` / `ERROR` | 同名终态 | 例外待办（§4.2）；晋升 → `BLOCKED`（若有） |
 | J-T8 | `QUEUED` / `RUNNING` | 任务被重开或取消、晋升被取代或拒绝、owner 取消（写 `cancel_requested_at`） | `CANCELLED` | `RUNNING` 行由 runner 在下一个阶段边界回报 `CANCELLED` |
 
-**J5（不自动重试）**：`CONFLICT`、`CHECK_FAILED`、`ERROR` 之后平台不再入队，重试只由 J-T1b、J-T1c 两个事实触发（判据 6）。唯一例外是 runner 在同一次作业内处理「推送时目标被别人推进」：回到 FETCH，最多再做 2 轮（附录 A-Q5），不另起作业。
+**J5（不自动重试）**：`CONFLICT`、`CHECK_FAILED`、`ERROR` 之后平台不再入队，重试只由 J-T1b、J-T1c 两个事实触发（判据 6）。唯一例外是 runner 在同一次作业内处理「推送时目标被别人推进」：回到 FETCH，最多再做 2 轮（附录 A-Q5），不另起作业。（J-T1e 的补排不在此列：它入队的是**另一条分支上的首次落地**，不是对任何失败作业的重试，被抢跑判掉的那个作业本身仍是终态。）
 
 ### 2.3 触发点
 
@@ -351,6 +351,13 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 **J-T1c（任务分支来了新提交）**：该任务工作会话的 `turnComplete` 提交时，若 `dto.branchSha` 与该任务最近一条失败作业的 `source_sha` 不同、任务仍是 DONE、且有 OPEN 的集成类待办，同一事务入队下一个 generation（效果图 5：「push to the task branch — Orbit re-integrates and re-checks on its own」）。
 
 **J-T1d（线开始时补入队）**：见 L3 第 4 步。
+
+**J-T1e（不许抢跑；判成了「没有独有提交」而成果在另一条分支上）**：`LAND_TASK` 的 `ALREADY_LANDED` 只在**该任务的工作已经停止移动**时才写成终态，因为 runner 在**结束会话**时才提交 worktree（SR13），而作业由结束它的那次 DONE 入队——线可能在提交存在之前就被交给一条空分支，那时它唯一能给的答案就是 `ALREADY_LANDED`，而那是终态、按设计不再重投。两条守卫（`project-integration-job.ts` 的 `landingWorkHasSettled` / `landingJudgedTooEarly`，SQL 见 `integration-job-relay.ts#claimOne`）：
+
+- **领取（J-T2）**：该任务任一工作会话 `finished_at IS NULL` 时不领取，留在 `QUEUED`；会话结束后第一个心跳领取（那时 fetch 到的分支才带着收尾提交）。
+- **判定（J-T5）**：回报的 `claimed_at` 早于某工作会话的 `finished_at`（或该会话尚未结束）时不落终态，该行退回 `QUEUED` 清空认领，由下一次领取重判。
+
+**补排**：终态 `ALREADY_LANDED` 的 `source_ref` 若**不是**该任务工作结束所在的分支（该任务最后结束的工作会话的 `worktree_branch`，缺省回落 `branch`；`workBranchEndedOn`），成果就没有任何路线——同一事务入队下一个 generation，`source_ref` 指向那条分支（`queueLandingBehindTheWork`，`landingLeftWorkBehind` 为判据）。2026-09-23 的事故：任务 `01a0ce5e…` 的 DONE 冻结了**已经失败的那轮 retry** 的分支 `orbit/autorun-false-830a9b`（tip 就是项目分支 tip，什么都没带），而 151 轮那条会话的 `789a8fffc` 在 `orbit/autorun-false-91f94d` 上；线答 ALREADY_LANDED 时那条会话还有 2 分 42 秒没跑完，成果最后靠两次人工 cherry-pick 才落地。用例见 `src/apiserver/src/tasks/task-landing-races-final-commit.pg.spec.ts`。
 
 **J-T2 的投递**：`HeartbeatResponse` 新增 `integrationJobs: IntegrationJobCommand[]`，由 `integration-job-relay.ts` 的 `dispatchIntegrationJobs`（照抄 `codex-reset-relay.ts` 的 `dispatchCodexResetCommand`）填入，每拍每个 runner 至多 2 条、串行键互不相同。结果与进度路由：
 

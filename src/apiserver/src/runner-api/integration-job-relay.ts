@@ -16,12 +16,16 @@ import {
   INTEGRATION_JOB_CLAIM,
   INTEGRATION_JOB_PHASES,
   INTEGRATION_JOB_STATES,
+  LandingWorkSessionFacts,
   MAX_CHECK_OUTPUT_TAIL,
   integrationDedupeKey,
   integrationItemTitle,
   isTerminalJobState,
   jobLanded,
+  landingJudgedTooEarly,
+  landingLeftWorkBehind,
   openItemKindForJobState,
+  queueLandingBehindTheWork,
   shortBranchName,
 } from '../projects/project-integration-job';
 import {
@@ -275,6 +279,23 @@ async function claimOne(
        WHERE w."runner_id" = ${runnerId}::uuid
          AND c."cancel_requested_at" IS NULL
          AND NOT (c."serial_key" = ANY(${alreadyTaken}::text[]))
+         -- J-T1a / §2.6: a landing is not judged while the task's own work can still move. The
+         -- runner commits a worktree when it FINISHES the session (SR13), so a branch handed to the
+         -- line during that session is a branch that carries nothing yet: the line can only answer
+         -- ALREADY_LANDED about it, that answer is terminal by design, and the commit arrives
+         -- afterwards with no route at all. The job stays QUEUED instead, and the first heartbeat
+         -- after the session ends is handed it. landingWorkHasSettled is the same rule in
+         -- TypeScript (projects/project-integration-job.ts), and the two are read together.
+         --
+         -- Deliberately only LAND_TASK: it is the kind whose subject is one task. A promotion's
+         -- subject is a branch (its row names no task on purpose), and a candidate's own source is
+         -- resolved and frozen by the check it exists to run (M-S1, 0293).
+         AND (c."kind" <> 'LAND_TASK' OR c."task_id" IS NULL OR NOT EXISTS (
+              SELECT 1 FROM "session" w
+               WHERE w."task_id" = c."task_id"
+                 AND w."starts_task_work" = true
+                 AND w."deleted_at" IS NULL
+                 AND w."finished_at" IS NULL))
          -- M2: while the item about an unresolved absorb of the upstream is still open, no later
          -- landing on that same repository-and-ref is claimed. The conflict is not one task's — it
          -- is the branch's relationship with the upstream, so the NEXT landing would hit exactly the
@@ -381,6 +402,32 @@ async function finishUnworkable(
 }
 
 // ── progress and result ───────────────────────────────────────────────────────────────────────
+
+/**
+ * The work sessions of one task, as the two landing rules read them (§2.6 J-T1a).
+ *
+ * The same three columns `enqueueForDoneTask` freezes a session from, plus the two the finalize
+ * writes about how it left the checkout — and every one of them is the runner's fact about its own
+ * checkout, never something this process infers.
+ */
+async function readLandingWorkSessions(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+): Promise<LandingWorkSessionFacts[]> {
+  const rows = await tx.session.findMany({
+    where: { taskId, startsTaskWork: true, deletedAt: null },
+    select: {
+      id: true, branch: true, worktreeBranch: true, finishedAt: true, assignedRunnerId: true,
+    },
+  });
+  return rows.map((row) => ({
+    sessionId: row.id,
+    branch: row.branch,
+    worktreeBranch: row.worktreeBranch,
+    finishedAt: row.finishedAt,
+    runnerId: row.assignedRunnerId,
+  }));
+}
 
 /** Why a report was refused, in the shape the controller turns into a status code. */
 export type IntegrationResultRefusal = 'STALE_CLAIM' | 'NOT_FOUND' | 'ALREADY_FINAL' | 'INVALID_RESULT';
@@ -492,7 +539,7 @@ export async function applyIntegrationJobResult(
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
-        claimLeaseOwner: true, claimGeneration: true, runnerId: true,
+        claimLeaseOwner: true, claimGeneration: true, runnerId: true, claimedAt: true,
         task: { select: { title: true } },
       },
     });
@@ -511,6 +558,38 @@ export async function applyIntegrationJobResult(
       || (input.runnerId != null && job.runnerId !== input.runnerId)
     ) {
       throw new IntegrationJobRefused('STALE_CLAIM');
+    }
+
+    // §2.6 J-T1a: the task's own work, as the two rules below read it. A landing whose subject is one
+    // task is judged against that task's sessions — which is the whole of "can this branch still
+    // move", and the reason a job's own `session_id` is not enough here: the incident this rule was
+    // written for had its work in a session the enqueue had not frozen.
+    const work = job.kind === 'LAND_TASK' && job.taskId
+      ? await readLandingWorkSessions(tx, job.taskId)
+      : [];
+
+    if (job.kind === 'LAND_TASK' && job.taskId
+        && state === 'ALREADY_LANDED' && landingJudgedTooEarly(job.claimedAt, work)) {
+      // Not written down as final, and NOT without a trace: the row goes back to the queue it came
+      // from, clearing the claim, and the line will be handed it again — which, by the claim guard
+      // above, is the first heartbeat after this task's work has stopped moving. Nothing follows
+      // from this result (no receipt, no item resolution, nothing for the caller to deliver): it is
+      // not an answer, it is the same question asked too early, and the runner is told so rather
+      // than told an error, because nothing about its work was wrong.
+      await tx.projectIntegrationJob.update({
+        where: { id: job.id },
+        data: {
+          state: 'QUEUED',
+          phase: null,
+          claimLeaseOwner: null,
+          claimedAt: null,
+          heartbeatAt: null,
+        },
+      });
+      return {
+        answer: { accepted: true, state: 'QUEUED' as never, receiptIds: [], openItemId: null },
+        after: null,
+      };
     }
 
     const receiptIds = jobLanded(state) && job.sessionId && !job.promotionId
@@ -584,6 +663,22 @@ export async function applyIntegrationJobResult(
         heartbeatAt: new Date(),
       },
     });
+
+    // §2.6, the other half: the line answered about a branch this task's work did not end on, so the
+    // commits are on a branch nothing has offered and nothing will — the row just written is terminal
+    // and a terminal job is not queued again. The task is owed the NEXT generation bound to the
+    // branch the work ended on, and it is written here, after that state (J3's one-inflight-landing
+    // index only has room for it once this row has stopped being the live one) and in the same
+    // transaction (a landing owed and not recorded is the bug this whole rule is about).
+    if (job.kind === 'LAND_TASK' && job.taskId
+        && state === 'ALREADY_LANDED' && landingLeftWorkBehind(job, work)) {
+      await queueLandingBehindTheWork(tx, {
+        ownerId: job.ownerId,
+        projectId: job.projectId,
+        taskId: job.taskId,
+        sessions: work,
+      });
+    }
 
     // §2.6: a failed job is somebody's to look at, and the platform does not retry it by itself.
     let openItemId: string | null = null;
