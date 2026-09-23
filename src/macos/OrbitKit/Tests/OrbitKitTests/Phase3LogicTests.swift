@@ -34,9 +34,14 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertEqual(ReferenceLink.route(URL(string: "orbit-session:5rYtl8WA1NSca2rDrCMHmW")!),
                        .session("5rYtl8WA1NSca2rDrCMHmW"))
         XCTAssertFalse(ReferenceLink.isInert(URL(string: "orbit-task:34MUgGQQWqTXPwyihadZ7")!))
-        // A task list switches the Tasks page to its scope.
+        // A task list switches the Tasks page to its scope — under the spelling the page knows it
+        // by, whichever spelling the link used.
         XCTAssertEqual(ReferenceLink.route(URL(string: "orbit-list:347en66xizlGSG9a6Nej5")!),
                        .list("347en66xizlGSG9a6Nej5"))
+        let listUUID = "01a0cca0-aeaa-7618-bd5a-caccc089108c"
+        XCTAssertEqual(ReferenceLink.route(URL(string: "orbit-list:\(listUUID)")!),
+                       ReferenceLink.route(URL(string: "orbit-list:\(PublicID.toPublic(listUUID))")!))
+        XCTAssertNotEqual(ReferenceLink.route(URL(string: "orbit-list:\(listUUID)")!), .list(listUUID))
     }
 
     /// A project is not inert either — it goes to the conversation that coordinates it, which the

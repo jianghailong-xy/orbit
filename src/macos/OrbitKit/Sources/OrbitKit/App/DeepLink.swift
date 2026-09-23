@@ -63,7 +63,9 @@ public enum ReferenceLink {
         switch ref.kind {
         case "task":    return .task(ref.id)
         case "session": return .session(ref.id)
-        case "list":    return .list(ref.id)
+        // A list is named by its public id everywhere the Tasks page knows it (`TaskListSummary.id`),
+        // so a link that spelled it as a UUID still lands on the row that is showing.
+        case "list":    return .list(PublicID.toPublic(ref.id))
         default:        return nil
         }
     }
