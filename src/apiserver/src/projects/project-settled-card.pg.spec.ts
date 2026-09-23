@@ -35,7 +35,7 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { criteriaFromDefinitions, criterionKeyOf } from './project-acceptance';
-import { criterionLanding, landingBranchesFor } from './project-criterion-landing';
+import { LANDING_SERVING_WORK_SELECT, criterionLanding, landingBranchesFor } from './project-criterion-landing';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import {
   ProjectTasksSettledProducer,
@@ -491,10 +491,10 @@ async function expectedTurnId(db: PrismaClient, projectId: string): Promise<stri
           id: true,
           title: true,
           status: true,
-          // SR5's escape hatch, which the landing fold reads: this expectation has to be folded from
-          // the same facts the product's own reader carries, or the mirror can disagree with it.
-          codeless: true,
-          mergeReceipts: { select: { result: true, targetBranch: true } },
+          // Everything the landing fold reads, spread from the module that folds it: this
+          // expectation has to be folded from the same facts the product's own reader carries, or
+          // the mirror can disagree with it.
+          ...LANDING_SERVING_WORK_SELECT,
         },
       },
     },

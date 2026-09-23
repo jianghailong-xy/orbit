@@ -7,7 +7,7 @@ import { WakeFact, criterionUnlandedFact } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
 import type { MechanicalAction } from './mechanical-disposition';
 import { criterionKeyOf } from './project-acceptance';
-import { criterionLanding, landingBranchesFor } from './project-criterion-landing';
+import { LANDING_SERVING_WORK_SELECT, criterionLanding, landingBranchesFor } from './project-criterion-landing';
 
 /** The project disappeared between the committed criterion read and the wake's authorization. */
 export const CRITERION_UNLANDED_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -132,10 +132,11 @@ export class CriterionUnlandedProducer {
             select: {
               id: true,
               status: true,
-              // SR5's escape hatch, which the fold reads: work that declares it needs no code has
-              // nothing to land and does not withhold LANDED.
-              codeless: true,
-              mergeReceipts: { select: { result: true, targetBranch: true } },
+              // Everything the landing fold reads, from the module that decides what "landed"
+              // means — including the answers the line gave about these branches. Spread rather
+              // than spelled, so this fact cannot come to say "still on the line" about a criterion
+              // the fold calls LANDED.
+              ...LANDING_SERVING_WORK_SELECT,
             },
           },
         },

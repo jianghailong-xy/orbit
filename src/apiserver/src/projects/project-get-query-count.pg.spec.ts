@@ -64,7 +64,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 /**
  * What one project detail read costs, whatever is in the project.
  *
- * Twenty statements, and every one of them is per RELATION rather than per row:
+ * Twenty-two statements, and every one of them is per RELATION rather than per row:
  *
  *   4  the project document — the row, its coordinator members, its runtime, its criteria;
  *   1  the per-status task tally, read from `project_task_status_count` by project id. It replaced
@@ -82,9 +82,17 @@ const sha = (nibble: string) => nibble.repeat(40);
  *   5  the satisfaction derivation — its criteria, their serving tasks, and, off those tasks, the
  *      verifications pointed at them, their newest completion evidence, and that evidence's
  *      decisions;
- *   4  the landing lane — its criteria, their serving tasks, those tasks' merge receipts, and the
- *      project's own binding, which says which two branches those receipts have to name
- *      (`project-integration-line.ts`); the same row the integration line is served from;
+ *   6  the landing lane — its criteria, their serving tasks, those tasks' merge receipts, those same
+ *      tasks' integration jobs, the work sessions those jobs were queued for, and the project's own
+ *      binding, which says which two branches the receipts have to name
+ *      (`project-integration-line.ts`); the same row the integration line is served from. The jobs
+ *      and their sessions are the two levels added when this lane stopped answering "nothing to
+ *      land" from a task's declaration alone (see `taskHasNothingToLand`): the line's own answer
+ *      about a branch is a column on the job that was handed it, and whether that answer was about
+ *      the branch as its session left it is on the session (`jobSawTheFinishedBranch`), so the fold
+ *      cannot be read without either. Two more STATEMENTS and not one more query per task — Prisma
+ *      issues one statement per relation level, and each of these is a whole level, so fifteen
+ *      serving tasks of the large fixture cost them what the one task of the small one does;
  *   4  the independence lane, which is the one that is not shaped like the other two;
  *   1  the project's blockers — every open one and the latest resolved, each with the title of the
  *      task it is about, joined in the same statement (`project-blocker-resolution.ts`);
@@ -129,7 +137,7 @@ const sha = (nibble: string) => nibble.repeat(40);
  * and fourth would BOTH be five statements at the large fixture and one at the small one if they
  * were written per criterion, and the equality assertion is what sees the difference.
  */
-const STATEMENTS_PER_READ = 20;
+const STATEMENTS_PER_READ = 22;
 
 test('the project detail read costs the same number of statements at either size', {
   skip, concurrency: 1, timeout: 300_000,
@@ -192,10 +200,26 @@ test('the project detail read costs the same number of statements at either size
    * evidence, the verifications pointed at them — is reached with the same kinds of rows behind
    * it. A comparison where one size populated a relation the other left empty would be measuring
    * which tables were touched rather than how the cost scales.
+   *
+   * That includes the line's answer about the settled task's branch, and the binding that answer
+   * needs: Prisma asks for a relation level only when the level above it returned rows, so a
+   * fixture with no integration job would never reach the sessions those jobs were queued for, and
+   * a per-job read written there would cost this file nothing to miss.
    */
   async function buildProject(label: string, criteria: number, tasksPerCriterion: number) {
     const projectId = randomUUID();
     await prisma.project.create({ data: { id: projectId, ownerId, title: label } });
+    const codebase = await prisma.projectCodebase.create({
+      data: {
+        ownerId,
+        projectId,
+        canonicalRepoUrl: `ssh://git@example.invalid/${label}`,
+        upstreamRef: 'refs/heads/main',
+        integrationRef: `refs/heads/project/${projectId}`,
+        refAuthority: 'REMOTE',
+      },
+      select: { id: true },
+    });
     const stated = criteriaFromDefinitions((await projects.update(ownerId, projectId, {
       acceptanceCriteriaItems: Array.from({ length: criteria }, (_, index) => ({
         text: `${label}: the criterion in position ${index + 1}`,
@@ -236,6 +260,26 @@ test('the project detail read costs the same number of statements at either size
           targetShaBefore: sha('2'),
           targetShaAfter: sha('3'),
         }, 'AGENT');
+        // What the line answered when it was handed the same branch: already there.
+        await prisma.projectIntegrationJob.create({
+          data: {
+            projectId,
+            ownerId,
+            codebaseId: codebase.id,
+            kind: 'LAND_TASK',
+            taskId: task.id,
+            sessionId,
+            serialKey: `count:${projectId}`,
+            targetRef: `refs/heads/project/${projectId}`,
+            upstreamRef: 'refs/heads/main',
+            sourceRef: `refs/heads/orbit/${label}-${position}-${index}`,
+            state: 'ALREADY_LANDED',
+            sourceSha: sha('1'),
+            targetShaBefore: sha('3'),
+            upstreamSha: sha('3'),
+            idempotencyKey: `ij:v1:LAND_TASK:${task.id}:1`,
+          },
+        });
       }
     }
     return projectId;
@@ -292,7 +336,8 @@ test('the project detail read costs the same number of statements at either size
     const { sent } = await measure(large);
     for (const table of ['"project"', '"task"', '"project_task_status_count"',
       '"project_acceptance_criterion_definition"', '"session_merge_receipt"',
-      '"project_criteria_authorship"', '"project_blocker"', '"project_codebase"']) {
+      '"project_criteria_authorship"', '"project_blocker"', '"project_codebase"',
+      '"project_integration_job"']) {
       assert.ok(sent.some((text) => text.includes(table)),
         `the project detail read must reach ${table}; it sent:\n${listing(sent)}`);
     }
