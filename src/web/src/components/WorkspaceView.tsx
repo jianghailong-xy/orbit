@@ -46,6 +46,7 @@ import {
   type TailScrollSample,
 } from '../lib/tailPinning';
 import { memoizeEventFull } from '../lib/eventFull';
+import { plainPreview } from '../lib/plainPreview';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
@@ -741,18 +742,6 @@ const fmtTime = (d?: string): string => {
     hour12: false,
   });
 };
-
-// Flatten an assistant reply into a single-line list preview: drop code blocks and the
-// most common markdown markers so the line reads as prose, not syntax, then collapse
-// all whitespace/newlines. Length is handled by CSS ellipsis, not here.
-const plainPreview = (md: string): string =>
-  md
-    .replace(/```[\s\S]*?```/g, ' ') // fenced code blocks
-    .replace(/`([^`]+)`/g, '$1') // inline code
-    .replace(/^[#>\-*\s]+/gm, '') // heading / quote / list markers at line start
-    .replace(/[*_~]/g, '') // emphasis marks
-    .replace(/\s+/g, ' ')
-    .trim();
 
 // Shorten a tool id for the live status line: mcp__orbit__task_create -> task_create;
 // plain tool names (Bash, Read, Edit) pass through unchanged.

@@ -90,9 +90,19 @@ public struct SessionLine: Equatable, Sendable {
 
     /// Flatten an assistant reply into a single prose line: drop code blocks and the common
     /// markdown markers, then collapse all whitespace. (Length is left to the view's truncation.)
+    ///
+    /// A link keeps only its text and an image only its alt, so `[name](orbit-task:…)` reads as
+    /// `name` — the same rules as the web `plainPreview`. Both match a code span first and put it
+    /// back as it was, which leaves the brackets inside `code` alone; the inline-code rule after
+    /// them unwraps it. Images go first so a linked image, `[![alt](src)](url)`, still comes down
+    /// to its alt.
     static func plainPreview(_ md: String) -> String {
         var s = md
         s = s.replacingOccurrences(of: "```[\\s\\S]*?```", with: " ", options: .regularExpression) // fenced code
+        s = s.replacingOccurrences(of: "(`[^`]+`)|!\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1$2",
+                                   options: .regularExpression)                                     // images -> alt
+        s = s.replacingOccurrences(of: "(`[^`]+`)|\\[([^\\[\\]]*)\\]\\([^)]*\\)", with: "$1$2",
+                                   options: .regularExpression)                                     // links -> link text
         s = s.replacingOccurrences(of: "`([^`]+)`", with: "$1", options: .regularExpression)        // inline code
         s = s.replacingOccurrences(of: "(?m)^[#>\\-*\\s]+", with: "", options: .regularExpression)   // line-start markers
         s = s.replacingOccurrences(of: "[*_~]", with: "", options: .regularExpression)               // emphasis
