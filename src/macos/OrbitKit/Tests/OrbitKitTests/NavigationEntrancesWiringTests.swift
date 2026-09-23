@@ -184,6 +184,48 @@ final class NavigationEntrancesWiringTests: XCTestCase {
         }
     }
 
+    /// A push names its session by the UUID the server stored; every list row spells it base62. The
+    /// console opened under the UUID matched no row, so its header read the agent's name ("orbit")
+    /// over a raw status word. The route opens the lists' spelling — and with the console carrying
+    /// that spelling, the banner check has to compare the push's id as an id, not as a string.
+    func testASessionRouteOpensTheListsSpellingOfItsID() throws {
+        let app = try appSource("AppModel.swift")
+        let route = code(try slice(app, from: "func route(to route: Route) {",
+                                   to: "private func openSession("))
+        XCTAssertTrue(route.contains("case .session(let id): openSession(PublicID.toPublic(id))"),
+                      "a session route opens the lists' spelling of its id")
+
+        let manager = code(try appSource("NotificationManager.swift"))
+        let present = try slice(manager, from: "willPresent notification: UNNotification) async",
+                                to: "\n    }")
+        XCTAssertTrue(present.contains("PublicID.storageKey(session) != focused.map(PublicID.storageKey)"),
+                      "iOS: the approval card skips the session on screen, whichever spelling the push used")
+        XCTAssertTrue(present.contains("PublicID.storageKey(session) == focused.map(PublicID.storageKey)"),
+                      "macOS: the banner skips the session on screen, whichever spelling the push used")
+        XCTAssertFalse(present.contains("session != focused") || present.contains("session == focused"),
+                       "no comparison of the two spellings as strings is left")
+    }
+
+    /// The approval push's other two readers. The foreground card looked its title up by the UUID and
+    /// found nothing, and the needs-you check that takes it down never found the UUID either — so it
+    /// came down at the next change to that set, answered or not. The Notification Center reconcile
+    /// read every server banner's thread id (the UUID) as "no longer needs you" and cleared them all.
+    func testAnApprovalPushIsReadInTheListsSpelling() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let card = try slice(app, from: "notifications.onForegroundApproval = {",
+                             to: "awaitsApproval: true)")
+        XCTAssertTrue(card.contains("sessionID: PublicID.toPublic(sessionID)"),
+                      "the foreground card holds the lists' spelling of the pushed session")
+
+        let reconcile = try slice(app, from: "let needsYou = Set(SessionGrouping.group(list).needsYou.map(\\.id))",
+                                  to: "#endif")
+        XCTAssertTrue(reconcile.contains(
+            "removeDeliveredApprovals(where: { !needsYou.contains(PublicID.toPublic($0)) })"),
+                      "a banner's UUID thread id is looked up in the list-spelled needs-you set")
+        XCTAssertFalse(reconcile.contains("!needsYou.contains($0)"),
+                       "no thread id is looked up in its raw spelling")
+    }
+
     /// A section switch writes which section is showing, and drives the Tasks data layer's poll.
     /// That is all: no page is dropped by hand for any section, and no list of them is kept here —
     /// each section's stack is its own, and it outlives the view the switch tears down.
