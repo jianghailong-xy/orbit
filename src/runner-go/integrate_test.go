@@ -624,6 +624,51 @@ func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
 	}
 }
 
+// TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush is M-T12's last window: main was where
+// the check left it when the landing fetched, and moved before the push. The push is refused (no
+// force), the lost race is taken again from the fetch (runIntegrationJob's refetch round), and there
+// an automatic landing finds main moved and hands the candidate back: READY, nothing on main. The
+// move is made from the landing's own PUSH report, which the runner sends just before it pushes, so
+// the race is exact rather than timed. The owner-confirmed run of the same job through the same race
+// is the control: it merges again onto the main that moved and lands (M5).
+func TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush(t *testing.T) {
+	for _, automatic := range []bool{true, false} {
+		r := newIntegrationRepo(t)
+		sourceSha, checked := checkedProjectBranch(t, r)
+		land := automaticLanding(r, sourceSha, checked)
+		land.Automatic = automatic
+
+		var moved string
+		result := runIntegrationJob(land, func(phase string, _ *IntegrationUpstreamMoved) {
+			if phase != "PUSH" || moved != "" {
+				return
+			}
+			r.write("elsewhere.txt", "somebody else landed in between\n")
+			moved = r.commit("main moved between the fetch and the push")
+			r.push("main")
+		})
+		if moved == "" {
+			t.Fatalf("automatic=%v: the landing never reached PUSH (%s %s %s)", automatic, result.State, result.ErrorCode, result.Phase)
+		}
+		if automatic {
+			if result.State != "READY" || result.LandedSha != "" {
+				t.Fatalf("automatic landing whose push lost the race = %s %q (%s %s), want READY with nothing landed",
+					result.State, result.LandedSha, result.ErrorCode, result.Phase)
+			}
+			if got := r.originRev("refs/heads/main"); got != moved {
+				t.Fatalf("main is %s, want it left at the commit that moved it %s", got, moved)
+			}
+			continue
+		}
+		if result.State != "LANDED" {
+			t.Fatalf("the owner-confirmed control = %s (%s %s), want LANDED onto the moved main", result.State, result.ErrorCode, result.Phase)
+		}
+		if parent, _ := git(r.work, "rev-parse", result.LandedSha+"^1"); parent != moved {
+			t.Fatalf("the control landed onto %s, want the main that moved %s", parent, moved)
+		}
+	}
+}
+
 // TestAutomaticPromotionWithNoCheckedTipLandsNothing: a mark with nothing to hold the landing to is
 // not a licence to land anywhere. The control plane never sends one; the runner does not trust that.
 func TestAutomaticPromotionWithNoCheckedTipLandsNothing(t *testing.T) {
