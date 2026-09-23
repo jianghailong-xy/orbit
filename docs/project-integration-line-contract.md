@@ -258,7 +258,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `commitsAheadOfUpstream` | number | 最近一条终态 `LAND_TASK` 的 `ahead_of_upstream` | `NO_LANDING_YET` |
 | `lastUpstreamSyncAt` | Date | 最近一条 `main_sync_sha` 非空的 `LANDED` 作业的 `finished_at` | `NEVER_SYNCED` |
 | `integratingCount` / `queuedCount` | number | 本项目 `RUNNING` / `QUEUED` 作业数 | — |
-| `mergeCheckOnTip` | `'PASSING' \| 'FAILING' \| 'UNKNOWN'` | 最近一条终态 `LAND_TASK`：`LANDED` / `ALREADY_LANDED` → PASSING；`CHECK_FAILED` → FAILING；其余 → UNKNOWN | — |
+| `mergeCheckOnTip` | `'PASSING' \| 'FAILING' \| 'UNKNOWN'` | 最近一条终态 `LAND_TASK`：`LANDED` / `ALREADY_LANDED` → PASSING；`CHECK_FAILED` → FAILING；其余（含 `NOTHING_TO_LAND`——没有可检的树）→ UNKNOWN | — |
 
 项目列表行带 `integration: { line, ref } | null`（§7.1）。
 
@@ -295,7 +295,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `promotion_id` | uuid NULL | FK `project_promotion`（0273 补外键） |
 | `serial_key` | text NOT NULL | 串行键，见 J1 |
 | `target_ref` / `upstream_ref` / `source_ref` | text NOT NULL | 全名；`upstream_ref` 入队时从代码库行冻结 |
-| `state` | text | CHECK ∈ {`QUEUED`, `RUNNING`, `LANDED`, `ALREADY_LANDED`, `READY`, `CONFLICT`, `CHECK_FAILED`, `ERROR`, `CANCELLED`, `SUPERSEDED`} |
+| `state` | text | CHECK ∈ {`QUEUED`, `RUNNING`, `LANDED`, `ALREADY_LANDED`, `NOTHING_TO_LAND`, `READY`, `CONFLICT`, `CHECK_FAILED`, `ERROR`, `CANCELLED`, `SUPERSEDED`} |
 | `phase` | text NULL | CHECK ∈ {`FETCH`, `MAIN_SYNC`, `REBASE`, `MERGE`, `CHECK`, `VERIFY`, `PUSH`}：进行到或停在哪一步 |
 | `runner_id` | uuid NULL | 入队时 = 源会话的 `assigned_runner_id`；认领时写实际认领者 |
 | `claim_lease_owner` / `claim_generation` / `claimed_at` / `heartbeat_at` | text / bigint DEFAULT 0 / timestamptz / timestamptz | 租约，形状照抄 `CodexRateLimitResetOperation` |
@@ -327,7 +327,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | J-T2 | `QUEUED` | 心跳领取 CAS：该 runner 声明 `integration-job/v1` 且未 draining；同 `serial_key` 无 `RUNNING`；按 `(created_at, id)` 取最早 | `RUNNING` | `claim_generation + 1`、`claim_lease_owner`、`claimed_at`、`heartbeat_at` |
 | J-T3 | `RUNNING` | 领取时发现 `heartbeat_at < now() - 10 min`（runner 失联） | `RUNNING`（换认领者） | `claim_generation + 1`。旧认领者的结果回报被 409 `STALE_CLAIM` 拒绝 |
 | J-T4 | `RUNNING` | 进度回报（`phase`、`heartbeat_at`；晋升重检见 M-T7） | `RUNNING` | |
-| J-T5 | `RUNNING` | 结果回报：`LANDED` / `ALREADY_LANDED` | 同名终态 | 回执（J8）；解决该任务的集成类待办（X 表）；提交后边沿见 J9–J11 |
+| J-T5 | `RUNNING` | 结果回报：`LANDED` / `ALREADY_LANDED` / `NOTHING_TO_LAND`（0300） | 同名终态 | 回执（J8，`NOTHING_TO_LAND` 仅在该任务没有任何会话报告过工作时）；解决该任务的集成类待办（X 表，仅落地）；提交后边沿见 J9–J11 |
 | J-T6 | `RUNNING` | 结果回报：`READY`（仅 `CHECK_PROMOTION`） | `READY` | 晋升 → `READY`（M-T2） |
 | J-T7 | `RUNNING` | 结果回报：`CONFLICT` / `CHECK_FAILED` / `ERROR` | 同名终态 | 例外待办（§4.2）；晋升 → `BLOCKED`（若有） |
 | J-T8 | `QUEUED` / `RUNNING` | 任务被重开或取消、晋升被取代或拒绝、owner 取消（写 `cancel_requested_at`） | `CANCELLED` | `RUNNING` 行由 runner 在下一个阶段边界回报 `CANCELLED` |
@@ -385,7 +385,7 @@ interface IntegrationJobCommand {
 |---|---|---|
 | **J-S1 FETCH** | `git fetch <remote> <target_ref> <upstream_ref>`；T0 = 远端目标 tip（`PROJECT_BRANCH` 线目标不存在时 T0 = U）；U = 远端 upstream tip；S = `git rev-parse refs/heads/<源分支>` → `source_sha` | fetch 失败 → `ERROR / FETCH_FAILED`；源分支不存在 → `ERROR / SOURCE_BRANCH_MISSING`；upstream 不存在 → `ERROR / BASE_REF_NOT_FOUND` |
 | **J-S2 MAIN_SYNC**（仅 `PROJECT_BRANCH`） | U 不是 T0 的祖先时，在 T0 上 `git merge --no-ff -m "Merge <upstream> into <target>" U` → M = `main_sync_sha`，base = M；否则 base = T0 | 冲突 → `CONFLICT`（`phase = MAIN_SYNC`，冲突路径来自 `git diff --name-only --diff-filter=U`） |
-| **J-S3 已包含** | S 是 base 的祖先 → `ALREADY_LANDED`，不推送，丢弃 M | |
+| **J-S3 已包含** | S 是 base 的祖先：S **等于会话记录的 base**（分支停在 fork 点，自己没有提交）→ `NOTHING_TO_LAND`（0300）；否则 → `ALREADY_LANDED`。两者都不推送，丢弃 M | |
 | **J-S4 REBASE / MERGE** | fork = `git merge-base S base`；`git rev-list --merges fork..S` 非空 → **MERGE 模式** `git merge --no-ff S`（保住合并提交里的冲突解法）；否则 `git rebase --onto base <fork 或 sessionBaseSha> S`。结果 C = `tested_sha` | 冲突 → `CONFLICT`（`phase = REBASE` 或 `MERGE`） |
 | **J-S5 CHECK** | 组合树自带 `scripts/worktree-overlay.sh` 时先运行它（见下方「检查前的铺环境」），再在 C 上依次跑任务验收命令（有 `acceptance_command` 时）与合并检查命令（有配置时），逐条比对退出码 | 铺环境失败或超时 → `ERROR / CHECK_TREE_UNPREPARED`；任一退出码不一致 → `CHECK_FAILED`（什么都不推送） |
 | **J-S6a 落地前核对** | `tested_tree_sha = git rev-parse C^{tree}`；要求 `HEAD = C` 且 `git status --porcelain --untracked-files=no` 为空（检查不得改动或提交已跟踪文件） | → `ERROR / CHECK_MUTATED_TREE` |
@@ -399,7 +399,9 @@ interface IntegrationJobCommand {
 
 ### 2.5 回执与派发下游
 
-**J8（回执）**：`receiveResult` 在同一事务里，通过新方法 `MergeReceiptService.fromIntegrationJob(tx, job)` 为 `LANDED` / `ALREADY_LANDED` 写回执：
+**J8（回执）**：`receiveResult` 在同一事务里，通过新方法 `MergeReceiptService.fromIntegrationJob(tx, job)` 为 `LANDED` / `ALREADY_LANDED` 写回执；`NOTHING_TO_LAND`（0300）写回执的形状相同（`result = ALREADY_MERGED`、`target_sha_after = NULL`），但**只在该任务没有任何 work 会话报告过工作时**才写：那种情况下「本任务没有东西可落」正是 J9 释放下游所依据的事实；反过来，任务的工作在**另一条分支**上时这一行不写回执——回执照写就等于宣称这份工作在那个目标上，而这正是 2026-09-23 假回执骗过晋升卡的那句假话——同时往任务上写一条评论（`task_comment`，同一个事务）留下可见信号。
+
+`NOTHING_TO_LAND` 与 `ALREADY_LANDED` 的另一个入口是**旧 runner**：早于 0300 的二进制没有这个状态可报，它对同一种分支（tip 等于该会话的 `base_sha`）报的仍是 `ALREADY_LANDED`。控制面在自己的行里就有这个事实的两半（`source_sha` 与 `session.base_sha`），因此收到的 `ALREADY_LANDED` 若满足该等式，落库时同样写成 `NOTHING_TO_LAND`——旧二进制不能替控制面写下那句正面结论。
 
 | 列 | 取值 |
 |---|---|

@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { CreatorType, Prisma } from '@prisma/client';
 import {
   IntegrationCheckResult,
   IntegrationCheckSpec,
@@ -7,6 +7,7 @@ import {
   IntegrationJobProgressRequest,
   IntegrationJobResultRequest,
   IntegrationJobResultResponse,
+  IntegrationJobState,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -29,6 +30,7 @@ import {
   recordPromotionApproval,
   resolveIntegrationItemsOnLanding,
 } from '../projects/project-open-item';
+import { sessionReportedWork } from '../projects/landing-source-branch';
 import { promotionDedupeKey } from '../projects/project-promotion';
 import {
   applyPromotionJobResult,
@@ -493,7 +495,8 @@ export async function applyIntegrationJobResult(
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
         claimLeaseOwner: true, claimGeneration: true, runnerId: true,
-        task: { select: { title: true } },
+        session: { select: { baseSha: true } },
+        task: { select: { title: true, assigneeId: true, creatorType: true, creatorId: true } },
       },
     });
     if (!job) throw new IntegrationJobRefused('NOT_FOUND');
@@ -513,14 +516,54 @@ export async function applyIntegrationJobResult(
       throw new IntegrationJobRefused('STALE_CLAIM');
     }
 
-    const receiptIds = jobLanded(state) && job.sessionId && !job.promotionId
+    // J-S3's answer about a branch with nothing of the task's own on it (0300). It is not a landing,
+    // so the receipt below is not automatic: what a reader of a receipt asks is "is this task's work
+    // on that target", and this answer says the branch it was handed holds none of it. It is written
+    // only when the task has no work of its own ANYWHERE — where the honest answer is that there is
+    // nothing of this task's to land, which is the fact §2.5 J9 releases dependents on.
+    //
+    // TWO SPELLINGS REACH HERE, and both are the same fact. A runner of 0300's vintage reports
+    // NOTHING_TO_LAND outright. A runner older than that reports ALREADY_LANDED — which J-S3 reaches
+    // by asking whether the source tip is contained in the base, and an EMPTY branch is contained in
+    // everything: its tip is the commit it forked at. That spelling is recognised from the row rather
+    // than from git, because the row holds both halves: a source tip equal to the session's own base
+    // is a branch that never moved off the commit it started at. This is the branch the incident of
+    // 2026-09-23 came through — the retry session that died on a 429, its branch tip being the
+    // upstream commit it forked at — and an old runner talking to a new control plane must not be
+    // able to write the positive answer about it.
+    //
+    // It is a LAND_TASK's answer and not a promotion's: a promotion merges a whole branch into an
+    // upstream and its empty-source case has an owner-approved card of its own (§3.4), which this
+    // does not decide.
+    const wroteNothingOfItsOwn = job.kind === 'LAND_TASK'
+      && (state === 'NOTHING_TO_LAND'
+        || (state === 'ALREADY_LANDED'
+          && body.sourceSha != null
+          && job.session?.baseSha != null
+          && body.sourceSha === job.session.baseSha));
+    const effectiveState: IntegrationJobState = wroteNothingOfItsOwn ? 'NOTHING_TO_LAND' : state;
+    const ownWork = wroteNothingOfItsOwn && job.taskId
+      ? await workSessionsReportingWork(tx, job.taskId)
+      : [];
+    // The states a receipt is written for: a landing, whose receipt says the work is on the target,
+    // and a no-commit answer where the task has no work of its own anywhere — where that is exactly
+    // what the receipt has to say for the dependents waiting on it.
+    //
+    // Read off `effectiveState` and not off what the runner called it: an answer downgraded above is
+    // NOT a landing, however it was spelled — and the incident's own row is exactly the downgraded
+    // one, so a receipt written there is the false claim all of this exists to stop.
+    const receiptState: 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND' | null =
+      jobLanded(effectiveState) ? effectiveState
+        : wroteNothingOfItsOwn && ownWork.length === 0 ? 'NOTHING_TO_LAND'
+          : null;
+    const receiptIds = receiptState && job.sessionId && !job.promotionId
       ? await MergeReceiptService.fromIntegrationJob(tx, {
         ownerId: job.ownerId,
         sessionId: job.sessionId,
         taskId: job.taskId,
         projectId: job.projectId,
         jobId: job.id,
-        state,
+        state: receiptState,
         sourceBranch: shortBranchName(job.sourceRef),
         targetBranch: shortBranchName(job.targetRef),
         sourceSha: body.sourceSha ?? null,
@@ -532,6 +575,22 @@ export async function applyIntegrationJobResult(
         mainSyncSha: body.mainSyncSha ?? null,
       })
       : [];
+    // The visible signal J-T5 owes a person when the line says it was handed a branch carrying
+    // nothing: the job row is not somewhere anybody looks, and the answer is silent otherwise.
+    if (wroteNothingOfItsOwn && job.taskId && job.task) {
+      await tx.taskComment.create({
+        data: {
+          taskId: job.taskId,
+          authorType: job.task.assigneeId ? CreatorType.AGENT : job.task.creatorType,
+          authorId: job.task.assigneeId ?? job.task.creatorId,
+          body: nothingToLandComment({
+            branch: shortBranchName(job.sourceRef),
+            targetBranch: shortBranchName(job.targetRef),
+            branchesWithWork: ownWork,
+          }),
+        },
+      });
+    }
 
     const checks = clipChecks(body.checks ?? []);
     // §3: a promotion job's result is the promotion's, and moves it in the same transaction — a
@@ -564,7 +623,11 @@ export async function applyIntegrationJobResult(
     await tx.projectIntegrationJob.update({
       where: { id: job.id },
       data: {
-        state,
+        // The state the row is WRITTEN with, which is the answer rather than the spelling an older
+        // runner sent it in: a no-commit answer recorded as `ALREADY_LANDED` is the positive
+        // conclusion this exists to stop writing, and a row that says so is what a promotion card
+        // and a landing lane go on to read.
+        state: effectiveState,
         phase: INTEGRATION_JOB_PHASES.includes(body.phase as never) ? body.phase : undefined,
         sourceSha: body.sourceSha ?? undefined,
         targetShaBefore: body.targetShaBefore ?? undefined,
@@ -618,7 +681,7 @@ export async function applyIntegrationJobResult(
         });
       }
     }
-    const itemKind = openItemKindForJobState(state);
+    const itemKind = openItemKindForJobState(effectiveState);
     if (itemKind) {
       const opened = await recordIntegrationFailure(tx, {
         projectId: job.projectId,
@@ -647,7 +710,7 @@ export async function applyIntegrationJobResult(
     // transaction — beside the receipt that says the work is there, which is the fact the item was
     // waiting for. Read by TASK rather than by this job: what is still open is an older
     // generation's item, and this landing is what closes it.
-    if (jobLanded(state) && job.taskId) {
+    if (jobLanded(effectiveState) && job.taskId) {
       await resolveIntegrationItemsOnLanding(tx, job.taskId);
     }
 
@@ -660,7 +723,13 @@ export async function applyIntegrationJobResult(
       },
       after: {
         projectId: job.projectId,
-        landedTaskId: jobLanded(state) && !job.promotionId ? job.taskId : null,
+        // J10: the release the tasks downstream were waiting for is the receipt, so this is non-null
+        // exactly when one was written above — a `NOTHING_TO_LAND` with the task's work on another
+        // branch released nothing, and dispatching the dependents of work that did not move would be
+        // the same false claim one layer out.
+        landedTaskId: (jobLanded(effectiveState) || receiptIds.length > 0) && !job.promotionId
+          ? job.taskId
+          : null,
         openItemIds: openItemId ? [openItemId] : [],
         // M-F1 for a landing, M-F4 for a promotion that ended: both are the queue getting shorter.
         considerPromotionProjectId:
@@ -670,8 +739,60 @@ export async function applyIntegrationJobResult(
   }, onRetry);
 }
 
-/** What a person is shown about a failure (§4.2's payload column). */
-function failurePayload(
+/**
+ * The branches of this task whose sessions reported work of their own — the branches a delivery is
+ * on, read by the same predicate that chose which one the line should have been handed
+ * (`landing-source-branch.ts`).
+ *
+ * This is what decides whether the line's `NOTHING_TO_LAND` is a fact about the TASK or about the
+ * branch it happened to be handed. No session reporting work: the task has nothing of its own to
+ * land, and the receipt the answer writes is the fact §2.5 J9 releases its dependents on. Some
+ * session reporting work: the task's delivery is somewhere the line was not shown, and a receipt
+ * naming this target would be the false claim the incident of 2026-09-23 was made of.
+ */
+async function workSessionsReportingWork(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+): Promise<string[]> {
+  const sessions = await tx.session.findMany({
+    where: {
+      taskId,
+      startsTaskWork: true,
+      deletedAt: null,
+      isolationStatus: 'worktree',
+      branch: { not: null },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { branch: true, changedFiles: true },
+  });
+  return [...new Set(
+    sessions.filter(sessionReportedWork).map((session) => session.branch as string),
+  )];
+}
+
+/**
+ * What the task is told when the line reports that the branch it was handed carried nothing of the
+ * task's own — the visible signal J-T5 owes, since the job row is not somewhere a person looks.
+ *
+ * It says what the line observed and, when the task has work on another branch, names it: that is
+ * the delivery that is not on the target, and the reason the receipt was withheld.
+ */
+function nothingToLandComment(input: {
+  branch: string;
+  targetBranch: string;
+  branchesWithWork: string[];
+}): string {
+  const where = input.branchesWithWork.length > 0
+    ? `本任务自己的工作在分支 \`${input.branchesWithWork.join('`、`')}\` 上，集成线拿到的是另一个分支；`
+      + `这份交付目前不在 \`${input.targetBranch}\` 上，因此也没有写回执。`
+    : '本任务没有任何会话报告过工作，因此确实没有东西可落。';
+  return `**集成线：没有可落的提交（系统自动记录）**\n\n`
+    + `集成线拿到本任务的分支 \`${input.branch}\`，它相对该会话的起点没有任何提交`
+    + `（0 轮就结束、或没有提交的会话会留下这样的空分支）。落地作业没有写成「已落地」，也没有推送任何东西。\n\n`
+    + where;
+}
+
+/** What a person is shown about a failure (§4.2's payload column). */function failurePayload(
   state: string,
   detail: {
     kind: string;

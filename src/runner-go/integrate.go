@@ -194,6 +194,24 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 
 	// ── J-S3 already contained ────────────────────────────────────────────────────────────────
 	if isAncestor(scratch, sourceSha, base) {
+		// THE EMPTY BRANCH FIRST, because "already contained" is trivially true of one: its tip is
+		// the commit it forked at, and every fork point is in the target it forked from. A branch
+		// whose tip IS the commit its session started at carries nothing of the task's own, and
+		// answering ALREADY_LANDED for it is what wrote a receipt for a delivery that did not exist
+		// (2026-09-23, project 34Tq39ByZ0rV4c6pJkfw7): the landing had been queued for a retry
+		// session that died on a 429 without a commit, the branch tip was the upstream, and the
+		// promotion card counted the task as work the merge did not contain. The same test the
+		// control plane applies to an older runner's spelling of this answer.
+		//
+		// Only when the claim names a base: without one, emptiness and a genuine landing are not
+		// distinguishable here — `merge-base S T` answers S in both — and an answer that cannot be
+		// told apart is not one to give.
+		if cmd.SessionBaseSha != "" && sourceSha == cmd.SessionBaseSha {
+			// Nothing to land, and nothing was pushed: the absorb commit is discarded with the
+			// worktree, exactly as in the answer below.
+			result.State, result.Phase = "NOTHING_TO_LAND", "REBASE"
+			return result
+		}
 		// Nothing to land, and the absorb commit is discarded with the worktree: a merge of
 		// upstream that carries no task work is not this job's to push.
 		result.State, result.Phase = "ALREADY_LANDED", "REBASE"
