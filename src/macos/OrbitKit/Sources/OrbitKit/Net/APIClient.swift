@@ -722,6 +722,22 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/adopt-branch", body: Optional<Empty>.none)
     }
 
+    // MARK: link previews
+
+    /// The cards for every Orbit link a conversation shows, in one request
+    /// (`POST /api/link-previews`, at most `linkPreviewMaxRefs` refs). Ids may be either spelling;
+    /// the answer spells them as public ids. What the caller cannot be shown — another account's
+    /// object, a deleted one, an id that names nothing — comes back `unavailable`, which is the same
+    /// answer for all three, so nothing here can be used to probe for objects that are not yours.
+    ///
+    /// `OrbitLinkPreviewStore` is what a conversation actually calls: it batches, caches by object,
+    /// and holds one flight per object.
+    public func linkPreviews(_ refs: [LinkPreviewRef]) async throws -> [LinkPreview] {
+        let response: LinkPreviewsResponse = try await post("link-previews",
+                                                            body: LinkPreviewsRequest(refs: refs))
+        return response.previews
+    }
+
     // MARK: attachments
 
     @discardableResult
