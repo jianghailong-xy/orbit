@@ -358,6 +358,33 @@ export interface OpenItemDeliveryCard {
 }
 
 /**
+ * What the message telling a coordinator its project was started carries beside its words
+ * (apiserver `project-started.ts`), so a client draws it as a card rather than as a bubble the
+ * reader typed.
+ *
+ * The turn is prose written for the AGENT — tool names, ids, `autoRunWhenReady` — and a person
+ * watching the conversation needs three facts from it: how the project was started, which project,
+ * and which of its tasks now wait on the coordinator. Recorded beside the runner's echo of that
+ * turn, like `OpenItemDeliveryCard`: a snapshot of what the platform knew when the message reached
+ * the conversation.
+ */
+export interface ProjectStartedCard {
+  /** `CONFIRMATION` is "Start the project" (the owner confirming the criteria); `SWITCH` is the
+   *  project page's Automatic switch. */
+  by: 'CONFIRMATION' | 'SWITCH';
+  /** The project, in the uuid spelling every other read of one uses. */
+  projectId: string;
+  projectTitle: string;
+  /** How many criteria the confirmation named; null for the switch, which confirmed nothing. */
+  criteriaCount: number | null;
+  /** Open tasks set to be started by hand (`autoRunWhenReady=false`), oldest first — at most as
+   *  many as the message lists. */
+  held: Array<{ id: string; title: string }>;
+  /** How many such tasks there are in all. */
+  heldCount: number;
+}
+
+/**
  * Whether the platform's last word to this project's coordinator reached it (§7.2 V7, V9).
  *
  * The one thing the coordinator card could never say before: a conversation that looks idle because

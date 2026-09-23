@@ -38,9 +38,14 @@ public enum StickySummary {
     /// then a watch's wake, then the control plane's, then the person's words — so the bar can never
     /// name a turn something other than what the card under it is.
     public static func of(text: String, note: String? = nil,
-                          itemCard: OpenItemDelivery? = nil) -> (label: String, text: String) {
+                          itemCard: OpenItemDelivery? = nil,
+                          startedCard: ProjectStarted? = nil) -> (label: String, text: String) {
         if let card = itemCard {
             let summary = OpenItemDeliveryCard.sticky(card)
+            return (arrow + summary.label, summary.text)
+        }
+        if let card = startedCard {
+            let summary = ProjectStartedCard.sticky(card)
             return (arrow + summary.label, summary.text)
         }
         if let wake = WatchWakeText.parse(text) {

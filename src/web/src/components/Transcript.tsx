@@ -66,8 +66,10 @@ import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOu
 import { parseWatchWake } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
-import type { OpenItemDeliveryCard as OpenItemDelivery } from '@orbit/shared';
+import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
+import { parseProjectStarted } from '../lib/projectStarted';
+import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
 
@@ -311,6 +313,9 @@ type TextNode = {
   // instead of a bubble, and the text below is the paragraph the agent was handed, folded. NOT the
   // `delivery` above, which is how far a message got on its way into the engine.
   itemCard?: OpenItemDelivery;
+  // The message telling the coordinator its project was started, when the control plane recorded
+  // the facts beside the echo (`projectStarted`, lib/projectStarted). Nobody's message either.
+  startedCard?: Started;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -538,6 +543,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // lib/openItemDelivery). Read off the event rather than out of the text, so a delivery that
         // carries no card keeps the reading it has always had.
         const itemCard = parseOpenItemDelivery(p) ?? undefined;
+        const startedCard = parseProjectStarted(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -557,6 +563,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             text: recorded ? recorded.text : p.text ? String(p.text) : '',
             note: recorded?.note,
             itemCard,
+            startedCard,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1042,6 +1049,19 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         return (
           <OpenItemDeliveryCard
             card={node.itemCard}
+            text={node.text}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+          />
+        );
+      }
+      // The message telling the coordinator its project was started: prose for the agent, drawn as
+      // the card the payload recorded beside it (lib/projectStarted). No payload, the old reading.
+      if (node.startedCard) {
+        return (
+          <ProjectStartedCard
+            card={node.startedCard}
             text={node.text}
             seq={node.seq}
             ts={node.ts}

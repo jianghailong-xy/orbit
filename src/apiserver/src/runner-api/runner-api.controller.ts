@@ -113,6 +113,7 @@ import {
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
   type OpenItemDeliveryCard,
+  type ProjectStartedCard,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -167,6 +168,7 @@ import {
   recordTaskFailure,
   returnQueuedTurns,
 } from '../projects/project-open-item';
+import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -215,7 +217,7 @@ import {
   waitingScheduledWakeup,
 } from '../tasks/owner-confirmation-read';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
-import { withControlPlaneNote, withOpenItemDelivery } from './control-plane-note';
+import { withControlPlaneNote, withOpenItemDelivery, withProjectStarted } from './control-plane-note';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
@@ -4215,6 +4217,8 @@ export class RunnerApiController {
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
         select: {
+          // Whose rows a control-plane turn's card may be read from (project-started.ts).
+          ownerId: true,
           status: true,
           runtimeSessionId: true,
           // Read under the row lock so the three conditional writes this transaction used to
@@ -4295,6 +4299,15 @@ export class RunnerApiController {
         const card = await readOpenItemDeliveryCard(tx, itemId);
         if (card) deliveryCards.set(turn.id, card);
       }
+      // And the turns telling a coordinator its project was started, by the same kind of key
+      // (`project-started:v1:`, project-started.ts) — read for those turns and no others.
+      const startedCards = new Map<string, ProjectStartedCard>();
+      for (const turn of userTurns) {
+        const start = projectStartOfTurn(turn.clientTurnId);
+        if (!start) continue;
+        const card = await readProjectStartedCard(tx, session.ownerId, start);
+        if (card) startedCards.set(turn.id, card);
+      }
       for (const e of durable) {
         if (e.type !== RunEventType.USER) continue;
         e.payload = withControlPlaneNote(
@@ -4304,6 +4317,10 @@ export class RunnerApiController {
         e.payload = withOpenItemDelivery(
           e.payload,
           (e.turnId ? deliveryCards.get(e.turnId) : undefined) ?? null,
+        );
+        e.payload = withProjectStarted(
+          e.payload,
+          (e.turnId ? startedCards.get(e.turnId) : undefined) ?? null,
         );
       }
       if (durable.length > 0) {

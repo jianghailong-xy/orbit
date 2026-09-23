@@ -72,20 +72,21 @@ import {
   TaskStatus,
 } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { type ProjectStartedCard, RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { projectStartedTurnId } from './project-started';
+import { projectStartOfTurn, projectStartedTurnId, readProjectStartedCard } from './project-started';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -513,6 +514,17 @@ test('the owner confirms one version of a project’s acceptance standard set, a
   const sessions = new SessionsService(prisma as unknown as PrismaService, queue, realtime);
   const telling = new ProjectAcceptanceService(prisma as unknown as PrismaService, sessions);
   const switching = new ProjectsService(prisma as unknown as PrismaService, telling, sessions);
+  // The runner's event door, where the echo of a turn — and the card beside it — is stored. Every
+  // port it does not use here answers as a proxy, as in `coordinator-judgment.pg.spec.ts`.
+  const runnerApi = new RunnerApiController(
+    prisma as unknown as PrismaService,
+    queue,
+    realtime,
+    new Proxy({}, { get: () => async () => undefined }) as never,
+    {} as never,
+    { expand: async (_ownerId: string, content?: string) => content } as never,
+    { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
+  );
   const HELD = 'the task its coordinator starts by hand';
   const AUTOMATIC = 'the task Orbit starts by itself';
 
@@ -602,7 +614,38 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     }
     assert.deepEqual(await authorization(id), { enabled: false, revision: '0' },
       'the fixture project is not started yet');
-    return { id, sessionId, heldId };
+    return { id, sessionId, heldId, runnerId };
+  }
+
+  /** The card the clients draw the waiting message as — off the queue, the way they read it. The
+   *  active projection, because the message is the queue's head and the default one leaves the
+   *  head out (it is the turn about to run, not one waiting behind it). */
+  async function queuedCard(sessionId: string): Promise<ProjectStartedCard | undefined> {
+    const active = await sessions.listQueuedTurns(ownerId, sessionId, 'active') as Array<{
+      projectStarted?: ProjectStartedCard;
+    }>;
+    assert.equal(active.length, 1, 'the one message is not the one thing queued');
+    return active[0].projectStarted;
+  }
+
+  /** The runner echoing a queued turn, and the payload that echo was stored with. */
+  async function echoed(runnerId: string, sessionId: string, turnId: string, text: string) {
+    const last = await prisma.runEvent.aggregate({ where: { sessionId }, _max: { seq: true } });
+    await runnerApi.events({ id: runnerId } as never, sessionId, {
+      events: [{
+        seq: (last._max.seq ?? 0) + 1,
+        type: RunEventType.USER,
+        ts: new Date().toISOString(),
+        turnId,
+        payload: { text },
+      }],
+    } as never);
+    const event = await prisma.runEvent.findFirst({
+      where: { sessionId, turnId, type: RunEventType.USER },
+      select: { payload: true },
+    });
+    assert.ok(event, 'the echo was not stored');
+    return event.payload as { text?: string; projectStarted?: ProjectStartedCard };
   }
 
   async function turns(sessionId: string): Promise<Array<{ client_turn_id: string; content: string }>> {
@@ -650,6 +693,21 @@ test('the owner confirms one version of a project’s acceptance standard set, a
       'the task nothing starts but the coordinator is named');
     assert.ok(!message.content.includes(AUTOMATIC), 'a task Orbit starts by itself is not');
 
+    // What the clients draw instead of those words: the same facts, as a card, on the queued turn —
+    // and, off the same key, nothing at all for somebody else.
+    assert.deepEqual(await queuedCard(waiting.sessionId), {
+      by: 'CONFIRMATION',
+      projectId: waiting.id,
+      projectTitle: 'waiting 的项目',
+      criteriaCount: 1,
+      held: [{ id: waiting.heldId, title: HELD }],
+      heldCount: 1,
+    });
+    const key = projectStartOfTurn(message.client_turn_id);
+    assert.ok(key, 'the message is not recognisable as a start by its own key');
+    assert.equal(await readProjectStartedCard(prisma, randomUUID(), key), null,
+      'another owner read this project’s card off the key');
+
     // A re-confirmation writes a second confirmation row and starts nothing — so it says nothing.
     await start(waiting.id);
     assert.equal((await turns(waiting.sessionId)).length, 2,
@@ -675,6 +733,24 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     assert.ok(told[1].content.includes(`- ${HELD} (${uuidToBase62(project.heldId)})`),
       'the task nothing starts but the coordinator is named');
     assert.ok(!told[1].content.includes(AUTOMATIC), 'a task Orbit starts by itself is not');
+    assert.deepEqual(await queuedCard(project.sessionId), {
+      by: 'SWITCH',
+      projectId: project.id,
+      projectTitle: 'switched 的项目',
+      criteriaCount: null,
+      held: [{ id: project.heldId, title: HELD }],
+      heldCount: 1,
+    }, 'the switch is drawn as its own kind of start, confirming nothing');
+
+    // And when a runner takes the turn, its echo is stored with the same card beside the same words.
+    const { rows: [turnRow] } = await sql.query<{ id: string }>(
+      `SELECT "id" FROM "conversation_turn" WHERE "session_id" = $1::uuid AND "client_turn_id" = $2`,
+      [project.sessionId, told[1].client_turn_id],
+    );
+    const echo = await echoed(project.runnerId, project.sessionId, turnRow.id, told[1].content);
+    assert.equal(echo.text, told[1].content, 'the echo is what the coordinator read, kept whole');
+    assert.equal(echo.projectStarted?.by, 'SWITCH', 'the echo was stored without its card');
+    assert.deepEqual(echo.projectStarted?.held, [{ id: project.heldId, title: HELD }]);
 
     // On over on is a write — the revision moves — and not a start, so it says nothing. Nor does
     // switching it off.

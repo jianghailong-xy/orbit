@@ -609,6 +609,13 @@ struct TranscriptView: View {
                                          undelivered: bubble.undelivered,
                                          onCancelQueued: bubble.turnId == nil
                                              ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let started = bubble.startedCard {
+                // The message telling the coordinator its project was started: the card the
+                // transcript draws once a runner takes it, off the projection (`startedCard`).
+                ProjectStartedCardView(card: started, text: bubble.text, ts: bubble.ts,
+                                       undelivered: bubble.undelivered,
+                                       onCancelQueued: bubble.turnId == nil
+                                           ? nil : { Task { await console.cancelQueued(bubble) } })
             } else if let wake = WatchWakeText.parse(bubble.text) {
                 WatchWakeCardView(wake: wake, text: bubble.text, ts: bubble.ts,
                                   undelivered: bubble.undelivered,
@@ -642,7 +649,8 @@ struct TranscriptView: View {
         // the turn the bar points back at, but it is not the person's question: it gets its card's
         // own title and line (`StickySummary`), so the bar can't say "your question" above a card
         // reading "not typed by you".
-        let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard)
+        let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
+                                       startedCard: bubble.startedCard)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -1138,6 +1146,13 @@ struct TranscriptItemView: View {
                 OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
                                          undelivered: b.undelivered || b.delivery == "failed",
                                          attached: b.attached)
+            } else if let started = b.startedCard {
+                // The message telling the coordinator its project was started: prose for the agent,
+                // drawn as the card the payload recorded beside it (`projectStarted`,
+                // `ProjectStarted.parse`). No payload, the old reading.
+                ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
+                                       undelivered: b.undelivered || b.delivery == "failed",
+                                       attached: b.attached)
             } else if let wake = WatchWakeText.parse(b.text) {
                 // A turn a watch queued is the watch's to show, not a message the user typed: it opens
                 // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
