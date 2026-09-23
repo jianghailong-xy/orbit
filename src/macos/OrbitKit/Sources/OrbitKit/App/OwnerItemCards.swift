@@ -124,6 +124,12 @@ public enum PromotionCards {
     /// §7.5's provenance mark — the same one the exception and blocker cards carry.
     public static let provenance = "FROM ORBIT"
     public static let mergedHeading = "✓ Merged into main"
+    /// C's heading when nobody pressed Merge — web's `MERGED_AUTOMATICALLY_HEADING`. The receipt is
+    /// the only place the owner learns the Automatic setting merged it (§3.3 M-T11), so it says so
+    /// first.
+    public static let mergedAutomaticallyHeading = "✓ Merged into main automatically"
+    /// Who merged it, where a pressed merge says "by you" — web's `UNDER_AUTOMATIC`.
+    public static let underAutomatic = "under your Automatic setting"
     /// What a card whose candidate the read no longer publishes says about itself: a newer
     /// candidate replaced it, or it was answered at another end. It stays on screen saying so —
     /// a card that vanished would leave the reader wondering what they had been about to press.
@@ -160,7 +166,7 @@ public enum PromotionCards {
         let into = shortRef(view.upstreamRef)
         switch stage(view) {
         case .merging: return "Merging \(branch) into \(into)…"
-        case .merged: return mergedHeading
+        case .merged: return view.merged?.automatic == true ? mergedAutomaticallyHeading : mergedHeading
         case .blocked: return "\(branch) can’t merge into \(into) yet"
         default: return "Merge \(branch) into \(into)?"
         }
@@ -223,11 +229,20 @@ public enum PromotionCards {
             : "checks passed and this is landing on \(shortRef(view.upstreamRef))"
     }
 
-    /// C's commit row: what landed, and when.
+    /// C's commit row: what landed, who merged it, and when.
     public static func mergedLine(_ view: ProjectPromotionView, now: Date = Date()) -> String {
         guard let merged = view.merged else { return "merged" }
         let when = RelativeTime.elapsed(merged.at, now: now).map { " · \($0)" } ?? ""
-        return "\(String(merged.sha.prefix(7))) · merge of \(shortRef(view.sourceRef)) · by you\(when)"
+        let who = merged.automatic == true ? underAutomatic : "by you"
+        return "\(String(merged.sha.prefix(7))) · merge of \(shortRef(view.sourceRef)) · \(who)\(when)"
+    }
+
+    /// C's undo row, on a merge the Automatic setting made: the one command that takes it back out
+    /// of main. Nil on a pressed merge, whose receipt is what it always was — the owner chose that
+    /// one and watched it happen; this one happened without them.
+    public static func revertLine(_ view: ProjectPromotionView) -> String? {
+        guard let merged = view.merged, merged.automatic == true else { return nil }
+        return merged.revert
     }
 
     /// D's first row: why it cannot merge, in the files that say so.

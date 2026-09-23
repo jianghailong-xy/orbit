@@ -147,6 +147,17 @@ export const INTEGRATION_JOBS_PER_HEARTBEAT = 2;
 /** The capability a runner declares before it is handed any of this (J-T2). */
 export const INTEGRATION_JOB_CLAIM = 'integration-job/v1';
 
+/**
+ * The capability a runner declares when it honours an automatic landing's one extra rule (§3.3
+ * M-T12): land only onto the upstream tip the check ran against, and when the upstream has moved,
+ * merge nothing and report READY so the owner is asked. A runner that has not declared it would
+ * check the moved tip again and merge it (M5), which is the right thing after an owner's press and
+ * not a thing the Automatic setting authorizes — so the platform confirms nothing by itself for a
+ * landing such a runner would do, and never hands one an automatic landing to do. Its runner twin
+ * is `promotionAutomaticLandCapabilityV1` in `src/runner-go/integrate.go`.
+ */
+export const PROMOTION_AUTOMATIC_LAND = 'promotion-automatic-land/v1';
+
 /** Longest check output an item and a job row carry, per §2.1 (`outputTail` ≤ 16 KB). */
 export const MAX_CHECK_OUTPUT_TAIL = 16 * 1_024;
 
@@ -695,6 +706,10 @@ export interface PromotionJobSubject {
  *
  * A job whose `source_sha` is null leaves the runner to resolve the source ref itself and report the
  * commit it resolved — the only way a `TASK_BRANCH` candidate's source is knowable (0293).
+ *
+ * `confirmedAutomatically` marks a LAND_PROMOTION the project's Automatic setting queued rather than
+ * the owner's press (M-T11) — on the job itself, because the job is the record of what was sent out
+ * to be pushed, and because it is what tells the runner the landing is bound to the checked tip.
  */
 export async function queuePromotionJob(
   tx: Prisma.TransactionClient,
@@ -702,6 +717,7 @@ export async function queuePromotionJob(
     kind: Extract<IntegrationJobKind, 'CHECK_PROMOTION' | 'LAND_PROMOTION'>;
     promotion: PromotionJobSubject;
     canonicalRepoUrl: string;
+    confirmedAutomatically?: boolean;
   },
 ): Promise<string> {
   const previous = await tx.projectIntegrationJob.aggregate({
@@ -738,6 +754,7 @@ export async function queuePromotionJob(
       upstreamRef: input.promotion.upstreamRef,
       sourceRef: input.promotion.sourceRef,
       sourceSha: input.promotion.sourceSha,
+      confirmedAutomatically: input.confirmedAutomatically === true,
       idempotencyKey: integrationIdempotencyKey({
         kind: input.kind,
         subjectId: input.promotion.id,

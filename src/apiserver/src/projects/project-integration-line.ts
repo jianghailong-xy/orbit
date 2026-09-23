@@ -17,7 +17,8 @@ import { branchName } from './project-criterion-landing';
  * TWO LINES
  * ---------
  * `MAIN` lands a task straight on the project's upstream. `PROJECT_BRANCH` lands it on the
- * project's own branch, which reaches main later and only with the owner's confirmation. Which one
+ * project's own branch, which reaches main later — with the owner's confirmation, or by itself when
+ * the project's Automatic setting is on and the branch's check is clean (§3.3 M-T11). Which one
  * a project has is not a column: it is whether the binding's `integration_ref` equals its
  * `upstream_ref`, so the two cannot disagree.
  *

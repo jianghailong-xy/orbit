@@ -13,6 +13,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
+  PROMOTION_AUTOMATIC_LAND,
   integrationSerialKey,
   queuePromotionJob,
   shortBranchName,
@@ -25,6 +26,7 @@ import {
   ProjectPromotionView,
   PromotionRow,
   PromotionState,
+  automaticConfirmationRefusal,
   medianMs,
   promotionConfirmRefusal,
   promotionDedupeKey,
@@ -60,6 +62,16 @@ const MERGED_RECORD_LIMIT = 20;
  * So the candidate freezes a source SHA, the checks freeze the upstream they passed against, and
  * M-S3 refuses to land anything that is not what was confirmed — either by reproducing the same tree
  * or, when the upstream has moved, by checking again before it lands (M5).
+ *
+ * THE ONE CONFIRMATION THAT IS NOT A PRESS
+ * ----------------------------------------
+ * A project that integrates on a branch of its own and has its Automatic setting on does not get the
+ * card when its check comes back clean: `applyPromotionJobResult` confirms it in the same
+ * transaction, marked `confirmedAutomatically` with no user named, and queues the landing (M-T11).
+ * That landing is bound tighter than an owner's — to the tree that passed, on the main tip it passed
+ * against — and a runner that finds main has moved hands it back untouched, at which point the card
+ * the owner did not see is opened after all (M-T12). The owner's doors below are unchanged, and
+ * `cancel` answers an automatic merge exactly as it answers a pressed one until it is pushed.
  */
 @Injectable()
 export class ProjectPromotionService {
@@ -646,8 +658,77 @@ export interface PromotionJobOutcome {
   state: PromotionState;
   /** The receipts M9 wrote, so the job row can keep them beside its own. */
   receiptIds: string[];
-  /** Whether the owner's approval card should be opened for this promotion. */
-  openApproval: { title: string; taskIds: string[] } | null;
+  /**
+   * Whether the owner's approval card should be opened for this promotion, and the facts it is
+   * about — read off the promotion rather than off the job that just finished, because a landing
+   * handed back after main moved (M-T12) reports the tip it found, not the one the check passed on.
+   */
+  openApproval: {
+    title: string;
+    taskIds: string[];
+    upstreamShaChecked: string | null;
+    checks: IntegrationCheckResult[];
+  } | null;
+}
+
+/** The exception kinds that are an integration line's own problems (§4.2): while one of this
+ *  project's is open, nothing it would carry into main is clean enough to go there by itself. */
+const INTEGRATION_ITEM_KINDS = ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'];
+
+/**
+ * M-T11: why this candidate, whose check just came back READY, goes to the owner as a card — or null
+ * when the project's Automatic setting confirms it instead. The rule itself is
+ * `automaticConfirmationRefusal`; this is the part that reads what it weighs, all of it inside the
+ * transaction that applies the check, so the answer is about this moment and no earlier one.
+ *
+ * The runner asked about is the one that just ran the check: the landing is claimed through the same
+ * session's workspace, so it is the machine that will be told to land only onto the checked tip.
+ */
+async function automaticConfirmationRefusalIn(
+  tx: Prisma.TransactionClient,
+  promotion: PromotionRow,
+  report: {
+    runnerId: string | null;
+    conflicts: string[];
+    checks: IntegrationCheckResult[];
+    upstreamSha: string | null;
+    testedTreeSha: string | null;
+  },
+): Promise<string | null> {
+  const project = await tx.project.findUnique({
+    where: { id: promotion.projectId },
+    select: { coordinatorEnabled: true },
+  });
+  const codebase = await tx.projectCodebase.findUnique({
+    where: { id: promotion.codebaseId },
+    select: { integrationRef: true, upstreamRef: true },
+  });
+  const openIntegrationItems = await tx.projectOpenItem.count({
+    where: { projectId: promotion.projectId, state: 'OPEN', kind: { in: INTEGRATION_ITEM_KINDS } },
+  });
+  const runner = report.runnerId
+    ? await tx.runner.findUnique({ where: { id: report.runnerId }, select: { capabilities: true } })
+    : null;
+  // The line as the binding says now, and only if it is still the line this candidate was made on:
+  // its source is the project's branch and its upstream is the project's upstream.
+  const line = !codebase
+    ? null
+    : codebase.integrationRef === codebase.upstreamRef
+      ? 'MAIN' as const
+      : codebase.integrationRef === promotion.sourceRef && codebase.upstreamRef === promotion.upstreamRef
+        ? 'PROJECT_BRANCH' as const
+        : null;
+  return automaticConfirmationRefusal({
+    sourceKind: promotion.sourceKind,
+    line,
+    coordinatorEnabled: project?.coordinatorEnabled === true,
+    conflicts: report.conflicts,
+    checks: report.checks,
+    upstreamShaChecked: report.upstreamSha,
+    mergeTreeSha: report.testedTreeSha,
+    openIntegrationItems,
+    runnerHandsBackMovedUpstream: runner?.capabilities.includes(PROMOTION_AUTOMATIC_LAND) === true,
+  });
 }
 
 /**
@@ -658,6 +739,12 @@ export interface PromotionJobOutcome {
  * the upstream are one fact. A reader that saw one without the other would see a project whose
  * criteria read ON_INTEGRATION_LINE while its promotion says it merged, which is the one
  * inconsistency the whole of §3 exists to make impossible.
+ *
+ * THE EDGE THE CARD OPENS ON IS ALSO WHERE THE OWNER'S AUTOMATIC AUTHORIZATION IS READ (M-T11). A
+ * check that comes back READY either opens the owner's card, as it always has, or — for a project
+ * branch whose project has Automatic on, with the check clean — is confirmed here and its landing
+ * queued, with no card and no user named. The same transaction decides it and writes it, so there
+ * is no moment at which the candidate sits READY with nobody asked.
  */
 export async function applyPromotionJobResult(
   tx: Prisma.TransactionClient,
@@ -665,6 +752,8 @@ export async function applyPromotionJobResult(
     promotionId: string;
     jobId: string;
     jobKind: string;
+    /** The runner that did this job, which is the one a landing queued now will be claimed by. */
+    runnerId: string | null;
     state: string;
     upstreamSha: string | null;
     /** The commit this job worked from. For a `TASK_BRANCH` candidate it is the one the runner
@@ -694,10 +783,19 @@ export async function applyPromotionJobResult(
 
   if (input.jobKind === 'CHECK_PROMOTION') {
     if (input.state === 'READY') {
+      // M-T11 before M-T2: whether anybody is asked at all.
+      const refusal = await automaticConfirmationRefusalIn(tx, promotion, {
+        runnerId: input.runnerId,
+        conflicts: input.conflicts,
+        checks: input.checks,
+        upstreamSha: input.upstreamSha,
+        testedTreeSha: input.testedTreeSha,
+      });
+      const automatic = refusal === null;
       await tx.projectPromotion.update({
         where: { id: promotion.id },
         data: {
-          state: 'READY' satisfies PromotionState,
+          state: (automatic ? 'CONFIRMED' : 'READY') satisfies PromotionState,
           // The commit the owner is being asked about, for the candidates whose source the platform
           // could not resolve for itself (0293). An echo for every other job: the runner works from
           // the sha it was handed and reports the same one back.
@@ -708,8 +806,18 @@ export async function applyPromotionJobResult(
           filesChanged: input.filesChanged,
           checks,
           conflicts: [],
+          // Nobody pressed it, so nobody is named: the setting is what confirmed it.
+          ...(automatic ? { confirmedAutomatically: true, confirmedAt: now } : {}),
         },
       });
+      if (automatic) {
+        const landJobId = await queueAutomaticLanding(tx, {
+          ...promotion,
+          sourceSha: input.sourceSha ?? promotion.sourceSha,
+        });
+        await tx.projectPromotion.update({ where: { id: promotion.id }, data: { landJobId } });
+        return { promotionId: promotion.id, state: 'CONFIRMED', receiptIds: [], openApproval: null };
+      }
       return {
         promotionId: promotion.id,
         state: 'READY',
@@ -717,6 +825,8 @@ export async function applyPromotionJobResult(
         openApproval: {
           title: promotionItemTitle(promotion.upstreamRef, promotion.includedTaskIds.length),
           taskIds: promotion.includedTaskIds,
+          upstreamShaChecked: input.upstreamSha,
+          checks: input.checks,
         },
       };
     }
@@ -724,6 +834,9 @@ export async function applyPromotionJobResult(
   }
 
   // LAND_PROMOTION.
+  if (input.state === 'READY' && promotion.confirmedAutomatically) {
+    return handBackToOwner(tx, promotion);
+  }
   if (input.state === 'LANDED' || input.state === 'ALREADY_LANDED') {
     const mergedSha = input.state === 'LANDED' ? input.landedSha : (input.targetShaBefore ?? input.upstreamSha);
     if (!mergedSha) return null;
@@ -754,6 +867,61 @@ export async function applyPromotionJobResult(
     return { promotionId: promotion.id, state: 'MERGED', receiptIds, openApproval: null };
   }
   return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha);
+}
+
+/**
+ * M-T11: the landing the project's Automatic setting confirmed, queued in the transaction that
+ * confirmed it. Marked on the job as well as on the promotion, because the job is what the runner is
+ * handed and the mark is what binds it to the checked tip (M-T12).
+ */
+async function queueAutomaticLanding(tx: Prisma.TransactionClient, promotion: PromotionRow): Promise<string> {
+  const codebase = await tx.projectCodebase.findUnique({
+    where: { id: promotion.codebaseId },
+    select: { canonicalRepoUrl: true },
+  });
+  if (!codebase) throw new NotFoundException('the project names no repository');
+  return queuePromotionJob(tx, {
+    kind: 'LAND_PROMOTION',
+    promotion,
+    canonicalRepoUrl: codebase.canonicalRepoUrl,
+    confirmedAutomatically: true,
+  });
+}
+
+/**
+ * M-T12: an automatic landing found main somewhere other than where the check left it, and landed
+ * nothing. The Automatic setting authorized a clean landing and this is no longer one, so the
+ * candidate goes back to being a question — READY, with the card the owner was spared opened after
+ * all, and with the check it already has: the owner's press is what decides whether it is checked
+ * again on the new main and merged (M5), exactly as if the card had been theirs from the start.
+ *
+ * The promotion stops saying it was confirmed automatically, because it is not confirmed at all now;
+ * the job it sent out keeps saying so, which is where the attempt is recorded.
+ */
+async function handBackToOwner(
+  tx: Prisma.TransactionClient,
+  promotion: PromotionRow,
+): Promise<PromotionJobOutcome> {
+  await tx.projectPromotion.update({
+    where: { id: promotion.id },
+    data: {
+      state: 'READY' satisfies PromotionState,
+      confirmedAutomatically: false,
+      confirmedAt: null,
+      landJobId: null,
+    },
+  });
+  return {
+    promotionId: promotion.id,
+    state: 'READY',
+    receiptIds: [],
+    openApproval: {
+      title: promotionItemTitle(promotion.upstreamRef, promotion.includedTaskIds.length),
+      taskIds: promotion.includedTaskIds,
+      upstreamShaChecked: promotion.upstreamShaChecked,
+      checks: Array.isArray(promotion.checks) ? (promotion.checks as unknown as IntegrationCheckResult[]) : [],
+    },
+  };
 }
 
 /** M-T3 / M-T9: the candidate stops and somebody has to look at it. */
@@ -800,7 +968,7 @@ async function blockPromotion(
 async function writeUpstreamReceipts(
   tx: Prisma.TransactionClient,
   input: {
-    promotion: { id: string; ownerId: string; projectId: string; sourceKind: string; taskId: string | null; sessionId: string | null; includedTaskIds: string[]; sourceRef: string; upstreamRef: string; sourceSha: string | null };
+    promotion: { id: string; ownerId: string; projectId: string; sourceKind: string; taskId: string | null; sessionId: string | null; includedTaskIds: string[]; sourceRef: string; upstreamRef: string; sourceSha: string | null; confirmedAutomatically: boolean };
     jobId: string;
     state: 'LANDED' | 'ALREADY_LANDED';
     mergedSha: string;
@@ -849,6 +1017,9 @@ async function writeUpstreamReceipts(
       testedTreeSha: input.testedTreeSha,
       landedTreeSha: input.testedTreeSha,
       mainSyncSha: null,
+      // The ledger's own copy of who merged it: a receipt read years later has to be able to say
+      // "nobody pressed this" without the promotion row beside it.
+      confirmedAutomatically: input.promotion.confirmedAutomatically,
     });
     receiptIds.push(...written);
   }

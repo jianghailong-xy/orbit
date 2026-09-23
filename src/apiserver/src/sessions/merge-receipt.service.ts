@@ -601,6 +601,10 @@ export class MergeReceiptService {
       testedTreeSha: string | null;
       landedTreeSha: string | null;
       mainSyncSha: string | null;
+      /** A merge into the upstream nobody pressed: the project's Automatic setting confirmed it
+       *  (integration contract §3.3 M-T11). Written into the receipt's `detail` so the ledger itself
+       *  says which merges a person made and which the platform made on its own. */
+      confirmedAutomatically?: boolean;
     },
   ): Promise<string[]> {
     const sourceSha = normalizeSha(args.sourceSha, 'sourceSha');
@@ -632,6 +636,7 @@ export class MergeReceiptService {
           ...(args.testedTreeSha ? { testedTreeSha: args.testedTreeSha } : {}),
           ...(args.landedTreeSha ? { landedTreeSha: args.landedTreeSha } : {}),
           ...(args.mainSyncSha ? { mainSyncSha: args.mainSyncSha } : {}),
+          ...(args.confirmedAutomatically ? { confirmedAutomatically: true } : {}),
         } as Prisma.InputJsonValue,
         idempotencyKey: mergeReceiptIdempotencyKey({
           sessionId: args.sessionId,

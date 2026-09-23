@@ -18,6 +18,14 @@ import (
 // INTEGRATION_JOB_CLAIM in src/apiserver/src/projects/project-integration-job.ts.
 const integrationJobCapabilityV1 = "integration-job/v1"
 
+// The capability that says this runner honours an automatic landing's one extra rule (§3.3 M-T12):
+// land only onto the upstream tip the check ran against, and hand the candidate back untouched when
+// the upstream has moved, rather than checking the new tip and merging it as an owner-confirmed
+// landing does (M5). The control plane confirms nothing by itself for a runner that has not said
+// this, and never hands such a runner an automatic landing. Its apiserver twin is
+// PROMOTION_AUTOMATIC_LAND in src/apiserver/src/projects/project-integration-job.ts.
+const promotionAutomaticLandCapabilityV1 = "promotion-automatic-land/v1"
+
 // Where a throwaway integration worktree lives, under the same worktrees directory as everything
 // else this runner stages. Prefixed so the garbage collector can recognise one that outlived its
 // job (a process killed mid-run) and remove it.
@@ -423,6 +431,17 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	// carries no change at all.
 	if isAncestor(scratch, sourceSha, upstreamSha) {
 		result.State, result.Phase = "ALREADY_LANDED", "MERGE"
+		return result
+	}
+
+	// M-T12: an automatic landing — the project's Automatic setting confirmed it, nobody pressed
+	// Merge — is authorized for one combination: this source onto the upstream tip its check ran
+	// against. With the upstream anywhere else there is nothing it may land, and it does not do what
+	// a landing the owner confirmed does (M5), re-check the new tip and merge it: it merges nothing,
+	// reports READY, and the owner is asked. A landing that names no checked tip has nothing to be
+	// held to, and lands nothing either.
+	if landing && cmd.Automatic && (cmd.UpstreamShaChecked == "" || cmd.UpstreamShaChecked != upstreamSha) {
+		result.State, result.Phase = "READY", "MERGE"
 		return result
 	}
 

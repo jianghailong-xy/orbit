@@ -26,9 +26,11 @@ import { ago, formatSpan } from '../lib/watches';
  * WHY THIS IS THE ONE MERGE SOMEBODY PRESSES. Everything else on an integration line happens on its
  * own: a finished task is rebased, checked on the combined tree and landed on the project branch by
  * the platform, because each of those steps has one right answer. Merging that branch into main does
- * not — "is this ready to be on main" is a judgement, and M7 gives it to the account owner every
- * time, with no automatic branch and no setting that turns one on. So this card is not a convenience
- * over an API; it is the only door that merge has.
+ * not — "is this ready to be on main" is a judgement, and M7 gives it to the account owner. They can
+ * give it back in exactly one case (owner decision 2026-09-23, M-T11): a project that integrates on
+ * a branch of its own, with its Automatic setting on, and a check that came back clean. Then this
+ * card is never asked — the merge happens and state C is drawn as its receipt, saying it was the
+ * setting and how to take it back. Every other merge into main still has this card as its only door.
  *
  * WHAT IT HAS TO SAY BEFORE SOMEBODY CAN ANSWER IT. Four facts, which is why the card is a list of
  * rows rather than a sentence: which tasks would arrive on main, what was run on the combined tree
@@ -57,6 +59,12 @@ export const OPEN_COORDINATOR = 'Open coordinator';
 
 /** State C's heading, and state B's one sentence about what the reader has to do (nothing). */
 export const MERGED_HEADING = '✓ Merged into main';
+/** State C's heading when nobody pressed Merge: the project's Automatic setting merged its own
+ *  branch because the check was clean (§3.3 M-T11). The receipt is the only place the owner learns
+ *  it happened, so it says so first. */
+export const MERGED_AUTOMATICALLY_HEADING = '✓ Merged into main automatically';
+/** Who merged it, where a pressed merge says "by you". */
+export const UNDER_AUTOMATIC = 'under your Automatic setting';
 export const NOTHING_TO_DO =
   'nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t';
 /** M8, in the card's own words: this merge is not the project finishing. */
@@ -96,7 +104,7 @@ export function promotionHeading(promotion: ProjectPromotionView): string {
   const upstream = shortRef(promotion.upstreamRef);
   switch (promotion.state) {
     case 'MERGED':
-      return MERGED_HEADING;
+      return promotion.merged?.automatic ? MERGED_AUTOMATICALLY_HEADING : MERGED_HEADING;
     case 'CONFIRMED':
     case 'RECHECKING':
       return `Merging ${source} into ${upstream}…`;
@@ -297,7 +305,13 @@ function MergingRows({ promotion, now }: { promotion: ProjectPromotionView; now:
   );
 }
 
-/** State C's body: the commit, what is on main because of it, and what the branch still owes. */
+/**
+ * State C's body: the commit, what is on main because of it, and what the branch still owes.
+ *
+ * A merge the Automatic setting made also says how to take it back. The owner watched a pressed
+ * merge happen and chose it; this one happened without them, and a receipt for a change to main
+ * nobody was asked about owes them the one command that undoes it (`git revert -m 1 <merge>`).
+ */
 function MergedRows({
   promotion,
   project,
@@ -316,7 +330,7 @@ function MergedRows({
     <>
       <Row k="Commit">
         <span className="promotion-mono">{shortSha(merged.sha)}</span>
-        {` · merge of ${source} · by you · ${ago(merged.at, now)}`}
+        {` · merge of ${source} · ${merged.automatic ? UNDER_AUTOMATIC : 'by you'} · ${ago(merged.at, now)}`}
       </Row>
       <Row k={`Now on ${shortRef(promotion.upstreamRef)}`}>
         {plural(promotion.taskIds.length, 'task')}
@@ -324,6 +338,11 @@ function MergedRows({
           ? ` · ${ordinals.length === 1 ? 'criterion' : 'criteria'} ${ordinals.join(', ')} show “on ${shortRef(promotion.upstreamRef)}”`
           : null}
       </Row>
+      {merged.automatic && merged.revert ? (
+        <Row k="Undo">
+          <span className="promotion-mono">{merged.revert}</span>
+        </Row>
+      ) : null}
       <Row k="Next">
         {open == null
           ? `${source} keeps going`

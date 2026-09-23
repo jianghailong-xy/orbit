@@ -9,6 +9,7 @@ import type { ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
 import {
   BLOCKERS_DECIDED_TOO,
   CANCEL_MERGE,
+  MERGED_AUTOMATICALLY_HEADING,
   MERGE_TO_MAIN,
   MERGING,
   NOTHING_TO_DO,
@@ -17,6 +18,7 @@ import {
   ProjectPromotion,
   ProjectPromotionCard,
   ProjectPromotionReceipt,
+  UNDER_AUTOMATIC,
   type PromotionProjectView,
 } from './ProjectPromotionCard';
 import { FROM_ORBIT } from './ProjectProgressStatus';
@@ -374,6 +376,8 @@ describe('state C — it merged, and the card is the receipt', () => {
       sha: '324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
       byUserId: '2p7QMFOwEGtL5oaTxZHihm',
       at: at(2 * MINUTE),
+      automatic: false,
+      revert: 'git revert -m 1 324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
     },
   });
 
@@ -398,6 +402,65 @@ describe('state C — it merged, and the card is the receipt', () => {
 });
 
 /**
+ * State C when nobody pressed Merge (§3.3 M-T11): the project integrates on a branch of its own, its
+ * Automatic setting is on, and the check was clean — so the platform merged it, and this receipt is
+ * the only place the owner learns that it did. It has to say three things a pressed merge's receipt
+ * does not need to: that it was the setting, which commit is now on main, and how to take it back.
+ */
+describe('state C, merged by the Automatic setting — the receipt says so and how to undo it', () => {
+  const automatic = promotion({
+    state: 'MERGED',
+    merged: {
+      sha: '324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
+      byUserId: null,
+      at: at(2 * MINUTE),
+      automatic: true,
+      revert: 'git revert -m 1 324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
+    },
+  });
+
+  it('says it merged into main automatically, under the owner\'s Automatic setting — not by them', () => {
+    const html = card(automatic);
+    expect(html).toContain(MERGED_AUTOMATICALLY_HEADING);
+    expect(html).toContain(`merge of project/bg-jobs · ${UNDER_AUTOMATIC} · 2m ago`);
+    expect(html).not.toContain('by you');
+  });
+
+  it('names the commit now on main and the one command that takes it back out', () => {
+    const html = card(automatic);
+    expect(html).toContain('324cf00');
+    expect(html).toContain('Undo');
+    expect(html).toContain('git revert -m 1 324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3');
+  });
+
+  it('says the same where the conversation draws the record, and still asks for nothing', () => {
+    const html = markup(<ProjectPromotionReceipt promotion={automatic} now={NOW} />);
+    expect(html).toContain(MERGED_AUTOMATICALLY_HEADING);
+    expect(html).toContain(UNDER_AUTOMATIC);
+    expect(html).toContain('git revert -m 1 324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3');
+    expect(html).not.toContain('<button');
+  });
+
+  it('leaves a pressed merge\'s receipt exactly as it was: by you, and no undo row', () => {
+    const pressed = promotion({
+      state: 'MERGED',
+      merged: {
+        sha: '324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
+        byUserId: '2p7QMFOwEGtL5oaTxZHihm',
+        at: at(2 * MINUTE),
+        automatic: false,
+        revert: 'git revert -m 1 324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
+      },
+    });
+    const html = card(pressed);
+    expect(html).toContain('✓ Merged into main<');
+    expect(html).not.toContain(MERGED_AUTOMATICALLY_HEADING);
+    expect(html).toContain('by you');
+    expect(html).not.toContain('git revert');
+  });
+});
+
+/**
  * The same state C as a record, drawn in the conversation at the moment it happened
  * (`WorkspaceView.promotionAtMerge.test.tsx`): what it says is the merge's OWN, and the two rows
  * about where the branch stands now are the live card's business rather than the record's.
@@ -409,6 +472,8 @@ describe('the record a merge leaves', () => {
       sha: '324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
       byUserId: '2p7QMFOwEGtL5oaTxZHihm',
       at: at(2 * MINUTE),
+      automatic: false,
+      revert: 'git revert -m 1 324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
     },
   });
 

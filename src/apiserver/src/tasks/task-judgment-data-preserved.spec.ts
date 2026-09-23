@@ -1132,7 +1132,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // — so it is not another writer of the DONE fence and names none of the six preserved objects
       // — carries no `ALTER TYPE` and no `DROP TYPE`, and has no INSERT, UPDATE or DELETE. The set
       // only grows, so no stored state is refused by it and it needs no backfill.
-      '0300_integration_job_nothing_to_land'],
+      '0300_integration_job_nothing_to_land',
+      // `project_promotion.confirmed_automatically` and `project_integration_job.
+      // confirmed_automatically`: two BOOLEAN NOT NULL DEFAULT false columns (a constant default,
+      // so catalog-only — no row is rewritten), `project_promotion_confirmed_by_chk` dropped and
+      // re-added with one more OR arm, two new CHECKs, two `COMMENT ON`s. Read against every claim
+      // above: no function, trigger, type or index is created, replaced or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects; both tables
+      // it ALTERs were created by 0281 and 0286 and neither is a preserved relation, and no `task`,
+      // `session`, `project`, `session_merge_receipt` or `project_acceptance_*` object is named, so
+      // the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
+      // UPDATE or DELETE: no stored row is read beyond the scans that validate the CHECKs, and
+      // none is locked for longer, backfilled or rewritten.
+      '0300_project_promotion_automatic_merge'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

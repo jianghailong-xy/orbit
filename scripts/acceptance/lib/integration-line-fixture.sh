@@ -613,6 +613,18 @@ promotion_job_column_of() {
          ORDER BY j.created_at DESC LIMIT 1"
 }
 
+# The owner flipping the project's Automatic switch — the web switch's own write (`PATCH
+# /projects/:id`). On a project branch it is also the authorization to merge a clean branch into
+# main without asking (§3.3 M7, M-T11), which is why a case about the owner's press turns it off.
+set_automatic() {
+  local project="$1" on="$2"
+  local body; body="$(api PATCH "/projects/$project" "{\"coordinatorEnabled\":$on}")"
+  case "$(api_status)" in
+    200|201) ;;
+    *) fail "setting Automatic=$on on $project answered $(api_status): $body" ;;
+  esac
+}
+
 # The owner pressing Merge on the card (§3.4 M-F3).
 confirm_promotion() {
   local project="$1" promotion="$2"

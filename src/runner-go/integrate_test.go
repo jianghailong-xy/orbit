@@ -521,6 +521,126 @@ func TestPromotionOfATaskBranchRebasesAndFastForwards(t *testing.T) {
 	}
 }
 
+// checkedProjectBranch is a project branch with one task's work on it, checked for promotion the
+// way the queue checks it: the CHECK_PROMOTION's READY, whose upstream tip and tree are what a
+// landing of it is held to.
+func checkedProjectBranch(t *testing.T, r *integrationRepo) (sourceSha string, checked integrationResult) {
+	t.Helper()
+	r.checkoutNew("project/p", "main")
+	r.write("feature.txt", "from the project\n")
+	sourceSha = r.commit("task on the project branch")
+	r.push("project/p")
+	r.checkout("main")
+	check := r.promotionCommand("CHECK_PROMOTION", "project/p", "PROJECT_BRANCH")
+	check.SourceSha = sourceSha
+	checked = runIntegrationJob(check, silent)
+	if checked.State != "READY" {
+		t.Fatalf("check state = %s (%s %s), want READY", checked.State, checked.ErrorCode, checked.Phase)
+	}
+	return sourceSha, checked
+}
+
+// automaticLanding is the LAND_PROMOTION the project's Automatic setting queues for that check
+// (§3.3 M-T11): the same frozen facts an owner-confirmed landing carries, plus the mark.
+func automaticLanding(r *integrationRepo, sourceSha string, checked integrationResult) IntegrationJobCommand {
+	land := r.promotionCommand("LAND_PROMOTION", "project/p", "PROJECT_BRANCH")
+	land.SourceSha = sourceSha
+	land.UpstreamShaChecked = checked.UpstreamSha
+	land.MergeTreeSha = checked.TestedTreeSha
+	land.Automatic = true
+	return land
+}
+
+// TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst is M-T11's landing when nothing
+// moved: the merge the check built is rebuilt on the same tip, comes out as the same tree, and is
+// pushed — a merge commit whose first parent is exactly the upstream the check ran against, which is
+// what makes `git revert -m 1 <merge>` the receipt's undo.
+func TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+
+	landed := runIntegrationJob(automaticLanding(r, sourceSha, checked), silent)
+	if landed.State != "LANDED" {
+		t.Fatalf("landing state = %s (%s %s), want LANDED", landed.State, landed.ErrorCode, landed.Phase)
+	}
+	if landed.LandedTreeSha != checked.TestedTreeSha {
+		t.Fatalf("landed tree %q is not the tree the check passed %q", landed.LandedTreeSha, checked.TestedTreeSha)
+	}
+	if got := r.originRev("refs/heads/main"); got != landed.LandedSha {
+		t.Fatalf("origin main is %s, the result claims %s", got, landed.LandedSha)
+	}
+	if parent, _ := git(r.work, "rev-parse", landed.LandedSha+"^1"); parent != checked.UpstreamSha {
+		t.Fatalf("the merge's first parent is %s, want the checked upstream %s", parent, checked.UpstreamSha)
+	}
+}
+
+// TestAutomaticPromotionHandsBackAMovedUpstream is M-T12, the half of "clean" the control plane
+// cannot see: main moved after the check. An owner-confirmed landing re-checks the new tip and
+// merges it (M5) — that is what the owner confirmed. An automatic one lands NOTHING: no merge, no
+// check, no push, no upstreamMoved report (which would move the promotion to RECHECKING, a state
+// whose card promises it lands on its own), and READY, so the owner is asked. The owner-confirmed
+// run of the very same job is the control: it is what the Automatic mark is the difference from.
+func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	r.write("elsewhere.txt", "somebody else landed first\n")
+	moved := r.commit("main moved after the check")
+	r.push("main")
+
+	var reports []string
+	handedBack := runIntegrationJob(automaticLanding(r, sourceSha, checked), func(phase string, m *IntegrationUpstreamMoved) {
+		if m != nil {
+			reports = append(reports, "upstreamMoved")
+		}
+		reports = append(reports, phase)
+	})
+	if handedBack.State != "READY" {
+		t.Fatalf("automatic landing onto a moved main = %s (%s %s), want READY", handedBack.State, handedBack.ErrorCode, handedBack.Phase)
+	}
+	if got := r.originRev("refs/heads/main"); got != moved {
+		t.Fatalf("an automatic landing pushed onto a moved main: main is %s, want it left at %s", got, moved)
+	}
+	if handedBack.TestedSha != "" || len(handedBack.Checks) != 0 {
+		t.Fatalf("it merged or checked something (tested %q, %d checks): it was to land nothing", handedBack.TestedSha, len(handedBack.Checks))
+	}
+	if handedBack.UpstreamSha != moved {
+		t.Fatalf("the result names upstream %q, want the tip it found %q", handedBack.UpstreamSha, moved)
+	}
+	for _, report := range reports {
+		if report == "upstreamMoved" {
+			t.Fatalf("the automatic landing reported upstreamMoved (%v): the promotion would read RECHECKING", reports)
+		}
+	}
+
+	// The control: the same landing without the mark is the owner's, and it re-checks and lands.
+	confirmed := automaticLanding(r, sourceSha, checked)
+	confirmed.Automatic = false
+	landed := runIntegrationJob(confirmed, silent)
+	if landed.State != "LANDED" {
+		t.Fatalf("the owner-confirmed control = %s (%s %s), want LANDED after a re-check", landed.State, landed.ErrorCode, landed.Phase)
+	}
+	if parent, _ := git(r.work, "rev-parse", landed.LandedSha+"^1"); parent != moved {
+		t.Fatalf("the control landed onto %s, want the moved tip %s", parent, moved)
+	}
+}
+
+// TestAutomaticPromotionWithNoCheckedTipLandsNothing: a mark with nothing to hold the landing to is
+// not a licence to land anywhere. The control plane never sends one; the runner does not trust that.
+func TestAutomaticPromotionWithNoCheckedTipLandsNothing(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	land := automaticLanding(r, sourceSha, checked)
+	land.UpstreamShaChecked = ""
+
+	result := runIntegrationJob(land, silent)
+	if result.State != "READY" {
+		t.Fatalf("an automatic landing with no checked tip = %s (%s %s), want READY", result.State, result.ErrorCode, result.Phase)
+	}
+	if got := r.originRev("refs/heads/main"); got != checked.UpstreamSha {
+		t.Fatalf("main moved to %s, want it left at %s", got, checked.UpstreamSha)
+	}
+}
+
 // TestIntegrationPreparesTheTreeBeforeTheChecks is the other half of a check: the command is one a
 // task author wrote for a tree with an environment in it, and the combination tree comes out of git
 // with none. So the tree's own recipe (scripts/worktree-overlay.sh) runs first, and what it lays

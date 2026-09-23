@@ -2014,6 +2014,12 @@ export interface IntegrationJobCommand {
    *  tree, and an upstream that moved must be checked again before anything lands. */
   upstreamShaChecked?: string;
   mergeTreeSha?: string;
+  /** LAND_PROMOTION queued by the project's Automatic setting rather than by the owner's press
+   *  (§3.3 M-T11). Such a landing is authorized onto `upstreamShaChecked` and nowhere else: a runner
+   *  that finds the upstream anywhere else merges nothing, checks nothing, and reports `READY` so the
+   *  promotion goes back to the owner as a card (M-T12). Sent only to a runner that declared
+   *  `promotion-automatic-land/v1`; absent on every other job. */
+  automatic?: boolean;
   checks: IntegrationCheckSpec[];
   /** Somebody asked for this job to stop; the runner checks it at each phase boundary. */
   cancelRequested: boolean;
