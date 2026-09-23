@@ -119,6 +119,7 @@ test('a criterion written by the session producing its evidence does not count, 
     routeSettledProjects: async () => [],
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],
+    routeReadyDependents: async () => [],
     routeTaskExceptions: async () => [],
   } as unknown as CompletionInputRouter;
 

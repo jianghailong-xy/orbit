@@ -99,7 +99,7 @@ interface WiredWakeFact {
  * The fact kinds this work put behind a producer, and the control that proves the switch stops
  * each one.
  *
- * Seven kinds, fifteen controls. The mapping is many-to-one in both directions on purpose: one
+ * Eight kinds, sixteen controls. The mapping is many-to-one in both directions on purpose: one
  * kind is reached by more than one write path and is controlled once per path, one control can
  * cover two kinds when the same run drives both, and one PRODUCER can build two kinds when which
  * fact a committed world justifies is the thing it decides.
@@ -275,6 +275,24 @@ const WIRED: readonly WiredWakeFact[] = [
       {
         spec: 'tasks/task-dispatch-refusal-visible.pg.spec.ts',
         test: 'a refused start under a switched-off coordinator is recorded on the task and wakes nobody',
+      },
+    ],
+  },
+  {
+    // A fact about a DEPENDENT — a task a landing made startable and that does not start itself —
+    // delivered by its own producer rather than through the terminal chooser. Neither changes the
+    // switch: the producer's authorizer refuses on the column before the convergence ledger is
+    // charged. One control, which lands the last prerequisite with the switch off and says every
+    // half of it in one case: one refusal, on the switch, the conversation told nothing, no session.
+    event: 'DEPENDENT_READY',
+    producedBy: [
+      'projects/coordinator-wake.ts#dependentReadyFact',
+      'projects/dependent-ready.producer.ts#factsFor',
+    ],
+    negatives: [
+      {
+        spec: 'tasks/task-dependent-ready-delivery.pg.spec.ts',
+        test: 'a released dependent under a switched-off coordinator is refused once, told nothing, and opens nothing',
       },
     ],
   },

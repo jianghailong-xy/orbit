@@ -9,6 +9,7 @@ import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
+import { DependentReadyProducer } from './dependent-ready.producer';
 import { ProjectFuseService } from './project-fuse.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
@@ -38,6 +39,9 @@ import { WakeDispositionService } from './wake-disposition.service';
  * is here for the same one reason all of them are — the convergence service its authorizer composes
  * is this module's provider, and merging is the one coordinator action that cannot be undone, so an
  * unbounded version of this fact is the most expensive one to have wired anywhere else.
+ * `DependentReadyProducer` is here for the same one reason, and it also holds
+ * `CoordinatorDeliveryService`: its fact is handed to the standing conversation by the producer
+ * itself, as `ProjectTasksSettledProducer` hands over the acceptance card.
  *
  * `WakeDispositionService` is here for the other half of that argument: it decides which of the
  * three terminals an authorized wake gets, and two of them are performed by this module's own
@@ -75,6 +79,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     CriterionReadyProducer,
     CriterionUnlandedProducer,
     TaskDispatchRefusalProducer,
+    DependentReadyProducer,
     WakeDispositionService,
   ],
   exports: [
@@ -90,6 +95,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     CriterionReadyProducer,
     CriterionUnlandedProducer,
     TaskDispatchRefusalProducer,
+    DependentReadyProducer,
     WakeDispositionService,
   ],
 })
