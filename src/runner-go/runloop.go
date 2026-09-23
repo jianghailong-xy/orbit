@@ -109,12 +109,44 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 	}
 	if len(next.Claude) == 0 {
 		next.Claude = prev.Claude
+	} else {
+		next.Claude = carryOverModelCapabilities(prev.Claude, next.Claude)
 	}
 	if len(next.Kimi) == 0 {
 		next.Kimi = prev.Kimi
 	}
 	if len(next.OpenCode) == 0 {
 		next.OpenCode = prev.OpenCode
+	}
+	return next
+}
+
+// carryOverModelCapabilities keeps a model row's last good permission-mode / fast-lane answer when
+// this round could not read it. Those two come from an extra `claude` spawn per model, so unlike
+// the list itself they can go missing one model at a time — and a single timed-out probe would
+// otherwise take Auto and the fast lane away from a model that has both, for the four hours until
+// the next refresh. That silent downgrade is the thing the per-model report exists to end, so it
+// must not be reintroduced by the report's own flakiness. A row that DID answer always wins,
+// including when it answers "no".
+func carryOverModelCapabilities(prev, next []ModelInfo) []ModelInfo {
+	if len(prev) == 0 {
+		return next
+	}
+	previous := make(map[string]ModelInfo, len(prev))
+	for _, model := range prev {
+		previous[model.Value] = model
+	}
+	for i, model := range next {
+		was, known := previous[model.Value]
+		if !known {
+			continue
+		}
+		if model.PermissionModes == nil {
+			next[i].PermissionModes = was.PermissionModes
+		}
+		if model.FastMode == nil {
+			next[i].FastMode = was.FastMode
+		}
 	}
 	return next
 }

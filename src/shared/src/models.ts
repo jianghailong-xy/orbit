@@ -1,5 +1,5 @@
 import { AgentProvider } from './enums';
-import type { RunnerModelCatalog } from './dto';
+import type { RunnerModelCatalog, RunnerModelInfo } from './dto';
 
 /** The model each provider falls back to when neither the session nor its Runtime supplies one.
  *  Mirrors the clients' defaults (web `lib/agentDefaults` DEFAULT_MODEL_BY_PROVIDER, Swift
@@ -45,19 +45,37 @@ export function isRetiredModel(
 }
 
 /**
- * The Claude models that have a fast lane at all.
+ * The Claude models known to have a fast lane, used ONLY where the assigned runner's catalogue has
+ * not answered for that model — a runner too old to report it, or one whose probe failed.
  *
- * Claude Code's own gate, copied: it allows fast mode on a model whose capability list carries
- * `fast_mode` and refuses it on every other one ("<model> is not in your organization's allowed
- * models"), and as of CLI 2.1.260 that is Opus 5 and Opus 4.8. Same shape and the same long-term
- * caveat as AUTO_CAPABLE_CLAUDE_MODELS: the answer belongs to the CLI that runs the model, so a
- * static table here goes stale a release before anyone notices. Codex does not have that problem —
- * its runner reports each model's tiers — which is why the Codex half below reads the catalogue.
+ * It is a fallback and no longer a gate. The runner asks its own CLI (`/fast` is refused out loud
+ * on a model without the lane) and reports the answer per model, because this table is exactly the
+ * shape that fails silently: it was written when CLI 2.1.260 offered the lane on Opus 5 and Opus
+ * 4.8, and when Opus 5.5 shipped, every client withdrew `/fast` from a model that had it — no
+ * error, just a capability that quietly stopped existing. A catalogue row therefore always wins,
+ * including when it says no; this list can only fill a silence, never contradict an answer.
  */
 export const FAST_MODE_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
+  'claude-opus-5-5',
   'claude-opus-5',
   'claude-opus-4-8',
 ]);
+
+/**
+ * One model's row in the assigned runner's catalogue for the runtime that will execute it.
+ *
+ * Shared by the two capability questions that used to be answered from static tables, so both
+ * read the same row and cannot disagree about whether the runner has spoken.
+ */
+export function runnerCatalogRow(
+  runtime: string,
+  model: string,
+  modelCatalog?: RunnerModelCatalog | null,
+): RunnerModelInfo | undefined {
+  const rows = modelCatalog?.[runtime as AgentProvider];
+  if (!Array.isArray(rows)) return undefined;
+  return rows.find((row) => row?.value === model);
+}
 
 /**
  * The Codex service tier Codex calls "Fast" (`codex debug models` → service_tiers:
@@ -77,11 +95,13 @@ export const CODEX_FAST_SERVICE_TIER = 'priority';
  * case (a second account with the same vendor) and harmless for the other: both CLIs run without
  * the lane rather than fail when the endpoint cannot give it.
  *
- * - **Claude**: per model, from the static table above.
- * - **Codex**: from the assigned runner's catalogue — the model's row must advertise the priority
- *   tier. No row means no: unlike an effort level, a tier the catalogue does not advertise is not
- *   refused by codex but dropped from the request without a word, so "unknown" must not render a
- *   control whose only possible outcome is being ignored.
+ * - **Claude**: from the assigned runner's catalogue — the model's row says whether the CLI that
+ *   will run it has the lane. Only a row that did not answer falls back to the static table above,
+ *   so a model the runner reports as fast-less is fast-less even if the table still lists it.
+ * - **Codex**: from the same catalogue — the model's row must advertise the priority tier. No row
+ *   means no: unlike an effort level, a tier the catalogue does not advertise is not refused by
+ *   codex but dropped from the request without a word, so "unknown" must not render a control
+ *   whose only possible outcome is being ignored.
  * - Kimi and OpenCode have no fast lane.
  *
  * There is one thing this deliberately does NOT know: whether the account is ALLOWED the lane (an
@@ -93,10 +113,12 @@ export function fastModeAvailable(
   model: string,
   modelCatalog?: RunnerModelCatalog | null,
 ): boolean {
-  if (runtime === AgentProvider.CLAUDE) return FAST_MODE_CAPABLE_CLAUDE_MODELS.has(model);
+  if (runtime === AgentProvider.CLAUDE) {
+    const reported = runnerCatalogRow(runtime, model, modelCatalog)?.fastMode;
+    return reported ?? FAST_MODE_CAPABLE_CLAUDE_MODELS.has(model);
+  }
   if (runtime !== AgentProvider.CODEX) return false;
-  const rows = modelCatalog?.[AgentProvider.CODEX];
-  const row = Array.isArray(rows) ? rows.find((entry) => entry?.value === model) : undefined;
+  const row = runnerCatalogRow(runtime, model, modelCatalog);
   return Array.isArray(row?.serviceTiers) && row.serviceTiers.includes(CODEX_FAST_SERVICE_TIER);
 }
 

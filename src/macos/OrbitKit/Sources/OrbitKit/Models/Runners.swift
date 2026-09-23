@@ -42,7 +42,32 @@ public struct RunnerModelInfo: Codable, Equatable, Sendable, Identifiable {
     public let reasoningLevels: [String]?
     public let defaultReasoningLevel: String?
     public let serviceTiers: [String]?
+    /// The permission modes this model accepts, as the runner's own CLI answered for it — Claude
+    /// gates Auto per model, and which models have it belongs to the installed CLI rather than to
+    /// a set in this app. nil is "this runner could not say" (an older runner, a failed probe) and
+    /// falls back to `AgentDefaults.autoCapableModels`; a list that came back is authoritative,
+    /// including when it withholds a mode. Does not encode the runner's own root-ness.
+    public let permissionModes: [String]?
+    /// Whether this model has the runtime's fast lane, from the same probe. nil is "could not say".
+    public let fastMode: Bool?
     public var id: String { value }
+
+    /// Spelled out rather than synthesized so the two fields above can be added without every
+    /// construction site having to name them.
+    public init(value: String, label: String, priority: Int? = nil, contextWindow: Int? = nil,
+                reasoningLevels: [String]? = nil, defaultReasoningLevel: String? = nil,
+                serviceTiers: [String]? = nil, permissionModes: [String]? = nil,
+                fastMode: Bool? = nil) {
+        self.value = value
+        self.label = label
+        self.priority = priority
+        self.contextWindow = contextWindow
+        self.reasoningLevels = reasoningLevels
+        self.defaultReasoningLevel = defaultReasoningLevel
+        self.serviceTiers = serviceTiers
+        self.permissionModes = permissionModes
+        self.fastMode = fastMode
+    }
 }
 
 /// Models a runner says its local runtimes can use.
@@ -96,6 +121,14 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     public func reasoningLevels(for provider: String, model: String) -> [String]? {
         guard provider == "codex" || provider == "opencode" || provider == "kimi" else { return nil }
         return modelInfo(for: provider, model: model)?.reasoningLevels
+    }
+
+    /// The permission modes this runner's CLI accepts for one model, or nil where it has not said.
+    /// Only Claude gates a mode per model, so only Claude rows are consulted; every other runtime
+    /// has its modes runtime-wide and a row there says nothing about them.
+    public func permissionModes(for provider: String, model: String) -> [String]? {
+        guard provider == "claude" else { return nil }
+        return modelInfo(for: provider, model: model)?.permissionModes
     }
 }
 

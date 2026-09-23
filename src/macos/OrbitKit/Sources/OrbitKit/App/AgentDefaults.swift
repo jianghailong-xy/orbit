@@ -554,32 +554,49 @@ public enum AgentDefaults {
     /// Claude's Auto mode is model-specific. Every other runtime has it runtime-wide, for any
     /// model — Codex spells it `on-request` ("the model decides when to ask the user for
     /// approval"), Kimi and OpenCode expose it as a plain mode.
-    /// Mirrors `AUTO_CAPABLE_CLAUDE_MODELS` in shared/permissionSemantics.ts.
+    ///
+    /// Used ONLY where the assigned runner's catalog has not answered for that model. It is a
+    /// fallback and no longer a gate: the runner asks the CLI it will actually run the session
+    /// with and reports the modes per model, because this set is exactly the shape that fails
+    /// silently — when Opus 5.5 shipped, a runner whose CLI could run it kept offering Default
+    /// only, with no error anywhere. Mirrors `AUTO_CAPABLE_CLAUDE_MODELS` in
+    /// shared/permissionSemantics.ts, including its demotion to a fallback.
     public static let autoCapableModels: Set<String> = [
+        "claude-opus-5-5",
         "claude-opus-5",
+        "claude-fable-5-1",
         "claude-fable-5",
         "claude-sonnet-5",
     ]
 
+    /// `catalog` is the ASSIGNED runner's — the machine whose CLI decides the answer. Omitting it
+    /// falls back to the set above; a row that came back always wins, including when it withholds
+    /// Auto for a model the set still lists.
     public static func supportsAuto(_ model: String, provider: String = "claude",
-                                    configured: [ConfiguredProvider]? = nil) -> Bool {
+                                    configured: [ConfiguredProvider]? = nil,
+                                    catalog: RunnerModelCatalog? = nil) -> Bool {
         // The runtime that will actually honor the mode, so `executingRuntime` rather than
         // `runtime(for:)` — the latter answers "claude" for the OpenCode slug (fine for the model
         // defaults it serves), which would clamp away an Auto the OpenCode session does have.
         let runtime = SessionProviderChoices.executingRuntime(provider, configured: configured ?? [])
         guard runtime == "claude" else { return true }
-        // A configured provider's model space is vendor-defined (e.g. DeepSeek), so the static
-        // Claude allow-list can't police it; the CLI decides for itself.
-        return configuredProvider(provider, in: configured) != nil
-            || autoCapableModels.contains(model)
+        // A configured provider's model space is vendor-defined (e.g. DeepSeek), so neither the
+        // runner's Claude rows nor the fallback set can police it; the CLI decides for itself.
+        if configuredProvider(provider, in: configured) != nil { return true }
+        if let reported = catalog?.permissionModes(for: runtime, model: model) {
+            return reported.contains(PermissionMode.auto.rawValue)
+        }
+        return autoCapableModels.contains(model)
     }
 
     /// Prevent the UI from carrying a model/mode pair that the runtime will reject. The backend
     /// applies the same normalization as a final safety net.
     public static func clampPermissionMode(_ mode: PermissionMode,
                                            for model: String, provider: String = "claude",
-                                           configured: [ConfiguredProvider]? = nil) -> PermissionMode {
-        mode == .auto && !supportsAuto(model, provider: provider, configured: configured)
+                                           configured: [ConfiguredProvider]? = nil,
+                                           catalog: RunnerModelCatalog? = nil) -> PermissionMode {
+        mode == .auto
+            && !supportsAuto(model, provider: provider, configured: configured, catalog: catalog)
             ? .default : mode
     }
 

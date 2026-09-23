@@ -356,7 +356,7 @@ final class ConsoleModel {
         self.permissionMode = providerCapabilitiesResolved
             ? AgentDefaults.clampPermissionMode(
                 seed, for: defaultModel, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
             : seed
         // The account's last-picked effort is the interactive default. `agent.effort` is the legacy
         // workspace default retained for accounts that have never written that preference. `??` in
@@ -943,7 +943,7 @@ final class ConsoleModel {
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
                 permissionMode, for: modelID, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
         }
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
@@ -1010,7 +1010,7 @@ final class ConsoleModel {
         let clamped = providerCapabilitiesResolved
             ? AgentDefaults.clampPermissionMode(
                 permissionMode, for: model, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
             : permissionMode
         let changedPermissionMode = clamped != permissionMode
         permissionMode = clamped
@@ -1057,7 +1057,8 @@ final class ConsoleModel {
                                          configured: configuredProviders)
         let nextMode = providerCapabilitiesResolved
             ? AgentDefaults.clampPermissionMode(permissionMode, for: nextModel, provider: slug,
-                                                configured: configuredProviders)
+                                                configured: configuredProviders,
+                                                catalog: modelCatalog)
             : permissionMode
         let nextEffort = AgentDefaults.normalizedEffort(effort, for: slug, model: nextModel,
                                                         catalog: modelCatalog)
@@ -1094,7 +1095,8 @@ final class ConsoleModel {
         modelSelectionRevision = ModelSelectionRevision()
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, provider: slug, configured: configuredProviders)
+                permissionMode, for: modelID, provider: slug, configured: configuredProviders,
+                catalog: modelCatalog)
         }
         effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
                                                 catalog: modelCatalog)
@@ -1126,7 +1128,7 @@ final class ConsoleModel {
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
                 permissionMode, for: modelID, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
         }
     }
 
@@ -1782,7 +1784,7 @@ final class ConsoleModel {
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
                 permissionMode, for: modelID, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
         }
         applySlashItems(from: agentRunner)
         // OpenCode variants are model-defined, so this is the first point where a stored

@@ -6722,6 +6722,7 @@ export class SessionsService {
         requestedPermissionMode,
         next.customRow?.enabled === true,
         session.assignedRunner?.runsAsRoot,
+        session.assignedRunner?.modelCatalog,
       );
       const normalizedEffort =
         dto.effort !== undefined

@@ -2614,6 +2614,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             pickedModelDefault ?? DEFAULT_MODEL,
             pickedProvider,
             configuredProviders,
+            runner.modelCatalog,
           )
         : 'auto'
     ] ?? 'Default';
@@ -2626,6 +2627,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 selectedModelDefault ?? DEFAULT_MODEL,
                 shownProvider,
                 configuredProviders,
+                runner.modelCatalog,
               )
             : effectivePermissionMode
         ] ?? 'Default'
@@ -2649,7 +2651,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       !live &&
       shownProviderCapabilitiesResolved &&
       mode === 'Auto' &&
-      !supportsAuto(model, shownProvider, configuredProviders)
+      !supportsAuto(model, shownProvider, configuredProviders, runner.modelCatalog)
     ) {
       setMode('Default');
     }
@@ -2658,6 +2660,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     live,
     mode,
     model,
+    runner.modelCatalog,
     shownProvider,
     shownProviderCapabilitiesResolved,
   ]);
@@ -5823,6 +5826,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               effectiveModel,
               shownProvider,
               configuredProviders,
+              runner.modelCatalog,
             )
           : effectivePermissionMode
       ] ?? 'Default')
@@ -5867,9 +5871,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             MODE_TO_PERMISSION[label],
             shownModel,
             runner.runsAsRoot,
+            runner.modelCatalog,
           )
         : undefined,
-    [shownProvider, shownProviderIsBuiltin, shownModel, runner.runsAsRoot],
+    [shownProvider, shownProviderIsBuiltin, shownModel, runner.runsAsRoot, runner.modelCatalog],
   );
   const shownModeSemantics = permissionSemanticsFor(shownMode);
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
@@ -7775,7 +7780,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           runner.runtimeDefaultModels,
                         );
                     const drop =
-                      shownMode === 'Auto' && !supportsAuto(nextModel, v, configuredProviders);
+                      shownMode === 'Auto' &&
+                      !supportsAuto(nextModel, v, configuredProviders, runner.modelCatalog);
                     const currentEffort = live ? effectiveEffort : effort;
                     const nextEffort = normalizeEffortForProvider(
                       v,
@@ -7847,7 +7853,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   // Switching to a model that can't do Auto while Auto is selected
                   // would send a mode claude rejects — snap back to Default.
                   const drop =
-                    shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders);
+                    shownMode === 'Auto' &&
+                    !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);
                   // An OpenCode variant is model-defined: a model switch can strip it.
                   const currentEffort = live ? effectiveEffort : effort;
                   const nextEffort = normalizeEffortForProvider(

@@ -1877,6 +1877,7 @@ export class RunnerApiController {
           permissionMode,
           customRow?.enabled === true,
           runner.runsAsRoot,
+          s.assignedRunner?.modelCatalog,
         ),
         // Whether the fast lane is actually on. Policed HERE rather than where it was picked,
         // for the same reason an OpenCode variant is: the constraint is about the model this

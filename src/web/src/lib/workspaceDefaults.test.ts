@@ -40,6 +40,29 @@ describe('Claude model capabilities', () => {
     expect(clampPermissionModeForModel('auto', 'claude-opus-5', 'claude')).toBe('auto');
     expect(clampPermissionModeForModel('plan', 'claude-haiku-4-5', 'claude')).toBe('plan');
   });
+
+  it('takes Auto from the assigned runner’s catalog rather than a list in the repo', () => {
+    // The picker follows the CLI installed on the machine that will run the session, exactly as
+    // the model list and the context window already do. Opus 5.5 is the case that failed: its
+    // runner reported it and could run Auto on it, while the composer offered Default only.
+    const catalog: RunnerModelCatalog = {
+      claude: [
+        { value: 'claude-opus-5-5', label: 'Opus 5.5', permissionModes: ['default', 'auto'] },
+        { value: 'claude-opus-5', label: 'Opus 5', permissionModes: ['default', 'plan'] },
+      ],
+    };
+    expect(supportsAuto('claude-opus-5-5', 'claude', null, catalog)).toBe(true);
+    expect(clampPermissionModeForModel('auto', 'claude-opus-5-5', 'claude', null, catalog)).toBe(
+      'auto',
+    );
+    // And a row that withholds Auto wins over the fallback list, which still lists Opus 5.
+    expect(supportsAuto('claude-opus-5', 'claude', null, catalog)).toBe(false);
+    expect(clampPermissionModeForModel('auto', 'claude-opus-5', 'claude', null, catalog)).toBe(
+      'default',
+    );
+    // A model the runner has not reported keeps the fallback answer — silence is not "no".
+    expect(supportsAuto('claude-sonnet-5', 'claude', null, catalog)).toBe(true);
+  });
 });
 
 describe('Codex model efforts', () => {

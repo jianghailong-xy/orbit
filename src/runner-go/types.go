@@ -239,6 +239,16 @@ type ModelInfo struct {
 	ReasoningLevels       []string `json:"reasoningLevels,omitempty"`
 	DefaultReasoningLevel string   `json:"defaultReasoningLevel,omitempty"`
 	ServiceTiers          []string `json:"serviceTiers,omitempty"`
+	// The permission modes this model accepts, probed from the CLI that will run it rather than
+	// kept in a table the clients hand-maintain (shared's AUTO_CAPABLE_CLAUDE_MODELS, which this
+	// demotes to a fallback). Nil means this runner could not say — a probe that failed, or a CLI
+	// too old to answer — and the clients keep their fallback for that model rather than reading
+	// silence as "no". Deliberately not narrowed by this machine's root-ness: that is a property
+	// of the runner, reported separately as runsAsRoot.
+	PermissionModes []string `json:"permissionModes,omitempty"`
+	// Whether this model has the runtime's fast lane. A pointer for the same reason: nil is "could
+	// not say" and false is "asked, and it does not", which the clients must tell apart.
+	FastMode *bool `json:"fastMode,omitempty"`
 }
 
 type HeartbeatResponse struct {
