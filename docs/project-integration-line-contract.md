@@ -238,7 +238,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | 处 | 现状 | 改为 |
 |---|---|---|
 | `resolveSource` P5（`PROJECT_UPSTREAM`） | 基线 ref 取 `upstream_ref` | 本项目在集成线上已有落地回执 → 取 `integration_ref`；否则取 `upstream_ref`（项目分支还没被创建，内容等价） |
-| `resolveSource` P4（`DEPENDENCY_CLOSURE`） | 输入写死为空；`assertCheckpointInputsAvailable` 对有前置的任务答 503 | `requiredContains` = 每个代码前置在集成线上的落地提交：`MERGED` 回执取 `target_sha_after`，`ALREADY_MERGED` 取 `source_sha`。有前置的任务不再 503（`verifiesTaskId` 的 503 不变） |
+| `resolveSource` P4（`DEPENDENCY_CLOSURE`） | 输入写死为空；`assertCheckpointInputsAvailable` 对有前置的任务答 503 | `requiredContains` = 每个代码前置在集成线上的落地提交：`MERGED` 回执取 `target_sha_after`，`ALREADY_MERGED` 取 `source_sha`。本线晋升进 upstream 的回执（源分支是集成分支）也取 `source_sha`：它就是该任务在集成线上的落地提交；而它的 `target_sha_after` 是 upstream 上的合并提交，集成线要等下一次 MAIN_SYNC 才包含它。有前置的任务不再 503（`verifiesTaskId` 的 503 不变） |
 | runner `setupWorktree`（`worktree.go`） | 忽略 `job.Source.BaseSha`，从 workDir HEAD 分叉 | `sourceState = PINNED` 时从 `Source.BaseSha` 分叉；`worktree add` 之前对每个 `requiredContains` 执行 `git merge-base --is-ancestor <sha> <base>`，不包含 → 拒绝 `DEPENDENCY_BASE_NOT_LANDED`；`worktree add` 失败 → `WORKTREE_REQUIRED`。两者都不落到 `shared`（PSC SR33） |
 
 `UNBOUND` 会话（项目无代码库行、`codeless`、非项目任务）走原路径，逐字节不变（PSC SR45 / SR46）。项目第一批任务开工时通常还没有代码库行，走的也是原路径。
