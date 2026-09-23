@@ -61,7 +61,8 @@ import { WakeDispositionService } from './wake-disposition.service';
  * A project branch whose project has Automatic on, and whose promotion check came back clean, is
  * merged into main by the platform — no card, and a receipt that says so. Anything else gets the
  * card, exactly as before: a MAIN line, Automatic off, a red check, a conflict, main moving after
- * the check, an integration exception still open, a runner that would re-check a moved main.
+ * the check, an integration exception still open, a runner that would re-check a moved main — and
+ * an authorization taken back between the check and the moment its landing is handed out.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/project-promotion-auto-authority.pg.spec.ts
  *
@@ -506,6 +507,28 @@ async function assertAskedAsBefore(stack: Stack, w: World, what: string): Promis
   assert.deepEqual(await landingsOf(stack.db, w.projectId), [], `${what}: nothing was queued to land`);
 }
 
+/** Everything "the automatic landing went back to the owner without landing" means, said once. */
+async function assertHandedBack(stack: Stack, w: World, taskId: string, what: string): Promise<void> {
+  const promotion = await promotionOf(stack.db, w.projectId);
+  const cards = await approvalCards(stack.db, w.projectId);
+  assert.equal(promotion.state, 'READY', `${what}: the candidate is a question again`);
+  assert.equal(promotion.confirmedAutomatically, false, `${what}: nothing stands confirmed by itself`);
+  assert.equal(promotion.confirmedByUserId, null);
+  assert.equal(promotion.landJobId, null, `${what}: no landing is in flight`);
+  assert.equal(promotion.mergedSha, null, `${what}: nothing was merged`);
+  assert.equal(promotion.upstreamShaChecked, MAIN_CHECKED, 'the check it has is the one it had');
+  assert.equal(cards.length, 1, `${what}: the owner is asked — ${await jobsOf(stack.db, w.projectId)}`);
+  assert.equal(cards[0]!.state, 'OPEN');
+  assert.equal(cards[0]!.assignee, 'OWNER');
+  assert.equal(promotion.openItemId, cards[0]!.id, `${what}: the candidate names its card`);
+  assert.equal((cards[0]!.payload as { upstreamShaChecked?: string }).upstreamShaChecked, MAIN_CHECKED);
+  const [attempted] = await landingsOf(stack.db, w.projectId);
+  assert.equal(attempted!.state, 'READY', `${what}: the automatic landing ended without landing`);
+  assert.equal(attempted!.confirmedAutomatically, true, 'and its record still says whose it was');
+  assert.equal(attempted!.landedSha, null);
+  assert.deepEqual(await mainReceipts(stack.db, taskId), [], `${what}: no receipt says the work is on main`);
+}
+
 // ── the rule, as a table ─────────────────────────────────────────────────────────────────────
 
 test('the rule: a project branch + Automatic + clean, and nothing less', () => {
@@ -884,6 +907,49 @@ test('(d) a runner that would re-check a moved main and merge it is never truste
       const { check } = await checkInHand(stack, w);
       await report(stack, w, check, cleanCheck());
       await assertAskedAsBefore(stack, w, 'a runner that has not said it hands a moved main back');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(d) the authorization is read again when the landing is handed out: taken back since the check, the owner is asked and nothing lands',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // Automatic switched off between the check that confirmed the merge and the heartbeat that
+      // would hand its landing to a runner: the yes it was queued under has been withdrawn.
+      const off = await world(stack, 'auto-revoked', { line: 'PROJECT_BRANCH', automatic: true });
+      const first = await checkInHand(stack, off);
+      await report(stack, off, first.check, cleanCheck());
+      assert.equal((await promotionOf(stack.db, off.projectId)).confirmedAutomatically, true, 'clean, Automatic on, at the check');
+      await stack.db.project.update({
+        where: { id: off.projectId },
+        data: { coordinatorEnabled: false, configRevision: { increment: 1 } },
+      });
+      assert.deepEqual(await heartbeat(stack, off), [], 'a landing Automatic no longer covers was handed to a runner');
+      await assertHandedBack(stack, off, first.taskId, 'Automatic switched off after the check');
+      assert.equal(await stack.db.projectOpenItem.count({
+        where: { projectId: off.projectId, kind: { in: ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'] } },
+      }), 0, 'a withdrawn authorization is the owner\'s question, not a failure for the coordinator');
+
+      // An integration exception opened on the project in the same interval — a later task's landing
+      // on the project branch conflicted. Its landing is claimed by a process that is never handed an
+      // automatic one, so it is the only job that moves before the one under test is claimed.
+      const since = await world(stack, 'auto-item-since', { line: 'PROJECT_BRANCH', automatic: true });
+      const second = await checkInHand(stack, since);
+      await report(stack, since, second.check, cleanCheck());
+      assert.equal((await promotionOf(stack.db, since.projectId)).confirmedAutomatically, true, 'clean at the check');
+      await doneCodeTask(stack, since, `${since.label}-later`);
+      const later = await onlyClaim(stack, since, 'LAND_TASK', OLDER);
+      await report(stack, since, later, {
+        state: 'CONFLICT',
+        phase: 'REBASE',
+        sourceSha: 'b'.repeat(40),
+        targetShaBefore: LANDED_ON_LINE,
+        conflicts: ['src/web/src/pages/ProjectsPage.tsx'],
+      });
+      assert.deepEqual(await heartbeat(stack, since), [], 'a landing an open exception now stands against was handed out');
+      await assertHandedBack(stack, since, second.taskId, 'an integration exception opened after the check');
     } finally {
       await stack.db.$disconnect();
     }

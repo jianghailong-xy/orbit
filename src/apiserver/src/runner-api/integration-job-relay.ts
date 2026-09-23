@@ -35,6 +35,7 @@ import { sessionReportedWork } from '../projects/landing-source-branch';
 import { promotionDedupeKey } from '../projects/project-promotion';
 import {
   applyPromotionJobResult,
+  automaticLandingRefusal,
   markPromotionRechecking,
 } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
@@ -192,6 +193,22 @@ export async function dispatchIntegrationJobs(
         await openItems?.deliverForItems(after.openItemIds);
       }
       continue;
+    }
+    if (row.confirmedAutomatically && row.promotionId) {
+      // M-T11 read again at the last moment the platform decides anything: the owner may have
+      // taken the Automatic setting back since the check. A landing it no longer covers is ended
+      // here as the owner's card (M-T12) instead of going out on a yes that was withdrawn — and one
+      // whose authorization cannot be read at all is not sent either.
+      const refusal = await automaticLandingRefusal(prisma, row.promotionId, landsAutomatically)
+        .catch((error) => `the authorization could not be read: ${error?.message ?? error}`);
+      if (refusal) {
+        log.log(`automatic landing ${row.id} handed back to the owner: ${refusal}`);
+        const after = await finishHandedBack(prisma, row.id, heartbeat.leaseOwner, row.claimGeneration);
+        if (after && after.openItemIds.length > 0) {
+          await openItems?.deliverForItems(after.openItemIds);
+        }
+        continue;
+      }
     }
     commands.push({
       jobId: row.id,
@@ -392,6 +409,28 @@ async function finishUnworkable(
     },
   }).catch((error) => {
     logger.warn(`could not end an unworkable job: ${error?.message ?? error}`);
+    return null;
+  });
+  return applied?.after ?? null;
+}
+
+/**
+ * A claim of an automatic landing the owner's authorization no longer covers: ended as READY
+ * without going to a runner — the very result a runner reports when it finds main moved — so the
+ * promotion goes back to the owner as the card they were spared (M-T12). Answers with the aftermath,
+ * because that card is owed its delivery and this caller is the only one that knows it opened.
+ */
+async function finishHandedBack(
+  prisma: PrismaService,
+  jobId: string,
+  leaseOwner: string,
+  claimGeneration: bigint,
+): Promise<IntegrationResultAftermath | null> {
+  const applied = await applyIntegrationJobResult(prisma, {
+    jobId,
+    body: { claimGeneration: claimGeneration.toString(), leaseOwner, state: 'READY', phase: 'FETCH' },
+  }).catch((error) => {
+    logger.warn(`could not hand an automatic landing back to the owner: ${error?.message ?? error}`);
     return null;
   });
   return applied?.after ?? null;

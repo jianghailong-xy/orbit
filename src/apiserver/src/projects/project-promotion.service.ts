@@ -676,19 +676,18 @@ export interface PromotionJobOutcome {
 const INTEGRATION_ITEM_KINDS = ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'];
 
 /**
- * M-T11: why this candidate, whose check just came back READY, goes to the owner as a card — or null
- * when the project's Automatic setting confirms it instead. The rule itself is
- * `automaticConfirmationRefusal`; this is the part that reads what it weighs, all of it inside the
- * transaction that applies the check, so the answer is about this moment and no earlier one.
- *
- * The runner asked about is the one that just ran the check: the landing is claimed through the same
- * session's workspace, so it is the machine that will be told to land only onto the checked tip.
+ * M-T11: why this candidate goes to the owner as a card — or null when the project's Automatic
+ * setting confirms it instead. The rule itself is `automaticConfirmationRefusal`; this is the part
+ * that reads what it weighs about the project, inside the caller's transaction, so the answer is
+ * about this moment and no earlier one. Asked twice: when the check comes back READY, and again when
+ * the landing that answer queued is about to be handed to a runner (`automaticLandingRefusal`).
  */
 async function automaticConfirmationRefusalIn(
   tx: Prisma.TransactionClient,
   promotion: PromotionRow,
   report: {
-    runnerId: string | null;
+    /** Whether the runner that will do the landing lands only onto the checked tip (M-T12). */
+    runnerHandsBackMovedUpstream: boolean;
     conflicts: string[];
     checks: IntegrationCheckResult[];
     upstreamSha: string | null;
@@ -706,9 +705,6 @@ async function automaticConfirmationRefusalIn(
   const openIntegrationItems = await tx.projectOpenItem.count({
     where: { projectId: promotion.projectId, state: 'OPEN', kind: { in: INTEGRATION_ITEM_KINDS } },
   });
-  const runner = report.runnerId
-    ? await tx.runner.findUnique({ where: { id: report.runnerId }, select: { capabilities: true } })
-    : null;
   // The line as the binding says now, and only if it is still the line this candidate was made on:
   // its source is the project's branch and its upstream is the project's upstream.
   const line = !codebase
@@ -727,8 +723,61 @@ async function automaticConfirmationRefusalIn(
     upstreamShaChecked: report.upstreamSha,
     mergeTreeSha: report.testedTreeSha,
     openIntegrationItems,
-    runnerHandsBackMovedUpstream: runner?.capabilities.includes(PROMOTION_AUTOMATIC_LAND) === true,
+    runnerHandsBackMovedUpstream: report.runnerHandsBackMovedUpstream,
   });
+}
+
+/**
+ * Whether the runner that just ran a check has declared that it lands an automatic merge only onto
+ * the checked tip (`PROMOTION_AUTOMATIC_LAND`). It is the one asked about because the landing is
+ * claimed through the same session's workspace, so it is the machine that will be told to do it.
+ */
+async function runnerHandsBackMovedUpstream(
+  tx: Prisma.TransactionClient,
+  runnerId: string | null,
+): Promise<boolean> {
+  if (!runnerId) return false;
+  const runner = await tx.runner.findUnique({ where: { id: runnerId }, select: { capabilities: true } });
+  return runner?.capabilities.includes(PROMOTION_AUTOMATIC_LAND) === true;
+}
+
+/**
+ * M-T11 read once more, at the last moment the platform decides anything about a landing the
+ * Automatic setting confirmed: the heartbeat that is about to hand it to a runner. Null when it may
+ * go out; otherwise why it goes back to the owner as a card instead (M-T12).
+ *
+ * The authorization is the owner's to take back, and a queue stands between the check and the push.
+ * A project whose Automatic was switched off in between — or whose line was moved to main, or which
+ * has had an integration exception opened since — no longer has the yes this landing was queued
+ * under, and it is not pushed on the strength of one that was withdrawn. The rule is the same one
+ * (`automaticConfirmationRefusal`), over the facts the check left on the promotion and the project as
+ * it stands now: the check is not judged a second time, only what the owner and the line can change.
+ * main moving since the check is still the runner's to see, at the push.
+ */
+export async function automaticLandingRefusal(
+  tx: Prisma.TransactionClient,
+  promotionId: string,
+  runnerLandsAutomatically: boolean,
+): Promise<string | null> {
+  const promotion = await tx.projectPromotion.findUnique({
+    where: { id: promotionId },
+    select: PROMOTION_COLUMNS,
+  });
+  // Only a landing the setting confirmed, and that has not been made or ended, is the setting's to
+  // take back. Anything else is answered where its result is applied, as it always was.
+  if (!promotion || promotion.state !== 'CONFIRMED' || !promotion.confirmedAutomatically) return null;
+  return automaticConfirmationRefusalIn(tx, promotion, {
+    runnerHandsBackMovedUpstream: runnerLandsAutomatically,
+    conflicts: promotion.conflicts,
+    checks: storedChecks(promotion),
+    upstreamSha: promotion.upstreamShaChecked,
+    testedTreeSha: promotion.mergeTreeSha,
+  });
+}
+
+/** The checks a promotion carries, as the check reported them. */
+function storedChecks(promotion: PromotionRow): IntegrationCheckResult[] {
+  return Array.isArray(promotion.checks) ? (promotion.checks as unknown as IntegrationCheckResult[]) : [];
 }
 
 /**
@@ -785,7 +834,7 @@ export async function applyPromotionJobResult(
     if (input.state === 'READY') {
       // M-T11 before M-T2: whether anybody is asked at all.
       const refusal = await automaticConfirmationRefusalIn(tx, promotion, {
-        runnerId: input.runnerId,
+        runnerHandsBackMovedUpstream: await runnerHandsBackMovedUpstream(tx, input.runnerId),
         conflicts: input.conflicts,
         checks: input.checks,
         upstreamSha: input.upstreamSha,
@@ -889,11 +938,13 @@ async function queueAutomaticLanding(tx: Prisma.TransactionClient, promotion: Pr
 }
 
 /**
- * M-T12: an automatic landing found main somewhere other than where the check left it, and landed
- * nothing. The Automatic setting authorized a clean landing and this is no longer one, so the
- * candidate goes back to being a question — READY, with the card the owner was spared opened after
- * all, and with the check it already has: the owner's press is what decides whether it is checked
- * again on the new main and merged (M5), exactly as if the card had been theirs from the start.
+ * M-T12: an automatic landing ended without landing — the runner found main somewhere other than
+ * where the check left it, or the heartbeat about to hand it out found the authorization gone
+ * (`automaticLandingRefusal`). The Automatic setting authorized a clean landing under a yes that
+ * still stands, and this is no longer one, so the candidate goes back to being a question — READY,
+ * with the card the owner was spared opened after all, and with the check it already has: the
+ * owner's press is what decides whether it is checked again on the new main and merged (M5),
+ * exactly as if the card had been theirs from the start.
  *
  * The promotion stops saying it was confirmed automatically, because it is not confirmed at all now;
  * the job it sent out keeps saying so, which is where the attempt is recorded.
@@ -919,7 +970,7 @@ async function handBackToOwner(
       title: promotionItemTitle(promotion.upstreamRef, promotion.includedTaskIds.length),
       taskIds: promotion.includedTaskIds,
       upstreamShaChecked: promotion.upstreamShaChecked,
-      checks: Array.isArray(promotion.checks) ? (promotion.checks as unknown as IntegrationCheckResult[]) : [],
+      checks: storedChecks(promotion),
     },
   };
 }
