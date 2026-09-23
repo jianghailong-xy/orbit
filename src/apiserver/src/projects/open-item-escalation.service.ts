@@ -19,13 +19,67 @@ export interface EscalatedOpenItem {
 }
 
 /**
+ * The moment an item the coordinator holds becomes the owner's, as SQL over the `project_open_item`
+ * row aliased `alias` — the one definition the clock acts on and every reader of the item shows.
+ *
+ * The clock counts the coordinator's silence, not the item's age. An item is opened with
+ * `escalate_at` = the moment it started waiting + its project's window (§4.1, frozen by X-E2), and
+ * that is when it goes to the owner if nothing is carrying it. It is carried while the conversation
+ * the project is coordinated from — live, and holding a delivery of the item that was not taken back
+ * — has moved since the item was put on it: been handed a turn, or finished one. The item then stays
+ * the coordinator's until a full window (its own, `escalate_at - waiting_since`) has passed since
+ * that conversation last moved. So a conversation that is busy, or working through a queue, keeps
+ * what it was given; one that is wedged, has gone quiet or has ended hands it over one window after
+ * it stopped; and an item that never reached anybody goes when its window runs out, as it always did.
+ *
+ * Moving is read from committed turn facts: `delivered_at`, written when `dequeueTurn` hands a turn
+ * to an engine, and `answered_at`, when that turn completes. Only a turn an engine was actually
+ * handed counts — ending or interrupting a conversation retires its queued turns in place as
+ * ANSWERED, and a turn nobody ran is not the conversation moving — and only a `message` turn, since
+ * a control turn (an interrupt, an end, a reload) is acked on delivery and is somebody else acting on
+ * the conversation. Both columns are `timestamp`, written in UTC.
+ */
+export function escalatesAt(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return Prisma.sql`GREATEST(${item}."escalate_at", (
+    SELECT max(COALESCE(turn."answered_at", turn."delivered_at") AT TIME ZONE 'UTC')
+           + (${item}."escalate_at" - ${item}."waiting_since")
+      FROM "project" proj
+      JOIN "session" coordinator ON coordinator."id" = proj."coordinator_session_id"
+      JOIN "project_open_item_delivery" delivery
+        ON delivery."session_id" = coordinator."id"
+       AND delivery."item_id" = ${item}."id"
+       AND delivery."purpose" = 'ITEM'
+       AND delivery."returned_at" IS NULL
+      JOIN "conversation_turn" turn
+        ON turn."session_id" = coordinator."id"
+       AND turn."kind" = 'message'
+       AND turn."delivered_at" IS NOT NULL
+       AND COALESCE(turn."answered_at", turn."delivered_at") AT TIME ZONE 'UTC' >= delivery."created_at"
+     WHERE proj."id" = ${item}."project_id"
+       AND proj."coordinator_enabled"
+       AND ${item}."assignee" = 'COORDINATOR'
+       -- The conversation can still take a turn: it has not ended (sessionHasEnded, in SQL), and
+       -- nobody has asked it to (the inbox hands no message to a conversation whose end is asked).
+       AND coordinator."deleted_at" IS NULL
+       AND coordinator."completed_at" IS NULL
+       AND coordinator."archived_at" IS NULL
+       AND coordinator."cancel_requested_at" IS NULL
+       AND (coordinator."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT')
+            OR (coordinator."status" = 'INTERRUPTED' AND COALESCE(coordinator."end_reason", '') = ''))))`;
+}
+
+/**
  * The one clock this platform adds (`docs/project-integration-line-contract.md` §4.6 X-E1).
  *
  * WHAT IT IS FOR. An exception item has an assignee, and the project's coordinator conversation can
  * be one of them. A conversation that is not reading — because it is wedged, because nobody restarts
- * it, because it is busy with something else — leaves the item waiting with no end, and the whole
- * point of the item was that somebody is expected to act on it. So an item unhandled for longer than
- * its project's window stops being the coordinator's and becomes the account owner's.
+ * it, because the item never reached it — leaves the item waiting with no end, and the whole point of
+ * the item was that somebody is expected to act on it. So an item nobody has carried for longer than
+ * its project's window stops being the coordinator's and becomes the account owner's. Carried is
+ * read off the conversation, not the item (`escalatesAt`): a coordinator that has the item and is
+ * still taking turns is acting on it however long ago it was opened, and handing its work to the owner
+ * at the two-hour mark only locked the conversation out of what it was doing (§4.7).
  *
  * WHY A CLOCK IS ALLOWED HERE AND NOWHERE ELSE. Every other input in this system is routed on a
  * COMMITTED FACT — evidence revised, a receipt written, a turn ended — and elapsed time is not one:
@@ -34,6 +88,7 @@ export interface EscalatedOpenItem {
  * agent work. It writes the item's assignee and nothing else; a person then reads it in their own
  * open items. No turn, no session, no wake row, no delivery — the assertions in
  * `exception-escalation.pg.spec.ts` count all four across the whole database, before and after.
+ * Reading a conversation's turns to decide WHEN changes none of that: they are read, never written.
  *
  * WHAT MAKES IT SAFE TO RUN ANYWHERE. The statement is its own compare-and-set: it selects only
  * items that are still OPEN, still the coordinator's and already due, and the same UPDATE takes them
@@ -82,13 +137,18 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * `assigned_at` moves with the assignee on purpose: a delivery's turn key names the assignment it
    * was made under (§4.4 X-D2), so an item that later comes back to a coordinator is delivered
    * afresh instead of replaying the turn the previous assignee never read.
+   *
+   * Due is `escalatesAt`, not the column. The column is the half of it that costs nothing and is
+   * asked first, so a conversation's turns are read only for items that have outlived the window
+   * they were opened with.
    */
   async sweep(): Promise<EscalatedOpenItem[]> {
     return this.prisma.$queryRaw<EscalatedOpenItem[]>(Prisma.sql`
-      UPDATE "project_open_item"
+      UPDATE "project_open_item" item
          SET "assignee" = 'OWNER', "assignee_reason" = 'ESCALATED', "assigned_at" = now(),
              "escalated_at" = now(), "updated_at" = now()
-       WHERE "state" = 'OPEN' AND "assignee" = 'COORDINATOR' AND "escalate_at" <= now()
-      RETURNING "id" AS "itemId", "project_id" AS "projectId", "owner_id" AS "ownerId"`);
+       WHERE item."state" = 'OPEN' AND item."assignee" = 'COORDINATOR' AND item."escalate_at" <= now()
+         AND ${escalatesAt('item')} <= now()
+      RETURNING item."id" AS "itemId", item."project_id" AS "projectId", item."owner_id" AS "ownerId"`);
   }
 }

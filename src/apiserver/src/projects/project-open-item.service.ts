@@ -38,6 +38,7 @@ import {
   questionDetailLine,
   sessionHasEnded,
 } from './project-open-item';
+import { escalatesAt } from './open-item-escalation.service';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 
 /**
@@ -1071,6 +1072,19 @@ export class ProjectOpenItemService {
       },
     });
     const keys = rows.flatMap((row) => row.deliveries);
+    // When each of the coordinator's items goes to the owner, as the clock decides it (§4.6): a
+    // conversation still carrying one moves that moment on, so it is read here rather than taken
+    // from the column the item was opened with — which would have the card say "due" about an item
+    // that is not coming.
+    const goesAt = new Map<string, Date>();
+    if (rows.some((row) => row.assignee === 'COORDINATOR')) {
+      const due = await this.prisma.$queryRaw<Array<{ id: string; at: Date }>>(Prisma.sql`
+        SELECT item."id", ${escalatesAt('item')} AS "at"
+          FROM "project_open_item" item
+         WHERE item."project_id" = ${projectId}::uuid
+           AND item."state" = 'OPEN' AND item."assignee" = 'COORDINATOR'`);
+      for (const row of due) goesAt.set(row.id, row.at);
+    }
     // The tasks these items are about, read once for the whole page: the card's first row names
     // what the item is about, and a task's title is not a column of the item. A task that is gone
     // leaves the row undrawn rather than drawn empty.
@@ -1114,7 +1128,7 @@ export class ProjectOpenItemService {
         assignee: row.assignee as OpenItemAssignee,
         assigneeReason: row.assigneeReason as OpenItemAssigneeReason,
         waitingSince: row.waitingSince,
-        escalateAt: row.escalateAt,
+        escalateAt: goesAt.get(row.id) ?? row.escalateAt,
         escalatedAt: row.escalatedAt,
         taskId: row.taskId,
         sessionId: row.sessionId,
