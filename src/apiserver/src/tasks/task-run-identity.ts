@@ -150,6 +150,25 @@ export function taskRunResumeTurnId(requestToken: string, sessionId: string): st
 }
 
 /**
+ * The request token a turn of this session was delivered under, when it is a run request's resume
+ * turn (`taskRunResumeTurnId`), and null for every other turn.
+ */
+export function taskRunResumeToken(clientTurnId: string, sessionId: string): string | null {
+  const prefix = taskRunResumeTurnId('', sessionId);
+  return clientTurnId.startsWith(prefix) && clientTurnId.length > prefix.length
+    ? clientTurnId.slice(prefix.length)
+    : null;
+}
+
+/**
+ * Whether a request token names one of the AUTOMATIC doors (`TASK_RUN_TRIGGER`'s schedule,
+ * dependency and first-run kinds) rather than a press — a bulk Run's `batch:` token is a press.
+ */
+export function isAutomaticTaskRunToken(requestToken: string): boolean {
+  return ['sched:', 'dep:', 'first-run:'].some((kind) => requestToken.startsWith(kind));
+}
+
+/**
  * The batch a press's Sessions are tied together by, when the press set a concurrency cap.
  *
  * Derived rather than drawn, for the same reason everything else here is: `randomUUID()` gave every

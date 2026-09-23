@@ -965,6 +965,9 @@ public struct TranscriptReducer: Sendable, Codable {
         // out of the text, so a delivery that carries no card — every one stored before the payload
         // existed — keeps the reading it has always had.
         let itemCard = OpenItemDelivery.parse(ev.payload)
+        // The same for a task run's opening turn (`taskStart`, `TaskStart.parse`): the payload, never
+        // the brief's text.
+        let taskStart = TaskStart.parse(ev.payload)
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -997,6 +1000,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.note = recorded?.note
                 // The card is the event's own: it rides whichever row ends up drawing this turn.
                 b.itemCard = itemCard
+                b.taskStart = taskStart
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
@@ -1016,7 +1020,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                             undelivered: delivery == "failed",
                                             note: recorded?.note,
                                             steer: steer, delivery: delivery,
-                                            itemCard: itemCard)))
+                                            itemCard: itemCard, taskStart: taskStart)))
     }
 
     private mutating func appendInterrupt(seq: Int) {

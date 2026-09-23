@@ -68,6 +68,9 @@ import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
+import { parseTaskStartCard } from '../lib/taskStartCard';
+import type { TaskStartCard as TaskStart } from '@orbit/shared';
+import { TaskStartCard } from './TaskStartCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
 
@@ -311,6 +314,10 @@ type TextNode = {
   // instead of a bubble, and the text below is the paragraph the agent was handed, folded. NOT the
   // `delivery` above, which is how far a message got on its way into the engine.
   itemCard?: OpenItemDelivery;
+  // The turn that starts a task's run, when the control plane recorded the task its brief was built
+  // from beside the echo (`taskStart`, lib/taskStartCard). Drawn as the task instead of a bubble, with
+  // `text` — the brief written for the agent — folded inside it.
+  taskStart?: TaskStart;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -538,6 +545,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // lib/openItemDelivery). Read off the event rather than out of the text, so a delivery that
         // carries no card keeps the reading it has always had.
         const itemCard = parseOpenItemDelivery(p) ?? undefined;
+        // The same for a task run's opening turn (lib/taskStartCard): the payload, never the brief.
+        const taskStart = parseTaskStartCard(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -557,6 +566,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             text: recorded ? recorded.text : p.text ? String(p.text) : '',
             note: recorded?.note,
             itemCard,
+            taskStart,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1046,6 +1056,22 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
             seq={node.seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+          />
+        );
+      }
+      // A task run's opening turn is the brief written for the agent — the task, then four steps of
+      // protocol — and nobody typed it either. With the task recorded beside it (lib/taskStartCard)
+      // it is drawn as that task; the task's inputs and anything delivery appended ride inside.
+      if (node.taskStart) {
+        return (
+          <TaskStartCard
+            card={node.taskStart}
+            text={node.text}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attachments={<TurnAttachments node={node} />}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
           />
         );
       }
@@ -1540,36 +1566,10 @@ function UserBubble({ node }: { node: TextNode }) {
       setTimeout(() => setCopied(false), 1600);
     });
   };
-  // Inline images come from the instant local previews when present, else from durable refs
-  // (fetched on demand); non-image files always render as a downloadable chip.
-  const localImgs = node.images && node.images.length ? node.images : undefined;
-  const refs = node.attachmentRefs ?? [];
-  const imgRefs = localImgs ? [] : refs.filter((r) => !r.mime || r.mime.startsWith('image/'));
-  const fileRefs = refs.filter((r) => r.mime && !r.mime.startsWith('image/'));
   return (
     <div className="chat-user-wrap">
       <div className="chat-msg chat-user" data-seq={node.seq}>
-        {localImgs && (
-          <div className="chat-images">
-            {localImgs.map((im, i) => (
-              <ChatImage key={i} src={im.url} previewKey={`u${node.seq}-l${i}`} order={node.seq * 1e4 + i} />
-            ))}
-          </div>
-        )}
-        {imgRefs.length > 0 && (
-          <div className="chat-images">
-            {imgRefs.map((r, i) => (
-              <AttachmentImage key={r.id} id={r.id} previewKey={`u${node.seq}-a${r.id}`} order={node.seq * 1e4 + i} />
-            ))}
-          </div>
-        )}
-        {fileRefs.length > 0 && (
-          <div className="chat-files">
-            {fileRefs.map((r) => (
-              <AttachmentFile key={r.id} id={r.id} name={r.name} />
-            ))}
-          </div>
-        )}
+        <TurnAttachments node={node} />
         {shownText && <MD breaks>{shownText}</MD>}
         {attached && (
           // Named, not hidden: without this the agent answers about a quota outage nobody
@@ -1627,6 +1627,41 @@ function UserBubble({ node }: { node: TextNode }) {
         </div>
       )}
     </div>
+  );
+}
+
+// A user turn's images and files: the instant local previews when present, else the durable refs
+// (fetched on demand); non-image files always render as a downloadable chip. Shared by the bubble and
+// by the task-start card, which carries the task's inputs the same turn was delivered with.
+function TurnAttachments({ node }: { node: TextNode }) {
+  const localImgs = node.images && node.images.length ? node.images : undefined;
+  const refs = node.attachmentRefs ?? [];
+  const imgRefs = localImgs ? [] : refs.filter((r) => !r.mime || r.mime.startsWith('image/'));
+  const fileRefs = refs.filter((r) => r.mime && !r.mime.startsWith('image/'));
+  return (
+    <>
+      {localImgs && (
+        <div className="chat-images">
+          {localImgs.map((im, i) => (
+            <ChatImage key={i} src={im.url} previewKey={`u${node.seq}-l${i}`} order={node.seq * 1e4 + i} />
+          ))}
+        </div>
+      )}
+      {imgRefs.length > 0 && (
+        <div className="chat-images">
+          {imgRefs.map((r, i) => (
+            <AttachmentImage key={r.id} id={r.id} previewKey={`u${node.seq}-a${r.id}`} order={node.seq * 1e4 + i} />
+          ))}
+        </div>
+      )}
+      {fileRefs.length > 0 && (
+        <div className="chat-files">
+          {fileRefs.map((r) => (
+            <AttachmentFile key={r.id} id={r.id} name={r.name} />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

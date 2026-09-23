@@ -113,6 +113,7 @@ import {
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
   type OpenItemDeliveryCard,
+  type TaskStartCard,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -216,7 +217,8 @@ import {
   waitingScheduledWakeup,
 } from '../tasks/owner-confirmation-read';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
-import { withControlPlaneNote, withOpenItemDelivery } from './control-plane-note';
+import { withControlPlaneNote, withOpenItemDelivery, withTaskStart } from './control-plane-note';
+import { readTaskStartCard } from '../tasks/task-start-card';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
@@ -4273,6 +4275,10 @@ export class RunnerApiController {
           // while this is still null, and the row is held FOR UPDATE across that decision.
           engineStartedAt: true,
           enginePhase: true,
+          // Which task this run executes and which door created it — read only when a user turn in
+          // this batch is the one that delivers the task's brief (`readTaskStartCard` below).
+          taskId: true,
+          runSource: true,
         },
       });
       // The owner fence alone is insufficient when the same runner process
@@ -4338,6 +4344,18 @@ export class RunnerApiController {
         const card = await readOpenItemDeliveryCard(tx, itemId);
         if (card) deliveryCards.set(turn.id, card);
       }
+      // The turn that hands a task's run its brief, and the task it was built from — drawn as a card
+      // rather than as the owner's own message (tasks/task-start-card.ts). Read only for a task
+      // run's opening or resume turn, so ordinary messages cost nothing here either.
+      const taskStartCards = new Map<string, TaskStartCard>();
+      for (const turn of userTurns) {
+        const card = await readTaskStartCard(
+          tx,
+          { id: sessionId, taskId: session.taskId, runSource: session.runSource },
+          turn,
+        );
+        if (card) taskStartCards.set(turn.id, card);
+      }
       for (const e of durable) {
         if (e.type !== RunEventType.USER) continue;
         e.payload = withControlPlaneNote(
@@ -4347,6 +4365,10 @@ export class RunnerApiController {
         e.payload = withOpenItemDelivery(
           e.payload,
           (e.turnId ? deliveryCards.get(e.turnId) : undefined) ?? null,
+        );
+        e.payload = withTaskStart(
+          e.payload,
+          (e.turnId ? taskStartCards.get(e.turnId) : undefined) ?? null,
         );
       }
       if (durable.length > 0) {
