@@ -7,6 +7,7 @@
  */
 import { codexAccountOfEnv, type PlanUsage, type PlanUsageSnapshot } from '@orbit/shared';
 import { ENGINE_ACCOUNTS_MAX, sanitizeRunnerEngines } from '../common/runner-engines';
+import { codexAccountOnRunner } from './codex-account';
 
 /** An account a runner added: 4 random bytes in lowercase hex (src/runner-go/codex_account_slot.go).
  *  Default is no entry of `accounts`: it is the Codex snapshot's own windows. */
@@ -40,17 +41,24 @@ export function sanitizePlanUsageAccounts(usage: PlanUsage): PlanUsage {
 }
 
 /**
- * The Codex account a run on `provider` spends: resolved from its workspace's env against the accounts
- * its runner reports (codexAccountOfEnv) — what planUsageBlockedUntil and planUsageReported are asked
- * about, so that one account's spent quota never holds back a run on another. Undefined for any other
+ * The Codex account a run on `provider` spends, which is the account dispatch runs it on — what
+ * planUsageBlockedUntil and planUsageReported are asked about, so that one account's spent quota never
+ * holds back a run on another. It is decided as dispatch decides it (resolveProviderExec): the account
+ * the workspace picked (`codexAccount`, Workspace.codexAccount) when its runner reports it
+ * (codexAccountOnRunner), in place of any CODEX_HOME in the workspace's env; otherwise the account that
+ * env's CODEX_HOME selects, or Default. The resulting env is read as the runner reads it
+ * (codexAccountOfEnv), so a run with a key of its own spends no account. Undefined for any other
  * provider: accounts are Codex's.
  */
 export function runCodexAccount(
   provider: string | null | undefined,
   workspaceEnv: unknown,
+  codexAccount: string | null | undefined,
   runnerEngines: unknown,
 ): string | null | undefined {
   if (provider !== 'codex') return undefined;
+  const env = isObject(workspaceEnv) ? workspaceEnv : null;
+  const picked = codexAccountOnRunner(codexAccount, runnerEngines);
   const accounts = sanitizeRunnerEngines(runnerEngines)?.find((engine) => engine.engine === 'codex')?.accounts;
-  return codexAccountOfEnv(isObject(workspaceEnv) ? workspaceEnv : null, accounts);
+  return codexAccountOfEnv(picked ? { ...(env ?? {}), CODEX_HOME: picked.codexHome } : env, accounts);
 }

@@ -238,7 +238,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           select: { planUsage: true, engines: true, status: true, lastHeartbeatAt: true },
         },
         // Which of the runner's Codex accounts the run spends, whose quota alone can hold it back.
-        workspace: { select: { env: true } },
+        workspace: { select: { env: true, codexAccount: true } },
       },
     });
     if (due.length === 0) return;
@@ -363,7 +363,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           session.assignedRunner?.planUsage as PlanUsage | null,
           session.provider,
           now,
-          runCodexAccount(session.provider, session.workspace?.env, session.assignedRunner?.engines),
+          runCodexAccount(
+            session.provider,
+            session.workspace?.env,
+            session.workspace?.codexAccount,
+            session.assignedRunner?.engines,
+          ),
         );
         if (blockedUntil) {
           await this.rearm(session.id, session.status, blockedUntil, attempts, observed);

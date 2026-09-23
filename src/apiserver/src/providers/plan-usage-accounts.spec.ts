@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import {
   AgentProvider,
+  codexAccountOfEnv,
   codexAccountSnapshot,
   codexRateLimitResetOf,
   planUsageBlockedUntil,
@@ -18,6 +19,7 @@ import {
 import { storeRefreshedCodexResetBlock } from '../runner-api/codex-reset-plan-usage';
 import { RunnerApiController, type RetryPlanTransaction } from '../runner-api/runner-api.controller';
 import { transactionDouble } from '../test-support/prisma-transaction-double';
+import { resolveProviderExec } from './custom-provider';
 import { runCodexAccount, sanitizePlanUsageAccounts } from './plan-usage-accounts';
 
 /**
@@ -246,11 +248,21 @@ const ENGINES: RunnerEngineHealth[] = [
 /** Codex's words when a run hits its limit without naming when it lifts. */
 const CODEX_LIMIT = "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits.";
 
-/** retryPlanFor for a quota-killed Codex session in a workspace with env `env`, on a runner reporting `planUsage`. */
-async function retryAtFor(env: Record<string, string> | null, planUsage: PlanUsage): Promise<Date | null | undefined> {
+/** retryPlanFor for a quota-killed Codex session in a workspace with env `env` and the Codex account
+ *  `codexAccount` picked, on a runner reporting `planUsage`. */
+async function retryAtFor(
+  env: Record<string, string> | null,
+  planUsage: PlanUsage,
+  codexAccount: string | null = null,
+): Promise<Date | null | undefined> {
   const tx = transactionDouble<RetryPlanTransaction>({
     session: {
-      findUnique: async () => ({ provider: AgentProvider.CODEX, taskId: null, retryAttempts: 0, workspace: { env } }),
+      findUnique: async () => ({
+        provider: AgentProvider.CODEX,
+        taskId: null,
+        retryAttempts: 0,
+        workspace: { env, codexAccount },
+      }),
     },
     runner: { findUnique: async () => ({ planUsage, engines: ENGINES }) },
   });
@@ -286,17 +298,102 @@ test('a quota-killed run is armed by the quota of the account it spends, never b
 });
 
 test("the gates' question — which account does this run spend — is its workspace's, on its runner", () => {
-  assert.equal(runCodexAccount('codex', null, ENGINES), 'default');
-  assert.equal(runCodexAccount('codex', { CODEX_HOME: WORK_HOME }, ENGINES), WORK);
-  assert.equal(runCodexAccount('codex', { CODEX_HOME: '/srv/elsewhere' }, ENGINES), null);
-  assert.equal(runCodexAccount('codex', { CODEX_API_KEY: 'sk-test' }, ENGINES), null);
+  assert.equal(runCodexAccount('codex', null, null, ENGINES), 'default');
+  assert.equal(runCodexAccount('codex', { CODEX_HOME: WORK_HOME }, null, ENGINES), WORK);
+  assert.equal(runCodexAccount('codex', { CODEX_HOME: '/srv/elsewhere' }, null, ENGINES), null);
+  assert.equal(runCodexAccount('codex', { CODEX_API_KEY: 'sk-test' }, null, ENGINES), null);
   // Accounts are Codex's; any other provider's gate asks as before.
-  assert.equal(runCodexAccount('claude', { CODEX_HOME: WORK_HOME }, ENGINES), undefined);
+  assert.equal(runCodexAccount('claude', { CODEX_HOME: WORK_HOME }, WORK, ENGINES), undefined);
 
   const usage: PlanUsage = { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } };
   const spent = (env: Record<string, string> | null) =>
-    planUsageBlockedUntil(usage, 'codex', NOW, runCodexAccount('codex', env, ENGINES));
+    planUsageBlockedUntil(usage, 'codex', NOW, runCodexAccount('codex', env, null, ENGINES));
   assert.deepEqual(spent(null), new Date(DEFAULT_RESET));
   assert.equal(spent({ CODEX_HOME: WORK_HOME }), null);
   assert.equal(spent({ CODEX_HOME: '/srv/elsewhere' }), null);
+});
+
+/** A slot id the runner does not report: the workspace's pick lives on another machine, or was removed. */
+const GONE = 'c0ffee42';
+
+/** Default's 5-hour window spent, Work's with room; and the other way round. */
+const DEFAULT_SPENT: PlanUsage = { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } };
+const WORK_SPENT: PlanUsage = { provider: AgentProvider.CODEX, primary: window(62, DEFAULT_RESET), accounts: { [WORK]: work(100) } };
+
+/**
+ * The account a Codex session in this workspace is dispatched on: the env dispatch hands the runner
+ * (resolveProviderExec), read as the runner reads it. The gates judge a run by the account they name,
+ * so each case below also holds that it is this one.
+ */
+function dispatchedOn(
+  env: Record<string, string> | null,
+  codexAccount: string | null | undefined,
+  engines: RunnerEngineHealth[] = ENGINES,
+): string | null {
+  const exec = resolveProviderExec({
+    declaredProvider: AgentProvider.CODEX,
+    customRow: null,
+    workspaceEnv: env,
+    codexAccount,
+    runnerEngines: engines,
+  });
+  return codexAccountOfEnv(exec.env, engines.find((engine) => engine.engine === 'codex')?.accounts);
+}
+
+test("a workspace that picked an account its runner reports is judged by that account's snapshot: Default's spent quota does not hold it back", async () => {
+  // The pick is what the run spends, whatever CODEX_HOME the workspace's env was given by hand.
+  for (const env of [null, { CODEX_HOME: '/root/.codex' }, { CODEX_HOME: '/srv/elsewhere' }]) {
+    assert.equal(runCodexAccount('codex', env, WORK, ENGINES), WORK);
+    assert.equal(dispatchedOn(env, WORK), WORK);
+  }
+  // A key of the run's own still spends no account, there as at dispatch.
+  assert.equal(runCodexAccount('codex', { CODEX_API_KEY: 'sk-test' }, WORK, ENGINES), null);
+  assert.equal(dispatchedOn({ CODEX_API_KEY: 'sk-test' }, WORK), null);
+
+  const onWork = runCodexAccount('codex', null, WORK, ENGINES);
+  assert.equal(planUsageBlockedUntil(DEFAULT_SPENT, 'codex', NOW, onWork), null);
+  assert.deepEqual(planUsageBlockedUntil(WORK_SPENT, 'codex', NOW, onWork), new Date(WORK_RESET));
+  assert.equal(planUsageReported(DEFAULT_SPENT, 'codex', onWork), true);
+  // The same through a quota-killed run's retry time.
+  assert.equal(await retryAtFor(null, DEFAULT_SPENT, WORK), undefined, "Default's spent quota names no moment for a run on Work");
+  assert.ok(withinJitterOf(await retryAtFor(null, WORK_SPENT, WORK), WORK_RESET), 'a run on Work waits for Work');
+});
+
+test('a workspace that picked an account its runner does not report is judged by Default, where dispatch runs it', async () => {
+  /** A runner too old to list its accounts. */
+  const unlisted: RunnerEngineHealth[] = [{ engine: 'codex', installed: true, auth: 'yes' }];
+  assert.equal(runCodexAccount('codex', null, GONE, ENGINES), 'default');
+  assert.equal(dispatchedOn(null, GONE), 'default');
+  assert.equal(runCodexAccount('codex', null, WORK, unlisted), 'default');
+  assert.equal(dispatchedOn(null, WORK, unlisted), 'default');
+
+  const onGone = runCodexAccount('codex', null, GONE, ENGINES);
+  assert.deepEqual(planUsageBlockedUntil(DEFAULT_SPENT, 'codex', NOW, onGone), new Date(DEFAULT_RESET));
+  assert.equal(planUsageBlockedUntil(WORK_SPENT, 'codex', NOW, onGone), null);
+  assert.ok(withinJitterOf(await retryAtFor(null, DEFAULT_SPENT, GONE), DEFAULT_RESET), 'the run waits for Default');
+  // A CODEX_HOME the env was given is then what the run spends, as it is without a pick.
+  assert.equal(runCodexAccount('codex', { CODEX_HOME: WORK_HOME }, GONE, ENGINES), WORK);
+  assert.equal(dispatchedOn({ CODEX_HOME: WORK_HOME }, GONE), WORK);
+});
+
+test('a workspace that picked no account is judged by its env, as before accounts could be picked', async () => {
+  const accounts = ENGINES[0].accounts;
+  const envs: Array<Record<string, string> | null> = [
+    null,
+    { CODEX_HOME: WORK_HOME },
+    { CODEX_HOME: '/root/.codex' },
+    { CODEX_HOME: '/srv/elsewhere' },
+    { HOME: '/home/ada' },
+    { CODEX_API_KEY: 'sk-test' },
+  ];
+  for (const env of envs) {
+    // No pick, and Default picked by name, are one choice.
+    for (const pick of [null, undefined, 'default']) {
+      assert.equal(runCodexAccount('codex', env, pick, ENGINES), codexAccountOfEnv(env, accounts), `${JSON.stringify(env)} / ${pick}`);
+      assert.equal(dispatchedOn(env, pick), codexAccountOfEnv(env, accounts), `${JSON.stringify(env)} / ${pick}`);
+    }
+  }
+  assert.ok(withinJitterOf(await retryAtFor(null, DEFAULT_SPENT, null), DEFAULT_RESET), 'a run on Default waits for Default');
+  assert.equal(await retryAtFor({ CODEX_HOME: WORK_HOME }, DEFAULT_SPENT, null), undefined);
+  assert.ok(withinJitterOf(await retryAtFor({ CODEX_HOME: WORK_HOME }, WORK_SPENT, null), WORK_RESET));
 });

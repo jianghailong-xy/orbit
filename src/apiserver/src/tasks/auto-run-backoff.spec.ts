@@ -32,6 +32,8 @@ interface Options {
   engines?: unknown;
   /** The assignee workspace's env; null = none, so its Codex runs are Default's. */
   workspaceEnv?: Record<string, string> | null;
+  /** The Codex account the assignee workspace picked; null = none. */
+  codexAccount?: string | null;
 }
 
 /** Every task in these fixtures is assigned to the same workspace. */
@@ -100,7 +102,9 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
     },
     // Read for the Codex account a task's run spends, which is its workspace's to say.
     workspace: {
-      findMany: async () => [{ id: AGENT_ID, env: options.workspaceEnv ?? null }],
+      findMany: async () => [
+        { id: AGENT_ID, env: options.workspaceEnv ?? null, codexAccount: options.codexAccount ?? null },
+      ],
     },
     session: {
       groupBy: async ({ where }: GroupByArgs) => {
@@ -294,8 +298,8 @@ test('the quota gate judges the Codex account the workspace runs on, never Defau
     },
   ];
   const room = { provider: 'codex', primary: { utilization: 8, resetsAt: inHours(3), windowDurationMins: 300 } };
-  const run = async (planUsage: unknown, workspaceEnv: Record<string, string> | null) => {
-    const { service, executed } = makeService(['task'], [], { provider: 'codex', planUsage, engines, workspaceEnv });
+  const run = async (planUsage: unknown, workspaceEnv: Record<string, string> | null, codexAccount: string | null = null) => {
+    const { service, executed } = makeService(['task'], [], { provider: 'codex', planUsage, engines, workspaceEnv, codexAccount });
     await sweep(service);
     return executed;
   };
@@ -303,10 +307,15 @@ test('the quota gate judges the Codex account the workspace runs on, never Defau
   const defaultSpent = { ...quotaExhausted('codex', inHours(140)), accounts: { '3fa91c2e': room } };
   assert.deepEqual(await run(defaultSpent, null), [], 'a task on Default waits for Default');
   assert.deepEqual(await run(defaultSpent, { CODEX_HOME: workHome }), ['task'], "Default's spent quota does not hold back Work");
+  // A workspace that picked Work runs there, as dispatch runs it; a pick this runner does not
+  // report runs on Default.
+  assert.deepEqual(await run(defaultSpent, null, '3fa91c2e'), ['task'], 'nor a workspace that picked Work');
+  assert.deepEqual(await run(defaultSpent, null, 'c0ffee42'), [], 'a pick the runner does not report waits for Default');
 
   const workSpent = { ...room, accounts: { '3fa91c2e': quotaExhausted('codex', inHours(140)) } };
   assert.deepEqual(await run(workSpent, { CODEX_HOME: workHome }), [], 'a task on Work waits for Work');
   assert.deepEqual(await run(workSpent, null), ['task'], "Work's spent quota does not hold back Default");
+  assert.deepEqual(await run(workSpent, null, '3fa91c2e'), [], 'a workspace that picked Work waits for Work');
 });
 
 test('the quota gate releases once the reported reset has passed', async () => {

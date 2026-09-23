@@ -450,6 +450,19 @@ test("a Codex session waits on the quota of the account its workspace runs on, n
   await onDefault.service.sweep(NOW);
   assert.deepEqual(onDefault.resumed, [], 'a run on Default still waits for Default');
   assert.deepEqual(onDefault.rows[0].retryAt, new Date(FUTURE));
+
+  // A workspace that picked Work runs there, as dispatch runs it; a pick this runner does not
+  // report runs on Default.
+  const picked = makeService([
+    row({ provider: 'codex', assignedRunner: runner, workspace: { env: null, codexAccount: '3fa91c2e' } }),
+  ]);
+  await picked.service.sweep(NOW);
+  assert.deepEqual(picked.resumed, [{ id: 'session-1', content: 'the original message' }], 'nor on a workspace that picked Work');
+  const gone = makeService([
+    row({ provider: 'codex', assignedRunner: runner, workspace: { env: null, codexAccount: 'c0ffee42' } }),
+  ]);
+  await gone.service.sweep(NOW);
+  assert.deepEqual(gone.resumed, [], 'a pick the runner does not report waits for Default');
 });
 
 // The reaper arms these: it finalized the session as 'runner offline' mid-turn. Waiting for

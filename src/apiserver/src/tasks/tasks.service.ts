@@ -9723,15 +9723,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ),
       ),
     ];
-    const envByWorkspace = new Map(
+    const workspaceById = new Map(
       codexWorkspaceIds.length === 0
         ? []
         : (
             await this.prisma.workspace.findMany({
               where: { id: { in: codexWorkspaceIds } },
-              select: { id: true, env: true },
+              select: { id: true, env: true, codexAccount: true },
             })
-          ).map((w) => [w.id, w.env]),
+          ).map((w) => [w.id, w]),
     );
     const now = this.now();
     for (const t of tasks) {
@@ -9739,9 +9739,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!assignee?.runnerId) continue;
       const runner = runnerById.get(assignee.runnerId);
       const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
+      const workspace = workspaceById.get(assignee.workspaceId);
       const account = runCodexAccount(
         assignee.provider,
-        envByWorkspace.get(assignee.workspaceId),
+        workspace?.env,
+        workspace?.codexAccount,
         runner?.engines,
       );
       if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);

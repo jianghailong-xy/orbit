@@ -4909,10 +4909,13 @@ export class RunnerApiController {
       // says when it frees up.
       const workspace =
         quotaSpent && current.provider === 'codex' && current.workspaceId
-          ? await tx.workspace.findUnique({ where: { id: current.workspaceId }, select: { env: true } })
+          ? await tx.workspace.findUnique({
+              where: { id: current.workspaceId },
+              select: { env: true, codexAccount: true },
+            })
           : null;
       const quotaRetryAt = quotaSpent
-        ? await this.quotaRetryAt(tx, runner.id, current.provider, dto.error!, workspace?.env)
+        ? await this.quotaRetryAt(tx, runner.id, current.provider, dto.error!, workspace)
         : null;
 
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
@@ -5734,14 +5737,19 @@ export class RunnerApiController {
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
     const session = await tx.session.findUnique({
       where: { id: sessionId },
-      select: { provider: true, taskId: true, retryAttempts: true, workspace: { select: { env: true } } },
+      select: {
+        provider: true,
+        taskId: true,
+        retryAttempts: true,
+        workspace: { select: { env: true, codexAccount: true } },
+      },
     });
     if (!session) return {};
     if (!quotaSpent) {
       if (session.taskId) return {};
       return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
     }
-    const at = await this.quotaRetryAt(tx, runnerId, session.provider, text, session.workspace?.env);
+    const at = await this.quotaRetryAt(tx, runnerId, session.provider, text, session.workspace);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
     return at ? { retryAt: at } : {};
@@ -5761,16 +5769,16 @@ export class RunnerApiController {
    * the freshly reset window.
    *
    * `text` is whichever words carried the refusal — the assistant reply that ingestion saw, or the
-   * terminal `error` of a run that never got to speak. `workspaceEnv` is the env of the session's
-   * workspace, which says which of the runner's Codex accounts the run spent (runCodexAccount): the
-   * snapshot read is that account's, never another's.
+   * terminal `error` of a run that never got to speak. `workspace` is the session's workspace, whose
+   * picked Codex account and env say which of the runner's Codex accounts the run spent
+   * (runCodexAccount): the snapshot read is that account's, never another's.
    */
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
     provider: string,
     text: string,
-    workspaceEnv: unknown,
+    workspace: { env: unknown; codexAccount: string | null } | null | undefined,
   ): Promise<Date | null> {
     const now = new Date();
     const runner = await tx.runner.findUnique({
@@ -5783,7 +5791,7 @@ export class RunnerApiController {
         runner?.planUsage as PlanUsage | null,
         provider,
         now,
-        runCodexAccount(provider, workspaceEnv, runner?.engines),
+        runCodexAccount(provider, workspace?.env, workspace?.codexAccount, runner?.engines),
       );
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }
