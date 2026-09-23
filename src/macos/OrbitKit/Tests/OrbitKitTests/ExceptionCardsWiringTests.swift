@@ -147,6 +147,23 @@ final class ExceptionCardsWiringTests: XCTestCase {
                           + "nothing in it — is gone")
     }
 
+    /// The needs-you bar asks where a card sits only of the cards still WAITING, against one read of
+    /// the rows' clocks. The console's body reads the bar on every update, and placing a card by its
+    /// moment reads every row's clock: asked of every card, a coordinator's nineteen records were
+    /// 19,000 parses a render, and its console froze on open (the owner's iOS report, 2026-09-23).
+    func testTheBarPlacesOnlyTheCardsStillWaiting() throws {
+        let console = try source(Self.consolePath)
+        let filter = try section(console, from: "var openBelowRows: [BelowRow] {",
+                                 to: "var clocks: ReceiptAnchor.Clocks?")
+        XCTAssertFalse(filter.contains("flowIndex("),
+                       "a card is placed before the bar knows it is waiting — every record in the "
+                           + "conversation is placed again on every update")
+        let placing = try section(console, from: "var clocks: ReceiptAnchor.Clocks?",
+                                  to: "var waitingBelow: WaitingBelow? {")
+        XCTAssertTrue(placing.contains("flowIndex(of: entry.card, clocks: &clocks)"),
+                      "the waiting cards share one read of the rows' clocks")
+    }
+
     // MARK: the card is honest
 
     /// The standing is re-derived from the console's read on every render and never kept: a card

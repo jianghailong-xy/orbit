@@ -319,6 +319,28 @@ final class TranscriptRowsTests: XCTestCase {
                         "transcript-bottom"])
     }
 
+    /// Several records in one render are placed against ONE read of the rows' clocks
+    /// (`ReceiptAnchor.Clocks`), and each still lands where its own moment puts it: above the
+    /// window, between two rows, after the last.
+    func testSeveralRecordsInOneRenderEachLandWhereTheirOwnMomentPutsThem() {
+        func receipt(_ intent: String, at stamp: String) -> DeliveredDecisionCard {
+            record(.criteriaDecisionReceipt(settled: SettledCriteriaDecision(
+                intentId: intent, decision: .approve, decidedAt: stamp,
+                baseSeal: "a", resultingSeal: "b")), at: stamp)
+        }
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1", at: "2026-09-21T09:00:00.000Z")),
+                                 .user(user("i2", at: "2026-09-21T10:00:00.000Z"))], oldestSeq: 42),
+            statusCards: [], canPageOlder: true, showWorkingIndicator: false,
+            decisionCards: [receipt("late", at: "2026-09-21T11:00:00.000Z"),
+                            receipt("mid", at: "2026-09-21T09:30:00.000Z"),
+                            receipt("early", at: "2026-09-20T09:00:00.000Z")])
+        XCTAssertEqual(rows.map(\.id),
+                       ["criteria-decision-receipt-early", "load-older-42", "i1",
+                        "criteria-decision-receipt-mid", "i2", "criteria-decision-receipt-late",
+                        "transcript-bottom"])
+    }
+
     /// The evidence half of the same rule: the record of an answer is a row of its own, id beside
     /// the question card's rather than equal to it.
     func testAnEvidenceReceiptSitsWhereItsAnswerHappenedUnderAnIdOfItsOwn() {

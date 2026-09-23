@@ -2204,17 +2204,13 @@ final class ConsoleModel {
     /// pressing a door, not by replying), which is why the row carries the distinction rather than
     /// the bar assuming one.
     var openBelowRows: [BelowRow] {
-        let rows: [(row: BelowRow, at: Int)] = decisionCards.compactMap { card -> (row: BelowRow, at: Int)? in
-            // Where the card sits, read ONCE per card — and here rather than inside `waiting`, which
-            // is a local function: those do not inherit the closure's actor isolation, and
-            // `flowIndex` is main-actor isolated because it reads `state`.
-            let at = flowIndex(of: card)
+        let asking: [(card: DeliveredDecisionCard, row: BelowRow)] = decisionCards.compactMap { card -> (card: DeliveredDecisionCard, row: BelowRow)? in
             // One spelling for both answers, so each case below reads as the question it is: is this
             // card still waiting, and does the reader answer it by replying (`question: true`) or by
             // pressing a door (`false`)?
-            func waiting(_ open: Bool, question: Bool) -> (row: BelowRow, at: Int)? {
+            func waiting(_ open: Bool, question: Bool) -> (card: DeliveredDecisionCard, row: BelowRow)? {
                 guard open else { return nil }
-                return (BelowRow(rowID: card.id, isQuestion: question), at)
+                return (card, BelowRow(rowID: card.id, isQuestion: question))
             }
             switch card.kind {
             case .criteriaDecision(let intentID):
@@ -2253,6 +2249,16 @@ final class ConsoleModel {
         // that a card can be placed by a moment rather than by its arrival (`flowIndex`): the
         // press goes to the one that happened first. Ties keep the delivery order (the sort is by
         // (place, appended-at)), so the target never depends on how the sort happened to break.
+        //
+        // Where a card sits is asked of the ones still waiting and of nothing else, against ONE read
+        // of the rows' clocks. A record is never waiting, and placing one reads every row's clock
+        // (`ReceiptAnchor.Clocks`): asked of every card, this — which the console's body reads on
+        // every update — parsed the whole window once per record, and a coordinator's nineteen
+        // records froze its console on open (the account owner's iOS report, 2026-09-23).
+        var clocks: ReceiptAnchor.Clocks?
+        let rows: [(row: BelowRow, at: Int)] = asking.map { entry in
+            (row: entry.row, at: flowIndex(of: entry.card, clocks: &clocks))
+        }
         return rows.enumerated()
             .sorted { ($0.element.at, $0.offset) < ($1.element.at, $1.offset) }
             .map(\.element.row)
@@ -2274,15 +2280,19 @@ final class ConsoleModel {
     /// the window), and one past the end for one that trails the tail.
     ///
     /// The same questions `TranscriptRows.build` answers when it assembles the rows, asked here for
-    /// the ORDER of the bar's rows and for which way the reader has to look.
-    private func flowIndex(of card: DeliveredDecisionCard) -> Int {
+    /// the ORDER of the bar's rows and for which way the reader has to look. `clocks` is the rows'
+    /// clocks, read by the first card placed by a moment and reused by the rest.
+    private func flowIndex(of card: DeliveredDecisionCard,
+                           clocks: inout ReceiptAnchor.Clocks?) -> Int {
         switch card.placement {
         case .onArrival(let anchor):
             guard let anchor, let at = state.items.firstIndex(where: { $0.id == anchor })
             else { return state.items.count }
             return at
         case .at(let moment):
-            switch ReceiptAnchor.place(items: state.items, at: moment) {
+            let read = clocks ?? ReceiptAnchor.Clocks(state.items)
+            clocks = read
+            switch ReceiptAnchor.place(read, at: moment) {
             case .after(let id): return state.items.firstIndex { $0.id == id } ?? state.items.count
             case .beforeWindow:  return -1
             // Nothing draws this one (`TranscriptRows.build` drops an unplaceable stamp), so it is
@@ -2303,7 +2313,8 @@ final class ConsoleModel {
         guard let top = topVisibleItemID,
               let item = state.items.firstIndex(where: { $0.id == top }),
               let card = decisionCards.first(where: { $0.id == rowID }) else { return nil }
-        return flowIndex(of: card) < item ? .above : .below
+        var clocks: ReceiptAnchor.Clocks?
+        return flowIndex(of: card, clocks: &clocks) < item ? .above : .below
     }
 
     /// The item straddling the top edge of the reader's viewport, as `TranscriptView` reports it
