@@ -2446,6 +2446,42 @@ export class SessionsService {
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
+    return this.listRows(ownerId, {
+      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter}`,
+      visibility,
+      orderBy,
+      pageLimit,
+    });
+  }
+
+  /**
+   * These sessions' list rows, for a reader that names sessions instead of browsing a view of them
+   * (the link cards, `link-previews/`). The same query and the same mapping as `list`, so a row read
+   * here cannot say something different from the row the list draws for the same session.
+   *
+   * Open and Completed alike; a session in Trash is not returned, and neither is one that is not
+   * `ownerId`'s. No order is promised — key the result by `id`.
+   */
+  async listRowsByIds(ownerId: string, ids: readonly string[]) {
+    if (ids.length === 0) return [];
+    return this.listRows(ownerId, {
+      scope: Prisma.sql`AND s.id = ANY(${[...ids]}::uuid[])`,
+      visibility: Prisma.sql`s.deleted_at IS NULL`,
+      orderBy: Prisma.sql`s.created_at DESC`,
+      pageLimit: Prisma.empty,
+    });
+  }
+
+  /** The row query and its mapping, shared by `list` and `listRowsByIds`. */
+  private async listRows(
+    ownerId: string,
+    { scope, visibility, orderBy, pageLimit }: {
+      scope: Prisma.Sql;
+      visibility: Prisma.Sql;
+      orderBy: Prisma.Sql;
+      pageLimit: Prisma.Sql;
+    },
+  ) {
     // Raw query so the (potentially multi-KB) last-reply preview is truncated in SQL —
     // only ~200 chars per row ever leave the DB. It also omits big unused columns like
     // `prompt`; together this keeps the list payload flat as the session count grows.
@@ -2660,9 +2696,7 @@ export class SessionsService {
         ) n
       ) q ON s.status = 'PENDING' AND s.cancel_requested_at IS NULL
       WHERE s.owner_id = ${ownerId}::uuid
-        ${runnerFilter}
-        ${workspaceFilter}
-        ${tagFilter}
+        ${scope}
         AND (${visibility})
       ORDER BY ${orderBy}
       ${pageLimit}
