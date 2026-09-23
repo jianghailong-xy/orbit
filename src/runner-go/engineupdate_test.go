@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -444,6 +445,178 @@ func TestBusyEngineUpdatesTheMomentItsSessionsFinish(t *testing.T) {
 	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
 	if engineUpdateRuns(t, busyRuns) != 1 {
 		t.Fatal("the deferred update stayed filed after it ran")
+	}
+}
+
+const fakeClaudeLatest = "2.1.280"
+
+// fakeClaudeInstall makes a Claude Code install at 2.1.226 the only engine, with a release feed
+// offering fakeClaudeLatest, laid out the way one of its two installers does it. Native: every
+// release its own file under share/claude/versions/, linked from bin/claude, and an updater that
+// writes the new release beside the old one and re-points the link. npm: the package's cli.js
+// behind the same link, and an updater that rewrites it in place. Returns the file counting the
+// updater's runs.
+//
+// Named `claude`, unlike the fakes above, because that is the engine the layout is asked about —
+// which makes the service PATH matter: serviceLoginPath puts the installer dirs a PATH lacks in
+// front of it, ~/.local/bin among them, where a dev machine's real claude lives. Naming them after
+// the fake's dir leaves nothing to prepend, and the result is checked rather than trusted.
+func fakeClaudeInstall(t *testing.T, native bool) (runs string) {
+	t.Helper()
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("needs a shell")
+	}
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(fakeClaudeLatest))
+	}))
+	t.Cleanup(feed.Close)
+
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	installed := filepath.Join(dir, "lib", "node_modules", "@anthropic-ai", "claude-code", "cli.js")
+	next := installed
+	if native {
+		versions := filepath.Join(dir, "share", "claude", "versions")
+		installed, next = filepath.Join(versions, "2.1.226"), filepath.Join(versions, fakeClaudeLatest)
+	}
+	for _, d := range []string{bin, filepath.Dir(installed)} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(installed, []byte("#!/bin/sh\necho '2.1.226 (Claude Code)'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(bin, providerClaude)
+	if err := os.Symlink(installed, link); err != nil {
+		t.Fatal(err)
+	}
+	runs = filepath.Join(dir, "update.runs")
+	update := "printf x >> " + runs + "; printf '#!/bin/sh\\necho \"" + fakeClaudeLatest + " (Claude Code)\"\\n' > " + next + "; chmod +x " + next
+	if native {
+		update += "; ln -sf " + next + " " + link
+	}
+	saved := engineSpecs
+	engineSpecs = []engineSpec{{name: "Claude Code", bin: providerClaude, updateCmd: update, latestURL: feed.URL}}
+	t.Cleanup(func() { engineSpecs = saved })
+	t.Cleanup(func() { clearDeferredEngineUpdate(providerClaude) })
+
+	path := []string{bin}
+	if u, err := user.Current(); err == nil {
+		path = append(path, engineInstallerDirs(u.HomeDir)...)
+	}
+	t.Setenv("PATH", strings.Join(append(path, os.Getenv("PATH")), ":"))
+	if got, _ := lookPathIn(providerClaude, serviceLoginPath()); got != link {
+		t.Fatalf("the service PATH resolves claude to %q, not the fake at %s", got, link)
+	}
+	return runs
+}
+
+// A native Claude Code install updates under its running sessions rather than waiting for them.
+// Its updater puts the new release beside the one they are running and re-points the link, so the
+// skip protected nothing and only held back the version the next spawn gets. Live on 2026-09-23 an
+// interactive 2.1.278, two days into its run, carried on straight through the update to 2.1.280,
+// as did the four runner engines running at that moment.
+func TestNativeClaudeUpdatesWhileItsSessionsRun(t *testing.T) {
+	runs := fakeClaudeInstall(t, true)
+	active := map[string]int{providerClaude: 3}
+	activeCount := func(bin string) int { return active[bin] }
+
+	lines := updateEngines(context.Background(), activeCount, nil)
+
+	if engineUpdateRuns(t, runs) != 1 {
+		t.Fatal("a native install waited on its sessions — its updater replaces nothing they run")
+	}
+	if deferredEngineUpdates()[providerClaude] {
+		t.Fatal("updated, and still filed for the idle retry")
+	}
+	if got := loadEngineUpdateLog()[providerClaude]; got.Status != updateUpdated || versionNumber(got.Latest) != fakeClaudeLatest {
+		t.Fatalf("recorded %+v, want it updated to %s", got, fakeClaudeLatest)
+	}
+	if len(lines) != 1 || strings.Contains(lines[0], "once they finish") ||
+		!strings.Contains(lines[0], "(3 sessions) keeps the version it started with") {
+		t.Fatalf("lines = %q, want the update reported, saying the running sessions keep theirs", lines)
+	}
+	// Nothing left owing: the retry must not run the updater a second time.
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+	if engineUpdateRuns(t, runs) != 1 {
+		t.Fatal("the idle retry updated an engine the pass already had")
+	}
+}
+
+// npm-installed Claude Code keeps the skip: npm rewrites the package in place, and nobody has shown
+// that to be safe under a session running out of it. Same engine, same busy sessions as the native
+// case — the layout is the only difference, and it is what decides.
+func TestNpmClaudeStillWaitsForItsSessions(t *testing.T) {
+	runs := fakeClaudeInstall(t, false)
+	active := map[string]int{providerClaude: 3}
+	activeCount := func(bin string) int { return active[bin] }
+
+	lines := updateEngines(context.Background(), activeCount, nil)
+
+	if engineUpdateRuns(t, runs) != 0 {
+		t.Fatal("rewrote an npm install under the sessions running out of it")
+	}
+	if !deferredEngineUpdates()[providerClaude] {
+		t.Fatal("skipped without filing it for the idle retry")
+	}
+	if len(lines) != 1 || !strings.Contains(lines[0], "3 sessions running, it'll update once they finish") {
+		t.Fatalf("lines = %q, want it waiting on its sessions", lines)
+	}
+
+	active[providerClaude] = 0
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+	if engineUpdateRuns(t, runs) != 1 {
+		t.Fatal("its sessions finished and the deferred update never ran")
+	}
+}
+
+// Narrow on purpose: whatever this lets through is updated under live sessions, so anything that
+// isn't plainly the native installer's own layout keeps the skip.
+func TestNativeClaudeInstallIsOnlyTheVersionsLayout(t *testing.T) {
+	dir := t.TempDir()
+	file := func(path string) string {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	claude := engineSpec{bin: providerClaude}
+	release := file(filepath.Join(dir, "share", "claude", "versions", "2.1.280"))
+	for _, c := range []struct {
+		name   string
+		spec   engineSpec
+		target string // what the PATH entry links to; empty for a plain file
+		want   bool
+	}{
+		{"native install", claude, release, true},
+		{"npm install", claude, file(filepath.Join(dir, "lib", "node_modules", "@anthropic-ai", "claude-code", "cli.js")), false},
+		{"plain file on PATH", claude, "", false},
+		{"another engine linked the same way", engineSpec{bin: providerCodex}, release, false},
+		{"a half-written download", claude, file(filepath.Join(dir, "share", "claude", "versions", "2.1.280.tmp.4242.1790000000")), false},
+		{"someone else's versions dir", claude, file(filepath.Join(dir, "share", "other", "versions", "2.1.280")), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			pathDir := t.TempDir()
+			entry := filepath.Join(pathDir, c.spec.bin)
+			if c.target == "" {
+				file(entry)
+			} else if err := os.Symlink(c.target, entry); err != nil {
+				t.Fatal(err)
+			}
+			got, ok := nativeClaudeInstall(c.spec, pathDir)
+			if ok != c.want {
+				t.Fatalf("native = %v (resolved to %q), want %v", ok, got, c.want)
+			}
+			if want, _ := filepath.EvalSymlinks(c.target); ok && got != want {
+				t.Fatalf("resolved to %q, want the release file %q", got, want)
+			}
+		})
 	}
 }
 
