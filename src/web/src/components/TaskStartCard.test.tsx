@@ -42,7 +42,7 @@ const CARD: Card = {
   taskId: '01a0cca7-8609-70ed-a0e2-d4b55b832b60',
   title: 'runner + web：配额按账户归属',
   description: '让每个账户的 plan usage 只进它自己那一行。\n\n背景：`codexSessionOnDefaultAccount` 今天回答的是二值问题。',
-  acceptanceCriteria: '配额按账户归属：每个账户的 plan usage 只进它自己那一行。',
+  acceptanceCriteria: '配额按账户归属：每个账户的 plan usage 只进它自己那一行。\n验收只跑 RunnerEngines*/RunnerSignIn* 这一组。',
   completionCriterion: 'EXECUTABLE',
   acceptanceCommand: COMMAND,
   acceptanceExpectedExitCode: 0,
@@ -148,7 +148,10 @@ describe('the turn that starts a task run', () => {
     await press(buttonNamed('Show details')!);
     const sections = [...card()!.querySelectorAll('.tsc-section')].map((s) => s.textContent);
     expect(sections).toEqual(['Acceptance criteria', 'List instructions']);
-    expect(card()!.textContent).toContain(CARD.acceptanceCriteria);
+    // The criteria as written — a glob is not emphasis — the way the task page shows them.
+    const criteria = card()!.querySelector('.tsc-plain');
+    expect(criteria?.textContent).toBe(CARD.acceptanceCriteria);
+    expect(criteria?.querySelector('em')).toBeNull();
     expect(card()!.textContent).toContain('提交前跑一遍全量测试。');
     expect(card()!.querySelector('.tsc-desc')?.className).not.toContain('is-folded');
     expect(card()!.querySelector('.tsc-command')?.className).toContain('is-clamped');
