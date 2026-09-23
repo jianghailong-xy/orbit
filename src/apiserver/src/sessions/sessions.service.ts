@@ -679,6 +679,8 @@ export class SessionsService {
     // The workspace's own environment, which may carry the provider credential that makes the
     // runner's engine sign-in irrelevant — see the sign-in preflight below.
     let workspaceEnv: unknown;
+    // The Codex account the workspace's sessions run on, whose sign-in the preflight below judges.
+    let codexAccount: string | null | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -687,6 +689,7 @@ export class SessionsService {
           enableWorktree: true,
           enabled: true,
           env: true,
+          codexAccount: true,
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -701,15 +704,17 @@ export class SessionsService {
       assignedRunnerId = workspace.runnerId ?? undefined;
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
+      codexAccount = workspace.codexAccount;
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, enabled: true, env: true },
+        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
+      codexAccount = workspace.codexAccount;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
@@ -852,6 +857,7 @@ export class SessionsService {
         runtime,
         bringsOwnCredentials: borrowedRuntime != null,
         workspaceEnv,
+        codexAccount,
         runner: targetRunner,
       });
     // Typed, not a bare 409: this is an availability condition — the engine is signed out on a
