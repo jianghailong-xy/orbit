@@ -86,6 +86,19 @@ final class RunnerArtifactWiringTests: XCTestCase {
                "the fetch no longer runs when the row appears")
     }
 
+    /// The store answers a repeated ask for the same path from its cache rather than the network —
+    /// a List re-creates rows as they scroll, and each appearance used to be a fresh round trip for
+    /// a file the reader had already been shown.
+    func testTheStoreKeepsArtifactBytesByPath() throws {
+        let store = try source("src/macos/OrbitApp/Sources/OrbitApp/AttachmentImageStore.swift")
+        let method = try section(store, from: "func artifactData(sessionID: String, path: String)",
+                                 to: "/// Fetch + decode `id` if not already known")
+        expect(method, "artifactBytes.data(for: path)",
+               "the store no longer looks in the cache before fetching")
+        expect(method, "artifactBytes.store(data, for: path)",
+               "a fetched file is no longer kept for the next appearance")
+    }
+
     /// A prose link to the same kind of file: it keeps its link (rather than being drawn as plain
     /// text) exactly when the artifact route can serve it, and the tap downloads it.
     func testAProseLinkToTheSessionsOwnFileIsDownloadable() throws {

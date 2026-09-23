@@ -35,6 +35,10 @@ final class AttachmentImageStore {
 
     private let api: APIClient
     private let cache: PinnedCache<Entry>
+    /// What the artifact route returned, by path — see `ArtifactByteCache` for why it is kept. The
+    /// budget is the file bytes rather than decoded pixels, so a small fraction of the image budget
+    /// is plenty: what reappears on screen is a handful of files, not a transcript's worth.
+    private let artifactBytes = ArtifactByteCache(byteLimit: 24 << 20)
 
     /// Ids with a fetch in flight — dedups concurrent callers. Bounded by what's actually in flight:
     /// every insert below is paired with a `defer`red removal.
@@ -99,12 +103,17 @@ final class AttachmentImageStore {
         try? await api.downloadAttachment(id)
     }
 
-    /// Bytes of a file a transcript named by *path* rather than by attachment id — what a tap on an
-    /// unreachable-path chip asks for (the artifact route, which the session's runner answers by
-    /// reading the file). Uncached and one-off, like `data(for:)`: this is a file the reader asked
-    /// for, not something the transcript renders with. Nil on any failure.
+    /// Bytes of a file a transcript named by *path* rather than by attachment id — what a row asks
+    /// for when the path names an image (drawn in place) or a reader taps a chip for a file. Served
+    /// from `artifactBytes` when it is there: a List re-creates rows as they scroll, and the same
+    /// mock came back as a fresh round trip every time it reappeared. Nil on any failure.
     func artifactData(sessionID: String, path: String) async -> Data? {
-        try? await api.sessionArtifact(sessionID: sessionID, path: path)
+        if let cached = artifactBytes.data(for: path) { return cached }
+        guard let data = try? await api.sessionArtifact(sessionID: sessionID, path: path) else {
+            return nil
+        }
+        artifactBytes.store(data, for: path)
+        return data
     }
 
     /// Fetch + decode `id` if not already known. Idempotent and dedups concurrent callers.
