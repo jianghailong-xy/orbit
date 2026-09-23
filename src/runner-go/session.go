@@ -469,7 +469,7 @@ func turnCompletionEndsSession(req TurnCompleteRequest) bool {
 // turn that ran and went wrong.
 const subtypeUnknownKind = "unknown_kind"
 
-func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string, onCodexRateLimits func(map[string]interface{}), pool *sessionPool, live *liveSession) {
+func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string, onCodexRateLimits codexRateLimitSink, pool *sessionPool, live *liveSession) {
 	syncJobProvider(job)
 	// Stable across warm/cold claims. The outer loop swaps `job` to the newest
 	// claim payload on a cold resume while the event flusher runs concurrently.
@@ -1408,7 +1408,7 @@ func envWithAgent(agentEnv map[string]string) []string {
 	return env
 }
 
-func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	// A pinned run whose checkout setupWorktree refused gets no engine at all. The refusal is this
 	// run's error, reported the way an engine that cannot start is reported just below.
 	if r := job.SourceRefusal; r != nil {

@@ -28,6 +28,10 @@ interface Options {
   freeBytes?: bigint | null;
   /** The runner's free-space floor in MB; null = no disk gate. */
   minFreeDiskMb?: number | null;
+  /** `engines` the assignees' runner reports: which Codex accounts it has. */
+  engines?: unknown;
+  /** The assignee workspace's env; null = none, so its Codex runs are Default's. */
+  workspaceEnv?: Record<string, string> | null;
 }
 
 /** Every task in these fixtures is assigned to the same workspace. */
@@ -90,7 +94,13 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
       }));
     },
     runner: {
-      findMany: async () => [{ id: 'runner-1', planUsage: options.planUsage ?? null }],
+      findMany: async () => [
+        { id: 'runner-1', planUsage: options.planUsage ?? null, engines: options.engines ?? null },
+      ],
+    },
+    // Read for the Codex account a task's run spends, which is its workspace's to say.
+    workspace: {
+      findMany: async () => [{ id: AGENT_ID, env: options.workspaceEnv ?? null }],
     },
     session: {
       groupBy: async ({ where }: GroupByArgs) => {
@@ -267,6 +277,36 @@ test('the quota gate applies only to the provider that is actually spent', async
   });
   await sweep(service);
   assert.deepEqual(executed, ['task-claude']);
+});
+
+test('the quota gate judges the Codex account the workspace runs on, never Default for all of them', async () => {
+  // One runner, two Codex accounts: Default, and Work in a slot of its own.
+  const workHome = '/root/.orbit/codex-accounts/3fa91c2e';
+  const engines = [
+    {
+      engine: 'codex',
+      installed: true,
+      auth: 'yes',
+      accounts: [
+        { id: 'default', codexHome: '/root/.codex', auth: 'yes' },
+        { id: '3fa91c2e', name: 'Work', codexHome: workHome, auth: 'yes' },
+      ],
+    },
+  ];
+  const room = { provider: 'codex', primary: { utilization: 8, resetsAt: inHours(3), windowDurationMins: 300 } };
+  const run = async (planUsage: unknown, workspaceEnv: Record<string, string> | null) => {
+    const { service, executed } = makeService(['task'], [], { provider: 'codex', planUsage, engines, workspaceEnv });
+    await sweep(service);
+    return executed;
+  };
+
+  const defaultSpent = { ...quotaExhausted('codex', inHours(140)), accounts: { '3fa91c2e': room } };
+  assert.deepEqual(await run(defaultSpent, null), [], 'a task on Default waits for Default');
+  assert.deepEqual(await run(defaultSpent, { CODEX_HOME: workHome }), ['task'], "Default's spent quota does not hold back Work");
+
+  const workSpent = { ...room, accounts: { '3fa91c2e': quotaExhausted('codex', inHours(140)) } };
+  assert.deepEqual(await run(workSpent, { CODEX_HOME: workHome }), [], 'a task on Work waits for Work');
+  assert.deepEqual(await run(workSpent, null), ['task'], "Work's spent quota does not hold back Default");
 });
 
 test('the quota gate releases once the reported reset has passed', async () => {

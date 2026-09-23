@@ -212,6 +212,7 @@ import { loadVerificationEpochGates } from './verification-epoch-read';
 import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
+import { runCodexAccount } from '../providers/plan-usage-accounts';
 import {
   criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
@@ -9163,6 +9164,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       assignee: {
         provider: (seeds.get(row.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider,
         runnerId: row.runnerId,
+        workspaceId: row.workspaceId,
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
       listId: row.listId,
@@ -9176,19 +9178,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
     const { blocked: quotaBlocked, blind: quotaBlind } = await this.quotaGate(ready);
     // Don't re-dispatch a task whose runs keep failing (see AUTO_RUN_RETRY_BACKOFF_MS). Tasks
-    // on a runner reporting no quota at all are named so the backoff can damp a usage limit
-    // the gate above had no reset time to hold on.
-    const blindTaskIds = new Set(
-      ready
-        .filter((t) => {
-          const runnerId = t.assignee?.runnerId;
-          return !!runnerId && quotaBlind.has(`${runnerId}:${t.assignee.provider}`);
-        })
-        .map((t) => t.id),
-    );
+    // whose run would spend a quota nothing reports are named so the backoff can damp a usage
+    // limit the gate above had no reset time to hold on.
     const heldOff = await this.autoRunHoldOff(
       ready.map((t) => t.id),
-      blindTaskIds,
+      quotaBlind,
     );
     // How many more sessions it is worth materialising, per runner and per capped list.
     //
@@ -9223,9 +9217,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       return e;
     };
     for (const t of ready) {
-      const blockedUntil = t.assignee?.runnerId
-        ? quotaBlocked.get(`${t.assignee.runnerId}:${t.assignee.provider}`)
-        : undefined;
+      const blockedUntil = quotaBlocked.get(t.id);
       if (blockedUntil) {
         quotaHeld += 1;
         if (!resumesAt || blockedUntil < resumesAt) resumesAt = blockedUntil;
@@ -9687,23 +9679,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Of these tasks' assignees, which (runner, provider) pairs have an exhausted account quota
-   * right now — mapped to the moment it frees up. Dispatching against one is pointless: the
-   * run dies on arrival with the provider's own "usage limit" error, so the only effect is a
-   * failed session per sweep until the window resets (a weekly limit means days of them).
+   * Of these tasks, which have an exhausted account quota to spend right now — mapped, by task id,
+   * to the moment it frees up. Dispatching against one is pointless: the run dies on arrival with
+   * the provider's own "usage limit" error, so the only effect is a failed session per sweep until
+   * the window resets (a weekly limit means days of them).
    *
-   * Keyed per (runner, provider) because one runner can host workspaces on several runtimes and
-   * only some of their quotas may be spent. A pair whose snapshot reports no exhausted window,
-   * or an exhausted one with no reset time, is absent from `blocked`.
+   * The quota is the one the task's run would spend: its runner's for its provider, because one
+   * runner can host workspaces on several runtimes and only some of their quotas may be spent — and
+   * for Codex that runner's account its workspace runs on (runCodexAccount), because one runner can
+   * hold several accounts and only some of theirs may be spent. A task whose quota reports no
+   * exhausted window, or an exhausted one with no reset time, is absent from `blocked`.
    *
-   * `blind` names the pairs this gate has *no quota data for at all*, which is a different
+   * `blind` names the tasks this gate has *no quota data for at all*, which is a different
    * thing from "not blocked" and must not be confused with it: for a reported-and-healthy
    * quota, dispatching immediately after a usage-limit failure is right (the window reset),
    * while doing the same with no snapshot to go on is what produces the respawn loop
    * QUOTA_BLIND_RETRY_BACKOFF_MS exists to damp.
    */
   private async quotaGate(
-    tasks: Array<{ assignee: { provider: string; runnerId: string | null } | null }>,
+    tasks: Array<{
+      id: string;
+      assignee: { provider: string; runnerId: string | null; workspaceId: string } | null;
+    }>,
   ): Promise<{ blocked: Map<string, Date>; blind: Set<string> }> {
     const runnerIds = [
       ...new Set(
@@ -9715,21 +9712,41 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (runnerIds.length === 0) return { blocked, blind };
     const runners = await this.prisma.runner.findMany({
       where: { id: { in: runnerIds } },
-      select: { id: true, planUsage: true },
+      select: { id: true, planUsage: true, engines: true },
     });
-    const usageByRunner = new Map(
-      runners.map((r) => [r.id, r.planUsage as unknown as PlanUsage | null]),
+    const runnerById = new Map(runners.map((r) => [r.id, r]));
+    // Which Codex account a run spends is its workspace's to say, so only Codex tasks' are read.
+    const codexWorkspaceIds = [
+      ...new Set(
+        tasks.flatMap((t) =>
+          t.assignee?.runnerId && t.assignee.provider === 'codex' ? [t.assignee.workspaceId] : [],
+        ),
+      ),
+    ];
+    const envByWorkspace = new Map(
+      codexWorkspaceIds.length === 0
+        ? []
+        : (
+            await this.prisma.workspace.findMany({
+              where: { id: { in: codexWorkspaceIds } },
+              select: { id: true, env: true },
+            })
+          ).map((w) => [w.id, w.env]),
     );
     const now = this.now();
     for (const t of tasks) {
       const assignee = t.assignee;
       if (!assignee?.runnerId) continue;
-      const key = `${assignee.runnerId}:${assignee.provider}`;
-      const usage = usageByRunner.get(assignee.runnerId);
-      if (!planUsageReported(usage, assignee.provider)) blind.add(key);
-      if (blocked.has(key)) continue;
-      const until = planUsageBlockedUntil(usage, assignee.provider, now);
-      if (until) blocked.set(key, until);
+      const runner = runnerById.get(assignee.runnerId);
+      const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
+      const account = runCodexAccount(
+        assignee.provider,
+        envByWorkspace.get(assignee.workspaceId),
+        runner?.engines,
+      );
+      if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);
+      const until = planUsageBlockedUntil(usage, assignee.provider, now, account);
+      if (until) blocked.set(t.id, until);
     }
     return { blocked, blind };
   }
@@ -9934,18 +9951,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       assignee: {
         provider: (seeds.get(moment.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider,
         runnerId: moment.runnerId,
+        workspaceId: moment.workspaceId,
       },
     }));
-    const quotaKey = (t: (typeof assigned)[number]) =>
-      `${t.assignee.runnerId}:${t.assignee.provider}`;
     const { blocked, blind } = await this.quotaGate(assigned);
     const heldOff = await this.autoRunHoldOff(
       assigned.map((t) => t.id),
-      new Set(assigned.filter((t) => blind.has(quotaKey(t))).map((t) => t.id)),
+      blind,
       { countUnrequestedEnds: true },
     );
     for (const t of assigned) {
-      const quotaResetsAt = blocked.get(quotaKey(t));
+      const quotaResetsAt = blocked.get(t.id);
       if (quotaResetsAt) {
         decisions.set(t.id, { code: 'QUOTA_EXHAUSTED', retryAt: quotaResetsAt });
       } else if (heldOff.has(t.id)) {

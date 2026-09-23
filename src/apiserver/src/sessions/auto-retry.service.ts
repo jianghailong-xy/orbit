@@ -22,6 +22,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
+import { runCodexAccount } from '../providers/plan-usage-accounts';
 import {
   classifyTransactionError,
   loggedRetry,
@@ -234,8 +235,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         startedAt: true,
         runtimeSessionId: true,
         assignedRunner: {
-          select: { planUsage: true, status: true, lastHeartbeatAt: true },
+          select: { planUsage: true, engines: true, status: true, lastHeartbeatAt: true },
         },
+        // Which of the runner's Codex accounts the run spends, whose quota alone can hold it back.
+        workspace: { select: { env: true } },
       },
     });
     if (due.length === 0) return;
@@ -360,6 +363,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           session.assignedRunner?.planUsage as PlanUsage | null,
           session.provider,
           now,
+          runCodexAccount(session.provider, session.workspace?.env, session.assignedRunner?.engines),
         );
         if (blockedUntil) {
           await this.rearm(session.id, session.status, blockedUntil, attempts, observed);

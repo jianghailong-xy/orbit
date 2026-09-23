@@ -98,6 +98,9 @@ type PlanUsage struct {
 	// Earned rate-limit reset state of the default Codex account
 	// (docs/codex-rate-limit-reset-contract.md). Nil until a reader fills it; omitted on the wire.
 	RateLimitReset *PlanUsageRateLimitReset `json:"rateLimitReset,omitempty"`
+	// Codex only: every other account slot's own snapshot, by slot id (codex_account_usage.go). The
+	// windows beside it are Default's. Omitted while no other account has been read.
+	Accounts map[string]*PlanUsage `json:"accounts,omitempty"`
 
 	// Nested snapshots when more than one provider is available.
 	Claude *PlanUsage `json:"claude,omitempty"`
@@ -416,11 +419,38 @@ func fetchCodexPlanUsage(ctx context.Context, reader *codexResetReader) (*PlanUs
 	return usage, err
 }
 
+// fetchCodexAccountPlanUsage reads the windows of one added account slot: account/rateLimits/read on
+// a bare app-server of that slot, and nothing else. No account/read, so no reset block: reset v1 is
+// Default's alone (docs/codex-rate-limit-reset-contract.md §3).
+func fetchCodexAccountPlanUsage(ctx context.Context, codexHome string) (*PlanUsage, error) {
+	var usage *PlanUsage
+	err := withCodexAccountAppServer(ctx, codexHome, 30*time.Second, func(cctx context.Context, app *codexAppServer) error {
+		rateLimits, err := app.request(cctx, codexRateLimitsReadMethod, nil)
+		if err != nil {
+			return err
+		}
+		usage, err = parseCodexPlanUsage(rateLimits)
+		return err
+	})
+	return usage, err
+}
+
 // withDefaultCodexAppServer runs use on a bare app-server of the runner's default Codex account — the
 // one the runner's own environment selects — once its handshake is done, all within budget, and closes
 // the app-server after. The shared state bootstrap before it waits on ctx alone.
 func withDefaultCodexAppServer(ctx context.Context, budget time.Duration, use func(context.Context, *codexAppServer) error) error {
-	env := os.Environ()
+	return withCodexAppServer(ctx, os.Environ(), budget, use)
+}
+
+// withCodexAccountAppServer is withDefaultCodexAppServer for an added account slot: the runner's own
+// environment with that slot's CODEX_HOME, so the app-server opens the slot's own shared state
+// partition under that partition's handshake lock — the path a session on the slot takes. Never a
+// fresh sqlite_home, and never another account's credentials copied in.
+func withCodexAccountAppServer(ctx context.Context, codexHome string, budget time.Duration, use func(context.Context, *codexAppServer) error) error {
+	return withCodexAppServer(ctx, envWithValue(os.Environ(), "CODEX_HOME", codexHome), budget, use)
+}
+
+func withCodexAppServer(ctx context.Context, env []string, budget time.Duration, use func(context.Context, *codexAppServer) error) error {
 	cwd, _ := os.Getwd()
 	state, err := codexPlanUsageStateForEnv(env, cwd)
 	if err != nil {

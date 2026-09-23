@@ -29,6 +29,8 @@ const (
 	codexResetTestEmail           = "fixture@example.invalid"
 
 	fakeCodexDirEnv = "ORBIT_FAKE_CODEX_DIR"
+	// The prefix of an answer file the fake app-server reads from the CODEX_HOME it runs in.
+	fakeCodexHomeAnswer = "orbit-fake-"
 )
 
 type codexResetReadCase struct {
@@ -572,17 +574,25 @@ func (f *fakeCodexBinary) answerSessionsWith(t *testing.T, frames ...map[string]
 	}
 }
 
-// runFakeCodexAppServer is `codex app-server --stdio` for the shim. It records the spawn (its argv
-// and the CODEX_HOME it was given) and every frame it receives, answers initialize, account/read and
-// account/rateLimits/read from the answer files — thread/start too once a test serves sessions,
-// saying that test's frames after the answer — and refuses anything else as the real server refuses
-// an unknown method — account/rateLimitResetCredit/consume included, which the recording lets a test
-// rule out.
+// runFakeCodexAppServer is `codex app-server --stdio` for the shim. It records the spawn — with the
+// CODEX_HOME it ran in — and every frame it receives, answers initialize, account/read and
+// account/rateLimits/read from the answer files — thread/start too once a test serves sessions, saying
+// that test's frames after the answer — and refuses anything else as the real server refuses an unknown
+// method — account/rateLimitResetCredit/consume included, which the recording lets a test rule out. An
+// answer file in the CODEX_HOME it runs in (fakeCodexHomeAnswer) wins over the one in dir, so each
+// account can answer for itself.
 func runFakeCodexAppServer(dir string) int {
-	appendJSONL(filepath.Join(dir, "spawns.jsonl"), map[string]interface{}{"pid": os.Getpid(), "argv": os.Args[1:], "codexHome": os.Getenv("CODEX_HOME")})
+	codexHome := os.Getenv("CODEX_HOME")
+	appendJSONL(filepath.Join(dir, "spawns.jsonl"), map[string]interface{}{"pid": os.Getpid(), "argv": os.Args[1:], "codexHome": codexHome})
 	answers := map[string]json.RawMessage{"initialize": json.RawMessage(`{"userAgent":"fake-codex/0.154.0"}`)}
 	for method, name := range map[string]string{codexAccountReadMethod: "account.json", codexRateLimitsReadMethod: "rateLimits.json", "thread/start": "threadStart.json"} {
 		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
+			answers[method] = data
+		}
+		if codexHome == "" {
+			continue
+		}
+		if data, err := os.ReadFile(filepath.Join(codexHome, fakeCodexHomeAnswer+name)); err == nil {
 			answers[method] = data
 		}
 	}

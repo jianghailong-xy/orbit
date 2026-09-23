@@ -12,13 +12,15 @@ import (
 	"time"
 )
 
-// Plan usage shows the runner's default Codex account: the windows its usage probe reads and, beside
+// Plan usage shows the runner's default Codex account as the windows its usage probe reads and, beside
 // them, that account's reset credits. A running session refreshes those windows between reads with its
 // account/rateLimits/updated notifications — but only a session on that same account may. One whose env
 // picks another account (another CODEX_HOME, set directly or through HOME; CODEX_API_KEY; any OPENAI_*,
 // a configured provider's included) would put that account's usage beside the default account's credits.
+// None of these rows names a slot the runner added, so their rate limits land in no account at all
+// (a slot's session feeding that slot is TestCodexAccountQuota*).
 //
-// Every row is the real runCodexAppServerSessionProcess, handed the probe's merge the way runloop.go
+// Every row is the real runCodexAppServerSessionProcess, handed the per-account merge the way runloop.go
 // hands it, against this test binary posing as `codex app-server`. After thread/start the fake says one
 // account/rateLimits/updated for the plan's own bucket — one the probe merges whenever it is handed it —
 // and then a text delta. A session handles its notifications in order, so once it has emitted the delta
@@ -80,10 +82,13 @@ func TestCodexSessionRateLimitsFeedPlanUsageOnlyFromTheDefaultAccount(t *testing
 		{"CODEX_HOME names the default home", map[string]string{"CODEX_HOME": defaultHome}, true},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			probe := newCodexPlanUsageProbe(codexResetTestLeaseOwner)
-			probe.store(read)
-			runCodexSessionUntilHandled(t, inbox.URL, row.env, probe.mergeCodexRateLimits, handled)
-			got := probe.snapshot()
+			usage := newCodexAccountUsage(codexResetTestLeaseOwner)
+			usage.def.store(read)
+			runCodexSessionUntilHandled(t, inbox.URL, row.env, usage.mergeCodexRateLimits, handled)
+			if accounts := usage.snapshot().Accounts; len(accounts) != 0 {
+				t.Fatalf("a session on no added slot fed another account's snapshot: %+v", accounts)
+			}
+			got := usage.def.snapshot()
 			if got.RateLimitReset == nil || !reflect.DeepEqual(*got.RateLimitReset, *read.RateLimitReset) {
 				t.Fatalf("the session changed the default account's reset block: %+v, want %+v", got.RateLimitReset, read.RateLimitReset)
 			}
@@ -102,7 +107,7 @@ func TestCodexSessionRateLimitsFeedPlanUsageOnlyFromTheDefaultAccount(t *testing
 
 // runCodexSessionUntilHandled runs one Codex session under agent env env until it has emitted the text
 // delta handled, then cancels it and waits for it to return.
-func runCodexSessionUntilHandled(t *testing.T, inboxURL string, env map[string]string, onRateLimits func(map[string]interface{}), handled string) {
+func runCodexSessionUntilHandled(t *testing.T, inboxURL string, env map[string]string, onRateLimits codexRateLimitSink, handled string) {
 	t.Helper()
 	job := &ClaimedSession{
 		SessionID: "5b0b8a4e-9d2c-4f7e-8a1b-3c6d9e0f1a2b",

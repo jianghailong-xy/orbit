@@ -151,7 +151,7 @@ func finishCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTur
 	activeMu.Unlock()
 }
 
-func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
@@ -169,10 +169,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		// account's history into the existing partition.
 		processEnv = envWithValue(processEnv, "CODEX_HOME", state.CodexHome)
 	}
-	// Plan usage shows the runner's default account, its reset credits beside its windows. A session
-	// on any other account keeps its rolling rate limits out of those windows.
-	if !codexSessionOnDefaultAccount(job.Agent.Env, processEnv, execDir) {
-		onRateLimits = nil
+	// Plan usage is kept per account slot. A session's rolling rate limits refresh the windows of the
+	// slot it runs on and no other's; one on no slot's subscription keeps them out of every account's.
+	var sessionRateLimits func(map[string]interface{})
+	if slot, ok := codexSessionAccountSlot(job.Agent.Env, processEnv, execDir); ok && onRateLimits != nil {
+		sessionRateLimits = func(snapshot map[string]interface{}) { onRateLimits(slot, snapshot) }
 	}
 	// Persist the layout before spawning. A pre-thread failure can leave a directory
 	// behind; the marker prevents a later resume from mistaking shared state for an
@@ -389,7 +390,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
 					return rewriteLocalMarkdownImages(workerCtx, t, job.SessionID, text, []string{execDir, upDir, genImagesDir})
-				}, onRateLimits, steerDispatch.acknowledge)
+				}, sessionRateLimits, steerDispatch.acknowledge)
 				activeMu.Lock()
 				tokens := 0
 				if active != nil {
