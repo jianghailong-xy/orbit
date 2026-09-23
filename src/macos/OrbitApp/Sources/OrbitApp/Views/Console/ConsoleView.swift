@@ -642,7 +642,8 @@ struct TranscriptView: View {
         // the turn the bar points back at, but it is not the person's question: it gets its card's
         // own title and line (`StickySummary`), so the bar can't say "your question" above a card
         // reading "not typed by you".
-        let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard)
+        let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
+                                       taskStart: bubble.taskStart)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -1138,6 +1139,20 @@ struct TranscriptItemView: View {
                 OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
                                          undelivered: b.undelivered || b.delivery == "failed",
                                          attached: b.attached)
+            } else if let card = b.taskStart {
+                // A task run's opening turn is the brief written for the agent — the task, then four
+                // steps of protocol — and nobody typed it either. With the task recorded beside it
+                // (`taskStart`, `TaskStart.parse`) it is drawn as that task, with anything delivery
+                // appended riding inside the card; the task's inputs the turn carried keep the
+                // bubble's own image and file rows under it, with no words in the owner's name.
+                VStack(alignment: .leading, spacing: 6) {
+                    TaskStartCardView(card: card, text: b.text, ts: b.ts,
+                                      undelivered: b.undelivered || b.delivery == "failed",
+                                      attached: b.attached)
+                    if !b.attachments.isEmpty {
+                        UserBubbleView(bubble: inputsOnly(b))
+                    }
+                }
             } else if let wake = WatchWakeText.parse(b.text) {
                 // A turn a watch queued is the watch's to show, not a message the user typed: it opens
                 // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
@@ -1204,5 +1219,14 @@ struct TranscriptItemView: View {
         var bare = bubble
         bare.note = nil
         return bare
+    }
+
+    /// The same bubble holding only what it was sent with: the brief and the note are the task-start
+    /// card's, so what is left is the images and files, drawn as the bubble draws them.
+    private func inputsOnly(_ bubble: UserBubble) -> UserBubble {
+        var inputs = bubble
+        inputs.text = ""
+        inputs.note = nil
+        return inputs
     }
 }

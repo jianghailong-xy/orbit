@@ -16,6 +16,7 @@ export * from './providerTransport';
 export * from './retry';
 export * from './searchTerms';
 export * from './source';
+export * from './task-start';
 export * from './watch';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input

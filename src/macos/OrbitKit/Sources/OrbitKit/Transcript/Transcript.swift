@@ -129,6 +129,12 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// written for the agent — folded inside it. Nil for every ordinary message, and for every
     /// delivery stored before the payload existed, which keeps the reading it has always had.
     public var itemCard: OpenItemDelivery?
+    /// The turn that starts a task's run, when the control plane recorded the task its brief was built
+    /// from beside the echo (`taskStart`, see `TaskStart.parse`). Nobody typed this turn either: the
+    /// console draws the task as a card instead of the bubble, with `text` — the brief written for the
+    /// agent — folded inside it. Nil for every other turn, and for every brief stored before the
+    /// payload existed, which keeps the reading it has always had.
+    public var taskStart: TaskStart?
     /// Filed by the server as a steer: written into the turn that was already running rather than
     /// queued behind it. Not a variety of `queued` — the opposite of it: this message is not
     /// waiting for anything and cannot be withdrawn. Since it is answered by the turn it joined
@@ -144,7 +150,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
                 undelivered: Bool = false, note: String? = nil,
-                steer: Bool = false, delivery: String? = nil, itemCard: OpenItemDelivery? = nil) {
+                steer: Bool = false, delivery: String? = nil, itemCard: OpenItemDelivery? = nil,
+                taskStart: TaskStart? = nil) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -158,13 +165,14 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.steer = steer
         self.delivery = delivery
         self.itemCard = itemCard
+        self.taskStart = taskStart
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
-        case note, steer, delivery, itemCard
+        case note, steer, delivery, itemCard, taskStart
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -183,6 +191,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // A snapshot written before the delivery card existed has no such key, and its turns are
         // exactly the deliveries that keep their old reading — a bubble.
         itemCard = try? c.decodeIfPresent(OpenItemDelivery.self, forKey: .itemCard)
+        // Same for the task-start card: a snapshot from before it existed keeps the bubble.
+        taskStart = try? c.decodeIfPresent(TaskStart.self, forKey: .taskStart)
     }
 }
 
