@@ -20,6 +20,7 @@ import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api
 import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { freshRunningBgJobs } from './background-job-activity';
+import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
@@ -5532,6 +5533,11 @@ export class SessionsService {
             endReason: reason,
             cancelRequestedAt: now,
             finishedAt: now,
+            // A queued session can still be holding what its last run left running — a job parked
+            // with the session and never reaped — and CANCELLED is the end of the line for it
+            // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
+            // and what its drain then reports is refused: this status has closed the door.
+            ...CLEARED_RUNNING_WORK,
           },
         });
         await retireSessionInboxGeneration(tx, sessionId);

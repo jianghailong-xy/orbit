@@ -116,6 +116,25 @@ test('hands a runner-offline session to auto-retry', async () => {
   assert.ok(data?.retryAt instanceof Date, 'armed, so a returning runner resumes it with no one asked');
 });
 
+// The reaped run stops being live here, and the runner holding its jobs has been told to tear down
+// (cancelRequestedAt, this same write) or is gone. So what it left running goes with it, in the
+// same statement — production sessions reaped as `runner offline` were the ones that stayed on the
+// list as "Background process running…" over no process at all. Nothing later could retire them:
+// the drain's terminal `background_task` is refused once this status has closed event admission,
+// and /finalize's backstop is gated on a LIVE row, which this write is what ends.
+test('takes the reaped run\'s running work with it', async () => {
+  const { data } = await sweepWithOfflineRunner(null);
+  assert.deepEqual(
+    {
+      runningBgShells: data?.runningBgShells,
+      runningBgJobs: data?.runningBgJobs,
+      runningBgJobActivity: data?.runningBgJobActivity,
+      runningSubagents: data?.runningSubagents,
+    },
+    { runningBgShells: [], runningBgJobs: [], runningBgJobActivity: {}, runningSubagents: [] },
+  );
+});
+
 // reclaimStalledTask just put this task back in the actionable pool, and because the task opted
 // into auto-run the scheduler will select it from there — that IS its retry. Arming here too
 // would run the same work from two mechanisms.
