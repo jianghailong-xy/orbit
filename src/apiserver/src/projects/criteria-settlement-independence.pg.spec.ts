@@ -116,6 +116,7 @@ test('a criterion written by the session producing its evidence does not count, 
    * column except by calling the projection, the one thing this file must not do.
    */
   const completionInputs = {
+    routeSettledUnmerged: async () => [],
     routeSettledProjects: async () => [],
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],

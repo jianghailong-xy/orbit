@@ -109,8 +109,20 @@ export const COORDINATOR_WAKE_EVENTS = [
   /**
    * A task that waits on prerequisites can now be started — every one of them is finished and on
    * the project's integration line — and it will not start by itself (`autoRunWhenReady = false`).
+   *
+   * Its producer is `dependent-ready.producer.ts`, which landed on main with migration 0299 while
+   * this branch was cut, and it is named here and in `0300_project_settled_unmerged` for the reason
+   * that migration states: every restatement of the database's CHECK is a revocation for the
+   * spellings it leaves out, and one that names only this branch's own set would take
+   * DEPENDENT_READY away from a producer that is already writing it.
    */
   'DEPENDENT_READY',
+  /**
+   * The project is settled and its integration line still carries work of its own that no receipt
+   * puts on the upstream — commits nothing is going to move, because promotion candidates are
+   * queued off landings and a settled project has no more of them.
+   */
+  'PROJECT_SETTLED_UNMERGED',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
@@ -654,5 +666,85 @@ export function dependentReadyFact(ready: {
     subjectId: ready.taskId,
     subjectVersion: String(ready.dispatchEpoch),
     detail: { title: ready.title },
+  };
+}
+/**
+ * One task's work that is on the integration line and is not on the upstream, as this fact names it.
+ *
+ * `sha` is the commit the platform can point at for it — what the receipt that put it on the line
+ * recorded as the tip that landing produced, and the commit it merged when the line took the work
+ * without moving (an `ALREADY_MERGED` into a branch that already carried it names no tip). A reader
+ * going to look will find it on the line and not on the upstream; that is the whole of the claim.
+ */
+export interface UnmergedLineWork {
+  taskId: string;
+  title: string;
+  sha: string;
+}
+
+/**
+ * §2's digest for the fact below: sha256 over the sorted `(taskId, sha)` pairs, and nothing else.
+ *
+ * The same shape `settlementVersion` has and for the same reason: the fact is defined over exactly
+ * these pairs, so a task that is retitled does not move it and a second commit of the same task's
+ * arriving on the line does. Sorted here rather than by the caller, which reads its rows in a
+ * query's order.
+ *
+ * Why the pairs and not the sha list alone: two tasks whose work sits at the same commit (a rebase
+ * that made one branch carry both) are two pieces of work, and collapsing them would derive one
+ * fact where the reader is being told about two.
+ */
+export function unmergedLineVersion(work: readonly UnmergedLineWork[]): string {
+  const pairs = work
+    .map((entry): [string, string] => [entry.taskId, entry.sha])
+    .sort((left, right) => compare(left[0], right[0]));
+  return createHash('sha256').update(canonicalJson(pairs)).digest('hex');
+}
+
+/**
+ * `PROJECT_SETTLED_UNMERGED` — the project is settled, and work of its own is still sitting on its
+ * integration line, in no receipt's answer on the upstream.
+ *
+ * WHY A SETTLED PROJECT NEEDS ONE MORE FACT
+ * =========================================
+ * Every promotion candidate is made off a landing: `considerCandidate` runs when the queue gets
+ * shorter, and the landing that would have made one for the tip this fact is about happened BEFORE
+ * the work existed — the job answered `ALREADY_LANDED` and went terminal while the session's last
+ * commit was still being written. So the tip moves onto the line with no landing behind it, nothing
+ * considers a candidate for it, and a project that has settled stops taking the writes that would
+ * have re-derived anything. On 2026-09-23 project `34ODoUKJGEsfbgcJDGS4q` was DONE with commit
+ * `d6b55d2d8` on `project/34ODoUKJGEsfbgcJDGS4q` and nothing anywhere saying so: it sat there until a
+ * person looked, and a person looking is not a mechanism.
+ *
+ * WHY IT IS NOT ANOTHER `CRITERION_UNLANDED`
+ * ==========================================
+ * That fact is about a stated criterion whose work has not reached the default branch, and a project
+ * cannot be settled while one of its criteria reads that way — every criterion is `LANDED` before
+ * the projection says DONE. What is left over after that is work the criteria do not name: a task's
+ * later commit, an acceptance task's own branch, a task that serves no criterion at all. This is
+ * the fact about THAT, and it is why it is cut on the project and not on a criterion.
+ *
+ * The version moves when the leftover MOVES — a second commit, another task joining it — and stands
+ * still while anything else is written, so a settled project does not wake its coordinator twice
+ * about one situation. It is `null` for no leftover at all, which is the ordinary end of a project
+ * that merged everything it made, and the whole of the negative half of this rule.
+ */
+export function projectSettledUnmergedFact(
+  projectId: string,
+  work: readonly UnmergedLineWork[],
+): WakeFact | null {
+  if (work.length === 0) return null;
+  const commits = [...new Set(work.map((entry) => entry.sha))].sort();
+  return {
+    event: 'PROJECT_SETTLED_UNMERGED',
+    projectId,
+    subjectType: 'PROJECT',
+    subjectId: projectId,
+    subjectVersion: unmergedLineVersion(work),
+    detail: {
+      taskCount: work.length,
+      commits,
+      tasks: work.map((entry) => ({ taskId: entry.taskId, title: entry.title, sha: entry.sha })),
+    },
   };
 }

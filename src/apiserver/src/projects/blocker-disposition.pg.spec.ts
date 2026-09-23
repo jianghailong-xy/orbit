@@ -186,6 +186,7 @@ async function connect(): Promise<Stack> {
   );
   const recorded: Recorded = { exceptions: [], criteria: [] };
   const watched = {
+    routeSettledUnmerged: async () => [],
     routeSettledProjects: (ids: ReadonlyArray<string | null | undefined>) =>
       router.routeSettledProjects(ids),
     routeReadyCriteria: (ids: ReadonlyArray<string | null | undefined>) =>

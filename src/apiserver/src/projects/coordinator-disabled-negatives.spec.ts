@@ -296,6 +296,23 @@ const WIRED: readonly WiredWakeFact[] = [
       },
     ],
   },
+  {
+    // Work a settled project left on its integration line, delivered from the merge-receipt edge
+    // that put it there. Its terminal is the standing conversation too, and the control also holds
+    // the half the refusal must NOT take away: the fact is still written down, naming the commit,
+    // because the switch governs who is woken and not whether the leftover is recorded.
+    event: 'PROJECT_SETTLED_UNMERGED',
+    producedBy: [
+      'projects/coordinator-wake.ts#projectSettledUnmergedFact',
+      'projects/project-settled-unmerged.producer.ts#factsFor',
+    ],
+    negatives: [
+      {
+        spec: 'projects/project-settled-unpromoted-work.pg.spec.ts',
+        test: '(4) a settled project whose coordinator is switched off produces the fact and wakes nobody',
+      },
+    ],
+  },
 ];
 
 /**

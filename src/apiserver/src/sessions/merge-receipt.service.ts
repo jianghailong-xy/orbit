@@ -231,6 +231,15 @@ export class MergeReceiptService {
       this.logger.warn(`unlanded-criterion delivery failed after a merge receipt: ${e?.message ?? e}`),
     );
     await this.reprojectProjectStatus(projectId);
+    // LAST, and after the projection: this fact reads the settled state, so it is asked of the row
+    // the projection has just written. A receipt landing on an already-settled project's line is
+    // exactly the moment the work it carries stops being anybody's: the landing that would have
+    // made a promotion candidate for it has already gone terminal, and nothing re-reads the line
+    // once a project has settled. A project that is not DONE justifies nothing here and the
+    // producer says so — its own read is one statement on the project row.
+    await this.completionInputs.routeSettledUnmerged(projectIds).catch((e) =>
+      this.logger.warn(`settled-unmerged delivery failed after a merge receipt: ${e?.message ?? e}`),
+    );
   }
 
   /**

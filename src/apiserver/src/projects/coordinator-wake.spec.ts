@@ -16,8 +16,10 @@ import {
   dependentReadyFact,
   isSettledTaskStatus,
   projectAcceptanceLandedFact,
+  projectSettledUnmergedFact,
   projectTasksSettledFact,
   settlementVersion,
+  unmergedLineVersion,
   wakeIdempotencyKey,
 } from './coordinator-wake';
 
@@ -33,6 +35,9 @@ const PROJECT = '00000000-0000-7000-8000-0000000000a1';
 const TASK = '00000000-0000-7000-8000-0000000000b1';
 const SESSION_ONE = '00000000-0000-7000-8000-0000000000c1';
 const SESSION_TWO = '00000000-0000-7000-8000-0000000000c2';
+
+/** A commit-shaped string from one nibble, for the commits one of the facts below names. */
+const sha = (nibble: string): string => nibble.repeat(40);
 
 test('the key is a total function of the fact and carries nothing else', () => {
   const fact = attemptEndedUnsettledFact({
@@ -346,20 +351,76 @@ test('a ready dependent is one fact per dispatch epoch, whatever else is written
   assert.notEqual(wakeIdempotencyKey(ended), wakeIdempotencyKey(ready));
 });
 
-// Pointed at 0299 since `DEPENDENT_READY` joined the set. This assertion went red on purpose the
-// moment the constant grew — the CHECK before it (0298's) did not list the new live event, and a
-// wake the database refuses is a delivery that throws — and it is repointed rather than loosened:
-// the new migration restates the whole list, so the claim is the same three-way equality it was.
+test('a settled project with nothing left over is no fact, and the version moves only with the work', () => {
+  assert.equal(projectSettledUnmergedFact(PROJECT, []), null,
+    'a project that landed everything it made owes nobody a waking');
+
+  const work = [{ taskId: TASK, title: 'the work left behind', sha: sha('d') }];
+  const fact = projectSettledUnmergedFact(PROJECT, work)!;
+  assert.equal(fact.event, 'PROJECT_SETTLED_UNMERGED');
+  assert.equal(fact.subjectType, 'PROJECT');
+  assert.equal(fact.subjectId, PROJECT);
+  assert.deepEqual((fact.detail as { commits: string[] }).commits, [sha('d')],
+    'the fact carries the commits a reader goes to look at');
+
+  // The version is the (taskId, sha) pairs and nothing else: a retitled task is the same fact.
+  const retitled = projectSettledUnmergedFact(PROJECT, [{ ...work[0]!, title: 'renamed' }])!;
+  assert.equal(wakeIdempotencyKey(retitled), wakeIdempotencyKey(fact),
+    'a title is display, and a key that moves with one fires on a rename');
+
+  // The work MOVING is a new fact: a second commit on the line is news, and so is another task's.
+  const moved = projectSettledUnmergedFact(PROJECT, [{ ...work[0]!, sha: sha('e') }])!;
+  assert.notEqual(wakeIdempotencyKey(moved), wakeIdempotencyKey(fact));
+  const joined = projectSettledUnmergedFact(PROJECT, [
+    ...work, { taskId: SESSION_ONE, title: 'more of it', sha: sha('f') },
+  ])!;
+  assert.notEqual(wakeIdempotencyKey(joined), wakeIdempotencyKey(fact));
+
+  // Two tasks whose work sits at one commit are two pieces of work — a rebase that made one branch
+  // carry both — so the version pairs the task with the commit rather than the commit alone. The
+  // sha list in `detail` is deduped, because that is what a reader is being handed.
+  const together = projectSettledUnmergedFact(PROJECT, [
+    { taskId: 'b1', title: 'one', sha: sha('d') },
+    { taskId: 'b2', title: 'two', sha: sha('d') },
+  ])!;
+  assert.deepEqual((together.detail as { commits: string[] }).commits, [sha('d')]);
+  assert.notEqual(
+    unmergedLineVersion([
+      { taskId: 'b1', title: 'one', sha: sha('d') },
+      { taskId: 'b2', title: 'two', sha: sha('d') },
+    ]),
+    unmergedLineVersion([{ taskId: 'b1', title: 'one', sha: sha('d') }]),
+    'one task at a commit is not two tasks at it',
+  );
+  // Sorted here rather than by the caller, for the reason `settlementVersion` sorts: the read is a
+  // query's row order, and two readers of one project must not derive two versions of one fact.
+  assert.equal(
+    unmergedLineVersion([
+      { taskId: 'b2', title: 'two', sha: sha('d') },
+      { taskId: 'b1', title: 'one', sha: sha('e') },
+    ]),
+    unmergedLineVersion([
+      { taskId: 'b1', title: 'one', sha: sha('e') },
+      { taskId: 'b2', title: 'two', sha: sha('d') },
+    ]),
+  );
+});
+
+// Pointed at the newest migration — 0300 since `PROJECT_SETTLED_UNMERGED` joined the set, 0299
+// before it. This assertion went red on purpose the moment the constant grew: the CHECK before
+// it did not list the new live event, and a wake the database refuses is a delivery that throws —
+// and it is repointed rather than loosened, because each migration restates the whole list, so the
+// claim is the same three-way equality it was.
 test('the events this unit knows about are exactly those the latest migration accepts', () => {
   const sql = readFileSync(
     path.resolve(
       __dirname,
-      '../../prisma/migrations/0299_dependent_ready_wake/migration.sql',
+      '../../prisma/migrations/0300_project_settled_unmerged/migration.sql',
     ),
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0299 no longer constrains the event column');
+  assert.ok(check, 'migration 0300 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,

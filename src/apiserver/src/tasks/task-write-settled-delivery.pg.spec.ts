@@ -239,6 +239,7 @@ test('the delivery is handed rows the transaction has already committed',
       // looked like at the moment the write path called it. Nothing is asserted inside it — a
       // throw here would be swallowed by the caller's own logging and the case would pass.
       const probe = {
+        routeSettledUnmerged: async () => [],
         routeSettledProjects: async (projectIds: ReadonlyArray<string | null | undefined>) => {
           const named = projectIds.filter((id): id is string => !!id);
           const rows = await outside.task.findMany({

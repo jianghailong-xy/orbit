@@ -187,6 +187,7 @@ async function connect(options: { silent?: boolean } = {}): Promise<Stack> {
     new CriterionUnlandedProducer(prisma, convergence),
   );
   const silent = {
+    routeSettledUnmerged: async () => [],
     routeSettledProjects: async () => [],
     routeTaskExceptions: async () => [],
     routeReadyCriteria: async () => [],

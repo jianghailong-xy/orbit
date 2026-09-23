@@ -1120,7 +1120,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // not another writer of the DONE fence and names none of the six preserved objects — carries
       // no `ALTER TYPE` and no `DROP TYPE`, and has no INSERT, UPDATE or DELETE. The set only grows,
       // so no stored event is refused by it and it needs no backfill.
-      '0299_dependent_ready_wake'],
+      '0299_dependent_ready_wake',
+      // The second accepted spelling of `project_coordinator_wake.event`, and the producer of the
+      // fact about it. Read against every claim above: one statement, `ALTER TABLE
+      // project_coordinator_wake DROP CONSTRAINT … ADD CONSTRAINT … CHECK`, so — like 0250, 0298 and
+      // 0299 — it names a table none of the six preserved triggers and functions lives on and
+      // reaches no stored row: an event this CHECK did not previously accept has never been written,
+      // so nothing is backfilled and nothing already stored can be refused. No function, trigger,
+      // type, index or enum is created, altered or dropped — no `CREATE OR REPLACE FUNCTION`, so it
+      // is not another writer of the DONE fence and names none of the six preserved objects — and it
+      // has no INSERT, UPDATE or DELETE. The `project_acceptance_*` tables are not named, and
+      // neither is the 0177 pair.
+      '0300_project_settled_unmerged'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
