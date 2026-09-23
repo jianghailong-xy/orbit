@@ -14,9 +14,12 @@ import { ModuleRef } from '@nestjs/core';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { TasksService } from '../tasks/tasks.service';
 
-/** The one thing a landing asks of the task side (contract §2.5 J10). */
+/**
+ * The one thing a landing asks of the task side (contract §2.5 J10). It answers with the dependents
+ * it released and did not start — the ones that wait for a decision (`DEPENDENT_READY`).
+ */
 export interface LandingDispatcher {
-  dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<void>;
+  dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<string[]>;
 }
 import {
   MERGE_RECEIPT_MAX_CONFLICTS,
@@ -202,7 +205,16 @@ export class MergeReceiptService {
     // LAST, and outside the router's own guard: this one is not a delivery to a coordinator, it is
     // the platform starting the next task (§2.5 J10). A receipt that could not be announced to
     // anybody still landed the work that the tasks downstream of it were waiting for.
-    await this.dispatchWhatThisLandingReleased(landedTaskId);
+    const undecided = await this.dispatchWhatThisLandingReleased(landedTaskId);
+    // And what the dispatch just skipped on purpose: a released dependent that does not start by
+    // itself (`autoRunWhenReady = false`) is a decision for the coordinator, and this receipt is the
+    // fact that puts it there. Last, so the facts above reach a coordinator in the order they always
+    // did; logged and never raised, like every other knock on this edge.
+    if (undecided.length > 0) {
+      await this.completionInputs?.routeReadyDependents(undecided).catch((e) =>
+        this.logger.warn(`ready-dependent delivery failed after a merge receipt: ${e?.message ?? e}`),
+      );
+    }
   }
 
   /** The three completion-input doors and the DONE projection, unchanged. */
@@ -231,18 +243,22 @@ export class MergeReceiptService {
    * Logged and never raised, like everything else on this edge. The receipt is committed, the
    * predicate that reads it is the same one the 60-second sweep reads, and a dispatch that failed
    * is re-derived from the same rows there.
+   *
+   * Answers with the released dependents it left for a decision, and with nothing when there was
+   * no dispatch to ask.
    */
-  private async dispatchWhatThisLandingReleased(landedTaskId?: string | null): Promise<void> {
+  private async dispatchWhatThisLandingReleased(landedTaskId?: string | null): Promise<string[]> {
     const tasks = this.landingDispatcher();
-    if (!tasks || !landedTaskId) return;
+    if (!tasks || !landedTaskId) return [];
     const task = await this.prisma.task.findUnique({
       where: { id: landedTaskId },
       select: { ownerId: true },
     }).catch(() => null);
-    if (!task) return;
-    await tasks.dispatchDependentsOf(task.ownerId, landedTaskId).catch((e) =>
-      this.logger.warn(`dependents of a landed task were not dispatched: ${e?.message ?? e}`),
-    );
+    if (!task) return [];
+    return tasks.dispatchDependentsOf(task.ownerId, landedTaskId).catch((e) => {
+      this.logger.warn(`dependents of a landed task were not dispatched: ${e?.message ?? e}`);
+      return [];
+    });
   }
 
   /**

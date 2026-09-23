@@ -5,13 +5,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { SessionsService } from '../sessions/sessions.service';
+import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening';
 import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { derivedUuid } from './project-dispatch-identity';
+import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
 
 /**
  * One committed fact becomes one MESSAGE to the coordinator conversation that already exists.
@@ -197,6 +199,96 @@ export class CoordinatorDeliveryService {
   }
 
   /**
+   * Deliver one committed fact as a QUEUED turn on the standing conversation — contract §0.3 G6's
+   * carrier, which `deliver` above predates.
+   *
+   * WHY A SECOND DOOR RATHER THAN A CHANGE TO THE FIRST
+   * ===================================================
+   * `deliver` goes through `resume`, and §2.1 says what that costs: a conversation that has been
+   * told something and has not read it yet is PENDING, and `resume` refuses PENDING. For the facts
+   * already on that door the refusal is survivable — they are re-derived by the next task write or
+   * receipt in the project. For `DEPENDENT_READY` it is the whole incident: the receipt that makes a
+   * dependent startable is the same receipt that has just told the coordinator about the landing,
+   * so the conversation is PENDING at exactly the moment this fact arrives, and nothing re-derives
+   * it afterwards. Changing `deliver` would move every fact already delivered through it onto a
+   * different carrier; this door is used by the fact that needs it and leaves them where they are.
+   *
+   * WHAT G6 GIVES (contract §4.4 X-D3, X-D6)
+   * =======================================
+   *   * busy is not a refusal: `createTurn` with `NEXT_TURN` queues the message behind the turn
+   *     that is running and behind any message not yet read, and `turnComplete` hands it to the
+   *     engine when that turn ends. The conversation reads it on the committed fact of its own turn
+   *     ending, which is what "delivered when the session is busy" means here;
+   *   * a conversation that has ended is never revived: the check is `sessionHasEnded`, the same
+   *     reading the exception items make, taken inside the transaction that writes the turn, so a
+   *     conversation that ends between the read and the write refuses rather than being written to;
+   *   * the ledger row is bound DELIVERED in that same transaction (`participateSendTransaction`),
+   *     so a turn exists exactly when the wake says it was delivered.
+   *
+   * A delivery that cannot be made — no conversation, or one that has ended — releases the key with
+   * the code that says which, exactly as `deliver` does. The fact is then the owner's in the only
+   * sense the rows support: the task it names is on the project's Ready-to-run list, which is read
+   * from the same predicate the fact was derived from, with the Run control beside it; and because
+   * the key is back, the next time the same release is derived — a receipt reported again, the
+   * same work promoted upstream — it reaches whichever conversation the project has by then.
+   */
+  async queue(fact: WakeFact, authorize: WakeAuthorizer): Promise<CoordinatorDeliveryOutcome> {
+    const claimed = await this.wakes.claim(fact, authorize);
+    if (claimed.outcome !== 'WOKEN') return claimed;
+    return this.enqueue(fact, claimed.wakeId, claimed.idempotencyKey);
+  }
+
+  /** `queue`'s half after the claim: the turn and the bind, in one transaction. */
+  private async enqueue(
+    fact: WakeFact,
+    wakeId: string,
+    idempotencyKey: string,
+  ): Promise<CoordinatorDeliveryOutcome> {
+    const clientTurnId = coordinatorDeliveryTurnId(idempotencyKey);
+    let sessionId: string;
+    try {
+      const project = await this.prisma.project.findUnique({
+        where: { id: fact.projectId },
+        select: { ownerId: true, title: true, coordinatorSessionId: true },
+      });
+      if (!project) return this.refuse(wakeId, idempotencyKey, DELIVERY_PROJECT_GONE);
+      if (!project.coordinatorSessionId) {
+        return this.refuse(wakeId, idempotencyKey, DELIVERY_NO_COORDINATOR_SESSION);
+      }
+      sessionId = project.coordinatorSessionId;
+      await this.sessions.createTurn(project.ownerId, sessionId, {
+        clientTurnId,
+        content: buildCoordinatorDeliveryMessage(fact, project.title),
+        intent: 'NEXT_TURN',
+      }, {
+        participateSendTransaction: (tx) => bindQueuedDelivery(tx, wakeId, sessionId, clientTurnId),
+      });
+    } catch (e) {
+      // The same four ordinary refusals `message` translates, `SessionNotSendable` among the
+      // Conflicts: the conversation is gone, ended, its workspace cannot run it, or the key names a
+      // turn written with another body. Anything else is a fault, re-raised with the key given back.
+      if (
+        e instanceof NotFoundException
+        || e instanceof ConflictException
+        || e instanceof ForbiddenException
+        || e instanceof BadRequestException
+      ) {
+        return this.refuse(wakeId, idempotencyKey, DELIVERY_COORDINATOR_SESSION_UNAVAILABLE);
+      }
+      await this.wakes.release(wakeId, DELIVERY_COORDINATOR_SESSION_UNAVAILABLE);
+      throw e;
+    }
+    // `createTurn` replays a turn already written under this key without running the hook, and the
+    // only writer of that turn is a delivery of this same fact. Bound here too, so a replay cannot
+    // leave the key CLAIMED for ever; a no-op when the hook already bound it.
+    await this.prisma.projectCoordinatorWake.updateMany({
+      where: { id: wakeId, status: 'CLAIMED' },
+      data: { status: 'DELIVERED', sessionId, delivery: { clientTurnId } satisfies WakeDeliveryRecord },
+    });
+    return { outcome: 'DELIVERED', wakeId, idempotencyKey, sessionId, clientTurnId };
+  }
+
+  /**
    * Put one fact's message on the project's standing conversation, and touch no ledger row.
    *
    * Everything §2, §2.1 and §3 say about the carrier is decided here, because this is where the
@@ -314,4 +406,36 @@ export class CoordinatorDeliveryService {
     await this.wakes.release(wakeId, refusalCode);
     return { outcome: 'REFUSED', wakeId, idempotencyKey, refusalCode };
   }
+}
+
+/**
+ * `queue`'s ledger half, run inside the transaction that writes the turn (contract §0.3 G6).
+ *
+ * The conversation is re-read here, under the Session lock `createTurn` already holds, because the
+ * read `queue` made before it is not one the turn can be written on: a conversation that ended in
+ * between must refuse rather than be written to, and throwing here is what rolls the turn back.
+ * `SessionNotSendable` is what `createTurn` itself throws for the narrower case, so the caller
+ * translates both the same way.
+ *
+ * Then the wake is bound, with the status it was claimed in as the condition. It is the only
+ * holder of this claim, so a miss would mean the row moved under a delivery that owns it — nothing
+ * does that — and the turn is still the fact's own (its key is derived from the fact).
+ */
+async function bindQueuedDelivery(
+  tx: Prisma.TransactionClient,
+  wakeId: string,
+  sessionId: string,
+  clientTurnId: string,
+): Promise<void> {
+  const conversation = await tx.session.findUniqueOrThrow({
+    where: { id: sessionId },
+    select: SESSION_ENDING_SELECT,
+  });
+  if (sessionHasEnded(conversation)) {
+    throw new SessionNotSendable('the coordinator conversation has ended');
+  }
+  await tx.projectCoordinatorWake.updateMany({
+    where: { id: wakeId, status: 'CLAIMED' },
+    data: { status: 'DELIVERED', sessionId, delivery: { clientTurnId } satisfies WakeDeliveryRecord },
+  });
 }

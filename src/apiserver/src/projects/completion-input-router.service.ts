@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 
 import type { CoordinatorWakeEvent, WakeFact } from './coordinator-wake';
 import {
@@ -16,6 +16,10 @@ import {
   CriterionUnlandedProducer,
   type CriterionUnlandedDelivery,
 } from './criterion-unlanded.producer';
+import {
+  DependentReadyProducer,
+  type DependentReadyDelivery,
+} from './dependent-ready.producer';
 import type { MechanicalAction } from './mechanical-disposition';
 import {
   ProjectTasksSettledProducer,
@@ -86,6 +90,13 @@ export class CompletionInputRouter {
      * always has it.
      */
     private readonly refusals?: TaskDispatchRefusalProducer,
+    /**
+     * The seventh door's producer, `DEPENDENT_READY`'s. `@Optional()` and last, for the reason
+     * `MergeReceiptService` gives about its own router: the fixtures that build this class by hand
+     * are about the doors before it, and for them this one delivers nothing rather than being a
+     * constructor argument every one of them has to be taught about. The module provides it.
+     */
+    @Optional() private readonly dependents?: DependentReadyProducer,
   ) {}
 
   /**
@@ -332,6 +343,30 @@ export class CompletionInputRouter {
     taskIds: ReadonlyArray<string | null | undefined>,
   ): Promise<DispatchRefusalDelivery[]> {
     return this.refusals ? this.refusals.deliver(taskIds) : [];
+  }
+
+  /**
+   * The seventh door: the dependents a committed landing or completion released and did not
+   * start, because they do not start by themselves.
+   *
+   * Task ids in, like the door above: what a landing released is already known — the dependency
+   * dispatch that starts auto-run dependents on the same edge found them READY and left them alone
+   * — so the question is asked about those tasks, not about a whole project. The producer re-reads
+   * them after the commit through the execute gate's own predicate and derives one fact per
+   * dependent.
+   *
+   * Not through `spend` either, for a reason of its own. `spend` asks `WakeDispositionService`
+   * which terminal a fact is worth by the coverage of the criterion its TASK serves, and read that
+   * way a dependent that has not started is either work still on its way (recorded, told to nobody)
+   * or, when it is the only work serving its criterion, a stranded criterion (a judgment session
+   * opened for it). Neither is what this fact says: a decision is waiting and only the coordinator
+   * can make it, so the producer hands it to the standing conversation itself.
+   */
+  async routeReadyDependents(
+    taskIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<DependentReadyDelivery[]> {
+    if (!this.dependents) return [];
+    return this.dependents.afterCommit(taskIds);
   }
 }
 
