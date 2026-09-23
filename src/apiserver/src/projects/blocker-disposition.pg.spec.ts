@@ -201,6 +201,8 @@ async function connect(): Promise<Stack> {
       recorded.criteria.push(...delivered);
       return delivered;
     },
+    routeReadyDependents: (ids: ReadonlyArray<string | null | undefined>) =>
+      router.routeReadyDependents(ids),
   } as unknown as CompletionInputRouter;
   const tasks = new TasksService(prisma, sessions, realtime, undefined, watched);
   const api = new RunnerApiController(

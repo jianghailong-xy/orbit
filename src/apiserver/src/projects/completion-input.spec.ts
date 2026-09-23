@@ -122,6 +122,12 @@ test('the gates are wired through the router, and the hollowed-out attempt produ
   assert.match(moduleSource, /CriterionUnlandedProducer/);
   assert.doesNotMatch(tasksSource, /CriterionUnlandedProducer/);
 
+  // And the ready-dependent gate, the fifth. It delivers its own facts rather than asking the
+  // terminal chooser, which changes neither claim: one instance, in this module, reached from the
+  // two write paths that release a dependent through the router.
+  assert.match(moduleSource, /DependentReadyProducer/);
+  assert.doesNotMatch(tasksSource, /DependentReadyProducer/);
+
   assert.doesNotMatch(moduleSource, /AttemptEndedUnsettledProducer/);
   assert.doesNotMatch(runnerSource, /AttemptEndedUnsettledProducer|attemptEndedUnsettled/);
   assert.doesNotMatch(attemptSource, /ATTEMPT_WAKE_SESSION_PARKED|ATTEMPT_SESSION_PARKED/);
