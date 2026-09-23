@@ -74,7 +74,7 @@ export class RunnersController {
 
   @Post(':id/login')
   startLogin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: StartLoginDto) {
-    return this.runners.startLogin(user.userId, id, dto?.engine ?? 'claude');
+    return this.runners.startLogin(user.userId, id, dto ?? {});
   }
 
   @Post(':id/login/code')

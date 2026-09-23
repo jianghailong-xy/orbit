@@ -973,7 +973,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
-				Engines:              engineHealth.snapshotNow(),
+				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsageProbe.snapshot()),
 				AgentDirProbes:       agentDirs.snapshot(),
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
@@ -1257,7 +1257,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				switch lr.Action {
 				case "start":
-					login.start(lr.Attempt, lr.Engine, report)
+					login.start(*lr, report)
 				case "code":
 					login.submitCode(lr.Code, report)
 				}

@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Tag } from 'antd';
-import type { LoginEngine, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
+import type {
+  LoginEngine,
+  RunnerEngineAccount,
+  RunnerEngineHealth,
+  RunnerInstallState,
+} from '@orbit/shared';
 import { api } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import { planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
@@ -94,11 +99,84 @@ function metaFor(kind: RowKind, engine: LoginEngine, health?: RunnerEngineHealth
   return health.version ? `${engine} ${health.version}` : engine;
 }
 
+/** The sign-in panel a card holds open: an engine's own (keyed by the engine), one Codex
+ *  account's, or the account being added. */
+const accountPanel = (id: string) => `codex/${id}`;
+const ADD_ACCOUNT_PANEL = 'codex/+';
+
+/** An account's own answer, in the words a row speaks. */
+function accountKindOf(account: RunnerEngineAccount): RowKind {
+  if (account.auth === 'yes') return 'in';
+  if (account.auth === 'no') return 'out';
+  return 'unknown';
+}
+
+/**
+ * A CODEX_HOME the way a terminal spells it, with the machine's home directory as `~`. The page
+ * can't ask that machine where its home is, so this reads the places a home directory lives; any
+ * other path is shown whole, and the row always carries the full one on hover.
+ */
+export function tildePath(path: string): string {
+  return path.replace(/^(?:\/root|\/home\/[^/]+|\/Users\/[^/]+)(?=\/|$)/, '~');
+}
+
+/** The accounts a Codex row lists under itself: every one, once there is more than one — and only
+ *  while the probe speaks for the engine, since an install under way is about the binary all of
+ *  them share. None otherwise, which leaves the row exactly what it was before accounts. */
+function accountRowsOf(
+  engine: LoginEngine,
+  health: RunnerEngineHealth | undefined,
+  install: RunnerInstallState | null | undefined,
+): RunnerEngineAccount[] {
+  const accounts = engine === 'codex' ? (health?.accounts ?? []) : [];
+  const kind = rowKindOf(health, install, engine);
+  return accounts.length >= 2 && (kind === 'in' || kind === 'out' || kind === 'unknown')
+    ? accounts
+    : [];
+}
+
+/** Whether every sign-in an engine needs is in place. With several Codex accounts that is all of
+ *  them: a folded card that called the machine signed in over a signed-out account would be
+ *  hiding the one thing it exists to surface. */
+function signedIn(health: RunnerEngineHealth): boolean {
+  return (
+    health.installed &&
+    health.auth === 'yes' &&
+    (health.accounts ?? []).every((account) => account.auth === 'yes')
+  );
+}
+
+type Quota = ReturnType<typeof planUsageRows>[number];
+
+/** The quota column: the plan's nearest limit, or why there isn't one to show. */
+function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota | null }) {
+  return (
+    <div className="re-quota">
+      {quota ? (
+        <>
+          <div className="re-quota-head">
+            <b>{quota.label}</b>
+            <span>{quota.percent}%</span>
+          </div>
+          <div className={`runner-util ${quota.nearLimit ? 'full' : ''}`}>
+            <span className="runner-util-fill" style={{ width: `${quota.percent}%` }} />
+          </div>
+        </>
+      ) : (
+        <span className="re-quota-none">
+          {kind === 'in' ? 'No quota reported' : kind === 'out' ? 'Sign in to see quota' : '—'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** One engine on one runner: what it is, what state it's in, what it costs, and the way out. */
 function EngineRow({
   runner,
   engine,
   health,
+  accounts,
   signIn,
   onSignIn,
   focused,
@@ -106,9 +184,11 @@ function EngineRow({
   runner: Runner;
   engine: LoginEngine;
   health?: RunnerEngineHealth;
-  /** The engine whose sign-in panel is open on this runner, if any. */
-  signIn: LoginEngine | null;
-  onSignIn: (engine: LoginEngine | null) => void;
+  /** The accounts listed under this row (accountRowsOf). Any at all make it their group's head. */
+  accounts: RunnerEngineAccount[];
+  /** The sign-in panel open on this runner, if any: an engine, or one of Codex's accounts. */
+  signIn: string | null;
+  onSignIn: (panel: string | null) => void;
   /** This is the row a deep link came here for: mark it and bring it into view. */
   focused?: boolean;
 }) {
@@ -135,6 +215,9 @@ function EngineRow({
   // Only one runtime's quota is this engine's; the others belong to the other rows.
   const snapshot = planUsageSnapshotForProvider(runner.planUsage, engine);
   const quota = kind === 'in' && snapshot ? planUsageRows(snapshot)[0] : null;
+  // More than one Codex account: this row heads their group, and each account is a row of its own
+  // below it (AccountRow), with its own state.
+  const grouped = accounts.length > 0;
 
   // An offline machine isn't updating anything, and the header already says so — repeating it
   // per row as a warning would put three alarms on one fact the user has already read.
@@ -185,13 +268,20 @@ function EngineRow({
   };
 
   return (
-    <div className={`re-row${focused ? ' focused' : ''}`} ref={row}>
+    <div className={`re-row${grouped ? ' re-grp' : ''}${focused ? ' focused' : ''}`} ref={row}>
       <div className="re-id">
         <ProviderTile slug={ENGINE_PRESET[engine]} label={ENGINE_NAME[engine]} size={28} />
         <div style={{ minWidth: 0 }}>
           <div className="re-name">{ENGINE_NAME[engine]}</div>
           <div className="re-meta">
-            {metaFor(kind, engine, health)}
+            {grouped ? (
+              <>
+                {health?.version ? `${engine} ${health.version}` : engine} ·{' '}
+                <b>{accounts.length} accounts</b>
+              </>
+            ) : (
+              metaFor(kind, engine, health)
+            )}
             {/* Whether this CLI is being kept current, next to what it currently is — the two
                 halves of the same question, and useless apart. */}
             {/* The machine's own sentence, on hover. The line itself stays short enough to sit
@@ -207,27 +297,31 @@ function EngineRow({
           </div>
         </div>
       </div>
-      <div>
-        <Tag color={STATUS_TAG[kind].color}>{STATUS_TAG[kind].label}</Tag>
-      </div>
-      <div className="re-quota">
-        {quota ? (
-          <>
-            <div className="re-quota-head">
-              <b>{quota.label}</b>
-              <span>{quota.percent}%</span>
-            </div>
-            <div className={`runner-util ${quota.nearLimit ? 'full' : ''}`}>
-              <span className="runner-util-fill" style={{ width: `${quota.percent}%` }} />
-            </div>
-          </>
-        ) : (
-          <span className="re-quota-none">
-            {kind === 'in' ? 'No quota reported' : kind === 'out' ? 'Sign in to see quota' : '—'}
-          </span>
-        )}
-      </div>
-      <div className="re-act">{action()}</div>
+      {grouped ? (
+        // Signed in and quota are each account's, not the engine's: the group's own columns stay
+        // empty rather than speak for one of its accounts.
+        <>
+          <div />
+          <div className="re-quota" />
+          <div className="re-act">
+            <Button
+              size="small"
+              disabled={offline}
+              onClick={() => onSignIn(signIn === ADD_ACCOUNT_PANEL ? null : ADD_ACCOUNT_PANEL)}
+            >
+              + Account
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div>
+            <Tag color={STATUS_TAG[kind].color}>{STATUS_TAG[kind].label}</Tag>
+          </div>
+          <QuotaCell kind={kind} quota={quota} />
+          <div className="re-act">{action()}</div>
+        </>
+      )}
 
       {/* The relay panels. Each one is the row's own news, so it opens under the row it belongs
           to rather than as a page-level banner. */}
@@ -285,7 +379,106 @@ function EngineRow({
           <RunnerSignIn runnerId={runner.id} engine={engine} />
         </div>
       )}
+      {grouped && signIn === ADD_ACCOUNT_PANEL && (
+        <div className="re-panel">
+          <AddCodexAccount runnerId={runner.id} onCancel={() => onSignIn(null)} />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** One Codex account, under its engine's row: its name, where it lives on the machine, its own
+ *  sign-in state, and its own way back in. */
+function AccountRow({
+  runner,
+  account,
+  signIn,
+  onSignIn,
+}: {
+  runner: Runner;
+  account: RunnerEngineAccount;
+  signIn: string | null;
+  onSignIn: (panel: string | null) => void;
+}) {
+  const kind = accountKindOf(account);
+  const isDefault = account.id === 'default';
+  const panel = accountPanel(account.id);
+  // The runner's usage probe reads Default, so the engine's quota is Default's own. No other
+  // account has one reported, and borrowing Default's would show one account's limit on another.
+  const snapshot = isDefault ? planUsageSnapshotForProvider(runner.planUsage, 'codex') : null;
+  const quota = kind === 'in' && snapshot ? planUsageRows(snapshot)[0] : null;
+  const toggle = () => onSignIn(signIn === panel ? null : panel);
+
+  return (
+    <div className="re-row re-acct">
+      <div className="re-id">
+        <span className="re-rail" aria-hidden="true" />
+        <div style={{ minWidth: 0 }}>
+          <div className="re-name">
+            {isDefault ? 'Default' : account.name || `Account ${account.id}`}
+            {isDefault && <span className="re-chip">DEFAULT</span>}
+          </div>
+          {/* Where the account lives and which one it is — never who: the account's email and id
+              stay on the machine, and the fingerprint is a prefix of a non-reversible one. */}
+          <div className="re-meta" title={account.codexHome}>
+            {tildePath(account.codexHome)}
+            {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
+          </div>
+        </div>
+      </div>
+      <div>
+        <Tag color={STATUS_TAG[kind].color}>{STATUS_TAG[kind].label}</Tag>
+      </div>
+      <QuotaCell kind={kind} quota={quota} />
+      <div className="re-act">
+        {!runner.online ? (
+          <Button size="small" disabled>
+            Sign in
+          </Button>
+        ) : kind === 'in' ? (
+          <Button size="small" type="text" onClick={toggle}>
+            Re-sign in
+          </Button>
+        ) : (
+          <Button size="small" type="primary" onClick={toggle}>
+            Sign in
+          </Button>
+        )}
+      </div>
+      {signIn === panel && (
+        <div className="re-panel">
+          <RunnerSignIn runnerId={runner.id} engine="codex" account={account.id} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "+ Account": name the new account, then the same device flow as every other sign-in here. The
+ *  runner gives it a CODEX_HOME of its own, so Default — and the terminal's codex — is untouched. */
+function AddCodexAccount({ runnerId, onCancel }: { runnerId: string; onCancel: () => void }) {
+  const [name, setName] = useState('');
+  return (
+    <RunnerSignIn runnerId={runnerId} engine="codex" accountName={name} onCancel={onCancel}>
+      <label className="re-add">
+        <span className="re-add-label">Account name</span>
+        <input
+          className="rsi-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Work"
+          maxLength={60}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </label>
+      <div className="re-panel-hint re-add-hint">
+        Only a label for this page. Orbit gives the account its own{' '}
+        <code className="re-cmd">CODEX_HOME</code> on this machine; your terminal keeps using
+        Default.
+      </div>
+    </RunnerSignIn>
   );
 }
 
@@ -308,10 +501,8 @@ export function summaryOf(runner: Runner): string {
   if (stale && runner.online) {
     return stale === 1 ? '1 engine not updating' : `${stale} engines not updating`;
   }
-  const signedIn = shown.filter((e) => e.installed && e.auth === 'yes').length;
-  return signedIn === ENGINES.length
-    ? 'All signed in'
-    : `${signedIn} of ${ENGINES.length} signed in`;
+  const ready = shown.filter(signedIn).length;
+  return ready === ENGINES.length ? 'All signed in' : `${ready} of ${ENGINES.length} signed in`;
 }
 
 function RunnerEngineCard({
@@ -326,7 +517,7 @@ function RunnerEngineCard({
   /** The engine a deep link named for this runner, if this is the runner it named. */
   focusEngine?: LoginEngine | null;
 }) {
-  const [signIn, setSignIn] = useState<LoginEngine | null>(null);
+  const [signIn, setSignIn] = useState<string | null>(null);
   const engines = runner.engines ?? null;
 
   return (
@@ -363,17 +554,32 @@ function RunnerEngineCard({
         </Link>
       </div>
       {collapsed ? null : engines ? (
-        ENGINES.map((engine) => (
-          <EngineRow
-            key={engine}
-            runner={runner}
-            engine={engine}
-            health={engines.find((e) => e.engine === engine)}
-            signIn={signIn}
-            onSignIn={setSignIn}
-            focused={engine === focusEngine}
-          />
-        ))
+        ENGINES.map((engine) => {
+          const health = engines.find((e) => e.engine === engine);
+          const accounts = accountRowsOf(engine, health, runner.install);
+          return (
+            <Fragment key={engine}>
+              <EngineRow
+                runner={runner}
+                engine={engine}
+                health={health}
+                accounts={accounts}
+                signIn={signIn}
+                onSignIn={setSignIn}
+                focused={engine === focusEngine}
+              />
+              {accounts.map((account) => (
+                <AccountRow
+                  key={account.id}
+                  runner={runner}
+                  account={account}
+                  signIn={signIn}
+                  onSignIn={setSignIn}
+                />
+              ))}
+            </Fragment>
+          );
+        })
       ) : (
         // Never three rows of "Unknown": this runner hasn't told us anything, which is a
         // different fact from "nothing is installed" and has a different fix.
@@ -445,7 +651,7 @@ export function RunnerEngines() {
     (n, r) =>
       n +
       (r.engines ?? []).filter(
-        (e) => e.installed && e.auth === 'yes' && ENGINES.some((engine) => engine === e.engine),
+        (e) => signedIn(e) && ENGINES.some((engine) => engine === e.engine),
       ).length,
     0,
   );
