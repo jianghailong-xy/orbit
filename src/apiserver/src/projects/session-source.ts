@@ -228,6 +228,13 @@ type PrerequisiteCommit = { taskId: string; commitSha: string; kind: string };
  * branches count, upstream included, for the reason §1.4 gives — work on main is also everywhere
  * the project branch will ever take it.
  *
+ * Except the receipt a promotion of THIS line writes, whose source is the integration branch. Its
+ * `target_sha_after` is upstream's merge commit, and the integration branch a P4 run starts from
+ * contains that commit only after its next main sync, which only a later landing performs. So every
+ * dependent started in between was refused DEPENDENCY_BASE_NOT_LANDED with its prerequisite's work
+ * on the pinned commit, and the last task of a chain could never start. Its `source_sha` is the
+ * commit the task landed on this line: the same one its own landing receipt names.
+ *
  * A prerequisite with no such receipt contributes NOTHING rather than a refusal, and that is safe
  * here for one reason only: §2.5 J9 will not let this task be dispatched at all while a code
  * prerequisite of it has not landed. The sweep, the run queue and Run Now read that predicate, so
@@ -251,10 +258,17 @@ async function prerequisiteLandingCommits(
       result: { in: [...LANDED_RESULTS] },
       targetBranch: { in: [branchName(codebase.integrationRef), branchName(codebase.upstreamRef)] },
     },
-    select: { taskId: true, result: true, sourceSha: true, targetShaAfter: true },
+    select: {
+      taskId: true, result: true, sourceBranch: true, sourceSha: true, targetBranch: true,
+      targetShaAfter: true,
+    },
   });
+  const integration = branchName(codebase.integrationRef);
   const checkpoints = receipts.flatMap((receipt): PrerequisiteCommit[] => {
-    const commitSha = receipt.result === 'MERGED' ? receipt.targetShaAfter : receipt.sourceSha;
+    const promotion = receipt.sourceBranch === integration && receipt.targetBranch !== integration;
+    const commitSha = receipt.result === 'MERGED' && !promotion
+      ? receipt.targetShaAfter
+      : receipt.sourceSha;
     return receipt.taskId && commitSha
       ? [{ taskId: receipt.taskId, commitSha, kind: 'ACCEPTED' }]
       : [];

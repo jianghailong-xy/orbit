@@ -1,4 +1,4 @@
-import type { OpenItemDeliveryCard } from '@orbit/shared';
+import type { OpenItemDeliveryCard, ProjectStartedCard } from '@orbit/shared';
 
 /** A user turn the API accepted but whose durable `user` event has not reached this tab yet. */
 export interface AcceptedUserTurn {
@@ -17,6 +17,8 @@ export interface AcceptedUserTurn {
    *  will replace it with: the shape the reader sees does not change when the echo lands. Absent on
    *  every turn a person typed, whichever `source` recovered it. */
   openItemDelivery?: OpenItemDeliveryCard;
+  /** The same for the message telling a coordinator its project was started (lib/projectStarted). */
+  projectStarted?: ProjectStartedCard;
 }
 
 export interface UserTurnEvent {
@@ -117,6 +119,7 @@ export function acceptedUserTurnEvent(
       // placeholder is drawn as the card, by the same parser, rather than as a bubble the card
       // replaces. Whoever built the row (`source`) the render is the same.
       ...(turn.openItemDelivery ? { openItemDelivery: turn.openItemDelivery } : {}),
+      ...(turn.projectStarted ? { projectStarted: turn.projectStarted } : {}),
     },
   };
 }

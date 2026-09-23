@@ -787,10 +787,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	claudeActive := func() int { return activeProviderCount(providerClaude) }
 	claudeIdle := func() bool { return providerConfigured(providerClaude) }
 	go claudeUsageProbe.run(loopCtx, claudeActive, claudeIdle)
-	codexUsageProbe := newCodexPlanUsageProbe(t.leaseOwner)
+	// Codex keeps one snapshot per account slot: Default's — its usage probe, which the reset steps
+	// read through too — and every added slot's own.
+	codexUsage := newCodexAccountUsage(t.leaseOwner)
+	codexUsageProbe := codexUsage.def
 	codexActive := func() int { return activeProviderCount(providerCodex) }
 	codexIdle := func() bool { return providerConfigured(providerCodex) }
-	go codexUsageProbe.run(loopCtx, codexActive, codexIdle)
+	go codexUsage.run(loopCtx, codexActive, codexIdle)
 
 	// Runtime model catalogs and effective defaults, reported by the runtimes themselves. Catalogs
 	// change rarely and are expensive to discover; defaults are cheap config reads that users may
@@ -970,7 +973,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
 				Commands: cmds, Skills: skills,
-				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
+				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsage.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsageProbe.snapshot()),
@@ -1441,7 +1444,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				// normal worktree/server finalization below. Its cancelled context makes
 				// runInteractiveSession take that path without spawning an engine.
 			}
-			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsageProbe.mergeCodexRateLimits, pool, live)
+			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsage.mergeCodexRateLimits, pool, live)
 		}(job, execDir, s, initiallyActive)
 	}
 

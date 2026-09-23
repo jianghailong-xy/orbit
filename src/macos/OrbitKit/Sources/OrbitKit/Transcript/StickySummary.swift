@@ -31,16 +31,31 @@ public enum StickySummary {
 
     /// What the bar says about one user turn, read off the same fields the transcript reads a card
     /// out of: a watch's wake is in the turn's own `text`, the control plane's wake in the `note` it
-    /// recorded beside it, and an exception item's delivery in the payload recorded beside it too
-    /// (`itemCard`). A turn that is none of them is the person's, unchanged.
+    /// recorded beside it, and an exception item's delivery, a task run's opening and a project's
+    /// start in the payload recorded beside it too (`itemCard`, `taskStart`, `startedCard`). A turn
+    /// that is none of them is the person's, unchanged.
     ///
     /// The order is the transcript's (`TranscriptItemView`, web's `NodeView`): the item card first,
-    /// then a watch's wake, then the control plane's, then the person's words — so the bar can never
-    /// name a turn something other than what the card under it is.
+    /// then a task run's opening, then a project's start, then a watch's wake, then the control
+    /// plane's, then the person's words — so the bar can never name a turn something other than what
+    /// the card under it is.
     public static func of(text: String, note: String? = nil,
-                          itemCard: OpenItemDelivery? = nil) -> (label: String, text: String) {
+                          itemCard: OpenItemDelivery? = nil,
+                          taskStart: TaskStart? = nil,
+                          startedCard: ProjectStarted? = nil) -> (label: String, text: String) {
         if let card = itemCard {
             let summary = OpenItemDeliveryCard.sticky(card)
+            return (arrow + summary.label, summary.text)
+        }
+        // A task run's opening turn: the brief is nobody's question, and the card under the bar
+        // names the task (`TaskStartCard`).
+        if let card = taskStart {
+            let summary = TaskStartCard.sticky(card)
+            return (arrow + summary.label, summary.text)
+        }
+        // The message telling the coordinator its project was started: the card names the project.
+        if let card = startedCard {
+            let summary = ProjectStartedCard.sticky(card)
             return (arrow + summary.label, summary.text)
         }
         if let wake = WatchWakeText.parse(text) {

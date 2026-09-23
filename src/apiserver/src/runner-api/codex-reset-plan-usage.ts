@@ -13,6 +13,8 @@
  */
 import { Prisma } from '@prisma/client';
 import {
+  CODEX_DEFAULT_ACCOUNT,
+  codexAccountSnapshot,
   codexRateLimitResetOf,
   codexRateLimitResetViolations,
   codexResetSnapshotAccepted,
@@ -23,6 +25,7 @@ import {
   type PlanUsageSnapshot,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { sanitizePlanUsageAccounts } from '../providers/plan-usage-accounts';
 import { countCodexResetSnapshotWrite } from '../runners/codex-reset-metrics';
 
 /** How often a heartbeat re-reads and re-merges when other writers keep changing planUsage first. */
@@ -38,9 +41,20 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
- * `incoming` as it may be written over `stored`. A heartbeat without a Codex snapshot is written as
- * reported, and so is one whose block is accepted; otherwise its Codex snapshot keeps the stored
- * block if that is a v1 block, and no block if it is not. A refused block is never written.
+ * Default's own part of a runner's Codex snapshot, where its reset block lives: none for a snapshot
+ * holding only the runner's other accounts (codexAccountSnapshot).
+ */
+function defaultCodexSnapshot(usage: PlanUsage | undefined): PlanUsageSnapshot | undefined {
+  const codex: PlanUsageSnapshot | undefined = usage?.codex ?? (usage?.provider === 'codex' ? usage : undefined);
+  return codex && codexAccountSnapshot(codex, CODEX_DEFAULT_ACCOUNT) ? codex : undefined;
+}
+
+/**
+ * `incoming` as it may be written over `stored`. A heartbeat without a Codex snapshot of Default's is
+ * written as reported, and so is one whose block is accepted; otherwise its Codex snapshot keeps the
+ * stored block if that is a v1 block, and no block if it is not. A refused block is never written, and
+ * a snapshot holding only the runner's other accounts is never given one: with nothing of Default's
+ * beside it, a block would read as usage data (§2).
  */
 export function mergeHeartbeatPlanUsage(
   stored: unknown,
@@ -48,7 +62,7 @@ export function mergeHeartbeatPlanUsage(
   leaseOwner: string | null,
   now: Date,
 ): HeartbeatPlanUsageMerge {
-  const codex: PlanUsageSnapshot | undefined = incoming.codex ?? (incoming.provider === 'codex' ? incoming : undefined);
+  const codex = defaultCodexSnapshot(incoming);
   if (!codex) return { planUsage: incoming, order: null };
   const previous = isObject(stored) ? codexRateLimitResetOf(stored as PlanUsage) : undefined;
   const order = orderCodexResetSnapshot(previous, codex.rateLimitReset, leaseOwner, now);
@@ -63,7 +77,8 @@ export function mergeHeartbeatPlanUsage(
  * Writes a heartbeat's planUsage by compare-and-set: merged against the stored value, and written only
  * while that is still the stored value. A lost race re-reads and merges again. Returns whether it
  * wrote; a runner row that is gone, or PLAN_USAGE_CAS_ATTEMPTS lost races, writes nothing and leaves
- * the next heartbeat to report again.
+ * the next heartbeat to report again. Each Codex account is stored as its own snapshot
+ * (sanitizePlanUsageAccounts), so no account's windows are written over another's.
  */
 export async function storeHeartbeatPlanUsage(
   prisma: PrismaService,
@@ -71,10 +86,11 @@ export async function storeHeartbeatPlanUsage(
   incoming: PlanUsage,
   leaseOwner: string | null,
 ): Promise<boolean> {
+  const reported = sanitizePlanUsageAccounts(incoming);
   for (let attempt = 0; attempt < PLAN_USAGE_CAS_ATTEMPTS; attempt++) {
     const row = await prisma.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } });
     if (!row) return false;
-    const { planUsage, order } = mergeHeartbeatPlanUsage(row.planUsage, incoming, leaseOwner, new Date());
+    const { planUsage, order } = mergeHeartbeatPlanUsage(row.planUsage, reported, leaseOwner, new Date());
     const written = await prisma.runner.updateMany({
       where: {
         id: runnerId,
@@ -95,8 +111,9 @@ export async function storeHeartbeatPlanUsage(
  * Writes the block a REFRESHED result carried (§6.3) into the stored Codex snapshot, by the same
  * compare-and-set and under the same order: only when orderCodexResetSnapshot accepts it over the block
  * stored now, `leaseOwner` being the result's. The rest of the snapshot stays as the last heartbeat
- * reported it, and a runner with no stored Codex snapshot is given none — one holding nothing but a
- * reset block would read as usage data (§2). Returns whether it wrote.
+ * reported it, and a runner with no stored Codex snapshot of Default's is given none — one holding
+ * nothing but a reset block, or only the runner's other accounts beside it, would read as usage data
+ * (§2). Returns whether it wrote.
  */
 export async function storeRefreshedCodexResetBlock(
   prisma: PrismaService,
@@ -107,7 +124,7 @@ export async function storeRefreshedCodexResetBlock(
   for (let attempt = 0; attempt < PLAN_USAGE_CAS_ATTEMPTS; attempt++) {
     const row = await prisma.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } });
     const stored = row && isObject(row.planUsage) ? (row.planUsage as PlanUsage) : undefined;
-    const codex: PlanUsageSnapshot | undefined = stored?.codex ?? (stored?.provider === 'codex' ? stored : undefined);
+    const codex = defaultCodexSnapshot(stored);
     if (!row || !stored || !codex) {
       countCodexResetSnapshotWrite('refreshed', 'no_codex_snapshot');
       return false;

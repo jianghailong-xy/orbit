@@ -36,6 +36,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
+import { runCodexAccount } from '../providers/plan-usage-accounts';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
   INTEGRATION_RESULT_REFUSAL_STATUS,
@@ -113,6 +114,8 @@ import {
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
   type OpenItemDeliveryCard,
+  type ProjectStartedCard,
+  type TaskStartCard,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -168,6 +171,7 @@ import {
   recordTaskFailure,
   returnQueuedTurns,
 } from '../projects/project-open-item';
+import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -216,7 +220,13 @@ import {
   waitingScheduledWakeup,
 } from '../tasks/owner-confirmation-read';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
-import { withControlPlaneNote, withOpenItemDelivery } from './control-plane-note';
+import {
+  withControlPlaneNote,
+  withOpenItemDelivery,
+  withProjectStarted,
+  withTaskStart,
+} from './control-plane-note';
+import { readTaskStartCard } from '../tasks/task-start-card';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
@@ -4263,6 +4273,8 @@ export class RunnerApiController {
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
         select: {
+          // Whose rows a control-plane turn's card may be read from (project-started.ts).
+          ownerId: true,
           status: true,
           runtimeSessionId: true,
           // Read under the row lock so the three conditional writes this transaction used to
@@ -4278,6 +4290,10 @@ export class RunnerApiController {
           // while this is still null, and the row is held FOR UPDATE across that decision.
           engineStartedAt: true,
           enginePhase: true,
+          // Which task this run executes and which door created it — read only when a user turn in
+          // this batch is the one that delivers the task's brief (`readTaskStartCard` below).
+          taskId: true,
+          runSource: true,
         },
       });
       // The owner fence alone is insufficient when the same runner process
@@ -4343,6 +4359,27 @@ export class RunnerApiController {
         const card = await readOpenItemDeliveryCard(tx, itemId);
         if (card) deliveryCards.set(turn.id, card);
       }
+      // The turn that hands a task's run its brief, and the task it was built from — drawn as a card
+      // rather than as the owner's own message (tasks/task-start-card.ts). Read only for a task
+      // run's opening or resume turn, so ordinary messages cost nothing here either.
+      const taskStartCards = new Map<string, TaskStartCard>();
+      for (const turn of userTurns) {
+        const card = await readTaskStartCard(
+          tx,
+          { id: sessionId, taskId: session.taskId, runSource: session.runSource },
+          turn,
+        );
+        if (card) taskStartCards.set(turn.id, card);
+      }
+      // And the turns telling a coordinator its project was started, by the same kind of key
+      // (`project-started:v1:`, project-started.ts) — read for those turns and no others.
+      const startedCards = new Map<string, ProjectStartedCard>();
+      for (const turn of userTurns) {
+        const start = projectStartOfTurn(turn.clientTurnId);
+        if (!start) continue;
+        const card = await readProjectStartedCard(tx, session.ownerId, start);
+        if (card) startedCards.set(turn.id, card);
+      }
       for (const e of durable) {
         if (e.type !== RunEventType.USER) continue;
         e.payload = withControlPlaneNote(
@@ -4352,6 +4389,14 @@ export class RunnerApiController {
         e.payload = withOpenItemDelivery(
           e.payload,
           (e.turnId ? deliveryCards.get(e.turnId) : undefined) ?? null,
+        );
+        e.payload = withTaskStart(
+          e.payload,
+          (e.turnId ? taskStartCards.get(e.turnId) : undefined) ?? null,
+        );
+        e.payload = withProjectStarted(
+          e.payload,
+          (e.turnId ? startedCards.get(e.turnId) : undefined) ?? null,
         );
       }
       if (durable.length > 0) {
@@ -4902,12 +4947,20 @@ export class RunnerApiController {
       // prose inside `error`. Arm the same retry from it, so `retryAt` answers "when does this come
       // back" for every quota failure rather than only the ones that got far enough to talk. Never
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
-      const quotaRetryAt =
-        effectiveStatus === RunStatus.FAILED &&
-        current.retryAt == null &&
-        isUsageLimitErrorText(dto.error)
-          ? await this.quotaRetryAt(tx, runner.id, current.provider, dto.error!)
+      const quotaSpent =
+        effectiveStatus === RunStatus.FAILED && current.retryAt == null && isUsageLimitErrorText(dto.error);
+      // Which Codex account the run spent is its workspace's to say, and only that account's quota
+      // says when it frees up.
+      const workspace =
+        quotaSpent && current.provider === 'codex' && current.workspaceId
+          ? await tx.workspace.findUnique({
+              where: { id: current.workspaceId },
+              select: { env: true, codexAccount: true },
+            })
           : null;
+      const quotaRetryAt = quotaSpent
+        ? await this.quotaRetryAt(tx, runner.id, current.provider, dto.error!, workspace)
+        : null;
 
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
@@ -5728,14 +5781,19 @@ export class RunnerApiController {
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
     const session = await tx.session.findUnique({
       where: { id: sessionId },
-      select: { provider: true, taskId: true, retryAttempts: true },
+      select: {
+        provider: true,
+        taskId: true,
+        retryAttempts: true,
+        workspace: { select: { env: true, codexAccount: true } },
+      },
     });
     if (!session) return {};
     if (!quotaSpent) {
       if (session.taskId) return {};
       return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
     }
-    const at = await this.quotaRetryAt(tx, runnerId, session.provider, text);
+    const at = await this.quotaRetryAt(tx, runnerId, session.provider, text, session.workspace);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
     return at ? { retryAt: at } : {};
@@ -5755,22 +5813,30 @@ export class RunnerApiController {
    * the freshly reset window.
    *
    * `text` is whichever words carried the refusal — the assistant reply that ingestion saw, or the
-   * terminal `error` of a run that never got to speak.
+   * terminal `error` of a run that never got to speak. `workspace` is the session's workspace, whose
+   * picked Codex account and env say which of the runner's Codex accounts the run spent
+   * (runCodexAccount): the snapshot read is that account's, never another's.
    */
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
     provider: string,
     text: string,
+    workspace: { env: unknown; codexAccount: string | null } | null | undefined,
   ): Promise<Date | null> {
     const now = new Date();
     const runner = await tx.runner.findUnique({
       where: { id: runnerId },
-      select: { planUsage: true },
+      select: { planUsage: true, engines: true },
     });
     const at =
       parseQuotaResetAt(text, now) ??
-      planUsageBlockedUntil(runner?.planUsage as PlanUsage | null, provider, now);
+      planUsageBlockedUntil(
+        runner?.planUsage as PlanUsage | null,
+        provider,
+        now,
+        runCodexAccount(provider, workspace?.env, workspace?.codexAccount, runner?.engines),
+      );
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }
 
