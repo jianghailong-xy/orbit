@@ -74,19 +74,35 @@ function interfacePublicIdFields(src: string): Map<string, string[]> {
   return out;
 }
 
+/**
+ * The public-id DTO fields that are deliberately NOT `@IsPublicId`, because refusing an id that does
+ * not decode is the wrong answer there. The service decodes each one itself and an undecodable value
+ * never reaches a query. Exact both ways — an entry the scan no longer finds fails too — and each
+ * entry names the spec that pins what the service answers instead.
+ */
+const DECODED_BY_THE_SERVICE: readonly string[] = [
+  // link-previews.pg.spec.ts: 'another account’s, deleted, and malformed ids are all the same bare
+  // `unavailable`' — a card must not tell an id that names nothing from somebody else's object.
+  'link-previews/LinkPreviewRefDto.id',
+];
+
 test('every public-id field on a DTO class is declared @IsPublicId', () => {
   const offenders: string[] = [];
+  const exempt: string[] = [];
   let scanned = 0;
   walk(SRC, (file) => {
     if (!file.endsWith('dto.ts')) return;
     for (const { cls, field, decorators } of classFields(readFileSync(file, 'utf8'))) {
       if (!PUBLIC_ID_FIELDS.has(field)) continue;
       scanned++;
-      if (!/IsPublicId/.test(decorators)) offenders.push(`${path.basename(path.dirname(file))}/${cls}.${field}`);
+      const name = `${path.basename(path.dirname(file))}/${cls}.${field}`;
+      if (DECODED_BY_THE_SERVICE.includes(name)) exempt.push(name);
+      else if (!/IsPublicId/.test(decorators)) offenders.push(name);
     }
   });
   assert.ok(scanned > 20, `only ${scanned} public-id DTO fields found — the scan broke, not the DTOs`);
   assert.deepEqual(offenders, [], '@IsString/@IsUUID on a public id — use @IsPublicId');
+  assert.deepEqual(exempt, DECODED_BY_THE_SERVICE, 'a DECODED_BY_THE_SERVICE entry names no DTO field any more');
 });
 
 test('every interface DTO body normalizes the public ids it carries', () => {

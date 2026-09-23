@@ -6472,9 +6472,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * running yet. Both are the live ground truth, distinct from Task.status (an
    * workspace-maintained label that can lag): the list breathes only for `running` and
    * shows a distinct queued indicator for `queued`. One grouped query covers the whole
-   * page. The list-detail view (TaskListsService) computes the same flags inline.
+   * page. The list-detail view (TaskListsService) computes the same flags inline. Public for the
+   * link cards (`link-previews/`), whose task pill is the list's.
    */
-  private async withRunning<T extends { id: string }>(
+  async withRunning<T extends { id: string }>(
     ownerId: string,
     tasks: T[],
     restrictToTaskIds = false,
