@@ -52,7 +52,11 @@ struct NeedsYouBannerView: View {
             // press scrolls to the row either way.
             bar(text: below.text,
                 chevron: below.side == .above ? "chevron.up" : "chevron.down",
-                hint: "Scrolls to the question waiting in this conversation") {
+                // "what is waiting", not "the question": the bar counts the exceptions too (an
+                // escalation that became the owner's, a pause only they can lift), and a reader
+                // told to look for a question finds a card reading "Escalated to you" — the same
+                // wrong noun the line above stopped using.
+                hint: "Scrolls to what is waiting in this conversation") {
                 onOpenBelow?(below.rowID)
             }
         } else if let banner = model.needsYouBanner(excluding: excluding) {
