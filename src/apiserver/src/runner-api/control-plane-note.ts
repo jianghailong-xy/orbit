@@ -1,4 +1,4 @@
-import type { OpenItemDeliveryCard, TaskStartCard } from '@orbit/shared';
+import type { OpenItemDeliveryCard, ProjectStartedCard, TaskStartCard } from '@orbit/shared';
 
 import { buildResumeContinuation } from './resume-continuation';
 
@@ -88,5 +88,21 @@ export function withTaskStart(
   const stored = { ...payload };
   delete stored.taskStart;
   if (card !== null) stored.taskStart = card;
+  return stored;
+}
+
+/**
+ * The same rule again for the message telling a coordinator its project was started
+ * (`projectStarted`, projects/project-started.ts): recorded when the control plane opened the turn
+ * and absent otherwise, and never taken from the runner.
+ */
+export function withProjectStarted(
+  payload: Record<string, unknown>,
+  card: ProjectStartedCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.projectStarted;
+  if (card !== null) stored.projectStarted = card;
   return stored;
 }

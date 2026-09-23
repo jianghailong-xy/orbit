@@ -66,11 +66,13 @@ import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOu
 import { parseWatchWake } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
-import type { OpenItemDeliveryCard as OpenItemDelivery } from '@orbit/shared';
+import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { parseTaskStartCard } from '../lib/taskStartCard';
 import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
+import { parseProjectStarted } from '../lib/projectStarted';
+import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
 
@@ -318,6 +320,9 @@ type TextNode = {
   // from beside the echo (`taskStart`, lib/taskStartCard). Drawn as the task instead of a bubble, with
   // `text` — the brief written for the agent — folded inside it.
   taskStart?: TaskStart;
+  // The message telling the coordinator its project was started, when the control plane recorded
+  // the facts beside the echo (`projectStarted`, lib/projectStarted). Nobody's message either.
+  startedCard?: Started;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -547,6 +552,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const itemCard = parseOpenItemDelivery(p) ?? undefined;
         // The same for a task run's opening turn (lib/taskStartCard): the payload, never the brief.
         const taskStart = parseTaskStartCard(p) ?? undefined;
+        const startedCard = parseProjectStarted(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -567,6 +573,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             note: recorded?.note,
             itemCard,
             taskStart,
+            startedCard,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1072,6 +1079,19 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attachments={<TurnAttachments node={node} />}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+          />
+        );
+      }
+      // The message telling the coordinator its project was started: prose for the agent, drawn as
+      // the card the payload recorded beside it (lib/projectStarted). No payload, the old reading.
+      if (node.startedCard) {
+        return (
+          <ProjectStartedCard
+            card={node.startedCard}
+            text={node.text}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
           />
         );
       }

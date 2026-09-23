@@ -12,6 +12,7 @@ import { uuidToBase62 } from '@orbit/shared';
 import {
   PROJECT_STARTED_LISTED_TASKS,
   type ProjectStart,
+  projectStartOfTurn,
   projectStartedMessage,
   projectStartedTurnId,
 } from './project-started';
@@ -116,5 +117,27 @@ test('the turn is keyed by what the press wrote: the confirmation, or the revisi
   assert.notEqual(key(SWITCHED), key({ ...SWITCHED, configRevision: '4' }));
   assert.notEqual(key(SWITCHED), projectStartedTurnId(randomUUID(), SWITCHED),
     'a revision number is only unique within its project');
-  assert.match(key(CONFIRMED), UUID);
+});
+
+test('a reader gets the start back off the key, and nothing off any other key', () => {
+  const project = randomUUID();
+  assert.deepEqual(projectStartOfTurn(projectStartedTurnId(project, CONFIRMED)),
+    { by: 'CONFIRMATION', confirmationId: CONFIRMED.confirmationId });
+  assert.deepEqual(projectStartOfTurn(projectStartedTurnId(project, SWITCHED)),
+    { by: 'SWITCH', projectId: project, configRevision: '3' });
+  for (const other of [
+    null,
+    undefined,
+    randomUUID(),
+    `open-item:v1:${randomUUID()}:1727000000000`,
+    'project-started:v1:',
+    'project-started:v1:confirmation:not-a-uuid',
+    `project-started:v1:confirmation:${randomUUID()}:extra`,
+    `project-started:v1:switch:${randomUUID()}`,
+    `project-started:v1:switch:${randomUUID()}:three`,
+    `project-started:v1:switch:${randomUUID()}:3:extra`,
+    `project-started:v1:unknown:${randomUUID()}`,
+  ]) {
+    assert.equal(projectStartOfTurn(other), null, `${String(other)} was read as a start`);
+  }
 });

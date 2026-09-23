@@ -135,6 +135,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// agent — folded inside it. Nil for every other turn, and for every brief stored before the
     /// payload existed, which keeps the reading it has always had.
     public var taskStart: TaskStart?
+    /// The message telling the coordinator its project was started, when the control plane recorded
+    /// the facts beside this turn's echo (`projectStarted`, see `ProjectStarted.parse`). Nobody's
+    /// message either: the console draws the card, with `text` folded inside it.
+    public var startedCard: ProjectStarted?
     /// Filed by the server as a steer: written into the turn that was already running rather than
     /// queued behind it. Not a variety of `queued` — the opposite of it: this message is not
     /// waiting for anything and cannot be withdrawn. Since it is answered by the turn it joined
@@ -151,7 +155,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
                 undelivered: Bool = false, note: String? = nil,
                 steer: Bool = false, delivery: String? = nil, itemCard: OpenItemDelivery? = nil,
-                taskStart: TaskStart? = nil) {
+                taskStart: TaskStart? = nil,
+                startedCard: ProjectStarted? = nil) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -166,13 +171,14 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.delivery = delivery
         self.itemCard = itemCard
         self.taskStart = taskStart
+        self.startedCard = startedCard
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
-        case note, steer, delivery, itemCard, taskStart
+        case note, steer, delivery, itemCard, taskStart, startedCard
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -193,6 +199,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         itemCard = try? c.decodeIfPresent(OpenItemDelivery.self, forKey: .itemCard)
         // Same for the task-start card: a snapshot from before it existed keeps the bubble.
         taskStart = try? c.decodeIfPresent(TaskStart.self, forKey: .taskStart)
+        startedCard = try? c.decodeIfPresent(ProjectStarted.self, forKey: .startedCard)
     }
 }
 

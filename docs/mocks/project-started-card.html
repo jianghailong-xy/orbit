@@ -1,0 +1,296 @@
+<!doctype html>
+<!-- Design mock: the "project started" delivery to the coordinator, drawn as a card.
+     TODAY: `project-started.ts` puts one `user` turn on the coordinator conversation — prose written
+     for the AGENT (tool names, ids, autoRunWhenReady) — and every client draws it as a bubble the
+     reader typed, a whole screen tall on a phone.
+     PROPOSED: the control plane records the facts beside that turn's echo (the way it records
+     `openItemDelivery` for an exception item), and the clients draw a card from them in the native
+     card language of BackgroundWakeCardView — brand tone, because nothing failed — folding the prose
+     rather than dropping it. A turn stored before the payload existed stays the bubble.
+     Geometry: iPhone 402×874pt (iOS 26 shell, like the 2026-09-23 screenshot), the transcript's
+     14pt gutters, and the iOS half of the token ramp (.body 17 / .footnote 13 / .caption2 11).
+     Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Project started card — iOS + web mockup</title>
+<style>
+  :root {
+    --blue: #007AFF;
+    --blue-ink: #0060D0;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --card-bg: rgba(0, 122, 255, .08);
+    --card-line: rgba(0, 122, 255, .30);
+    --raised: rgba(255, 255, 255, .85);
+    --bubble: #dfe8fb;
+    --thread: #fff;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    /* web tokens, from src/web/src/index.css (light) */
+    --w-brand: #3370ff; --w-brand-tint: #eaf1ff; --w-brand-border: #bcd3ff;
+    --w-text-1: #1f2329; --w-text-2: #646a73; --w-text-3: #8f959e;
+    --w-raised: #fff; --w-border: #dee0e3; --w-hover-strong: #e3e6eb; --w-bg: #f5f6f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 28px 64px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", Roboto, "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 6px; }
+  .lede { color: #55555e; max-width: 1240px; margin: 0 0 26px; }
+  .lede code, figcaption code, .legend code { font: 12.5px/1.4 var(--mono); background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px; }
+  .row { display: flex; gap: 40px; align-items: flex-start; }
+  figure { margin: 0; }
+  figure.phone-fig { width: 402px; flex: 0 0 402px; }
+  figure.web-fig { width: 640px; flex: 0 0 640px; }
+  figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption > b:first-child { display: block; font-size: 14.5px; color: #16161a; margin-bottom: 3px; }
+  figure.hi figcaption > b:first-child::after {
+    content: 'PROPOSED'; font: 600 10px/1 ui-monospace, Menlo, monospace; color: #fff;
+    background: #1a7f37; padding: 3px 6px; border-radius: 4px; margin-left: 8px; vertical-align: 1px; }
+  .frame { position: relative; }
+  .frame.mark::after { content: ''; position: absolute; inset: -8px; border: 1.5px dashed #ff6a00;
+                       border-radius: 58px; pointer-events: none; }
+  .frame.mark.web::after { border-radius: 16px; }
+
+  /* ── phone shell, after the screenshot ───────────────────── */
+  .phone { width: 402px; height: 874px; border-radius: 54px; overflow: hidden; background: var(--surface);
+           color: var(--label); display: flex; flex-direction: column; position: relative;
+           box-shadow: 0 12px 40px rgba(0,0,0,.18); border: 1px solid rgba(0,0,0,.08); }
+  .status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 32px 4px; font-size: 16px; font-weight: 600; }
+  .nav { padding: 8px 14px 8px; display: flex; align-items: center; gap: 10px; }
+  .circle { width: 44px; height: 44px; border-radius: 50%; background: #f7f7f8; border: 1px solid rgba(0,0,0,.06);
+            display: grid; place-items: center; font-size: 22px; box-shadow: 0 1px 4px rgba(0,0,0,.06); flex: none; }
+  .nav .titles { flex: 1; min-width: 0; text-align: center; line-height: 1.2; }
+  .nav .t { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav .t .pill { font-size: 11px; font-weight: 600; background: #eeeef0; border-radius: 9px; padding: 2px 7px; margin-left: 4px; vertical-align: 2px; }
+  .nav .s { font-size: 12px; color: var(--label-2); }
+  .sticky { padding: 6px 16px 8px; font-size: 14px; color: var(--label-2); border-bottom: 1px solid var(--sep); }
+  .thread { flex: 1; background: var(--thread); padding: 12px 14px 0; overflow: hidden;
+            display: flex; flex-direction: column; gap: 10px; }
+  .thread .spacer { flex: 1 1 auto; }
+  .reply { font-size: 17px; line-height: 1.4; color: var(--label); }
+  .reply.dim { color: var(--label-2); }
+  .foot { padding: 8px 14px 18px; border-top: 1px solid var(--sep); background: var(--surface); }
+  .branch { border: 1px solid var(--sep); border-radius: 12px; padding: 6px 10px; display: flex; gap: 8px;
+            align-items: center; font: 12.5px var(--mono); color: var(--label-2); margin-bottom: 8px; }
+  .branch .add { color: #248A3D; } .branch .del { color: #d70015; }
+  .branch .commit { margin-left: auto; font-family: inherit; border: 1px solid var(--sep); border-radius: 10px; padding: 1px 10px; color: var(--label-3); }
+  .field { border: 1px solid var(--sep); border-radius: 18px; height: 50px; display: flex; align-items: center;
+           padding: 0 8px 0 16px; gap: 12px; color: var(--label-3); font-size: 17px; }
+  .field .send { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; background: var(--blue); }
+  .meta-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--label-2); margin-top: 8px; }
+
+  /* ── today: the prose, in the reader's own bubble ─────────── */
+  .bubble-wrap { display: flex; justify-content: flex-end; }
+  .bubble { max-width: 88%; padding: 10px 13px; border-radius: 18px; background: var(--bubble);
+            color: var(--label); font-size: 17px; line-height: 1.38; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bubble .cut { color: var(--label-2); font-size: 13px; }
+
+  /* ── the card: BackgroundWakeCardView's language, brand tone ─ */
+  .card { border: 1px solid var(--card-line); background: var(--card-bg); border-radius: 10px;
+          padding: 9px 11px; display: flex; flex-direction: column; gap: 6px; }
+  .head { display: flex; align-items: center; gap: 6px; }
+  .head .mark { color: var(--blue); font-size: 14px; line-height: 1; }
+  .head .name { color: var(--blue-ink); font-weight: 600; font-size: 13px; }
+  .head .spacer { flex: 1; }
+  .kind { font-size: 11px; font-weight: 500; color: var(--label-2); background: var(--raised);
+          border: 1px solid var(--card-line); border-radius: 9px; padding: 2px 8px; white-space: nowrap; }
+  .title { font-size: 17px; font-weight: 600; line-height: 1.3; }
+  .lead { font-size: 15px; line-height: 1.35; }
+  .tasks { margin: 0; padding: 4px 10px; list-style: none; border-radius: 8px; background: var(--raised);
+           display: flex; flex-direction: column; }
+  .tasks li { font-size: 15px; line-height: 1.3; padding: 6px 0; display: flex; gap: 8px; align-items: baseline;
+              border-bottom: 1px solid rgba(60,60,67,.08); }
+  .tasks li:last-child { border-bottom: 0; }
+  .tasks .dot { color: var(--label-3); font-size: 11px; flex: none; }
+  .tasks .tt { color: var(--blue); flex: 1; min-width: 0; }
+  .tasks .chev { color: var(--label-3); flex: none; }
+  .more { font-size: 13px; color: var(--blue); }
+  .meta { border-top: 1px solid rgba(0,122,255,.18); padding-top: 6px; font-size: 11px; color: var(--label-2); }
+  .fold { font-size: 12px; color: var(--label-2); }
+  .dim-note { font-size: 12px; color: var(--label-2); }
+
+  /* ── web ──────────────────────────────────────────────────── */
+  .web { width: 640px; border-radius: 12px; overflow: hidden; background: var(--w-bg);
+         box-shadow: 0 14px 44px rgba(0,0,0,.18); border: 1px solid rgba(0,0,0,.10);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif; color: var(--w-text-1); }
+  .web-top { height: 44px; display: flex; align-items: center; padding: 0 16px; gap: 8px; background: #fff;
+             border-bottom: 1px solid var(--w-border); font-weight: 600; font-size: 14px; }
+  .web-top .tag { font-size: 11px; font-weight: 500; color: var(--w-text-2); border: 1px solid var(--w-border); border-radius: 9px; padding: 0 7px; }
+  .web-thread { padding: 16px 20px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .w-reply { color: var(--w-text-1); font-size: 14px; }
+  .w-receipt { border: 1px solid var(--w-border); background: #fff; border-radius: 10px; padding: 9px 12px; font-size: 13px; }
+  .w-receipt .h { display: flex; justify-content: space-between; font-weight: 600; font-size: 13px; }
+  .w-receipt .h span:last-child { font-weight: 500; font-size: 11px; color: var(--w-text-3); }
+  .w-receipt p { margin: 3px 0 0; color: var(--w-text-2); }
+  .w-wrap { display: flex; justify-content: flex-end; }
+  .w-card { width: min(560px, 88%); padding: 10px 12px; border: 1px solid var(--w-brand-border); border-radius: 12px;
+            background: var(--w-brand-tint); }
+  .w-head { display: flex; align-items: center; gap: 6px; color: var(--w-brand); font-weight: 600; }
+  .w-kind { margin-left: auto; padding: 0 8px; border: 1px solid var(--w-brand-border); border-radius: 9px;
+            background: var(--w-raised); color: var(--w-text-2); font-size: 11px; font-weight: 500; line-height: 18px; }
+  .w-title { margin: 4px 0 2px; font-weight: 600; }
+  .w-lead { color: var(--w-text-1); font-size: 13px; margin-top: 6px; }
+  .w-tasks { margin: 6px 0 0; padding: 4px 10px; border-radius: 8px; background: var(--w-raised); list-style: none; font-size: 13px; }
+  .w-tasks li { padding: 4px 0; border-bottom: 1px solid var(--w-hover-strong); }
+  .w-tasks li:last-child { border-bottom: 0; }
+  .w-tasks a { color: var(--w-brand); text-decoration: none; }
+  .w-more { margin-top: 6px; font-size: 12px; color: var(--w-brand); }
+  .w-meta { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--w-hover-strong); color: var(--w-text-3); font-size: 11px; }
+  .w-fold { margin-top: 6px; font-size: 12px; color: var(--w-text-2); }
+  .w-composer { margin: 0 20px 16px; height: 44px; border: 1px solid var(--w-border); border-radius: 12px; background: #fff;
+                display: flex; align-items: center; padding: 0 14px; color: var(--w-text-3); }
+
+  .legend { max-width: 1240px; margin: 34px 0 0; font-size: 13.5px; color: #55555e; }
+  .legend b { color: #16161a; }
+  .legend ul { margin: 6px 0 0; padding-left: 20px; }
+  .legend li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<h1>“Project started” — drawn as a card, not as your message</h1>
+<p class="lede">Today the message Orbit sends the coordinator when a project is started (by <i>Start the project</i> or the
+  <i>Automatic</i> switch) is prose written for the agent, and the transcript draws it as a bubble you typed — a whole
+  phone screen. Proposed: the control plane records the facts beside that turn (the way it already does for an exception
+  item, <code>openItemDelivery</code>), and web, iOS and macOS draw a compact card from them. The agent still reads the
+  same words; the reader gets them one tap away.</p>
+
+<div class="row">
+  <!-- ═══ 1 · today (iOS) ═══ -->
+  <figure class="phone-fig">
+    <div class="frame">
+    <div class="phone">
+      <div class="status"><span>2:14</span><span>5G · 72%</span></div>
+      <div class="nav">
+        <div class="circle">‹</div>
+        <div class="titles"><div class="t">Codex 多账户：… <span class="pill">Coordinator</span></div>
+          <div class="s">Running · Open · just now</div></div>
+        <div class="circle">⇪</div>
+      </div>
+      <div class="sticky">↑ Your question　切</div>
+      <div class="thread">
+        <div class="bubble-wrap">
+          <div class="bubble">From Orbit · project switched on
+
+The account owner switched project “Codex 多账户：一台机器上登录多个 Codex” (34Tcl0kralZrY8opuLJU4) on (Automatic) at 2026-09-23T06:14:50.220Z. From now on Orbit starts this project’s tasks that are set to run on their own (autoRunWhenReady), within its concurrency limit.
+
+8 of its open tasks are set to be started by hand (autoRunWhenReady=false), so nothing starts them unless you do:
+- runner：Codex 账户槽（解析、创建、列举）(34TcwNENwb4zkIbdpLF5S)
+- runner + apiserver：登录中继按槽落地 (34TcwNPgvwQWaCYIwRTA1)
+<span class="cut">…6 more lines, then two paragraphs of instructions for the agent</span></div>
+        </div>
+      </div>
+      <div class="foot">
+        <div class="branch"><span>orbit…ff751</span><span class="add">+297</span><span class="del">−0</span><span>· 2 files</span><span class="commit">Commit</span></div>
+        <div class="field">＋ <span>Message…</span><span class="send"></span></div>
+        <div class="meta-row"><span>Auto</span><span>orbitd@Claude · Opus 5.5 · Max · 26%</span></div>
+      </div>
+    </div>
+    </div>
+    <figcaption><b>1 · Today (iOS)</b>The screenshot from 2026-09-23: one <code>user</code> turn, written for the agent
+      (tool names, ids, <code>autoRunWhenReady</code>), drawn as your own bubble. It fills the screen and still only
+      reaches the second task.</figcaption>
+  </figure>
+
+  <!-- ═══ 2 · proposed (iOS), the Automatic switch ═══ -->
+  <figure class="phone-fig hi">
+    <div class="frame mark">
+    <div class="phone">
+      <div class="status"><span>2:14</span><span>5G · 72%</span></div>
+      <div class="nav">
+        <div class="circle">‹</div>
+        <div class="titles"><div class="t">Codex 多账户：… <span class="pill">Coordinator</span></div>
+          <div class="s">Running · Open · just now</div></div>
+        <div class="circle">⇪</div>
+      </div>
+      <div class="sticky">↑ Project switched on　Codex 多账户</div>
+      <div class="thread">
+        <div class="card">
+          <div class="head">
+            <span class="mark">▶︎</span><span class="name">Project switched on</span>
+            <span class="spacer"></span><span class="kind">Automatic on</span>
+          </div>
+          <div class="title">Codex 多账户：一台机器上登录多个 Codex</div>
+          <div class="lead">8 tasks are set to start by hand, so they wait for the coordinator:</div>
+          <ul class="tasks">
+            <li><span class="dot">●</span><span class="tt">runner：Codex 账户槽（解析、创建、列举）</span><span class="chev">›</span></li>
+            <li><span class="dot">●</span><span class="tt">runner + apiserver：登录中继按槽落地</span><span class="chev">›</span></li>
+            <li><span class="dot">●</span><span class="tt">runner / shared / web：按账户上报状态，页面每账户一行</span><span class="chev">›</span></li>
+          </ul>
+          <div class="more">Show 5 more</div>
+          <div class="meta">Switched on by you · a notification, not an interruption · just now</div>
+          <div class="fold">What the coordinator was told ›</div>
+        </div>
+        <div class="reply dim">（协调者对这条消息的回复，紧接在卡片下面）</div>
+        <div class="spacer"></div>
+      </div>
+      <div class="foot">
+        <div class="branch"><span>orbit…ff751</span><span class="add">+297</span><span class="del">−0</span><span>· 2 files</span><span class="commit">Commit</span></div>
+        <div class="field">＋ <span>Message…</span><span class="send"></span></div>
+        <div class="meta-row"><span>Auto</span><span>orbitd@Claude · Opus 5.5 · Max · 26%</span></div>
+      </div>
+    </div>
+    </div>
+    <figcaption><b>2 · Proposed (iOS · Automatic switched on)</b>A card in the transcript's own card language
+      (brand tone: nothing failed). The project, how it was started, and the tasks that wait on the coordinator —
+      each one tappable into its task. The coordinator's reply now sits right under it, on the same screen.</figcaption>
+  </figure>
+
+  <!-- ═══ 3 · proposed (web), Start the project ═══ -->
+  <figure class="web-fig hi">
+    <div class="frame mark web">
+    <div class="web">
+      <div class="web-top">Codex 多账户：一台机器上登录多个 Codex <span class="tag">Coordinator</span></div>
+      <div class="web-thread">
+        <div class="w-reply">8 个任务都建好了，依赖链核过 …（协调者上一条回复）</div>
+        <div class="w-receipt"><div class="h"><span>Criteria confirmed</span><span>From Orbit</span></div>
+          <p>Confirmed by you · 8 criteria · seal 0c79f950 · 05:06</p></div>
+        <div class="w-wrap">
+          <div class="w-card">
+            <div class="w-head"><span>▶︎</span><span>Project started</span><span class="w-kind">Criteria confirmed</span></div>
+            <div class="w-title">Codex 多账户：一台机器上登录多个 Codex</div>
+            <div class="w-lead">8 tasks are set to start by hand, so they wait for the coordinator:</div>
+            <ul class="w-tasks">
+              <li><a>runner：Codex 账户槽（解析、创建、列举）</a></li>
+              <li><a>runner + apiserver：登录中继按槽落地</a></li>
+              <li><a>runner / shared / web：按账户上报状态，页面每账户一行</a></li>
+            </ul>
+            <div class="w-more">Show 5 more</div>
+            <div class="w-meta">Started by you, confirming 8 criteria · a notification, not an interruption · 05:06</div>
+            <div class="w-fold">▸ What the coordinator was told</div>
+          </div>
+        </div>
+      </div>
+      <div class="w-composer">Message…</div>
+    </div>
+    </div>
+    <figcaption><b>3 · Proposed (web · Start the project)</b>The same card, same words, in the web's card
+      language (the exception-item card's shape, brand tone). It lands right under the <i>Criteria confirmed</i>
+      receipt the press already leaves, so the pair reads as “you confirmed → the coordinator was told”.</figcaption>
+  </figure>
+</div>
+
+<div class="legend">
+  <b>Rules the card follows</b>
+  <ul>
+    <li><b>Two starts, one card.</b> <i>Start the project</i> → “Project started” + chip <i>Criteria confirmed</i>;
+      the <i>Automatic</i> switch → “Project switched on” + chip <i>Automatic on</i>. The facts are a snapshot of when
+      the coordinator was told, like the exception-item card's.</li>
+    <li><b>The tasks list only what waits on the coordinator</b> (<code>autoRunWhenReady=false</code>): three shown,
+      “Show N more” for the rest. None waiting → one line: “Every open task starts on its own.”</li>
+    <li><b>Nothing is dropped.</b> The words the agent read fold under “What the coordinator was told”.</li>
+    <li><b>Queued</b> (a turn is still running): the same card with a dashed border and the queue's own “Queued · Cancel”
+      line, as the exception-item card does.</li>
+    <li><b>Older messages stay bubbles.</b> The one sent at 06:14 today carries no card payload, so it is drawn as it is now.</li>
+    <li>Web, iOS and macOS share every word (a copy-parity test, as for the exception-item card).</li>
+  </ul>
+</div>
+</body>
+</html>

@@ -151,6 +151,7 @@ import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeCard } from './WatchWakeCard';
 import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
+import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseWatchWake, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import type { BgShell } from '../lib/backgroundShells';
@@ -251,6 +252,7 @@ import type { Runner } from './TasksSidePanel';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
   OpenItemDeliveryCard as OpenItemDelivery,
+  ProjectStartedCard as ProjectStarted,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -385,6 +387,8 @@ export interface QueuedTurn {
    *  accepted-turn placeholder does (`AcceptedUserTurn.openItemDelivery`): the queued tail draws the
    *  card the transcript will, rather than a bubble it replaces when the runner takes the turn. */
   openItemDelivery?: OpenItemDelivery;
+  /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
+  projectStarted?: ProjectStarted;
 }
 
 /** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is
@@ -2963,6 +2967,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // The card the snapshot carried for an exception item's delivery, so the placeholder
               // this row paints is the card the runner's echo will replace it with.
               ...(row.openItemDelivery ? { openItemDelivery: row.openItemDelivery } : {}),
+              ...(row.projectStarted ? { projectStarted: row.projectStarted } : {}),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -6964,6 +6969,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   <OpenItemDeliveryCard
                     key={q.turnId}
                     card={q.openItemDelivery}
+                    text={q.content}
+                    ts={q.createdAt}
+                    queued={
+                      <QueuedTurnMeta
+                        placement={q.placement}
+                        delivery={q.delivery}
+                        deliveryCode={q.deliveryCode}
+                        deliveryReason={q.deliveryReason}
+                        onCancel={() => cancelQueued(q.turnId)}
+                        onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
+                      />
+                    }
+                  />
+                ) : q.projectStarted ? (
+                  // The message telling the coordinator its project was started, as the card the
+                  // transcript draws once a runner takes it — the same reason as the delivery above.
+                  <ProjectStartedCard
+                    key={q.turnId}
+                    card={q.projectStarted}
                     text={q.content}
                     ts={q.createdAt}
                     queued={

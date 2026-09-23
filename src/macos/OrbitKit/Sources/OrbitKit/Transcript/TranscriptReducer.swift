@@ -513,13 +513,16 @@ public struct TranscriptReducer: Sendable, Codable {
                 // tail would draw the paragraph written for the agent as a message the reader sent
                 // (web parity: the queue tail reads `q.openItemDelivery`).
                 bubble.itemCard = turn.itemCard
+                // And the card a project start is, on the same terms (web parity: `q.projectStarted`).
+                bubble.startedCard = turn.startedCard
                 reconciled.append(bubble)
             } else {
                 reconciled.append(UserBubble(id: "server-\(turn.turnId)", text: turn.content,
                                              attachments: incomingAttachments ?? [], turnId: turn.turnId,
                                              pending: true, queued: true,
                                              steer: SteerDelivery.isSteerKind(turn.kind),
-                                             itemCard: turn.itemCard))
+                                             itemCard: turn.itemCard,
+                                             startedCard: turn.startedCard))
             }
         }
 
@@ -968,6 +971,9 @@ public struct TranscriptReducer: Sendable, Codable {
         // The same for a task run's opening turn (`taskStart`, `TaskStart.parse`): the payload, never
         // the brief's text.
         let taskStart = TaskStart.parse(ev.payload)
+        // The message telling the coordinator its project was started, by the same rule
+        // (`projectStarted`, `ProjectStarted.parse`).
+        let startedCard = ProjectStarted.parse(ev.payload)
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -1001,6 +1007,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 // The card is the event's own: it rides whichever row ends up drawing this turn.
                 b.itemCard = itemCard
                 b.taskStart = taskStart
+                b.startedCard = startedCard
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
@@ -1020,7 +1027,8 @@ public struct TranscriptReducer: Sendable, Codable {
                                             undelivered: delivery == "failed",
                                             note: recorded?.note,
                                             steer: steer, delivery: delivery,
-                                            itemCard: itemCard, taskStart: taskStart)))
+                                            itemCard: itemCard, taskStart: taskStart,
+                                            startedCard: startedCard)))
     }
 
     private mutating func appendInterrupt(seq: Int) {

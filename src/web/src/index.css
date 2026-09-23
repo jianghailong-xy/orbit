@@ -14043,6 +14043,136 @@ button.chat-jump-start:hover {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* The message telling a coordinator its project was started (ProjectStartedCard.tsx): the exception
+   item's card, in the brand tone — nothing here failed — with the tasks that wait on the coordinator
+   as a raised list of links. */
+.psc-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+}
+.psc {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+}
+.psc.is-queued {
+  border-style: dashed;
+}
+.psc-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand);
+  font-weight: 600;
+}
+.psc-mark {
+  flex: none;
+}
+.psc-kind {
+  margin-left: auto;
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.psc-title {
+  margin: 4px 0 2px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.psc-lead {
+  margin-top: 6px;
+  font-size: 13px;
+}
+.psc-tasks {
+  margin: 6px 0 0;
+  padding: 2px 10px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  list-style: none;
+  font-size: 13px;
+}
+.psc-tasks li {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--bg-hover-strong);
+  overflow-wrap: anywhere;
+}
+.psc-tasks li:last-child {
+  border-bottom: 0;
+}
+.psc-tasks a,
+.psc-unlisted a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.psc-more {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.psc-unlisted {
+  margin-top: 4px;
+  font-size: 12px;
+}
+.psc-meta {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg-hover-strong);
+  color: var(--text-3);
+  font-size: 11px;
+}
+.psc-undelivered {
+  margin-top: 4px;
+  color: var(--warning);
+  font-size: 12px;
+}
+.psc-raw {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.psc-raw summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.psc-raw pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.psc-queued {
+  margin-top: 6px;
+}
+.psc-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 2px;
+}
+.psc-queued .chat-queued-why {
+  order: 1;
+  flex-basis: 100%;
+  white-space: normal;
+}
 .watch-editor {
   display: flex;
   flex-direction: column;
