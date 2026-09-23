@@ -273,8 +273,10 @@ export class QueueService {
         // The workspace's standing "always allow" grants ride along: they are what turns an
         // approval a human already answered into one this session never has to ask again.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+        // `engines` carries the Codex accounts this runner has, which is where the workspace's
+        // chosen account resolves to a CODEX_HOME.
         assignedRunner: {
-          select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true },
+          select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true },
         },
         // The account-level permission default, which replaced the per-workspace one.
         owner: { select: { preferences: true } },
@@ -380,6 +382,8 @@ export class QueueService {
         workspaceModel: workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: workspace?.env as Record<string, string> | null,
+        codexAccount: workspace?.codexAccount,
+        runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);
     // Snapshot an inherited default on the session at its first claim, and refresh one the runtime

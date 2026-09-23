@@ -2343,6 +2343,17 @@ body {
 .rd-adv-body {
   padding-top: 6px;
 }
+/* Which Codex account the workspace runs on: each option is the account, with its own quota and
+   sign-in on a quieter line under it. */
+.rd-codex-account {
+  width: 100%;
+}
+.rd-codex-account-status {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-3);
+  margin-top: 1px;
+}
 @media (max-width: 600px) {
   .rd-form-grid {
     grid-template-columns: 1fr;

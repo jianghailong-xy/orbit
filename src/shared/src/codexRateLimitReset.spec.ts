@@ -452,6 +452,10 @@ describe('creating an operation', () => {
     expect(codexResetAccountOverride({ env: { OPENAI_BASE_URL: 'https://example.invalid/v1' } })).toBe(true);
     expect(codexResetAccountOverride({ env: { CODEX_API_KEY: 'sk-fixture' } })).toBe(true);
     expect(codexResetAccountOverride({ provider: 'deepseek' })).toBe(true);
+    // A workspace that picked another Codex account on the machine: reset v1 spends Default's.
+    expect(codexResetAccountOverride({ provider: 'codex', codexAccount: '3fa91c2e' })).toBe(true);
+    expect(codexResetAccountOverride({ provider: 'codex', codexAccount: 'default' })).toBe(false);
+    expect(codexResetAccountOverride({ provider: 'codex', codexAccount: null })).toBe(false);
   });
 
   it('accepts a create body of a UUID clientRequestId and a fingerprint, and nothing provider-facing', () => {

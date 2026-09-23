@@ -1437,7 +1437,14 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	// likely to have died, because the last time anything checked them was whenever the
 	// session last ran, hours or days ago. A local probe per engine start is cheap next to
 	// what it replaces.
-	if msg := engineAuthPreflight(provider, job.Agent.Env); msg != "" {
+	//
+	// Asked of the account the engine will run on: a Codex session can be on one of the machine's
+	// other accounts, and one that has run keeps the account it started on.
+	preflightEnv := job.Agent.Env
+	if provider == providerCodex {
+		preflightEnv = codexSessionAccountEnv(job.Agent.Env, scratchDir)
+	}
+	if msg := engineAuthPreflight(provider, preflightEnv); msg != "" {
 		emit(evError, map[string]interface{}{"message": msg})
 		return stFailed, true, false
 	}

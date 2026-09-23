@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -207,5 +210,29 @@ func TestFakeClaudeScriptedEOF(t *testing.T) {
 	}
 	if err := run.waitExit(); err != nil {
 		t.Errorf("exit after eof: %v", err)
+	}
+}
+
+// A poll can land mid-append: the fake writes a record in one go, but a reader alongside it
+// can see one that crosses a page cut short. Half a record is not a record — readLines leaves
+// it for the next poll rather than handing Spawns() a line it fails the test on.
+func TestFakeClaudeReadLinesLeavesAHalfWrittenRecordForTheNextPoll(t *testing.T) {
+	f := newFakeClaude(t)
+	first := `{"pid":1,"argv":["-p"],"cwd":"/"}`
+	second := `{"pid":2,"argv":["-p","--system-prompt","You are Orbit."],"cwd":"/"}`
+	for _, poll := range []struct {
+		recorded string
+		want     []string
+	}{
+		{first[:len(first)/2], nil},
+		{first + "\n" + second[:len(second)/2], []string{first}},
+		{first + "\n" + second + "\n", []string{first, second}},
+	} {
+		if err := os.WriteFile(filepath.Join(f.rec, "spawns.jsonl"), []byte(poll.recorded), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := f.readLines("spawns.jsonl"); !slices.Equal(got, poll.want) {
+			t.Fatalf("with %q recorded, readLines = %q, want %q", poll.recorded, got, poll.want)
+		}
 	}
 }

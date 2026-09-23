@@ -212,6 +212,23 @@ func codexSessionOnDefaultAccount(agentEnv map[string]string, processEnv []strin
 	return err == nil && home == defaultHome
 }
 
+// codexSessionAccountEnv is agentEnv as far as the Codex account goes: with the CODEX_HOME the
+// session's state was first opened under, when it has one. That home is sticky for the life of the
+// session (resolveCodexStateDir) — its thread lives there — so a later claim naming another account
+// does not move it, and whatever asks about the session's account has to ask about that one.
+func codexSessionAccountEnv(agentEnv map[string]string, scratchDir string) map[string]string {
+	meta := readSessionMeta(filepath.Join(scratchDir, "meta.json"))
+	if meta == nil || meta.CodexStateLayout != codexStateLayoutShared || meta.CodexStateHome == "" {
+		return agentEnv
+	}
+	out := make(map[string]string, len(agentEnv)+1)
+	for key, value := range agentEnv {
+		out[key] = value
+	}
+	out["CODEX_HOME"] = meta.CodexStateHome
+	return out
+}
+
 func sharedCodexStateForEnv(env []string, cwd string) (codexStateSelection, error) {
 	codexHome, err := effectiveCodexHome(env, cwd)
 	if err != nil {

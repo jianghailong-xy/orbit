@@ -157,7 +157,8 @@ read 本身失败（进程起不来、RPC 报错）不产生新块，旧块按 �
     `fingerprint-raw-account-id`、`observed-raw-account-id` 被两侧拒绝）。
   - key 丢失会让在途 operation 看到“账户变了”而停止（§7.4），这是安全方向。
 - **ACCOUNT_OVERRIDE**：确认来自工作区或会话上下文（请求带 `workspaceId`）时，apiserver 用
-  `codexResetAccountOverride({ provider, env })` 判定：provider 不是内置 `codex`（配置型 provider 或别的 runtime），
+  `codexResetAccountOverride({ provider, codexAccount, env })` 判定：provider 不是内置 `codex`（配置型 provider 或别的 runtime），
+  或工作区选了 Default 以外的 Codex 账户（`codexAccount` 是某个槽 id——按选择判，不管该 runner 眼下是否还报告这个槽），
   或 env 里 `CODEX_HOME`、`CODEX_API_KEY`、任意 `OPENAI_*` 非空 → 拒绝。runner 自己的页面不带 `workspaceId`，不做这项判断。
 
 ---
