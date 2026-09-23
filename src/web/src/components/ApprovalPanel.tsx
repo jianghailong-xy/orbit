@@ -5,6 +5,7 @@ import type { ApprovalInfo, PermissionRule } from '../api';
 import { BatchGraph } from './BatchGraph';
 import { CardActionButton, CardActions } from './CardAction';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
+import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainText } from '../lib/markdownText';
 import {
   OWNER_CONFIRMATION_SHOW_ALL,
@@ -405,7 +406,13 @@ export function ApprovalPanel({
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
       <div className={`approval-body${plan || create || blocker ? ' is-plan' : ''}`}>
         {plan ? (
-          <Markdown remarkPlugins={[remarkGfm]}>{plan}</Markdown>
+          <Markdown
+            remarkPlugins={[remarkGfm]}
+            urlTransform={referenceUrlTransform}
+            components={{ a: ReferenceLink }}
+          >
+            {plan}
+          </Markdown>
         ) : dag ? (
           <DagChangeBody note={dag.note} preview={dag.preview} />
         ) : batch ? (
@@ -489,9 +496,21 @@ function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Elem
   return (
     <div className="dag-approval">
       {about && <p className="dag-approval-caption">{about}</p>}
-      <Markdown remarkPlugins={[remarkGfm]}>{input.requiredAction}</Markdown>
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={referenceUrlTransform}
+        components={{ a: ReferenceLink }}
+      >
+        {input.requiredAction}
+      </Markdown>
       <p className="dag-approval-caption">The agent says it no longer blocks</p>
-      <Markdown remarkPlugins={[remarkGfm]}>{input.reason}</Markdown>
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={referenceUrlTransform}
+        components={{ a: ReferenceLink }}
+      >
+        {input.reason}
+      </Markdown>
     </div>
   );
 }
@@ -526,14 +545,26 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
               ? createFoldHideLabel(noun)
               : createFoldLabel(noun, input.prose.length)}
           </summary>
-          <Markdown remarkPlugins={[remarkGfm]}>{input.prose}</Markdown>
+          <Markdown
+            remarkPlugins={[remarkGfm]}
+            urlTransform={referenceUrlTransform}
+            components={{ a: ReferenceLink }}
+          >
+            {input.prose}
+          </Markdown>
         </details>
       )}
       {input.criteria && (
         <>
           <p className="dag-approval-caption">{CREATE_DONE_WHEN}</p>
           {input.isProject ? (
-            <Markdown remarkPlugins={[remarkGfm]}>{input.criteria}</Markdown>
+            <Markdown
+              remarkPlugins={[remarkGfm]}
+              urlTransform={referenceUrlTransform}
+              components={{ a: ReferenceLink }}
+            >
+              {input.criteria}
+            </Markdown>
           ) : (
             <>
               <p className="dag-approval-criteria">

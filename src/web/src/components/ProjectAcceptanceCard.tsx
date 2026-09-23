@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
+import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { useMediaQuery } from '../lib/useMediaQuery';
 
 /**
@@ -372,7 +373,11 @@ export function AcceptanceCriteriaList({
               tick or a cross would make it a verdict badge, and there is no verdict here. */}
           <span className={`acceptance-row-no ${markState(c.satisfied)}`}>{c.ordinal}</span>
           <div className="acceptance-row-text">
-            <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
+            <Markdown
+              remarkPlugins={[remarkGfm]}
+              urlTransform={referenceUrlTransform}
+              components={{ ...INLINE_ONLY, a: ReferenceLink }}
+            >
               {c.text}
             </Markdown>
             <CriterionWork criterion={c} integrationRef={integrationRef} />

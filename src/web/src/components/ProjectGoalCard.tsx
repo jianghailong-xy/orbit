@@ -4,6 +4,7 @@ import { Typography } from 'antd';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
+import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 
 export function ProjectGoalCard({ goal }: { goal?: string | null }) {
@@ -27,6 +28,8 @@ export function ProjectGoalCard({ goal }: { goal?: string | null }) {
             <Markdown
               remarkPlugins={[remarkGfm, remarkHardBreaks]}
               rehypePlugins={[rehypeHighlight]}
+              urlTransform={referenceUrlTransform}
+              components={{ a: ReferenceLink }}
             >
               {body}
             </Markdown>
