@@ -64,7 +64,9 @@ const (
 
 // engineUpdateLoop updates each installed engine in place, skipping any with a live
 // session so a binary is never swapped mid-turn — and then retrying that engine as soon as
-// its sessions finish, rather than at the next daily tick. Installing a missing engine stays
+// its sessions finish, rather than at the next daily tick. A native Claude Code install is the
+// exception: its update swaps nothing a session runs, so it goes ahead busy or not (see
+// nativeClaudeInstall). Installing a missing engine stays
 // `orbit doctor`'s interactive job. Best-effort — every failure is logged, never
 // fatal. ORBIT_NO_ENGINE_UPDATE disables it, retry included: it turns the whole loop off
 // before anything is scheduled.
@@ -118,29 +120,86 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 			}
 			break // runner shutting down; not this machine's news
 		}
-		if n := activeCount(spec.bin); n > 0 {
-			logln("engine-update:", spec.name, "skipped — session(s) active")
-			// Filed rather than dropped, which is what makes the line below a promise instead of
-			// a figure of speech: retryDeferredEngineUpdates comes back for it within seconds of
-			// the last session ending, so this engine's next chance is not 24h away.
-			deferEngineUpdate(spec.bin)
-			// The outcome is deliberately not recorded: a busy machine says nothing about whether
-			// updating works here, and writing it would leave every well-used engine reading
-			// "skipped" until the next daily pass. How far behind it is, though, is true whoever
-			// is busy — and this is the machine that most needs it said. It is worth saying out
-			// loud to whoever just pressed the button, too: silence reads as "nothing happened".
-			noteEngineDrift(ctx, spec, servicePath)
-			lines = append(lines, spec.name+" — "+plural(n, "session")+" running, it'll update once they finish")
-			continue
+		n := activeCount(spec.bin)
+		if n > 0 {
+			current, native := nativeClaudeInstall(spec, servicePath)
+			if !native {
+				logln("engine-update:", spec.name, "skipped — session(s) active")
+				// Filed rather than dropped, which is what makes the line below a promise instead of
+				// a figure of speech: retryDeferredEngineUpdates comes back for it within seconds of
+				// the last session ending, so this engine's next chance is not 24h away.
+				deferEngineUpdate(spec.bin)
+				// The outcome is deliberately not recorded: a busy machine says nothing about whether
+				// updating works here, and writing it would leave every well-used engine reading
+				// "skipped" until the next daily pass. How far behind it is, though, is true whoever
+				// is busy — and this is the machine that most needs it said. It is worth saying out
+				// loud to whoever just pressed the button, too: silence reads as "nothing happened".
+				noteEngineDrift(ctx, spec, servicePath)
+				lines = append(lines, spec.name+" — "+plural(n, "session")+" running, it'll update once they finish")
+				continue
+			}
+			logln("engine-update:", spec.name, "updating with", plural(n, "session"), "running — native install at",
+				current+": the new release goes in beside it, and running sessions keep the version they started with")
 		}
 		// Whoever gets to it first settles it: an engine updated by this pass has nothing left
 		// owing, and leaving the to-do filed would send the idle retry after it again seconds later.
 		clearDeferredEngineUpdate(spec.bin)
-		if _, phrase := updateEngine(ctx, spec, servicePath, proxyVars); phrase != "" {
+		rec, phrase := updateEngine(ctx, spec, servicePath, proxyVars)
+		if n > 0 && rec.Status == updateUpdated {
+			// The one thing about this update the version numbers don't say: the sessions that were
+			// busy are still on whatever they started with, and only their next spawn moves.
+			phrase += " — native install, so what's already running (" + plural(n, "session") + ") keeps the version it started with"
+		}
+		if phrase != "" {
 			lines = append(lines, phrase)
 		}
 	}
 	return lines
+}
+
+// nativeClaudeInstall reports whether the `claude` on the service PATH is Claude Code's native
+// install, returning the version file it resolves to — the one engine install whose update is
+// safe to run under live sessions, so the busy skip does not apply to it.
+//
+// That installer keeps every release as a separate file, …/claude/versions/<ver>, and the command
+// on PATH is a symlink to the current one. `claude update` writes the new release beside the
+// others and swaps the link atomically: no file a session is running gets rewritten, and its
+// cleanup keeps any version a live process still holds a lock on. A running session therefore
+// finishes on the binary it started with, and only the next spawn gets the new one — which is all
+// waiting would have bought too, since an engine reclaimed between turns resumes from PATH
+// whenever the update happened. Seen on vmi3129740 on 2026-09-23: an interactive 2.1.278, two
+// days into its run, carried on straight through the update to 2.1.280, and not one of the four
+// runner engines running at that moment broke.
+//
+// The one way a turn could still straddle two versions is Claude re-running itself through the
+// link, and it does not — checked against 2.1.280's own code. A turn does start copies of the
+// binary (the ripgrep built into Grep and Glob, a teammate), but each is spawned from
+// process.execPath, which is the resolved versions/<ver> file: the per-version locks under
+// ~/.local/state/claude/locks record exactly that path for a process launched through the link.
+// The link is used only where getting the newest release is the point — the background-session
+// daemon, which reconciles its version with its clients itself, and a session relaunching itself
+// with --resume from the interactive UI — and neither happens inside a `-p` turn. Subagents run
+// in-process; a `claude` that a Bash command runs is its own CLI, for which the new version is
+// simply the current one.
+//
+// Anything else stays behind the skip. npm in particular rewrites node_modules in place, and
+// nobody has shown that to be safe under a process running out of it.
+func nativeClaudeInstall(spec engineSpec, servicePath string) (string, bool) {
+	if spec.bin != providerClaude {
+		return "", false
+	}
+	binPath, ok := lookPathIn(spec.bin, servicePath)
+	if !ok {
+		return "", false
+	}
+	real, err := filepath.EvalSymlinks(binPath)
+	if err != nil {
+		return "", false
+	}
+	// lookPathIn has already found an executable file there; what is left to ask is where it lives.
+	versions := filepath.Dir(real)
+	name := filepath.Base(real)
+	return real, versionNumber(name) == name && filepath.Base(versions) == "versions" && filepath.Base(filepath.Dir(versions)) == "claude"
 }
 
 // engineUpdateDeferred is the set of engines a pass declined to update because sessions were

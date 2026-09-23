@@ -13,14 +13,29 @@ import (
 // is the only account of the run a user ever sees — the per-engine records behind it belong to
 // rows the card with the button doesn't show — so a wrong verdict here is a silent one.
 //
-// Every test in this file reports each engine as busy. That is not incidental: updateEngines
-// resolves engines against the service PATH, not the test's, so any engine actually installed on
-// the machine running these tests would have its real updater executed. Busy is the one input
-// that reaches the relay's own logic without running anything.
+// Every test in this file that reaches updateEngines runs it over relayEngines and reports each
+// engine as busy. Neither is incidental: updateEngines resolves engines against the service PATH,
+// not the test's, so any engine actually installed on the machine running these tests would have
+// its real updater executed. Busy used to be enough to stop that on its own, until a native Claude
+// Code install stopped waiting for its sessions; engines that exist nowhere are what stops it now,
+// and busy is what still gets each one a line in the summary without running anything.
+
+// relayEngines swaps in the engines the relay tests update: named like the real ones, installed on
+// no machine.
+func relayEngines(t *testing.T) {
+	t.Helper()
+	saved := engineSpecs
+	t.Cleanup(func() { engineSpecs = saved })
+	engineSpecs = []engineSpec{
+		{name: "Claude Code", bin: "orbit-relay-claude"},
+		{name: "Codex", bin: "orbit-relay-codex"},
+	}
+}
 
 func runUpdateRelay(t *testing.T, activeCount func(string) int) []InstallResultRequest {
 	t.Helper()
 	t.Setenv("ORBIT_HOME", t.TempDir())
+	relayEngines(t)
 
 	var mu sync.Mutex
 	var got []InstallResultRequest
@@ -71,16 +86,8 @@ func TestUpdateRelayNamesEveryEngineItSkipped(t *testing.T) {
 	// A machine mid-turn is the common case for this button, and engines skipped for it are
 	// exactly what a summary listing only successes would hide: the run did less than the press
 	// implied, and silence there is indistinguishable from having done the work.
-	counts := map[string]int{providerClaude: 2, providerCodex: 1}
-	// Default 1, not 0: an engine this map forgets is an engine whose real updater runs on the
-	// machine running these tests. A map lookup returning the zero value is exactly how that
-	// happens by accident, and adding a fifth engine spec would be enough to trigger it.
-	got := runUpdateRelay(t, func(bin string) int {
-		if n, ok := counts[bin]; ok {
-			return n
-		}
-		return 1
-	})
+	counts := map[string]int{"orbit-relay-claude": 2, "orbit-relay-codex": 1}
+	got := runUpdateRelay(t, func(bin string) int { return counts[bin] })
 
 	outcome := got[len(got)-1]
 	for _, want := range []string{"2 sessions running", "1 session running"} {
@@ -103,6 +110,7 @@ func TestUpdateRelayRefusesToRunTwice(t *testing.T) {
 	// moves it on, so a second delivery must be a no-op rather than a second package manager
 	// against the same prefix.
 	t.Setenv("ORBIT_HOME", t.TempDir())
+	relayEngines(t)
 
 	relay := &installRelay{}
 	release := make(chan struct{})
