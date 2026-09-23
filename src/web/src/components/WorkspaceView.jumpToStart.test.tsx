@@ -119,6 +119,20 @@ const mounted = (): HTMLDivElement => {
 
 const shown = (): string => mounted().textContent ?? '';
 
+/** The reader drags the transcript up off its live tail — the state the way back is offered in.
+ *  Opening a session pins it to the bottom, and jsdom fires no scroll of its own, so this moves
+ *  the faked geometry and then tells the transcript to look. Assigned to the backing value rather
+ *  than through the element, so the move the reader made is not mistaken for one the walk made. */
+const scrollUpOffTail = async (): Promise<void> => {
+  // The sidebar's session list carries the same class, so the scroller is taken from the pane.
+  const el = mounted().querySelector<HTMLElement>('.workspace-scroll-wrap .workspace-sessions');
+  if (!el) throw new Error('the transcript scroller is not mounted');
+  scrollTop = 5000; // still well clear of the top: reading history, not asking for a page
+  await act(async () => {
+    el.dispatchEvent(new Event('scroll'));
+  });
+};
+
 // Below the test budget, so a wait that runs out fails its test instead of outliving it.
 const waitForUi = async (assertion: () => void): Promise<void> => {
   await act(async () => {
@@ -244,6 +258,7 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
 
     // The tail page is all there is so far, and the session plainly starts somewhere above it.
     expect(shown()).not.toContain(FIRST);
+    await scrollUpOffTail();
     const jump = mounted().querySelector<HTMLElement>('.chat-jump-start');
     expect(jump, 'the top of the window offers the way back').not.toBeNull();
 
@@ -277,5 +292,25 @@ describe('the way back to a session’s first message', { timeout: 60_000 }, () 
 
     expect(shown(), 'the first message came with the only page there was').toContain(FIRST);
     expect(mounted().querySelector('.chat-jump-start')).toBeNull();
+  });
+
+  it('is not offered to a reader who is still at the live tail', async () => {
+    await mountTranscript();
+
+    // There is more above — the walk above proves this very session has two older pages — but the
+    // reader is at the newest message, where nobody is looking for the oldest one. The control
+    // floats over the transcript, so offering it here only covers a message up.
+    expect(
+      mounted().querySelector('.chat-jump-start'),
+      'the tail is no place to offer the beginning',
+    ).toBeNull();
+
+    // The moment they go looking, it is there: the mirror of the jump-to-bottom button, which
+    // appears on the same leaving of the tail.
+    await scrollUpOffTail();
+    expect(
+      mounted().querySelector('.chat-jump-start'),
+      'reading back through history, the way to the start is on screen',
+    ).not.toBeNull();
   });
 });

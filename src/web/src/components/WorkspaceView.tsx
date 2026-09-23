@@ -6695,8 +6695,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   says so, and otherwise it is the way to the first message, which scrolling alone
                   never reaches (see jumpToStart). Pinned to the top of the viewport rather than
                   left at the top of the content — content-top is only on screen for the instant
-                  before the page it triggers lands and re-anchors the view a page below it. */}
-              {(loadingOlder || hasMoreOlder) && (
+                  before the page it triggers lands and re-anchors the view a page below it. Offered
+                  only once the reader has left the live tail, the mirror of the jump-to-bottom
+                  button: at the tail nobody is looking for the beginning, and the pill floats over
+                  the transcript, so there it is only something covering a message. */}
+              {(loadingOlder || (hasMoreOlder && !atBottom)) && (
                 <div className="chat-older-top">
                   {loadingOlder ? (
                     <span className="chat-older-pill">Loading earlier messages…</span>
