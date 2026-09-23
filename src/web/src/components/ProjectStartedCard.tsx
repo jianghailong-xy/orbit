@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { PlayCircleFilled } from '@ant-design/icons';
-import { Link } from 'react-router-dom';
 import type { ProjectStartedCard as Started } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
+import { AppLink } from './AppLink';
 import { relTime } from './Transcript';
 
 /**
@@ -121,7 +121,7 @@ export function ProjectStartedCard({
                   return (
                     <li key={task.id}>
                       {taskPublic
-                        ? <Link to={`/tasks/${encodeURIComponent(taskPublic)}`}>{task.title}</Link>
+                        ? <AppLink to={`/tasks/${encodeURIComponent(taskPublic)}`}>{task.title}</AppLink>
                         : task.title}
                     </li>
                   );
@@ -135,7 +135,7 @@ export function ProjectStartedCard({
             )}
             {unlisted > 0 && projectHref && (allTasks || folded <= 0) && (
               <div className="psc-unlisted">
-                <Link to={projectHref}>{projectStartedMoreInProject(unlisted)}</Link>
+                <AppLink to={projectHref}>{projectStartedMoreInProject(unlisted)}</AppLink>
               </div>
             )}
           </>
