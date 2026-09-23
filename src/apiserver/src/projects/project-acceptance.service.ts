@@ -260,9 +260,12 @@ export class ProjectAcceptanceService {
       await tellCoordinatorProjectStarted(this.prisma, this.sessions, {
         ownerId,
         projectId,
-        confirmationId: confirmation.id,
-        confirmedAt: confirmation.confirmedAt,
-        criteriaCount: currentVersion.material.length,
+        start: {
+          by: 'CONFIRMATION',
+          confirmationId: confirmation.id,
+          criteriaCount: currentVersion.material.length,
+          at: confirmation.confirmedAt,
+        },
       }).catch((error) =>
         this.logger.warn(`coordinator not told project ${projectId} was started: ${
           (error as { message?: string })?.message ?? String(error)}`),

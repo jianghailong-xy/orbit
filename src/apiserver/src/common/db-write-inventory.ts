@@ -261,8 +261,8 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     identity: 'The project id and the DTO, both outside the closure.',
     isolation: '',
     attempts: 4,
-    replay: 'The row is re-read under its own lock and every derived decision — coordinator rebind and managed title sync — comes from that read. Pointer drift is retried from a fresh pre-read rather than locking downward.',
-    effects: 'None inside; the control-plane publish is after this resolves.',
+    replay: 'The row is re-read under its own lock and every derived decision — coordinator rebind, managed title sync, and whether this write turned the coordinator on — comes from that read. Pointer drift is retried from a fresh pre-read rather than locking downward.',
+    effects: 'None inside; the control-plane publish, and — when this write turned the coordinator on — the one turn telling its conversation (projects/project-started.ts#tellCoordinatorProjectStarted), are after this resolves.',
     answer: 'Typed 503 from the global boundary.',
   },
   {

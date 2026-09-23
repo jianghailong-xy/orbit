@@ -11,11 +11,20 @@ import { uuidToBase62 } from '@orbit/shared';
 
 import {
   PROJECT_STARTED_LISTED_TASKS,
+  type ProjectStart,
   projectStartedMessage,
   projectStartedTurnId,
 } from './project-started';
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const AT = new Date('2026-09-23T05:06:07.072Z');
+const CONFIRMED: Extract<ProjectStart, { by: 'CONFIRMATION' }> = {
+  by: 'CONFIRMATION',
+  confirmationId: randomUUID(),
+  criteriaCount: 8,
+  at: AT,
+};
+const SWITCHED: Extract<ProjectStart, { by: 'SWITCH' }> = { by: 'SWITCH', configRevision: '3', at: AT };
 
 function held(count: number): Array<{ id: string; title: string }> {
   return Array.from({ length: count }, (_, index) => ({
@@ -24,15 +33,18 @@ function held(count: number): Array<{ id: string; title: string }> {
   }));
 }
 
-function message(tasks: Array<{ id: string; title: string }>, heldCount = tasks.length) {
+function message(
+  tasks: Array<{ id: string; title: string }>,
+  heldCount = tasks.length,
+  start: ProjectStart = CONFIRMED,
+) {
   const projectId = randomUUID();
   return {
     projectId,
     text: projectStartedMessage({
       projectId,
       projectTitle: 'Two Codex accounts on one machine',
-      criteriaCount: 8,
-      confirmedAt: new Date('2026-09-23T05:06:07.072Z'),
+      start,
       held: tasks,
       heldCount,
     }),
@@ -81,9 +93,28 @@ test('with nothing held it says so, and still says what the press did not answer
   ));
 });
 
-test('the turn is keyed by the confirmation that started the project', () => {
-  const confirmation = randomUUID();
-  assert.equal(projectStartedTurnId(confirmation), projectStartedTurnId(confirmation));
-  assert.notEqual(projectStartedTurnId(confirmation), projectStartedTurnId(randomUUID()));
-  assert.match(projectStartedTurnId(confirmation), UUID);
+test('the Automatic switch is told in its own words, and names what the press did not answer', () => {
+  const tasks = held(1);
+  const { projectId, text } = message(tasks, 1, SWITCHED);
+  assert.match(text, /^From Orbit · project switched on\n\n/);
+  assert.ok(text.includes(
+    'The account owner switched project “Two Codex accounts on one machine” '
+      + `(${uuidToBase62(projectId)}) on (Automatic) at 2026-09-23T05:06:07.072Z.`,
+  ));
+  assert.ok(!text.includes('confirmed'), 'switching it on confirmed nothing');
+  assert.ok(text.includes(`- ${tasks[0].title} (${uuidToBase62(tasks[0].id)})`));
+  assert.ok(text.endsWith('Switching it on answered nothing else: if you are still waiting on the '
+    + 'owner for something, ask it again.'));
+});
+
+test('the turn is keyed by what the press wrote: the confirmation, or the revision it moved to', () => {
+  const project = randomUUID();
+  const key = (start: ProjectStart) => projectStartedTurnId(project, start);
+  assert.equal(key(CONFIRMED), key({ ...CONFIRMED, at: new Date() }), 'the same confirmation, one key');
+  assert.notEqual(key(CONFIRMED), key({ ...CONFIRMED, confirmationId: randomUUID() }));
+  assert.equal(key(SWITCHED), key({ ...SWITCHED, at: new Date() }), 'the same revision, one key');
+  assert.notEqual(key(SWITCHED), key({ ...SWITCHED, configRevision: '4' }));
+  assert.notEqual(key(SWITCHED), projectStartedTurnId(randomUUID(), SWITCHED),
+    'a revision number is only unique within its project');
+  assert.match(key(CONFIRMED), UUID);
 });

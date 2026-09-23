@@ -18,7 +18,8 @@ import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
  * §0 — WHY THE PLATFORM SAYS IT
  * =============================
  * "Start the project" (`ProjectAcceptanceService.confirmStandardSet`) turns `coordinator_enabled`
- * on, and that switch lets Orbit start this project's tasks — the ones opted into auto-run, and no
+ * on, and so does the web project page's Automatic switch (`ProjectsService.update`). Either way
+ * the switch lets Orbit start this project's tasks — the ones opted into auto-run, and no
  * others. A coordinator that filed its tasks to be started by hand and then waited for the owner's
  * go-ahead was never told the go-ahead came: the press spoke to the dispatcher, and the one party
  * holding the work was a conversation it never reached. On 2026-09-23 a project was started with
@@ -48,29 +49,40 @@ export interface HeldTask {
   title: string;
 }
 
-/** The `clientTurnId` of the one turn that tells a coordinator its project was started. */
-export function projectStartedTurnId(confirmationId: string): string {
-  return derivedUuid(`project-started:v1:turn:${confirmationId}`);
+/**
+ * Which press turned the project on: the owner confirming its criteria, or the owner moving its
+ * Automatic switch — each keyed by what that press wrote, so one start is told once.
+ */
+export type ProjectStart =
+  | { by: 'CONFIRMATION'; confirmationId: string; criteriaCount: number; at: Date }
+  | { by: 'SWITCH'; configRevision: string; at: Date };
+
+/** The `clientTurnId` of the one turn that tells a coordinator about one start. */
+export function projectStartedTurnId(projectId: string, start: ProjectStart): string {
+  return derivedUuid(start.by === 'CONFIRMATION'
+    ? `project-started:v1:turn:${start.confirmationId}`
+    : `project-started:v1:switch:${projectId}:${start.configRevision}`);
 }
 
 /** The message's words. `held` is at most `PROJECT_STARTED_LISTED_TASKS` of `heldCount`. */
 export function projectStartedMessage(input: {
   projectId: string;
   projectTitle: string;
-  criteriaCount: number;
-  confirmedAt: Date;
+  start: ProjectStart;
   held: readonly HeldTask[];
   heldCount: number;
 }): string {
-  const project = uuidToBase62(input.projectId);
-  const criteria = `${input.criteriaCount} acceptance `
-    + (input.criteriaCount === 1 ? 'criterion' : 'criteria');
+  const { start } = input;
+  const project = `project “${input.projectTitle}” (${uuidToBase62(input.projectId)})`;
+  const at = start.at.toISOString();
+  const what = start.by === 'CONFIRMATION'
+    ? `The account owner confirmed the ${start.criteriaCount} acceptance `
+      + `${start.criteriaCount === 1 ? 'criterion' : 'criteria'} of ${project} and started it at ${at}.`
+    : `The account owner switched ${project} on (Automatic) at ${at}.`;
   const paragraphs = [
-    'From Orbit · project started',
-    `The account owner confirmed the ${criteria} of project “${input.projectTitle}” (${project}) `
-      + `and started it at ${input.confirmedAt.toISOString()}. From now on Orbit starts this `
-      + 'project’s tasks that are set to run on their own (autoRunWhenReady), within its '
-      + 'concurrency limit.',
+    start.by === 'CONFIRMATION' ? 'From Orbit · project started' : 'From Orbit · project switched on',
+    `${what} From now on Orbit starts this project’s tasks that are set to run on their own `
+      + '(autoRunWhenReady), within its concurrency limit.',
   ];
   if (input.heldCount === 0) {
     paragraphs.push(
@@ -80,7 +92,9 @@ export function projectStartedMessage(input: {
     const one = input.heldCount === 1;
     const lines = input.held.map((task) => `- ${task.title} (${uuidToBase62(task.id)})`);
     const rest = input.heldCount - input.held.length;
-    if (rest > 0) lines.push(`- …and ${rest} more (task_list with projectId: ${project})`);
+    if (rest > 0) {
+      lines.push(`- …and ${rest} more (task_list with projectId: ${uuidToBase62(input.projectId)})`);
+    }
     paragraphs.push(
       `${input.heldCount} of its open tasks ${one ? 'is' : 'are'} set to be started by hand `
         + `(autoRunWhenReady=false), so nothing starts ${one ? 'it' : 'them'} unless you do:\n`
@@ -90,15 +104,14 @@ export function projectStartedMessage(input: {
     );
   }
   paragraphs.push(
-    'Starting the project answered nothing else: if you are still waiting on the owner for '
-      + 'something, ask it again.',
+    `${start.by === 'CONFIRMATION' ? 'Starting the project' : 'Switching it on'} answered nothing `
+      + 'else: if you are still waiting on the owner for something, ask it again.',
   );
   return paragraphs.join('\n\n');
 }
 
 /**
- * Tell the project's coordinator conversation that the confirmation `confirmationId` started the
- * project. §2.
+ * Tell the project's coordinator conversation that `start` turned the project on. §2.
  *
  * Null when nobody was told: the project has no conversation, it has ended, or `createTurn`
  * refused for a state of the world rather than a fault. A fault is thrown.
@@ -106,13 +119,7 @@ export function projectStartedMessage(input: {
 export async function tellCoordinatorProjectStarted(
   prisma: PrismaService,
   sessions: SessionsService,
-  input: {
-    ownerId: string;
-    projectId: string;
-    confirmationId: string;
-    confirmedAt: Date;
-    criteriaCount: number;
-  },
+  input: { ownerId: string; projectId: string; start: ProjectStart },
 ): Promise<{ sessionId: string; clientTurnId: string } | null> {
   const project = await prisma.project.findFirst({
     where: { id: input.projectId, ownerId: input.ownerId },
@@ -139,15 +146,14 @@ export async function tellCoordinatorProjectStarted(
   });
   const heldCount = await prisma.task.count({ where });
 
-  const clientTurnId = projectStartedTurnId(input.confirmationId);
+  const clientTurnId = projectStartedTurnId(input.projectId, input.start);
   try {
     await sessions.createTurn(input.ownerId, sessionId, {
       clientTurnId,
       content: projectStartedMessage({
         projectId: input.projectId,
         projectTitle: project.title,
-        criteriaCount: input.criteriaCount,
-        confirmedAt: input.confirmedAt,
+        start: input.start,
         held,
         heldCount,
       }),

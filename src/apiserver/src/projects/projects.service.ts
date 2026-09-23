@@ -154,6 +154,7 @@ import {
   storeDerivedProjectStatus,
 } from './project-done-derived';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
+import { tellCoordinatorProjectStarted } from './project-started';
 import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -3159,13 +3160,15 @@ export class ProjectsService {
         // below (project before its team row), which is the order every path takes.
         const select = Prisma.sql`
           SELECT "config_revision", "status"::text AS "status",
-                 "coordinator_session_id" AS "coordinator_session_id"
+                 "coordinator_session_id" AS "coordinator_session_id",
+                 "coordinator_enabled"
             FROM "project"
            WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
         const [locked] = await tx.$queryRaw<Array<{
           config_revision: bigint;
           status: string;
           coordinator_session_id: string | null;
+          coordinator_enabled: boolean;
         }>>(Prisma.sql`${select} FOR NO KEY UPDATE`);
         if (!locked) throw new NotFoundException('project not found');
         if (
@@ -3239,13 +3242,17 @@ export class ProjectsService {
           // Publish after commit so list/detail clients refresh the backlink as well as the title.
           changedSessionId = locked.coordinator_session_id;
         }
-        return { project, changedSessionId, held };
+        // Read under the lock, so "this write turned it on" is a fact about the row this write
+        // replaced rather than about one somebody else's write had already replaced.
+        const switchedOn = dto.coordinatorEnabled === true && locked.coordinator_enabled === false;
+        return { project, changedSessionId, held, switchedOn };
       }, loggedRetry(this.logger, 'projects.update'));
     try {
       let projectResult: {
         project: ProjectMutationPayload;
         changedSessionId: string | null;
         held: HeldCriteriaEdit | null;
+        switchedOn: boolean;
       } | null = null;
       for (let bindingAttempt = 1; bindingAttempt <= 4; bindingAttempt += 1) {
         try {
@@ -3267,8 +3274,21 @@ export class ProjectsService {
         }
       }
       if (!projectResult) throw new CoordinatorBindingChanged();
-      const { project, changedSessionId, held } = projectResult;
+      const { project, changedSessionId, held, switchedOn } = projectResult;
       if (changedSessionId) this.sessions?.announceProjectSessionChanged?.(changedSessionId);
+      // The Automatic switch is the other press that starts a project (`project-started.ts`), and
+      // its coordinator is told the same way: only when this write turned it on, after the commit,
+      // and never at the cost of a write that already happened.
+      if (switchedOn && this.sessions) {
+        await tellCoordinatorProjectStarted(this.prisma, this.sessions, {
+          ownerId,
+          projectId: id,
+          start: { by: 'SWITCH', configRevision: String(project.configRevision), at: project.updatedAt },
+        }).catch((e) =>
+          this.logger.warn(`coordinator not told project ${id} was switched on: ${
+            (e as { message?: string })?.message ?? String(e)}`),
+        );
+      }
       // A held edit is a new question on the owner's pending criteria decisions. The nudge names
       // the project and nothing else: the proposal, and the key that answers it, stay on the
       // owner's own read.
