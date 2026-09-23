@@ -54,7 +54,9 @@ public enum DeepLink {
 /// A transcript link naming an Orbit object: `[title](orbit-task:<id>)`, and likewise
 /// `orbit-session:`, `orbit-project:` and `orbit-list:`. The composer's `#`-references send them and
 /// agents are told to write them instead of a bare id, so the reader sees a title. Mirrors web's
-/// `referenceRoute` (Transcript.tsx), except that this app has a screen only for tasks and sessions.
+/// `referenceRoute` (Transcript.tsx), with one difference: a project has no page in this app, so its
+/// reference goes to the conversation that coordinates it — a destination only a read can name, which
+/// is why `route` answers nil for it and the app's own link door (`AppModel.openOrbitLink`) answers.
 public enum ReferenceLink {
     /// Where tapping the link goes, or nil for a reference whose destination the app has to look up
     /// first: a project leads to the conversation that coordinates it, which only a read can name.

@@ -423,7 +423,7 @@ struct TranscriptView: View {
             // An Orbit link card is a reading of a live object, so the links this transcript is
             // showing are asked for again as the console refreshes — one write per publish that
             // costs a request only for what has gone stale, and no poll of the cards' own.
-            .onChange(of: console.stateRevision) { appModel.linkCards?.refreshStale() }
+            .onChange(of: console.stateRevision) { app.linkCards?.refreshStale() }
             // The in-memory window cap trims the HEAD of the transcript, so it may only run while
             // the reader is pinned at the live tail — see `ConsoleModel.setReadingHistory`.
             // `initial: true` so a console opened (or switched to) already at the bottom is capped
