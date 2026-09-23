@@ -1,5 +1,6 @@
 import { uuidToBase62 } from '@orbit/shared';
 
+import { dispatchRefusalNextStep } from '../tasks/task-dispatch-refusal';
 import { SettledCriterionReport, WakeFact } from './coordinator-wake';
 
 /**
@@ -120,6 +121,25 @@ export function describeWakeFact(fact: WakeFact): string {
         + `而是被扣成了一条待决提案（提案 ${String(detail.intentId ?? fact.subjectId)}，`
         + `内容摘要 ${String(detail.actionDigest ?? '未知').slice(0, 16)}…），等账号所有者决定。`
       );
+    case 'TASK_DISPATCH_REFUSED': {
+      const base = typeof detail.baseSha === 'string' ? detail.baseSha : null;
+      const missing = Array.isArray(detail.missing)
+        ? (detail.missing as Array<{ sha?: unknown; taskId?: unknown }>)
+        : [];
+      const named = missing.map((commit) => (
+        typeof commit.taskId === 'string'
+          ? `前置 ${uuidToBase62(commit.taskId)} 落地的 ${String(commit.sha).slice(0, 10)}`
+          : `提交 ${String(commit.sha).slice(0, 10)}`
+      ));
+      return (
+        `任务 ${uuidToBase62(fact.subjectId)}「${String(detail.taskTitle ?? '')}」的一次开工在起跑前被 `
+        + `runner 拒绝了：${String(detail.code ?? '未知')}。`
+        + (base ? `它钉在 ${base.slice(0, 10)}` : '')
+        + (base && named.length > 0 ? `，这个提交不包含${named.join('、')}` : '')
+        + (base ? '。' : '')
+        + '这次开工没有变成一次运行：没有启动引擎，任务状态没有被改动。'
+      );
+    }
     default:
       return `发生了 ${fact.event}，主体是 ${fact.subjectType} ${fact.subjectId}。`;
   }
@@ -250,7 +270,9 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  * ======================================================
  * Lines 1, 3 and 4 are properties of the carrier and are the same for every fact delivered here.
  * Line 2 is not: it is the ACTION, and the merge order above is the action `CRITERION_UNLANDED`
- * calls for. The one other fact delivered here calls for a different one.
+ * calls for. The one other fact delivered here calls for a different one — and so does
+ * `TASK_DISPATCH_REFUSED`, whose action is the refusal's own next step, the sentence the task's
+ * comment gives (`dispatchRefusalNextStep`), so the two cannot advise differently.
  *
  * AND WHY THAT ONE CARRIES A SNAPSHOT THE MERGE CARD REFUSES TO
  * =============================================================
@@ -304,6 +326,23 @@ export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: st
       + '再加上账号所有者对这一版标准集的确认，服务端自己把它投影出来。\n\n'
       + `全量状态自己读，上面那份清单是事实成立那一刻的快照：project_get（projectId 传 ${projectId}）`
       + `读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
+      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+      + '所以以你自己刚读到的库里状态为准。'
+    );
+  }
+  if (fact.event === 'TASK_DISPATCH_REFUSED') {
+    const detail = (fact.detail ?? {}) as { fixAction?: string; ref?: string | null };
+    const taskId = uuidToBase62(fact.subjectId);
+    return (
+      `【项目「${projectTitle}」有一个任务开不了工】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + `下一步：${dispatchRefusalNextStep({
+        fixAction: detail.fixAction ?? '未记录', ref: detail.ref ?? null,
+      })}\n\n`
+      + `这次拒绝记在任务上：task_get（taskId 传 ${taskId}）的 dispatchRefusal 是码、时间、钉住的提交和缺的`
+      + '提交，任务评论里有 runner 的原话。任务再开工之后这一栏会清空；再被拒会重新记一次、再通知你一次。\n\n'
+      + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
+      + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
       + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
       + '所以以你自己刚读到的库里状态为准。'
     );

@@ -54,7 +54,7 @@ export type SourceFixAction =
   | 'RETRY_OR_FIX_CREDENTIALS'
   | 'FIX_REF'
   | 'RESTORE_COMMIT'
-  | 'LAND_PREREQUISITE'
+  | 'SYNC_INTEGRATION_LINE'
   | 'ENABLE_ISOLATION'
   | 'UPGRADE_RUNNER'
   | 'START_NEW_RUN'
@@ -67,7 +67,11 @@ export const SOURCE_FIX_ACTIONS: Readonly<Record<SourceRefusalCode, SourceFixAct
   SOURCE_AUTHORITY_UNREACHABLE: 'RETRY_OR_FIX_CREDENTIALS',
   BASE_REF_NOT_FOUND: 'FIX_REF',
   BASE_SHA_UNAVAILABLE: 'RESTORE_COMMIT',
-  DEPENDENCY_BASE_NOT_LANDED: 'LAND_PREREQUISITE',
+  // Not "land the prerequisite": `requiredContains` is built from prerequisites' landing receipts
+  // alone, so every commit G5 cannot find is one a receipt says has landed. What is missing is that
+  // landed commit in the line this run started from — work that reached upstream the line has not
+  // absorbed yet — and the step that moves it is bringing the line up to it, then starting again.
+  DEPENDENCY_BASE_NOT_LANDED: 'SYNC_INTEGRATION_LINE',
   WORKTREE_REQUIRED: 'ENABLE_ISOLATION',
   SOURCE_PROTOCOL_UNSUPPORTED: 'UPGRADE_RUNNER',
   SOURCE_PIN_IMMUTABLE: 'START_NEW_RUN',
@@ -129,6 +133,36 @@ export interface SessionSourceSnapshot {
  * Exactly one half is sent. `baseSha` asks for the compare-and-set that freezes the pin; `refusal`
  * reports that the admission gate stopped, and carries the code that says which level did.
  */
+/**
+ * The refusal a task's most recent start met before its run could begin, as the task records it
+ * (`task.dispatchRefusal`, migration 0298). Null on the task once another run is put on it.
+ *
+ * The runner decides these at the checkout — after the pin froze, so the session's SOURCE state
+ * cannot carry them — and ends the run FAILED with `<code>: <reason>` as its error. Recorded on the
+ * TASK because that is what the detail and the list show: before this, a start refused this way
+ * left the task untouched and said so nowhere but that one session's error line.
+ */
+export interface TaskDispatchRefusal {
+  code: SourceRefusalCode;
+  /** §10.1's pairing, carried with the code for the reason `sourceRefusalDetail` carries it. */
+  fixAction: SourceFixAction;
+  refusedAt: string;
+  /** The run that was refused. */
+  sessionId: string;
+  /** The commit the run was pinned to, which is what it failed to contain. */
+  baseSha: string | null;
+  /** The ref its selector resolved, e.g. `refs/heads/project/<id>`; null for a SHA selector. */
+  ref: string | null;
+  /**
+   * The prerequisite commits the pinned commit does not contain, each with the prerequisite task a
+   * merge receipt says landed it (null when no receipt of a prerequisite names that commit).
+   * Empty for every code but DEPENDENCY_BASE_NOT_LANDED.
+   */
+  missing: Array<{ sha: string; taskId: string | null }>;
+  /** The runner's own words, after the code. */
+  reason: string;
+}
+
 export interface SourcePinRequest {
   /** The resolved commit — full 40-hex, lowercase. Rejected in any other shape. */
   baseSha?: string;

@@ -164,6 +164,7 @@ export {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
 } from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
+import { clearDispatchRefusal } from './task-dispatch-refusal';
 import {
   TASK_RUN_ACTION,
   TASK_RUN_LEASE_MS,
@@ -675,6 +676,10 @@ export const TASK_LIST_SELECT = {
   supersededByTaskId: true,
   supersededAt: true,
   terminalReason: true,
+  // The refusal the task's latest start met before its run began (task-dispatch-refusal.ts), in for
+  // the reason the rest are: a task that could not start looks like any other OPEN row, and the list
+  // is where a reader looking for why a project has stopped is looking.
+  dispatchRefusal: true,
   assignee: {
     select: {
       id: true,
@@ -1851,6 +1856,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   async deliverTaskExceptionsAfterCommit(taskId: string): Promise<void> {
     await this.deliverTaskExceptions([taskId]);
+  }
+
+  /**
+   * The runner door's other failure edge: a start the runner refused at its checkout, which the
+   * finalize that ended the run recorded on the task (`task-dispatch-refusal.ts`).
+   *
+   * Its own door rather than the exception one above, because what it is worth does not depend on
+   * the criteria the task serves: nothing else runs this task until the line it starts from
+   * changes, so the refusal always goes to the conversation coordinating the project. Logged rather
+   * than raised, like its siblings: the finalize is already committed, and the refusal is already
+   * on the task whatever this delivery comes to.
+   */
+  async deliverDispatchRefusalAfterCommit(taskId: string): Promise<void> {
+    if (!this.completionInputs) return;
+    await this.completionInputs.routeDispatchRefusals([taskId]).catch((e) =>
+      this.logger.warn(`dispatch-refusal delivery failed: ${e?.message ?? e}`),
+    );
   }
 
   /** An invalidation whose complete fetchable row set is unknown, deleted, or too wide. */
@@ -11834,6 +11856,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         await this.discardTaskAttachmentCopies(resumeAttachments);
         throw error;
       }
+      await this.clearStaleDispatchRefusal(task.id, plan.sessionId);
       return plan.sessionId;
     }
     const session = await this.createTaskSessionOrReadWinner(
@@ -11868,7 +11891,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         startsTaskWork: true,
       },
     );
+    await this.clearStaleDispatchRefusal(task.id, session.id);
     return session.id;
+  }
+
+  /**
+   * A run is away on this task, which answers the refusal its previous start met: the task stops
+   * saying its latest start was refused (`task-dispatch-refusal.ts`). If this run is refused too,
+   * its own finalize records it again.
+   *
+   * After the effect and outside it, so a start can never fail over bookkeeping — the run is the
+   * authoritative result — and logged rather than raised for the same reason.
+   */
+  private async clearStaleDispatchRefusal(taskId: string, sessionId: string): Promise<void> {
+    await clearDispatchRefusal(this.prisma, taskId, sessionId).catch((e) =>
+      this.logger.warn(`dispatch refusal of task ${taskId} not cleared: ${e?.message ?? e}`));
   }
 
   /**

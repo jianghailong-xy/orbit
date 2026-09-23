@@ -22,6 +22,10 @@ import {
   type SettledProjectDelivery,
 } from './project-tasks-settled.producer';
 import {
+  type DispatchRefusalDelivery,
+  TaskDispatchRefusalProducer,
+} from './task-dispatch-refusal.producer';
+import {
   TASK_EXCEPTION_CONSUMER,
   TaskExceptionInputProducer,
 } from './task-exception-input.producer';
@@ -76,6 +80,12 @@ export class CompletionInputRouter {
     private readonly criteria: CriterionReadyProducer,
     private readonly disposition: WakeDispositionService,
     private readonly unlanded: CriterionUnlandedProducer,
+    /**
+     * The sixth door's producer. Optional only for the fixtures that build this router by hand
+     * with the six arguments before it; CoordinatorJudgmentModule provides it, so production
+     * always has it.
+     */
+    private readonly refusals?: TaskDispatchRefusalProducer,
   ) {}
 
   /**
@@ -307,6 +317,21 @@ export class CompletionInputRouter {
     // work just landed derives no unlanded fact at all, and that is exactly when its blockers end.
     await this.disposition.resolveLandedBlockers(projectIds);
     return deliveries;
+  }
+
+  /**
+   * The sixth door: the starts one committed finalize recorded as refused before their run began.
+   *
+   * Task ids in, like the exception door, and the same post-commit position — and one difference
+   * that is why it does not go through `spend`: what a refused start is worth does not turn on the
+   * criteria. Nothing else will run the task until its line changes, so it is always one action
+   * owed by the conversation coordinating the project, and the producer hands it straight to that
+   * conversation under its own authorizer (`task-dispatch-refusal.producer.ts` says why).
+   */
+  async routeDispatchRefusals(
+    taskIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<DispatchRefusalDelivery[]> {
+    return this.refusals ? this.refusals.deliver(taskIds) : [];
   }
 }
 
