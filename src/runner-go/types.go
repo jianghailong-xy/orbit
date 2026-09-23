@@ -132,6 +132,28 @@ type EngineHealthReport struct {
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`
+	// Codex only: each account slot on this machine and whether it is signed in, Default first
+	// (codex_account_slot.go). Auth above stays Default's answer, which is what every reader older
+	// than accounts takes it for. Omitted for the other engines, and whenever the slots couldn't
+	// be listed — a report without it is read as one account, the way it was before accounts.
+	Accounts []EngineAccountReport `json:"accounts,omitempty"`
+}
+
+// EngineAccountReport mirrors @orbit/shared RunnerEngineAccount: one Codex account slot and its
+// own `codex login status`. Nothing here names the account itself — no email, no account id: the
+// name is the one the user gave the slot, and the fingerprint is a prefix of the non-reversible
+// one the rate-limit reset already reports (docs/codex-rate-limit-reset-contract.md §3).
+type EngineAccountReport struct {
+	// "default", or the id of a slot this runner added — what LoginCommand.Account names.
+	ID string `json:"id"`
+	// What the user called the account; empty for Default, and for a slot whose record is lost.
+	Name string `json:"name,omitempty"`
+	// The slot's CODEX_HOME on this machine, absolute.
+	CodexHome string `json:"codexHome"`
+	Auth      string `json:"auth"` // "yes" | "no" | "unknown"
+	// cxa1_ and the first 8 hex digits of the account's fingerprint, when this runner has read
+	// one for it; omitted otherwise.
+	FingerprintPrefix string `json:"fingerprintPrefix,omitempty"`
 }
 
 // EngineUpdateReport is the updater's last word on one engine, carried alongside that engine's

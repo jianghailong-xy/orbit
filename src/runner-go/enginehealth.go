@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 )
@@ -34,12 +35,15 @@ func authWord(a authState) string {
 // probeEngineHealth checks every login engine on this machine — the same check `orbit doctor`
 // prints, reported to the control plane so the web can show and fix this runner's logins.
 func probeEngineHealth() []EngineHealthReport {
-	servicePath := serviceLoginPath()
+	return probeEngines(engineSpecs, serviceLoginPath())
+}
+
+func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 	// What the updater last managed to do here, read fresh each probe: the daily loop and
 	// `orbit engine-update` both write it, and neither can reach into this snapshot.
 	updates := loadEngineUpdateLog()
-	out := make([]EngineHealthReport, 0, len(engineSpecs))
-	for _, spec := range engineSpecs {
+	out := make([]EngineHealthReport, 0, len(specs))
+	for _, spec := range specs {
 		h := checkEngine(spec, servicePath)
 		report := EngineHealthReport{
 			Engine:    spec.bin,
@@ -52,7 +56,76 @@ func probeEngineHealth() []EngineHealthReport {
 		if rec, ok := updates[spec.bin]; ok && h.installed && rec.Status != "" {
 			report.Update = &rec
 		}
+		if spec.bin == providerCodex && h.installed {
+			report.Accounts = codexAccountHealth(h.path, h.auth)
+		}
 		out = append(out, report)
+	}
+	return out
+}
+
+// codexAccountHealth asks every Codex account slot on this machine whether it is signed in. An
+// account's login lives in its CODEX_HOME, so each slot gets its own `codex login status`, run in
+// that slot's CODEX_HOME. Default's is the one the engine probe just ran — in the runner's own
+// environment, which is what selects Default — so its answer is reused instead of asked twice.
+// Nil when the slots can't be listed: the report then reads as the one account it was before.
+func codexAccountHealth(binPath string, defaultAuth authState) []EngineAccountReport {
+	slots, err := listCodexAccountSlots()
+	if err != nil {
+		return nil
+	}
+	out := make([]EngineAccountReport, 0, len(slots))
+	for _, slot := range slots {
+		auth := defaultAuth
+		if slot.ID != codexAccountDefaultSlot {
+			auth = codexSlotLoginStatus(binPath, slot.CodexHome)
+		}
+		out = append(out, EngineAccountReport{
+			ID:        slot.ID,
+			Name:      slot.Name,
+			CodexHome: slot.CodexHome,
+			Auth:      authWord(auth),
+		})
+	}
+	return out
+}
+
+func codexSlotLoginStatus(binPath, codexHome string) authState {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return codexLoginStatus(ctx, binPath, envWithValue(os.Environ(), "CODEX_HOME", codexHome))
+}
+
+// codexAccountFingerprintPrefixLen is how much of an account fingerprint the heartbeat's account
+// list carries: enough to tell accounts apart on the page, and nothing that could stand in for the
+// whole fingerprint the rate-limit reset binds its operations to.
+const codexAccountFingerprintPrefixLen = len(codexAccountFingerprintPrefix) + 8
+
+// withCodexAccountFingerprints labels the Default account in an engine snapshot with the prefix
+// of the fingerprint the Codex usage probe last read. That probe reads Default — the account the
+// runner's own environment selects (contract §3) — so its fingerprint is Default's and no other
+// account's. The snapshot is shared with the probe that refreshes it, so a labelled copy is
+// returned rather than the snapshot written to.
+func withCodexAccountFingerprints(engines []EngineHealthReport, codexUsage *PlanUsage) []EngineHealthReport {
+	if codexUsage == nil || codexUsage.RateLimitReset == nil {
+		return engines
+	}
+	fingerprint := codexUsage.RateLimitReset.AccountFingerprint
+	if !codexAccountFingerprintPattern.MatchString(fingerprint) {
+		return engines
+	}
+	out := append([]EngineHealthReport(nil), engines...)
+	for i := range out {
+		if out[i].Engine != providerCodex || len(out[i].Accounts) == 0 {
+			continue
+		}
+		accounts := append([]EngineAccountReport(nil), out[i].Accounts...)
+		for j := range accounts {
+			if accounts[j].ID == codexAccountDefaultSlot {
+				accounts[j].FingerprintPrefix = fingerprint[:codexAccountFingerprintPrefixLen]
+			}
+		}
+		out[i].Accounts = accounts
 	}
 	return out
 }

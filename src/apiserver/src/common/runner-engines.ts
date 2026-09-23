@@ -1,9 +1,11 @@
 import type {
   LoginEngine,
   ReportedEngine,
+  RunnerEngineAccount,
   RunnerEngineHealth,
   RunnerEngineUpdate,
 } from '@orbit/shared';
+import { CODEX_ACCOUNT_PATTERN } from '../runners/dto';
 
 /** The engines a runner can sign into (LoginEngine's full set), in the order they're shown. */
 export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi'];
@@ -46,6 +48,8 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
         ? entry.version.trim().slice(0, 120)
         : undefined;
     const update = sanitizeEngineUpdate(entry.update);
+    // Only Codex signs in more than one account on a machine.
+    const accounts = entry.engine === 'codex' ? sanitizeEngineAccounts(entry.accounts) : undefined;
     byEngine.set(entry.engine, {
       engine: entry.engine,
       installed: entry.installed === true,
@@ -54,12 +58,69 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
       // an engine that wouldn't answer is never shown as signed in.
       auth: entry.auth === 'yes' || entry.auth === 'no' ? entry.auth : 'unknown',
       ...(update ? { update } : {}),
+      ...(accounts ? { accounts } : {}),
     });
   }
   if (!byEngine.size) return null;
   return REPORTED_ENGINES.map((engine) => byEngine.get(engine)).filter(
     (entry): entry is RunnerEngineHealth => !!entry,
   );
+}
+
+/** How many Codex accounts one report may carry. Each is a sign-in somebody made by hand, so a
+ *  real machine sits far below this: what it bounds is a runaway report, not a user. */
+export const ENGINE_ACCOUNTS_MAX = 16;
+/** StartLoginDto's limit on a new account's name, the way a name reaches a runner from here. */
+const ACCOUNT_NAME_MAX = 60;
+/** A CODEX_HOME is shown, not followed; this is room for any real home directory, not a log line. */
+const ACCOUNT_PATH_MAX = 400;
+/** `cxa1_` and 8 hex digits: the start of the fingerprint the rate-limit reset reports. */
+const FINGERPRINT_PREFIX = /^cxa1_[0-9a-f]{8}$/;
+
+/**
+ * Normalize the Codex accounts one engine report lists.
+ *
+ * The rule of the report around it: an account that can't be read is dropped whole, never
+ * repaired — a half-read one would put a confident sign-in state on the row of somebody's account.
+ * So unlike the engine's own `auth`, an account's is not rounded to `unknown`: an entry that doesn't
+ * say which of the three states it is in is not a report about an account. The fingerprint prefix
+ * is dropped on its own, like an engine's update record: it only labels the row, and whatever sits
+ * there when it isn't one could be the raw account id that never leaves the machine (contract §3).
+ * Returns undefined when nothing usable is left, which reads as the one account a runner had
+ * before accounts.
+ */
+function sanitizeEngineAccounts(value: unknown): RunnerEngineAccount[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: RunnerEngineAccount[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (out.length === ENGINE_ACCOUNTS_MAX) break;
+    if (!raw || typeof raw !== 'object') continue;
+    const entry = raw as Record<string, unknown>;
+    // A second report for the same account loses to the first, as a second engine report does.
+    if (typeof entry.id !== 'string' || !CODEX_ACCOUNT_PATTERN.test(entry.id) || seen.has(entry.id)) {
+      continue;
+    }
+    const auth = entry.auth;
+    if (auth !== 'yes' && auth !== 'no' && auth !== 'unknown') continue;
+    const codexHome =
+      typeof entry.codexHome === 'string' ? entry.codexHome.trim().slice(0, ACCOUNT_PATH_MAX) : '';
+    if (!codexHome) continue;
+    const name = typeof entry.name === 'string' ? entry.name.trim().slice(0, ACCOUNT_NAME_MAX) : '';
+    const fingerprintPrefix =
+      typeof entry.fingerprintPrefix === 'string' && FINGERPRINT_PREFIX.test(entry.fingerprintPrefix)
+        ? entry.fingerprintPrefix
+        : undefined;
+    seen.add(entry.id);
+    out.push({
+      id: entry.id,
+      ...(name ? { name } : {}),
+      codexHome,
+      auth,
+      ...(fingerprintPrefix ? { fingerprintPrefix } : {}),
+    });
+  }
+  return out.length ? out : undefined;
 }
 
 /** How long a message from the runner may be. Long enough for an installer's last words plus the

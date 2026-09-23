@@ -948,6 +948,34 @@ export interface RunnerEngineHealth {
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
    *  the first daily pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
+  /** Codex only: every account signed into this machine's CLI, Default first, each with its own
+   *  sign-in state. `auth` above stays Default's answer, which is what every reader older than
+   *  accounts takes it for. Absent from an older runner, and whenever the runner couldn't list its
+   *  accounts — read as the one account every machine had before accounts. */
+  accounts?: RunnerEngineAccount[];
+}
+
+/**
+ * One Codex account on a runner: a CODEX_HOME the runner signs in and runs sessions on.
+ *
+ * Nothing here names the account itself. Neither its email nor its account id leaves the machine
+ * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and
+ * `fingerprintPrefix` is the start of the non-reversible fingerprint the rate-limit reset already
+ * reports for it.
+ */
+export interface RunnerEngineAccount {
+  /** `default` — the CODEX_HOME the runner's own environment selects — or the id of a slot the
+   *  runner added: the same value LoginCommand.account names. */
+  id: string;
+  /** What the user called the account. Absent for Default, and for a slot whose record was lost. */
+  name?: string;
+  /** Its CODEX_HOME on that machine, absolute. */
+  codexHome: string;
+  /** The CLI's own answer for this account, with `unknown` for anything ambiguous. */
+  auth: 'yes' | 'no' | 'unknown';
+  /** `cxa1_` and the first 8 hex digits of the account's fingerprint. Absent until the runner has
+   *  read one for this account. Two accounts showing the same one are the same account. */
+  fingerprintPrefix?: string;
 }
 
 /**

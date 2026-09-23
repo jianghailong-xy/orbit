@@ -1,6 +1,6 @@
 import { CheckCircleFilled, ExportOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { LoginEngine, RunnerEngineHealth, RunnerLoginState } from '@orbit/shared';
 import { api } from '../api';
 import { runnersQuery } from '../lib/queries';
@@ -24,15 +24,21 @@ const inFlight = (s: RunnerLoginState['status'] | null | undefined) =>
 type ProbedRunner = { id: string; engines?: RunnerEngineHealth[] | null };
 
 /** Does the runner's own probe now say this engine is signed in? "unknown" is not a yes — the
- *  wait below is bounded precisely because a CLI that won't answer never becomes one. */
+ *  wait below is bounded precisely because a CLI that won't answer never becomes one. Given a
+ *  Codex account, it is that account's own answer: the engine's is Default's, and says nothing
+ *  about any other. */
 export function probeReportsSignedIn(
   runners: ProbedRunner[] | undefined,
   runnerId: string,
   engine: LoginEngine,
+  account?: string,
 ): boolean {
   const health = runners
     ?.find((r) => r.id === runnerId)
     ?.engines?.find((e) => e.engine === engine);
+  if (account && health?.accounts) {
+    return health.accounts.some((a) => a.id === account && a.auth === 'yes');
+  }
   return health?.auth === 'yes';
 }
 
@@ -72,15 +78,30 @@ Waiting for the sign-in link…</body>`;
 export function RunnerSignIn({
   runnerId,
   engine = 'claude',
+  account,
+  accountName,
   onDone,
   onUseApiKey,
+  onCancel,
+  children,
 }: {
   runnerId: string;
   engine?: LoginEngine;
+  /** Codex only: sign in this account the runner already has — `default` or a slot id. Absent:
+   *  the runner's own login, exactly as before accounts. */
+  account?: string;
+  /** Codex only: sign in a NEW account, which the runner adds under this name. The button waits
+   *  for one: a blank name would read as no account at all, which is the runner's own login. */
+  accountName?: string;
   onDone?: () => void;
   /** Take the other route out: a key on the account, good for every runner. Offered beside the
    *  sign-in while it is still a choice — once one is under way the other is just noise. */
   onUseApiKey?: () => void;
+  /** Close the card. Offered beside the button, while there is no sign-in of its own to cancel. */
+  onCancel?: () => void;
+  /** What the sign-in still needs from the user, shown above its button until one is under way —
+   *  a new account's name, say. */
+  children?: ReactNode;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
@@ -88,6 +109,9 @@ export function RunnerSignIn({
   const [sent, setSent] = useState(false);
   // Set once this card has seen a sign-in actually running — see `status` below.
   const [watched, setWatched] = useState(false);
+  // Set once this card has started a sign-in itself — see `mine` below.
+  const [startedHere, setStartedHere] = useState(false);
+  const adding = accountName !== undefined;
   // The tab parked by the click, waiting for a URL to point at. Cleared once it has one.
   const tab = useRef<Window | null>(null);
   const dropTab = () => {
@@ -110,7 +134,16 @@ export function RunnerSignIn({
 
   const start = useMutation({
     mutationFn: () =>
-      api<RunnerLoginState>(`/runners/${runnerId}/login`, { method: 'POST', body: { engine } }),
+      api<RunnerLoginState>(`/runners/${runnerId}/login`, {
+        method: 'POST',
+        // Naming no account is the runner's own login, which is what every card said before
+        // accounts — so a card for none still says only which engine.
+        body: {
+          engine,
+          ...(account !== undefined ? { account } : {}),
+          ...(adding ? { accountName: accountName.trim() } : {}),
+        },
+      }),
     onSuccess: put,
     onError: dropTab, // no sign-in is coming; don't strand a blank tab
   });
@@ -144,13 +177,18 @@ export function RunnerSignIn({
       tab.current = window.open('', '_blank');
       tab.current?.document.write(WAITING_PAGE);
     }
+    setStartedHere(true);
     start.mutate();
   };
 
   const s = state.data;
   // A runner runs one relay at a time. If the one in flight is for the other engine (another card,
   // another tab), this card has nothing to report — show it as idle so pressing it takes over.
-  const mine = !s?.engine || s.engine === engine;
+  // The same goes for the other Codex accounts: a card for one says nothing about another's
+  // sign-in. A card adding an account owns only the sign-in it started, because until the runner
+  // names the slot it added, that sign-in names no account at all.
+  const ownAccount = adding ? startedHere : account === undefined || s?.account === account;
+  const mine = !s?.engine || (s.engine === engine && ownAccount);
   const reported = mine ? (s?.status ?? null) : null;
   // done/failed stay on the runner until the *next* sign-in starts, so they describe the last
   // attempt rather than whether that machine's credentials are good now. A card raised by a later
@@ -183,7 +221,13 @@ export function RunnerSignIn({
     ...runnersQuery(),
     enabled: awaitingProbe,
     refetchInterval: (q) =>
-      probeReportsSignedIn(q.state.data as ProbedRunner[] | undefined, runnerId, engine)
+      probeReportsSignedIn(
+        q.state.data as ProbedRunner[] | undefined,
+        runnerId,
+        engine,
+        // A new account's slot is the one the runner reported adding for this sign-in.
+        account ?? (adding ? (s?.account ?? undefined) : undefined),
+      )
         ? false
         : PROBE_POLL_MS,
     // The sign-in is approved in the tab this one opened, so this wait usually starts while the
@@ -273,7 +317,15 @@ export function RunnerSignIn({
         <a className="rsi-open" href={s.url} target="_blank" rel="noopener noreferrer">
           <ExportOutlined /> Open the sign-in page
         </a>
-        <div className="rsi-hint">Sign in there, then enter this one-time code:</div>
+        <div className="rsi-hint">
+          {adding ? (
+            <>
+              Sign in <b>with the other account</b>, then enter this one-time code:
+            </>
+          ) : (
+            'Sign in there, then enter this one-time code:'
+          )}
+        </div>
         <div className="rsi-usercode">{s.userCode}</div>
         <div className="rsi-row">
           <LoadingOutlined /> Waiting for you to approve it…
@@ -334,8 +386,14 @@ export function RunnerSignIn({
     <div className="rsi">
       {status === 'failed' && s?.message && <div className="rsi-warn">{s.message}</div>}
       {err && <div className="rsi-warn">{err.message}</div>}
+      {children}
       <div className="rsi-actions">
-        <button className="rsi-btn" onClick={begin} disabled={start.isPending} type="button">
+        <button
+          className="rsi-btn"
+          onClick={begin}
+          disabled={start.isPending || (adding && !accountName.trim())}
+          type="button"
+        >
           {start.isPending
             ? 'Starting…'
             : status === 'failed'
@@ -345,6 +403,11 @@ export function RunnerSignIn({
         {onUseApiKey && (
           <button className="rsi-btn-alt" onClick={onUseApiKey} type="button">
             Use an API key instead
+          </button>
+        )}
+        {onCancel && (
+          <button className="rsi-link" onClick={onCancel} type="button">
+            Cancel
           </button>
         )}
       </div>
