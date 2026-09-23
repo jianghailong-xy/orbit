@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Spin } from 'antd';
 import { getToken } from './api';
@@ -34,6 +34,18 @@ function LegacySessionRedirect() {
     to = '/';
   }
   return <Navigate to={to} replace />;
+}
+
+// Signed out on an in-app page: log in first, then come back to it. The page (path + query) rides
+// along as `next`, which LoginPage follows after a successful login — so an Orbit link clicked on
+// a share page, or a pasted task URL, isn't lost to the default landing. The bare root has nowhere
+// better to return to than where login lands anyway, so it keeps the plain /login.
+function LoginRedirect() {
+  const { pathname, search } = useLocation();
+  const next = pathname + search;
+  return (
+    <Navigate to={next === '/' ? '/login' : `/login?next=${encodeURIComponent(next)}`} replace />
+  );
 }
 
 // The default landing (bare root, and where login/setup bounce to): the first workspace's session
@@ -92,7 +104,7 @@ export function App() {
         }
       />
       {!authed ? (
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<LoginRedirect />} />
       ) : (
         <>
           {/* The app shell hosts one routed view at a time. The default landing is the first
