@@ -518,6 +518,7 @@ export class QueueService {
           permissionMode,
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
+          session.assignedRunner?.modelCatalog,
         ),
         // Whether the fast lane is actually on. Policed HERE rather than where it was picked,
         // for the same reason an OpenCode variant is: the constraint is about the model this

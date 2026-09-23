@@ -10,7 +10,6 @@ import {
   CloseCircleFilled,
   CloseOutlined,
   CodeOutlined,
-  ConsoleSqlOutlined,
   DeleteOutlined,
   DisconnectOutlined,
   DownOutlined,
@@ -46,6 +45,7 @@ import {
   sampleTail,
   type TailScrollSample,
 } from '../lib/tailPinning';
+import { memoizeEventFull } from '../lib/eventFull';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
@@ -91,6 +91,7 @@ import {
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
   projectMergedPromotionsQuery,
+  projectOpenItemsQuery,
   watchesQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
@@ -175,6 +176,7 @@ import {
   listApprovals,
   listQueuedTurns,
   mergeSessionToMain,
+  type EventPageEvent,
   type PermissionRule,
   pinSession,
   purgeSession,
@@ -204,7 +206,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
-import { ProjectExceptionCards } from './ProjectProgressStatus';
+import { ItemAsCard, exceptionCardRows } from './ProjectProgressStatus';
 import { ProjectPromotion, ProjectPromotionReceipt } from './ProjectPromotionCard';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
@@ -664,6 +666,11 @@ const OLDER_PAGE = 200;
 const RESEED_AFTER_STALLED_RECONNECTS = 3;
 // Distance from the top (px) at which scrolling up pulls in the next older page.
 const LOAD_OLDER_AT = 400;
+// A ceiling on the pages "Jump to the beginning" may pull in at once — the same one ⌘F's jump
+// runs under (SessionFind's MAX_LOAD_PAGES), for the same reason: 30 pages is well past the
+// deepest session in this deployment, so it bounds a runaway without being a working limit. A
+// session deeper than that keeps the control, and a second press carries on from where it left.
+const JUMP_TO_START_PAGES = 30;
 // What the sticky bar calls a turn the person typed. A wake carries its own label on its card
 // instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
 // screen contradicting itself — which is what the account owner photographed on 2026-09-17.
@@ -818,12 +825,52 @@ const sentLine = (text: string): SessionLine => ({
   tone: 'preview',
 });
 
+// The four owner items, one word each: no project and no count, because a row is one line and the
+// project it is about is the conversation the row already names (contract §7.6 V13). The native
+// banner and card say these same words, and `OwnerItemCardsTests` holds the two ends to each other.
+const OWNER_ITEM_APPROVE_MERGE = 'Approve merge to main';
+const OWNER_ITEM_COORDINATOR_QUESTION = 'Question from coordinator';
+const OWNER_ITEM_ESCALATED = 'Escalated to you';
+const OWNER_ITEM_PAUSED = 'Paused';
+
+/** The kinds this row can name, and the words it says for each. A kind missing here — one this
+ *  build does not know — falls back to the approval wording rather than naming nothing. */
+const OWNER_ITEM_WORDS: Record<string, string> = {
+  PROMOTION_APPROVAL: OWNER_ITEM_APPROVE_MERGE,
+  COORDINATOR_QUESTION: OWNER_ITEM_COORDINATOR_QUESTION,
+  ESCALATED: OWNER_ITEM_ESCALATED,
+  FUSE_PAUSED: OWNER_ITEM_PAUSED,
+};
+
+/**
+ * The item a row names: the oldest one it can name, which is the same item the needs-you bar above
+ * the list points at. Mirrors `NeedsYouLogic.oldestItemWord` — an unparseable instant sorts last
+ * rather than first, so it cannot beat an item whose wait is known.
+ */
+const ownerItemWord = (s: any): string | null => {
+  let oldest: { word: string; at: number } | null = null;
+  for (const item of s.ownerItems ?? []) {
+    const word = OWNER_ITEM_WORDS[item?.kind];
+    if (!word) continue;
+    const at = Date.parse(item?.since ?? '');
+    const key = Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at;
+    if (oldest === null || key < oldest.at) oldest = { word, at: key };
+  }
+  return oldest?.word ?? null;
+};
+
 // What a row that is waiting on you says. The server names the kind when everything it counted is
-// an OWNER_CONFIRMED task's run waiting to be confirmed (`waitingKind`), and that row says so in the
-// confirmation card's words; anything else waiting on you keeps the approval wording. Only the words
-// change — the row still carries no button: the one place to answer is the card in the session.
-const waitingLabel = (s: any): string =>
-  s.waitingKind === 'OWNER_CONFIRMATION' ? WAITING_FOR_CONFIRMATION : 'Waiting for approval';
+// one kind with words of its own (`waitingKind`), and the row says it: an OWNER_CONFIRMED task's run
+// in the confirmation card's words, and one of the four owner items in the words the bar and the
+// card share — a row reading "Waiting for approval" over an escalated exception describes the one
+// thing that is certainly not happening. Anything else waiting on you keeps the approval wording.
+// Only the words change — the row still carries no button: the one place to answer is the card in
+// the session.
+const waitingLabel = (s: any): string => {
+  if (s.waitingKind === 'OWNER_CONFIRMATION') return WAITING_FOR_CONFIRMATION;
+  if (s.waitingKind === 'OWNER_ITEM') return ownerItemWord(s) ?? 'Waiting for approval';
+  return 'Waiting for approval';
+};
 
 export const sessionLine = (s: any, live: boolean): SessionLine => {
   const state = sessionRunStateOf(s);
@@ -1179,6 +1226,36 @@ function WaitElapsed({ since }: { since?: string | null }) {
   return label ? <span className="chat-wait-elapsed">{label}</span> : null;
 }
 
+/**
+ * `</>` — the glyph the native composer's `+` menu gives Command (SF Symbols
+ * `chevron.left.forwardslash.chevron.right`). `@ant-design/icons` v6 has no slash-bracket: its
+ * `CodeOutlined` draws a terminal box, which is the glyph native Shell carries, so the two are not
+ * interchangeable and this one is drawn here. 1em square, so it takes the size its row asks for.
+ *
+ * `className` is not decoration: the menu clones the icon with its own slot class, and a component
+ * that drops it renders a glyph with no size and no gap — the one thing a menu glyph cannot be.
+ */
+function SlashCommandIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      data-glyph="slash-command"
+      viewBox="0 0 20 20"
+      width="1em"
+      height="1em"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M6.7 6.3 3.2 10l3.5 3.7M13.3 6.3 16.8 10l-3.5 3.7M11.3 4.2 8.7 15.8" />
+    </svg>
+  );
+}
+
 /** What withdrawing a queued wake costs: said beside the action, and again when it asks to confirm. */
 const WAKE_WITHDRAW_CONSEQUENCE =
   "If withdrawn, this session is not woken this time, and the watch won't send it again.";
@@ -1505,13 +1582,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // already running instead of being told "no".
   const loadingOlderRef = useRef<Promise<boolean> | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  // Render mirror of hasMoreOlderRef, refreshed by measure() the way setAtBottom is: it decides
+  // whether the top of the transcript offers the way back to the first message.
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
+  // stamped as one that wants the top (see prependAnchorRef).
+  const jumpingToStartRef = useRef(false);
   // True from the moment a session with no cached transcript is selected until its tail page
   // lands (or gives up). Drives the skeleton: without it an unvisited session paints a blank
   // pane for the whole fetch, since an ended session matches none of the empty-state notes.
   const [seeding, setSeeding] = useState(false);
   // Set by loadOlder just before it prepends a page; a layout effect reads it to compensate
-  // scrollTop so the viewport stays put instead of jumping when older content grows above.
-  const prependAnchorRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
+  // scrollTop so the viewport stays put instead of jumping when older content grows above. `toTop`
+  // marks a page fetched by the walk to the beginning, which wants the top rather than the
+  // position it was at — carried on the anchor, not read off the walk's flag when the page lands,
+  // because the last page commits after the walk has already finished.
+  const prependAnchorRef = useRef<{ prevHeight: number; prevTop: number; toTop: boolean } | null>(null);
   // Re-opens the transcript SSE after a `final` event paused it and the session was
   // resumed in place (set by the SSE effect, called by the liveness watcher below).
   const resumeStreamRef = useRef<(() => void) | null>(null);
@@ -1616,7 +1702,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         for (const e of fresh) if (typeof e.seq === 'number') seen.current.add(e.seq);
         if (fresh.length) {
           const el = scrollRef.current;
-          if (el) prependAnchorRef.current = { prevHeight: el.scrollHeight, prevTop: el.scrollTop };
+          if (el) {
+            prependAnchorRef.current = {
+              prevHeight: el.scrollHeight,
+              prevTop: el.scrollTop,
+              toTop: jumpingToStartRef.current,
+            };
+          }
           accRef.current = [...fresh, ...accRef.current];
           setEvents(accRef.current);
         }
@@ -1637,15 +1729,45 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     loadingOlderRef.current = inFlight;
     return inFlight;
   }, [selectedId]);
+  // Walk the pages back until the session's first message is loaded, then sit at the top.
+  //
+  // Scrolling up alone can't get there: each page lands with the reader's position anchored
+  // (below), which puts them a page BELOW the top again, so the start recedes once per page and a
+  // long session's first message is unreachable in practice. This is that loop, made explicit —
+  // and bounded, so it can't become an unattended full-history download.
+  const jumpToStart = useCallback(async (): Promise<void> => {
+    if (jumpingToStartRef.current) return;
+    const session = selectedIdRef.current;
+    jumpingToStartRef.current = true;
+    // Leaving the tail is the whole point, so say so before the first page lands: a transcript
+    // still counting itself pinned re-scrolls to the bottom on every content change, which would
+    // undo each page of this walk as it arrives.
+    atBottomRef.current = false;
+    setAtBottom(false);
+    try {
+      for (let page = 0; page < JUMP_TO_START_PAGES && hasMoreOlderRef.current; page++) {
+        if (!(await loadOlder())) break; // that was the end of it (or the session was switched)
+      }
+    } finally {
+      jumpingToStartRef.current = false;
+    }
+    // Each page the walk pulled in lands pinned to the top (the anchor branch below); this catches
+    // the case where the walk ended without one — nothing more to load, or the cap was hit. Not
+    // when the reader has moved on to another session, whose transcript this is now.
+    if (selectedIdRef.current === session) scrollRef.current?.scrollTo({ top: 0 });
+  }, [loadOlder]);
   // The tail-first window's edges, read through callbacks because they live in refs (kept out of
   // render for cost). ⌘F needs both: whether older events exist, and how far back it has loaded.
   const hasOlderNow = useCallback(() => hasMoreOlderRef.current, []);
   const oldestSeqNow = useCallback(() => oldestSeqRef.current, []);
   // Pull back the untrimmed payload of an event the server clipped to a preview (see
   // MAX_EVENT_PAYLOAD). The transcript calls this when the user expands such a card, so a big
-  // Read output or Write body only crosses the network if someone actually opens it.
-  const fetchEventFull = useCallback(
-    (seq: number) => getSessionEventFull(selectedId ?? '', seq),
+  // Read output or Write body only crosses the network if someone actually opens it — and, because
+  // a remounted row is a new card with no memory of the first ask, only once (see
+  // lib/eventFull.ts). Rebuilt per session: seqs are per session, so a memo outliving the switch
+  // would answer this session's 99323 with the last session's.
+  const fetchEventFull = useMemo(
+    () => memoizeEventFull((seq: number) => getSessionEventFull(selectedId ?? '', seq)),
     [selectedId],
   );
   // Recompute, on scroll and after content changes: are we at the bottom, and which top-level
@@ -1668,6 +1790,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     );
     lastSampleRef.current = sample;
     setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
+    setHasMoreOlder(hasMoreOlderRef.current); // same bail-out; drives the way back to the start
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
@@ -2491,6 +2614,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             pickedModelDefault ?? DEFAULT_MODEL,
             pickedProvider,
             configuredProviders,
+            runner.modelCatalog,
           )
         : 'auto'
     ] ?? 'Default';
@@ -2503,6 +2627,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 selectedModelDefault ?? DEFAULT_MODEL,
                 shownProvider,
                 configuredProviders,
+                runner.modelCatalog,
               )
             : effectivePermissionMode
         ] ?? 'Default'
@@ -2526,7 +2651,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       !live &&
       shownProviderCapabilitiesResolved &&
       mode === 'Auto' &&
-      !supportsAuto(model, shownProvider, configuredProviders)
+      !supportsAuto(model, shownProvider, configuredProviders, runner.modelCatalog)
     ) {
       setMode('Default');
     }
@@ -2535,6 +2660,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     live,
     mode,
     model,
+    runner.modelCatalog,
     shownProvider,
     shownProviderCapabilitiesResolved,
   ]);
@@ -2768,7 +2894,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Reset tail-first lazy-loading state for the session being opened.
     prependAnchorRef.current = null;
     loadingOlderRef.current = null;
+    jumpingToStartRef.current = false; // a walk to the start belongs to the session it was run on
     setLoadingOlder(false);
+    setHasMoreOlder(false); // measure() re-reads it once this session's window is established
     if (!selectedId) {
       accRef.current = [];
       setEvents([]);
@@ -3361,7 +3489,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (!anchor) return;
     prependAnchorRef.current = null;
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight - anchor.prevHeight + anchor.prevTop;
+    if (!el) return;
+    // A page the walk to the beginning asked for has no position to hold: keep the top of what has
+    // loaded in view, so the last page leaves the reader looking at the start of the conversation.
+    el.scrollTop = anchor.toTop ? 0 : el.scrollHeight - anchor.prevHeight + anchor.prevTop;
   }, [events]);
 
   useEffect(() => {
@@ -3520,6 +3651,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     refetchInterval: 20_000,
   });
 
+  // What this project still owes somebody, for the exceptions drawn into the transcript at the
+  // moment each happened (`exceptionCardRows` below, `ItemAsCard`). The same read the project page
+  // and the coordinator's other cards use, and polled with the merges above: a conversation that is
+  // open is where somebody watches their own exception arrive and clear.
+  const openItems = useQuery({
+    ...projectOpenItemsQuery(coordinatedProjectId ?? ''),
+    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+    refetchInterval: 20_000,
+  });
+
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
   // the card's own filter over the same read and the project this session coordinates. The strip
   // counts and points at those and no others; a row this conversation draws no card for is counted
@@ -3581,31 +3722,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // The decisions this conversation has recorded, drawn into the transcript at the moment each was
   // made (`EvidenceDecisionReceipt`, `CriteriaDecisionReceipt`, `OwnerDecisionReceipt`,
   // `AcceptanceConfirmationReceipt`). Memoized because `Transcript` is: a fresh array on every
-  // render would rebuild the whole conversation with it.
+  // render would rebuild the whole conversation with it. Each row carries the moment it is placed
+  // by, because a record whose moment is older than every loaded event leads at the head of the
+  // window and the ones that do are ordered by it (`TranscriptInsert`).
   const decisionReceipts = useMemo(
     () => [
       ...criteriaDecisionReceiptRows(criteriaDecisions.data, transcriptEvents, criteriaReplies)
         .map((row) => ({
-          afterSeq: row.afterSeq,
+          anchor: row.placement,
+          moment: row.settled.decidedAt,
           key: `criteria-receipt:${row.settled.intentId}`,
           element: <CriteriaDecisionReceipt settled={row.settled} reply={row.reply} />,
         })),
       ...(pendingDecisions.data?.decided ?? []).flatMap((decided) => {
-        const afterSeq = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
-        return afterSeq === null
+        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        return anchor === null
           ? []
           : [{
-              afterSeq,
+              anchor,
+              moment: decided.decidedAt,
               key: `evidence-receipt:${decisionRowKey(decided)}`,
               element: <EvidenceDecisionReceipt decided={decided} />,
             }];
       }),
       ...ownerDecisionReceiptsIn(ownerConfirmation.data, selectedId).flatMap((decided) => {
-        const afterSeq = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
-        return afterSeq === null || !ownerConfirmation.data
+        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        return anchor === null || !ownerConfirmation.data
           ? []
           : [{
-              afterSeq,
+              anchor,
+              moment: decided.decidedAt,
               key: `owner-decision-receipt:${decided.id}`,
               element: <OwnerDecisionReceipt view={ownerConfirmation.data} decided={decided} />,
             }];
@@ -3614,16 +3760,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // settlement card's record and not its question: held by the card, it sat at the BOTTOM of
       // the pane for the life of the project — under every later message, in conversations started
       // long after, and after the project was done — which is where the questions that are open NOW
-      // belong. The native clients have always placed it this way (`AcceptanceConfirmations.receipt`
-      // + `ReceiptAnchor.after`), and a moment older than every loaded event is a record of a
-      // conversation this one is not: drawn nowhere, rather than at the top of somebody else's.
+      // belong. The native clients place it the same way (`AcceptanceConfirmations.receipt` +
+      // `ReceiptAnchor.place`), and a moment older than every loaded event puts it at the HEAD of
+      // the window rather than at the bottom of it.
       ...[acceptanceConfirmation.data?.confirmation].flatMap((confirmation) => {
         if (!confirmation) return [];
-        const afterSeq = decisionReceiptAnchor(transcriptEvents, confirmation.confirmedAt);
-        return afterSeq === null
+        const anchor = decisionReceiptAnchor(transcriptEvents, confirmation.confirmedAt);
+        return anchor === null
           ? []
           : [{
-              afterSeq,
+              anchor,
+              moment: confirmation.confirmedAt,
               key: `acceptance-receipt:${confirmation.confirmedAt}`,
               element: <AcceptanceConfirmationReceipt confirmation={confirmation} />,
             }];
@@ -3633,15 +3780,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // this record sat under every later message for the life of the project — in conversations
       // started long afterwards, and after the project was done — which is where the questions that
       // are open NOW belong. Anchored by `mergedAt`, which is the terminal edge's own clock on a row
-      // that never moves again; a merge older than every loaded event lands nowhere, like every
-      // other record here.
+      // that never moves again; a merge older than every loaded event leads at the head, like every
+      // other record here (`decisionReceiptAnchor`).
       ...(mergedPromotions.data ?? []).flatMap((promotion) => {
+        // A candidate with no `merged` is not a record: no moment, so nothing to place.
         const mergedAt = promotion.merged?.at;
-        const afterSeq = mergedAt ? decisionReceiptAnchor(transcriptEvents, mergedAt) : null;
-        return afterSeq === null
+        if (!mergedAt) return [];
+        const anchor = decisionReceiptAnchor(transcriptEvents, mergedAt);
+        return anchor === null
           ? []
           : [{
-              afterSeq,
+              anchor,
+              moment: mergedAt,
               key: `promotion-receipt:${promotion.promotionId}`,
               element: <ProjectPromotionReceipt promotion={promotion} />,
             }];
@@ -3657,6 +3807,39 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       selectedId,
       transcriptEvents,
     ],
+  );
+
+  // The exceptions this project still owes somebody, drawn into the transcript at the moment each
+  // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
+  // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
+  // two different stories about when it happened. The moment is the item's own (`escalatedAt`, else
+  // `waitingSince`), read off the same fields the card's heading counts its wait from, and placed by
+  // the same rule the records above are (`decisionReceiptAnchor`); both native clients do the same
+  // (`DeliveryAnchor.exception`), so no end can disagree about where one exception goes.
+  //
+  // `dataUpdatedAt` is in the deps because the cards count their wait from NOW: an element built
+  // once and kept would freeze "waiting 2h" at the moment it was built, and react-query's structural
+  // sharing means an unchanged poll leaves `data` the same object. A poll that changed nothing still
+  // moves `dataUpdatedAt`, which is exactly the tick these labels need.
+  const exceptionCards = useMemo(
+    () =>
+      exceptionCardRows(openItems.data, transcriptEvents).flatMap(({ row, anchor }) => {
+        if (anchor === null || !coordinatedProjectId) return [];
+        return [{
+          anchor,
+          moment: row.escalatedAt ?? row.waitingSince,
+          key: `open-item:${row.itemId}`,
+          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} />,
+        }];
+      }),
+    [coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
+  );
+
+  // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
+  // conversation with it (`Transcript` memoizes on this prop).
+  const transcriptInserts = useMemo(
+    () => [...decisionReceipts, ...exceptionCards],
+    [decisionReceipts, exceptionCards],
   );
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
@@ -5643,6 +5826,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               effectiveModel,
               shownProvider,
               configuredProviders,
+              runner.modelCatalog,
             )
           : effectivePermissionMode
       ] ?? 'Default')
@@ -5687,9 +5871,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             MODE_TO_PERMISSION[label],
             shownModel,
             runner.runsAsRoot,
+            runner.modelCatalog,
           )
         : undefined,
-    [shownProvider, shownProviderIsBuiltin, shownModel, runner.runsAsRoot],
+    [shownProvider, shownProviderIsBuiltin, shownModel, runner.runsAsRoot, runner.modelCatalog],
   );
   const shownModeSemantics = permissionSemanticsFor(shownMode);
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
@@ -6511,7 +6696,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </div>
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
-              {loadingOlder && <div className="chat-note chat-loading-older">Loading earlier messages…</div>}
+              {/* A tail-first transcript always has more above it: while a page is in flight this
+                  says so, and otherwise it is the way to the first message, which scrolling alone
+                  never reaches (see jumpToStart). Pinned to the top of the viewport rather than
+                  left at the top of the content — content-top is only on screen for the instant
+                  before the page it triggers lands and re-anchors the view a page below it. Offered
+                  only once the reader has left the live tail, the mirror of the jump-to-bottom
+                  button: at the tail nobody is looking for the beginning, and the pill floats over
+                  the transcript, so there it is only something covering a message. */}
+              {(loadingOlder || (hasMoreOlder && !atBottom)) && (
+                <div className="chat-older-top">
+                  {loadingOlder ? (
+                    <span className="chat-older-pill">Loading earlier messages…</span>
+                  ) : (
+                    <button type="button" className="chat-older-pill chat-jump-start" onClick={() => void jumpToStart()}>
+                      <ArrowUpOutlined /> Jump to the beginning
+                    </button>
+                  )}
+                </div>
+              )}
               {placeholder === 'queued' && showQueuedNotice && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
@@ -6553,7 +6756,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                               turnImages={turnImages}
                               artifactSessionId={selectedId}
                               streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
-                              inserts={decisionReceipts}
+                              inserts={transcriptInserts}
                             />
                           </StreamingDraftsCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
@@ -6608,20 +6811,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {selected && selectedId && !selectedTrashed && (
                 <CoordinatorQuestions
                   key={`coordinator-question:${selectedId}`}
-                  projectId={coordinatedProjectId}
-                />
-              )}
-              {/* And the rest of what this project owes somebody, as the same cards the project
-                  page expands (mocks 5 and 6 ①): a conflict or a failed check this conversation is
-                  expected to fix, a task that failed, an item a clock has since made the owner's,
-                  and the pause that stopped this conversation from starting anything. Drawn here
-                  because this is where the coordinator would be told about them, and they are the
-                  answer to "why has nothing moved" for whoever opens this conversation to ask.
-                  Keyed apart from its siblings for the reason the evidence card's note gives
-                  below. */}
-              {selected && selectedId && !selectedTrashed && (
-                <ProjectExceptionCards
-                  key={`open-items:${selectedId}`}
                   projectId={coordinatedProjectId}
                 />
               )}
@@ -7218,24 +7407,37 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             placement="topLeft"
             disabled={composerDisabled}
             menu={{
+              className: 'composer-attach-menu',
+              // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
+              // array's last entry is the one beside the `+` — while the native menu
+              // (ComposerView.swift `addMenu`) hands its items to the system with the first one
+              // nearest the button and gets them back reversed. Hence the native source reads
+              // Command…File and this reads File…Command: both clients put Command under the
+              // thumb and File at the far end, and a divider between the two groups. Pinned by
+              // WorkspaceView.composerMenu.test.tsx, drawn in
+              // docs/mocks/composer-attach-menu-phone.html.
               items: [
                 {
-                  key: 'command',
-                  icon: <CodeOutlined />,
-                  label: 'Command',
-                  disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
-                  onClick: () => insertSlash('command'),
+                  key: 'file',
+                  icon: <PaperClipOutlined />,
+                  label: 'File',
+                  onClick: () => fileInputRef.current?.click(),
                 },
                 {
-                  key: 'skill',
-                  icon: <ThunderboltOutlined />,
-                  label: 'Skill',
-                  disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
-                  onClick: () => insertSlash('skill'),
+                  key: 'image',
+                  icon: <PictureOutlined />,
+                  // One word per action, the way the native composer's `+` menu writes them
+                  // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
+                  // upload can't work in says so on pick, rather than greying the item out.
+                  label: 'Image',
+                  onClick: () => imageInputRef.current?.click(),
                 },
+                { type: 'divider' },
                 {
                   key: 'shell',
-                  icon: <ConsoleSqlOutlined />,
+                  // The terminal box, as native Shell draws it — not `ConsoleSqlOutlined`, whose
+                  // SQL monitor appeared in neither client.
+                  icon: <CodeOutlined />,
                   // Works on a live session, a brand-new draft (sent as the first turn), and
                   // an ended-but-resumable session (sent as the revive turn — the runner
                   // --resumes claude, runs the command, and buffers its output for the next
@@ -7249,19 +7451,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   onClick: insertShell,
                 },
                 {
-                  key: 'image',
-                  icon: <PictureOutlined />,
-                  // One word per action, the way the native composer's `+` menu writes them
-                  // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
-                  // upload can't work in says so on pick, rather than greying the item out.
-                  label: 'Image',
-                  onClick: () => imageInputRef.current?.click(),
+                  key: 'skill',
+                  icon: <ThunderboltOutlined />,
+                  label: 'Skill',
+                  disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
+                  onClick: () => insertSlash('skill'),
                 },
                 {
-                  key: 'file',
-                  icon: <PaperClipOutlined />,
-                  label: 'File',
-                  onClick: () => fileInputRef.current?.click(),
+                  key: 'command',
+                  icon: <SlashCommandIcon />,
+                  label: 'Command',
+                  disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
+                  onClick: () => insertSlash('command'),
                 },
               ],
             }}
@@ -7579,7 +7780,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           runner.runtimeDefaultModels,
                         );
                     const drop =
-                      shownMode === 'Auto' && !supportsAuto(nextModel, v, configuredProviders);
+                      shownMode === 'Auto' &&
+                      !supportsAuto(nextModel, v, configuredProviders, runner.modelCatalog);
                     const currentEffort = live ? effectiveEffort : effort;
                     const nextEffort = normalizeEffortForProvider(
                       v,
@@ -7651,7 +7853,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   // Switching to a model that can't do Auto while Auto is selected
                   // would send a mode claude rejects — snap back to Default.
                   const drop =
-                    shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders);
+                    shownMode === 'Auto' &&
+                    !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);
                   // An OpenCode variant is model-defined: a model switch can strip it.
                   const currentEffort = live ? effectiveEffort : effort;
                   const nextEffort = normalizeEffortForProvider(

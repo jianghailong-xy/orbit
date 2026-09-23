@@ -296,16 +296,26 @@ final class OpenItemDeliveryCopyParityTests: XCTestCase {
         let web = try flat(Self.webCard)
         assertBuilt(web, "data-sticky-label=\"Exception item\"", "the label the bar reads",
                     Self.webCard)
-        assertBuilt(web, "data-sticky-text={`${label}: ${card.title}`}",
+        // The kind, then the title — and the guard that keeps a title already carrying its kind from
+        // being prefixed with it a second time. Both ends spell the rule out (`stickyText` here,
+        // `stickyText` in the browser): a bar reading "Task failed: Task failed: [WARC]…" is one
+        // turn told twice, and a browser that de-duplicated while this end kept both would be two
+        // wordings of it.
+        assertBuilt(web, "data-sticky-text={stickyText}",
                     "the line under that label", Self.webCard)
+        assertBuilt(web,
+                    "card.title.toLowerCase().startsWith(label.toLowerCase())",
+                    "the browser de-duplicating a title that already opens with its kind", Self.webCard)
 
         let sticky = OpenItemDeliveryCard.sticky(try conflictCard())
         XCTAssertEqual(sticky.label, OpenItemDeliveryCard.header)
-        // The kind, then the item's own title — which for this kind already opens with the kind, so
-        // the line says it twice. Copied from the browser rather than improved on: `sticky.text` is
-        // the pair the web stamps on the card's root, and a native bar that dropped half of it would
-        // be a third wording of the same turn.
-        XCTAssertEqual(sticky.text, "Merge conflict: Merge conflict: 回填历史 user 事件的 controlPlaneNote")
+        XCTAssertEqual(sticky.text, "Merge conflict: 回填历史 user 事件的 controlPlaneNote",
+                       "this fixture's title already opens with its kind, so it is not prefixed again")
+        // And a title that does NOT say it keeps the prefix, so the line still names the kind: the
+        // rule drops a repetition, not the label.
+        XCTAssertEqual(
+            OpenItemDeliveryCard.stickyText(kind: .taskFailed, title: "[WARC] 000_00022 的 WARC 依赖"),
+            "Task failed: [WARC] 000_00022 的 WARC 依赖")
         // And where the browser checks it, so does this client: before the wakes, which are read out
         // of the text this card is not.
         let transcript = try flat(Self.webTranscript)

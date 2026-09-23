@@ -1,5 +1,6 @@
 import { AgentProvider, PermissionMode } from './enums';
-import type { ApprovalSupport, PermissionSemantics } from './dto';
+import { runnerCatalogRow } from './models';
+import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from './dto';
 
 /**
  * Whether a runtime can put a human in the loop, which is what a permission mode is really
@@ -45,18 +46,22 @@ const ASK_MODES: ReadonlySet<string> = new Set([
 const ALLOW_MODES: ReadonlySet<string> = new Set([PermissionMode.AUTO, PermissionMode.BYPASS]);
 
 /**
- * The Claude models that accept `--permission-mode auto`; Claude Code rejects it on the rest
- * (notably Haiku). The single copy — the server's dispatch normalization and every client's
- * picker read this one, instead of the three hand-synced sets that used to disagree.
+ * The Claude models known to accept `--permission-mode auto`, used ONLY where the assigned
+ * runner's catalogue has not answered for that model — a runner too old to report it, or one
+ * whose probe failed.
  *
- * Still a static table, and still the wrong shape long-term for the same reason the model list
- * and the context window were moved off static tables: the answer belongs to the CLI that runs
- * the model, so it goes stale a release before anyone notices. Replacing it means having the
- * runner report each runtime's permission modes in the heartbeat catalog, next to the reasoning
- * levels it already reports per model.
+ * It is a fallback and no longer a gate. The runner now asks its own CLI (which takes
+ * `--permission-mode auto` on any model and quietly starts in `default` where there is no Auto,
+ * so its init frame is the answer) and reports the modes per model, because this table is exactly
+ * the shape that fails silently: when Opus 5.5 shipped, a runner whose CLI could run it kept
+ * offering it Default-only, with the picker explaining that "Auto needs Opus 5, Fable 5 or Sonnet
+ * 5" — no error, just a mode that stopped existing. A catalogue row therefore always wins,
+ * including when it withholds Auto; this list can only fill a silence, never contradict an answer.
  */
 export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
+  'claude-opus-5-5',
   'claude-opus-5',
+  'claude-fable-5-1',
   'claude-fable-5',
   'claude-sonnet-5',
 ]);
@@ -66,15 +71,28 @@ export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
  *
  * Every runtime but Claude has it runtime-wide, for any model: Codex spells it `on-request` ("the
  * model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode.
- * Claude alone makes it model-specific. A configured (BYOK) provider's model space is
- * vendor-defined, so the Claude allow-list cannot police it and the CLI decides for itself.
+ * Claude alone makes it model-specific, and the assigned runner's catalogue is where that answer
+ * comes from — its row lists the modes the CLI that will run the model accepts. Only a model that
+ * row does not cover falls back to the static list above. A configured (BYOK) provider's model
+ * space is vendor-defined, so neither the list nor the catalogue polices it and the CLI decides.
  *
  * `runtime` is the built-in runtime that executes the session, not the persisted provider slug —
- * resolve a configured slug to its runtime first, as both callers already do.
+ * resolve a configured slug to its runtime first, as the callers already do.
+ *
+ * `modelCatalog` is the ASSIGNED runner's — the machine that will run this session, whose CLI is
+ * the one being described. Omit it where no single runner is in view; the fallback answers then.
  */
-export function autoAvailable(runtime: string, model: string, customProvider = false): boolean {
+export function autoAvailable(
+  runtime: string,
+  model: string,
+  customProvider = false,
+  modelCatalog?: RunnerModelCatalog | null,
+): boolean {
   if (runtime !== AgentProvider.CLAUDE) return true;
-  return customProvider || AUTO_CAPABLE_CLAUDE_MODELS.has(model);
+  if (customProvider) return true;
+  const reported = runnerCatalogRow(runtime, model, modelCatalog)?.permissionModes;
+  if (Array.isArray(reported)) return reported.includes(PermissionMode.AUTO);
+  return AUTO_CAPABLE_CLAUDE_MODELS.has(model);
 }
 
 /**
@@ -135,12 +153,16 @@ export function permissionModeAvailableOnRunner(
  * `runsAsRoot` is the assigned runner's report about itself, and likewise only changes the answer
  * for Bypass. Omit it where no single runner is in view (an account-level default applies across a
  * fleet, and one root machine in it must not describe the setting for all of them).
+ *
+ * `modelCatalog` is that same runner's, and is what makes the Auto answer follow the CLI actually
+ * installed on it rather than a table in this repo. Omit it on the same terms as `runsAsRoot`.
  */
 export function derivePermissionSemantics(
   provider: string,
   permissionMode?: string | null,
   model?: string,
   runsAsRoot?: boolean | null,
+  modelCatalog?: RunnerModelCatalog | null,
 ): PermissionSemantics {
   const mode = (permissionMode ?? PermissionMode.DONT_ASK) as string;
   const approvalSupport = runtimeApprovalSupport(provider);
@@ -166,15 +188,22 @@ export function derivePermissionSemantics(
   // (normalizeBuiltinPermissionMode), which asks — so this is a safe degradation, and it is
   // disclosed rather than hidden: the mode is the account's stored intent and starts applying the
   // moment the session moves to a model that has it, exactly like every other unhonored mode here.
-  if (mode === PermissionMode.AUTO && model !== undefined && !autoAvailable(provider, model)) {
+  if (
+    mode === PermissionMode.AUTO &&
+    model !== undefined &&
+    !autoAvailable(provider, model, false, modelCatalog)
+  ) {
     return {
       mode,
       unapproved: 'ask',
       approvalSupport,
       honored: false,
+      // Deliberately names no models. Which ones have Auto is the installed CLI's answer and
+      // changes with it — the old copy ("Auto needs Opus 5, Fable 5 or Sonnet 5") was still being
+      // shown about Opus 5.5, a model that has Auto, on a runner whose CLI would have honored it.
       note:
-        'Auto needs Opus 5, Fable 5 or Sonnet 5. On this model the session runs as Default, so ' +
-        'you are asked before an action nobody pre-approved.',
+        'Auto is not available on this model. The session runs as Default instead, so you are ' +
+        'asked before an action nobody pre-approved.',
       shortNote: 'not available on this model, runs as Default',
     };
   }

@@ -394,7 +394,7 @@ export class PushService {
           ownerId: true,
           projectId: true,
           promotionId: true,
-          project: { select: { title: true, coordinatorEnabled: true, coordinatorSessionId: true } },
+          project: { select: { title: true, coordinatorSessionId: true } },
         },
       });
       // A resolved item is not waiting on anybody: the owner answered it in another window, or the
@@ -425,9 +425,13 @@ export class PushService {
         // Where the card is drawn: the project's own coordinator conversation. Omitted when the
         // project has none — the clients ignore a payload naming no session, and an item whose
         // project is not coordinated has no conversation to open (the project page still has it).
-        ...(item.project?.coordinatorEnabled && item.project.coordinatorSessionId
-          ? { sessionID: item.project.coordinatorSessionId }
-          : {}),
+        //
+        // The BINDING, not the switch, for the reason `readOwnerItemSignals` gives at length: a
+        // switched-off coordinator still draws this project's owner items in the conversation bound
+        // to it, and this notification is sent exactly when nobody else will take the item, so the
+        // tap has to land on the card — the switch decides whether the coordinator may act, never
+        // where the card is.
+        ...(item.project?.coordinatorSessionId ? { sessionID: item.project.coordinatorSessionId } : {}),
         projectID: item.projectId,
         openItemID: itemId,
       });

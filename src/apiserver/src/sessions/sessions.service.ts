@@ -20,6 +20,8 @@ import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api
 import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { freshRunningBgJobs } from './background-job-activity';
+import { CLEARED_RUNNING_WORK } from './running-work';
+import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -203,6 +205,12 @@ interface ListedQueuedTurn {
   kind: string;
   content: string;
   attachments: Array<{ id: string; mimeType: string }>;
+  /** An exception item's delivery carries the item's own fields beside its words (§4.4 X-D2): the
+   *  card the runner's echo will be drawn as, so the card a client paints while this turn waits is
+   *  not a different rendering of a different reading. Absent on every turn a person typed — and on
+   *  this base rather than on one view, because BOTH projections carry it and both ends draw the
+   *  queue (`listQueuedTurns`). */
+  openItemDelivery?: OpenItemDeliveryCard;
 }
 
 interface ListedActiveTurn extends ListedQueuedTurn {
@@ -212,10 +220,6 @@ interface ListedActiveTurn extends ListedQueuedTurn {
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
-  /** An exception item's delivery carries the item's own fields beside its words (§4.4 X-D2): the
-   *  card the runner's echo will be drawn as, so the placeholder a client paints while this turn
-   *  waits is not a different rendering of a different reading. */
-  openItemDelivery?: OpenItemDeliveryCard;
 }
 
 const CURRENT_WORK_UNAVAILABLE = 'CURRENT_WORK_UNAVAILABLE';
@@ -3476,27 +3480,9 @@ export class SessionsService {
     sessionId: string,
     rawPath: string | undefined,
   ): Promise<{ original: string; file: string; root: string }> {
-    const original = (rawPath ?? '').trim();
-    if (!original) throw new NotFoundException('artifact not found');
-    let decoded = original;
-    try {
-      decoded = decodeURIComponent(original);
-    } catch {
-      // Keep the raw value; the path checks below reject malformed or unsafe values.
-    }
-    if (!path.isAbsolute(decoded) || decoded.split(/[\\/]+/).includes('..')) {
-      throw new NotFoundException('artifact not found');
-    }
-    const normalized = path.normalize(decoded);
-    const parts = normalized.split(path.sep).filter(Boolean);
-    const marker = parts.findIndex(
-      (part, i) => part === '.orbit' && parts[i + 1] === 'uploads' && parts[i + 2] === sessionId,
-    );
-    if (marker < 0 || parts.length <= marker + 3) {
-      throw new NotFoundException('artifact not found');
-    }
-    const root = path.join(path.sep, ...parts.slice(0, marker + 3));
-    return { original: decoded, file: normalized, root };
+    const resolved = resolveLegacyArtifactPath(sessionId, rawPath);
+    if (!resolved) throw new NotFoundException('artifact not found');
+    return resolved;
   }
 
   private async resolveExistingLocalArtifactFile(root: string, file: string): Promise<string | null> {
@@ -4550,6 +4536,11 @@ export class SessionsService {
    *  placement — PENDING queued successors and steers, never the accepted head or IN_FLIGHT rows.
    *  `!cmd` shell turns queue and cross that handoff like messages do, so they're classified too.
    *
+   *  Both projections carry the same exception-item card for the rows they return (`openItemDelivery`,
+   *  §4.4 X-D2), because both ends draw the queued tail: the native one reads THIS projection, and a
+   *  delivery whose card only came with the `active` view would be prose on a phone and a card in a
+   *  browser for as long as it waits.
+   *
    *  A still-PENDING `steer` is listed for the same reason and NOT for the same purpose: it
    *  is not waiting its turn, it is on its way into the one already running, and the runner
    *  usually takes it within a poll. But until it does, a reload has nothing else to render it
@@ -4634,9 +4625,18 @@ export class SessionsService {
               : 'queued') as TurnPlacement,
       }));
     if (view !== 'active') {
-      return classified
-        .filter(({ turn, placement }) => turn.status === 'PENDING' && placement !== 'accepted')
-        .map(({ turn, content }) => ({
+      const queued = classified
+        .filter(({ turn, placement }) => turn.status === 'PENDING' && placement !== 'accepted');
+      // The card, for the same reason the active view carries it and by the same two calls: the
+      // narrow projection is what the installed native client draws its queue from, and a delivery
+      // it cannot see the card on is 30 lines of prose in the reader's own bubble until the runner
+      // takes the turn — the reading this row's whole shape exists to avoid (web parity: the
+      // queue tail, `WorkspaceView`). Read after the filter, so neither an ordinary message nor an
+      // accepted head the native client will not see costs a query.
+      const deliveryCards = await this.openItemDeliveryCards(queued.map(({ turn }) => turn));
+      return queued.map(({ turn, content }) => {
+        const card = deliveryCards.get(turn.id);
+        return {
           turnId: turn.id,
           kind: turn.kind,
           content,
@@ -4644,7 +4644,9 @@ export class SessionsService {
             id: attachment.id,
             mimeType: attachment.mimeType,
           })),
-        }));
+          ...(card ? { openItemDelivery: card } : {}),
+        };
+      });
     }
     // `run_event` is append-only, so probing after the active-turn snapshot is monotone in the safe
     // direction: an event that committed meanwhile suppresses a fallback that is no longer needed;
@@ -5531,6 +5533,11 @@ export class SessionsService {
             endReason: reason,
             cancelRequestedAt: now,
             finishedAt: now,
+            // A queued session can still be holding what its last run left running — a job parked
+            // with the session and never reaped — and CANCELLED is the end of the line for it
+            // (CLEARED_RUNNING_WORK). The runner is told to stop by the same cancelRequestedAt,
+            // and what its drain then reports is refused: this status has closed the door.
+            ...CLEARED_RUNNING_WORK,
           },
         });
         await retireSessionInboxGeneration(tx, sessionId);
@@ -6715,6 +6722,7 @@ export class SessionsService {
         requestedPermissionMode,
         next.customRow?.enabled === true,
         session.assignedRunner?.runsAsRoot,
+        session.assignedRunner?.modelCatalog,
       );
       const normalizedEffort =
         dto.effort !== undefined

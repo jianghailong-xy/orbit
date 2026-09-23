@@ -17,22 +17,35 @@ import type {
  */
 
 /**
- * The seq a receipt is drawn after: the last event recorded at or before the decision.
+ * WHERE A RECEIPT IS DRAWN, in the three answers the rule has — the same three the native clients
+ * compute (`ReceiptAnchor.place`), because two ends of one rule is how a phone and a browser come
+ * to disagree about where the same answer happened:
  *
- * Null when every event loaded so far is later. The moment is then on a page that is not loaded
- * yet, and drawing the receipt at the top would put a decision above things that happened first.
+ *   `seq`     after that row: the last event recorded at or before the decision.
+ *   `'head'`  older than EVERY event loaded: drawn at the head of the window, above the first row
+ *             and above the "load earlier" control — as close to where it happened as this client
+ *             can get, and it walks down into place as older pages arrive. NOT at the tail: a
+ *             record's own stamp on a card under everything that happened after it says the
+ *             decision was made now, and not drawn at all is what this used to do — a record that
+ *             vanishes on a long conversation is a record the reader cannot find.
+ *   `null`    a stamp nothing can parse. The head claims "older than everything here", which is a
+ *             claim about a moment, and there is none: not drawn.
  */
+export type ReceiptPlacement = number | 'head';
+
+/** Where the receipt for `decidedAt` is drawn among the events loaded right now, or null. */
 export function decisionReceiptAnchor(
   events: ReadonlyArray<{ seq: number; ts?: string }>,
   decidedAt: string,
-): number | null {
+): ReceiptPlacement | null {
   const at = Date.parse(decidedAt);
+  if (Number.isNaN(at)) return null;
   let anchor: number | null = null;
   for (const event of events) {
     const ts = event.ts === undefined ? Number.NaN : Date.parse(event.ts);
     if (ts <= at && (anchor === null || event.seq > anchor)) anchor = event.seq;
   }
-  return anchor;
+  return anchor ?? 'head';
 }
 
 /** One answer the read says belongs in this conversation, and where in its flow it goes. */
@@ -40,7 +53,7 @@ export interface CriteriaDecisionReceiptRow {
   settled: SettledCriteriaDecision;
   /** Where the answer went, when the window that pressed it knows — the door's own response. */
   reply: CriteriaDecisionReply | null;
-  afterSeq: number;
+  placement: ReceiptPlacement;
 }
 
 /**
@@ -65,9 +78,9 @@ export function criteriaDecisionReceiptRows(
   replies: Readonly<Record<string, CriteriaDecisionReply | null | undefined>> = {},
 ): CriteriaDecisionReceiptRow[] {
   return (queue?.settled ?? []).flatMap((settled) => {
-    const afterSeq = decisionReceiptAnchor(events, settled.decidedAt);
-    return afterSeq === null
+    const placement = decisionReceiptAnchor(events, settled.decidedAt);
+    return placement === null
       ? []
-      : [{ settled, reply: replies[settled.intentId] ?? null, afterSeq }];
+      : [{ settled, reply: replies[settled.intentId] ?? null, placement }];
   });
 }

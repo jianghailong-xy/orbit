@@ -356,7 +356,7 @@ final class ConsoleModel {
         self.permissionMode = providerCapabilitiesResolved
             ? AgentDefaults.clampPermissionMode(
                 seed, for: defaultModel, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
             : seed
         // The account's last-picked effort is the interactive default. `agent.effort` is the legacy
         // workspace default retained for accounts that have never written that preference. `??` in
@@ -943,7 +943,7 @@ final class ConsoleModel {
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
                 permissionMode, for: modelID, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
         }
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
@@ -1010,7 +1010,7 @@ final class ConsoleModel {
         let clamped = providerCapabilitiesResolved
             ? AgentDefaults.clampPermissionMode(
                 permissionMode, for: model, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
             : permissionMode
         let changedPermissionMode = clamped != permissionMode
         permissionMode = clamped
@@ -1057,7 +1057,8 @@ final class ConsoleModel {
                                          configured: configuredProviders)
         let nextMode = providerCapabilitiesResolved
             ? AgentDefaults.clampPermissionMode(permissionMode, for: nextModel, provider: slug,
-                                                configured: configuredProviders)
+                                                configured: configuredProviders,
+                                                catalog: modelCatalog)
             : permissionMode
         let nextEffort = AgentDefaults.normalizedEffort(effort, for: slug, model: nextModel,
                                                         catalog: modelCatalog)
@@ -1094,7 +1095,8 @@ final class ConsoleModel {
         modelSelectionRevision = ModelSelectionRevision()
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, provider: slug, configured: configuredProviders)
+                permissionMode, for: modelID, provider: slug, configured: configuredProviders,
+                catalog: modelCatalog)
         }
         effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
                                                 catalog: modelCatalog)
@@ -1126,7 +1128,7 @@ final class ConsoleModel {
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
                 permissionMode, for: modelID, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
         }
     }
 
@@ -1782,7 +1784,7 @@ final class ConsoleModel {
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
                 permissionMode, for: modelID, provider: provider,
-                configured: configuredProviders)
+                configured: configuredProviders, catalog: modelCatalog)
         }
         applySlashItems(from: agentRunner)
         // OpenCode variants are model-defined, so this is the first point where a stored
@@ -2184,49 +2186,138 @@ final class ConsoleModel {
     /// between two of them.
     private static let rulerReadThrottle: TimeInterval = 10
 
-    /// The open questions below the reader, oldest first — what the "needs you" bar counts and
-    /// where a tap on it goes.
+    /// The cards still waiting below the reader, oldest first — what the "needs you" bar counts and
+    /// where a tap on it goes. Each row says whether it is a QUESTION, which is the only thing the
+    /// bar's words turn on (`NeedsYouLogic.below`).
     ///
     /// A card that has gone stale stays ON SCREEN (it is the only thing that can explain what
-    /// happened to the question) but stops being counted here: pointing somebody at a dead card and
-    /// calling it an open question is worse than saying nothing. `isOpen` is OrbitKit's, so the
-    /// one place that decides "still a question" is the same place that decides "answerable" — and
-    /// so the one case where they differ, an unreadable standing, cannot drift apart.
-    var openQuestionRowIDs: [String] {
-        decisionCards.filter { card in
+    /// happened to the question) but stops being counted here: pointing somebody at a dead card is
+    /// worse than saying nothing. `isOpen` is OrbitKit's, so the one place that decides "still
+    /// open" is the same place that decides "answerable" — and so the one case where they differ,
+    /// an unreadable standing, cannot drift apart.
+    ///
+    /// THE EXCEPTIONS ARE IN HERE. They used to be excluded (the note said the browser's rail points
+    /// at decisions, not at open items), and the reader was the thing that argument forgot: inside a
+    /// project's coordinator conversation the needs-you bar excludes the session on screen, so a
+    /// card that scrolled away had nothing at all pointing at it — while a question in the same
+    /// position got a bar and a press that scrolls. They are not questions (the owner answers them by
+    /// pressing a door, not by replying), which is why the row carries the distinction rather than
+    /// the bar assuming one.
+    var openBelowRows: [BelowRow] {
+        let rows: [(row: BelowRow, at: Int)] = decisionCards.compactMap { card -> (row: BelowRow, at: Int)? in
+            // Where the card sits, read ONCE per card — and here rather than inside `waiting`, which
+            // is a local function: those do not inherit the closure's actor isolation, and
+            // `flowIndex` is main-actor isolated because it reads `state`.
+            let at = flowIndex(of: card)
+            // One spelling for both answers, so each case below reads as the question it is: is this
+            // card still waiting, and does the reader answer it by replying (`question: true`) or by
+            // pressing a door (`false`)?
+            func waiting(_ open: Bool, question: Bool) -> (row: BelowRow, at: Int)? {
+                guard open else { return nil }
+                return (BelowRow(rowID: card.id, isQuestion: question), at)
+            }
             switch card.kind {
             case .criteriaDecision(let intentID):
-                return CriteriaDecisions.isOpen(criteriaStanding(intentID))
+                return waiting(CriteriaDecisions.isOpen(criteriaStanding(intentID)), question: true)
             // A record of an answer, not a question: nothing is waiting on the reader. A merge's
             // receipt is one of these — the merge already happened, and pointing a reader at it
             // would be pointing them at something with nothing to press.
             case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
                  .acceptanceConfirmationReceipt, .promotionReceipt:
-                return false
+                return nil
             case .acceptanceConfirmation:
-                return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
+                return waiting(AcceptanceConfirmations.isOpen(acceptanceConfirmation), question: true)
             case .evidenceDecision(let taskID, let evidenceRevision):
-                return EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision))
+                return waiting(EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision)),
+                               question: true)
             case .ownerConfirmation(let taskID, let requestID):
-                return OwnerConfirmations.isOpen(ownerStanding(taskID, requestID))
+                return waiting(OwnerConfirmations.isOpen(ownerStanding(taskID, requestID)),
+                               question: true)
             case .ownerDecisionReceipt:
                 // A receipt is a record, not a question: it stays on screen and is never counted.
-                return false
+                return nil
             case .coordinatorQuestion(let itemID):
-                return CoordinatorQuestions.isOpen(questionStanding(itemID))
+                return waiting(CoordinatorQuestions.isOpen(questionStanding(itemID)), question: true)
             case .promotionApproval(let promotionID):
                 // Only state A is a question. B is landing on its own, C is a receipt and D is
                 // waiting on somebody else — none of the three is something to point a reader at.
-                return PromotionCards.stage(promotionStanding(promotionID)) == .askingYou
-            case .escalatedItem, .fusePause:
-                // An exception is drawn where it arrived — under the turn that was last when the
-                // item was read — and that is where it is answered. The bar above the transcript
-                // points at the project's DECISIONS (the browser's rail counts `PendingDecisionRow`s,
-                // not the open items), so these two are not counted here; what names them is the
-                // needs-you banner, which carries the item itself.
-                return false
+                return waiting(PromotionCards.stage(promotionStanding(promotionID)) == .askingYou,
+                               question: true)
+            case .escalatedItem(let itemID), .fusePause(let itemID):
+                // The owner answers one of these by pressing a door, not by replying — so it counts,
+                // and the bar is told it is not a question (see `openBelowRows`' doc).
+                return waiting(ExceptionCards.isOpen(ownerItemStanding(itemID)), question: false)
             }
-        }.map(\.id)
+        }
+        // Oldest in the CONVERSATION first — which is not the order these were delivered in, now
+        // that a card can be placed by a moment rather than by its arrival (`flowIndex`): the
+        // press goes to the one that happened first. Ties keep the delivery order (the sort is by
+        // (place, appended-at)), so the target never depends on how the sort happened to break.
+        return rows.enumerated()
+            .sorted { ($0.element.at, $0.offset) < ($1.element.at, $1.offset) }
+            .map(\.element.row)
+    }
+
+    /// What the needs-you bar above this transcript says, or nil when nothing in it is waiting.
+    ///
+    /// The direction word is the one part of the line this conversation cannot answer by itself: it
+    /// is about the reader's own place, reported by the transcript (`topVisibleItemID`). Everything
+    /// else is the count and what kind of thing it points at (`NeedsYouLogic.below`).
+    var waitingBelow: WaitingBelow? {
+        let rows = openBelowRows
+        guard let first = rows.first else { return nil }
+        return NeedsYouLogic.below(rows: rows, side: side(ofRow: first.rowID))
+    }
+
+    /// Where one delivered card sits in the conversation RIGHT NOW, as an index into `state.items`:
+    /// the item it is drawn after, -1 for one older than everything loaded (drawn at the head of
+    /// the window), and one past the end for one that trails the tail.
+    ///
+    /// The same questions `TranscriptRows.build` answers when it assembles the rows, asked here for
+    /// the ORDER of the bar's rows and for which way the reader has to look.
+    private func flowIndex(of card: DeliveredDecisionCard) -> Int {
+        switch card.placement {
+        case .onArrival(let anchor):
+            guard let anchor, let at = state.items.firstIndex(where: { $0.id == anchor })
+            else { return state.items.count }
+            return at
+        case .at(let moment):
+            switch ReceiptAnchor.place(items: state.items, at: moment) {
+            case .after(let id): return state.items.firstIndex { $0.id == id } ?? state.items.count
+            case .beforeWindow:  return -1
+            // Nothing draws this one (`TranscriptRows.build` drops an unplaceable stamp), so it is
+            // counted as if it were at the tail: the bar must not send the reader to a row that is
+            // not there.
+            case .unplaceable:   return state.items.count
+            }
+        }
+    }
+
+    /// Which way the reader has to look for one of those rows: above when the card is drawn before
+    /// the item at the top of their viewport, below when it is at or after it.
+    ///
+    /// Nil when the reader's place is unknown — nothing has reported it yet, the system is below the
+    /// floor the transcript's scroll geometry needs, or the item it named has since been trimmed out
+    /// of the window — and the bar then says the count and no direction (`NeedsYouLogic.below`).
+    private func side(ofRow rowID: String) -> ReaderSide? {
+        guard let top = topVisibleItemID,
+              let item = state.items.firstIndex(where: { $0.id == top }),
+              let card = decisionCards.first(where: { $0.id == rowID }) else { return nil }
+        return flowIndex(of: card) < item ? .above : .below
+    }
+
+    /// The item straddling the top edge of the reader's viewport, as `TranscriptView` reports it
+    /// (`noteTopVisible`) — the reader's own place, and the one fact the bar's direction word needs.
+    private(set) var topVisibleItemID: String?
+
+    /// Tell the console which item the reader's viewport top is on.
+    ///
+    /// Called from the transcript's scroll tracking, which recomputes on every geometry change; the
+    /// write happens only when the answer CHANGES, so scrolling a long conversation invalidates the
+    /// views that read this a handful of times rather than once a frame.
+    func noteTopVisible(_ itemID: String?) {
+        guard topVisibleItemID != itemID else { return }
+        topVisibleItemID = itemID
     }
 
     /// A row the transcript has been asked to scroll to. The tick rides along so pressing the bar
@@ -2295,9 +2386,14 @@ final class ConsoleModel {
             // drawn), so a build that drew none of them said "Waiting for approval" over a
             // conversation with nothing in it to press. `ExceptionCards.cards` draws the owner's
             // group only — what is still the coordinator's is work in progress, and the agent's.
+            //
+            // Placed by the item's OWN moment rather than by where this device read it
+            // (`DeliveryAnchor.exception`), so the card sits where it became the owner's: read off
+            // the item, the same clock its heading counts its wait from.
             for row in ExceptionCards.cards(items) {
                 deliver(row.kind == .fusePaused ? .fusePause(itemID: row.itemId)
-                                                : .escalatedItem(itemID: row.itemId))
+                                                : .escalatedItem(itemID: row.itemId),
+                        placement: DeliveryAnchor.exception(row, items: state.items))
             }
         }
         // `do` rather than `try?`, because this door answers `null` for "asking nothing" and `try?`
@@ -2368,11 +2464,18 @@ final class ConsoleModel {
         deliver(kind, anchoredAt: DeliveryAnchor.onArrival(of: kind, items: state.items))
     }
 
-    /// …or where it happened, for a record that carries its own moment — a receipt is drawn at the
-    /// point in the conversation it belongs to rather than where the reader happened to be looking
-    /// when the read brought it back.
+    /// …or where it happened, for a card that carries a moment of its own — a receipt, and the two
+    /// owner cards that became the owner's at a time the read can name (`DeliveryAnchor.exception`):
+    /// drawn at the point in the conversation they belong to rather than where the reader happened
+    /// to be looking when the read brought them back.
     private func deliver(_ kind: DeliveredDecisionCard.Kind, anchoredAt anchor: String?) {
-        let card = DeliveredDecisionCard(kind: kind, afterItemID: anchor)
+        deliver(kind, placement: .onArrival(afterItemID: anchor))
+    }
+
+    /// The same, for a card whose whole placement the caller worked out (`DeliveryAnchor`).
+    private func deliver(_ kind: DeliveredDecisionCard.Kind,
+                         placement: DeliveredDecisionCard.Placement) {
+        let card = DeliveredDecisionCard(kind: kind, placement: placement)
         guard !closedCards.contains(card.id), !decisionCards.contains(where: { $0.id == card.id })
         else { return }
         decisionCards.append(card)
@@ -2394,9 +2497,9 @@ final class ConsoleModel {
     ///
     /// Anchors are captured once: a receipt already delivered keeps the place it was given, so a
     /// read coming round again cannot walk it down the conversation. One whose moment is older than
-    /// everything loaded is not drawn at all — see `CriteriaDecisions.receipts`.
+    /// everything loaded leads at the HEAD of the window — see `ReceiptAnchor.Placement`.
     private func adoptReceipts(_ queue: PendingCriteriaDecisionQueue) {
-        let receipts = CriteriaDecisions.receipts(queue: queue, items: state.items)
+        let receipts = CriteriaDecisions.receipts(queue: queue)
         let answered = Set(receipts.map(\.settled.intentId))
         guard !answered.isEmpty else { return }
         decisionCards.removeAll { card in
@@ -2406,7 +2509,7 @@ final class ConsoleModel {
         for receipt in receipts where !decisionCards.contains(where: { $0.id == receipt.id }) {
             decisionCards.append(DeliveredDecisionCard(
                 kind: .criteriaDecisionReceipt(settled: receipt.settled),
-                afterItemID: receipt.afterItemID))
+                placement: .at(receipt.moment)))
         }
     }
 
@@ -2417,7 +2520,7 @@ final class ConsoleModel {
     /// answered revision is let go of: the receipt says which way it went, which is the thing a
     /// dimmed card could not say. A revision the read does not name keeps its card.
     private func adoptEvidenceReceipts(_ queue: EvidenceDecisionQueue) {
-        let receipts = EvidenceDecisions.receipts(queue: queue, items: state.items)
+        let receipts = EvidenceDecisions.receipts(queue: queue)
         let answered = Set(receipts.map { "\($0.decided.taskId)@\($0.decided.evidenceRevision)" })
         guard !answered.isEmpty else { return }
         decisionCards.removeAll { card in
@@ -2429,7 +2532,7 @@ final class ConsoleModel {
         for receipt in receipts where !decisionCards.contains(where: { $0.id == receipt.id }) {
             decisionCards.append(DeliveredDecisionCard(
                 kind: .evidenceDecisionReceipt(decided: receipt.decided),
-                afterItemID: receipt.afterItemID))
+                placement: .at(receipt.moment)))
         }
     }
 
@@ -2443,13 +2546,13 @@ final class ConsoleModel {
     /// vanishing mid-read. A press made HERE has already closed the card, so nothing is left to
     /// take away — this only adds.
     private func adoptAcceptanceReceipt() {
-        guard let receipt = AcceptanceConfirmations.receipt(standing: acceptanceConfirmation,
-                                                            items: state.items) else { return }
+        guard let receipt = AcceptanceConfirmations.receipt(standing: acceptanceConfirmation)
+        else { return }
         guard !closedCards.contains(receipt.id),
               !decisionCards.contains(where: { $0.id == receipt.id }) else { return }
         decisionCards.append(DeliveredDecisionCard(
             kind: .acceptanceConfirmationReceipt(confirmed: receipt.confirmation),
-            afterItemID: receipt.afterItemID))
+            placement: .at(receipt.moment)))
     }
 
     /// The same, for the decisions this session's runs have already recorded: each drawn where it
@@ -2463,12 +2566,12 @@ final class ConsoleModel {
     /// what `DeliveryAnchor` says — and so is a decision the read stops publishing: a row already
     /// adopted keeps its place, for `adoptReceipts`' reason.
     private func adoptOwnerReceipts(_ read: OwnerConfirmationView) {
-        for receipt in OwnerConfirmations.receipts(read, sessionID: sessionID, items: state.items) {
+        for receipt in OwnerConfirmations.receipts(read, sessionID: sessionID) {
             guard !closedCards.contains(receipt.id),
                   !decisionCards.contains(where: { $0.id == receipt.id }) else { continue }
             decisionCards.append(DeliveredDecisionCard(
                 kind: .ownerDecisionReceipt(taskID: receipt.taskId, decisionID: receipt.decided.id),
-                afterItemID: receipt.afterItemID))
+                placement: .at(receipt.moment)))
         }
     }
 
@@ -2481,14 +2584,14 @@ final class ConsoleModel {
     /// a different merge in the same place. The card that ASKED for a merge is let go of by the read
     /// that says it merged (`refreshRulerQuestions`), which is where the strip stops drawing it; what
     /// is adopted here is the record that replaces it. A merge whose moment is older than everything
-    /// loaded is not drawn at all — see `PromotionCards.receipts`.
+    /// loaded leads at the HEAD of the window — see `ReceiptAnchor.Placement`.
     private func adoptPromotionReceipts(_ merged: [ProjectPromotionView]) {
-        for receipt in PromotionCards.receipts(merged: merged, items: state.items) {
+        for receipt in PromotionCards.receipts(merged: merged) {
             guard !closedCards.contains(receipt.id),
                   !decisionCards.contains(where: { $0.id == receipt.id }) else { continue }
             decisionCards.append(DeliveredDecisionCard(
                 kind: .promotionReceipt(promotion: receipt.promotion),
-                afterItemID: receipt.afterItemID))
+                placement: .at(receipt.moment)))
         }
     }
 

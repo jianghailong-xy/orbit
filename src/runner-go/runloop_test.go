@@ -197,6 +197,46 @@ func TestCarryOverModelCatalog(t *testing.T) {
 	}
 }
 
+func TestCarryOverModelCapabilities(t *testing.T) {
+	yes, no := true, false
+	prev := []ModelInfo{
+		{Value: "claude-opus-5-5", PermissionModes: allPermissionModes, FastMode: &yes},
+		{Value: "claude-haiku-4-5", PermissionModes: []string{"default"}, FastMode: &no},
+	}
+
+	// The alias probes answered but the per-model capability probe did not (a timed-out spawn, a
+	// CLI with no /fast). The row must keep what this runner knew rather than reading its own
+	// silence as "Opus 5.5 has no Auto and no fast lane" for the four hours until the next round.
+	merged := carryOverModelCapabilities(prev, []ModelInfo{
+		{Value: "claude-opus-5-5", Label: "Opus 5.5"},
+		{Value: "claude-haiku-4-5", Label: "Haiku 4.5"},
+	})
+	if !reflect.DeepEqual(merged[0].PermissionModes, allPermissionModes) {
+		t.Fatalf("PermissionModes = %#v, want the previous answer carried over", merged[0].PermissionModes)
+	}
+	if merged[0].FastMode == nil || !*merged[0].FastMode {
+		t.Fatalf("FastMode = %v, want the previous true carried over", merged[0].FastMode)
+	}
+
+	// A round that DID answer always wins, including when it answers no: a model losing a
+	// capability is news, and carrying the old yes over it would pin a lane that is gone.
+	merged = carryOverModelCapabilities(prev, []ModelInfo{
+		{Value: "claude-opus-5-5", PermissionModes: []string{"default"}, FastMode: &no},
+	})
+	if merged[0].FastMode == nil || *merged[0].FastMode {
+		t.Fatalf("FastMode = %v, want this round's false", merged[0].FastMode)
+	}
+	if !reflect.DeepEqual(merged[0].PermissionModes, []string{"default"}) {
+		t.Fatalf("PermissionModes = %#v, want this round's list", merged[0].PermissionModes)
+	}
+
+	// A model this runner has never reported has nothing to inherit.
+	merged = carryOverModelCapabilities(prev, []ModelInfo{{Value: "claude-opus-6"}})
+	if merged[0].PermissionModes != nil || merged[0].FastMode != nil {
+		t.Fatalf("new model = %#v, want it left unknown", merged[0])
+	}
+}
+
 func TestReclaimStatusOpenRejectsTerminalAndUnknownRows(t *testing.T) {
 	for _, tc := range []struct {
 		status string

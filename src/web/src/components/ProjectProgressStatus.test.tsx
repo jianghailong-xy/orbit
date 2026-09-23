@@ -3,7 +3,7 @@ import { act, type JSX } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import type {
   CoordinatorFuseUsage,
   CoordinatorWakeups,
@@ -13,8 +13,9 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CoordinatorProgressRows,
-  ProjectExceptionCards,
+  ItemAsCard,
   ProjectOpenItems,
+  exceptionCardRows,
 } from './ProjectProgressStatus';
 import { projectOpenItemsQuery } from '../lib/queries';
 
@@ -259,6 +260,24 @@ const STANDING = {
   withCoordinator: [CONFLICT, CHECK_FAILED],
 };
 
+/**
+ * The conversation's host, as `WorkspaceView` now draws these cards: the rows of the open-items
+ * read, one card each, in the order the host would insert them. Production places each of those
+ * rows at the moment it happened (`exceptionCardRows` → the transcript's `inserts`); what these
+ * assertions are about is the CARD, so this stands in for the placing and does none of it — the
+ * rows are the same selection and order, drawn from the same read.
+ */
+function ExceptionCards({ projectId, now }: { projectId: string; now: number }): JSX.Element {
+  const items = useQuery({ ...projectOpenItemsQuery(projectId), enabled: true });
+  return (
+    <>
+      {exceptionCardRows(items.data, []).map(({ row }) => (
+        <ItemAsCard key={row.itemId} projectId={projectId} row={row} now={now} />
+      ))}
+    </>
+  );
+}
+
 describe('ProjectOpenItems — the project page’s Open items card', () => {
   it('renders open items in two groups with owner, waiting time and escalation', () => {
     const html = paint(STANDING, () => <ProjectOpenItems projectId={PROJECT_ID} now={NOW} />);
@@ -332,11 +351,67 @@ describe('ProjectOpenItems — the project page’s Open items card', () => {
   });
 });
 
-describe('ProjectExceptionCards — the same items in the coordinator’s conversation', () => {
+/**
+ * Where each of those cards is drawn in a conversation (mock `escalated-card-placement`).
+ *
+ * The card used to be a block under the transcript, so an exception that became the owner's
+ * thirty-four minutes ago sat under the newest message reading `waiting 34m` — one card, two
+ * stories about when it happened. `exceptionCardRows` is the placement: the moment it happened,
+ * resolved against the events the conversation holds, by the rule the records are placed by
+ * (`decisionReceiptAnchor`) and the same field the card's heading counts its wait from — which
+ * both native clients read too (`DeliveryAnchor.exception`).
+ */
+describe('exceptionCardRows — where each exception lands in a conversation', () => {
+  /** 11:00 → 11:30 → 11:54 → 12:00: the fixtures are built relative to NOW (12:00). */
+  const EVENTS = [
+    { seq: 1, ts: '2026-09-13T11:00:00.000Z' },
+    { seq: 2, ts: '2026-09-13T11:30:00.000Z' },
+    { seq: 3, ts: '2026-09-13T11:54:00.000Z' },
+  ];
+  const anchors = (items: {
+    needsYou: ProjectOpenItemRow[];
+    withCoordinator: ProjectOpenItemRow[];
+  }): Array<number | 'head' | null> =>
+    exceptionCardRows(items, EVENTS).map(({ anchor }) => anchor);
+
+  it('anchors an escalated item where it became the owner’s, not where its wait started', () => {
+    // ESCALATED opened 2h6m ago (09:54) and the clock handed it over 6m ago (11:54). The second is
+    // the moment: the first would draw the card two hours early, at the top of a conversation it
+    // had not been escalated in yet.
+    expect(anchors({ needsYou: [ESCALATED], withCoordinator: [] })).toEqual([3]);
+  });
+
+  it('falls back to when the item opened, for one that was never the coordinator’s', () => {
+    // A project with no coordinator lands the item on the owner with no escalation instant.
+    const landed = { ...ESCALATED, escalatedAt: null, waitingSince: at(28 * MINUTE) };
+    expect(anchors({ needsYou: [landed], withCoordinator: [] })).toEqual([2]);
+  });
+
+  it('leads at the head when the moment is older than every loaded event', () => {
+    const old = { ...ESCALATED, escalatedAt: null, waitingSince: '2026-09-13T09:00:00.000Z' };
+    expect(anchors({ needsYou: [old], withCoordinator: [] })).toEqual(['head']);
+  });
+
+  it('drops a row whose stamp no clock can parse, rather than placing it by a guess', () => {
+    const broken = { ...ESCALATED, escalatedAt: null, waitingSince: 'not a stamp' };
+    expect(anchors({ needsYou: [broken], withCoordinator: [] })).toEqual([null]);
+  });
+
+  it('keeps the pause first and the rest oldest first, as the one block drew them', () => {
+    const older = { ...ESCALATED, itemId: 'OLDER', escalatedAt: null, waitingSince: at(3 * HOUR) };
+    const rows = exceptionCardRows(
+      { needsYou: [older], withCoordinator: [CONFLICT, PAUSED] },
+      EVENTS,
+    );
+    expect(rows.map(({ row }) => row.itemId)).toEqual([PAUSED.itemId, 'OLDER', CONFLICT.itemId]);
+  });
+});
+
+describe('ExceptionCards — the same items in the coordinator’s conversation', () => {
   it('draws a card for each exception with its owner, waiting time and escalation', () => {
     const html = paint(
       { needsYou: [], withCoordinator: [CONFLICT, CHECK_FAILED, item()] },
-      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
 
     // Each card is its kind's own heading, and what the item is about is a row under it rather
@@ -361,7 +436,7 @@ describe('ProjectExceptionCards — the same items in the coordinator’s conver
   it('says an escalated item is now yours, and why', () => {
     const html = paint(
       { needsYou: [ESCALATED], withCoordinator: [] },
-      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
 
     expect(html).toContain('Now yours — no one acted on this for 2h');
@@ -376,7 +451,7 @@ describe('ProjectExceptionCards — the same items in the coordinator’s conver
     const handed = { ...ESCALATED, assigneeReason: 'HANDED_OVER' as const };
     const draw = (row: ProjectOpenItemRow) =>
       paint({ needsYou: [row], withCoordinator: [] }, () => (
-        <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />
+        <ExceptionCards projectId={PROJECT_ID} now={NOW} />
       ));
 
     expect(draw(ended)).toContain('Now yours — the coordinator conversation ended');
@@ -387,7 +462,7 @@ describe('ProjectExceptionCards — the same items in the coordinator’s conver
   it('draws the pause card and nothing else when only the fuse is open', () => {
     const html = paint(
       { needsYou: [PAUSED], withCoordinator: [] },
-      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
     expect(html).toContain('The coordinator paused itself');
     expect(html).toContain('3 things it would have started are on hold');
@@ -399,14 +474,14 @@ describe('ProjectExceptionCards — the same items in the coordinator’s conver
     // land is the other one.
     expect(paint(
       { needsYou: [PROMOTION], withCoordinator: [] },
-      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     )).toBe('');
   });
 
   it('draws nothing while nothing is open', () => {
     expect(paint(
       { needsYou: [], withCoordinator: [] },
-      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     )).toBe('');
   });
 });
@@ -425,7 +500,7 @@ describe('the exception card’s fact block', () => {
       row.assignee === 'OWNER'
         ? { needsYou: [row], withCoordinator: [] }
         : { needsYou: [], withCoordinator: [row] },
-      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
   }
 
@@ -517,7 +592,7 @@ describe('the exception cards’ presses', () => {
       row.assignee === 'OWNER'
         ? { needsYou: [row], withCoordinator: [] }
         : { needsYou: [], withCoordinator: [row] },
-      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
   }
 
@@ -597,7 +672,7 @@ describe('the exception card’s action row', () => {
       row.assignee === 'OWNER'
         ? { needsYou: [row], withCoordinator: [] }
         : { needsYou: [], withCoordinator: [row] },
-      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
     );
   }
 
@@ -651,7 +726,7 @@ describe('the exception card’s action row', () => {
     await mount(
       <MemoryRouter>
         <QueryClientProvider client={client({ needsYou: [ESCALATED], withCoordinator: [] })}>
-          <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />
+          <ExceptionCards projectId={PROJECT_ID} now={NOW} />
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -863,7 +938,7 @@ describe('FusePauseCard — resuming', () => {
     await mount(
       <MemoryRouter>
         <QueryClientProvider client={qc}>
-          <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />
+          <ExceptionCards projectId={PROJECT_ID} now={NOW} />
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -894,7 +969,7 @@ describe('the exception cards’ presses, through their doors', () => {
     await mount(
       <MemoryRouter>
         <QueryClientProvider client={qc}>
-          <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />
+          <ExceptionCards projectId={PROJECT_ID} now={NOW} />
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -989,7 +1064,7 @@ describe('an owner marking an exception handled', () => {
     await mount(
       <MemoryRouter>
         <QueryClientProvider client={qc}>
-          <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />
+          <ExceptionCards projectId={PROJECT_ID} now={NOW} />
         </QueryClientProvider>
       </MemoryRouter>,
     );

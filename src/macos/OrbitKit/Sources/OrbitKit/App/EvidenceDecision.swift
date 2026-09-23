@@ -697,15 +697,16 @@ public enum EvidenceDecisions {
         return "\(action) · rev \(decided.evidenceRevision) · \(receiptTime(decided.decidedAt, now: now))"
     }
 
-    /// One answer this console draws as a record, and the item it belongs after.
+    /// One answer this console draws as a record.
     public struct Receipt: Equatable, Sendable, Identifiable {
         public let decided: RecordedEvidenceDecision
-        public let afterItemID: String
 
-        public init(decided: RecordedEvidenceDecision, afterItemID: String) {
+        public init(decided: RecordedEvidenceDecision) {
             self.decided = decided
-            self.afterItemID = afterItemID
         }
+
+        /// The door's own clock — see `CriteriaDecisions.Receipt.moment`.
+        public var moment: String { decided.decidedAt }
 
         /// Beside the question card's id rather than equal to it — see `DeliveredDecisionCard`,
         /// where both rows can be on screen at once for one revision.
@@ -723,18 +724,13 @@ public enum EvidenceDecisions {
     /// the deciding session), so they are derived here like everything else on a card, and a device
     /// that never saw the question still shows what was decided.
     ///
-    /// Placed by `ReceiptAnchor` — the last item at or before the door's clock — and NOT drawn at
-    /// all when that moment is older than everything this console holds: the window starts at the
-    /// tail, so such a receipt has no honest place to go.
-    public static func receipts(queue: EvidenceDecisionQueue?,
-                                items: [TranscriptItem]) -> [Receipt] {
+    /// Placed by the row's own clock and never by a captured one: the record carries `decidedAt`, and
+    /// `TranscriptRows.build` resolves it against the rows loaded at render time — inside the window
+    /// it sits where the decision happened, above it it leads at the head
+    /// (`ReceiptAnchor.Placement`), including on the console that opened a day later.
+    public static func receipts(queue: EvidenceDecisionQueue?) -> [Receipt] {
         guard let queue else { return [] }
-        return queue.decided.compactMap { decided in
-            guard let anchor = ReceiptAnchor.after(items: items, at: decided.decidedAt) else {
-                return nil
-            }
-            return Receipt(decided: decided, afterItemID: anchor)
-        }
+        return queue.decided.map { Receipt(decided: $0) }
     }
 
     /// Whether the read says this revision was answered — what makes its question card give way.

@@ -834,11 +834,35 @@ export const Transcript = memo(function Transcript({
    * end, exactly where they used to render.
    */
   streamingAfterSeq?: number | null;
-  /** Drawn among the events instead of after them — see `TranscriptInsert`. Pass a stable array:
-   *  this component is memo'd, and a new one on every render rebuilds the whole conversation. */
+  /** Drawn among the events instead of after them — or above all of them, when the record's own
+   *  moment is older than every event loaded — see `TranscriptInsert`. Pass a stable array: this
+   *  component is memo'd, and a new one on every render rebuilds the whole conversation. */
   inserts?: readonly TranscriptInsert[];
 }) {
   const nodes = useMemo(() => buildNodes(events, turnImages), [events, turnImages]);
+  // Where each insert goes: after the last top-level card at or before its seq, keyed by that
+  // card's seq. Whichever half of the split holds the card draws it, so nothing is drawn twice,
+  // and an insert older than every loaded card is not drawn at all — UNLESS it says `head`, which
+  // is the record whose moment is above this whole window: it leads, above everything.
+  const { head, at: placed } = useMemo(() => {
+    const at = new Map<number, TranscriptInsert[]>();
+    const head: TranscriptInsert[] = [];
+    for (const insert of inserts ?? []) {
+      if (insert.anchor === 'head') {
+        head.push(insert);
+        continue;
+      }
+      let seq: number | null = null;
+      for (const node of nodes) {
+        if (Number.isFinite(node.seq) && node.seq <= insert.anchor) seq = node.seq;
+      }
+      if (seq !== null) at.set(seq, [...(at.get(seq) ?? []), insert]);
+    }
+    // Oldest first, because the head of a conversation reads top-down in the order things
+    // happened, and these are its oldest rows (native: `ReceiptAnchor.ascending`).
+    head.sort((a, b) => Date.parse(a.moment) - Date.parse(b.moment));
+    return { head, at };
+  }, [nodes, inserts]);
   const artifactResolve = useMemo(
     () =>
       artifactSessionId ? (artifactPath: string) => fetchSessionArtifactObjectUrl(artifactSessionId, artifactPath) : null,
@@ -858,22 +882,11 @@ export const Transcript = memo(function Transcript({
     }
     return at < 0 || at >= nodes.length ? [nodes, [] as Node[]] : [nodes.slice(0, at), nodes.slice(at)];
   }, [nodes, streamingAfterSeq]);
-  // Where each insert goes: after the last top-level card at or before its seq, keyed by that
-  // card's seq. Whichever half of the split holds the card draws it, so nothing is drawn twice,
-  // and an insert older than every loaded card is not drawn at all.
-  const placed = useMemo(() => {
-    const at = new Map<number, TranscriptInsert[]>();
-    for (const insert of inserts ?? []) {
-      let anchor: number | null = null;
-      for (const node of nodes) {
-        if (Number.isFinite(node.seq) && node.seq <= insert.afterSeq) anchor = node.seq;
-      }
-      if (anchor !== null) at.set(anchor, [...(at.get(anchor) ?? []), insert]);
-    }
-    return at;
-  }, [nodes, inserts]);
   const body = (
     <ImagePreviewProvider>
+      {head.map((insert) => (
+        <Fragment key={insert.key}>{insert.element}</Fragment>
+      ))}
       <NodeList nodes={before} live={live} placed={placed} />
       <StreamingDrafts />
       {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
@@ -888,11 +901,16 @@ export const Transcript = memo(function Transcript({
 
 /**
  * Something drawn into the conversation that is not an event: it has a moment but no seq of its
- * own, like a decision recorded from this session. It renders straight after the card holding
- * `afterSeq`, which the caller works out from the events' clocks.
+ * own, like a decision recorded from this session.
+ *
+ * `anchor` is where it goes — after the row holding that seq, or `'head'` when the moment is older
+ * than every loaded row, which `decisionReceiptAnchor` answers for `moment`. The caller works both
+ * out from the events' clocks; this component only draws the answer.
  */
 export interface TranscriptInsert {
-  afterSeq: number;
+  anchor: number | 'head';
+  /** The door's clock. Read only to order the inserts that all lead at the head — oldest first. */
+  moment: string;
   key: string;
   element: ReactNode;
 }
@@ -1901,8 +1919,22 @@ function isLocalFileSrc(src: string): boolean {
   return /^\/(?:root|home|tmp|Users)\/[^?#]+$/i.test(src);
 }
 
+// A path inside the session's own directories, as prose names them: the uploads scratch older
+// sessions wrote into, and the checkout an agent works in now — where the mocks it draws and links
+// sit. Either id spelling, because a checkout is named after whatever the claim carried. The
+// artifact route is what turns one of these back into bytes (the runner reads the file), so this is
+// also the gate on what gets a download affordance instead of an inert chip.
+// Whether a path names something worth drawing rather than handing over — the same reading the
+// native clients make (AttachmentLink.looksLikeImage), so one reply looks the same in all three.
+// The extension is all there is before the bytes are in hand, and it is enough: an agent's mock
+// ends in .png because that is what it wrote. SVG is deliberately absent — a browser draws it, but
+// neither native client decodes it, and a chip on two clients beats a picture on one.
+function looksLikeImagePath(src: string): boolean {
+  return /\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i.test(src.split(/[?#]/)[0] ?? src);
+}
+
 function isLegacyArtifactSrc(src: string): boolean {
-  return isLocalFileSrc(src) && /\/\.orbit\/uploads\/[0-9a-f-]{36}\//i.test(src);
+  return isLocalFileSrc(src) && /\/\.orbit\/(?:uploads|worktrees)\/[0-9a-z-]{16,}\//i.test(src);
 }
 
 function fileLabel(src: string): string {
@@ -1927,6 +1959,9 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
     );
   }
   if (typeof src === 'string' && isLegacyArtifactSrc(src)) {
+    if (looksLikeImagePath(src)) {
+      return <LocalArtifactImage artifactPath={src} alt={typeof alt === 'string' ? alt : 'Image'} />;
+    }
     return <LocalArtifactFile artifactPath={src} label={fileLabel(src)} />;
   }
   if (typeof src === 'string' && isLocalImageSrc(src)) {
@@ -1938,6 +1973,47 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
     );
   }
   return <img {...rest} className="md-image" src={src} alt={alt ?? ''} />;
+}
+
+// An image a reply named by its path: the mock an agent drew, in the session's own directories. The
+// bytes are on the runner, so they come through the artifact route — fetched when the row appears,
+// and drawn in place, because a reader who linked a picture meant to show one.
+//
+// A file that does not come back as an image, or does not come back at all (a checkout GC'd since,
+// a runner that is gone), falls back to the chip a non-image path gets: same reading, and the
+// click retries it. Static export falls back too — the route is a live fetch and those bytes were
+// never embedded.
+function LocalArtifactImage({ artifactPath, alt }: { artifactPath: string; alt: string }) {
+  const resolve = useContext(ArtifactResolverContext);
+  const exp = useContext(ExportCtx);
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!resolve || exp) return;
+    let active = true;
+    let made: string | null = null;
+    resolve(artifactPath)
+      .then((u) => {
+        if (active) {
+          made = u;
+          setUrl(u);
+        } else {
+          URL.revokeObjectURL(u); // unmounted before the fetch resolved
+        }
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [artifactPath, resolve, exp]);
+  if (exp || failed) {
+    return <LocalArtifactFile artifactPath={artifactPath} label={alt || fileLabel(artifactPath)} />;
+  }
+  if (!url) return <span className="md-image md-image-loading" />;
+  return <ChatImage src={url} className="md-image" alt={alt || 'Image'} />;
 }
 
 function LocalArtifactFile({
@@ -2775,14 +2851,23 @@ function ToolResult({
 }) {
   const text = resultText(content);
   const images = resultImages(content);
+  // An oversized image reaches the preview as a block with no `data` (see MAX_IMAGE_PAYLOAD), so
+  // `images` is empty for a card that has a picture coming. That counts as output: the card is
+  // open on the block, and rendering nothing would leave it a picture-shaped hole.
+  const imagePending = images.length === 0 && hasResultImage(content);
   // A successful tool with no output renders nothing; but an error with no output must
   // still surface — otherwise a failed tool looks like it never ran.
-  if (!text && images.length === 0 && !isError) return null;
+  if (!text && images.length === 0 && !imagePending && !isError) return null;
   return (
     <div
       data-seq={seq}
       className={`chat-result${isError ? ' is-error' : ''}${compact ? ' compact' : ''}`}
     >
+      {imagePending && (
+        <div className="chat-result-image-loading" aria-label="loading image">
+          <LoadingOutlined spin />
+        </div>
+      )}
       {images.length > 0 && (
         <div className="chat-images">
           {images.map((src, i) => (

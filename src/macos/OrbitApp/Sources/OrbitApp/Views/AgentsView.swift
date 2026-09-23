@@ -239,14 +239,19 @@ struct AgentContentColumn: View {
                 AgentPanes(agents: agents, agent: a, selectedSessionID: $app.selectedAgentSessionID,
                            searchQuery: $searchQuery, rowNavigation: rowNavigation)
                     .id(a.id)
-                    .navigationTitle(a.name)
                     #if os(iOS)
-                    // Inline on the phone too, which used to keep its roomy large title. The title is
-                    // the workspace name, and the drawer already shows that as its selected row — so
-                    // the vertical room the large title spent repeating it came straight out of the
-                    // rows. The regular-width shell has read it this way since the persistent scope
-                    // control took that room; the two shells now agree.
+                    // No title, on either width: the bar's workspace switcher (see the toolbar
+                    // below) moved out of the title slot and into the leading one, and a title left
+                    // behind would draw a second copy of the same name in the centre. `.inline`
+                    // stays even with nothing to draw — a page with no title still reserves the
+                    // *large* title band without it, the trap `ConsoleView` documents on its own
+                    // page. One deliberate cost: a pushed page's back label is the previous page's
+                    // title, so the console and the draft now read "Back" instead of the workspace
+                    // name. (macOS keeps its title: its toolbar is its own layout and nothing there
+                    // moved.)
                     .navigationBarTitleDisplayMode(.inline)
+                    #else
+                    .navigationTitle(a.name)
                     #endif
             } else {
                 switch app.agents?.listPresentation {
@@ -269,29 +274,41 @@ struct AgentContentColumn: View {
         #if os(iOS)
         // Search, in the list rather than over it. Until it existed the list was only searchable from
         // inside the drawer (or ⌘K, which needs a keyboard), so it looked like it had none.
-        // `.navigationBarDrawer` is what keeps the field *below* the workspace title instead of over
-        // it — the system owns that layout, which a hand-placed bar can't do. `.automatic`: the field
-        // is there at the top, leaves as you read, and the pull brings it back. (The field is
-        // declared on the column root, so it also exists from that column's first breath in either
-        // mode.) Typing searches the server (every workspace, scope and message text); the hits
-        // replace the list's sections until the field is cleared (see `AgentPanes`).
+        // `.navigationBarDrawer` is what keeps the field *below* the bar's own content instead of
+        // over it — the system owns that layout, which a hand-placed bar can't do. `.always`, and
+        // this is the second time it has won: the list below carries `.refreshable`, and on iOS 26
+        // the two disagree about where the drawer's 60pt goes.
         //
-        // The trap this mode brings, measured on an iOS 26.2 simulator (the `.ios-probe/` probe on
-        // the `orbit/loading-c855b1-shots` branch; frames in window coordinates): the drawer's 60pt
-        // is counted twice. The navigation bar grows to 62–236 and the field is drawn at its bottom
-        // (176–236), while `UIRefreshControl` still takes the band above it (116–176) — so the pull
-        // that reveals the field also drew the spinner *in the bar*, and on the phone that reported
-        // it that band is the field itself. `.always` (the revert this replaces) avoids it only by
-        // keeping the field resident: bar 62–176, field 116–176 inside it, control 176–236, below
-        // both. Every other spelling measures identically — `.searchable` on the list rather than
-        // here, `.searchPresentationToolbarBehavior(.avoidHidingContent)`, `.refreshable` hoisted to
-        // the column root, the list's top safe-area inset removed.
+        // Measured on an iOS 26.2 simulator (the `.ios-probe/` probe on the
+        // `orbit/loading-c855b1-shots` branch; frames in window coordinates). Every bottom edge here
+        // was taken while the page still drew an inline title above the field, so with that title
+        // gone the whole arrangement sits a title-line higher; what the numbers decide is the
+        // *relative* order (field inside the bar, control below it), which is unchanged. Under
+        // `.automatic` the navigation bar grows to 62–236 and the field is drawn at its bottom
+        // (176–236), while the
+        // refresh control still takes the band above it (116–176) — so the pull that reveals the
+        // field draws the spinner *in the bar*, which on the phone that reported this is the field
+        // itself. Under `.always` the bar is 62–176, the field 116–176 *inside* it, and the control
+        // 176–236: below both, like Mail's. Every other spelling measures identically —
+        // `.searchable` on the list instead of here, `.searchPresentationToolbarBehavior
+        // (.avoidHidingContent)`, `.refreshable` hoisted to the column root, the list's top
+        // safe-area inset removed.
         //
-        // So the fix is not the display mode but the control's *glyph*: `AgentPanes` keeps the system
-        // control — the gesture, the threshold and the haptics are the system's — clears its tint,
-        // and draws its own indicator in the list's top band, below the field the pull reveals.
+        // β96 also tried keeping `.automatic` and moving the *spinner* instead: clearing the
+        // control's tint (which does hide the glyph — it hangs off a zero-height row inside the
+        // list, since a `.background` is attached outside the collection view and reaches no scroll
+        // view at all) and drawing an indicator of our own in the band below the field. It works,
+        // and it leaves the header with a void: that band is the refresh control's own 60pt, which
+        // `.refreshable` reserves whether or not a search field exists (`bare` 116 → `bareRefresh`
+        // 176), while a drawer with no refresh control reserves nothing (`.automatic` and `.always`
+        // both 176 without it). A resident field below that band reads as chrome; a field floating
+        // above it reads as a hole under the field — which is how it was reported. So: `.always`,
+        // and the 56pt a scrolling-away field would give back is what the header pays to read right.
+        // (The field is declared on the column root, so it also exists from that column's first
+        // breath in either mode.) Typing searches the server (every workspace, scope and message
+        // text); the hits replace the list's sections until the field is cleared (see `AgentPanes`).
         .searchable(text: $searchQuery,
-                    placement: .navigationBarDrawer(displayMode: .automatic),
+                    placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "Search sessions")
         // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
         // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
@@ -300,41 +317,6 @@ struct AgentContentColumn: View {
         #endif
     }
 }
-
-#if os(iOS)
-/// Hides the spinner the system's refresh control draws — the one thing that has to move for the
-/// session list to keep a scrolling-away search field, which is why this exists at all.
-///
-/// On iOS 26 that spinner is drawn in the navigation bar's *drawer* band: the bar grows to 62–236,
-/// the drawer field is drawn at its bottom (176–236), and the control still takes 116–176 — the band
-/// above the field, which on the phone that reported this is the field itself. Measured on an iOS
-/// 26.2 simulator; the full note is on `AgentContentColumn`'s `.searchable`.
-///
-/// The control stays — its gesture, threshold and haptics are the system's, and it is what runs
-/// `.refreshable` — and only its tint goes, which is what iOS 26's indicator draws with. The list
-/// then draws its own indicator in its top band, below the field (see `AgentPanes`).
-///
-/// It hangs off a zero-height row *inside* the list, not off the list's background: a background is
-/// attached to the wrapper outside the collection view, so walking up from it never reaches a scroll
-/// view (measured — the first cut of this did nothing at all), while from a row the walk can only
-/// arrive at this list's own control and can never clear another list's spinner.
-private struct ClearRefreshSpinner: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        view.isUserInteractionEnabled = false
-        return view
-    }
-
-    func updateUIView(_ view: UIView, context: Context) {
-        // Off the layout pass: the control is UIKit's, and it does not exist yet on the first update.
-        DispatchQueue.main.async {
-            var node: UIView? = view
-            while let current = node, !(current is UIScrollView) { node = current.superview }
-            (node as? UIScrollView)?.refreshControl?.tintColor = .clear
-        }
-    }
-}
-#endif
 
 struct AgentPanes: View {
     @Environment(AppModel.self) private var app
@@ -359,10 +341,6 @@ struct AgentPanes: View {
     @State private var tagFilter: String?
     /// Whether the iOS list is grouped by tag instead of by recency (iOS list only).
     @State private var groupByTag = false
-    /// Whether the pull's refresh is running. The system spinner is cleared (see
-    /// `ClearRefreshSpinner`), so this is what draws the indicator in the list's top band for the
-    /// duration — below the search field the pull is revealing (iOS list only).
-    @State private var refreshing = false
     #if os(iOS)
     /// Whether the title's workspace switcher is open. The title slot is the switcher here for the
     /// same reason it is on the new-session draft (see `WorkspaceTitleSwitcher`): the workspace is
@@ -391,14 +369,6 @@ struct AgentPanes: View {
         // there the List has nothing to select (and in a plain stack wouldn't respond to a tap).
         List(selection: listSelection) {
             #if os(iOS)
-            // The handle onto the pull's refresh control — see `ClearRefreshSpinner`. It rides a
-            // zero-height row rather than the list's background because a background hangs off the
-            // wrapper *outside* the collection view, where the walk up finds no scroll view at all.
-            ClearRefreshSpinner()
-                .frame(height: 0)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
             // ChatGPT-style recency sections (Pinned / Today / Yesterday / Previous 7 Days / …) — a
             // deliberate divergence from web's flat list, grouping the tall iOS session column by
             // last activity. Bucketing is the pure, tested `SessionTimeGrouping`. macOS keeps the flat
@@ -417,11 +387,34 @@ struct AgentPanes: View {
                     }
                 }
             } else {
-                ForEach(SessionTimeGrouping.sections(shownSessions, pinnedFirst: view == .open && tagFilter == nil)) { section in
-                    Section {
-                        ForEach(section.sessions) { sessionRow($0) }
-                    } header: {
-                        Text(section.title).textCase(nil)
+                // The leading "Today" keeps no title. A list that opens on today — which is nearly
+                // always — would be saying something its rows already say (each carries its own time
+                // on the right), and the 28pt of header it costs is half a row back. `Pinned`, when
+                // it leads, and every later bucket keep theirs: those are the ones that answer
+                // "where am I" once the list has scrolled. (Bucketing itself is untouched — see
+                // `SessionTimeGrouping`; this is only whether a given section draws its title. The
+                // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
+                // — the reporter picked the first: never draw it, rather than only once it pins.)
+                ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
+                    if index == 0, section.title == "Today" {
+                        // The list draws a hairline at the top of its first row — the title used to
+                        // sit over it. With the title gone it reads as a stray rule above the first
+                        // session, so that one row drops its top separator (measured on an iOS 26.2
+                        // simulator: hiding the *section* separator, or giving the Section an empty
+                        // header, both leave the line; only this removes it).
+                        ForEach(section.sessions) { session in
+                            if session.id == section.sessions.first?.id {
+                                sessionRow(session).listRowSeparator(.hidden, edges: .top)
+                            } else {
+                                sessionRow(session)
+                            }
+                        }
+                    } else {
+                        Section {
+                            ForEach(section.sessions) { sessionRow($0) }
+                        } header: {
+                            Text(section.title).textCase(nil)
+                        }
                     }
                 }
             }
@@ -462,14 +455,8 @@ struct AgentPanes: View {
         #if os(iOS)
         // Pull-to-refresh reloads the current agent + scope's sessions on demand (matching the
         // Open/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
-        // `reset:` to update the rows in place rather than blanking the list mid-gesture. The flag
-        // it sets is what draws our own indicator — the control's own is cleared, because iOS 26
-        // draws it in the navigation bar's drawer band, over the field the pull reveals.
-        .refreshable {
-            await MainActor.run { refreshing = true }
-            await agents.loadSessions(agentID: agent.id, view: view)
-            await MainActor.run { refreshing = false }
-        }
+        // `reset:` to update the rows in place rather than blanking the list mid-gesture.
+        .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
         // Typing in the column's search field (declared on `AgentContentColumn`) searches the server —
         // every workspace, scope and message text — and the hits show here in place of the sections;
         // clearing the field restores them.
@@ -481,15 +468,6 @@ struct AgentPanes: View {
         // regular width (the console beside it stays quiet), so it excludes that visible console.
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
-                if refreshing {
-                    // Ours, in the band *below* the search field: the system's spinner is cleared
-                    // (see `ClearRefreshSpinner`) because iOS 26 draws it in the bar's drawer band
-                    // — which is the field itself.
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.top, 10)
-                        .padding(.bottom, 4)
-                }
                 if listPresentation.showsPersistentScope {
                     VStack(spacing: 0) {
                         scopePicker
@@ -538,12 +516,39 @@ struct AgentPanes: View {
                 }
                 .accessibilityLabel("Start a new session with \(agent.name)")
             }
-            // The title slot is the workspace switcher, exactly as it is on the new-session draft
-            // (`WorkspaceTitleSwitcher`). The workspace you are in is the standing context of the
-            // whole list, so the bar's title is where you read it and now also where you change it —
-            // one tap instead of opening the drawer and hunting for the row.
-            ToolbarItem(placement: .principal) {
-                WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
+            // The same workspace switcher the new-session draft carries (`WorkspaceTitleSwitcher`),
+            // but at the *leading* slot rather than the title one. In the title slot iOS 26 only
+            // centres a custom title view while its whole ideal width fits what is left of the bar
+            // after reserving the widest side's chrome on both sides — here the two trailing
+            // buttons' glass capsule (measured 107pt wide on a 393pt bar, +16pt margin ≈ 123pt a
+            // side, leaving ≈147pt). Past that the group didn't truncate: it was clamped to the
+            // leading edge (measured 72.3pt = the drawer button's right edge + 12), so the same bar
+            // read centred for `orbit` and left for `wikova-develop`, decided by nothing but how
+            // long the name happened to be. Leading is where that fallback put it anyway, and
+            // without a width cap the whole name shows rather than a truncation — the two spellings
+            // are drawn side by side in docs/mocks/ios-title-switcher-long-name.html (the chosen one
+            // is B). The drawer button is declared a level up (`drawerToggle`, on the section root),
+            // which is the item this one follows.
+            //
+            // Its shared background is switched off, so the name is *drawn on the bar* rather than
+            // inside a platter with the drawer button: iOS 26 groups adjacent leading items into one
+            // glass capsule by itself, which put `[☰ or ⌄]` on one pill (beta.106). Measured on an
+            // iPhone 17 Pro Max simulator: with the default the two share a 102pt platter; with
+            // `.hidden` the drawer button keeps its own circle and the name sits bare beside it, both
+            // workspace names FULL width. (The probe app that measured it was throwaway and is not
+            // kept; the harness it was built from is the `.ios-probe` app on
+            // `orbit/loading-c855b1-shots`, which is a different arrangement but the same scaffold.)
+            // The modifier is iOS 26 only — below that the bar draws no platters at all, so the
+            // fallback branch is the same item with nothing to hide.
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarLeading) {
+                    WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .topBarLeading) {
+                    WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
+                }
             }
             #else
             // macOS: the wide window toolbar keeps the platform-idiomatic layout — New Session
@@ -672,6 +677,12 @@ struct AgentPanes: View {
     #endif
 
     // The sessions to show: the agent list, narrowed to the tag filter chip when one is active.
+    /// The recency sections the list draws, split out of the `ForEach` so the leading one can be
+    /// rendered without its title (see the list body).
+    private var timeSections: [SessionTimeSection] {
+        SessionTimeGrouping.sections(shownSessions, pinnedFirst: view == .open && tagFilter == nil)
+    }
+
     private var shownSessions: [Session] {
         guard let f = tagFilter else { return agents.agentSessions }
         return SessionFilter.withTag(agents.agentSessions, tagID: f)

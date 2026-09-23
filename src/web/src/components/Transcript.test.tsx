@@ -1699,12 +1699,22 @@ describe('clipped screenshot results', () => {
     expect(html).toContain('is-open');
   });
 
+  // Opening on the block is only half of it: the card is now a picture-shaped hole until the
+  // untrimmed payload lands, and a reader who cannot tell "coming" from "gone" reads it as broken.
+  it('shows the picture-shaped placeholder while the bytes are being fetched back', () => {
+    const html = render(imageResult({ type: 'base64', media_type: 'image/png' }));
+
+    expect(html).toContain('chat-result-image-loading');
+  });
+
   it('still opens — and renders — a small image that arrived whole', () => {
     const data = 'iVBORw0KGgo=';
     const html = render(imageResult({ type: 'base64', media_type: 'image/png', data }));
 
     expect(html).toContain('is-open');
     expect(html).toContain(`data:image/png;base64,${data}`);
+    // The bytes are here, so there is nothing to wait for.
+    expect(html).not.toContain('chat-result-image-loading');
   });
 
   it('leaves a text-only result folded', () => {

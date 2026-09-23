@@ -47,7 +47,12 @@ struct ToolCardView: View {
 
     private var d: ToolDisplay { fullDisplay ?? previewDisplay }
     private var result: String? { fullResult ?? card.result }
-    private var images: [Data] { fullImages ?? card.resultImages }
+    /// `fullImages` is this view's own fetch; the console's copy is what it falls back to first,
+    /// because a row the List recycled comes back with no view state at all — reading it here draws
+    /// the picture in that first frame instead of flashing the placeholder it already left behind.
+    private var images: [Data] {
+        fullImages ?? sessionPreview?.toolImages(card.id) ?? card.resultImages
+    }
     /// `images` decoded and keyed for the viewer. Bytes that aren't a renderable image drop out here,
     /// which is what keeps a page index aligned with the thumbnail it was tapped from.
     private var previewImages: [PreviewImage] {
@@ -97,22 +102,32 @@ struct ToolCardView: View {
 
     /// Refetch whatever this card had clipped, once it's open (or immediately for a card that
     /// parses its result while folded). Runs at most once per payload: each guard re-checks the
-    /// state it fills, so re-opening a resolved card is a no-op.
+    /// state it fills, so re-opening a resolved card is a no-op — and so is a card whose bytes the
+    /// console still holds, whichever view it now lives in.
     @MainActor private func resolveFull() async {
         guard let fullPayload else { return }
         if expanded, card.inputTruncated, fullDisplay == nil, let p = await fullPayload(card.inputSeq) {
             let input = p["input"] ?? .null
             fullDisplay = ToolDisplay.describe(name: card.name, input: input, status: card.status, id: card.id)
         }
-        if expanded || needsWholeResult, card.resultTruncated, !resultResolved,
-           let seq = card.resultSeq, let p = await fullPayload(seq) {
-            // Set before the payload is read: an image-only result yields no text, and keying the
-            // guard on `fullResult` would refetch the whole screenshot on every re-open.
+        guard expanded || needsWholeResult, card.resultTruncated, !resultResolved,
+              let seq = card.resultSeq else { return }
+        // This view's state is not the only copy: the console keeps the bytes a card fetched back,
+        // and a recycled row is a NEW view that would otherwise ask the server again for a
+        // byte-identical answer — one phone was measured pulling the same two ~400KB screenshots
+        // eight times in fifteen seconds while its reader scrolled. The bytes already render from
+        // there (see `images`), so a hit means there is nothing to wait for.
+        if let cached = sessionPreview?.toolImages(card.id), !cached.isEmpty {
             resultResolved = true
-            fullResult = ToolResultContent.text(p["content"])
-            fullImages = ToolResultContent.images(p["content"])
-            if let fullImages, !fullImages.isEmpty { sessionPreview?.rememberToolImages(card.id, fullImages) }
+            return
         }
+        guard let p = await fullPayload(seq) else { return }
+        // Set before the payload is read: an image-only result yields no text, and keying the
+        // guard on `fullResult` would refetch the whole screenshot on every re-open.
+        resultResolved = true
+        fullResult = ToolResultContent.text(p["content"])
+        fullImages = ToolResultContent.images(p["content"])
+        if let fullImages, !fullImages.isEmpty { sessionPreview?.rememberToolImages(card.id, fullImages) }
     }
 
     private var defaultBody: some View {
@@ -225,6 +240,13 @@ struct ToolCardView: View {
                         })
                     }
                 }
+            } else if card.resultHasImage {
+                // The other half of that: an oversized image reaches the preview as a block with no
+                // bytes at all (`MAX_IMAGE_PAYLOAD`), and that block is what opened this card
+                // (`defaultOpen`) — so until `resolveFull` fetches the payload whole there is a
+                // picture-shaped hole here, and a hole reads as a broken card rather than a
+                // deferred picture.
+                ToolResultImagePlaceholder()
             }
             if let result, !result.isEmpty {
                 let isErr = card.status == .error
@@ -315,9 +337,9 @@ private struct ToolResultImageView: View {
     var ns: Namespace.ID
     var onTap: () -> Void
     #if os(iOS)
-    private static let cap = CGSize(width: 300, height: 360)
+    static let cap = CGSize(width: 300, height: 360)
     #else
-    private static let cap = CGSize(width: 240, height: 240)
+    static let cap = CGSize(width: 240, height: 240)
     #endif
 
     /// Scale to touch the cap while keeping aspect ratio, never upscaling past native size, so the
@@ -338,6 +360,24 @@ private struct ToolResultImageView: View {
                 .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
                 .imageTap(onTap, sourceID: item.id, ns: ns)
         }
+    }
+}
+
+/// The slot a tool-result image will occupy while its bytes are still being fetched back — the
+/// server drops an oversized image's `data` from the preview (`MAX_IMAGE_PAYLOAD`), and a card that
+/// opened on that block has nothing to draw until `resolveFull` returns the payload whole.
+///
+/// Sized to the very cap the picture lands in, so the swap barely moves the transcript, and drawn
+/// in the same `.quaternary` fill the sent-image thumbnail waits in (`ChatAttachmentImage`) — the
+/// two pending states should not be two different greys. The spinner is what separates "coming"
+/// from "gone": a still empty box would read as a card that failed to render. Web parity:
+/// `.chat-result-image-loading` in `Transcript.tsx`.
+private struct ToolResultImagePlaceholder: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(.quaternary)
+            .frame(width: ToolResultImageView.cap.width, height: ToolResultImageView.cap.height)
+            .overlay { ProgressView().controlSize(.small) }
     }
 }
 

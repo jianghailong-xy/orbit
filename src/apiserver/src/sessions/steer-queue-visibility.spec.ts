@@ -628,6 +628,36 @@ test("a delivery still waiting behind a running turn carries its card too", asyn
   assert.deepEqual(listed[1].openItemDelivery, ITEM_CARD);
 });
 
+test('the default projection carries the card too, for the tail a native client draws', async () => {
+  const h = makeService(
+    [
+      row('running', 'message', 'working now', { seq: 1, status: 'IN_FLIGHT' }),
+      row('item-turn', 'message', ITEM_MESSAGE, { seq: 2, clientTurnId: ITEM_TURN }),
+    ],
+    [],
+    [],
+    [],
+    ITEM_ROW,
+  );
+
+  // The installed native client reads THIS projection, so a card that only came with the `active`
+  // view would leave its queue tail drawing the paragraph written for the agent — the reading the
+  // projection exists to avoid — until a runner took the turn.
+  const [wire] = asWire(await h.service.listQueuedTurns(OWNER_ID, SESSION_ID));
+
+  assert.equal(wire.turnId, 'item-turn');
+  assert.equal(wire.content, ITEM_MESSAGE, 'the card is recorded BESIDE the words, not instead');
+  assert.deepEqual(wire.openItemDelivery, ITEM_CARD);
+  assert.deepEqual(Object.keys(wire).sort(), [
+    'attachments',
+    'content',
+    'kind',
+    'openItemDelivery',
+    'turnId',
+  ]);
+  assert.deepEqual(h.itemReads, [ITEM_ID], 'read once, for the one turn that is a delivery');
+});
+
 test('an ordinary queued turn carries no card and costs no read', async () => {
   const h = makeService(
     [

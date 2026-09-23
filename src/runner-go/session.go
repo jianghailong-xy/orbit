@@ -542,6 +542,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	bgEmissionGate := &eventEmissionGate{}
 	flushGate := newEventFlushGate()
 	criticalFlushFence := &criticalEventFlushFence{}
+	// A reply that links a file by the path it wrote it to (an agent's own mock, most of the time)
+	// gets that file uploaded here, before the batch is posted — see reply_attachments.go for why
+	// this belongs to the flush and not to the engine's reader. The roots are this session's own
+	// directories; the memo keeps a retried batch, or a mock linked twice, from being uploaded
+	// again under a second id.
+	replyFiles := newReplyAttachmentIDs()
+	replyFileRoots := []string{execDir, uploadsDir(sessionID)}
 	flushWithContext := func(ctx context.Context) error {
 		return flushGate.run(ctx, func(flushCtx context.Context) error {
 			if err := criticalFlushFence.check(); err != nil {
@@ -555,6 +562,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			events := buf
 			buf = nil
 			bufMu.Unlock()
+			// Bounded, because this runs under the flush permit: a server that takes the whole 35s
+			// the upload itself allows would hold back every later event with it — the rest of the
+			// reply, and the turn's own completion. Spent, the budget costs the file its rewrite,
+			// which is the chip that was there before this existed.
+			uploadCtx, cancelUploads := context.WithTimeout(flushCtx, replyAttachmentBudget)
+			attachLocalReplyFiles(uploadCtx, t, sessionID, events, replyFileRoots, replyFiles)
+			cancelUploads()
 			serverRejections := 0
 			err := retryIdempotentWhile(flushCtx, func(attemptCtx context.Context) error {
 				return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: events})

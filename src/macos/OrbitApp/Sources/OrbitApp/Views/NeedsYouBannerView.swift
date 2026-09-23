@@ -40,15 +40,23 @@ struct NeedsYouBannerView: View {
     var excluding: String?
     /// Questions in THIS conversation that stop no turn, if any. Nil from a list, and from a console
     /// holding none.
-    var below: OpenQuestionsBelow? = nil
+    var below: WaitingBelow? = nil
     /// Where a press goes when the bar is pointing down: the console scrolls to that row.
     var onOpenBelow: ((String) -> Void)? = nil
 
     var body: some View {
         if let below {
+            // The chevron points where the words say the card is: a card placed by its own moment
+            // can be up the conversation from a reader at the live tail, which is the ordinary case
+            // here. Unknown (nothing has reported the reader's place) keeps the old down — the
+            // press scrolls to the row either way.
             bar(text: below.text,
-                chevron: "chevron.down",
-                hint: "Scrolls to the question waiting in this conversation") {
+                chevron: below.side == .above ? "chevron.up" : "chevron.down",
+                // "what is waiting", not "the question": the bar counts the exceptions too (an
+                // escalation that became the owner's, a pause only they can lift), and a reader
+                // told to look for a question finds a card reading "Escalated to you" — the same
+                // wrong noun the line above stopped using.
+                hint: "Scrolls to what is waiting in this conversation") {
                 onOpenBelow?(below.rowID)
             }
         } else if let banner = model.needsYouBanner(excluding: excluding) {

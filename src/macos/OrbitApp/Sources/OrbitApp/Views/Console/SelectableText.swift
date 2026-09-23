@@ -98,6 +98,9 @@ struct SelectableText: UIViewRepresentable {
     // environments renders fine (its links just stay inert).
     @Environment(AttachmentImageStore.self) private var attachments: AttachmentImageStore?
     @Environment(AppModel.self) private var app: AppModel?
+    /// The session this prose belongs to, when a console around it knows. What a link naming a file
+    /// by its path needs: the artifact route fetches it from that session's runner.
+    @Environment(\.sessionImagePreview) private var sessionPreview
 
     /// Remembers what a text view was last built from, so `updateUIView` can no-op when nothing
     /// changed. That matters twice over: the transcript re-evaluates its rows on every stream publish
@@ -136,6 +139,7 @@ struct SelectableText: UIViewRepresentable {
         // any single render, so it must be refreshed even when the text itself hasn't changed.
         context.coordinator.attachments = attachments
         context.coordinator.app = app
+        context.coordinator.sessionID = sessionPreview?.sessionID
         let key = renderKey
         guard context.coordinator.key != key else { return }   // nothing changed — keep any live selection
         context.coordinator.key = key
@@ -224,12 +228,20 @@ struct SelectableText: UIViewRepresentable {
             }
             if let link = run.link {
                 if AttachmentLink.isRunnerLocalPath(link) {
-                    // A path on the runner's disk the agent never uploaded: no client can fetch it, so
-                    // don't draw a link whose tap could only do nothing. Web chips these with a
-                    // paperclip (`md-image-unavailable`) — same here, laid inline so it stays part of
-                    // the selectable prose. The clip goes in once per link, not once per styled run.
+                    // A path on the runner's disk the agent never uploaded. Usually nothing can fetch
+                    // it, and then it is drawn as prose rather than as a link whose tap could only do
+                    // nothing (web chips these with a paperclip, `md-image-unavailable` — same here,
+                    // laid inline so it stays part of the selectable prose; the clip goes in once per
+                    // link, not once per styled run). The exception is a file in the session's own
+                    // directories: the artifact route gets those from the session's runner, so that
+                    // one keeps its link and a tap downloads it like any other file.
                     if link != previousLink { result.append(paperclip(font: font, para: para)) }
                     attrs[.foregroundColor] = ProseInk.secondary.uiColor
+                    if let sessionID = sessionPreview?.sessionID,
+                       AttachmentLink.runnerArtifactPath(link, sessionID: sessionID) != nil {
+                        attrs[.link] = link
+                        attrs[.foregroundColor] = UIColor.tintColor
+                    }
                 } else if ReferenceLink.isInert(link) {
                     // A project or task list this app has no screen for: its title reads as prose.
                 } else {
@@ -308,12 +320,16 @@ extension SelectableText {
     /// Holds the render key `updateUIView` compares against, and answers link taps: an
     /// `orbit-attachment:<id>` link isn't a URL anything can open (the bytes are bearer-guarded), so
     /// tapping one downloads the file and offers it through the share sheet — iOS's "download": Save
-    /// to Files, Save Image, AirDrop. A task or session reference (`orbit-task:<id>`) opens it in the
-    /// app. Every other link keeps the system's default action.
+    /// to Files, Save Image, AirDrop. A file named by a path in the session's own directories goes
+    /// the same way, through the artifact route (`downloadArtifact`). A task or session reference
+    /// (`orbit-task:<id>`) opens it in the app. Every other link keeps the system's default action.
     @MainActor final class Coordinator: NSObject, UITextViewDelegate {
         var key: Int?
         var attachments: AttachmentImageStore?
         var app: AppModel?
+        /// The session whose runner answers for a file named by path; nil outside a console, where
+        /// such a link is drawn as prose and never reaches this handler.
+        var sessionID: String?
         private var downloading: Set<String> = []
 
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
@@ -322,9 +338,32 @@ extension SelectableText {
             if let route = ReferenceLink.route(url) {
                 return UIAction(title: "Open") { [weak self] _ in self?.app?.route(to: route) }
             }
-            guard let id = AttachmentLink.attachmentID(url) else { return defaultAction }
-            return UIAction(title: "Download") { [weak self, weak textView] _ in
-                self?.download(id, from: textView)
+            if let id = AttachmentLink.attachmentID(url) {
+                return UIAction(title: "Download") { [weak self, weak textView] _ in
+                    self?.download(id, from: textView)
+                }
+            }
+            if let sessionID, let path = AttachmentLink.runnerArtifactPath(url, sessionID: sessionID) {
+                return UIAction(title: "Download") { [weak self] _ in
+                    self?.downloadArtifact(path)
+                }
+            }
+            return defaultAction
+        }
+
+        /// A file the session's runner is holding, by path: the control plane asks it to upload the
+        /// bytes, and what comes back is handed on exactly as a downloaded attachment is.
+        private func downloadArtifact(_ path: String) {
+            guard let attachments, let sessionID, !downloading.contains(path) else { return }
+            downloading.insert(path)
+            Task { [weak self] in
+                defer { self?.downloading.remove(path) }
+                guard let data = await attachments.artifactData(sessionID: sessionID, path: path),
+                      !data.isEmpty else {
+                    self?.app?.showToast("Couldn't download that file", tone: .error)
+                    return
+                }
+                FileHandoff.deliver(data, named: AttachmentLink.fileName(inPath: path))
             }
         }
 

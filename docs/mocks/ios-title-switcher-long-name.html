@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 会话列表 — 长 workspace 名把标题挤到左边（小构图）</title>
+<style>
+  :root {
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .20);
+    --surface: #fff;
+    --fill: rgba(0, 0, 0, .065);
+    --glass: rgba(255, 255, 255, .50);
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, "Liberation Sans", "Helvetica Neue", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1080px; margin: 0 0 26px; }
+  .lede code { font-size: 13px; background: #e2e2e8; border-radius: 4px; padding: 1px 5px; }
+  pre { background: #e2e2e8; border-radius: 8px; padding: 12px 14px; font-size: 12.5px;
+        line-height: 1.55; overflow-x: auto; max-width: 1080px; }
+  .row { display: flex; gap: 34px; align-items: flex-start; margin-bottom: 34px; }
+  figure { margin: 0; width: 393px; }
+  figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.a { background: #d6e4ff; color: #14428f; }
+  .tag.b { background: #ffd9d6; color: #a3261c; }
+  .tag.c { background: #e5e5ea; color: #3a3a3c; }
+
+  .phone { width: 393px; height: 300px; background: var(--surface); overflow: hidden;
+           border-radius: 26px; box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07);
+           color: var(--label); position: relative; }
+
+  .status { height: 59px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 28px 0 39px; font-size: 17px; font-weight: 600; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 500; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 25px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+
+  /* ── 导航条：三件东西绝对定位，中间那件才是「真的在屏幕中央」─────────
+     实拍测得的 chrome（393pt 机，1179px @3x）：
+       左玻璃圆 16..60pt（44）、右玻璃胶囊 270..377pt（107）、两侧外边距各 16。 */
+  .nav { position: relative; height: 44px; }
+  .nav .guide { position: absolute; left: 196.5px; top: -6px; height: 56px;
+                border-left: 1px dashed var(--mark); opacity: .5; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 44px;
+             background: var(--glass); border-radius: 999px; flex: none; position: absolute; top: 0;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { left: 16px; width: 44px; }
+  .platter.capsule { right: 16px; width: 107px; padding: 0 13px;
+                     justify-content: space-between; }
+  .ico { width: 20px; height: 20px; stroke: var(--label); fill: none; stroke-width: 1.85;
+         stroke-linecap: round; stroke-linejoin: round; }
+  .titleSwitcher { display: flex; align-items: center; gap: 6px; min-width: 0;
+                   position: absolute; top: 0; height: 44px; }
+  .titleSwitcher.center { left: 50%; transform: translateX(-50%); }
+  .titleSwitcher.lead { left: 72.3px; }
+  .titleSwitcher .name { font-size: 17px; font-weight: 600; letter-spacing: -.01em;
+                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .titleSwitcher .chev { width: 11px; height: 11px; stroke: var(--label-2); fill: none;
+                         stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .titleSwitcher.mk { outline: 1.5px dashed var(--mark); outline-offset: 4px; border-radius: 4px; }
+
+  .search { margin: 6px 16px 0; height: 44px; border-radius: 22px; background: var(--fill);
+            display: flex; align-items: center; gap: 7px; padding: 0 12px;
+            font-size: 17px; color: var(--label-2); }
+  .search .ico { width: 17px; height: 17px; stroke: var(--label-2); stroke-width: 2.2; }
+
+  .grp { padding: 14px 16px 5px; font-size: 13px; font-weight: 600; color: var(--label-2); }
+  .srow { display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
+  .srow .col { flex: 1; min-width: 0; }
+  .srow .ttl { font-size: 16px; letter-spacing: -.01em; }
+  .srow .sub { font-size: 13px; color: var(--label-2); margin-top: 1px; }
+  .srow .rel { font-size: 13px; color: var(--label-2); flex: none; }
+  .rule { position: absolute; left: 16px; right: 16px; height: 0;
+          border-top: .5px solid var(--sep); }
+</style>
+
+<h1>iOS 会话列表 — 长 workspace 名把标题挤到左边</h1>
+<p class="lede">
+  标题槽是 workspace 切换器（<code>WorkspaceTitleSwitcher</code>，b205f199a）。它在 <code>.principal</code> 上，是个自定义 title view：
+  系统按 <b>ideal 宽度</b>给它位置——放得进中间槽就居中，放不进就<b>整组夹到汉堡按钮右边</b>（不截断）。
+  实拍同一台 393pt 机（1179px @3x）：<code>orbit</code> 那个工作区组中心 195.7pt（屏幕中心 196.5，居中）；
+  <code>wikova-develop</code> 那个组 72.3–217pt，起点正是汉堡右缘 60.3 + 12。
+  右边那个双按钮玻璃胶囊实测 107pt 宽，系统按<b>宽的一侧两边各留</b>（≈123pt/边）——留完中间只剩 ≈147pt 可以居中，名字一过线就掉到兜底分支。
+</p>
+<pre>// A 案的做法 —— 画在这里留档，最终没有采用（选定的是 B）
+// WorkspaceTitleSwitcher：名字限宽、箭头固定宽（原注释里「名字过长时截断，箭头不被挤走」这版才真的成立）
+Text(name)
+    .font(.headline).foregroundStyle(.primary)
+    .lineLimit(1).truncationMode(.tail)
+    .frame(maxWidth: maxNameWidth)          // ← 新增：给 ideal 宽度封顶，系统于是永远能居中
+
+// 调用处（列表页 AgentPanes / 新会话草稿页各一处）：从列宽算预算
+// 132/边 = 右侧玻璃胶囊 107 + 外边距 16 + 8pt 余量（实测能居中的上限 ≈147，取 129 组宽留档）。
+// 18 = HStack 的 6 + chevron 的 12。
+static func nameBudget(columnWidth: CGFloat, chrome: CGFloat = 132) -> CGFloat {
+    min(max(columnWidth - 2 * chrome - 18, 0), 240)
+}   // 393pt 机 → 111pt：约 12–13 个西文字符；超出的尾巴截掉，整组仍在正中</pre>
+
+<div class="row">
+
+  <!-- 1 现状 · 长名 -->
+  <figure>
+    <span class="tag b">现状 · 长名字（实拍几何）</span>
+    <div class="phone">
+      <div class="status"><span>10:42</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">32</span></span></div>
+      <div class="nav">
+        <span class="guide"></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="titleSwitcher lead mk"><span class="name">wikova-develop</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+        <span class="platter capsule"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span>
+      </div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Backfill worktree fences</div><div class="sub">Waiting for you · 8m</div></div><span class="rel">8m</span></div>
+    </div>
+    <figcaption>
+      <b>组 72.3–217pt：整组被夹到左边，全名照画</b>
+      虚线＝屏幕中心（196.5pt）。组中心 144.7pt，偏左 51.8pt——不是「左对齐」这个设计，是系统的兜底分支：
+      ideal 宽度 144.7pt 超过了中间槽能居中的 ≈147pt（就压线，所以只差一点点也掉下去）。
+      点开切换器、抽屉、名字都没问题，只有「标题看着忽中忽左」这一个毛病。
+    </figcaption>
+  </figure>
+
+  <!-- 2 A 案 · 长名 -->
+  <figure>
+    <span class="tag c">A 案 · 长名（备选 · 未采用）</span>
+    <div class="phone">
+      <div class="status"><span>10:42</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">32</span></span></div>
+      <div class="nav">
+        <span class="guide"></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="titleSwitcher center mk"><span class="name" style="max-width:111px">wikova-develop</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+        <span class="platter capsule"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span>
+      </div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Backfill worktree fences</div><div class="sub">Waiting for you · 8m</div></div><span class="rel">8m</span></div>
+    </div>
+    <figcaption>
+      <b>限宽 111pt：名字截断，组回到正中，箭头还在名字右边</b>
+      只动 ideal 宽度这一件事——<code>.frame(maxWidth:)</code> 把 Text 的上限压到中间槽以内，系统就永远走居中分支。
+      短名字一个字都不变（下一张）；名字和箭头仍是一组，箭头固定 12pt，不会被挤走（原效果图的口径）。
+      全名不必在这里看全：点标题开 <code>AgentSwitchSheet</code>，抽屉里那一行也是全名。
+    </figcaption>
+  </figure>
+
+</div>
+
+<div class="row">
+
+  <!-- 3 A 案 · 短名不变 -->
+  <figure>
+    <span class="tag c">A 案 · 短名（回归）</span>
+    <div class="phone">
+      <div class="status"><span>10:42</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">32</span></span></div>
+      <div class="nav">
+        <span class="guide"></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="titleSwitcher center mk"><span class="name">orbit</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+        <span class="platter capsule"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span>
+      </div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Backfill worktree fences</div><div class="sub">Waiting for you · 8m</div></div><span class="rel">8m</span></div>
+    </div>
+    <figcaption>
+      <b>短名字：和今天一模一样（组中心 195.7pt）</b>
+      上限是 <code>maxWidth</code> 不是固定宽——名字没到上限时组宽就是自然宽，位置一像素不动。
+      换句话说这次改动只在「名字长到会掉分支」时才有画面差异。
+    </figcaption>
+  </figure>
+
+  <!-- 4 B 案 -->
+  <figure>
+    <span class="tag a">B 案 · 一律靠左（选定 · 已实现）</span>
+    <div class="phone">
+      <div class="status"><span>10:42</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">32</span></span></div>
+      <div class="nav">
+        <span class="guide"></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="titleSwitcher lead mk"><span class="name">orbit</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+        <span class="platter capsule"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span>
+      </div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Backfill worktree fences</div><div class="sub">Waiting for you · 8m</div></div><span class="rel">8m</span></div>
+    </div>
+    <figcaption>
+      <b>不跟系统掰手腕：短名字也靠左，全名永远看得见 —— 选定并已实现</b>
+      <code>ToolbarItem(placement: .topBarLeading)</code> 挂在汉堡右边，位置和长名兜底时几乎一样（68–72pt），
+      但没有宽度上限，<code>wikova-develop</code> 也不用截断。代价：这一页的标题不再居中，而会话详情页（<code>ConsoleNavTitle</code>）、
+      设置页都是居中的——标题槽「有时中有时左」变成「这一页永远左」。<br>
+      落地时的连带改动：<code>.navigationTitle(a.name)</code> 必须让位（标题槽空出来后，它会在中间再画一遍同一个名字）。
+      这一笔带走的是<b>返回按钮的标签</b>——推入的页面（会话详情、新会话草稿）从「‹ orbit」变成「‹ Back」，因为返回标签就是上一页的标题。
+      不接受的话，退路是在那两页上加 <code>.navigationBarBackButtonDisplayMode(.minimal)</code>，只留一个箭头。<br>
+      另：iOS 26 会把相邻的 leading 项并进同一块玻璃（右胶囊就是这么来的），所以这一版有可能画成「☰ + 名字 + ⌄ 一个胶囊」，要上机才知道。<br>
+      <b>上线后实测（beta.106，iPhone 17 Pro Max / iOS 26）</b>：玻璃确实并成一块、位置也对，但名字只画出<b>两个字</b>——
+      iOS 26 给 leading 上的自定义项一个很小的宽度提案：<code>orbit</code> 只拿到 14.7pt（理想 37.7），<code>wikova-develop</code> 同样 14.7（理想 125.3），
+      而旁边空着 ≈190pt。去掉右侧两个按钮、去掉搜索框都还是 14.7，所以不是被挤。<code>Menu</code> 和 <code>.fixedSize()</code> 都实测画全，
+      <code>.layoutPriority(1)</code> 不行（仍是 14.7）。也就是说：这一格「全名照画」只有配上 <code>.fixedSize()</code> 才成立（iPhone 17 Pro Max / iOS 26 模拟器实测；那一轮的一次性探针未随仓库保留）。
+    </figcaption>
+  </figure>
+
+</div>
+
+<div class="row">
+
+  <!-- 5 A 案 · 超长中文名 -->
+  <figure>
+    <span class="tag c">A 案 · 超长名（最坏情况）</span>
+    <div class="phone">
+      <div class="status"><span>10:42</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">32</span></span></div>
+      <div class="nav">
+        <span class="guide"></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="titleSwitcher center mk"><span class="name" style="max-width:111px">Wikids AI 游戏模拟器</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+        <span class="platter capsule"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span>
+      </div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Backfill worktree fences</div><div class="sub">Waiting for you · 8m</div></div><span class="rel">8m</span></div>
+    </div>
+    <figcaption>
+      <b>名字的识别部分在尾巴时，A 案代价最难看：111pt 被 ASCII 前缀吃光</b>
+      17pt 一个字≈17pt，<code>Wikids AI </code> 这一截就占满了预算，中文一个字都没留下。
+      这是 A 案的真正代价，也说明 111pt 不是排版偏好，而是「这台机上还能居中」的宽度。
+      要更多字只有三条路：把右边那个玻璃胶囊收成一个按钮（多出 ≈44pt，但「New session」要多点一次）；
+      或者走 B 案；或者留在 A 案但改成 <code>.truncationMode(.middle)</code>——保住尾巴（<code>Wikids A…游戏模拟器</code>），
+      代价是省略号跑到中间，而 iOS 原生标题从不这么干（详情页的 <code>ConsoleNavTitle</code> 也是尾巴截断）。
+      完整名字在抽屉行和切换器里都能看全，这一格只负责「我在哪个工作区」的第一眼。
+    </figcaption>
+  </figure>
+
+</div>
+
+<p class="lede" style="margin-top:0">
+  <b>落在哪</b>：只有列表页这一处动（<code>AgentsView.swift</code> 的 <code>AgentPanes</code> toolbar）——标题槽被两个尾随按钮挤掉的是它。
+  新建会话草稿页（<code>AgentsView.swift:980</code>）共用同一个 <code>WorkspaceTitleSwitcher</code>，但那页右边没有那两个按钮，
+  中间槽从来放得下，没有兜底分支可躲，所以它继续用 <code>.principal</code>（居中）。要两页一模一样，说一声，一起挪。<br>
+  <b>上机要量的两件事</b>：leading 项与汉堡的先后（这一版靠「声明在高层的先排」推断）、iOS 26 会不会把两者并进同一块玻璃。
+  仓库里的 <code>.ios-probe/</code> + <code>client.yml -f probe=true</code> 是量这个的现成路子。
+</p>
+</html>

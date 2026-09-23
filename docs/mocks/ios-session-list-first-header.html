@@ -1,0 +1,218 @@
+<!-- EVIDENCE MOCK (2026-09-22, branch orbit/first-section-header). Geometry is the reporter's own
+     phone, measured from the beta.97 screenshots: search field 107–151, the refresh control's band
+     151–209, "Today" 209–237, first row 237+. The band is `.refreshable`'s own reservation — it is
+     NOT part of this change (see docs/mocks/ios-list-search-field-always.html and the note on
+     `AgentContentColumn`'s `.searchable`). Render:
+       chromium --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
+         --force-device-scale-factor=1.5 --window-size=920,1160 \
+         --screenshot=docs/mocks/ios-session-list-first-header.png \
+         file://$PWD/docs/mocks/ios-session-list-first-header.html -->
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 会话列表 — 首组就是 Today 时，要不要这个标题（小构图）</title>
+<style>
+  :root {
+    --amber: #FF9500; --label: #000; --label-2: rgba(60, 60, 67, .6); --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .20); --surface: #fff; --fill: rgba(0, 0, 0, .065);
+    --glass: rgba(255, 255, 255, .50); --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, "Liberation Sans", "Helvetica Neue", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1010px; margin: 0 0 26px; }
+  .lede code, figcaption code { font-size: 13px; background: #e2e2e8; border-radius: 4px; padding: 1px 5px; }
+  .row { display: flex; flex-wrap: wrap; gap: 30px; align-items: flex-start; }
+  figure { margin: 0; width: 393px; }
+  figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  figcaption b.in { display: inline; margin: 0; }
+  .geom { display: block; font-size: 12px; letter-spacing: .01em; color: #16161a;
+          background: #f2f2f6; border-radius: 6px; padding: 3px 7px; margin: 6px 0 7px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+
+  .phone { width: 393px; height: 430px; background: var(--surface); overflow: hidden;
+           border-radius: 26px; box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07);
+           color: var(--label); position: relative; }
+  .status { height: 59px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 28px 0 39px; font-size: 17px; font-weight: 600; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 500; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 25px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700; position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+  .nav { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; gap: 8px; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 44px;
+             background: var(--glass); border-radius: 999px; flex: none;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { width: 44px; }
+  .platter.capsule { padding: 0 3px; gap: 3px; }
+  .slot { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+  .ico { width: 20px; height: 20px; stroke: var(--label); fill: none; stroke-width: 1.85;
+         stroke-linecap: round; stroke-linejoin: round; }
+  .title { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+  .search { margin: 4px 16px 0; height: 44px; border-radius: 22px; display: flex; align-items: center;
+            gap: 8px; padding: 0 13px; font-size: 17px; color: var(--label-2);
+            background: var(--fill); box-shadow: inset 0 0 0 .5px rgba(0,0,0,.10); }
+  .search .ico { width: 17px; height: 17px; stroke-width: 2.2; }
+  .band { height: 58px; display: flex; align-items: center; justify-content: center;
+          background: repeating-linear-gradient(45deg, rgba(0,0,0,.022) 0 6px, transparent 6px 12px); }
+  .band span { font-size: 11px; color: #8a8a90; letter-spacing: .02em; }
+  .grp { padding: 0 16px; height: 28px; display: flex; align-items: center;
+         font-size: 13px; font-weight: 600; color: var(--label-2); }
+  .grp.pinned { background: rgba(249,249,249,.94); box-shadow: 0 1px 0 var(--sep); }
+  .srow { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: .5px solid var(--sep); }
+  .srow .col { flex: 1; min-width: 0; }
+  .srow .ttl { font-size: 16px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .sub { font-size: 13px; color: var(--label-2); margin-top: 1px; white-space: nowrap;
+               overflow: hidden; text-overflow: ellipsis; }
+  .srow .rel { font-size: 13px; color: var(--label-2); flex: none; }
+  .chip { display: inline-block; font-size: 11.5px; font-weight: 600; border-radius: 999px;
+          padding: 0 6px; margin-right: 4px; }
+  .chip.tag { background: #ffe9c7; color: #8a5300; }
+  .ruler { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--mark); }
+  .ruler span { position: absolute; right: 6px; top: 3px; font-size: 11.5px; font-weight: 700;
+                color: #8f1d13; background: #fff; border-radius: 5px; padding: 0 5px;
+                box-shadow: 0 0 0 1px rgba(255,59,48,.45); }
+</style>
+
+<h1>iOS 会话列表 — 首组就是 Today 时，这个标题还有用吗</h1>
+<p class="lede">
+  四格的头部几何是报告者手机上量的（β97 截图）：搜索框 107–151、下拉刷新自己占的那条带 151–209、
+  <b>"Today" 标题 209–237</b>、首行从 237 起。<b>那条 58pt 的斜纹带不属于这次改动</b>——它是
+  <code>.refreshable</code> 在内容上方预留的（见 <code>ios-list-search-field-always.html</code>）；
+  这次只问标题本身：列表一打开，最上面那一格几乎总是"今天"，这个 <b>"Today" 值 28pt 吗</b>。
+</p>
+
+<div class="row">
+
+  <!-- 现状 -->
+  <figure>
+    <span class="tag now">现状 · β97</span>
+    <div class="phone">
+      <div class="status"><span>3:13</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">25</span></span></div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="title">orbit ⌄</span>
+        <span class="platter capsule"><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span></span>
+      </div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div class="band"><span>下拉刷新的带（58pt，不属于本次）</span></div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">会话列表缺少等待审批提示</div><div class="sub"><span class="chip tag">会话调试</span><span class="chip tag">前端问题</span>Running Bash…</div></div><span class="rel">24s</span></div>
+      <div class="srow"><div class="col"><div class="ttl">复查：后台作业生命周期</div><div class="sub">核实完毕，两处更正都有据：① 我错的…</div></div><span class="rel">2h ago</span></div>
+      <div class="srow"><div class="col"><div class="ttl">判断：项目推进可靠性</div><div class="sub">核对完成，本轮结论与动作如下。发现…</div></div><span class="rel">4h ago</span></div>
+      <div class="ruler" style="top:209px"><span>这一行值 28pt：一打开就写着"今天"</span></div>
+    </div>
+    <figcaption>
+      <span class="geom">首行起 237 · 标题占 209–237（28pt）</span>
+      <b>现状：一屏里最先看到的标签，说的是你已经知道的事</b>
+      列表一打开（或从别处推回来），最上面那格几乎总是今天——标题把"今天"说了一遍，占掉 28pt，
+      而它下面每一行右边本来就写着自己的相对时间（24s / 2h ago / 4h ago）。
+      <br>它唯一的用处是<b class="in">往下滚以后</b>：滚进昨天那一段时，"Yesterday" 才是你在找的定位。
+    </figcaption>
+  </figure>
+
+  <!-- ① -->
+  <figure>
+    <span class="tag after">① 首组不画标题</span>
+    <div class="phone">
+      <div class="status"><span>3:13</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">25</span></span></div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="title">orbit ⌄</span>
+        <span class="platter capsule"><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span></span>
+      </div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div class="band"><span>下拉刷新的带（58pt，不属于本次）</span></div>
+      <div class="srow"><div class="col"><div class="ttl">会话列表缺少等待审批提示</div><div class="sub"><span class="chip tag">会话调试</span><span class="chip tag">前端问题</span>Running Bash…</div></div><span class="rel">24s</span></div>
+      <div class="srow"><div class="col"><div class="ttl">复查：后台作业生命周期</div><div class="sub">核实完毕，两处更正都有据：① 我错的…</div></div><span class="rel">2h ago</span></div>
+      <div class="srow"><div class="col"><div class="ttl">判断：项目推进可靠性</div><div class="sub">核对完成，本轮结论与动作如下。发现…</div></div><span class="rel">4h ago</span></div>
+      <div class="srow"><div class="col"><div class="ttl">下拉刷新图标与搜索框重叠</div><div class="sub">β97 双端出包成功 — [run 356…</div></div><span class="rel">4h ago</span></div>
+      <div class="ruler" style="top:209px"><span>首行回到 209（多出 28pt ≈ 半行）</span></div>
+    </div>
+    <figcaption>
+      <span class="geom">首行起 209（上移 28pt）· 其余标题不变</span>
+      <b>① 首组是 Today 就不画它</b>
+      规则一条：第一个 section 若是 Today，不画它的标题；"Yesterday / Previous 7 Days / …" 照旧。
+      多出 28pt（约半行），而且没有丢信息——每行右边本来就有自己的时间。
+      <br>代价：滚进这一段的中间时，没有吸顶标签告诉你"还在今天"；滚过它就又是原来的样子了。
+    </figcaption>
+  </figure>
+
+  <!-- ② -->
+  <figure>
+    <span class="tag after">② 静止不画、吸顶才画</span>
+    <div class="phone">
+      <div class="status"><span>3:13</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">25</span></span></div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="title">orbit ⌄</span>
+        <span class="platter capsule"><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span></span>
+      </div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div class="grp pinned">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">判断：项目推进可靠性</div><div class="sub">核对完成，本轮结论与动作如下。发现…</div></div><span class="rel">4h ago</span></div>
+      <div class="srow"><div class="col"><div class="ttl">下拉刷新图标与搜索框重叠</div><div class="sub">β97 双端出包成功 — [run 356…</div></div><span class="rel">4h ago</span></div>
+      <div class="srow"><div class="col"><div class="ttl">控制面问题报告：runner 反复 claim</div><div class="sub">全部到位 重试退避已经跑到线上…</div></div><span class="rel">6h ago</span></div>
+      <div class="grp">Yesterday</div>
+      <div class="srow"><div class="col"><div class="ttl">判断：项目推进可靠性</div><div class="sub">核对完了。结论：主干已含全部交付…</div></div><span class="rel">17h ago</span></div>
+      <div class="ruler" style="top:151px"><span>滚动中：这一段顶上来了，标题才出现（吸顶）</span></div>
+    </div>
+    <figcaption>
+      <span class="geom">静止 = ①；滚动 = 现在这样（吸顶）</span>
+      <b>② 标题只在"你已经看不见今天"时才出现</b>
+      静止在顶部：和 ① 一样不画，省下那 28pt。往下滚、这一段顶到栏下时，标题以吸顶的形式出现——
+      它出现的那一刻正好是你需要它的那一刻（在找"这还是今天那批吗"）。图里画的就是滚动中的样子。
+      <br>代价：实现比 ① 麻烦一点（要按滚动位置判断显隐，SwiftUI 没有直接的 API），且吸顶标题会盖住
+      下方行的一小条——现在也是这样，只是现在静止时就画着。
+    </figcaption>
+  </figure>
+
+  <!-- ③ -->
+  <figure>
+    <span class="tag after">③ 全扁平，不要分组</span>
+    <div class="phone">
+      <div class="status"><span>3:13</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">25</span></span></div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="title">orbit ⌄</span>
+        <span class="platter capsule"><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span></span>
+      </div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div class="band"><span>下拉刷新的带（58pt，不属于本次）</span></div>
+      <div class="srow"><div class="col"><div class="ttl">会话列表缺少等待审批提示</div><div class="sub"><span class="chip tag">会话调试</span><span class="chip tag">前端问题</span>Running Bash…</div></div><span class="rel">24s</span></div>
+      <div class="srow"><div class="col"><div class="ttl">复查：后台作业生命周期</div><div class="sub">核实完毕，两处更正都有据：① 我错的…</div></div><span class="rel">2h ago</span></div>
+      <div class="srow"><div class="col"><div class="ttl">判断：项目推进可靠性</div><div class="sub">核对完成，本轮结论与动作如下。发现…</div></div><span class="rel">4h ago</span></div>
+      <div class="srow"><div class="col"><div class="ttl">下拉刷新图标与搜索框重叠</div><div class="sub">β97 双端出包成功 — [run 356…</div></div><span class="rel">4h ago</span></div>
+      <div class="srow"><div class="col"><div class="ttl">判断：项目推进可靠性</div><div class="sub">核对完了。结论：主干已含全部交付…</div></div><span class="rel">17h ago</span></div>
+      <div class="srow"><div class="col"><div class="ttl">iOS 版本审核状态异常</div><div class="sub">全绿了：✓ macOS (build + test…</div></div><span class="rel">20h ago</span></div>
+      <div class="ruler" style="top:209px"><span>首行 209，之后全是行</span></div>
+    </div>
+    <figcaption>
+      <span class="geom">首行起 209 · 无分组标题 · 与 web / macOS 同形</span>
+      <b>③ 干脆不分（web 与 macOS 早就是这样）</b>
+      去掉所有分组标题，列表就一串，靠每行右边的相对时间定位。<b class="in">这是三个里最省的</b>：
+      没有"哪个组该不该画"的规则要维护，三个客户端也终于长得一样。
+      <br>代价：丢掉"今天 / 昨天"这层<b class="in">视觉分块</b>——长列表里那层分块是 ChatGPT 式列表的
+      主要手感（这段分组是当时<b class="in">刻意</b>与 web 分叉做的）；要往回走就是把当初那条决定撤掉。
+    </figcaption>
+  </figure>
+
+</div>
+
+<p class="lede" style="margin-top:30px">
+  <b>我的建议：②</b>（静止不画、吸顶才画）。它把标题挪到"你正需要它"的那一刻，
+  静止时省下的 28pt 归列表；① 更简单但滚进这一段就彻底没有定位了；③ 改的是当初刻意做的分叉，代价最大。
+  三个都不动分组本身（<code>SessionTimeGrouping</code> 照旧），只动"这一组的标题画不画"。
+</p>
+</html>

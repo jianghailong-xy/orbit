@@ -64,6 +64,63 @@ test('unsupported built-in models safely downgrade Auto permission mode', () => 
   );
 });
 
+test('dispatch takes Auto from the assigned runner\'s catalogue, not from the fallback list', () => {
+  // The boundary check, not just the picker: an account default, an MCP-created session and an
+  // older client all reach dispatch without passing a client-side gate, so this is where a model
+  // the runner CAN run Auto on has to keep it. Opus 5.5 is the case that failed — the runner's CLI
+  // honored `--permission-mode auto` on it while every static list still said otherwise.
+  const catalog = {
+    [AgentProvider.CLAUDE]: [
+      {
+        value: 'claude-opus-5-5',
+        label: 'Opus 5.5',
+        permissionModes: [PermissionMode.DEFAULT, PermissionMode.AUTO],
+      },
+      {
+        value: 'claude-opus-5',
+        label: 'Opus 5',
+        permissionModes: [PermissionMode.DEFAULT, PermissionMode.PLAN],
+      },
+    ],
+  };
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-opus-5-5',
+      PermissionMode.AUTO,
+      false,
+      false,
+      catalog,
+    ),
+    PermissionMode.AUTO,
+  );
+  // And the other direction: a row that withholds Auto downgrades a model the fallback list
+  // still contains. The runner's own CLI is the authority both ways.
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-opus-5',
+      PermissionMode.AUTO,
+      false,
+      false,
+      catalog,
+    ),
+    PermissionMode.DEFAULT,
+  );
+  // Bypass under root still loses to the root rule, which is about the machine and not the model.
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-opus-5-5',
+      PermissionMode.BYPASS,
+      false,
+      true,
+      catalog,
+    ),
+    PermissionMode.DONT_ASK,
+  );
+});
+
 test('configured providers keep Auto on the Claude runtime regardless of model id', () => {
   assert.equal(
     normalizeBuiltinPermissionMode(AgentProvider.CLAUDE, 'deepseek-v4', PermissionMode.AUTO, true),

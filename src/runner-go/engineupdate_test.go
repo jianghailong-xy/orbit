@@ -333,6 +333,148 @@ func TestUpdateEnginesShutdownIsSilent(t *testing.T) {
 	}
 }
 
+// fakeUpdatableEngine puts a stub engine in `dir` whose --version reads a file its own
+// "updater" rewrites. That file is how a test sees the binary actually move — an exit code
+// cannot tell an update that landed from one that wrote somewhere nothing execs — and `runs`
+// counts how many times the updater was allowed to run at all.
+func fakeUpdatableEngine(t *testing.T, dir, bin, installed, latest, latestURL string) (spec engineSpec, runs string) {
+	t.Helper()
+	version := filepath.Join(dir, bin+".version")
+	runs = filepath.Join(dir, bin+".runs")
+	if err := os.WriteFile(version, []byte(installed+" (Fake Engine)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, bin), []byte("#!/bin/sh\ncat "+version+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return engineSpec{
+		name: bin,
+		bin:  bin,
+		// Appends a mark before moving the version, so an updater that ran and failed is still
+		// distinguishable from one that was never started.
+		updateCmd: "printf x >> " + runs + "; printf '" + latest + " (Fake Engine)\\n' > " + version,
+		latestURL: latestURL,
+	}, runs
+}
+
+func engineUpdateRuns(t *testing.T, runs string) int {
+	t.Helper()
+	b, err := os.ReadFile(runs)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(b)
+}
+
+// The behaviour this whole file's skip exists to enable: an engine stepped over because sessions
+// were running on it is installed the moment they finish, not at the next 24h tick.
+//
+// Skipping a busy engine was only half an answer. The retry was the daily ticker, which samples
+// the machine at one fixed instant — and a runner that always has work is busy at that instant
+// essentially always, so the machine doing the most work was the one that never updated. Live on
+// 2026-09-23: wikova sat on Claude Code behind 2.1.280 with behindSince climbing, and the models
+// the picker probes out of that CLI were missing Opus 5.5 until somebody ran `claude update` by
+// hand.
+func TestBusyEngineUpdatesTheMomentItsSessionsFinish(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("needs a shell")
+	}
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	const latest = "2.1.280"
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(latest))
+	}))
+	defer feed.Close()
+
+	// Two engines, one busy and one not: the skip is per engine, so a machine mid-turn on Claude
+	// still updates Codex in the same pass.
+	busy, busyRuns := fakeUpdatableEngine(t, dir, "orbit-fake-busy", "2.1.226", latest, feed.URL)
+	idle, idleRuns := fakeUpdatableEngine(t, dir, "orbit-fake-idle", "2.1.226", latest, feed.URL)
+	saved := engineSpecs
+	engineSpecs = []engineSpec{busy, idle}
+	t.Cleanup(func() { engineSpecs = saved })
+	t.Cleanup(func() { clearDeferredEngineUpdate(busy.bin); clearDeferredEngineUpdate(idle.bin) })
+	// Keep the real PATH: the updater runs through `sh`, which has to be findable.
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	active := map[string]int{busy.bin: 4}
+	activeCount := func(bin string) int { return active[bin] }
+
+	lines := updateEngines(context.Background(), activeCount, nil)
+
+	if engineUpdateRuns(t, busyRuns) != 0 {
+		t.Fatal("swapped the binary of an engine with sessions running on it")
+	}
+	if engineUpdateRuns(t, idleRuns) != 1 {
+		t.Fatal("one busy engine held up an idle one — the skip is per engine, not per machine")
+	}
+	if len(lines) != 2 || !strings.Contains(lines[0], "4 sessions running") {
+		t.Fatalf("lines = %q, want the busy engine to say it is waiting on its sessions", lines)
+	}
+	log := loadEngineUpdateLog()
+	// A skip is not an outcome: nothing attempted, nothing filed. Only the drift is, because
+	// being behind is true whoever is busy.
+	if got := log[busy.bin]; got.Status != "" || got.BehindSince == "" || got.Latest != latest {
+		t.Fatalf("skipped engine = %+v, want no recorded attempt but the drift measured", got)
+	}
+
+	// Still busy: the retry must not install behind a live session either.
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+	if engineUpdateRuns(t, busyRuns) != 0 {
+		t.Fatal("the idle retry ran an updater while sessions were still running")
+	}
+
+	// The last session ends. This is the edge the whole change is about.
+	active[busy.bin] = 0
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+
+	if engineUpdateRuns(t, busyRuns) != 1 {
+		t.Fatal("the engine went idle and its deferred update never ran")
+	}
+	if got := loadEngineUpdateLog()[busy.bin]; got.Status != updateUpdated || got.BehindSince != "" {
+		t.Fatalf("after the retry = %+v, want it recorded as updated with the drift cleared", got)
+	}
+
+	// The to-do is discharged, not standing: a retry every 15s must not keep re-running a
+	// package manager against an engine that is already current.
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+	if engineUpdateRuns(t, busyRuns) != 1 {
+		t.Fatal("the deferred update stayed filed after it ran")
+	}
+}
+
+// ORBIT_NO_ENGINE_UPDATE turns off automatic engine updates — all of them. The idle retry is a
+// second scheduler inside the same loop, so "disabled" has to mean it too; a machine that opted
+// out must not find an engine swapped under it the moment it goes quiet.
+func TestNoEngineUpdateEnvDisablesTheIdleRetryToo(t *testing.T) {
+	t.Setenv("ORBIT_NO_ENGINE_UPDATE", "1")
+	deferEngineUpdate("orbit-fake-optedout")
+	t.Cleanup(func() { clearDeferredEngineUpdate("orbit-fake-optedout") })
+
+	// Cancellable so that a run which does NOT return promptly — the failure this asserts
+	// against — is stopped here rather than left sleeping out engineUpdateInitialDelay.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		engineUpdateLoop(ctx, func(string) int { return 0 }, nil)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("engineUpdateLoop kept running with ORBIT_NO_ENGINE_UPDATE set")
+	}
+	if !deferredEngineUpdates()["orbit-fake-optedout"] {
+		t.Fatal("the opted-out loop discharged a deferred update")
+	}
+}
+
 // The failure this reproduces: every installer forks, exec.CommandContext kills only the `sh`,
 // and the forked child keeps the output pipe open — so CombinedOutput blocks past the deadline
 // and the caller keeps engineInstall.mu. Observed live as an `opencode upgrade` still running

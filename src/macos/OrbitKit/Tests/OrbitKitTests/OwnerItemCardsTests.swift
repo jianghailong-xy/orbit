@@ -16,6 +16,7 @@ import XCTest
 final class OwnerItemCardsTests: XCTestCase {
 
     private static let webQuestionCard = "src/web/src/components/CoordinatorQuestionCard.tsx"
+    private static let webConsole = "src/web/src/components/WorkspaceView.tsx"
 
     private enum ParityError: Error, CustomStringConvertible {
         case noRepo
@@ -83,6 +84,28 @@ final class OwnerItemCardsTests: XCTestCase {
             XCTAssertEqual(mine, try declaration(web, name),
                            "\(name) drifted — first is this client's, second is the browser's.")
         }
+    }
+
+    // MARK: the four, in one word each
+
+    /// One word per kind, and both ends say the same one. Four surfaces read this: the browser's
+    /// session row, this client's row, the bar above the list, and the card in the conversation —
+    /// and a person moves between them, so "the same fact, told two ways" is the failure.
+    func testTheOwnerItemWordsAreTheBrowsersDeclarations() throws {
+        let web = try webSource(Self.webConsole)
+        let pairs: [(String, OwnerItemKind)] = [
+            ("OWNER_ITEM_APPROVE_MERGE", .promotionApproval),
+            ("OWNER_ITEM_COORDINATOR_QUESTION", .coordinatorQuestion),
+            ("OWNER_ITEM_ESCALATED", .escalated),
+            ("OWNER_ITEM_PAUSED", .fusePaused),
+        ]
+        for (name, kind) in pairs {
+            XCTAssertEqual(try declaration(web, name), NeedsYouLogic.kindWord(kind),
+                           "\(name) drifted — first is the browser's, second is this client's.")
+        }
+        // A kind neither end can name is named by neither: the row falls back to its generic words
+        // rather than trailing an empty separator, which is the choice the bar already makes.
+        XCTAssertNil(NeedsYouLogic.kindWord(.unknown))
     }
 
     private func question(options: [CoordinatorQuestion.Option] = [],

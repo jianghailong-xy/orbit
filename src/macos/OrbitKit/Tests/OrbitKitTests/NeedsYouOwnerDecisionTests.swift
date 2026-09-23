@@ -25,16 +25,23 @@ final class NeedsYouOwnerDecisionTests: XCTestCase {
 
     /// A project's coordinator conversation between turns: parked, with a decision card delivered
     /// into it and nothing running. The shape the badge was dark on.
-    private func parkedCoordinator(pending: Int) -> Session {
+    private func parkedCoordinator(pending: Int,
+                                  waitingKind: SessionWaitingKind? = nil,
+                                  ownerItems: [SessionOwnerItem]? = nil) -> Session {
         Session(id: "coordinator", title: "Criteria seal & decision", status: .awaitingInput,
                 agentId: "orbit", assignedRunnerId: "runner",
-                pendingApprovals: pending, branch: nil, updatedAt: nil,
+                pendingApprovals: pending, waitingKind: waitingKind, ownerItems: ownerItems,
+                branch: nil, updatedAt: nil,
                 projectId: "proj_1", projectTitle: "Criteria seal & decision",
                 lastAssistantText: "Filed the proposal.",
                 engineTurnActive: false,
                 agent: SessionAgentRef(id: "orbit", name: "orbit", provider: nil,
                                        model: nil, effort: nil),
                 lastTurnAt: "2026-09-09T15:14:57Z")
+    }
+
+    private func item(_ id: String, _ kind: OwnerItemKind, since: String) -> SessionOwnerItem {
+        SessionOwnerItem(itemId: id, kind: kind, title: "\(kind.rawValue) item", since: since)
     }
 
     func testParkedConversationWithAnOwnerDecisionIsGroupedAsNeedsYou() {
@@ -68,6 +75,46 @@ final class NeedsYouOwnerDecisionTests: XCTestCase {
         XCTAssertEqual(SessionLine.make(for: parkedCoordinator(pending: 0), live: true),
                        SessionLine(text: "Filed the proposal.", tone: .preview),
                        "and with nothing waiting the row is an ordinary reply preview again")
+    }
+
+    /// One of the four says which it is, in the bar's own words — and this is the row that matters
+    /// most on a project whose coordinator is switched off, because the item is the owner's exactly
+    /// when nobody else will take it. "Waiting for approval" described the one act that was
+    /// certainly not happening (the account owner's report, 2026-09-22: a project confirmed but
+    /// never started, three escalations drawn in its coordinator conversation, the row saying
+    /// nothing).
+    func testTheRowNamesWhichOfTheFourIsWaiting() {
+        let escalated = item("i1", .escalated, since: "2026-09-22T00:19:41Z")
+        let paused = item("i2", .fusePaused, since: "2026-09-22T02:00:00Z")
+        let unknown = item("i3", .unknown, since: "2026-09-22T00:00:00Z")
+
+        XCTAssertEqual(
+            SessionLine.make(for: parkedCoordinator(pending: 1, waitingKind: .ownerItem,
+                                                    ownerItems: [escalated]), live: true),
+            SessionLine(text: "Escalated to you", tone: .approval),
+            "the row says the item's own word, not the approval one")
+        // The same words the bar says about the same item, so a person who pressed either arrives
+        // at a card saying what they read.
+        XCTAssertEqual(NeedsYouLogic.ownerItemText(escalated, project: "FineWeb"),
+                       "Escalated to you · FineWeb")
+        XCTAssertEqual(NeedsYouLogic.kindWord(.fusePaused), "Paused")
+        XCTAssertNil(NeedsYouLogic.kindWord(.unknown),
+                     "a kind this build cannot name is not named")
+        // The OLDEST item is the one named — the same FIFO the bar picks its target by — and the
+        // order the row holds them in is not what decides it.
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([paused, escalated]), "Escalated to you")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([unknown, paused]), "Paused",
+                       "an unnameable item is skipped rather than sorting last")
+
+        // And nothing to name keeps the generic words: a row that lost its items (an older control
+        // plane, or a summary that carried none) reads as it always did rather than going silent.
+        XCTAssertEqual(
+            SessionLine.make(for: parkedCoordinator(pending: 1, waitingKind: .ownerItem), live: true),
+            SessionLine(text: "Waiting for approval", tone: .approval))
+        XCTAssertEqual(
+            SessionLine.make(for: parkedCoordinator(pending: 1, waitingKind: .ownerItem,
+                                                    ownerItems: [unknown]), live: true),
+            SessionLine(text: "Waiting for approval", tone: .approval))
     }
 
     /// A blocked tool call is unchanged by the hoist: it holds the turn open, so it was already

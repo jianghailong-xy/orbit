@@ -59,9 +59,29 @@ import { isSessionGenerating } from '../common/session-generating';
  * ones here.
  *
  * A row whose opener is unknown (null `turn_id`: raised outside a turn, or filed before 0252) is
- * never collected. The predicate has to be a fact, and "we do not know who raised it" is not one.
- * The rows filed before 0252 were settled once instead, by migration 0258, on the two facts
- * `SessionsService.listApprovals` reads; that migration says why no rule here could reach them.
+ * never collected by the TURN rule above. The predicate has to be a fact, and "we do not know who
+ * raised it" is not one. The rows filed before 0252 were settled once instead, by migration 0258,
+ * on the two facts `SessionsService.listApprovals` reads; that migration says why no rule here
+ * could reach them.
+ *
+ * THE CARD'S OWN CALL IS A THIRD READER, AND A THIRD FACT
+ * ------------------------------------------------------
+ * The engine runs in stretches of its own — a background task reporting in, a scheduled wake-up,
+ * both of which stay at AWAITING_INPUT for their whole duration (`common/session-generating.ts`) —
+ * and an ask raised in one has no turn to name, so the turn rule can never reach it. 2026-09-20:
+ * such a card (an `AskUserQuestion` at 20:56, `turn_id` null, no job) had its poll die on `context
+ * deadline exceeded`; the engine wrote the error result and ran on for another 550 turns while the
+ * row sat PENDING, keeping the conversation reading "Waiting for approval" with no card on any
+ * surface to press — the count takes every pending row of a generating session, and the listing
+ * hides this one on the very fact the pass below collects it by.
+ *
+ * That fact is the card's own and no one else's: the tool call it was raised for already has a
+ * result. `tool_call.finished_at` is written by the same ingest that finishes every call, it is
+ * what the engine leaving a call behind leaves there, and `SessionsService.stillBeingAsked` already
+ * reads it to stop offering the card. Whatever the opener is, the loop that would consume an answer
+ * runs INSIDE the call, and a call that has returned is not running. So a card that names neither
+ * a turn nor a job is collected on it, and a card that names a job is not — that reader outlives
+ * its own call by construction and is settled by its job alone.
  *
  * IT LEAVES A TRACE RATHER THAN DELETING
  * --------------------------------------
@@ -91,6 +111,17 @@ export const APPROVAL_ABANDONED_JOB_MESSAGE =
   'the background job that asked this ended before it was answered, so nothing is left to receive an answer';
 
 /**
+ * The trace for a card whose own call has already returned — the third reader, after the turn and
+ * the job.
+ *
+ * Its own sentence for the same reason the two above have theirs: the outcome is the same and the
+ * reason is not. "The turn that asked this ended" would name a turn that never existed, and "the
+ * job that asked this ended" a job that was never named.
+ */
+export const APPROVAL_ABANDONED_CALL_MESSAGE =
+  'the call that asked this already returned, so nothing is left to receive an answer';
+
+/**
  * Collect this session's approvals whose reader is gone. Returns how many were collected.
  *
  * Called from the boundaries that END turns — the turn-complete acknowledgement and the drains that
@@ -104,13 +135,15 @@ export const APPROVAL_ABANDONED_JOB_MESSAGE =
  * pointing at that turn, and neither is touched. The live jobs are read the same way and for the
  * same reason.
  *
- * The two readers are asked about separately, because each card has exactly one of them and the
- * facts are therefore not interchangeable. A card that names a job is read by that process, so its
- * job's liveness settles it and the turn is not consulted at all — a job may file while no turn is
- * in flight (`turn_id` null), which is the ordinary shape of a watch that decides an hour later,
- * and such a row is collected when its job goes rather than left for the turn rule that could
- * never reach it. Everything else is read by the turn it names, and is collected on that turn
- * ending; a card at the turn boundary in flight when a job filed one is the job's, not the turn's.
+ * The readers are asked about separately, because each card has exactly one of them and the facts
+ * are therefore not interchangeable. A card that names a job is read by that process, so its job's
+ * liveness settles it and the turn is not consulted at all — a job may file while no turn is in
+ * flight (`turn_id` null), which is the ordinary shape of a watch that decides an hour later, and
+ * such a row is collected when its job goes rather than left for the turn rule that could never
+ * reach it. A card that names neither is read by its own call, and is collected when that call has
+ * returned (see the module note). Everything else is read by the turn it names, and is collected on
+ * that turn ending; a card at the turn boundary in flight when a job filed one is the job's, not
+ * the turn's.
  */
 export async function reapApprovalsOfEndedTurns(
   tx: Prisma.TransactionClient,
@@ -154,7 +187,45 @@ export async function reapApprovalsOfEndedTurns(
     },
     data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_MESSAGE },
   });
-  return lostItsJob.count + lostItsTurn.count;
+  // The third reader, and the one both passes above are blind to by construction: a card raised
+  // where the engine was running with no turn in flight names no opener (the turn rule declines to
+  // guess, and rightly) and no job (so the job rule cannot see it). Its reader is its own call, and
+  // `tool_call.finished_at` — the fact `SessionsService.stillBeingAsked` stops offering the card on
+  // — is what says that call has returned. Read then written, because the pairing is a row in
+  // another table: which card has a returned call is not a predicate `updateMany` can carry.
+  const turnless = await tx.approval.findMany({
+    where: {
+      sessionId,
+      status: 'PENDING',
+      turnId: null,
+      backgroundJobId: null,
+      toolUseId: { not: null },
+    },
+    select: { id: true, toolUseId: true },
+  });
+  const paired = turnless
+    .map((a) => a.toolUseId)
+    .filter((id): id is string => id !== null);
+  const returned =
+    paired.length === 0
+      ? new Set<string>()
+      : new Set(
+          (
+            await tx.toolCall.findMany({
+              where: { sessionId, toolUseId: { in: paired }, finishedAt: { not: null } },
+              select: { toolUseId: true },
+            })
+          ).map((call) => call.toolUseId),
+        );
+  const collected = turnless.filter((a) => a.toolUseId !== null && returned.has(a.toolUseId));
+  const lostItsCall =
+    collected.length === 0
+      ? { count: 0 }
+      : await tx.approval.updateMany({
+          where: { sessionId, status: 'PENDING', id: { in: collected.map((a) => a.id) } },
+          data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_CALL_MESSAGE },
+        });
+  return lostItsJob.count + lostItsTurn.count + lostItsCall.count;
 }
 
 /**

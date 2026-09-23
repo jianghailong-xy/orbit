@@ -65,7 +65,7 @@ function makeController({
       findFirst: async () => null,
       findMany: async () => [],
     },
-    approval: { updateMany: async () => ({ count: 0 }) },
+    approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
     runner: { findUnique: async () => ({ planUsage: null }) },
     sessionDiff: { upsert: async () => ({}) },
     // The task side of the same transaction: reclaimStalledTask's nudge, and the timeline the

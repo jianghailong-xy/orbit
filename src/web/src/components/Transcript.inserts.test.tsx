@@ -6,10 +6,11 @@ import { type RunEvent, StreamingDraftsCtx, Transcript, type TranscriptInsert } 
  * Where something with a moment but no seq of its own — a decision recorded from this session —
  * sits among the events around it.
  *
- * The caller names the seq it follows, worked out from the events' clocks. These pin what the
- * transcript does with that: draw it straight after the card holding that seq, draw it once even
- * while a live stretch splits the list in two, and draw nothing for one older than every event
- * loaded so far — the page that holds its moment is not on screen yet.
+ * The caller resolves the moment against the events' clocks (`decisionReceiptAnchor`) and hands
+ * over the answer: a seq to follow, or `head` for a record older than everything loaded, which
+ * leads above the whole window. These pin what the transcript does with that: draw it straight
+ * after the card holding that seq, draw it once even while a live stretch splits the list in two,
+ * and — for `head` — draw it above every row, oldest first.
  */
 
 const ev = (seq: number, type: string, payload: Record<string, unknown>): RunEvent => ({ seq, type, payload });
@@ -17,10 +18,18 @@ const ev = (seq: number, type: string, payload: Record<string, unknown>): RunEve
 // Terminated, so no marker is a prefix of another: `insert@1` would be counted inside `insert@10`.
 const marker = (afterSeq: number) => `insert@${afterSeq}#`;
 
-const insert = (afterSeq: number): TranscriptInsert => ({
-  afterSeq,
+const insert = (afterSeq: number, moment = '2026-09-13T12:53:47.000Z'): TranscriptInsert => ({
+  anchor: afterSeq,
+  moment,
   key: marker(afterSeq),
   element: <div className="probe">{marker(afterSeq)}</div>,
+});
+
+const headInsert = (moment: string): TranscriptInsert => ({
+  anchor: 'head',
+  moment,
+  key: `head@${moment}`,
+  element: <div className="probe">{`head@${moment}`}</div>,
 });
 
 const render = (events: RunEvent[], inserts: TranscriptInsert[], streamingAfterSeq: number | null = null) =>
@@ -57,13 +66,25 @@ describe('an insert sits at its moment in the conversation', () => {
     expect(html.indexOf(marker(7))).toBeLessThan(html.indexOf('second question'));
   });
 
-  it('draws nothing for an insert older than every event loaded so far', () => {
-    // The paired positive is the case above: the same insert over events that reach back far
-    // enough is drawn. Here the earliest loaded event is later, so its moment is on another page.
-    const later = CONVERSATION.map((event) => ({ ...event, seq: event.seq + 100 }));
+  it('draws a head insert above every loaded row, and not at the tail', () => {
+    // What the caller says for a record whose moment is older than everything loaded: not "no
+    // seq" (there is none to give) but "above all of this". At the tail it would read as a
+    // decision made now, which is the defect this rule exists for.
+    const html = render(CONVERSATION, [headInsert('2026-09-10T09:00:00.000Z')]);
 
-    expect(render(later, [insert(7)])).not.toContain(marker(7));
-    expect(render(later, [insert(107)])).toContain(marker(107));
+    expect(occurrences(html, 'head@2026-09-10T09:00:00.000Z')).toBe(1);
+    expect(html.indexOf('head@2026-09-10T09:00:00.000Z')).toBeLessThan(html.indexOf('first question'));
+  });
+
+  it('reads two head inserts oldest first', () => {
+    const older = headInsert('2026-09-09T09:00:00.000Z');
+    const newer = headInsert('2026-09-10T09:00:00.000Z');
+    // Handed over newest-first, drawn oldest-first: the head of a conversation reads top-down in
+    // the order things happened.
+    const html = render(CONVERSATION, [newer, older]);
+
+    expect(html.indexOf('head@2026-09-09T09:00:00.000Z'))
+      .toBeLessThan(html.indexOf('head@2026-09-10T09:00:00.000Z'));
   });
 
   it('draws each insert once, on its own side of a live stretch', () => {

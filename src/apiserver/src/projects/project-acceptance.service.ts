@@ -5,9 +5,11 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SessionsService } from '../sessions/sessions.service';
 import {
   RecordedStandardSetConfirmation,
   StandardSetConfirmationStanding,
@@ -18,6 +20,7 @@ import {
 } from './project-acceptance';
 import { refuseSessionAuthoredConfirmation } from './coordinator-authority';
 import { storeDerivedProjectStatus } from './project-done-derived';
+import { tellCoordinatorProjectStarted } from './project-started';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** One stated criterion, as every read surface reports it. */
@@ -57,7 +60,13 @@ export interface RecordMergeEvidenceInput {
 export class ProjectAcceptanceService {
   private readonly logger = new Logger(ProjectAcceptanceService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /** Tells the coordinator conversation that the project was started (`project-started.ts`).
+     *  `@Optional()` because telling is never a condition of starting: every spec that builds this
+     *  service by hand from a client alone confirms and starts exactly as before, and tells nobody. */
+    @Optional() private readonly sessions?: SessionsService,
+  ) {}
 
   /** Read the authored criteria. The delegate check is for unit-test doubles that stub Prisma with
    * only the tables the case is about; production schema always has it. */
@@ -189,7 +198,7 @@ export class ProjectAcceptanceService {
       });
     }
 
-    await this.prisma.projectStandardSetConfirmation.create({
+    const confirmation = await this.prisma.projectStandardSetConfirmation.create({
       data: {
         projectId,
         // The credentialed actor. On the owner door this is the same row as `ownerId` — the
@@ -227,7 +236,7 @@ export class ProjectAcceptanceService {
     // A throw here leaves a confirmation on record with the project still not started, which is
     // the failure this order is chosen for: the caller is told the authorization did not land, and
     // confirming again is safe — the INSERT appends, and this statement is the same statement.
-    await this.prisma.project.updateMany({
+    const started = await this.prisma.project.updateMany({
       where: { id: projectId, ownerId, coordinatorEnabled: false },
       data: { coordinatorEnabled: true, configRevision: { increment: 1 } },
     });
@@ -242,6 +251,26 @@ export class ProjectAcceptanceService {
       this.logger.warn(`derived project status not re-projected after confirmation: ${
         (error as { message?: string })?.message ?? String(error)}`),
     );
+
+    // The switch lets Orbit start the tasks opted into auto-run; the ones a coordinator filed to
+    // start by hand wait on that coordinator, which the press above never reached. So it is told
+    // — on the off→on transition the CAS made and on no other, so a re-confirmation says nothing
+    // twice — and, like the projection, a telling that failed must not undo a start that happened.
+    if (this.sessions && started.count === 1) {
+      await tellCoordinatorProjectStarted(this.prisma, this.sessions, {
+        ownerId,
+        projectId,
+        start: {
+          by: 'CONFIRMATION',
+          confirmationId: confirmation.id,
+          criteriaCount: currentVersion.material.length,
+          at: confirmation.confirmedAt,
+        },
+      }).catch((error) =>
+        this.logger.warn(`coordinator not told project ${projectId} was started: ${
+          (error as { message?: string })?.message ?? String(error)}`),
+      );
+    }
 
     return standardSetConfirmationStanding(
       currentVersion,

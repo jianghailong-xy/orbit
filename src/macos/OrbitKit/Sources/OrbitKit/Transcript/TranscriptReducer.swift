@@ -508,12 +508,18 @@ public struct TranscriptReducer: Sendable, Codable {
                 // The server's kind, so a reopened console can still tell the message waiting for
                 // its turn from the one being written into the turn in progress.
                 bubble.steer = SteerDelivery.isSteerKind(turn.kind)
+                // The card the projection carried, when this row IS an exception item's delivery:
+                // the console draws it for a delivery the moment it is queued, and without this the
+                // tail would draw the paragraph written for the agent as a message the reader sent
+                // (web parity: the queue tail reads `q.openItemDelivery`).
+                bubble.itemCard = turn.itemCard
                 reconciled.append(bubble)
             } else {
                 reconciled.append(UserBubble(id: "server-\(turn.turnId)", text: turn.content,
                                              attachments: incomingAttachments ?? [], turnId: turn.turnId,
                                              pending: true, queued: true,
-                                             steer: SteerDelivery.isSteerKind(turn.kind)))
+                                             steer: SteerDelivery.isSteerKind(turn.kind),
+                                             itemCard: turn.itemCard))
             }
         }
 

@@ -284,8 +284,12 @@ final class CriteriaDecisionWiringTests: XCTestCase {
     /// half — the derivation, or the question giving way — is what turns this red.
     func testTheConsoleDerivesReceiptsFromTheReadAndLetsTheAnsweredQuestionGo() throws {
         let console = try source(Self.consolePath)
-        XCTAssertTrue(console.contains("CriteriaDecisions.receipts(queue: queue, items: state.items)"),
-                      "the receipts are derived from the read's own answers, placed by the items' clocks")
+        XCTAssertTrue(console.contains("CriteriaDecisions.receipts(queue: queue)"),
+                      "the receipts are derived from the read's own answers")
+        XCTAssertTrue(console.contains("placement: .at(receipt.moment)"),
+                      "each carrying the door's own clock — the transcript resolves the row against "
+                      + "the items it holds at RENDER time, which is what a trimmed window cannot "
+                      + "outlive")
         XCTAssertTrue(console.contains("kind: .criteriaDecisionReceipt(settled: receipt.settled)"),
                       "and delivered as rows of their own, carrying the answer they record")
         // The press itself writes nothing: the re-read draws the record, and a press that also
@@ -328,8 +332,12 @@ final class CriteriaDecisionWiringTests: XCTestCase {
         let banner = try source(Self.bannerPath)
         XCTAssertTrue(banner.contains("if let below {"),
                       "the in-conversation question is what the bar says when there is one")
-        XCTAssertTrue(banner.contains("chevron: \"chevron.down\""),
-                      "and it points down, not away: the destination is in this transcript")
+        // It points INTO this transcript, whichever way the card lies: down was the only direction
+        // while every card it counted sat below the reader, and a card placed by its own moment can
+        // be above one — the reader at the live tail, which is where a conversation opens
+        // (`DeliveryAnchor.exception`). The word and the chevron read the same answer.
+        XCTAssertTrue(banner.contains(#"chevron: below.side == .above ? "chevron.up" : "chevron.down""#),
+                      "and it points the way the card lies, rather than away from the conversation")
         XCTAssertTrue(banner.contains("onOpenBelow?(below.rowID)"),
                       "a press scrolls to the card rather than navigating anywhere")
     }
@@ -342,8 +350,17 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                           + "question is worse than saying nothing")
         XCTAssertTrue(console.contains("AcceptanceConfirmations.isOpen(acceptanceConfirmation)"),
                       "and the confirmation is counted by the same rule, from the same place")
-        XCTAssertFalse(console.contains("var openQuestionRowIDs: [String] { decisionCards.map(\\.id) }"),
+        XCTAssertFalse(console.contains("decisionCards.map(\\.id)"),
                        "counting every delivered card is exactly the version this replaced")
+        // And the exceptions the bar now counts are counted by their OWN standing, never by being
+        // on screen: a card the server no longer lists is `.gone`, and pointing somebody at it is
+        // the same dead-card failure the two assertions above are about.
+        XCTAssertTrue(console.contains("ExceptionCards.isOpen(ownerItemStanding(itemID))"),
+                      "the exceptions are counted by the same standing rule as the questions")
+        XCTAssertTrue(console.contains("ExceptionCards.isOpen(ownerItemStanding(itemID)), question: false)"),
+                      "and the bar is told they are NOT questions: the card it scrolls to reads "
+                          + "\"Escalated to you\", and a line calling that a question sends the reader "
+                          + "looking for something to say")
     }
 
     func testTheConsoleOnlyAsksAboutARulerItCoordinates() throws {

@@ -27,6 +27,7 @@ import {
   CURRENT_WORK_SESSION_REAPED,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
+import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { TaskFailureHow, returnQueuedTurns } from '../projects/project-open-item';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
@@ -443,6 +444,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           ...(retryAt ? { retryAt } : {}),
           finishedAt: new Date(),
           cancelRequestedAt: new Date(),
+          // Every status this writes is terminal, so the run this reaps stops being live here and
+          // what it had running goes with it (CLEARED_RUNNING_WORK). A runner that is merely
+          // unreachable — the partition this sweep's own comment describes — drains its jobs when
+          // it comes back and finds the session closed, and that report is refused for exactly the
+          // reason this row is: not OPEN any more.
+          ...CLEARED_RUNNING_WORK,
         },
       });
       if (res.count === 0) return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };

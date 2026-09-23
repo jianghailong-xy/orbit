@@ -40,6 +40,16 @@ import {
 } from './project-open-item';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 
+/**
+ * Who is asking for an item to be put in front of the project's coordinator conversation.
+ *
+ * `AUTOMATIC` is the platform: an item the coordinator owes, a drain finding one owed, an item
+ * opened for a conversation. `OWNER` is the account owner's own press — `returnToCoordinator`, the
+ * card's "Ask the coordinator again". The two differ in exactly one place and for one reason, the
+ * coordinator switch; `deliver` is where that is spelled out.
+ */
+export type DeliverAskedBy = 'AUTOMATIC' | 'OWNER';
+
 /** Only the project's coordinator conversation may put a question to the owner (§5.2 R8). */
 export const ASK_OWNER_COORDINATOR_ONLY = 'ASK_OWNER_COORDINATOR_ONLY';
 /** A question that has been answered, withdrawn or superseded is not answered again (§4.7). */
@@ -316,7 +326,7 @@ export class ProjectOpenItemService {
    * project that no longer has one, means the item is the owner's — which is the same answer §4.3
    * gives when the item is opened, reached later.
    */
-  async deliver(itemId: string): Promise<void> {
+  async deliver(itemId: string, askedBy: DeliverAskedBy = 'AUTOMATIC'): Promise<void> {
     const item = await this.prisma.projectOpenItem.findUnique({
       where: { id: itemId },
       select: {
@@ -334,8 +344,28 @@ export class ProjectOpenItemService {
       },
     });
     if (!item || item.state !== 'OPEN' || item.assignee !== 'COORDINATOR') return;
-    const sessionId = item.project.coordinatorEnabled ? item.project.coordinatorSessionId : null;
+    // THE SWITCH DECIDES AUTOMATIC HAND-OVERS, AND ONLY THOSE. `coordinatorEnabled` is the owner
+    // saying the coordinator may not act on its own, and an item handed over by the platform is
+    // exactly that. The owner's own press is not: it is that same person saying "put this one in
+    // front of it", about one item, now — the authority is already theirs, and the switch stays
+    // theirs to use. So the press needs the conversation to exist and nothing else, which is what
+    // makes `ASK_COORDINATOR_AGAIN` a button rather than a treadmill: gated on the switch too, the
+    // press would land back on the owner on the next line (`handToOwner`, below) and the item would
+    // be exactly where it started — the clock the door's own comment used to refuse over.
+    const sessionId = askedBy === 'OWNER' || item.project.coordinatorEnabled
+      ? item.project.coordinatorSessionId
+      : null;
     if (!sessionId) {
+      // A TURN THAT IS ALREADY WRITTEN IS NOT THE PLATFORM REACHING FOR A COORDINATOR. The switch
+      // decides THIS delivery; an item whose assignment has already been put in front of the
+      // project's conversation is not one of those — its turn exists (queued, or read and answered),
+      // and the consent that paid for it was spent when that turn was written: by the owner's own
+      // press, or by an automatic hand-over made while the switch was on. Handing it back here is a
+      // reader re-deciding an assignment nobody asked it to re-decide, and it is what made the press
+      // a treadmill with a longer stride than the one `returnToCoordinator` closed: press → the
+      // coordinator reads it → the next drain takes it back → press again (the account owner's
+      // report, 2026-09-22: the exemption held in the press's own call and nowhere else).
+      if (await this.carried(item.id, item.assignedAt, item.project.coordinatorSessionId)) return;
       await this.handToOwner(item.id, item.assignedAt, 'NO_COORDINATOR');
       return;
     }
@@ -551,8 +581,17 @@ export class ProjectOpenItemService {
    * The three refusals in front of the write are what keep the press honest. An item that is no
    * longer open has nothing left to hand over; an item the coordinator is already carrying is not
    * the owner's to send; and a project with no coordinator conversation — or one that has ended —
-   * has nobody to ask again, so handing it back would only start a clock that runs out into this
-   * same item.
+   * has nobody to put the item in front of, so the delivery would hand it straight back and the
+   * press would be a circle.
+   *
+   * WHAT IT NO LONGER REFUSES, AND WHY. It used to refuse when `coordinatorEnabled` was off, on the
+   * same argument. That argument is about AUTOMATIC hand-overs (`deliver` spells it out): an item
+   * nobody pressed for belongs to the owner when the coordinator may not act. This press is not
+   * that — it is the owner, who owns the switch, putting one item in front of their own
+   * conversation — so the door asks for a conversation and the delivery carries the authority. The
+   * alternative was a card whose press is refused, or a card that hides the press and leaves the
+   * owner with nothing to do about an item that is theirs precisely because nobody else will take
+   * it (the account owner's report, 2026-09-22).
    */
   async returnToCoordinator(
     ownerId: string,
@@ -567,7 +606,6 @@ export class ProjectOpenItemService {
         assignee: true,
         project: {
           select: {
-            coordinatorEnabled: true,
             coordinatorSessionId: true,
             coordinatorSession: { select: SESSION_ENDING_SELECT },
             exceptionEscalationSeconds: true,
@@ -592,7 +630,13 @@ export class ProjectOpenItemService {
           + 'owner because nobody acted on it.',
       });
     }
-    const session = item.project.coordinatorEnabled ? item.project.coordinatorSession : null;
+    // The conversation, not the switch: this press is the owner's own authority, so a project whose
+    // coordinator is switched off still has somewhere to put the item — what it needs is somebody to
+    // put it in front of (`deliver`, which this ends by calling with `OWNER`). What the switch does
+    // keep is every automatic hand-over: an item opened for a switched-off coordinator is the
+    // owner's from the start, and this refusal is what it was always about — a project with NO
+    // conversation at all.
+    const session = item.project.coordinatorSession;
     if (item.project.coordinatorSessionId == null || session == null || sessionHasEnded(session)) {
       throw new ConflictException({
         code: OPEN_ITEM_NO_COORDINATOR,
@@ -627,7 +671,7 @@ export class ProjectOpenItemService {
     // §4.4 X-D4 (1), after the commit, and guarded: the item is the coordinator's from here whether
     // or not this process manages to tell it, and a delivery that fails is re-derived from the
     // committed row at the next drain point rather than costing the owner a 500.
-    await this.guarded('returnToCoordinator', () => this.deliver(itemId));
+    await this.guarded('returnToCoordinator', () => this.deliver(itemId, 'OWNER'));
     return { itemId, assignee: 'COORDINATOR', waitingSince: now, escalateAt };
   }
 
@@ -677,7 +721,7 @@ export class ProjectOpenItemService {
         state: true,
         assignee: true,
         askedBySessionId: true,
-        project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
+        project: { select: { coordinatorSessionId: true } },
       },
     });
     if (!item) throw new NotFoundException('item not found');
@@ -736,10 +780,13 @@ export class ProjectOpenItemService {
               + 'nobody acted and it escalated to them. Closing it is their press.',
           });
         }
-        const coordinatorSessionId = item.project.coordinatorEnabled
-          ? item.project.coordinatorSessionId
-          : null;
-        if (!sessionId || sessionId !== coordinatorSessionId) {
+        // The conversation, not the switch — the reading `returnToCoordinator` and `deliver` spell
+        // out (§4.7). An item arrives on a coordinator either by an automatic hand-over the switch
+        // authorized or by the owner's own press, and once it is its assignee's, its assignee ends
+        // it: an assignment that cannot be closed is an item with no ending but its clock. Gated on
+        // the switch, an item handed to a switched-off coordinator could only be ended by the owner
+        // — the dead end the press was made exempt from the switch to avoid.
+        if (!sessionId || sessionId !== item.project.coordinatorSessionId) {
           throw new ForbiddenException({
             code: OPEN_ITEM_COORDINATOR_ONLY,
             message:
@@ -984,17 +1031,17 @@ export class ProjectOpenItemService {
       // BACK to decides one press on every item it owns, and it is one project either way.
       select: {
         id: true,
-        coordinatorEnabled: true,
         coordinatorSessionId: true,
         coordinatorSession: { select: SESSION_ENDING_SELECT },
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    // The same two facts `deliver` refuses on, asked at read time: a project with no coordinator
-    // conversation — or one that has ended — has nobody to ask again, and a press offering to do
-    // it would be a button whose only answer is a refusal (§4.7).
-    const askable = project.coordinatorEnabled
-      && project.coordinatorSessionId != null
+    // Whether there is a conversation to ask again — the SAME predicate `returnToCoordinator`
+    // refuses on, minus the switch, which is not part of it: the press is the owner's own, so a
+    // switched-off coordinator still has somewhere to put the item (`deliver`). Drawn the other way
+    // round, the card would hide a press that works, which is the same failure as drawing one that
+    // cannot (§4.7).
+    const askable = project.coordinatorSessionId != null
       && project.coordinatorSession != null
       && !sessionHasEnded(project.coordinatorSession);
     const rows = await this.prisma.projectOpenItem.findMany({
@@ -1162,6 +1209,34 @@ export class ProjectOpenItemService {
         createdAt: new Date(),
       },
     });
+  }
+
+  /**
+   * Whether this assignment has already been put in front of that conversation (§4.4 X-D2).
+   *
+   * The ledger's own answer to "has anybody been told", and the one `deliver` asks before it decides
+   * that an item the platform may not hand over belongs to the owner. The row is not a hope: it is
+   * written inside `createTurn`'s transaction, so a live one under this item, this conversation and
+   * this assignment is the turn itself — already queued or already read. `returnedAt: null` is the
+   * other half of it: a delivery that was taken back is a delivery that was not made, and the item
+   * goes wherever the switch says it goes.
+   */
+  private async carried(
+    itemId: string,
+    assignedAt: Date,
+    sessionId: string | null,
+  ): Promise<boolean> {
+    if (!sessionId) return false;
+    const carried = await this.prisma.projectOpenItemDelivery.count({
+      where: {
+        itemId,
+        sessionId,
+        purpose: 'ITEM',
+        returnedAt: null,
+        clientTurnId: openItemTurnId(itemId, assignedAt),
+      },
+    });
+    return carried > 0;
   }
 
   /** An item nobody's coordinator can read is the owner's (§4.4 X-D6). */

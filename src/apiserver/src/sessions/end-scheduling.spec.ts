@@ -63,6 +63,14 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
   assert.deepEqual(await service.end(ownerId, id), { ok: true });
   assert.equal(statusWrite?.status, RunStatus.CANCELLED);
   assert.equal(statusWrite?.endReason, SessionEndReason.ENDED);
+  // CANCELLED is the end of the line for the session, so it is the end of what its last run left
+  // running too — a job parked with it that nobody reaped. The runner learns to stop from the same
+  // cancelRequestedAt, and the terminal report its drain then sends is refused: this status has
+  // already closed event admission on the session.
+  assert.deepEqual(statusWrite?.runningBgShells, []);
+  assert.deepEqual(statusWrite?.runningBgJobs, []);
+  assert.deepEqual(statusWrite?.runningBgJobActivity, {});
+  assert.deepEqual(statusWrite?.runningSubagents, []);
   assert.equal(drained, 1);
   assert.equal(retired, 1);
   assert.equal(cancelRequests, 1);

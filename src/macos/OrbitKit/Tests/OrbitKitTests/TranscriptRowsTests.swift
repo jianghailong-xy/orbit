@@ -5,8 +5,16 @@ import XCTest
 // crashed the iOS client: every row the List is handed must carry a UNIQUE id, and each source must
 // contribute a fixed, predictable number of rows.
 final class TranscriptRowsTests: XCTestCase {
-    private func user(_ id: String, _ text: String = "hi", queued: Bool = false) -> UserBubble {
-        UserBubble(id: id, text: text, pending: false, queued: queued)
+    private func user(_ id: String, _ text: String = "hi", queued: Bool = false,
+                      at ts: String? = nil) -> UserBubble {
+        UserBubble(id: id, text: text, ts: ts, pending: false, queued: queued)
+    }
+
+    /// A row of one of the five receipts, placed by the door's own clock — the shape the console
+    /// builds them in (`ConsoleModel`'s `adopt*`).
+    private func record(_ kind: DeliveredDecisionCard.Kind,
+                        at moment: String) -> DeliveredDecisionCard {
+        DeliveredDecisionCard(kind: kind, placement: .at(moment))
     }
 
     private func card(_ after: String?) -> LocalStatusCard {
@@ -177,7 +185,8 @@ final class TranscriptRowsTests: XCTestCase {
     // MARK: delivered decision cards
 
     private func decision(_ intentID: String, after: String?) -> DeliveredDecisionCard {
-        DeliveredDecisionCard(kind: .criteriaDecision(intentID: intentID), afterItemID: after)
+        DeliveredDecisionCard(kind: .criteriaDecision(intentID: intentID),
+                              placement: .onArrival(afterItemID: after))
     }
 
     /// A question about the project's ruler sits where it ARRIVED, so the messages that came after
@@ -197,7 +206,8 @@ final class TranscriptRowsTests: XCTestCase {
         let rows = TranscriptRows.build(
             state: state(items: [.user(user("i1"))]),
             statusCards: [], canPageOlder: false, showWorkingIndicator: false,
-            decisionCards: [DeliveredDecisionCard(kind: .acceptanceConfirmation, afterItemID: "i1")])
+            decisionCards: [DeliveredDecisionCard(kind: .acceptanceConfirmation,
+                                                  placement: .onArrival(afterItemID: "i1"))])
         XCTAssertEqual(rows.map(\.id), ["i1", "acceptance-confirmation", "transcript-bottom"])
     }
 
@@ -215,23 +225,98 @@ final class TranscriptRowsTests: XCTestCase {
                         "criteria-decision-in-1", "criteria-decision-in-2", "transcript-bottom"])
     }
 
-    /// The record of an answer sits where the DECISION happened — the anchor is computed from the
-    /// door's clock, not from when the read brought the row in — and its id is beside the question's
-    /// rather than the same as it: for one intent both rows can be on screen at once while the
-    /// question is being let go of, and two rows sharing an id costs the List its diff.
+    /// The record of an answer sits where the DECISION happened — resolved from the door's clock
+    /// against the rows' own clocks on every render, not from when the read brought the row in —
+    /// and its id is beside the question's rather than the same as it: for one intent both rows can
+    /// be on screen at once while the question is being let go of, and two rows sharing an id costs
+    /// the List its diff.
     func testAReceiptSitsWhereItsAnswerHappenedUnderAnIdOfItsOwn() {
         let settled = SettledCriteriaDecision(intentId: "in-1", decision: .approve,
                                               decidedAt: "2026-09-11T15:40:00.000Z",
                                               baseSeal: "a", resultingSeal: "b")
-        let receipt = DeliveredDecisionCard(kind: .criteriaDecisionReceipt(settled: settled),
-                                            afterItemID: "i1")
+        let receipt = record(.criteriaDecisionReceipt(settled: settled),
+                             at: settled.decidedAt)
         let rows = TranscriptRows.build(
-            state: state(items: [.user(user("i1")), .user(user("i2"))]),
+            state: state(items: [.user(user("i1", at: "2026-09-11T15:00:00.000Z")),
+                                 .user(user("i2", at: "2026-09-11T15:50:00.000Z"))]),
             statusCards: [], canPageOlder: false, showWorkingIndicator: false,
             decisionCards: [decision("in-1", after: "i1"), receipt])
         XCTAssertEqual(rows.map(\.id),
                        ["i1", "criteria-decision-in-1", "criteria-decision-receipt-in-1",
                         "i2", "transcript-bottom"])
+    }
+
+    /// THE RULE OF 2026-09-22, and what this test is for. A record whose moment is older than
+    /// every loaded row is drawn at the HEAD of the window — above the load-earlier row, which
+    /// stays UNDER it because that row is the way up to the moment — and NOT at the tail. At the
+    /// tail it reads as a decision made now, and it is where the account owner found one that had
+    /// been trimmed out of the window 316 rows earlier (a frozen anchor id, an unplaceable anchor,
+    /// `trailingDecisions`: `ReceiptAnchor.Placement` has the story).
+    func testARecordOlderThanEveryLoadedRowLeadsAtTheHeadAndNotAtTheTail() {
+        let settled = SettledCriteriaDecision(intentId: "in-1", decision: .approve,
+                                              decidedAt: "2026-09-19T04:26:49.679Z",
+                                              baseSeal: "a", resultingSeal: "b")
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1", at: "2026-09-21T09:00:00.000Z")),
+                                 .user(user("i2", at: "2026-09-22T09:00:00.000Z"))],
+                         oldestSeq: 42),
+            statusCards: [], canPageOlder: true, showWorkingIndicator: false,
+            decisionCards: [record(.criteriaDecisionReceipt(settled: settled),
+                                   at: settled.decidedAt)])
+        XCTAssertEqual(rows.map(\.id),
+                       ["criteria-decision-receipt-in-1", "load-older-42", "i1", "i2",
+                        "transcript-bottom"])
+    }
+
+    /// Several records above the window read oldest-first, like the conversation they are the head
+    /// of — and the load-earlier row stays under all of them.
+    func testHeadRecordsReadOldestFirst() {
+        let older = SettledCriteriaDecision(intentId: "in-1", decision: .approve,
+                                            decidedAt: "2026-09-19T04:26:49.679Z",
+                                            baseSeal: "a", resultingSeal: "b")
+        let newer = SettledCriteriaDecision(intentId: "in-2", decision: .reject,
+                                            decidedAt: "2026-09-20T04:26:49.679Z",
+                                            baseSeal: "c", resultingSeal: "d")
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1", at: "2026-09-21T09:00:00.000Z"))], oldestSeq: 42),
+            statusCards: [], canPageOlder: true, showWorkingIndicator: false,
+            decisionCards: [record(.criteriaDecisionReceipt(settled: newer), at: newer.decidedAt),
+                            record(.criteriaDecisionReceipt(settled: older), at: older.decidedAt)])
+        XCTAssertEqual(rows.map(\.id),
+                       ["criteria-decision-receipt-in-1", "criteria-decision-receipt-in-2",
+                        "load-older-42", "i1", "transcript-bottom"])
+    }
+
+    /// A stamp nothing can parse is not a licence to draw the record in the wrong place: it is not
+    /// drawn at all. (The window's head claims "older than everything here", which is a claim about
+    /// a moment — and there is none.)
+    func testARecordWhoseStampCannotBeReadIsNotDrawn() {
+        let settled = SettledCriteriaDecision(intentId: "in-1", decision: .approve,
+                                              decidedAt: "not a stamp",
+                                              baseSeal: "a", resultingSeal: "b")
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1", at: "2026-09-21T09:00:00.000Z"))]),
+            statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+            decisionCards: [record(.criteriaDecisionReceipt(settled: settled),
+                                   at: settled.decidedAt)])
+        XCTAssertEqual(rows.map(\.id), ["i1", "transcript-bottom"])
+    }
+
+    /// A record whose moment falls among the loaded rows keeps going where it happened, even with
+    /// the head of that window long gone: the placement is re-derived, not remembered.
+    func testARecordInsideTheWindowStaysWhereItHappened() {
+        let settled = SettledCriteriaDecision(intentId: "in-1", decision: .approve,
+                                              decidedAt: "2026-09-21T09:30:00.000Z",
+                                              baseSeal: "a", resultingSeal: "b")
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1", at: "2026-09-21T09:00:00.000Z")),
+                                 .user(user("i2", at: "2026-09-21T10:00:00.000Z"))], oldestSeq: 42),
+            statusCards: [], canPageOlder: true, showWorkingIndicator: false,
+            decisionCards: [record(.criteriaDecisionReceipt(settled: settled),
+                                   at: settled.decidedAt)])
+        XCTAssertEqual(rows.map(\.id),
+                       ["load-older-42", "i1", "criteria-decision-receipt-in-1", "i2",
+                        "transcript-bottom"])
     }
 
     /// The evidence half of the same rule: the record of an answer is a row of its own, id beside
@@ -242,14 +327,14 @@ final class TranscriptRowsTests: XCTestCase {
             decision: .confirm, note: nil, decidedAt: "2026-09-16T09:45:00.000Z",
             decidedByType: "USER")
         let rows = TranscriptRows.build(
-            state: state(items: [.user(user("i1")), .user(user("i2"))]),
+            state: state(items: [.user(user("i1", at: "2026-09-16T09:00:00.000Z")),
+                                 .user(user("i2", at: "2026-09-16T10:00:00.000Z"))]),
             statusCards: [], canPageOlder: false, showWorkingIndicator: false,
             decisionCards: [
                 DeliveredDecisionCard(kind: .evidenceDecision(taskID: decided.taskId,
                                                               evidenceRevision: decided.evidenceRevision),
-                                      afterItemID: "i1"),
-                DeliveredDecisionCard(kind: .evidenceDecisionReceipt(decided: decided),
-                                      afterItemID: "i1"),
+                                      placement: .onArrival(afterItemID: "i1")),
+                record(.evidenceDecisionReceipt(decided: decided), at: decided.decidedAt),
             ])
         XCTAssertEqual(rows.map(\.id),
                        ["i1", "evidence-decision-34LMiluvx0jK63cj8arWl@2",

@@ -3732,6 +3732,11 @@ html[data-theme='dark'] .session-tag-chip {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* The transcript does its own anchoring when a page of older messages lands above the viewport
+     (WorkspaceView's prepend anchor). The browser's scroll anchoring adjusts for the same growth,
+     one layout later, and the two compensations fight: the reader is thrown a page down from
+     wherever they were reading. Ours is the one that can tell a prepend from a fold, so it wins. */
+  overflow-anchor: none;
 }
 /* Canonical completion-repair obligations sit outside the transcript scroller: the command has
    already finished, so burying this behind a stale Running transcript would recreate the product
@@ -4922,6 +4927,60 @@ html[data-theme='dark'] .session-tag-chip {
   .composer-pill-workspace .ant-select {
     min-width: 0;
   }
+  /* ── The `+` menu ─────────────────────────────────────────────────────────────────────────
+     One menu, two clients — and the phone is the one that can be held next to the iOS app, so
+     here it takes the native menu's box: 250 wide, 42.4px rows, 17px type, a 26px corner, and a
+     rule between the two groups inset 24 from either edge. Every number is measured off the
+     phone screenshot in docs/mocks/composer-attach-menu-phone.html, and pinned by
+     WorkspaceView.composerMenu.test.tsx so it cannot drift back to antd's defaults.
+     Desktop keeps antd's density on purpose: that menu is a pointer menu at the foot of a pane,
+     and a 250px card there would be the wrong size for the surface it opens on. */
+  .composer-attach-menu.ant-dropdown-menu {
+    /* 250 is where it rests, and it is a floor rather than a width because one row's label is
+       longer than the others: "Shell (session unavailable)" needs the whole 250 before it fits,
+       and a card that wraps THAT into two lines stops looking like the native menu it is
+       copying. So the card grows to fit its widest row, up to what the phone can show. */
+    min-width: 250px;
+    width: max-content;
+    max-width: calc(100vw - 44px);
+    padding: 10px 0;
+    border-radius: 26px;
+    box-shadow:
+      0 18px 44px rgba(0, 0, 0, 0.17),
+      0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+  .composer-attach-menu .ant-dropdown-menu-item {
+    display: flex;
+    align-items: center;
+    height: 42.4px;
+    padding: 0 0 0 31px;
+    border-radius: 0;
+    font-size: 17px;
+    /* antd leaves this to the row it draws; a native menu row is one line, always. */
+    white-space: nowrap;
+  }
+  /* The glyph box and the gap after it: 31 + 19 + 16 lands the word 66 from the card's edge,
+     which is where the native menu has it. */
+  .composer-attach-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+    min-width: 19px;
+    font-size: 19px;
+  }
+  /* Glyphs are drawn in the native menu's secondary tone — but only on a row that can be used,
+     so an unavailable one keeps antd's dimmed colour instead of reading as enabled. */
+  .composer-attach-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled)
+    .ant-dropdown-menu-item-icon {
+    color: #8a8a8e;
+  }
+  .composer-attach-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon + span {
+    margin-inline-start: 16px;
+  }
+  /* The rule between the two groups: 9.5 + 1 + 9.5 = the 20pt band the native menu leaves, and
+     the line itself drawn as the background antd already uses so no border has to be undone. */
+  .composer-attach-menu .ant-dropdown-menu-item-divider {
+    height: 1px;
+    margin: 9.5px 24px;
+    background-color: #eaeaea;
+  }
 }
 /* Popover body: one gauge per subscription window (reuses .runner-util for the bar). */
 .cu-pop {
@@ -5246,9 +5305,39 @@ button.composer-usage:focus-visible {
   font-size: 13px;
   padding: 10px 4px;
 }
-.chat-loading-older {
+/* What is above the loaded window: a page in flight, or the way back to the first message. Sticky
+   inside the scroller — it has to stay reachable wherever the reader is, and the top of the content
+   is not a place they can stop: arriving there pulls in the next page, which lands anchored and
+   leaves them a page below it. Zero-height so it floats over the transcript rather than indenting
+   it, and transparent apart from the pill itself. */
+.chat-older-top {
+  position: sticky;
+  top: 10px;
+  z-index: 4;
+  height: 0;
   text-align: center;
-  opacity: 0.75;
+  pointer-events: none;
+}
+.chat-older-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  pointer-events: auto;
+}
+button.chat-jump-start {
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+button.chat-jump-start:hover {
+  background: var(--bg-sunken);
+  color: var(--text-1);
 }
 /* Transcript placeholder while an unvisited session's tail page is in flight. Geometry tracks
    .chat-user / .chat-assistant so the skeleton occupies the same columns the real messages will,
@@ -5579,6 +5668,21 @@ button.composer-usage:focus-visible {
   height: 90px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.06);
+}
+/* A result image whose bytes the server dropped from the preview (see MAX_IMAGE_PAYLOAD): the card
+   opens on the image block, so until the untrimmed payload lands there is a picture-shaped hole
+   where the picture is going. Reserve that slot — the cap .chat-result .chat-image itself lands
+   in, so the swap barely moves the transcript — and spin, so an open card never reads as a broken
+   one. The spinner is the only content: this box is a shape, not a chip. */
+.chat-result-image-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 760px);
+  height: 520px;
+  border-radius: 8px;
+  background: var(--fill-inset);
+  color: var(--text-3);
 }
 .md .ant-image {
   display: block;

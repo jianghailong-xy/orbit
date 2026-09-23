@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import type { SessionOwnerItem } from '@orbit/shared';
+import type { SessionOwnerItem, SessionWaitingKind } from '@orbit/shared';
 
 import { countPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
 import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read';
@@ -217,6 +217,21 @@ async function readProjectDecisionSignals(
  * for the same reason a held proposal is not: a lit badge that opens nothing is worse than a dark
  * one. What is counted is decided by `ownerItemKind` and nothing else, so the count, the push and
  * the chip on the project list cannot come to disagree about which items are the owner's.
+ *
+ * THE CONVERSATION, NOT THE SWITCH. `coordinatorEnabled` is deliberately NOT part of this
+ * predicate, and it used to be. That column is the authority: whether the coordinator may ACT —
+ * `deliver()` reads it to decide whether an item can be handed to the conversation at all, and
+ * hands it to the owner when it cannot; the four wake producers read it the same way. Where the
+ * CARD is drawn is a different fact, and it is the binding: the client's read is
+ * `session.projectId` (`sessions.service.ts`, from `Project.coordinatorSessionId`) and it never
+ * looks at the switch, so a project whose coordinator is switched off still draws its owner items
+ * in that conversation. Gating the count on the switch therefore broke the very rule this file
+ * works under — the badge and the card disagreeing — and it broke it in the worst direction: a
+ * dark row over a conversation that does hold an unanswered card, on a project where nothing else
+ * will ever pick the item up (the account owner's report, 2026-09-22: a project confirmed but
+ * never started, three escalations drawn in its coordinator conversation, nothing pointing at
+ * them). The switch still decides everything it decided before; it just no longer decides where
+ * the badge points.
  */
 async function readOwnerItemSignals(
   tx: Prisma.TransactionClient,
@@ -229,7 +244,6 @@ async function readOwnerItemSignals(
       state: 'OPEN',
       assignee: 'OWNER',
       project: {
-        coordinatorEnabled: true,
         coordinatorSessionId: sessionIds ? { in: [...sessionIds] } : { not: null },
         coordinatorSession: { completedAt: null, archivedAt: null, deletedAt: null },
       },
@@ -341,22 +355,36 @@ export function ownerItemsForRow(
   }));
 }
 
-/** The one waiting kind a session row names in words of its own. */
-export type SessionWaitingKind = 'OWNER_CONFIRMATION';
+/** The waiting kinds a session row names in words of its own. Declared in `@orbit/shared` beside
+ *  the owner items it describes, because it rides on the wire and both clients read it; re-exported
+ *  here, where the count that produces it lives. */
+export type { SessionWaitingKind };
 
 /**
  * What a session row's `pendingApprovals` is counting, when one word says it better than
- * "approval": `OWNER_CONFIRMATION` when everything counted is an owner confirmation, so the row can
- * say "Waiting for your confirmation". Null otherwise — including when a tool call is blocked on the
- * same row, which is holding a turn open and is the more urgent thing to say.
+ * "approval". Two of the three kinds do:
+ *
+ *   * `OWNER_CONFIRMATION` — everything counted is an OWNER_CONFIRMED task's run waiting for its
+ *     owner to confirm it done, and the row says so in the confirmation card's words. Nobody is
+ *     approving anything; the row was describing an act that does not happen.
+ *   * `OWNER_ITEM` — everything counted is one of the four things a project waits on its owner in
+ *     person for (§7.6 V13), and the row says the item's own word — `Escalated to you`, `Paused`,
+ *     `Approve merge to main`, `Question from coordinator` — the same words the banner above the
+ *     list and the card in the conversation use. On a switched-off coordinator this is the row that
+ *     matters most: the item is the owner's precisely because nobody else will take it, so
+ *     "Waiting for approval" described the one thing that was certainly not happening.
+ *
+ * Null otherwise — a blocked tool call on the same row, which holds a turn open and is the more
+ * urgent thing to say; a kind with no words of its own (`PROJECT_DECISION` really is a proposal
+ * awaiting approval); and a row counting two kinds at once, which would have to name one of them
+ * and hide the other.
  */
 export function sessionWaitingKind(
   approvals: number,
   decisions: OwnerDecisionsOnSession | undefined,
 ): SessionWaitingKind | null {
   if (approvals > 0 || !decisions || decisions.count === 0) return null;
-  for (const kind of decisions.kinds) {
-    if (kind !== 'OWNER_CONFIRMATION') return null;
-  }
-  return 'OWNER_CONFIRMATION';
+  if (decisions.kinds.size !== 1) return null;
+  const [only] = decisions.kinds;
+  return only === 'OWNER_CONFIRMATION' || only === 'OWNER_ITEM' ? only : null;
 }

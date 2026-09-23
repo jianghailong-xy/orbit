@@ -37,6 +37,46 @@ describe('sessionLine', () => {
     expect(statusLabel({ ...parked, pendingApprovals: 0 })).toBe('Waiting for your reply');
   });
 
+  /**
+   * One of the four owner items says WHICH it is, in the words the bar above the list and the card
+   * in the conversation share — the oldest item, which is the one the bar names, so a person who
+   * pressed either arrives at a card saying what they read. A row calling an escalated exception
+   * "Waiting for approval" described the one act that was certainly not happening.
+   */
+  it('names which of the four is waiting, and falls back when it cannot', () => {
+    const waiting = {
+      status: 'AWAITING_INPUT',
+      engineTurnActive: false,
+      projectId: 'p_1',
+      waitingKind: 'OWNER_ITEM',
+      lastAssistantText: 'Filed the proposal.',
+    };
+    const escalated = { itemId: 'i1', kind: 'ESCALATED', title: 'Task failed: 000_00022',
+                        since: '2026-09-22T00:19:41Z' };
+    const paused = { itemId: 'i2', kind: 'FUSE_PAUSED', title: 'Paused',
+                     since: '2026-09-22T02:00:00Z' };
+    expect(sessionLine({ ...waiting, pendingApprovals: 1, ownerItems: [escalated] }, true)).toEqual({
+      text: 'Escalated to you',
+      tone: 'approval',
+    });
+    // The oldest item is the one named — the same FIFO the bar picks its target by — and the order
+    // the row happens to hold them in is not what decides it.
+    expect(
+      statusLabel({ ...waiting, pendingApprovals: 2, ownerItems: [paused, escalated] }),
+    ).toBe('Escalated to you');
+    // Nothing to name keeps the generic words: a row from an older control plane, or one whose
+    // items are kinds this build has no words for.
+    expect(statusLabel({ ...waiting, pendingApprovals: 1 })).toBe('Waiting for approval');
+    expect(
+      statusLabel({ ...waiting, pendingApprovals: 1, ownerItems: [{ ...escalated, kind: 'A_FIFTH_KIND' }] }),
+    ).toBe('Waiting for approval');
+    // And with nothing waiting at all the kind decides nothing: the row is an ordinary preview.
+    expect(sessionLine({ ...waiting, pendingApprovals: 0, ownerItems: [escalated] }, true)).toEqual({
+      text: 'Filed the proposal.',
+      tone: 'preview',
+    });
+  });
+
   it('surfaces live state before any reply preview', () => {
     expect(sessionLine({ status: 'RUNNING', pendingApprovals: 2 }, true)).toEqual({
       text: 'Waiting for approval',

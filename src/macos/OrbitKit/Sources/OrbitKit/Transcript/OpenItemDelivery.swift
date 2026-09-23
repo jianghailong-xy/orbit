@@ -144,7 +144,16 @@ public struct OpenItemDelivery: Sendable, Equatable, Codable {
     /// makes it one, and a payload missing any of them is not drawn at all — never half a card. Every
     /// other field is optional and defaults, exactly as the web's reader defaults it.
     public static func parse(_ payload: JSONValue) -> OpenItemDelivery? {
-        guard case .object(let card)? = payload["openItemDelivery"],
+        parseCard(payload["openItemDelivery"])
+    }
+
+    /// The same reading for the card itself rather than a payload that carries it: the queued-turn
+    /// projection (`QueuedTurnInfo.openItemDelivery`) hands over the object the echo would have put
+    /// under that key, and one function reads both so the card a client draws while the delivery
+    /// waits is the very card the echo is drawn as. A value that is not an object, or one missing
+    /// the three fields that make a card one, is nil — never half a card.
+    public static func parseCard(_ value: JSONValue?) -> OpenItemDelivery? {
+        guard case .object(let card)? = value,
               let itemId = nonEmptyString(card["itemId"]),
               let kind = card["kind"]?.stringValue,
               let title = nonEmptyString(card["title"]) else { return nil }
@@ -358,7 +367,23 @@ public enum OpenItemDeliveryCard {
     /// so the bar can never name the turn something the card under it does not (see `StickySummary`).
     /// Web parity: the `data-sticky-label` / `data-sticky-text` the card's root carries.
     public static func sticky(_ card: OpenItemDelivery) -> (label: String, text: String) {
-        (header, "\(kindLabel(card.kind)): \(card.title)")
+        (header, stickyText(kind: card.kind, title: card.title))
+    }
+
+    /// The line under the bar's label: the kind of item it is, then the item's own title — unless
+    /// the title already opens with the kind, which a failed task's does by construction (`Task
+    /// failed: <task title>` against this kind's label `Task failed`). The bar read
+    /// "Task failed: Task failed: [WARC]…" on the account owner's screenshot (2026-09-22), and the
+    /// browser stamped the same doubled pair.
+    ///
+    /// The title wins when it already says it, and the rule is stated once here and once in
+    /// `OpenItemDeliveryCard.tsx`'s `stickyText` because the two ends must stamp the SAME pair: a
+    /// native bar that dropped half of it while the browser kept both would be two wordings of one
+    /// turn, which is the failure the parity test exists for. Case-insensitive, so a title the
+    /// server happened to lower-case is not doubled either.
+    public static func stickyText(kind: ProjectOpenItemKind, title: String) -> String {
+        let label = kindLabel(kind)
+        return title.lowercased().hasPrefix(label.lowercased()) ? title : "\(label): \(title)"
     }
 
     /// The task this item is about, as the app's own `orbit-task:` door — nil when the item is about

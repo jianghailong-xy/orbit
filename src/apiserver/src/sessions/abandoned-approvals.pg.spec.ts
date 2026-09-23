@@ -19,12 +19,17 @@
  *       badge falls to zero and the row is ABANDONED, with the reason on it and `decided_at` still
  *       null, because nobody decided anything. A brand-new approval raised inside that same turn
  *       goes with it. Young and dead IS collected.
- *   (3) An approval whose opener is unknown (`turn_id` null: a row from before 0252, or one raised
- *       outside a turn) is never collected. The predicate needs a fact, and "we do not know who
- *       raised it" is not one.
+ *   (3) An approval raised where the engine was running with no turn in flight — the shape a
+ *       self-driven stretch leaves (`turn_id` null, no job) — is collected on the card's OWN fact:
+ *       its call has returned, which is what the result the engine writes when it stops polling
+ *       records. The turn rule can never reach such a row, and before this it kept the badge lit
+ *       forever with no card on any surface to press.
+ *   (4) An approval whose opener is unknown and whose call has said nothing is never collected. The
+ *       predicate needs a fact, and "we do not know who raised it" is not one.
  *
- * (1) and (2) together are what rule the clock out in both directions; (3) is the guard on the
- * clause that keeps `notIn: []` from becoming "collect everything".
+ * (1) and (2) together are what rule the clock out in both directions; (4) is the guard on the
+ * clause that keeps `notIn: []` from becoming "collect everything", and (3) is what keeps that
+ * guard from leaving a card nothing will ever be able to answer.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/abandoned-approvals.pg.spec.ts
  *
@@ -48,6 +53,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import {
+  APPROVAL_ABANDONED_CALL_MESSAGE,
   APPROVAL_ABANDONED_JOB_MESSAGE,
   APPROVAL_ABANDONED_MESSAGE,
   APPROVAL_ABANDONED_STATUS,
@@ -195,6 +201,7 @@ test('an approval whose turn ended stops counting, and says so in the row', {
       where: { id },
       select: {
         status: true, message: true, decidedAt: true, decidedById: true, turnId: true,
+        backgroundJobId: true,
       },
     });
   }
@@ -279,7 +286,74 @@ test('an approval whose turn ended stops counting, and says so in the row', {
       'both rows are still there: the question that was asked stays in the record');
   });
 
-  await t.test('(3) an approval whose opener is unknown is never collected', async () => {
+  await t.test('(3) a card raised with no turn at all is collected once its own call returns', async () => {
+    // 2026-09-20, in production. The engine runs in stretches of its own — a background task
+    // reporting in, a wake-up — that never reach /turn-complete and are recorded as no turn at
+    // all (`common/session-generating.ts`). An ask raised in one has no opener to name, so the
+    // turn rule above is inert on it by design, and its job is null, so the job rule cannot see it
+    // either. What its reader was is the call itself: the MCP poll loop that runs inside it.
+    assert.equal(
+      await db.conversationTurn.count({ where: { sessionId: f.sessionId, status: { not: 'ANSWERED' } } }),
+      0,
+      'no turn of this session is in flight — so this card can name no opener',
+    );
+
+    const toolUseId = `toolu_${randomUUID()}`;
+    const turnless = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {
+      toolName: 'AskUserQuestion',
+      input: { questions: [{ question: '每模型 A/B 档各跑几次?', header: '测试规模', options: [] }] },
+      toolUseId,
+    });
+    const raised = await approval(turnless.id);
+    assert.equal(raised.turnId, null, 'the card names no turn: there was none to name');
+    assert.equal(raised.backgroundJobId, null, 'and no job: nothing here names a reader but the call');
+
+    // The engine's own stream opens the call, the way the runtime reports a tool it is running.
+    await stack.api.events({ id: f.runnerId }, f.sessionId, {
+      events: [{
+        seq: 2,
+        type: RunEventType.TOOL_USE,
+        ts: new Date().toISOString(),
+        payload: { id: toolUseId, name: 'AskUserQuestion', input: { questions: [] } },
+      }],
+    });
+    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 0,
+      'a call that has STARTED is not a call that has returned — the row is still a live question');
+    assert.equal((await approval(turnless.id)).status, 'PENDING', 'and it is untouched');
+
+    // The three-hour poll dies the way this one did — `context deadline exceeded` — and the engine
+    // writes the result it got and runs on. This is the ONLY trace it leaves, and the same fact
+    // `stillBeingAsked` stops offering the card on.
+    await stack.api.events({ id: f.runnerId }, f.sessionId, {
+      events: [{
+        seq: 3,
+        type: RunEventType.TOOL_RESULT,
+        ts: new Date().toISOString(),
+        payload: {
+          toolUseId,
+          content: 'approval poll failed: context deadline exceeded',
+          isError: true,
+        },
+      }],
+    });
+    assert.equal(await pendingApprovals(), 1,
+      'the count is lit — this is the row that reads "Waiting for approval" with no card to press');
+    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 1,
+      'and the reaper is what puts it out, on the card’s own fact rather than a turn it never had');
+
+    const after = await approval(turnless.id);
+    assert.equal(after.status, APPROVAL_ABANDONED_STATUS, 'the row is collected');
+    assert.equal(after.message, APPROVAL_ABANDONED_CALL_MESSAGE,
+      'with the sentence for the reader it actually lost — neither a turn nor a job');
+    assert.equal(after.decidedAt, null, 'nobody decided anything');
+    assert.equal(after.decidedById, null, 'so it names no decider');
+    assert.equal(after.turnId, null, 'and it still names no turn: there never was one');
+    assert.equal(await pendingApprovals(), 0, 'the badge is dark: nothing is waiting on anybody');
+    assert.equal(await db.approval.count({ where: { sessionId: f.sessionId } }), 3,
+      'the question stays in the record with the other two');
+  });
+
+  await t.test('(4) an approval whose opener is unknown is never collected', async () => {
     // Deliberately LAST, when this session has no live turn at all. That is the only state in
     // which the null-opener guard does any work: with no live turns the exclusion list is empty,
     // `NOT IN ()` is a tautology in SQL, and a reaper without the guard would sweep up every

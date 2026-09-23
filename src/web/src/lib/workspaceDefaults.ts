@@ -485,24 +485,34 @@ export const MODE_OPTIONS = [
 ];
 
 /** Whether Auto exists on the runtime behind a persisted provider identity. Resolves the slug and
- *  defers to the shared table the server normalizes with, so the picker and dispatch cannot
- *  disagree about which sessions can have it. */
+ *  defers to the same shared answer the server normalizes with, so the picker and dispatch cannot
+ *  disagree about which sessions can have it.
+ *
+ *  `modelCatalog` is the ASSIGNED runner's, and is where the answer now comes from: Claude gates
+ *  Auto per model, and which models have it is a property of the CLI installed on that machine.
+ *  Pass it wherever the runner is in view — exactly as the model list, the context window and the
+ *  effort levels already do. Omitting it falls back to a list in the repo, which is how Opus 5.5
+ *  came to be offered Default-only on runners whose CLI would have honored Auto. */
 export const supportsAuto = (
   model: string,
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
+  modelCatalog?: RunnerModelCatalog | null,
 ): boolean =>
   autoAvailable(
     runtimeForProvider(provider, configured),
     model,
     !!configuredProvider(provider, configured),
+    modelCatalog,
   );
 export const clampPermissionModeForModel = (
   mode: string,
   model: string,
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
-): string => (mode === 'auto' && !supportsAuto(model, provider, configured) ? 'default' : mode);
+  modelCatalog?: RunnerModelCatalog | null,
+): string =>
+  mode === 'auto' && !supportsAuto(model, provider, configured, modelCatalog) ? 'default' : mode;
 
 // App defaults used when the user has set no preference of their own.
 export const DEFAULT_MODEL = 'claude-opus-5';

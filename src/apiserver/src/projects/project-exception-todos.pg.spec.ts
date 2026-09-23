@@ -211,8 +211,13 @@ interface World {
  *   * `COMPLETED` — filed as Completed by its owner: still `AWAITING_INPUT`, which `createTurn` on its
  *                   own would queue onto, so only the item delivery's own check keeps it closed;
  *   * `NONE`      — nobody has opened a coordinator for this project.
+ *
+ * `coordinatorEnabled` is the owner's own switch and is orthogonal to that shape: off, the
+ * conversation is still there and the platform simply stops handing it things on its own. A world
+ * built off is the state a project lands in when nobody has confirmed what would settle it.
  */
-async function world(stack: Stack, label: string, coordinator: CoordinatorShape): Promise<World> {
+async function world(stack: Stack, label: string, coordinator: CoordinatorShape,
+                     options: { coordinatorEnabled?: boolean } = {}): Promise<World> {
   const db = stack.db;
   const ownerId = randomUUID();
   const runnerId = randomUUID();
@@ -291,7 +296,7 @@ async function world(stack: Stack, label: string, coordinator: CoordinatorShape)
       ownerId,
       title: `${label} project`,
       goal: 'every failure has somebody who knows about it',
-      coordinatorEnabled: true,
+      coordinatorEnabled: options.coordinatorEnabled ?? true,
       coordinatorWorkspaceId: workspaceId,
       ...(coordinatorSessionId ? { coordinatorSessionId } : {}),
     },
@@ -2266,6 +2271,130 @@ test('hands it back with the window restarted, and queues it on the coordinator 
         RunStatus.PENDING,
         'a parked coordinator is woken for it',
       );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('hands it back to a coordinator that is SWITCHED OFF, because the press is the owner\'s own',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // The account owner's report, 2026-09-22: a project confirmed but never started — a live,
+      // bound coordinator conversation, the switch off, and its exceptions handed to the owner
+      // because the platform had nowhere to put them. The card offered no way back, and the
+      // switch's only door is the web project page.
+      const w = await world(stack, 'return-switched-off', 'PARKED', { coordinatorEnabled: false });
+      const a = await attempt(stack, w, 'return-switched-off', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const item = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
+      assert.equal(item.assignee, 'OWNER');
+      assert.equal(item.assigneeReason, 'NO_COORDINATOR',
+                   'the switch, not the clock, is what put it on the owner');
+
+      // (1) The card is offered the press at all. `askable` is about there being a conversation —
+      //     the same fact the count, the session row and the badge are drawn by.
+      const view = await stack.openItems.list(w.ownerId, w.projectId);
+      const row = view.needsYou.find((one) => one.itemId === item.id);
+      assert.ok(row, 'the item is in the owner\'s group');
+      assert.ok(row!.actions.includes('ASK_COORDINATOR_AGAIN'),
+                'the door is offered rather than hidden');
+
+      // (2) And it works: the item goes back to the conversation and is queued there afresh,
+      //     rather than landing back on the owner on `deliver`'s next line.
+      const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id);
+      assert.equal(returned.assignee, 'COORDINATOR');
+      const after = (await items(stack.db, w.projectId)).find((one) => one.id === item.id)!;
+      assert.equal(after.assignee, 'COORDINATOR', 'the hand-back did not bounce back to the owner');
+      assert.equal(after.assigneeReason, 'DEFAULT');
+      const fresh = (await itemTurns(stack.db, w.coordinatorSessionId!)).filter(
+        (turn) => turn.clientTurnId === `open-item:v1:${item.id}:${after.assignedAt.getTime()}`,
+      );
+      assert.equal(fresh.length, 1, 'the item was put in front of the conversation');
+      assert.equal(fresh[0]!.status, 'PENDING');
+
+      // (3) Nothing else moved: the press is one item, not an authorization. The project is still
+      //     switched off, so nothing automatic starts reaching a coordinator that may not act.
+      const project = await stack.db.project.findUniqueOrThrow({
+        where: { id: w.projectId },
+        select: { coordinatorEnabled: true },
+      });
+      assert.equal(project.coordinatorEnabled, false, 'the press did not start the project');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a switched-off coordinator keeps what the owner handed it, and can close it',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // The case above, one turn further on. The coordinator reads the item and says what it found;
+      // its turn then ENDS, and a turn ending is where `deliverOwedTo` runs (§4.4 X-D4 3) — which is
+      // where the item used to be taken straight back off it. The press bought one read, and the card
+      // came back with its clock restarted: the account owner's report, 2026-09-22, three items and
+      // 14 deliveries in 16 minutes, every one of them answered "no change yet".
+      const w = await world(stack, 'carried-while-off', 'PARKED', { coordinatorEnabled: false });
+      const a = await attempt(stack, w, 'carried-while-off', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const item = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
+      await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id);
+      const returned = await itemNow(stack, w, item.id);
+      assert.equal(returned.assignee, 'COORDINATOR');
+
+      await stack.openItems.deliverOwedTo(w.coordinatorSessionId!);
+
+      const after = await itemNow(stack, w, item.id);
+      assert.equal(after.assignee, 'COORDINATOR',
+                   'the drain did not take back what the owner\'s press handed over');
+      assert.equal(after.assigneeReason, 'DEFAULT');
+      assert.equal(after.assignedAt.getTime(), returned.assignedAt.getTime(),
+                   'and it re-decided nothing, so the assignment it was delivered under still stands');
+      const sent = (await deliveries(stack.db, w.projectId)).filter((row) => row.itemId === item.id);
+      assert.equal(sent.length, 1, 'one item, one delivery row — re-read, not handed again');
+      assert.equal(sent[0]!.returnedAt, null);
+
+      // And it is the coordinator's in the only sense that ends anything: the conversation the
+      // project points at can close it. A hand-over that leaves an item nobody may end is a look
+      // (§4.7) — with the switch off, this press used to be closable by the owner alone.
+      const closed = await door(stack)(w, item.id, {
+        kind: 'SESSION',
+        sessionId: w.coordinatorSessionId!,
+      }, '是协调会话自己落地的那份，没有东西要再集成一次');
+      assert.equal(closed.state, 'RESOLVED');
+      assert.equal(closed.resolution, 'HANDLED');
+      const ended = await itemNow(stack, w, item.id);
+      assert.equal(ended.resolvedBy, 'COORDINATOR');
+      assert.equal(ended.resolvedBySessionId, w.coordinatorSessionId);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an item the platform never managed to hand over is still the owner\'s when the switch is off',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // The other half of the rule above, and the reason it is a ledger question rather than "the
+      // switch stopped mattering": a delivery that was taken back is a delivery that was not made,
+      // so the item goes wherever the switch says it goes. The state is written the way the column
+      // says it is — `returned_at` and `return_code` together, which the table's check enforces.
+      const w = await world(stack, 'returned-while-off', 'PARKED', { coordinatorEnabled: false });
+      const a = await attempt(stack, w, 'returned-while-off', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const item = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
+      await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id);
+      await stack.db.projectOpenItemDelivery.updateMany({
+        where: { itemId: item.id, purpose: 'ITEM' },
+        data: { returnedAt: new Date(), returnCode: 'SESSION_ENDED_BEFORE_THE_TURN_WAS_READ' },
+      });
+
+      await stack.openItems.deliverOwedTo(w.coordinatorSessionId!);
+
+      const after = await itemNow(stack, w, item.id);
+      assert.equal(after.assignee, 'OWNER', 'an item nobody was told about is not the coordinator\'s');
+      assert.equal(after.assigneeReason, 'NO_COORDINATOR',
+                   'the switch is what put it there — the sentence that draws is its own question');
     } finally {
       await stack.db.$disconnect();
     }

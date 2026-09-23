@@ -248,6 +248,52 @@ final class AgentDefaultsTests: XCTestCase {
             .auto, for: "deepseek-v4-pro", provider: "deepseek", configured: [deepseek]), .auto)
     }
 
+    /// Auto follows the CLI installed on the machine that will run the session, exactly as the
+    /// model list, the context window and the effort levels already do. The static set is what
+    /// answers only where that machine has not: when Opus 5.5 shipped, its runner reported it and
+    /// could run Auto on it, and the composer still offered Default alone — no error, just a mode
+    /// that stopped existing. Web parity: workspaceDefaults' supportsAuto case of the same name.
+    func testAutoComesFromTheAssignedRunnersCatalog() {
+        let catalog = RunnerModelCatalog(claude: [
+            RunnerModelInfo(value: "claude-opus-5-5", label: "Opus 5.5",
+                            permissionModes: ["default", "auto"]),
+            RunnerModelInfo(value: "claude-opus-5", label: "Opus 5",
+                            permissionModes: ["default", "plan"]),
+        ])
+        XCTAssertTrue(AgentDefaults.supportsAuto("claude-opus-5-5", catalog: catalog))
+        XCTAssertEqual(
+            AgentDefaults.clampPermissionMode(.auto, for: "claude-opus-5-5", catalog: catalog),
+            .auto)
+
+        // A row that withholds Auto wins over the fallback set, which still lists Opus 5. The
+        // set can fill a silence; it can never contradict an answer.
+        XCTAssertFalse(AgentDefaults.supportsAuto("claude-opus-5", catalog: catalog))
+        XCTAssertEqual(
+            AgentDefaults.clampPermissionMode(.auto, for: "claude-opus-5", catalog: catalog),
+            .default)
+
+        // Silence in its shapes — no catalog, no row for this model, a row from a runner too old
+        // to report the modes — all keep the fallback answer. "We don't know" is not "no".
+        let stale = RunnerModelCatalog(claude: [
+            RunnerModelInfo(value: "claude-sonnet-5", label: "Sonnet 5"),
+        ])
+        for candidate in [nil, stale] as [RunnerModelCatalog?] {
+            XCTAssertTrue(AgentDefaults.supportsAuto("claude-sonnet-5", catalog: candidate))
+            XCTAssertFalse(AgentDefaults.supportsAuto("claude-haiku-4-5", catalog: candidate))
+        }
+
+        // The catalog is keyed by runtime: Codex's row for a same-named model says nothing about
+        // what Claude Code would do with it.
+        let codexRows = RunnerModelCatalog(codex: [
+            RunnerModelInfo(value: "claude-opus-9", label: "x", permissionModes: ["auto"]),
+        ])
+        XCTAssertFalse(AgentDefaults.supportsAuto("claude-opus-9", catalog: codexRows))
+
+        // A configured provider's model space stays vendor-defined; neither source polices it.
+        XCTAssertTrue(AgentDefaults.supportsAuto(
+            "claude-opus-5", provider: "deepseek", configured: [deepseek], catalog: catalog))
+    }
+
     // MARK: configured providers (control-plane custom slugs — GET /api/providers)
 
     private let deepseek = ConfiguredProvider(

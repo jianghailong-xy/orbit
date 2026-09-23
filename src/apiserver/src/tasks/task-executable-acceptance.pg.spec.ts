@@ -414,6 +414,19 @@ suite('a different exit code derives FAILED, and records nothing either', async 
   const api = controller(db);
   await finishMessage(api, f);
   const acceptance = await dequeueAcceptance(api, f);
+  // What the run had going when the acceptance round disagreed with it: a runner-hosted job, which
+  // outlives the engine that launched it and so is still up while its session ends. The drain that
+  // ends it reports seconds from now, into a session this completion has just made non-OPEN, where
+  // the events endpoint refuses it. Nothing else would retire these ids (CLEARED_RUNNING_WORK).
+  await db.session.update({
+    where: { id: f.sessionId },
+    data: {
+      runningBgShells: ['bgj_0000000000e1'],
+      runningBgJobs: ['bgj_0000000000e1'],
+      runningBgJobActivity: { bgj_0000000000e1: Date.now() - 1_000 },
+      runningSubagents: ['call_00000000e1'],
+    },
+  });
   // Genuinely executed, exactly as the runner would.
   const shell = spawnSync('bash', ['-lc', acceptance.content!], { encoding: 'utf8' });
   assert.equal(shell.status, 7);
@@ -438,6 +451,20 @@ suite('a different exit code derives FAILED, and records nothing either', async 
   const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
   assert.equal(session.status, RunStatus.FAILED);
   assert.equal(session.error, 'acceptance command exited 7; expected 0');
+  // And the run's end takes its running work with it, in the write that ends it. The session is
+  // not live any more, so it has no live background process — the same rule the tray derives from
+  // (`classifyShellStatus`: no terminal notification on an ended session is not running). Left
+  // standing, the row reads "Background process running…" for the rest of its life, over a process
+  // that is gone: production sessions failed by a disagreeing acceptance round looked exactly so.
+  assert.deepEqual(
+    {
+      runningBgShells: session.runningBgShells,
+      runningBgJobs: session.runningBgJobs,
+      runningBgJobActivity: session.runningBgJobActivity,
+      runningSubagents: session.runningSubagents,
+    },
+    { runningBgShells: [], runningBgJobs: [], runningBgJobActivity: {}, runningSubagents: [] },
+  );
 });
 
 suite('the DONE fence is what the derived status passes through, and it still refuses others',

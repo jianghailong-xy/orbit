@@ -157,6 +157,7 @@ import {
   requeueUnreadCurrentWorkSteers,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
+import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import {
@@ -1876,6 +1877,7 @@ export class RunnerApiController {
           permissionMode,
           customRow?.enabled === true,
           runner.runsAsRoot,
+          s.assignedRunner?.modelCatalog,
         ),
         // Whether the fast lane is actually on. Policed HERE rather than where it was picked,
         // for the same reason an OpenCode variant is: the constraint is about the model this
@@ -3899,6 +3901,11 @@ export class RunnerApiController {
                 error: (acceptanceFailureReason ?? dto.result) || 'run failed',
                 finishedAt: new Date(),
                 cancelRequestedAt: new Date(),
+                // FAILED is where this session stops being live, so whatever it had running
+                // goes with it (CLEARED_RUNNING_WORK). This write is the reason the runner
+                // cannot do it: the drain that kills those jobs reports them seconds from now,
+                // and by then this status has closed event admission on them.
+                ...CLEARED_RUNNING_WORK,
               }
             : {}),
           // Live worktree state for the composer's status bar, refreshed each turn (the
@@ -4903,10 +4910,7 @@ export class RunnerApiController {
           // Clearing runningSubagents here is the teardown backstop for a sub-workspace that never got
           // its own terminal signal (e.g. an async workspace killed with the session), so the list
           // can't stay stuck on "Running Workspace…".
-          runningBgShells: [],
-          runningBgJobs: [],
-          runningBgJobActivity: {},
-          runningSubagents: [],
+          ...CLEARED_RUNNING_WORK,
           ...(quotaRetryAt ? { retryAt: quotaRetryAt } : {}),
         },
       });

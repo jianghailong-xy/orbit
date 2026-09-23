@@ -28,16 +28,28 @@ type supervisedSession struct {
 	pool *sessionPool
 	live *liveSession
 	job  *ClaimedSession
+	// The session's checkout, which is both where its engine reads/writes files and the directory
+	// a reply's own images have to sit in to be uploaded (reply_attachments.go).
+	execDir string
 
 	mu      sync.Mutex
 	inbox   []RunInboxResponse
 	events  []RunEvent
 	settled []TurnCompleteRequest
+	// The file names of attachments the runner uploaded, in arrival order.
+	uploads []string
 }
 
 // superviseClaudeSession registers the session active, as a claim does, with one message
 // queued for it, and runs its supervisor until the test ends.
 func superviseClaudeSession(t *testing.T, pool *sessionPool, script ...fakeStep) *supervisedSession {
+	t.Helper()
+	return superviseClaudeSessionIn(t, pool, t.TempDir(), script...)
+}
+
+// superviseClaudeSessionIn is the same run in an execDir the test names, for a script that has to
+// speak about a file the test wrote into the session's checkout (see reply_attachments_test.go).
+func superviseClaudeSessionIn(t *testing.T, pool *sessionPool, execDir string, script ...fakeStep) *supervisedSession {
 	t.Helper()
 	fake := newFakeClaude(t, script...)
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -56,12 +68,12 @@ func superviseClaudeSession(t *testing.T, pool *sessionPool, script ...fakeStep)
 		t.Fatal("the session was not registered")
 	}
 	s.live = live
-	execDir := t.TempDir()
+	s.execDir = execDir
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		runInteractiveSession(NewTransport(api.URL, "runner-token"), job, ctx, context.Background(),
-			execDir, nil, pool, live)
+			s.execDir, nil, pool, live)
 		pool.finish(live)
 	}()
 	t.Cleanup(func() {
@@ -98,6 +110,18 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 			s.events = append(s.events, batch.Events...)
 			s.mu.Unlock()
 		}
+	case strings.HasSuffix(r.URL.Path, "/attachments"):
+		// What the runner posts when a reply links a file it wrote (reply_attachments.go): the
+		// bytes go up and the answer's id is what the transcript carries instead of the path.
+		if err := r.ParseMultipartForm(1 << 20); err == nil && r.MultipartForm != nil {
+			s.mu.Lock()
+			for _, header := range r.MultipartForm.File["file"] {
+				s.uploads = append(s.uploads, header.Filename)
+			}
+			s.mu.Unlock()
+		}
+		_, _ = w.Write([]byte(`{"id":"attachment-1"}`))
+		return
 	case strings.HasSuffix(r.URL.Path, "/turn-complete"):
 		// An empty answer parks the session: AWAITING_INPUT.
 		var req TurnCompleteRequest

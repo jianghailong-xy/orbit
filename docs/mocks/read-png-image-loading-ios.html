@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Read on a .png — 图片到达之前那一秒 iOS 效果图</title>
+<style>
+  html, body { margin: 0; background: #eceef2; }
+  body { width: 962px; padding: 44px 48px 52px; box-sizing: border-box;
+         font-family: "Inter", "Noto Sans CJK SC", "Noto Sans SC", sans-serif; color: #111; }
+  h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -0.3px; }
+  .sub { margin: 0 0 8px; font-size: 17px; color: #444; line-height: 1.45; }
+  .why { margin: 0 0 30px; font-size: 15px; color: #666; line-height: 1.55; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13.5px;
+         background: #e2e5ea; border-radius: 4px; padding: 1px 5px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 413px); column-gap: 40px; row-gap: 36px; }
+  .cap { margin-top: 14px; font-size: 16px; line-height: 1.5; color: #333; }
+  .cap b { display: flex; align-items: center; gap: 8px; font-size: 19px; color: #111; margin-bottom: 4px; }
+  .pill { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 7px; }
+  .now { background: #e5e5ea; color: #3a3a3c; }
+  .rec { background: #34c759; color: #fff; }
+  .alt { background: #ff9f0a; color: #000; }
+
+  .device { position: relative; width: 413px; height: 872px; border-radius: 62px; background: #1b1b1d; padding: 10px; box-sizing: border-box;
+            box-shadow: 0 18px 44px rgba(0,0,0,.20), inset 0 0 0 1.5px #3a3a3c; }
+  .screen { position: relative; width: 393px; height: 852px; border-radius: 52px; overflow: hidden; background: #fff; }
+  .island { position: absolute; top: 11px; left: 134px; width: 125px; height: 36px; border-radius: 18px; background: #000; z-index: 20; }
+  .home { position: absolute; bottom: 8px; left: 129px; width: 135px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.32); z-index: 20; }
+
+  /* transcript */
+  .transcript { position: absolute; inset: 0; padding-top: 58px; }
+  .r { display: flex; align-items: center; gap: 7px; padding: 6px 10px 6px 11px; }
+  .chev { width: 11px; font-size: 11px; font-weight: 600; color: rgba(0,0,0,.28); flex: none; }
+  .ic { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .ic svg { display: block; }
+  .lbl { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; font-weight: 600; color: #000; }
+  .base { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; font-weight: 600; color: #000; white-space: nowrap; }
+  .dir { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: rgba(0,0,0,.45); }
+  .sum { font-size: 13px; color: rgba(0,0,0,.5); white-space: nowrap; overflow: hidden; }
+  .ok { margin-left: 2px; flex: none; }
+  .spacer { flex: 1 1 auto; }
+  .prose { padding: 4px 14px 10px 14px; font-size: 15.5px; line-height: 1.5; color: #111; }
+
+  .card { position: relative; padding-left: 11px; padding-right: 10px; }
+  .card.open { background: rgba(0,0,0,.06); border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+  .card .rail { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+  .card.open .rail { border-radius: 8px 0 0 8px; }
+  .read .rail { background: #007aff; } .read .ic { background: rgba(0,122,255,.14); }
+  .exec .rail { background: #30b0c7; } .exec .ic { background: rgba(48,176,199,.14); }
+  .card .r { padding-left: 0; padding-right: 0; }
+
+  .detail { padding-bottom: 6px; }
+  .ph-cap { width: 300px; height: 360px; border-radius: 8px; background: rgba(120,120,128,.16);
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); display: flex; align-items: center; justify-content: center; }
+  .ph-small { width: 120px; height: 90px; border-radius: 8px; background: rgba(120,120,128,.16); }
+  .ph-line { display: flex; align-items: center; gap: 7px; font-size: 13px; color: rgba(0,0,0,.5); }
+  .spin { width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box;
+          border: 2px solid rgba(0,0,0,.14); border-top-color: rgba(0,0,0,.45); }
+  .spin.small { width: 14px; height: 14px; border-width: 1.6px; }
+
+  .thought { display: flex; align-items: center; gap: 9px; padding: 8px 12px; color: rgba(0,0,0,.5); font-size: 15px; }
+  .brain { width: 22px; height: 22px; border-radius: 50%; background: rgba(120,120,128,.14); flex: none; }
+
+  /* change markers, per docs/mocks convention */
+  .mark { position: absolute; border: 1.5px dashed #ff3b30; border-radius: 10px; z-index: 30; }
+  .tag { position: absolute; z-index: 31; padding: 3px 9px; border-radius: 7px; background: #ff3b30; color: #fff;
+         font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+  .tag.q { background: #ff9f0a; color: #000; }
+</style>
+</head>
+<body>
+  <h1>Read 一张 .png：图片到达之前，卡片里是什么</h1>
+  <p class="sub">iOS 会话窗口 · 同一张卡片的四种样子。左上是你截图那一帧（现在），其余三种是改法。</p>
+  <p class="why">卡片是「自动展开」的：结果里带 image 块它就展开（web 同款）。超过 <code>64KB</code> 的图，
+     服务端只留下 image 块、剥掉里面的字节（这两张 mock 图 443KB / 447KB，都被剥）；
+     字节要等客户端回取那次 ~400KB 的 refetch 才到。中间这一段，卡片就是空的。</p>
+
+  <div class="grid">
+
+    <div>
+      <div class="device" data-panel="now"></div>
+      <p class="cap"><b><span class="pill now">现在</span>展开的卡片是空的</b>
+        箭头朝下、有边框、有左侧蓝条，里面却没有一行东西 —— 读者以为图挂了，或者以为这张卡坏了。</p>
+    </div>
+
+    <div>
+      <div class="device" data-panel="cap"></div>
+      <p class="cap"><b><span class="pill rec">推荐 A</span>按图片上限尺寸占位 + 转圈</b>
+        占位块正是图片将要出现的位置（iOS 上图片上限 300×360），落位时几乎不跳；转圈说明「正在取」。</p>
+    </div>
+
+    <div>
+      <div class="device" data-panel="small"></div>
+      <p class="cap"><b><span class="pill alt">备选 B</span>小灰块，静默（120×90）</b>
+        和「已发图片」缩略图等待时那块一模一样，改动最小、最轻；代价是图片落位时会把下面的内容顶一下。</p>
+    </div>
+
+    <div>
+      <div class="device" data-panel="line"></div>
+      <p class="cap"><b><span class="pill alt">备选 C</span>只写一行字，不占位</b>
+        最省地方，也最不像一张图；落位时顶得最多。要加文案，还得定用哪种语言。</p>
+    </div>
+
+  </div>
+
+<script>
+const doc = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#007aff" stroke-width="1.5"><path d="M4 1.9h5.2L13 5.7v8.4H4z"/><path d="M9.2 1.9v3.8H13"/></svg>`;
+const term = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#30b0c7" stroke-width="1.6"><rect x="1.6" y="2.2" width="12.8" height="11.6" rx="2.4"/><path d="M4.6 6.4l2 2-2 2M8.8 10.6h2.6"/></svg>`;
+const check = `<svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#34c759"/><path d="M4.6 8.3l2.2 2.2 4.4-4.6" stroke="#fff" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const bashRow = `<div class="r exec"><span class="chev">›</span><span class="ic">${term}</span>
+  <span class="lbl">Bash</span><span class="sum">Render the mock to PNG</span><span class="spacer"></span><span class="ok">${check}</span></div>`;
+const readRow = `<div class="r"><span class="chev">⌄</span><span class="ic">${doc}</span>
+  <span class="lbl">Read</span><span class="base">owner-receipt-placement.png</span><span class="dir">…</span>
+  <span class="spacer"></span><span class="ok">${check}</span></div>`;
+
+const details = {
+  now:   { html: ``, label: `展开，但里面什么都没有`, q: true },
+  cap:   { html: `<div class="detail"><div class="ph-cap"><div class="spin"></div></div></div>`, label: `占位 = 图片上限 300×360` },
+  small: { html: `<div class="detail"><div class="ph-small"></div></div>`, label: `120×90 灰块，静默` },
+  line:  { html: `<div class="detail"><div class="ph-line"><span class="spin small"></span>Loading image…</div></div>`, label: `一行字，不占位` },
+};
+
+for (const host of document.querySelectorAll('.device')) {
+  const d = details[host.dataset.panel];
+  host.innerHTML = `
+    <div class="screen">
+      <div class="island"></div><div class="home"></div>
+      <div class="transcript">
+        <div class="thought"><span class="brain"></span>Thought · 4.1k chars<span class="spacer"></span><span style="color:rgba(0,0,0,.35)">›</span></div>
+        <div class="prose">效果图成了，但底部被裁掉，左栏三个编号语义不清。我修一下再出图。</div>
+        ${bashRow}
+        <div class="card read open"><div class="rail"></div>${readRow}${d.html}</div>
+        <div class="thought"><span class="brain"></span>Thought · 730 chars<span class="spacer"></span><span style="color:rgba(0,0,0,.35)">›</span></div>
+        ${bashRow.replace('Render the mock to PNG', 'Deliver the mockup into uploads')}
+        <div class="thought"><span class="brain"></span>Thought · 2.4k chars<span class="spacer"></span><span style="color:rgba(0,0,0,.35)">›</span></div>
+      </div>
+    </div>`;
+
+  // Mark the region under test — the detail area when there is one, else the whole card —
+  // and put the label wherever it fits, measured rather than guessed.
+  const screen = host.querySelector('.screen');
+  const region = screen.querySelector('.detail') || screen.querySelector('.card');
+  const s = screen.getBoundingClientRect(), r = region.getBoundingClientRect();
+  const pad = 7;
+  const mark = document.createElement('div');
+  mark.className = 'mark';
+  mark.style.cssText = `left:${r.left - s.left - pad}px;top:${r.top - s.top - pad}px;` +
+                       `width:${r.width + 2 * pad}px;height:${r.height + 2 * pad}px`;
+  screen.append(mark);
+}
+</script>
+</body>
+</html>

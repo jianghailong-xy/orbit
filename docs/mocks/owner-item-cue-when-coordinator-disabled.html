@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>协调会话活着、但项目 coordinator_enabled=false 时，升级给你的异常该不该在列表/标题栏亮</title>
+<style>
+  :root {
+    --orange: #FF9500;
+    --blue: #007AFF;
+    --red: #FF3B30;
+    --green: #34C759;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --fill-2: rgba(120, 120, 128, .08);
+    --glass: rgba(255, 255, 255, .55);
+    --mark: rgba(255, 59, 48, .85);      /* 改动处的虚线标注 */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Liberation Sans",
+          "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1180px; margin: 0 0 26px; }
+  .lede code, figcaption code, .note code {
+    font: 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 34px; align-items: flex-start; margin-bottom: 34px; }
+  figure { margin: 0; }
+  figcaption { margin-top: 14px; width: 393px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  figcaption b:not(:first-child) { display: inline; font-size: inherit; margin: 0; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+  .mark { outline: 1.5px dashed var(--mark); outline-offset: 3px; border-radius: 8px; }
+
+  /* ── 手机 ───────────────────────────────────────────────── */
+  .phone {
+    width: 393px; background: var(--surface); overflow: hidden; border-radius: 30px;
+    box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07); color: var(--label);
+    display: flex; flex-direction: column;
+  }
+  .status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 26px 6px; font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-weight: 500; font-size: 14px; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 10px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 24px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+
+  /* 会话页导航栏（iOS 26 玻璃托） */
+  .nav { padding: 2px 14px 10px; display: flex; align-items: center; gap: 10px; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 40px;
+             background: var(--glass); border-radius: 999px;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { width: 40px; }
+  .nav .titles { flex: 1; text-align: center; line-height: 1.15; min-width: 0; }
+  .nav .t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .nav .s { font-size: 11.5px; color: var(--label-2); white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; }
+  .badge { background: var(--fill); border-radius: 6px; padding: 2px 6px; font-size: 11px;
+           color: var(--label-2); margin-left: 4px; vertical-align: 1px; }
+  .ico { width: 19px; height: 19px; fill: none; stroke: var(--label); stroke-width: 1.9;
+         stroke-linecap: round; stroke-linejoin: round; }
+
+  /* 列表 */
+  .listhead { padding: 4px 16px 10px; display: flex; align-items: center; justify-content: space-between; }
+  .listhead .ttl { font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .grp { font-size: 12.5px; font-weight: 600; color: var(--label-2); padding: 10px 20px 6px; }
+  .srow { padding: 8px 20px 9px; border-top: 1px solid var(--sep); }
+  .srow:first-of-type { border-top: none; }
+  .srow .l1 { display: flex; align-items: center; gap: 8px; }
+  .srow .ttl { font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .sp { flex: 1; }
+  .srow .rel { font-size: 13px; color: var(--label-2); }
+  .srow .l2 { display: flex; align-items: center; gap: 6px; margin-top: 2px; min-width: 0; }
+  .srow .sub { font-size: 13.5px; color: var(--label-2); white-space: nowrap; overflow: hidden;
+               text-overflow: ellipsis; }
+  .srow .sub.approval { color: var(--orange); font-weight: 500; }
+  .cobadge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--label-2);
+             background: var(--fill-2); border-radius: 6px; padding: 1px 6px; flex: none; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.amber { background: var(--orange); }
+  .dot.red { background: var(--red); }
+  .spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--label-3);
+          border-top-color: transparent; flex: none; }
+
+  /* 会话内 */
+  .thread { flex: 1; padding: 8px 14px 0; display: flex; flex-direction: column;
+            min-height: 0; overflow: hidden; }
+  .ask { font-size: 13px; color: var(--label-2); padding-bottom: 9px; margin-bottom: 10px;
+         border-bottom: 1px solid var(--sep); }
+  .ask b { color: var(--label); font-weight: 600; }
+  .card { padding: 13px; border-radius: 14px; background: rgba(255, 149, 0, .07);
+          border: 1px solid rgba(255, 149, 0, .28); margin-bottom: 10px; }
+  .card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .card .icon { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+                font-size: 12px; background: rgba(255,149,0,.16); color: #b26a00; flex: none; }
+  .card .title { font-size: 15px; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden;
+                 text-overflow: ellipsis; }
+  .prov { font-size: 12px; color: var(--label-2); margin-bottom: 8px; letter-spacing: .04em; }
+  .why { font-size: 13.5px; font-weight: 600; line-height: 1.45; }
+  .subject { font-size: 13px; line-height: 1.45; color: var(--label-2); margin-top: 3px; }
+  .btn { min-height: 42px; border-radius: 22px; display: flex; align-items: center;
+         justify-content: center; font-size: 16px; margin-top: 10px; }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.tinted { background: var(--fill); color: var(--blue); }
+  .card .foot { font-size: 12px; color: var(--label-2); margin-top: 9px; }
+  .tail { padding: 10px 14px 22px; }
+  .composer { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+              border: 1px solid var(--sep); border-radius: 22px; color: var(--label-3); font-size: 15px; }
+  .composer .send { margin-left: auto; width: 30px; height: 30px; border-radius: 9px;
+                    background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 13px; }
+  .footbar { display: flex; align-items: center; gap: 13px; padding: 8px 18px 20px;
+             font-size: 13px; color: var(--label-2); }
+  .footbar .on { color: var(--label); font-weight: 600; }
+  .footbar .ctx { margin-left: auto; }
+
+  /* needs-you 条（别的页面上的那一条） */
+  .needs { display: flex; align-items: center; gap: 8px; padding: 9px 16px;
+           background: rgba(255,149,0,.08); border-bottom: 1px solid rgba(255,149,0,.22);
+           font-size: 13px; color: var(--label); }
+  .needs .txt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .needs .chev { width: 14px; height: 14px; stroke: var(--label-3); fill: none; stroke-width: 2.2;
+                 stroke-linecap: round; stroke-linejoin: round; }
+  .ghost { border: 1.5px dashed #b3261e; border-radius: 14px; min-height: 86px; display: grid;
+           place-items: center; font-size: 12.5px; line-height: 1.45; color: #b3261e; text-align: center;
+           background: rgba(255,59,48,.05); padding: 12px; margin-bottom: 10px; }
+  .note { max-width: 1180px; font-size: 13.5px; line-height: 1.6; color: #55555e; }
+  .note b { color: #16161a; }
+</style>
+
+<h1>协调会话活着、项目的 <code>coordinator_enabled</code> 却是 false 时，升级给你的异常该不该亮</h1>
+<p class="lede">
+  现状（你截图那个项目 <b>FineWeb × Common Crawl → RocksDB 语料库</b>）：项目里 3 条 <code>project_open_item</code>
+  是 <code>assignee=OWNER</code>、<code>assignee_reason=NO_COORDINATOR</code>，也就是「没人会替你动，它是你的」——
+  而列表行、标题栏、needs-you 条三处全暗（服务端的计数读写死只数 <code>coordinatorEnabled=true</code> 的项目），
+  <b>只有卡片孤零零画在会话里</b>（①③ 里那两张）。下面 ②④ 是改后的样子，两处一起改：
+  <b>计数与画卡用同一判据</b>（只要这个会话仍是某个项目的协调会话，它的 owner item 就算在它头上），
+  且这一行不再说泛称「Waiting for approval」，而是说<b>那一条自己的话</b> —— 和横幅、卡片同一批词。
+</p>
+
+<div class="row">
+
+  <!-- ── ① 现状 · 列表行 ───────────────────────────────── -->
+  <figure>
+    <span class="tag now">现状</span>
+    <div class="phone" style="height:384px">
+      <div class="status"><span>12:38</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">44</span></span>
+      </div>
+      <div class="listhead">
+        <span class="ttl">Agents</span>
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+      </div>
+      <div class="grp">Today</div>
+      <div class="srow">
+        <div class="l1">
+          <span class="ttl">Coordinator: FineWeb × Common Crawl → RocksDB…</span>
+          <span class="sp"></span>
+          <span class="spin"></span>
+        </div>
+        <div class="l2">
+          <span class="cobadge">◫ Coordinator</span>
+          <span class="sub">已按你说的删掉旧清单，并把它并进…</span>
+        </div>
+      </div>
+      <div class="srow">
+        <div class="l1"><span class="ttl">000_00022 的 WARC 依赖</span><span class="sp"></span>
+          <span class="dot red"></span><span class="rel">4h</span></div>
+        <div class="l2"><span class="sub">Failed · the acceptance command exited -1</span></div>
+      </div>
+      <div class="srow">
+        <div class="l1"><span class="ttl">Session 列表重设计：注意力收件箱</span><span class="sp"></span>
+          <span class="rel">3d</span></div>
+        <div class="l2"><span class="sub">Succeeded · 8 个判据各自有落点了</span></div>
+      </div>
+    </div>
+    <figcaption><b>① 今天：协调会话那一行什么也不说</b>
+      第二行是它自己最后一句回复的预览（灰），右上那颗是「正在干活」的静默 spinner —— 看的人无从知道
+      项目里有 3 条异常已经等了他 4 小时 18 分。抽屉里的 Recents 更短，只有一颗 <code>SessionLiveIndicator</code>，
+      同样不亮。</figcaption>
+  </figure>
+
+  <!-- ── ② 改后 · 列表行 ───────────────────────────────── -->
+  <figure>
+    <span class="tag after">改后</span>
+    <div class="phone" style="height:384px">
+      <div class="status"><span>12:38</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">44</span></span>
+      </div>
+      <div class="listhead">
+        <span class="ttl">Agents</span>
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+      </div>
+      <div class="grp">Today</div>
+      <div class="srow">
+        <div class="l1">
+          <span class="ttl">Coordinator: FineWeb × Common Crawl → RocksDB…</span>
+          <span class="sp"></span>
+          <span class="dot amber mark"></span><span class="rel">4h</span>
+        </div>
+        <div class="l2">
+          <span class="cobadge">◫ Coordinator</span>
+          <span class="sub approval mark">Escalated to you</span>
+        </div>
+      </div>
+      <div class="srow">
+        <div class="l1"><span class="ttl">000_00022 的 WARC 依赖</span><span class="sp"></span>
+          <span class="dot red"></span><span class="rel">4h</span></div>
+        <div class="l2"><span class="sub">Failed · the acceptance command exited -1</span></div>
+      </div>
+      <div class="srow">
+        <div class="l1"><span class="ttl">Session 列表重设计：注意力收件箱</span><span class="sp"></span>
+          <span class="rel">3d</span></div>
+        <div class="l2"><span class="sub">Succeeded · 8 个判据各自有落点了</span></div>
+      </div>
+    </div>
+    <figcaption><b>② 改后：同一行，第二行换成那一条自己的话</b>
+      「有人等你」压过一切其它说法（<code>SessionLine.swift:44</code> 本来就在最前面），所以预览让位；
+      spinner 换成琥珀点（<code>SessionLiveIndicator</code> 的 warning 档），右边恢复出「什么时候」。
+      词是现成的：<code>Escalated to you</code> 就是横幅和卡上那句（<code>NeedsYouLogic.kindWord</code> /
+      web 的 <code>OWNER_ITEM_*</code> 声明，两端由 parity 测试钉住）。取<b>最久等待那一条</b>的词 ——
+      和横幅取的是同一条，所以行与条永远指向同一张卡。</figcaption>
+  </figure>
+</div>
+
+<div class="row">
+
+  <!-- ── ③ 现状 · 标题栏 ───────────────────────────────── -->
+  <figure>
+    <span class="tag now">现状</span>
+    <div class="phone" style="height:566px">
+      <div class="status"><span>12:38</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">44</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">Coordinator: Fin…</span><span class="badge">Coordinator</span>
+          <span class="s">Running · Open · just now</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　删 + 搬</div>
+        <div class="card">
+          <div class="head"><span class="icon">⚠</span><span class="title">Escalated to you</span></div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">Now yours — this project has no coordinator (waiting 4h 18m)</div>
+          <div class="subject">[WARC][CC-MAIN-2025-26] 000_00022 的 WARC 依赖</div>
+          <div class="subject">the acceptance command exited -1 (expected 0)</div>
+          <div class="btn primary">Open task session</div>
+          <div class="btn tinted">Chat about this</div>
+          <div class="foot">Owner: you · waiting 4h 18m</div>
+        </div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">■</span></div></div>
+      <div class="footbar"><span class="on">Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span>
+        <span class="on">Max</span><span class="ctx">41%</span></div>
+    </div>
+    <figcaption><b>③ 今天：卡在，标题栏说「Running」</b>
+      这一屏就是你截图那张。标题栏走的也是同一个数（<code>SessionHeader.swift:29</code>），所以它和列表一起暗；
+      而卡片由另一条读画出来 —— 客户端的 projectID 来自 <code>session.projectId</code>（=
+      <code>coordinatorForProject</code>，<code>sessions.service.ts:2848</code>），<b>那条读不判 <code>coordinatorEnabled</code></b>。
+      同一个事实，两条判据。</figcaption>
+  </figure>
+
+  <!-- ── ④ 改后 · 标题栏 ───────────────────────────────── -->
+  <figure>
+    <span class="tag after">改后</span>
+    <div class="phone" style="height:566px">
+      <div class="status"><span>12:38</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">44</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">Coordinator: Fin…</span><span class="badge">Coordinator</span>
+          <span class="s mark">Escalated to you · Open · just now</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　删 + 搬</div>
+        <div class="card">
+          <div class="head"><span class="icon">⚠</span><span class="title">Escalated to you</span></div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">Now yours — this project has no coordinator (waiting 4h 18m)</div>
+          <div class="subject">[WARC][CC-MAIN-2025-26] 000_00022 的 WARC 依赖</div>
+          <div class="subject">the acceptance command exited -1 (expected 0)</div>
+          <div class="btn primary">Open task session</div>
+          <div class="btn tinted">Chat about this</div>
+          <div class="foot">Owner: you · waiting 4h 18m</div>
+        </div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">■</span></div></div>
+      <div class="footbar"><span class="on">Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span>
+        <span class="on">Max</span><span class="ctx">41%</span></div>
+    </div>
+    <figcaption><b>④ 改后：标题栏换成同一句，卡一个字不动</b>
+      标题栏与列表行读的是同一个词（<code>SessionHeader.waitingWord</code>），它同时也是 VoiceOver 的值，所以读屏拿到的也一样。
+      「什么时候」仍是最后活动时间（刚才你在跟它说话，就是 just now）—— 那条卡自己的 <code>waiting 4h 18m</code> 才是等待时长，
+      两个时钟各有各的出处，不合并。</figcaption>
+  </figure>
+</div>
+
+<div class="row">
+  <!-- ── ⑤ 改后 · 别的页面上那条 needs-you ─────────────────── -->
+  <figure>
+    <span class="tag after">改后</span>
+    <div class="phone" style="height:384px">
+      <div class="status"><span>12:38</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">44</span></span>
+      </div>
+      <div class="needs mark">
+        <span class="dot amber"></span>
+        <span class="txt">Escalated to you · FineWeb × Common Crawl → RocksDB 语料库</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="listhead"><span class="ttl">Agents</span>
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg></div>
+      <div class="grp">Today</div>
+      <div class="srow">
+        <div class="l1"><span class="ttl">Coordinator: FineWeb × Common Crawl → RocksDB…</span>
+          <span class="sp"></span><span class="dot amber"></span><span class="rel">4h</span></div>
+        <div class="l2"><span class="cobadge">◫ Coordinator</span>
+          <span class="sub approval">Waiting for approval</span></div>
+      </div>
+      <div class="srow">
+        <div class="l1"><span class="ttl">Session 列表重设计：注意力收件箱</span><span class="sp"></span>
+          <span class="rel">3d</span></div>
+        <div class="l2"><span class="sub">Succeeded · 8 个判据各自有落点了</span></div>
+      </div>
+      <div class="grp" style="padding-top:16px">Earlier</div>
+      <div class="srow">
+        <div class="l1"><span class="ttl">000_00022 的 WARC 依赖</span><span class="sp"></span>
+          <span class="dot red"></span><span class="rel">4h</span></div>
+        <div class="l2"><span class="sub">Failed · the acceptance command exited -1</span></div>
+      </div>
+    </div>
+    <figcaption><b>⑤ 改后：不在那个会话里时，条会说清是哪一种</b>
+      条上的这句是既有的 <code>NeedsYouLogic.ownerItemText</code>（<code>Escalated to you · &lt;项目名&gt;</code>），
+      按下去直接打开 ④ 那一屏、滚到卡上。老规矩：<b>正看着那个会话时这条不出现</b> ——
+      它的卡就在眼前，条指过去等于指向自己。</figcaption>
+  </figure>
+
+  <figure style="align-self:center; max-width:560px">
+    <figcaption style="width:auto; margin-top:0">
+      <b>这次要动的只有一处判据</b>
+      <code>readOwnerItemSignals</code>（<code>owner-decision-signal.ts:231</code>）的 where 里那句
+      <code>project: { coordinatorEnabled: true, … }</code> —— 它是「这个项目有没有人接活」的答案，
+      而 owner item 要问的是「这个会话是不是它的协调会话」。改后者的代价是：<b style="display:inline">没有绑定会话的项目仍然一根不亮</b>（真正没地方放的地方还是暗的），而 FineWeb 这类「绑着活着的会话」的项目亮起来。
+      <br><br>
+      另外那一半是数据：FineWeb 是 40 条标准集确认里唯一一条「确认过、但 <code>coordinator_enabled</code> 仍是 false、
+      <code>config_revision=0</code>」的项目（8/23 建、9/19 04:26 你确认的那次没把它打开）。改完判据它会自己亮；
+      项目本身要不要顺手在 web 项目页把 <b style="display:inline">Automatic</b> 打开（那才是 <code>coordinatorEnabled</code> 唯一的门，iOS 上没有），
+      是另一件事。
+    </figcaption>
+  </figure>
+</div>
+
+<p class="note">
+  <b>落下的规则（三端同一份）：</b>服务端 <code>sessionWaitingKind</code> 只在「数到的全是同一种、且这种有自己的词」时给出 kind
+  ——<code>OWNER_CONFIRMATION</code> 或 <code>OWNER_ITEM</code>；行/标题栏读到 <code>OWNER_ITEM</code> 就说<b>最久等待那条 item 自己的词</b>
+  （<code>Escalated to you</code> / <code>Paused</code> / <code>Approve merge to main</code> / <code>Question from coordinator</code>）。
+  三种情况仍回到泛称「Waiting for approval」：混着 blocked tool call 或 proposal 的行、数到两种 kind 的行、
+  以及这一版认不出的 kind（旧控制面）。<code>coordinatorEnabled</code> 从此不参与这件事——它是「协调者能不能行动」
+  （能不能把 item 投递给它），不是「卡片画在哪」；卡片画在绑定的那个会话里，客户端读的就是绑定。
+</p>
+</html>

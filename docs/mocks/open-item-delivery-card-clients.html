@@ -136,6 +136,12 @@
   figure.mac .files { font-size: 11.5px; }
   .callout { font-size: 12px; color: #9a6000; background: #fff6e5; border: 1px solid #ffd591;
              border-radius: 7px; padding: 6px 9px; line-height: 1.45; }
+  /* ── queued: the same card before a runner has taken the turn ───────────────
+     The browser's `.oic.is-queued` (dashed) plus the queue's own line at the foot
+     (`QueuedTurnMeta`, drawn here in the words the queued bubble already uses). */
+  .card.queued { border-style: dashed; }
+  .queue { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--label-2); }
+  .queue .cancel { color: var(--blue); }
   .legend { max-width: 1180px; margin: 34px 0 0; font-size: 13.5px; color: #55555e; }
   .legend b { color: #16161a; }
   .legend ul { margin: 6px 0 0; padding-left: 20px; }
@@ -321,6 +327,72 @@
       <li><b>English copy, held to the web’s.</b> Every string (“Exception item”, the kind labels, the
         landing sentences, the door names, “a notification, not an interruption”) is the web card’s
         wording, and a copy-parity test reads the TSX to keep the two ends together.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="row" style="margin-top:34px">
+  <figure class="phone hi">
+    <div class="frame mark">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>􀙇 􀙈 􀛨</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">项目推进可靠性：集成线、例外待办与保险丝重做</div>
+          <div class="s">orbit · coordinator</div></div>
+      </div>
+      <div class="thread">
+        <div class="spacer"></div>
+        <div class="card queued">
+          <div class="head">
+            <span class="mark">⚠</span><span class="name">Exception item</span>
+            <span class="spacer"></span><span class="kind">Task failed</span>
+          </div>
+          <div class="title">Task failed: [Merge][CC-MAIN-2025-26] 000_00024 → RocksDB</div>
+          <div class="where">Task <span class="link">[Merge][CC-MAIN-2025-26] 000_00024 → RocksDB</span></div>
+          <div class="why">The acceptance command disagreed with what the task declared — exit -1,
+            expected 0 · attempt 1 of 3 in this chain.</div>
+          <div class="facts unknown"><span class="glyph">◌</span><span>No merge receipt for this work —
+            Orbit cannot tell whether it has landed.</span></div>
+          <div class="doors">
+            <span class="lead">The coordinator can:</span><span class="chip">Cancel the task</span>
+          </div>
+          <div class="links"><span>Open the task ↗</span><span>Open the failed session ↗</span></div>
+          <div class="meta">Item 34TIQsISZ5aPF2dKpuHFU · a notification, not an interruption</div>
+          <div class="fold">▸ What the coordinator was told</div>
+          <div class="queue"><span>Queued</span><span class="cancel">Cancel</span></div>
+        </div>
+        <div class="composer">Message…</div>
+      </div>
+    </div>
+    </div>
+    <figcaption><b>4 · Proposed (iOS) — the delivery while it is still QUEUED</b>An item is delivered as an
+      ordinary turn, so it waits behind whatever is running: until a runner takes it, the only thing a
+      client can draw it from is <code>GET /sessions/:id/turns</code>. That projection now carries the
+      card beside the paragraph, so the queued row is the card it is about to become — dashed, with the
+      queue’s own line at its foot (<i>Queued · Cancel</i>, the words the queued bubble already uses,
+      and an ordinary cancel: the item stays owed and is filed again at the next chance) — instead of 30
+      lines written for the agent in the reader’s name, redrawn as a card the moment the turn is taken.
+      The time line arrives with the echo, as it does on the queued message this replaces. The native
+      client reads the DEFAULT projection (web opts into <code>view=active</code>), which is why the
+      card has to ride both.</figcaption>
+  </figure>
+
+  <div class="legend">
+    <b>One more rule, for the state a delivery spends most of its life in</b>
+    <ul>
+      <li><b>A card is a card from the moment the turn is queued.</b> An exception item’s delivery
+        queues behind the running turn (§4.4 X-D3), so “not yet an event” is its normal state, not an
+        edge: the projection carries <code>openItemDelivery</code> on both views
+        (<code>sessions.service.ts#listQueuedTurns</code>), and the queue tail draws the card instead of
+        the prose.</li>
+      <li><b>Read by one function, on both roads.</b> The projection’s <code>openItemDelivery</code> and
+        the echo’s are parsed by <code>OpenItemDelivery.parseCard</code> — a second reading of the same
+        fields is what would drift, and the drift is exactly what the reader sees as the row changing
+        shape when the runner takes it.</li>
+      <li><b>Nothing is read out of the text to find it.</b> The queued row knows it is a delivery
+        because the server said so beside its content, never because the paragraph looks like one
+        (the rule <code>lib/deliveredMessage.ts</code> already states).</li>
     </ul>
   </div>
 </div>

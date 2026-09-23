@@ -157,3 +157,45 @@ describe('fastModeAvailable on Codex', () => {
     expect(fastModeAvailable(AgentProvider.CODEX, 'claude-opus-5', catalog(['priority']))).toBe(false);
   });
 });
+
+/**
+ * Where the Claude fast-lane answer comes from, on the same terms as Auto: the static set is a
+ * fallback for a runner that has not spoken, so emptying it changes none of the assertions below.
+ *
+ * The failure being closed: Opus 5.5 shipped with a fast lane, runners reported it, and every
+ * composer hid `/fast` on it because a set in this repo had not been edited.
+ */
+describe('fastModeAvailable on Claude reads the assigned runner’s catalogue', () => {
+  const claude = (model: string, fastMode?: boolean) => ({
+    [AgentProvider.CLAUDE]: [{ value: model, label: model, fastMode }],
+  });
+
+  it('offers the lane on a model the runner reports it for, whatever the static set says', () => {
+    // An id in no static set — a release the clients have never heard of is usable as soon as a
+    // runner's own CLI says it has the lane.
+    expect(fastModeAvailable(AgentProvider.CLAUDE, 'claude-opus-9', claude('claude-opus-9', true)))
+      .toBe(true);
+  });
+
+  it('withdraws it when the runner’s row says no, even for a model in the static set', () => {
+    expect(fastModeAvailable(AgentProvider.CLAUDE, 'claude-opus-5', claude('claude-opus-5', false)))
+      .toBe(false);
+  });
+
+  it('falls back to the static set only where the catalogue has not answered', () => {
+    // Silence in its three shapes — no catalogue, no row for this model, a row from a runner too
+    // old to report the field — none of which may read as "no".
+    const stale = { [AgentProvider.CLAUDE]: [{ value: 'claude-opus-5', label: 'Opus 5' }] };
+    for (const catalog of [undefined, null, claude('claude-sonnet-5', true), stale]) {
+      expect(fastModeAvailable(AgentProvider.CLAUDE, 'claude-opus-5', catalog)).toBe(true);
+      expect(fastModeAvailable(AgentProvider.CLAUDE, 'claude-haiku-4-5', catalog)).toBe(false);
+    }
+  });
+
+  it('never answers a Claude model from the Codex rows', () => {
+    const codexRows = {
+      [AgentProvider.CODEX]: [{ value: 'claude-opus-9', label: 'x', fastMode: true }],
+    };
+    expect(fastModeAvailable(AgentProvider.CLAUDE, 'claude-opus-9', codexRows)).toBe(false);
+  });
+});

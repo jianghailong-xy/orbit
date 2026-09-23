@@ -232,6 +232,16 @@ export interface RunnerModelInfo {
   defaultReasoningLevel?: string;
   /** Extra service tiers supported by this model, e.g. `priority`. */
   serviceTiers?: string[];
+  /** The permission modes this model accepts, as the runner's own CLI answered for it — Claude
+   *  gates Auto per model, and the answer belongs to the CLI that runs it rather than to a table
+   *  in this repo. ABSENT means the runner could not say (an older runner, a probe that failed),
+   *  which leaves `autoAvailable` on its static fallback for that model; present is authoritative,
+   *  including when it withholds a mode. Does not encode the runner's own root-ness — that is
+   *  `runsAsRoot`, and the two are composed by the caller. */
+  permissionModes?: string[];
+  /** Whether this model has the runtime's fast lane, from the same probe. Absent is "the runner
+   *  could not say" and false is "it said no"; only the first falls back to the static table. */
+  fastMode?: boolean;
 }
 
 /** Models a runner says its local runtimes can use. Keys are provider ids. */

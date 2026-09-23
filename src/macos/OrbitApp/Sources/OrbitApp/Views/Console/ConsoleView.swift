@@ -58,6 +58,7 @@ struct ConsoleView: View {
         let fetched = fetchedToolImages
         return SessionImagePreview(
             consoleID: ObjectIdentifier(console),
+            sessionID: console.sessionID,
             ns: imagePreviewNS,
             open: { key, fallback, fallbackIndex in
                 let pages = SessionPreviewImages
@@ -71,11 +72,13 @@ struct ConsoleView: View {
                     imagePreviewTarget = ImagePreviewTarget(index: fallbackIndex, id: key)
                 }
             },
-            rememberToolImages: { cardID, images in fetched.byCard[cardID] = images })
+            rememberToolImages: { cardID, images in fetched.byCard[cardID] = images },
+            toolImages: { fetched.byCard[$0] })
     }
 
     /// Screenshot bytes that open tool cards fetched back, by card. A reference, not state: filling it
-    /// needn't re-render the console, only be there when the viewer next gathers its pages.
+    /// needn't re-render the console, only be there when the viewer next gathers its pages — and for a
+    /// card the List has since recycled, to be there in the first place (see `ToolCardView.images`).
     private final class FetchedToolImages {
         var byCard: [String: [Data]] = [:]
     }
@@ -178,7 +181,7 @@ struct ConsoleView: View {
                 let console = registry.peek(sessionID)
                 NeedsYouBannerView(
                     excluding: sessionID,
-                    below: NeedsYouLogic.below(rowIDs: console?.openQuestionRowIDs ?? []),
+                    below: console?.waitingBelow,
                     onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
             }
         }
@@ -310,6 +313,19 @@ struct TranscriptView: View {
     @State private var transcriptScroll = TranscriptScroll()
     #endif
 
+    /// The transcript's scroll observer, carrying the iOS-only UIKit handle where there is one.
+    /// A helper rather than a `#if` in the call's argument list: conditional compilation does not
+    /// parse there (`expected ')' in expression list`), which is what the first version of this
+    /// landed as — two red compile gates.
+    private func tracker(ruler: QuestionRuler) -> some ViewModifier {
+        #if os(iOS)
+        return ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck,
+                             scroll: transcriptScroll)
+        #else
+        return ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck)
+        #endif
+    }
+
     /// Whether the load-earlier row is offered at all. Gated to the same floor as `ScrollTracker`:
     /// below it `atBottom` can never leave true, so the follow-on publish of a prepended page would
     /// yank the reader straight back to the live tail — worse than today's no-paging. The legacy
@@ -371,7 +387,7 @@ struct TranscriptView: View {
             #endif
             .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
             .defaultScrollAnchor(.bottom)
-            .modifier(ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck))
+            .modifier(tracker(ruler: ruler))
             // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
             // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
             // the keyboard), so reading it here doesn't churn.
@@ -414,6 +430,10 @@ struct TranscriptView: View {
             .onChange(of: console.sessionID) {
                 atBottom = true; ruler.reset(); stuckID = nil
                 console.setReadingHistory(false)
+                // The reader's place went with the transcript that was on screen: the new one has
+                // not been laid out yet, and the bar's direction word must not answer for the
+                // session that just left.
+                console.noteTopVisible(nil)
                 proxy.scrollTo(bottomID, anchor: .bottom)
             }
             // A message the user just sent forces the transcript back to the live tail — even if
@@ -495,6 +515,10 @@ struct TranscriptView: View {
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet.
     private func recomputeStuck() {
         let items = console.state.items
+        // Where the reader is, for the console: the needs-you bar's direction word points at a card
+        // and has to say which way it is. Reported here rather than read off the ruler by the bar,
+        // which is an inset of the whole console and has no ruler of its own.
+        console.noteTopVisible(ruler.topAnchorID)
         var found: String? = nil
         if let anchor = ruler.topAnchorID {
             for item in items {
@@ -572,10 +596,20 @@ struct TranscriptView: View {
             // No `AnchorRow` — a queued turn hasn't been asked yet, so it's never the sticky
             // "Your question" (web's `:not(.chat-queued)`).
             //
-            // A wake a watch queued is the card the transcript draws once a runner takes it, so it
-            // keeps that shape while it waits and its payload stays folded. Withdrawing is offered
-            // only once the server `turnId` is known — the DELETE keys on it.
-            if let wake = WatchWakeText.parse(bubble.text) {
+            // An exception item's delivery is nobody's message the moment it is QUEUED, not the
+            // moment a runner takes it: its words are written for the AGENT, so read as a message
+            // they are wrong about who sent them and everything the item is opened with is prose —
+            // for as long as the turn waits, and redrawn the instant it is taken. The card comes off
+            // the projection (`QueuedTurnInfo.itemCard`), never out of the text's shape, and this is
+            // checked FIRST as the transcript's own row checks it (`TranscriptItemView`): the shape
+            // must not depend on which of the two states the turn is in. A delivery's paragraph is
+            // neither of the two wake blocks below, so nothing is shadowed by the order.
+            if let card = bubble.itemCard {
+                OpenItemDeliveryCardView(card: card, text: bubble.text, ts: bubble.ts,
+                                         undelivered: bubble.undelivered,
+                                         onCancelQueued: bubble.turnId == nil
+                                             ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let wake = WatchWakeText.parse(bubble.text) {
                 WatchWakeCardView(wake: wake, text: bubble.text, ts: bubble.ts,
                                   undelivered: bubble.undelivered,
                                   onWithdraw: bubble.turnId == nil
@@ -612,6 +646,11 @@ struct TranscriptView: View {
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
+            // The person moving the transcript themselves, said outright rather than inferred: this
+            // client decides "a reader did that" from the platform's own drag reports, and an
+            // animated jump to a row is not one — without this line the next publish would drag them
+            // back to the tail.
+            atBottom = false
             // Same coast fix as the jump-to-latest disc: cancel the momentum so `proxy.scrollTo` isn't
             // swallowed by the deceleration, then scroll to the question row on the next runloop.
             transcriptScroll.halt()
@@ -979,11 +1018,39 @@ private struct ScrollTracker: ViewModifier {
     @Binding var atBottom: Bool
     let ruler: QuestionRuler
     let recompute: () -> Void
+    #if os(iOS)
+    /// The List's own `UIScrollView`, for the one fact UIKit knows better than any geometry: whether
+    /// a finger is on it. See `readerIsMoving`.
+    let scroll: TranscriptScroll
+    #endif
     /// Whether the reader is the one moving the list: a finger on it, or the momentum of one.
     /// `.animating` is SwiftUI moving it (a jump-to-latest, the sticky header) and `.idle` is it
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
     /// needs the difference to tell a drag up from the clamp a row that shrank forces.
     @State private var readerDriven = false
+
+    /// What the platform can say about that — see `TailPinning.ReaderEvidence`. iOS reports drags,
+    /// measured with a synthesized one on the simulator: `interacting` for the finger and
+    /// `decelerating` for its coast, each with the offset following it. macOS keeps the geometry
+    /// rule, where a fall over content that did not resize is the only evidence of a reader there
+    /// is.
+    #if os(iOS)
+    private static let evidence = TailPinning.ReaderEvidence.reported
+    #else
+    private static let evidence = TailPinning.ReaderEvidence.inferred
+    #endif
+
+    /// The reader's own movement, from the phase plus — on iOS — UIKit's unambiguous "a finger is
+    /// down", so a drag is never missed because SwiftUI happened to be animating something else.
+    private var readerIsMoving: Bool {
+        if readerDriven { return true }
+        #if os(iOS)
+        guard let v = scroll.view else { return false }
+        return v.isTracking || v.isDragging
+        #else
+        return false
+        #endif
+    }
 
     func body(content: Content) -> some View {
         if #available(macOS 15, iOS 18, *) {
@@ -997,7 +1064,8 @@ private struct ScrollTracker: ViewModifier {
                                      bottomGap: Double(geo.contentSize.height - geo.visibleRect.maxY))
                 } action: { was, now in
                     atBottom = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
-                                                  readerDriven: readerDriven)
+                                                  readerDriven: readerIsMoving,
+                                                  evidence: Self.evidence)
                     ruler.contentOffset = CGFloat(now.offset)
                     recompute()
                 }

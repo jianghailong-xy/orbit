@@ -11,6 +11,8 @@ final class SessionHeaderTests: XCTestCase {
                          lifecycleState: SessionLifecycleState? = nil,
                          pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
                          engineTurnActive: Bool? = nil,
+                         waitingKind: SessionWaitingKind? = nil,
+                         ownerItems: [SessionOwnerItem]? = nil,
                          error: String? = nil, endReason: String? = nil,
                          createdAt: String? = nil, lastTurnAt: String? = nil,
                          retryAt: String? = nil) -> Session {
@@ -18,7 +20,8 @@ final class SessionHeaderTests: XCTestCase {
                 sessionState: sessionState,
                 runState: runState, lifecycleState: lifecycleState,
                 agentId: nil, assignedRunnerId: nil,
-                pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
+                pendingApprovals: pendingApprovals, waitingKind: waitingKind,
+                ownerItems: ownerItems, branch: nil, updatedAt: nil,
                 runningBgCount: runningBgCount, engineTurnActive: engineTurnActive,
                 error: error, endReason: endReason,
                 createdAt: createdAt, lastTurnAt: lastTurnAt, retryAt: retryAt)
@@ -33,6 +36,29 @@ final class SessionHeaderTests: XCTestCase {
     func testStatusWordWaitingForApproval() {
         XCTAssertEqual(SessionHeader.statusWord(for: session(.running, pendingApprovals: 1)),
                        "Waiting for approval")
+    }
+
+    /// The header's half of the owner-item words: the subtitle says which of the four is waiting,
+    /// in the same words the bar and the card use, because the app draws the card in this very
+    /// conversation and the header is one of the three places that used to say nothing about it.
+    func testStatusWordNamesTheOwnerItemWaiting() {
+        let escalated = SessionOwnerItem(itemId: "i1", kind: .escalated,
+                                         title: "Task failed: [WARC] 000_00022",
+                                         since: "2026-09-22T00:19:41Z")
+        let waiting = session(.awaitingInput, pendingApprovals: 1,
+                              waitingKind: .ownerItem, ownerItems: [escalated])
+        XCTAssertEqual(SessionHeader.statusWord(for: waiting), "Escalated to you")
+        XCTAssertEqual(SessionHeader.subtitle(for: waiting, now: Date(timeIntervalSince1970: 0)),
+                       "Escalated to you · Open")
+
+        // A bar above a list and the row it points at name the same item: the oldest one.
+        let paused = SessionOwnerItem(itemId: "i2", kind: .fusePaused, title: "Paused",
+                                      since: "2026-09-22T02:00:00Z")
+        XCTAssertEqual(
+            SessionHeader.statusWord(for: session(.awaitingInput, pendingApprovals: 2,
+                                                  waitingKind: .ownerItem,
+                                                  ownerItems: [paused, escalated])),
+            "Escalated to you")
     }
 
     func testStatusWordAwaitingInput() {

@@ -56,19 +56,52 @@ struct ChatAttachmentImage: View {
     }
 }
 
-/// A non-image attachment: a name chip (web's `.chat-file`).
+/// A non-image attachment: a name chip (web's `.chat-file`). Tapping it fetches the bytes and hands
+/// them to the platform, the way web's chip downloads — an attachment the reader can see and not
+/// open is the same dead end as a path no client can reach. (A file that turns out not to decode as
+/// an image lands here too, so the chip a screenshot falls back to is reachable as well.)
 struct ChatAttachmentFile: View {
     let attachment: TurnAttachment
+    @Environment(AttachmentImageStore.self) private var store
+    @Environment(AppModel.self) private var app: AppModel?
+    @State private var fetching = false
+
+    private var name: String { attachment.name ?? "file" }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "paperclip").foregroundStyle(.secondary)
-            Text(attachment.name ?? "file").lineLimit(1).truncationMode(.middle)
+        Button { fetch() } label: {
+            HStack(spacing: 6) {
+                if fetching {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "paperclip").foregroundStyle(.secondary)
+                }
+                Text(name).lineLimit(1).truncationMode(.middle)
+            }
+            .font(.orbitLabel)
+            .padding(.vertical, 4).padding(.horizontal, 8)
+            .frame(maxWidth: 220, alignment: .leading)
+            .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
         }
-        .font(.orbitLabel)
-        .padding(.vertical, 4).padding(.horizontal, 8)
-        .frame(maxWidth: 220, alignment: .leading)
-        .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .buttonStyle(.plain)
+        .disabled(fetching)
+        .help("Open \(name)")
+    }
+
+    /// Fetch the bytes by attachment id, then hand them on: the share sheet on iOS, the file's own
+    /// application on a Mac. A fetch that comes back empty says so — a tap that does nothing is what
+    /// this chip used to be.
+    private func fetch() {
+        guard !fetching else { return }
+        fetching = true
+        Task {
+            defer { fetching = false }
+            guard let data = await store.data(for: attachment.id),
+                  FileHandoff.deliver(data, named: name) else {
+                app?.showToast("Couldn't open that file", detail: name, tone: .error)
+                return
+            }
+        }
     }
 }
 

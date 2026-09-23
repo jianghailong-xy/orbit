@@ -155,7 +155,9 @@ struct ProviderSwitchSheet: View {
 /// marks the current one, and reports a pick back to the caller — which switches the composing agent.
 /// A flat list (not runner-grouped) keeps it light; the caller owns the switch so this view needs no
 /// environment (which doesn't always propagate into a sheet).
-/// The navigation bar's title slot, as a switcher: the workspace's name and a down chevron.
+/// The workspace switcher: the workspace's name and a down chevron — the navigation bar's title
+/// slot on the new-session draft, and its leading edge on the session list (whose title slot cannot
+/// hold a custom view once the name is long: see `AgentsView`'s toolbar).
 ///
 /// One definition for the two screens whose title *is* a workspace — the session list (whose content
 /// all belongs to it) and the new-session draft (which will send into it). They open the same
@@ -164,6 +166,26 @@ struct ProviderSwitchSheet: View {
 ///
 /// Name and chevron only: the brand mark belongs to the new-session hero, and repeating it here in
 /// miniature said nothing the screen wasn't already saying.
+///
+/// `.fixedSize()` is load-bearing, not tidiness. iOS 26 hands a *custom* item in the leading slot a
+/// proposal far narrower than the item's own content: measured on an iPhone 17 Pro Max simulator
+/// (`.ios-probe` probe, iOS 26 — the same arrangement the shipped bar has), the label drew the name
+/// at 14.7pt against an ideal of 37.7pt for `orbit`, and 14.7 against 125.3 for `wikova-develop`
+/// — i.e. a two-letter "or" on a bar with ~190pt of empty space beside it. Nothing else in the bar
+/// was doing it: removing the two trailing buttons, or the `.navigationBarDrawer` search field,
+/// left the name at 14.7. `.fixedSize()` makes the control answer with its ideal width instead, and
+/// both names then measure FULL; so does a `Menu`. `.layoutPriority(1)` on the name does not (still
+/// 14.7), and neither does dropping the `Button` for a bare `Text` (31.7 of 37.7).
+///
+/// The one case this does not cover is a name wider than the bar itself, which would be clipped
+/// rather than truncated — today's longest workspace name is 125pt against ~250pt of room.
+///
+/// Its sibling on the session list's bar is the item's *shared background*: iOS 26 would group this
+/// control with the drawer button into one glass platter, so `AgentsView` declares the item with
+/// `.sharedBackgroundVisibility(.hidden)` and the name draws on the bar instead. iOS 26 only, and
+/// measured on an iPhone 17 Pro Max simulator like the widths above: with the system's shared
+/// background the two share one 102pt platter, without it the name sits on the bar beside the
+/// drawer button's own circle.
 struct WorkspaceTitleSwitcher: View {
     let name: String
     let action: () -> Void
@@ -179,6 +201,7 @@ struct WorkspaceTitleSwitcher: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .fixedSize()
         .accessibilityLabel("Workspace: \(name). Switch")
     }
 }

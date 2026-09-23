@@ -262,20 +262,18 @@ public enum OwnerConfirmations {
         return view.decisions.filter { $0.sessionId == sessionID }
     }
 
-    /// One recorded decision this console draws as a record, and the item it belongs after.
+    /// One recorded decision this console draws as a record.
     public struct Receipt: Equatable, Sendable, Identifiable {
         public let taskId: String
         public let decided: RecordedOwnerDecision
-        /// The transcript item that was last at or before the decision. A card delivered live
-        /// anchors to the item that was last when it ARRIVED; a record has no arrival of its own on
-        /// a device that was not there, so it is anchored by the door's clock instead (`ReceiptAnchor`).
-        public let afterItemID: String
 
-        public init(taskId: String, decided: RecordedOwnerDecision, afterItemID: String) {
+        public init(taskId: String, decided: RecordedOwnerDecision) {
             self.taskId = taskId
             self.decided = decided
-            self.afterItemID = afterItemID
         }
+
+        /// The door's own clock — see `CriteriaDecisions.Receipt.moment`.
+        public var moment: String { decided.decidedAt }
 
         /// The row this record is drawn in — the card's own address rather than a second spelling of
         /// it, so the id the console dedupes on and the id the transcript draws cannot drift.
@@ -300,17 +298,15 @@ public enum OwnerConfirmations {
     /// so the moment was never missing — this is the move `CriteriaDecisions.receipts` makes, and the
     /// web client draws these by `decidedAt` already (`ownerDecisionReceiptsIn`).
     ///
-    /// A decision whose moment is older than everything loaded is NOT drawn: the window this console
-    /// holds starts at the tail, so a record with no anchor has no honest place to go, and drawing it
-    /// at the tail instead is the defect itself.
-    public static func receipts(_ view: OwnerConfirmationView?, sessionID: String?,
-                                items: [TranscriptItem]) -> [Receipt] {
+    /// A decision older than everything this console holds is still drawn: the record carries
+    /// `decidedAt`, and the row it belongs in is resolved against the rows loaded at render time
+    /// (`ReceiptAnchor.Placement`) — where it happened when that row is loaded, the head of the
+    /// window when the moment is above it. Nothing is captured here but the decision.
+    public static func receipts(_ view: OwnerConfirmationView?,
+                                sessionID: String?) -> [Receipt] {
         guard let view else { return [] }
-        return receiptsIn(view, sessionID: sessionID).compactMap { decided in
-            guard let anchor = ReceiptAnchor.after(items: items, at: decided.decidedAt) else {
-                return nil
-            }
-            return Receipt(taskId: view.taskId, decided: decided, afterItemID: anchor)
+        return receiptsIn(view, sessionID: sessionID).map { decided in
+            Receipt(taskId: view.taskId, decided: decided)
         }
     }
 

@@ -377,6 +377,14 @@ private struct MarkdownImageView: View {
     @State private var previewTarget: ImagePreviewTarget?
     @Environment(\.sessionImagePreview) private var sessionPreview
     @Environment(\.previewOwnerID) private var ownerID
+    /// A file named by path is fetched on the tap (below); the chip says so while it is in flight.
+    @State private var fetching = false
+    /// The bytes of a path that named an image, once they have landed: drawn where the chip was. Held
+    /// here rather than in the store, which is keyed by attachment id for what a turn carried.
+    @State private var inlineImage: PlatformImage?
+    /// Where a failed fetch is reported. The app model is what the transcript's own prose links
+    /// report through, for the same reason: nothing else would.
+    @Environment(AppModel.self) private var app: AppModel?
 
     // web `.md-image { max-width: min(100%, 760px); max-height: 70vh }`, rendered at an exact fitted
     // size (below) against a fixed cap — the same approach as the sibling `ChatAttachmentImage` /
@@ -417,7 +425,11 @@ private struct MarkdownImageView: View {
                 }
             }
         } else {
-            unavailable
+            // A path that names an image fetches itself on appearing (and again if the path under this
+            // row changes); everything else waits for a tap.
+            unavailable.task(id: inlineFetchPath) {
+                if let path = inlineFetchPath { loadInline(path) }
+            }
         }
     }
 
@@ -467,14 +479,103 @@ private struct MarkdownImageView: View {
         RoundedRectangle(cornerRadius: 8).fill(.quaternary).frame(width: 200, height: 140)
     }
 
+    /// The chip an image no client can render falls back to — and, for a file in the session's own
+    /// directories, the way back to its bytes: the control plane asks the session's runner for them
+    /// (see `fetch`).
+    ///
+    /// What the path is *named* decides how much is asked of the reader. An image (`.png`, `.jpg`,
+    /// the mock an agent drew) is fetched unprompted and drawn in place — a reader who linked a
+    /// picture meant to show one, and this is the difference between reading the reply and having to
+    /// poke at it. Anything else stays a chip until tapped, which hands it to the platform instead.
+    /// A path nobody can serve stays a label, which is what every one of these was before the
+    /// artifact route could fetch the session's own files.
+    @ViewBuilder
     private var unavailable: some View {
+        if let path = fetchablePath {
+            if let image = inlineImage {
+                let size = Self.fitted(image.size)
+                withPreview(Image(platformImage: image)
+                    .resizable().scaledToFit()
+                    .frame(width: size.width, height: size.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) },
+                    image: image)
+            } else {
+                Button { fetch(path) } label: { chip }
+                    .buttonStyle(.plain)
+                    .disabled(fetching)
+                    .accessibilityHint("Open this file from the session's runner")
+            }
+        } else {
+            chip
+        }
+    }
+
+    private var chip: some View {
         HStack(spacing: 6) {
-            Image(systemName: "paperclip").foregroundStyle(.secondary)
+            if fetching {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "paperclip").foregroundStyle(.secondary)
+            }
             Text(alt.isEmpty ? "Image" : alt).lineLimit(1).truncationMode(.middle)
         }
         .font(.orbitLabel)
         .padding(.vertical, 4).padding(.horizontal, 8)
         .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// The path to ask the artifact route for, when this source is one of the session's own files
+    /// (see `AttachmentLink.runnerArtifactPath`) and a console is around to ask through.
+    private var fetchablePath: String? {
+        guard let sessionID = sessionPreview?.sessionID else { return nil }
+        return AttachmentLink.runnerArtifactPath(source: source, sessionID: sessionID)
+    }
+
+    /// What comes back is decided by what it is, not by what the path promised: bytes that decode as
+    /// an image are drawn in place (tappable into the same viewer every other image opens), anything
+    /// else goes to the platform — the share sheet on iOS, the file's own application on a Mac, which
+    /// has no such viewer. A fetch that comes back empty, or a tap on a path that turned out not to
+    /// be an image, says so rather than leaving the reader unanswered.
+    private func fetch(_ path: String) {
+        guard !fetching else { return }
+        let preview = sessionPreview
+        fetching = true
+        Task {
+            defer { fetching = false }
+            guard let data = await store.artifactData(sessionID: preview?.sessionID ?? "", path: path) else {
+                app?.showToast("Couldn't open that file", detail: path, tone: .error)
+                return
+            }
+            if let image = PlatformImage(data: data) {
+                inlineImage = image
+                return
+            }
+            if !FileHandoff.deliver(data, named: AttachmentLink.fileName(inPath: path)) {
+                app?.showToast("Couldn't open that file", detail: path, tone: .error)
+            }
+        }
+    }
+
+    /// Fetch a path that names an image, unprompted, and draw it where the chip was. Nothing is
+    /// handed to the platform here: bytes that do not decode as an image (a file wearing a .png name,
+    /// a path whose file is gone) leave the chip in place, and the reader can still tap it.
+    private func loadInline(_ path: String) {
+        guard inlineImage == nil, !fetching, let sessionID = sessionPreview?.sessionID else { return }
+        fetching = true
+        Task {
+            defer { fetching = false }
+            guard let data = await store.artifactData(sessionID: sessionID, path: path),
+                  let image = PlatformImage(data: data) else { return }
+            inlineImage = image
+        }
+    }
+
+    /// The path to fetch unprompted: one that names an image (see `AttachmentLink.looksLikeImage`).
+    /// Nil for everything else, which is also what keeps `loadInline` off a document.
+    private var inlineFetchPath: String? {
+        guard let path = fetchablePath, AttachmentLink.looksLikeImage(path: path) else { return nil }
+        return path
     }
 
     /// The attachment id from an `orbit-attachment:<id>` source, `nil` for any other scheme — read the

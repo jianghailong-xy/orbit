@@ -69,6 +69,39 @@ final class TailPinningWiringTests: XCTestCase {
                         + "the clamp from a row that shrank as a reader scrolling up")
     }
 
+    /// iOS tells the rule that drags are reported, and asks UIKit as well as the phase. Both are the
+    /// fix for the second round of this bug: with the reader *inferred* from geometry, a fold under
+    /// a transcript that was behind its tail (the app's normal state while a reply streams) un-pinned
+    /// the tail, and the rest of the reply ran away below the fold.
+    func testTheTrackerReportsDragsOnIOSAndKeepsInferringThemOnMacOS() throws {
+        let tracker = try section(
+            try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"),
+            from: "private struct ScrollTracker",
+            to: "/// Publishes the id of the item currently under")
+
+        XCTAssertTrue(tracker.contains("TailPinning.ReaderEvidence.reported"),
+                      "iOS reports drags: the rule must be told so, not left to infer a reader from "
+                        + "a fall over content that did not resize in that same sample")
+        XCTAssertTrue(tracker.contains("v.isTracking"), "a finger down is UIKit's to report")
+        XCTAssertTrue(tracker.contains("v.isDragging"), "and so is the drag that follows it")
+        XCTAssertTrue(tracker.contains("evidence: Self.evidence"),
+                      "the rule must actually be handed the evidence, or the axis does nothing")
+    }
+
+    /// The one place iOS un-pins without the platform saying so: the sticky header's jump back to a
+    /// question. The tap IS the reader saying it — and without the line, the next publish would drag
+    /// them back to the tail, because an animated jump is not a reported drag.
+    func testTheStickyHeadersJumpSaysTheReaderDidIt() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let jump = try section(source, from: "private func stickyQuestion", to: "private func scrollToBottomButton")
+
+        XCTAssertTrue(jump.contains("atBottom = false"),
+                      "the jump must un-pin the tail outright: iOS decides a reader from reported "
+                        + "drags, and a jump SwiftUI animates is not one")
+        XCTAssertTrue(jump.contains("#if os(iOS)") ,
+                      "macOS still infers the reader from the fall, so this is the iOS branch")
+    }
+
     /// Web decides the same question in `tailPinning.ts`, and the two got here by drifting apart:
     /// both carried the gap-plus-direction rule, so both stopped following a reply when a reasoning
     /// row folded. Asserted piece by piece rather than as one expression, so reflowing that line

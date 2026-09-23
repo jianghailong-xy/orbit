@@ -419,10 +419,48 @@ final class OpenItemDeliveryTests: XCTestCase {
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard)
         XCTAssertEqual(summary.label, "↑ Exception item")
         // The kind, then the item's own title — which in this product already opens with the kind
-        // ("Merge conflict: <task>", §4.2), so the bar reads it twice. That is the browser's own
-        // pair, copied rather than improved on: `OpenItemDeliveryCopyParityTests` holds the two ends
-        // to the same words, and a bar that quietly dropped half of one would be a third wording.
-        XCTAssertEqual(summary.text, "Merge conflict: Merge conflict: 回填历史 user 事件的 controlPlaneNote")
+        // ("Merge conflict: <task>", §4.2), so the label is not added a second time. The pair is
+        // still the browser's own: `OpenItemDeliveryCopyParityTests` holds the two ends to the same
+        // words, and both ends carry the same guard.
+        XCTAssertEqual(summary.text, "Merge conflict: 回填历史 user 事件的 controlPlaneNote")
+    }
+
+    // MARK: - (d) the card while the delivery is still QUEUED
+
+    /// A delivery is queued as an ordinary turn, so until a runner takes it the only thing a client
+    /// can draw it from is GET /sessions/:id/turns — and that projection carries the card beside the
+    /// paragraph, read by the same parser the echo's payload is. The reducer that builds the tail
+    /// puts it on the bubble, so the queued row is the card the transcript will draw rather than 30
+    /// lines written for the agent in the reader's own name (web parity: the queue tail,
+    /// `WorkspaceView`). One row, read twice: the projection's own shape, then the card arriving on
+    /// the row already on screen.
+    func testAQueuedDeliveryCarriesTheCardOnTheRowItAlreadyHas() throws {
+        func projected(_ card: String) throws -> [QueuedTurnInfo] {
+            try JSONDecoder().decode([QueuedTurnInfo].self, from: Data("""
+                [{"turnId": "turn-1", "kind": "message", "content": \(Self.jsonString(Self.told)),
+                  "attachments": []\(card.isEmpty ? "" : ", \"openItemDelivery\": \(card)")}]
+                """.utf8))
+        }
+
+        var reducer = TranscriptReducer()
+        // A server that predates the field, or a payload that does not make a card one: the row is
+        // the message it has always been, and no half-card is drawn from the shape of the text.
+        for card in ["", "{\"kind\": \"TASK_FAILED\"}"] {
+            reducer.reconcileQueuedTurns(try projected(card), knownBefore: [])
+            let queued = try XCTUnwrap(reducer.state.queued.first)
+            XCTAssertNil(queued.itemCard)
+            XCTAssertEqual(queued.text, Self.told, "the paragraph is the turn's own content")
+        }
+
+        let rowID = try XCTUnwrap(reducer.state.queued.first).id
+        reducer.reconcileQueuedTurns(try projected(conflictCard), knownBefore: ["turn-1"])
+
+        let queued = try XCTUnwrap(reducer.state.queued.first)
+        XCTAssertEqual(reducer.state.queued.count, 1, "the card arrives on the row already there")
+        XCTAssertEqual(queued.id, rowID, "stable row identity is retained")
+        XCTAssertEqual(queued.itemCard?.itemId, "0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a6d")
+        XCTAssertEqual(queued.text, Self.told, "what the agent read waits in the card's fold")
+        XCTAssertTrue(queued.queued, "and it is still the queue's row")
     }
 
     /// A cached transcript written before the card existed rehydrates: the key is absent, so the
