@@ -119,4 +119,21 @@ final class SessionDetailCacheTests: XCTestCase {
         XCTAssertNotNil(cache.resolve("still-there", preferring: []))
         XCTAssertFalse(cache.invalidateNotFound("purged"), "a repeated 404 stays idempotent")
     }
+
+    /// The real pair from 2026-09-23: an owner-item push opened a project's coordinator by the UUID
+    /// the server stored, the Open list held the row as base62, and the header drew the agent's name.
+    /// `AppModel.route(to:)` opens the console under `PublicID.toPublic` of the pushed id — this is
+    /// the lookup the header then makes.
+    func testAPushedUUIDFindsItsListRowUnderTheSpellingTheRouteOpens() {
+        let row = Session(id: "34TYUP5wb87XfuYCInJRY", title: "Codex 多账户：一台机器上登录多个 Codex",
+                          status: .awaitingInput, runState: .awaitingInput, lifecycleState: .open,
+                          agentId: "agent-1", assignedRunnerId: "runner-1",
+                          pendingApprovals: 0, branch: nil, updatedAt: nil)
+        let routed = PublicID.toPublic("01a0cc01-771c-767d-846b-8fddfa669490")
+
+        let resolved = SessionDetailCache().resolve(routed, preferring: [row], [])
+        XCTAssertEqual(resolved?.id, row.id)
+        XCTAssertEqual(SessionHeader.title(for: resolved, fallbackAgent: "orbit"),
+                       "Codex 多账户：一台机器上登录多个 Codex")
+    }
 }

@@ -121,8 +121,10 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         let content = notification.request.content
         let session = content.userInfo[Notifications.keySession] as? String
         let focused = await MainActor.run { self.focusedSessionID }
+        // The push spells its session as the stored UUID, the console on screen as the lists' public
+        // id (`AppModel.route(to:)`), so the two are compared as ids rather than as strings.
         #if os(iOS)
-        if let session, session != focused,
+        if let session, PublicID.storageKey(session) != focused.map(PublicID.storageKey),
            content.categoryIdentifier == Notifications.approvalCategory {
             let line = content.body
             await MainActor.run { self.onForegroundApproval?(session, line) }
@@ -134,7 +136,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
         return [.list]
         #else
-        if let session, session == focused { return [.list] }
+        if let session, PublicID.storageKey(session) == focused.map(PublicID.storageKey) { return [.list] }
         return [.banner, .sound, .list]
         #endif
     }

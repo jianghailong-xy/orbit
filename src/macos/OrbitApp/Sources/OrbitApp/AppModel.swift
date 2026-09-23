@@ -575,8 +575,10 @@ final class AppModel {
         // system banner (see `NotificationManager.willPresent`). A `.warning`, so it stays until
         // it's dealt with — that's the whole point of it, and it's what a banner's persistence in
         // Notification Center was doing before. Tapping it opens the session it's blocking on.
+        // The push names the session by its stored UUID; the card takes the lists' spelling, or its
+        // title lookup and the needs-you check that takes it down both miss the row.
         notifications.onForegroundApproval = { [weak self] sessionID, line in
-            self?.showToast(line, sessionID: sessionID, tone: .warning,
+            self?.showToast(line, sessionID: PublicID.toPublic(sessionID), tone: .warning,
                             icon: "bell.badge.fill", awaitsApproval: true)
         }
         #endif
@@ -1127,7 +1129,8 @@ final class AppModel {
         let needsYou = Set(SessionGrouping.group(list).needsYou.map(\.id))
         if needsYou != lastNeedsYou {
             lastNeedsYou = needsYou
-            NotificationManager.removeDeliveredApprovals(where: { !needsYou.contains($0) })
+            // A server banner's thread id is the session's stored UUID; `needsYou` is list-spelled.
+            NotificationManager.removeDeliveredApprovals(where: { !needsYou.contains(PublicID.toPublic($0)) })
             // The foreground card standing in for one of those banners has to come down with them.
             // It's persistent by design, so an approval answered on web or macOS would otherwise
             // leave a card asking for something that's already been decided.
@@ -1723,7 +1726,11 @@ final class AppModel {
         selectedSection = AppSection.forRoute(route)
         switch route {
         case .active:          if selectedAgentID == nil { selectedAgentID = orderedAgents.first?.id }
-        case .session(let id): openSession(id)
+        // A push names its session by the stored UUID (an APNs body never passes the server's
+        // public-id rewrite), while every list row and detail record spells it base62 — and the
+        // console finds its record by `==`. A UUID frame found none, so its header fell back to the
+        // agent's name. The frame takes the lists' spelling here, once, for everything downstream.
+        case .session(let id): openSession(PublicID.toPublic(id))
         case .task(let id):
             // A deep link or dependency jump may target a task outside the currently selected
             // named list. Aggregate scope guarantees the row and detail can resolve together.
