@@ -13951,6 +13951,13 @@ button.chat-jump-start:hover {
 .tsc-body {
   margin-top: 2px;
 }
+/* Set like the Markdown beside it (`.md`), so plain criteria do not read as a different size. */
+.tsc-plain {
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .tsc-judged {
   margin-top: 8px;
   padding: 8px 10px;

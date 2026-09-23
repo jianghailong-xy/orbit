@@ -93,7 +93,9 @@ export function TaskStartCard({
         {open && card.acceptanceCriteria && (
           <>
             <div className="tsc-section">{TASK_START_CRITERIA_HEADING}</div>
-            <div className="tsc-body"><MD breaks>{card.acceptanceCriteria}</MD></div>
+            {/* As written, the way the task page shows it: criteria are checks, not documents, and
+                their globs (`RunnerEngines*`) and paths read as emphasis when parsed as Markdown. */}
+            <div className="tsc-body tsc-plain">{card.acceptanceCriteria}</div>
           </>
         )}
         {open && card.listInstructions && (

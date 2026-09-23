@@ -53,10 +53,22 @@ struct TaskStartCardView: View {
             if let description = card.description { descriptionView(description) }
             if showingDetails {
                 if let criteria = card.acceptanceCriteria {
-                    section(TaskStartCard.criteriaHeading, criteria)
+                    // As written, the way the task page shows them: criteria are checks, not
+                    // documents, and their globs (`RunnerEngines*`) read as emphasis as Markdown.
+                    section(TaskStartCard.criteriaHeading) {
+                        Text(criteria)
+                            .font(.orbitProse)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 if let instructions = card.listInstructions {
-                    section(TaskStartCard.instructionsHeading, instructions)
+                    section(TaskStartCard.instructionsHeading) {
+                        MarkdownView(source: instructions, base: .body, ink: .primary)
+                            .font(.orbitProse)
+                            .textSelection(.enabled)
+                    }
                 }
             }
             if let judged = TaskStartCard.judgedBy(card) { judgedRow(judged) }
@@ -144,13 +156,12 @@ struct TaskStartCardView: View {
         }
     }
 
-    private func section(_ heading: String, _ source: String) -> some View {
+    private func section<Content: View>(_ heading: String,
+                                        @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(heading)
                 .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
-            MarkdownView(source: source, base: .body, ink: .primary)
-                .font(.orbitProse)
-                .textSelection(.enabled)
+            content()
         }
         .padding(.top, 4)
     }
