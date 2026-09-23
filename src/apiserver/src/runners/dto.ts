@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -41,9 +42,19 @@ export class SubmitLoginCodeDto {
   @IsString() @MinLength(1) code!: string;
 }
 
+/**
+ * A Codex account a runner has: `default`, the CODEX_HOME its own environment selects, or the id
+ * of a slot it added — 4 random bytes in lowercase hex (src/runner-go/codex_account_slot.go).
+ */
+export const CODEX_ACCOUNT_PATTERN = /^(?:default|[0-9a-f]{8})$/;
+
 /** Which CLI to sign in. Absent from an older client, which only ever signed in claude. */
 export class StartLoginDto {
   @IsOptional() @IsIn(['claude', 'codex', 'kimi']) engine?: LoginEngine;
+  /** Codex only: sign in this account the runner already has. Absent: the runner's own login. */
+  @IsOptional() @IsString() @Matches(CODEX_ACCOUNT_PATTERN) account?: string;
+  /** Codex only: sign in a NEW account, which the runner adds under this name. */
+  @IsOptional() @IsString() @MaxLength(60) accountName?: string;
 }
 
 /** Which CLI to install on the runner. Required — there is no historical default here. */

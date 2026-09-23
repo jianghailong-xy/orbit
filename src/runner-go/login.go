@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -12,10 +13,21 @@ import (
 	"time"
 )
 
-// How long a half-finished sign-in may hold the runner's single login slot. The user has to
-// leave the page, approve in a browser and paste a code back, so this is generous; past it the
-// CLI is killed and the slot freed, otherwise one abandoned attempt would block sign-in forever.
+// How long a half-finished sign-in may hold its account. The user has to leave the page, approve
+// in a browser and paste a code back, so this is generous; past it the CLI is killed and the
+// account freed, otherwise one abandoned attempt would block that account's sign-in forever.
 const loginRelayTimeout = 10 * time.Minute
+
+// codexAccountLoginCapabilityV1 declares that this runner signs in the account a LoginCommand
+// names (Account, AccountName) instead of ignoring it. A runner that ignored it would sign the
+// machine's Default account in instead, so the control plane hands such a start only to a process
+// that declares this.
+const codexAccountLoginCapabilityV1 = "codex-account-login/v1"
+
+// lookLoginEngine is lookEngine, the binary the relay probes. A variable so a test can stand a
+// fake CLI in: the service PATH lookEngine searches puts ~/.local/bin first, where a dev machine's
+// real codex lives.
+var lookLoginEngine = lookEngine
 
 // Login relay statuses reported to the control plane. They mirror the `login_status` column.
 // awaitingCode is the only one the server acts on (it forwards the pasted code); awaitingApproval
@@ -164,25 +176,51 @@ func loginFlowFor(engine string) loginFlow {
 	}
 }
 
-// loginRelay drives one engine login on this machine while the user completes
-// its browser authorization through the control plane.
+// loginRelay drives engine logins on this machine while the user completes
+// their browser authorization through the control plane.
 //
-// One at a time per runner: the CLI writes this machine's single credentials file, so two
-// concurrent sign-ins would race over it, and the heartbeat redelivers a `start` until the
-// server sees a status change — so start() must be idempotent while one is already running.
+// One at a time per account: a CLI writes the credentials of the account it signs in — claude's
+// and kimi's the machine's one login, codex's the CODEX_HOME of one account slot — so two
+// concurrent sign-ins into the same account would race over them, while sign-ins into different
+// Codex slots write different files and run side by side. The heartbeat redelivers a `start`
+// until the server sees a status change, so start() must be idempotent while that account's
+// sign-in is already running.
 type loginRelay struct {
-	mu      sync.Mutex
-	wg      sync.WaitGroup
-	running bool
+	mu sync.Mutex
+	wg sync.WaitGroup
+	// The sign-ins running now, by the account each one writes (loginAccountKey).
+	runs map[string]*loginRun
+	// The slot the latest add-account attempt created, so a redelivery of that start signs into
+	// it instead of adding the account a second time.
+	addedAttempt, addedSlot string
+}
+
+// loginRun is one sign-in the relay is driving.
+type loginRun struct {
+	// The account it signs in (loginAccountKey).
+	key string
+	// Identifies the sign-in, so a redelivered `start` for the SAME attempt is a no-op while a
+	// genuinely new one for the same account preempts it. Without this a user who cancelled was
+	// locked out until the old CLI timed out ten minutes later: start() saw a relay running and
+	// returned.
+	attempt string
 	stdin   io.WriteCloser
 	cancel  context.CancelFunc
-	// Identifies the sign-in currently running, so a redelivered `start` for the SAME attempt is
-	// a no-op while a genuinely new one preempts it. Without this a user who cancelled was locked
-	// out until the old CLI timed out ten minutes later: start() saw a relay running and returned.
-	attempt string
 	// Everything the CLI has printed. Shared with submitCode so a rejected code — which the CLI
 	// signals only by re-prompting — can be spotted.
 	out *syncBuffer
+}
+
+// loginAccountKey names the account a sign-in writes: the engine's one login, or for codex one
+// slot, where no account named is the runner's own CODEX_HOME — Default.
+func loginAccountKey(engine, account string) string {
+	if engine != providerCodex {
+		return engine
+	}
+	if account == "" {
+		account = codexAccountDefaultSlot
+	}
+	return engine + "/" + account
 }
 
 // ptyCommand wraps argv in a pseudo-terminal.
@@ -201,50 +239,94 @@ func ptyCommand(ctx context.Context, argv ...string) *exec.Cmd {
 	return exec.CommandContext(ctx, "script", "-qec", strings.Join(argv, " "), "/dev/null")
 }
 
-// start launches the sign-in identified by `attempt` and reports progress through `report`. It
-// returns immediately; the flow continues in a goroutine until the CLI exits or the relay times
-// out.
+// start launches the sign-in `lr` asks for and reports progress through `report`. It returns
+// immediately; the flow continues in a goroutine until the CLI exits or the relay times out.
 //
-// `attempt` is the server's identifier for this sign-in (its login_at). The heartbeat redelivers
-// `start` until our first status report lands, so repeats of the SAME attempt must be ignored —
-// but a DIFFERENT attempt means the user asked again (typically after cancelling), and that has
-// to preempt whatever is still running, or they wait out the old CLI's timeout for nothing.
-func (r *loginRelay) start(attempt, engine string, report func(LoginResultRequest)) {
-	flow := loginFlowFor(engine)
+// `lr.Attempt` is the server's identifier for this sign-in (its login_at). The heartbeat
+// redelivers `start` until our first status report lands, so repeats of the SAME attempt must be
+// ignored — but a DIFFERENT attempt at the same account means the user asked again (typically
+// after cancelling), and that has to preempt whatever is still running there, or they wait out
+// the old CLI's timeout for nothing.
+func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
+	attempt := lr.Attempt
+	flow := loginFlowFor(lr.Engine)
 	if flow.engine == providerOpenCode {
-		report(LoginResultRequest{Status: loginFailed, Message: "OpenCode sign-in is provider-specific — run `opencode auth login` on this runner and choose the provider there"})
+		report(LoginResultRequest{Status: loginFailed, Message: "OpenCode sign-in is provider-specific — run `opencode auth login` on this runner and choose the provider there", Attempt: attempt})
 		return
 	}
+	// Only codex has accounts; every other engine signs in the one login its CLI keeps.
+	account, name := "", ""
+	if flow.engine == providerCodex {
+		account, name = lr.Account, strings.TrimSpace(lr.AccountName)
+	}
+	r.mu.Lock()
+	if name != "" {
+		// A new account is added once per attempt, and every redelivery of its start signs into
+		// the slot the first one added. An account that then fails to sign in stays, signed out.
+		if r.addedSlot != "" && r.addedAttempt == attempt {
+			account = r.addedSlot
+		} else {
+			slot, err := createCodexAccountSlot(name)
+			if err != nil {
+				r.mu.Unlock()
+				report(LoginResultRequest{Status: loginFailed, Message: "could not add the Codex account: " + firstLine(err.Error()), Attempt: attempt})
+				return
+			}
+			r.addedAttempt, r.addedSlot, account = attempt, slot.ID, slot.ID
+		}
+	}
+	key := loginAccountKey(flow.engine, account)
 	// Cheap pre-check for the heartbeat's redelivery of a start we are already running: the real
 	// decision is made under the lock below, this just keeps the probe that follows from running
 	// a subprocess every heartbeat for a sign-in that is already in flight.
-	r.mu.Lock()
-	redelivered := r.running && (attempt == "" || attempt == r.attempt)
+	run := r.runs[key]
+	redelivered := run != nil && (attempt == "" || attempt == run.attempt)
 	r.mu.Unlock()
 	if redelivered {
 		return
+	}
+	// Every report names the attempt it is about and the account signing in, so the control plane
+	// can tell which account this is and drop what a sign-in it has moved past still says.
+	send := report
+	report = func(res LoginResultRequest) {
+		res.Attempt, res.Account = attempt, account
+		send(res)
+	}
+	// Default, or no account named (an older control plane): the CLI runs in this process's own
+	// environment, exactly as before accounts. Any other account runs in its slot's CODEX_HOME, and
+	// so does every codex process of its sign-in — even printing its help, codex writes into the
+	// CODEX_HOME it runs in, and none of that may land in Default.
+	var env []string
+	if account != "" && account != codexAccountDefaultSlot {
+		home, err := codexAccountSlotHome(account)
+		if err != nil {
+			// Never fall back to Default: that would sign this account in over the machine's own.
+			report(LoginResultRequest{Status: loginFailed, Message: "this runner has no Codex account " + account + " — add the account again"})
+			return
+		}
+		env = envWithValue(os.Environ(), "CODEX_HOME", home)
 	}
 	// A codex old enough to lack the device flow can't be signed in from here at all, and its
 	// error would surface as "couldn't read a sign-in URL" — say what actually has to happen.
 	if flow.engine == providerCodex {
 		spec, _ := specFor(providerCodex)
-		if path, ok := lookEngine(providerCodex); !ok || !supportsLoginFlag(path, spec) {
-			report(LoginResultRequest{Status: loginFailed, Message: "this runner's codex is too old to sign in from the browser — run `codex update` on that machine, or sign in there with `codex login`"})
+		if path, ok := lookLoginEngine(providerCodex); !ok || !supportsLoginFlag(path, spec, env) {
+			report(LoginResultRequest{Status: loginFailed, Message: "this runner's codex is too old to sign in from the browser — run `codex update` on that machine, or sign in there with `" + loginCommandIn(env, "codex login") + "`"})
 			return
 		}
 	}
 	r.mu.Lock()
-	if r.running {
-		if attempt == "" || attempt == r.attempt {
+	if prev := r.runs[key]; prev != nil {
+		if attempt == "" || attempt == prev.attempt {
 			r.mu.Unlock()
 			return // same sign-in, redelivered
 		}
-		// Newer attempt: tear the old one down. Its pump sees the killed process, but its report
-		// is for a sign-in the server has already moved past, so let it fall on the floor.
-		if r.cancel != nil {
-			r.cancel()
+		// Newer attempt at this account: tear the old one down. Its pump sees the killed process,
+		// and its report names an attempt the server has already moved past, which it drops.
+		if prev.cancel != nil {
+			prev.cancel()
 		}
-		r.running = false
+		delete(r.runs, key)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), loginRelayTimeout)
 	var cmd *exec.Cmd
@@ -253,6 +335,7 @@ func (r *loginRelay) start(attempt, engine string, report func(LoginResultReques
 	} else {
 		cmd = exec.CommandContext(ctx, flow.argv[0], flow.argv[1:]...)
 	}
+	cmd.Env = env
 	// Only a flow that takes a pasted code needs a writable stdin; the device flow completes
 	// on its own, so there is nothing to hold open.
 	var stdin io.WriteCloser
@@ -280,13 +363,17 @@ func (r *loginRelay) start(attempt, engine string, report func(LoginResultReques
 		report(LoginResultRequest{Status: loginFailed, Message: signInStartError(err, flow)})
 		return
 	}
-	r.running, r.stdin, r.cancel, r.out, r.attempt = true, stdin, cancel, out, attempt
+	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out}
+	if r.runs == nil {
+		r.runs = map[string]*loginRun{}
+	}
+	r.runs[key] = run
 	r.wg.Add(1)
 	r.mu.Unlock()
 
 	go func() {
 		defer r.wg.Done()
-		r.pump(attempt, flow, cmd, out, cancel, stdin, report)
+		r.pump(run, flow, cmd, env, report)
 	}()
 }
 
@@ -294,30 +381,34 @@ func (r *loginRelay) start(attempt, engine string, report func(LoginResultReques
 // must first stop heartbeat delivery so no new start can race with Wait.
 func (r *loginRelay) stop() {
 	r.mu.Lock()
-	if r.cancel != nil {
-		r.cancel()
+	for _, run := range r.runs {
+		if run.cancel != nil {
+			run.cancel()
+		}
 	}
 	r.mu.Unlock()
 	r.wg.Wait()
 }
 
 // pump watches the sign-in: publish the URL as soon as it appears, then wait for the CLI to exit
-// and report whether this machine ended up signed in.
-func (r *loginRelay) pump(attempt string, flow loginFlow, cmd *exec.Cmd, out *syncBuffer, cancel context.CancelFunc, stdin io.WriteCloser, report func(LoginResultRequest)) {
+// and report whether this machine ended up signed in. env is the environment the CLI ran in, and
+// so the one to ask whether it did.
+func (r *loginRelay) pump(run *loginRun, flow loginFlow, cmd *exec.Cmd, env []string, report func(LoginResultRequest)) {
+	out := run.out
 	// Wait in its own goroutine so the URL poll below can tell "still running" from "already
 	// exited" — cmd.ProcessState stays nil until Wait returns, so it can't answer that itself.
 	waited := make(chan error, 1)
 	go func() { waited <- cmd.Wait() }()
 
 	defer func() {
-		cancel()
-		if stdin != nil {
-			_ = stdin.Close()
+		run.cancel()
+		if run.stdin != nil {
+			_ = run.stdin.Close()
 		}
 		r.mu.Lock()
-		// Only clear if we are still the current attempt — a newer start() may already own these.
-		if r.attempt == attempt {
-			r.running, r.stdin, r.cancel, r.out = false, nil, nil, nil
+		// Only clear if we are still this account's sign-in — a newer start() may already own it.
+		if r.runs[run.key] == run {
+			delete(r.runs, run.key)
 		}
 		r.mu.Unlock()
 	}()
@@ -359,7 +450,7 @@ poll:
 		}
 		report(LoginResultRequest{
 			Status:  loginFailed,
-			Message: "couldn't read a sign-in URL from the CLI — run `" + flow.cmdLine() + "` on this machine instead",
+			Message: "couldn't read a sign-in URL from the CLI — run `" + loginCommandIn(env, flow.cmdLine()) + "` on this machine instead",
 		})
 		return
 	}
@@ -373,7 +464,7 @@ poll:
 	}
 	// The CLI's exit code isn't a reliable success signal, so ask the question `orbit doctor`
 	// asks: is this machine actually signed in now?
-	if probeAuthNow(flow.engine) == authYes {
+	if probeAuthNow(flow.engine, env) == authYes {
 		report(LoginResultRequest{Status: loginDone})
 		return
 	}
@@ -389,18 +480,24 @@ poll:
 // stale paste from a relay that already timed out.
 func (r *loginRelay) submitCode(code string, report func(LoginResultRequest)) {
 	r.mu.Lock()
-	stdin, out := r.stdin, r.out
+	// Only claude's flow takes a pasted code, and claude has the one account.
+	run := r.runs[providerClaude]
 	r.mu.Unlock()
-	if stdin == nil {
+	if run == nil || run.stdin == nil {
 		report(LoginResultRequest{Status: loginFailed, Message: "the sign-in expired before the code arrived — start it again"})
 		return
 	}
-	seen := strings.Count(out.String(), loginInvalidCodeMarker)
-	if _, err := io.WriteString(stdin, strings.TrimSpace(code)+"\n"); err != nil {
+	send := report
+	report = func(res LoginResultRequest) {
+		res.Attempt = run.attempt
+		send(res)
+	}
+	seen := strings.Count(run.out.String(), loginInvalidCodeMarker)
+	if _, err := io.WriteString(run.stdin, strings.TrimSpace(code)+"\n"); err != nil {
 		report(LoginResultRequest{Status: loginFailed, Message: "could not hand the code to the CLI: " + err.Error()})
 		return
 	}
-	go r.watchRejected(out, seen, report)
+	go r.watchRejected(run, seen, report)
 }
 
 // watchRejected turns the CLI's "Invalid code" line into a report the user can act on.
@@ -412,7 +509,7 @@ func (r *loginRelay) submitCode(code string, report func(LoginResultRequest)) {
 //
 // The URL is republished unchanged: the challenge is still live, so the user re-approves at the
 // same link and copies the code more carefully.
-func (r *loginRelay) watchRejected(out *syncBuffer, seen int, report func(LoginResultRequest)) {
+func (r *loginRelay) watchRejected(run *loginRun, seen int, report func(LoginResultRequest)) {
 	deadline := time.After(2 * time.Minute)
 	for {
 		select {
@@ -421,12 +518,12 @@ func (r *loginRelay) watchRejected(out *syncBuffer, seen int, report func(LoginR
 		case <-time.After(500 * time.Millisecond):
 		}
 		r.mu.Lock()
-		running := r.running
+		running := r.runs[run.key] == run
 		r.mu.Unlock()
 		if !running {
 			return // pump already reported the outcome
 		}
-		s := out.String()
+		s := run.out.String()
 		if strings.Count(s, loginInvalidCodeMarker) > seen {
 			report(LoginResultRequest{
 				Status:  loginAwaitingCode,
@@ -438,13 +535,29 @@ func (r *loginRelay) watchRejected(out *syncBuffer, seen int, report func(LoginR
 	}
 }
 
-// probeAuthNow re-runs doctor's sign-in probe against the engine binary on the service PATH.
-func probeAuthNow(engine string) authState {
-	path, ok := lookEngine(engine)
+// probeAuthNow re-runs doctor's sign-in probe against the engine binary on the service PATH, in
+// env when the sign-in ran in one Codex account's CODEX_HOME rather than this process's own.
+func probeAuthNow(engine string, env []string) authState {
+	path, ok := lookLoginEngine(engine)
 	if !ok {
 		return authUnknown
 	}
+	if env != nil {
+		// Only a sign-in into a Codex account runs in an environment of its own.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return codexLoginStatus(ctx, path, env)
+	}
 	return probeAuth(engine, path)
+}
+
+// loginCommandIn spells a sign-in command the way to run it by hand for the account env signs in:
+// run bare, a command meant for one Codex account's CODEX_HOME would sign in Default instead.
+func loginCommandIn(env []string, cmdLine string) string {
+	if home := envValue(env, "CODEX_HOME"); home != "" {
+		return "CODEX_HOME=" + shellQuote(home) + " " + cmdLine
+	}
+	return cmdLine
 }
 
 func signInStartError(err error, flow loginFlow) string {

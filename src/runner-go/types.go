@@ -480,6 +480,12 @@ type LoginCommand struct {
 	// from a new one the user asked for after cancelling. Empty from an older control plane,
 	// which the relay treats as "same attempt" — the pre-existing no-op behaviour.
 	Attempt string `json:"attempt,omitempty"`
+	// Which Codex account to sign in: "default", or the id of a slot this runner added. Empty from
+	// a control plane older than accounts, which only ever signed in the runner's own CODEX_HOME —
+	// the Default account.
+	Account string `json:"account,omitempty"`
+	// Sign in a NEW Codex account: the runner adds a slot under this name and signs into that.
+	AccountName string `json:"accountName,omitempty"`
 }
 
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card
@@ -491,6 +497,12 @@ type LoginResultRequest struct {
 	URL      string `json:"url,omitempty"`
 	UserCode string `json:"userCode,omitempty"`
 	Message  string `json:"message,omitempty"`
+	// The sign-in this reports on (LoginCommand.Attempt), so the control plane can drop what a
+	// sign-in it has already moved past still has to say.
+	Attempt string `json:"attempt,omitempty"`
+	// The Codex account being signed in. For a new account this is the slot the runner just
+	// added, which is how the control plane learns its id.
+	Account string `json:"account,omitempty"`
 }
 
 // MergeCommand mirrors @orbit/shared: a request to merge one session's worktree branch into

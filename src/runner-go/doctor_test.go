@@ -226,11 +226,11 @@ Options:
 func TestSupportsLoginFlag(t *testing.T) {
 	spec := engineSpec{bin: "codex", loginArgs: []string{"login"}, loginRemoteFlag: "--device-auth"}
 	current := writeFakeBin(t, t.TempDir(), "codex", "cat <<'EOF'\n"+codexLoginHelp+"EOF")
-	if !supportsLoginFlag(current, spec) {
+	if !supportsLoginFlag(current, spec, nil) {
 		t.Fatal("help advertising --device-auth should count as supported")
 	}
 	old := writeFakeBin(t, t.TempDir(), "codex", `echo "Usage: codex login [OPTIONS]"`)
-	if supportsLoginFlag(old, spec) {
+	if supportsLoginFlag(old, spec, nil) {
 		t.Fatal("a CLI that never mentions the flag must not be used with it")
 	}
 }

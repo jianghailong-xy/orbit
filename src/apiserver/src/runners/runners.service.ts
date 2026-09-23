@@ -18,7 +18,7 @@ import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
+import { CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
@@ -362,10 +362,28 @@ export class RunnersService {
    * for codex's device flow), then whether it ended up signed in.
    *
    * Starting over is always allowed: the runner's relay kills a previous CLI when it starts a
-   * new one, and a user staring at a stuck card needs a way out that isn't waiting ten minutes.
-   * One relay at a time per runner, so asking for codex while claude's is in flight replaces it.
+   * new one for the same account, and a user staring at a stuck card needs a way out that isn't
+   * waiting ten minutes. One relay at a time per runner, so asking for codex while claude's is in
+   * flight replaces it; whatever the replaced one still reports names its attempt, and is dropped.
+   *
+   * Codex may be told which account to sign in: one the runner has (`account`, 'default' or a
+   * slot id), or a new one it adds under `accountName`. Naming neither signs in the runner's own
+   * login, exactly as before accounts.
    */
-  async startLogin(ownerId: string, id: string, engine: LoginEngine = 'claude'): Promise<RunnerLoginState> {
+  async startLogin(ownerId: string, id: string, dto: StartLoginDto = {}): Promise<RunnerLoginState> {
+    const engine: LoginEngine = dto.engine ?? 'claude';
+    const accountName = dto.accountName?.trim();
+    if (dto.account != null && dto.accountName != null) {
+      throw new BadRequestException('Sign in an account the runner has or a new one, not both');
+    }
+    if ((dto.account != null || dto.accountName != null) && engine !== 'codex') {
+      throw new BadRequestException('Only Codex signs in more than one account');
+    }
+    // A blank name must not read as "no account": that is the runner's own login, and signing a
+    // second account in there would replace it.
+    if (dto.accountName != null && !accountName) {
+      throw new BadRequestException('A new account needs a name');
+    }
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
     if (runner.status === 'OFFLINE') {
@@ -376,6 +394,8 @@ export class RunnersService {
       data: {
         loginStatus: 'pending',
         loginEngine: engine,
+        loginAccount: dto.account ?? null,
+        loginAccountName: accountName ?? null,
         loginUrl: null,
         loginUserCode: null,
         loginCode: null,
@@ -425,6 +445,8 @@ export class RunnersService {
       data: {
         loginStatus: null,
         loginEngine: null,
+        loginAccount: null,
+        loginAccountName: null,
         loginUrl: null,
         loginUserCode: null,
         loginCode: null,
@@ -657,6 +679,7 @@ export function installStateOf(r: {
 function loginStateOf(r: {
   loginStatus: string | null;
   loginEngine: string | null;
+  loginAccount?: string | null;
   loginUrl: string | null;
   loginUserCode: string | null;
   loginMessage: string | null;
@@ -668,5 +691,6 @@ function loginStateOf(r: {
     userCode: r.loginUserCode,
     url: r.loginUrl,
     message: r.loginMessage,
+    account: r.loginStatus ? (r.loginAccount ?? null) : null,
   };
 }

@@ -472,7 +472,9 @@ model Runner {
   // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
   // on its own machine while the user approves in their own browser, so a machine with no
   // terminal access can still be signed in. State, not history: one sign-in at a time per
-  // runner, since each CLI writes that machine's single credentials file.
+  // runner, and a new one replaces it. (The runner itself keeps one per account — a second Codex
+  // account writes a CODEX_HOME of its own — so what a replaced sign-in reports names its attempt,
+  // and is dropped.)
   //   NULL       — nothing in flight
   //   pending    — user asked to sign in; the next heartbeat tells the runner to start
   //   awaiting_code — loginUrl holds the link to approve; loginCode carries the user's paste
@@ -483,6 +485,13 @@ model Runner {
   // Which CLI the relay is driving: 'claude' | 'codex'. NULL on a row written before the relay
   // handled more than claude.
   loginEngine   String?   @map("login_engine")
+  // Codex only: the account being signed in — 'default' or the id of a slot the runner added.
+  // NULL when the sign-in names none, which a runner takes as its own CODEX_HOME (Default), and
+  // for a new account until the runner reports the slot it added for it.
+  loginAccount     String? @map("login_account")
+  // Codex only: the name of a NEW account the runner is to add and sign in, kept so every
+  // redelivered start asks for the same one.
+  loginAccountName String? @map("login_account_name")
   loginUrl      String?   @map("login_url")
   // The device flow's one-time code, which the user types on loginUrl's page. Runner → user,
   // the opposite direction from loginCode.

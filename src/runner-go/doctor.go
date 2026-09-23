@@ -46,7 +46,7 @@ func (s engineSpec) loginCmd() string {
 // variant when we're somewhere the browser can't reach back (SSH / no desktop)
 // and the CLI advertises the flag, else the default flow.
 func (s engineSpec) loginArgvFor(binPath string) []string {
-	if s.loginRemoteFlag == "" || !remoteMachine() || !supportsLoginFlag(binPath, s) {
+	if s.loginRemoteFlag == "" || !remoteMachine() || !supportsLoginFlag(binPath, s, nil) {
 		return s.loginArgs
 	}
 	return append(append([]string{}, s.loginArgs...), s.loginRemoteFlag)
@@ -232,14 +232,7 @@ func probeAuth(bin, binPath string) authState {
 		}
 		return authNo
 	case providerCodex:
-		err := exec.CommandContext(ctx, binPath, "login", "status").Run()
-		if err == nil {
-			return authYes
-		}
-		if _, ok := err.(*exec.ExitError); ok {
-			return authNo // ran and reported not-signed-in
-		}
-		return authUnknown // couldn't even run it
+		return codexLoginStatus(ctx, binPath, nil)
 	case providerKimi:
 		return probeKimiACPAuth(ctx, binPath)
 	case providerOpenCode:
@@ -264,6 +257,21 @@ func probeAuth(bin, binPath string) authState {
 		return authUnknown
 	}
 	return authUnknown
+}
+
+// codexLoginStatus is probeAuth's codex question, asked with env as the CLI's environment (nil:
+// this process's own) — so one Codex account's CODEX_HOME can be asked instead of the runner's.
+func codexLoginStatus(ctx context.Context, binPath string, env []string) authState {
+	cmd := exec.CommandContext(ctx, binPath, "login", "status")
+	cmd.Env = env
+	err := cmd.Run()
+	if err == nil {
+		return authYes
+	}
+	if _, ok := err.(*exec.ExitError); ok {
+		return authNo // ran and reported not-signed-in
+	}
+	return authUnknown // couldn't even run it
 }
 
 // kimiACPResponse is the small part of a JSON-RPC response needed by the auth
@@ -398,11 +406,14 @@ func remoteMachine() bool {
 
 // supportsLoginFlag asks the CLI's own sign-in help whether it knows the flag, so
 // a runner still on an older build falls back to the default flow instead of dying
-// on an unknown argument.
-func supportsLoginFlag(binPath string, spec engineSpec) bool {
+// on an unknown argument. env is the CLI's environment (nil: this process's own):
+// even printing its help, codex writes helper binaries into its CODEX_HOME.
+func supportsLoginFlag(binPath string, spec engineSpec, env []string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, _ := exec.CommandContext(ctx, binPath, append(append([]string{}, spec.loginArgs...), "--help")...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, binPath, append(append([]string{}, spec.loginArgs...), "--help")...)
+	cmd.Env = env
+	out, _ := cmd.CombinedOutput()
 	return strings.Contains(string(out), spec.loginRemoteFlag)
 }
 

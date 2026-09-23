@@ -71,6 +71,7 @@ func init() {
 		sessionSourcePinV1,
 		codexRateLimitResetCapabilityV1,
 		integrationJobCapabilityV1,
+		codexAccountLoginCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 

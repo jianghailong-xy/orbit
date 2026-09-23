@@ -131,6 +131,7 @@ import {
 } from '../common/transaction-retry';
 import { TransactionSurface } from '../common/prisma-transaction-surface';
 import { PrismaService } from '../prisma/prisma.service';
+import { CODEX_ACCOUNT_PATTERN } from '../runners/dto';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import {
@@ -351,6 +352,9 @@ const RUNNER_PROVIDERS_HEADER = 'x-orbit-supported-providers';
 export const SESSION_ORCHESTRATION_CREDENTIAL_V1 = 'session-orchestration-credential-v1';
 export const SESSION_TERMINAL_HANDOFF_V1 = 'session-terminal-handoff-v1';
 export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
+/** Runner signs in the Codex account a login `start` names (`account`, `accountName`). One that
+ *  does not would ignore the account and sign in its machine's Default instead. */
+export const CODEX_ACCOUNT_LOGIN_V1 = 'codex-account-login/v1';
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -1101,7 +1105,10 @@ export class RunnerApiController {
         }
       }
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
-      loginRequest = await this.drainLoginRequest(runner.id);
+      loginRequest = await this.drainLoginRequest(
+        runner.id,
+        runnerSupportsCapability(capabilities, CODEX_ACCOUNT_LOGIN_V1),
+      );
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
       claudeHistoryRequest = await this.drainClaudeHistoryRequest(runner.id);
@@ -1502,12 +1509,17 @@ export class RunnerApiController {
    * loginRelayTimeout, so a row still `pending`/`awaiting_code` past that window has no process
    * behind it and would otherwise block sign-in forever.
    */
-  private async drainLoginRequest(runnerId: string): Promise<LoginCommand | undefined> {
+  private async drainLoginRequest(
+    runnerId: string,
+    signsInAccounts = false,
+  ): Promise<LoginCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
       select: {
         loginStatus: true,
         loginEngine: true,
+        loginAccount: true,
+        loginAccountName: true,
         loginCode: true,
         loginAt: true,
       },
@@ -1528,13 +1540,31 @@ export class RunnerApiController {
       }
       return undefined;
     }
-    if (r.loginStatus === 'pending')
+    if (r.loginStatus === 'pending') {
+      const account = r.loginAccount ?? undefined;
+      const accountName = r.loginAccountName ?? undefined;
+      // A process that does not declare account sign-in would ignore the account and sign in its
+      // machine's Default instead — replacing the very login this sign-in was meant to leave alone.
+      if (!signsInAccounts && (accountName || (account && account !== 'default'))) {
+        await this.prisma.runner.update({
+          where: { id: runnerId },
+          data: {
+            loginStatus: 'failed',
+            loginMessage: 'This runner is too old to sign in another Codex account — update it, then try again.',
+          },
+        });
+        return undefined;
+      }
       return {
         action: 'start',
         // NULL predates the relay driving anything but claude.
         engine: (r.loginEngine as LoginCommand['engine']) ?? 'claude',
         attempt: r.loginAt?.toISOString() ?? '',
+        // Only when named, so a start for the runner's own login is the shape it always was.
+        ...(account ? { account } : {}),
+        ...(accountName ? { accountName } : {}),
       };
+    }
     if (r.loginStatus === 'awaiting_code' && r.loginCode) {
       await this.prisma.runner.update({
         where: { id: runnerId },
@@ -1557,9 +1587,19 @@ export class RunnerApiController {
     if (status !== 'awaiting_code' && status !== 'awaiting_approval' && status !== 'done' && status !== 'failed') {
       throw new BadRequestException('Unknown login status');
     }
+    if (body.account !== undefined && !CODEX_ACCOUNT_PATTERN.test(String(body.account))) {
+      throw new BadRequestException('Unknown account');
+    }
+    // A report names the start it is about. One about a start this row has moved past — the user
+    // cancelled, or asked for another sign-in, which the runner may still be running beside this
+    // one's successor — changes nothing. An older runner names none and is taken as it comes.
+    const attempt = body.attempt ? new Date(body.attempt) : undefined;
+    if (attempt && Number.isNaN(attempt.getTime())) {
+      throw new BadRequestException('attempt must be the start this reports on');
+    }
     const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
-    await this.prisma.runner.update({
-      where: { id: runner.id },
+    const { count } = await this.prisma.runner.updateMany({
+      where: { id: runner.id, ...(attempt ? { loginAt: attempt } : {}) },
       data: {
         loginStatus: status,
         // A retry after a rejected code republishes the same still-valid URL, so just take
@@ -1569,9 +1609,12 @@ export class RunnerApiController {
         loginUserCode: status === 'awaiting_approval' ? (body.userCode ?? null) : null,
         loginCode: null,
         loginMessage: body.message ?? null,
+        // Which account is signing in. For a new one this is the first the control plane hears of
+        // the slot the runner added for it.
+        ...(body.account ? { loginAccount: body.account } : {}),
       },
     });
-    return { ok: true };
+    return { ok: true, applied: count > 0 };
   }
 
   /**

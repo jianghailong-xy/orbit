@@ -905,6 +905,13 @@ export interface LoginCommand {
   /** Identifies this sign-in, so the runner can tell a redelivered `start` from one the user
    *  asked for again after cancelling — the latter must preempt whatever is still running. */
   attempt?: string;
+  /** Codex only: the account to sign in — `default`, or the id of a slot the runner added. Absent
+   *  from a control plane older than accounts, which only ever signed in the runner's own
+   *  CODEX_HOME, the Default account. Only a runner that declares `codex-account-login/v1` is
+   *  handed a start naming any other account: one that ignored it would sign in Default. */
+  account?: string;
+  /** Codex only: sign in a NEW account, which the runner adds under this name. */
+  accountName?: string;
 }
 
 /** Runner → control plane: progress of a sign-in relay. */
@@ -916,6 +923,13 @@ export interface LoginResult {
   /** The one-time code the user types on the sign-in page, for the device flow. */
   userCode?: string;
   message?: string;
+  /** The `attempt` of the start this reports on. A report about an attempt the control plane has
+   *  moved past (cancelled, or replaced by a new sign-in) changes nothing. Absent from an older
+   *  runner, whose reports are taken as they come. */
+  attempt?: string;
+  /** The Codex account being signed in — for a new account, the slot the runner just added,
+   *  which is how the control plane learns its id. */
+  account?: string;
 }
 
 /**
@@ -1030,6 +1044,10 @@ export interface RunnerLoginState {
   /** Set with `awaiting_approval`: the code to enter on the page at `url`. */
   userCode: string | null;
   message: string | null;
+  /** The Codex account this relay is signing in (`default` or a slot id); null for one that
+   *  names none — the runner's own login — and for a new account until the runner reports the
+   *  slot it added. */
+  account?: string | null;
 }
 
 /** Control plane → runner: merge one session's worktree branch into a target branch. */
