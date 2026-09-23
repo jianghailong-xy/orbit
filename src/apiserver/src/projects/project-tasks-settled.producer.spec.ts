@@ -57,9 +57,14 @@ function producerFixture(
             id: randomUUID(),
             title: `serving ${index + 1}`,
             status,
+            codeless: false,
             mergeReceipts: criterion.landed
               ? [{ result: 'MERGED', targetBranch: 'main' }]
               : [],
+            // Every task here ran a branch and the line has no answer about any of them: what this
+            // fixture is about is the receipts, and the landing fold reads an empty record of the
+            // line's own as "nothing said", not as "nothing to land".
+            integrationJobs: [],
           })),
         }));
       },
