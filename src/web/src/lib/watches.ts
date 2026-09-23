@@ -322,6 +322,29 @@ export function watchingWord(watches: readonly WatchView[], sessionId: string): 
   return `${STRIP_LABEL} ${targets.size} ${noun}`;
 }
 
+/**
+ * The same word from counts rather than rows: all a reader who holds one session's preview knows
+ * about the live watches that will resume it (`LinkPreviewSession.watching`).
+ *
+ * The counts are the server's own tally of the same set `watchingWord` walks — ACTIVE watches, the
+ * targets still in them counted once, PAUSED ones when nothing is active — so a card drawn away
+ * from the strip says what the strip says. macOS reads the same counts into the same sentence
+ * (`LinkPreviewSession.watchingLabel`).
+ */
+export function watchingCountWord(
+  watching: { active?: number; paused?: number; targets?: number } | null | undefined,
+): string | null {
+  if (!watching) return null;
+  if ((watching.active ?? 0) > 0) {
+    const targets = watching.targets ?? 0;
+    const noun = targets === 1 ? WATCHING_WORDS.target : WATCHING_WORDS.targets;
+    return `${STRIP_LABEL} ${targets} ${noun}`;
+  }
+  const paused = watching.paused ?? 0;
+  if (paused === 0) return null;
+  return paused === 1 ? WATCHING_WORDS.paused : `${paused} ${WATCHING_WORDS.pausedMany}`;
+}
+
 export interface WatchProgress {
   met: number;
   waiting: number;

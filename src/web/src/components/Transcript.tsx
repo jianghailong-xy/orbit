@@ -31,7 +31,7 @@ import { Image } from 'antd';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import {
   apiErrorRetryAt,
   isApiErrorText,
@@ -84,10 +84,16 @@ export const AttachmentResolverContext =
 export const ArtifactResolverContext =
   createContext<((artifactPath: string) => Promise<string>) | null>(null);
 import Markdown from 'react-markdown';
+import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
+import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
+
+/** What `Markdown` accepts as `remarkPlugins`: the array `MD` builds is annotated with it so that
+ *  the plugins written into its literal cannot narrow its element type and refuse the next one. */
+type RemarkPlugins = NonNullable<ComponentProps<typeof Markdown>['remarkPlugins']>;
 
 // One normalized run event (subset the transcript cares about). Mirrors the SSE
 // payload the runner emits; see src/runner-go/claude.go + @orbit/shared enums.
@@ -2185,13 +2191,26 @@ export const MD = memo(function MD({
   highlight?: boolean;
   breaks?: boolean;
 }) {
+  // Links that name an object of this deployment become cards — but only where a conversation view
+  // has asked for them, which is what `OrbitLinkCardsProvider` says. The shared page and the
+  // exported file mount no provider, and an export is a file with no JS behind it, so a link there
+  // stays the link it is today; nothing here asks the server for card data it could not draw.
+  const cards = useContext(OrbitLinkCardsCtx);
+  const exporting = useContext(ExportCtx) != null;
+  const plugins: RemarkPlugins = breaks
+    ? [remarkGfm, remarkHardBreaks, remarkHtmlBlocks]
+    : [remarkGfm, remarkHtmlBlocks];
+  // The plugin and its options, as unified's own tuple: an entry here is an *attacher*, and a card
+  // plugin handed over already called would be installed as one and asked to read a tree it was
+  // never given.
+  if (cards && !exporting) plugins.push([orbitLinkRemarkPlugin, { host: cards.host }]);
   return (
     <div className="md">
       <Markdown
-        remarkPlugins={breaks ? [remarkGfm, remarkHardBreaks, remarkHtmlBlocks] : [remarkGfm, remarkHtmlBlocks]}
+        remarkPlugins={plugins}
         rehypePlugins={highlight ? [rehypeHighlight] : []}
         urlTransform={transcriptUrlTransform}
-        components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink }}
+        components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink, ...orbitLinkCardComponents }}
       >
         {children}
       </Markdown>
