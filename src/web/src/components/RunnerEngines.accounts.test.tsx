@@ -186,6 +186,53 @@ describe('a runner with two Codex accounts', () => {
     expect(workRow.querySelector('.re-quota')?.textContent).toBe('No quota reported');
   });
 
+  it('draws each account its own quota bar from its own report', () => {
+    // The runner reads every account in its own CODEX_HOME: Default's windows are the Codex
+    // snapshot's own, Work's sit under its id.
+    const WORK_USAGE = { provider: 'codex', primary: { utilization: 8, windowDurationMins: 300 } } as const;
+    const bar = (row: Element) => row.querySelector<HTMLElement>('.runner-util-fill')?.style.width;
+    for (const planUsage of [
+      { ...CODEX_USAGE, accounts: { [WORK.id]: WORK_USAGE } },
+      // Beside a Claude snapshot, as a runner with both runtimes nests them.
+      {
+        claude: { provider: 'claude', fiveHour: { utilization: 38 } },
+        codex: { ...CODEX_USAGE, accounts: { [WORK.id]: WORK_USAGE } },
+      },
+    ] as PlanUsage[]) {
+      const page = mount([runner({ accounts: [DEFAULT, { ...WORK, auth: 'yes' }] }, { planUsage })]);
+      const [defaultRow, workRow] = rows(page, '.re-acct');
+
+      expect(defaultRow.querySelector('.re-quota')?.textContent).toBe('5h limit62%');
+      expect(bar(defaultRow)).toBe('62%');
+      expect(workRow.querySelector('.re-quota')?.textContent).toBe('5h limit8%');
+      expect(bar(workRow)).toBe('8%');
+      // The group's head speaks for neither account.
+      expect(rows(page, '.re-grp')[0].querySelector('.re-quota')?.textContent).toBe('');
+      act(() => root?.unmount());
+      host?.remove();
+      root = host = null;
+    }
+  });
+
+  it("shows no quota on Default when only Work has been read, and none for a signed-out account", () => {
+    const WORK_USAGE = { provider: 'codex', primary: { utilization: 8, windowDurationMins: 300 } } as const;
+    // A report that holds nothing of Default's: the runner has read Work, and not Default yet.
+    const onlyWork = { provider: 'codex', accounts: { [WORK.id]: WORK_USAGE } } as PlanUsage;
+    let page = mount([runner({ accounts: [DEFAULT, { ...WORK, auth: 'yes' }] }, { planUsage: onlyWork })]);
+    let [defaultRow, workRow] = rows(page, '.re-acct');
+    expect(defaultRow.querySelector('.re-quota')?.textContent).toBe('No quota reported');
+    expect(workRow.querySelector('.re-quota')?.textContent).toBe('5h limit8%');
+    act(() => root?.unmount());
+    host?.remove();
+    root = host = null;
+
+    // Work signed out since its last read: its old numbers are not shown as if they still applied.
+    page = mount([runner({ accounts: [DEFAULT, WORK] }, { planUsage: { ...CODEX_USAGE, accounts: { [WORK.id]: WORK_USAGE } } as PlanUsage })]);
+    [defaultRow, workRow] = rows(page, '.re-acct');
+    expect(defaultRow.querySelector('.re-quota')?.textContent).toBe('5h limit62%');
+    expect(workRow.querySelector('.re-quota')?.textContent).toBe('Sign in to see quota');
+  });
+
   it("signs in the account whose row was pressed, and only that one", async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
 

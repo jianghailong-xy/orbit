@@ -192,24 +192,41 @@ func codexPlanUsageStateForEnv(env []string, cwd string) (codexStateSelection, e
 	return sharedCodexStateForEnv(env, cwd)
 }
 
-// codexSessionOnDefaultAccount reports whether a Codex session runs on the account the usage probe
-// reads, the runner's default: its app-server resolves the CODEX_HOME the runner's own environment
-// resolves, and its agent env sets no CODEX_API_KEY or OPENAI_* of its own — the variables
-// codexResetAccountOverride in @orbit/shared counts as an account override. processEnv is the env the
-// app-server is spawned with, its sticky CODEX_HOME included.
-func codexSessionOnDefaultAccount(agentEnv map[string]string, processEnv []string, execDir string) bool {
+// codexSessionAccountSlot resolves which Codex account slot (codex_account_slot.go) a session runs on,
+// and so whose plan usage its rolling rate limits are: Default when its app-server resolves the
+// CODEX_HOME the runner's own environment resolves, an added slot when it resolves that slot's. ok is
+// false for a session on no slot's subscription: its agent env sets a CODEX_API_KEY or OPENAI_* of its
+// own — the variables codexResetAccountOverride in @orbit/shared counts as an account override — or
+// its CODEX_HOME is one no slot is. processEnv is the env the app-server is spawned with, its sticky
+// CODEX_HOME included.
+func codexSessionAccountSlot(agentEnv map[string]string, processEnv []string, execDir string) (string, bool) {
 	for key, value := range agentEnv {
 		if (key == "CODEX_API_KEY" || strings.HasPrefix(key, "OPENAI_")) && strings.TrimSpace(value) != "" {
-			return false
+			return "", false
 		}
 	}
-	cwd, _ := os.Getwd()
-	defaultHome, err := effectiveCodexHome(os.Environ(), cwd)
-	if err != nil {
-		return false
-	}
 	home, err := effectiveCodexHome(processEnv, execDir)
-	return err == nil && home == defaultHome
+	if err != nil {
+		return "", false
+	}
+	def, err := defaultCodexAccountSlot()
+	if err != nil {
+		return "", false
+	}
+	if home == def.CodexHome {
+		return codexAccountDefaultSlot, true
+	}
+	// An added slot is the directory named by its id right under the runner's codex-accounts root,
+	// and only while it still is one.
+	root, err := codexAccountsDir()
+	if err != nil || filepath.Dir(home) != root {
+		return "", false
+	}
+	id := filepath.Base(home)
+	if slotHome, err := codexAccountSlotHome(id); err != nil || slotHome != home {
+		return "", false
+	}
+	return id, true
 }
 
 // codexSessionAccountEnv is agentEnv as far as the Codex account goes: with the CODEX_HOME the

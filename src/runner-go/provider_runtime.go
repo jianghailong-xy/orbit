@@ -46,7 +46,7 @@ type sessionProcessArgs struct {
 	setTurn           func(string)
 	firstSpawn        bool
 	bg                *bgTailer
-	onCodexRateLimits func(map[string]interface{})
+	onCodexRateLimits codexRateLimitSink
 	completeTurn      turnCompleter
 	waitTurnPermit    turnPermitWaiter
 	onLeaseLost       leaseLossHandler

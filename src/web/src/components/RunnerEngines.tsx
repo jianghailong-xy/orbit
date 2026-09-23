@@ -10,7 +10,7 @@ import type {
 } from '@orbit/shared';
 import { api } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
+import { codexAccountPlanUsage, planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { runnersQuery } from '../lib/queries';
 import { updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
@@ -404,9 +404,9 @@ function AccountRow({
   const kind = accountKindOf(account);
   const isDefault = account.id === 'default';
   const panel = accountPanel(account.id);
-  // The runner's usage probe reads Default, so the engine's quota is Default's own. No other
-  // account has one reported, and borrowing Default's would show one account's limit on another.
-  const snapshot = isDefault ? planUsageSnapshotForProvider(runner.planUsage, 'codex') : null;
+  // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
+  // and an account it has not read shows none rather than borrowing another's limit.
+  const snapshot = codexAccountPlanUsage(runner.planUsage, account.id);
   const quota = kind === 'in' && snapshot ? planUsageRows(snapshot)[0] : null;
   const toggle = () => onSignIn(signIn === panel ? null : panel);
 

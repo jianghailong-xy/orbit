@@ -1,5 +1,6 @@
 import {
   AgentProvider,
+  codexAccountSnapshot,
   type PlanUsage,
   type PlanUsageRateLimit,
   type PlanUsageSnapshot,
@@ -49,6 +50,17 @@ export function planUsageSnapshotForProvider(
     return !usage.provider || usage.provider === 'claude' ? usage : null;
   }
   return null;
+}
+
+/** One Codex account's own quota on a runner (codexAccountSnapshot): Default's is the Codex
+ *  snapshot's own windows, any other account's is its entry under `accounts`. Null when the runner
+ *  reports none for that account. */
+export function codexAccountPlanUsage(
+  usage: PlanUsage | null | undefined,
+  accountId: string,
+): PlanUsageSnapshot | null {
+  const codex = planUsageSnapshotForProvider(usage, 'codex');
+  return (codex && codexAccountSnapshot(codex, accountId)) ?? null;
 }
 
 /**

@@ -359,6 +359,11 @@ export interface PlanUsageSnapshot {
   /** Codex earned rate-limit reset state (docs/codex-rate-limit-reset-contract.md). Absent from
    *  older runners and from non-Codex snapshots. */
   rateLimitReset?: PlanUsageRateLimitReset;
+  /** Codex only: the snapshot of every other account on the runner, keyed by its id
+   *  (RunnerEngineAccount.id); the windows beside it are Default's (codexAccountSnapshot). An entry
+   *  never carries a reset block — reset is Default's alone. Absent from older runners, and until the
+   *  runner has read an account other than Default. */
+  accounts?: Record<string, PlanUsageSnapshot>;
   /** ISO-8601 when the runner fetched this. */
   fetchedAt?: string;
 }

@@ -17,8 +17,10 @@ const SIGNED_OUT_ERROR =
   'Failed to authenticate: Claude Code is installed on this runner but not signed in — sign in from here, or run `claude auth login` on that machine.';
 
 function makeController(
-  current: { numTurns: number; retryAt?: Date | null; provider?: string },
+  current: { numTurns: number; retryAt?: Date | null; provider?: string; workspaceId?: string },
   pendingCurrentWork = false,
+  /** What the runner reports, and the session's workspace, for a refusal only the snapshot can time. */
+  quota: { planUsage?: unknown; engines?: unknown; workspace?: { env: unknown; codexAccount: string | null } } = {},
 ) {
   const updates: Array<Record<string, unknown>> = [];
   const turnUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
@@ -37,6 +39,7 @@ function makeController(
         archivedAt: null,
         deletedAt: null,
         provider: current.provider ?? 'claude',
+        workspaceId: current.workspaceId ?? null,
         retryAt: current.retryAt ?? null,
         numTurns: current.numTurns,
       }),
@@ -65,9 +68,11 @@ function makeController(
     // over can never be answered, so it stops being a question there
     // (`sessions/abandoned-approvals.ts`). These fixtures raise no approvals, so it collects none.
     approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
-    // Only read when the terminal message is a quota refusal; this runner reports no snapshot,
-    // so the reset moment has to come from the message itself.
-    runner: { findUnique: async () => ({ planUsage: null }) },
+    // Only read when the terminal message is a quota refusal; unless a test says otherwise this
+    // runner reports no snapshot, so the reset moment has to come from the message itself.
+    runner: { findUnique: async () => ({ planUsage: quota.planUsage ?? null, engines: quota.engines ?? null }) },
+    // Read for a Codex run's quota refusal: its workspace says which account the run spent.
+    workspace: { findUnique: async () => quota.workspace ?? null },
     // The drain returns any item turn still queued on the conversation it is ending; this one has
     // none, so it writes nothing (contract §4.4 X-D5).
     projectOpenItemDelivery: {
@@ -170,6 +175,44 @@ test('a retry armed while the session was running is never overwritten at the en
   await finalize(h.controller, { status: SharedRunStatus.FAILED, error: QUOTA_ERROR });
 
   assert.equal(h.updates[0].retryAt, undefined, 'ingestion knew more than the last words do');
+});
+
+test("a Codex run the quota killed at startup is armed by the quota of the account its workspace picked", async () => {
+  // Codex's refusal names no moment, so the runner's snapshot is all there is to arm by: Default's
+  // and Work's, one runner with both accounts.
+  const work = '3fa91c2e';
+  const engines = [
+    {
+      engine: 'codex',
+      installed: true,
+      auth: 'yes',
+      accounts: [
+        { id: 'default', codexHome: '/root/.codex', auth: 'yes' },
+        { id: work, name: 'Work', codexHome: '/root/.orbit/codex-accounts/3fa91c2e', auth: 'yes' },
+      ],
+    },
+  ];
+  const resetsAt = new Date(Date.now() + 3 * 3_600_000).toISOString();
+  const spent = { utilization: 100, resetsAt };
+  const room = { utilization: 8, resetsAt };
+  const armed = async (planUsage: unknown, codexAccount: string | null) => {
+    const h = makeController({ numTurns: 0, provider: 'codex', workspaceId: 'workspace-1' }, false, {
+      planUsage,
+      engines,
+      workspace: { env: null, codexAccount },
+    });
+    await finalize(h.controller, {
+      status: SharedRunStatus.FAILED,
+      error: "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits.",
+    });
+    return h.updates[0].retryAt;
+  };
+
+  const defaultSpent = { provider: 'codex', primary: spent, accounts: { [work]: { provider: 'codex', primary: room } } };
+  assert.equal(await armed(defaultSpent, work), undefined, "Default's spent quota names no moment for a run on Work");
+  assert.ok((await armed(defaultSpent, null)) instanceof Date, 'a run on Default is armed for Default’s reset');
+  const workSpent = { provider: 'codex', primary: room, accounts: { [work]: { provider: 'codex', primary: spent } } };
+  assert.ok((await armed(workSpent, work)) instanceof Date, 'a run on Work is armed for Work’s reset');
 });
 
 test('runner-loss finalize writes an IN_FLIGHT CURRENT_WORK UNCONFIRMED receipt before blanket drain', async () => {
