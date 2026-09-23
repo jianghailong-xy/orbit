@@ -71,13 +71,23 @@ import type { PrismaService } from '../prisma/prisma.service';
  * tasks could not reach DONE for exactly this reason: its criterion 12 was served by two landed
  * tasks and one zero-commit acceptance task, and it read ON_INTEGRATION_LINE for ever.
  *
- * §2.5 J9 already exempts the very same tasks from a dependent's wait, in SR27's words — a "write
- * the docs" prerequisite must not make the task after it demand a checkpoint that was never going to
- * exist. This lane reads the same declaration through `taskHasNothingToLand` and lets such work out
- * of the roll-up. It is not a way round the landing judgment: a task that ran a branch keeps
- * participating whatever its receipts say and whatever its title says, and work on the project
- * branch keeps reading ON_INTEGRATION_LINE. Only the declaration gets anything out — see
- * `taskHasNothingToLand` for why the declaration and not a task's session history.
+ * The declaration was the first half of the answer, and honouring it was not enough: the same
+ * project went on reading ON_INTEGRATION_LINE for the same criterion afterwards. The task holding it
+ * declares nothing, and cannot be made to — `codeless` is written when a task is created and no door
+ * writes it afterwards, so a task created without it can never gain it. What it has instead is a
+ * better fact, and the LINE's own: it ran a branch, committed nothing to it, and when the line was
+ * handed that branch — after the session that ran it had finished with it — it answered that the tip
+ * was already ON THE UPSTREAM. That answer is §2.2's `ALREADY_LANDED`, it is on the task's own job
+ * row, and it says what SR27's rule says one contract over — there was nothing of this task's to
+ * land, because it never had a commit of its own.
+ *
+ * §2.5 J9 already exempts the very same tasks from a dependent's wait, in SR27's words: a "write the
+ * docs" prerequisite must not make the task after it demand a checkpoint that was never going to
+ * exist. This lane reads the same declaration through `taskHasNothingToLand`, and the line's answer
+ * beside it, and lets such work out of the roll-up. Neither is a way round the landing judgment: a
+ * task that ran a branch and HAS commits of its own keeps participating, whatever its newest session
+ * looks like and whatever its title says, and work on the project branch keeps reading
+ * ON_INTEGRATION_LINE. `taskHasNothingToLand` is the whole of what gets anything out.
  *
  * WHAT THIS DELIBERATELY DOES NOT DO
  * ----------------------------------
@@ -175,16 +185,52 @@ export interface LandingReceiptFacts {
 }
 
 /**
+ * One integration job's facts, as the fold reads them (§2.2 J-T5): what the line answered about the
+ * branch it was handed, the three tips that answer was computed against, and what the work session
+ * that branch belongs to had reported by then (`jobSawTheFinishedBranch`).
+ *
+ * Kept structural for the same reason the receipts are — it is what `integrate.go`'s result carries
+ * up, and the fold's own reading of an `ALREADY_LANDED` is a statement about these columns rather
+ * than about a repository this process has no checkout for.
+ */
+export interface LandingJobFacts {
+  state: string;
+  /** The merge of the upstream into the target this job made, when it made one (J-S2). */
+  mainSyncSha: string | null;
+  /** The target tip this job worked from. */
+  targetShaBefore: string | null;
+  /** The upstream tip the same job read, in the same fetch. */
+  upstreamSha: string | null;
+  /** The branch the line was handed: `refs/heads/<session branch>`, frozen at enqueue (J-T1a). */
+  sourceRef: string;
+  /** The job's first claim. The runner resolves the branch after it (J-S1), so no answer is older. */
+  startedAt: Date | null;
+  /** The work session the landing was queued for. Null once that session row is gone. */
+  session: LandingJobSessionFacts | null;
+}
+
+/** What a work session's runner reported when it finished with the worktree (its finalize). */
+export interface LandingJobSessionFacts {
+  /** When that report was recorded, which is after the runner's last commit to the branch. */
+  finishedAt: Date | null;
+  /** The branch the checkout's HEAD was on when it finished. */
+  worktreeBranch: string | null;
+  /** Whether finishing left anything uncommitted in the checkout. */
+  worktreeDirty: boolean | null;
+}
+
+/**
  * One piece of work serving a criterion, as this lane needs it: whether it has a commit to land at
- * all, and nothing else but the merges recorded against its session branches. It carries no identity
- * on purpose — a task is named here only when something can be said about it, and "has no receipt"
- * is not something that can be said.
+ * all, and nothing else but the merges and the line's answers recorded against it. It carries no
+ * identity on purpose — a task is named here only when something can be said about it, and "has no
+ * receipt" is not something that can be said.
  *
  * `codeless` is §1.1 `isCodeTask`'s first half, and `taskHasNothingToLand` below is what reads it.
  */
 export interface LandingServingTask {
   codeless: boolean;
   mergeReceipts: ReadonlyArray<LandingReceiptFacts>;
+  integrationJobs: ReadonlyArray<LandingJobFacts>;
 }
 
 /** The rows the fold needs: one criterion's identity and its serving work's receipts. */
@@ -300,12 +346,157 @@ export function lineStartedSql(alias: string): string {
 }
 
 /**
- * Whether this work has nothing to land at all — the task's own declaration that it needs no code.
+ * Whether this job is the line saying, in its own words, that the branch it was handed had nothing
+ * on it that the upstream did not already have.
  *
- * §1.1 `isCodeTask` has two halves and this reads the FIRST: a task that declares itself `codeless`
- * "needs no code, even though its project is bound to a codebase", which is SR5's escape hatch for
- * the research, documentation and evidence work inside an otherwise code-bearing project. Its
- * schema comment says what that buys here: "a codeless task resolves no SOURCE" — so it has no
+ * `ALREADY_LANDED` is §2.4 J-S3's answer, and on its own it is NOT that statement. The runner
+ * reaches it by asking whether the source tip is an ancestor of the base it is working from, and for
+ * a project with a line of its own that base is the TARGET — so a branch whose work was merged into
+ * the project branch an hour ago and a branch that carries nothing at all are answered identically.
+ * The other two conditions are what makes the base the UPSTREAM instead:
+ *
+ *  - no merge of the upstream into the target ran (`main_sync_sha` is null), so the base is the
+ *    target tip itself rather than a commit that absorbed the upstream into it; and
+ *  - the target tip was the same commit as the upstream tip (`target_sha_before = upstream_sha`),
+ *    read by the same fetch.
+ *
+ * Together: `isAncestor(sourceSha, targetTip)` where the target tip IS the upstream tip — the tip,
+ * and with it every commit the branch carried, is on the upstream. The line observed the branch and
+ * found no commit of its own on it. Nothing here resolves ancestry: the answer is what the runner
+ * resolved, and these are the columns it reports beside it.
+ *
+ * What it does NOT cover, said here rather than left to be discovered: an answer computed against a
+ * line that has moved PAST the upstream proves only that the tip is inside the LINE, and a task whose
+ * branch is offered to such a line goes on withholding LANDED. That is not a new answer — it is the
+ * one this lane has always given where it cannot tell, and withholding is the safe direction.
+ *
+ * And the OTHER reading of "it never had a commit of its own" — the branch never moved from the
+ * commit it forked at — is not in this data, which is why the fact is read off the job instead of
+ * off the session: `session.source_base_sha` is the column that would hold the fork point, and it is
+ * null on 4,560 of the 4,580 worktree sessions on this deployment (measured 2026-09-22), while
+ * `base_sha` beside it is healed by `resolveBaseSha` on reclaim to serve the diff view (SR13) and is
+ * not the fork point either. A fact a table does not carry cannot be one this lane decides by.
+ *
+ * A moment: the row records what was true when it was computed, nothing rewrites a terminal job (the
+ * schema's `project_integration_job_terminal_guard`), and the upstream losing a commit is the one
+ * direction a default branch does not move. The line growing past the upstream afterwards cannot
+ * hurt either: at the moment of this observation the line WAS the upstream. What CAN move afterwards
+ * is the branch itself, which is why this answer lets nothing out on its own — see
+ * `jobSawTheFinishedBranch`.
+ */
+export function jobSawTipOnUpstream(job: LandingJobFacts): boolean {
+  return job.state === 'ALREADY_LANDED'
+    && job.mainSyncSha === null
+    && job.targetShaBefore !== null
+    && job.targetShaBefore === job.upstreamSha;
+}
+
+/**
+ * Whether the branch the line looked at is the one this task's work ENDED on, looked at after it
+ * ended — the condition under which `jobSawTipOnUpstream` speaks for everything the session left,
+ * and not for a branch that went on growing after the line looked.
+ *
+ * That answer is true of one branch at one moment, and "this task never had a commit of its own" is a
+ * claim about all of its work. Three things stand between the two, and each has happened:
+ *
+ *  - THE MOMENT. The runner commits a worktree when it finishes the session, and a landing is queued
+ *    by the DONE that ends it (J-T1a), so the line can be handed the branch before the commit that
+ *    carries the work exists. On 2026-09-22 the first delivery of this very rule was lost that way:
+ *    the line answered ALREADY_LANDED at 04:23:09Z and the commit appeared at 04:23:24Z, on a branch
+ *    nothing offers the line a second time. The finish is recorded as `session.finished_at` after
+ *    that commit, and a job first claimed later than it saw every commit the session made. 2 of the
+ *    14 upstream answers on this deployment were taken before their session finished (measured
+ *    2026-09-23) — both on branches that stayed empty, but an answer that turned out true by timing is
+ *    not one this lane can stand on.
+ *  - THE BRANCH. The line is handed the branch the session was started on. An agent that runs
+ *    `git checkout -b` in its checkout commits somewhere else, and the finish reports where HEAD
+ *    ended as `worktree_branch` (a different branch on 20 of the 4,758 worktree sessions here). The
+ *    answer is about the task's work only when the two are the same branch.
+ *  - WHAT WAS LEFT UNCOMMITTED. A finish that could not commit everything says so (`worktree_dirty`),
+ *    and what it left can still reach the branch later, from the session's own Commit action.
+ *
+ * Every condition withholds and none can grant: a session never finished, a runner too old to say
+ * where HEAD was, a session row that is gone — each reads as "cannot tell", the answer this lane has
+ * always given where it cannot. And reviving the session clears `finished_at` and finishing it again
+ * writes a later one, so an answer about a branch that went back to work stops counting by itself.
+ *
+ * This reads a session, and it is not §1.1's second half, which `taskHasNothingToLand` refuses to
+ * read: that half asks which session is NEWEST and lets a task out when it took no worktree. This
+ * asks about the session the line was handed, and can only keep a task in.
+ */
+export function jobSawTheFinishedBranch(job: LandingJobFacts): boolean {
+  const session = job.session;
+  return session !== null
+    && job.startedAt !== null
+    && session.finishedAt !== null
+    && job.startedAt.getTime() > session.finishedAt.getTime()
+    && session.worktreeBranch !== null
+    && branchName(job.sourceRef) === session.worktreeBranch
+    && session.worktreeDirty === false;
+}
+
+/**
+ * One job's answer that the task's work carried nothing the upstream did not already have: the tip on
+ * the upstream (`jobSawTipOnUpstream`), of the branch the work ended on, after it ended
+ * (`jobSawTheFinishedBranch`).
+ */
+export function jobFoundNothingOfItsOwn(job: LandingJobFacts): boolean {
+  return jobSawTipOnUpstream(job) && jobSawTheFinishedBranch(job);
+}
+
+/**
+ * The job states in which the line never reported on the branch at all: it has not looked yet, it is
+ * looking, or the job was taken out of the queue before or after it could.
+ *
+ * An ALLOWLIST, and that is the point: a state added to §2.1's closed set later withholds this lane's
+ * exemption until somebody decides otherwise, where a denylist would silently grant it.
+ */
+const JOB_SAID_NOTHING_ABOUT_THE_BRANCH: ReadonlyArray<string> = [
+  'QUEUED', 'RUNNING', 'CANCELLED', 'SUPERSEDED',
+];
+
+/**
+ * Whether the line's whole record of this task is "there was nothing of it to land": every job its
+ * branch was handed either never got as far as reporting, or reported the finished branch's tip
+ * already on the upstream (`jobFoundNothingOfItsOwn`) — and no receipt says a target ever MOVED with
+ * this task's work.
+ *
+ * WHY EVERY JOB, AND NOT JUST ONE
+ * -------------------------------
+ * `jobFoundNothingOfItsOwn` is a statement about ONE attempt's branch at ONE moment. A task can be
+ * reopened and run again, and an exemption read off any single job would let a task out of the
+ * roll-up while a LATER attempt's commits sit on the line unlanded — the same false green, arrived
+ * at the long way round. So the task's whole record has to agree, and the two things that can
+ * disagree are both here: a job that got as far as reporting says the branch had commits the line
+ * did not (`LANDED` put them there, `CONFLICT`, `CHECK_FAILED` and `ERROR` are the line trying and
+ * failing, and a promotion's `READY` passed the same check), or is an `ALREADY_LANDED` that cannot
+ * say the branch was empty (the line had moved past the upstream, or it looked before the session
+ * finished) — and a receipt that says a target moved says it even when no job of this task's is the
+ * one that moved it.
+ *
+ * WHY `MERGED` AND NOT `ALREADY_MERGED`
+ * -------------------------------------
+ * `MERGED` is the only result in `LANDED_RESULTS` that means the target CHANGED; `ALREADY_MERGED` is
+ * this table's word for the case where nothing moved — it is written for exactly the answer this
+ * function reads. So "a target moved" is `MERGED`, and that is the receipt that says this task had
+ * commits of its own wherever it was recorded from: the platform's own landing, or the door an agent
+ * records a merge it made itself with, which is how most of this work lands.
+ */
+export function lineSawNothingToLand(task: LandingServingTask): boolean {
+  if (!task.integrationJobs.some(jobFoundNothingOfItsOwn)) return false;
+  const saidSomethingElse = task.integrationJobs.some((job) => !jobFoundNothingOfItsOwn(job)
+    && !JOB_SAID_NOTHING_ABOUT_THE_BRANCH.includes(job.state));
+  return !saidSomethingElse && !task.mergeReceipts.some((receipt) => receipt.result === 'MERGED');
+}
+
+/**
+ * Whether this work has nothing to land at all — and there are two ways for that to be true: the
+ * task DECLARES it needs no code, or the line's own record says it never had a commit of its own.
+ *
+ * §1.1 `isCodeTask` has two halves and the first is the declaration: a task that declares itself
+ * `codeless` "needs no code, even though its project is bound to a codebase", which is SR5's escape
+ * hatch for the research, documentation and evidence work inside an otherwise code-bearing project.
+ * Its schema comment says what that buys here: "a codeless task resolves no SOURCE" — so it has no
  * branch, no commit of its own, and no receipt can ever put its work on `main`. A criterion that
  * demanded a landing from one would be demanding something that was never going to exist, which is
  * SR27's rule one contract over: "a 'write the docs' prerequisite must not make the task after it
@@ -313,25 +504,45 @@ export function lineStartedSql(alias: string): string {
  * dependent's wait, and `ProjectIntegrationBuckets.doneNotIntegrated` already calls them "DONE work
  * with nothing to land". This is that same answer arriving at §1.4.
  *
- * WHY ONLY THE DECLARATION, AND NOT §1.1's SECOND HALF
- * ----------------------------------------------------
+ * THE SECOND WAY, AND WHY IT HAD TO BE ADDED
+ * ------------------------------------------
+ * The declaration is a fact about an intention, and it is the ONLY fact of its kind: `codeless` is
+ * written when a task is created and no door writes it afterwards, so a task created without it can
+ * never gain it. On 2026-09-22 that cost a project of 48 finished tasks its DONE a second time: its
+ * criterion 12 was served by a finished acceptance task that ran a branch, committed nothing to it
+ * and declared nothing, and no receipt could ever put its work on `main` — the same deadlock the
+ * declaration had just been taught to break, one task over, with no declaration anywhere to read.
+ *
+ * What that task has instead is the line's own answer, and it is the better fact of the two: the
+ * task's branch was offered to the line after its session had finished with it, and the line replied
+ * that the tip was already on the upstream (`jobFoundNothingOfItsOwn`). A task whose whole record at
+ * the line is that answer has no commit of its own — see `lineSawNothingToLand` for why that is the
+ * whole of the claim and not a guess from it.
+ *
+ * WHY §1.1's SECOND HALF IS STILL NOT READ HERE
+ * ---------------------------------------------
  * `isCodeTask`'s other half — whether the NEWEST work session ran in a worktree on a branch — is
- * deliberately NOT read here, and the difference is what this lane is FOR. §1.1 asks it to decide
+ * deliberately NOT read, and the difference is what this lane is FOR. §1.1 asks it to decide
  * dispatch and closure, where "the latest attempt is not a branch-bearing one" is the right input.
  * This lane is an audit of where work IS, and a receipt is attached to the TASK rather than to the
  * session it was recorded against: a task that landed from one attempt and then ran another without
  * a worktree is a task whose work is really on the integration line, and reading it as "nothing to
- * land" would say LANDED over it. That is the false green this lane exists to break up. The
- * declaration has no such gap: a task that declares it needs no code has no branch on any of its
- * sessions, which is why `codeless` and not the session relation is the fact read here.
+ * land" would say LANDED over it. That is the false green this lane exists to break up.
  *
- * It is also not an exemption for acceptance or evidence work as such: a task that ran a branch HAS
- * commits of its own, whatever its receipt says and whatever its title says, and this answers false
- * for it. It goes on withholding LANDED until those commits reach the upstream. Only work that
- * DECLARES it has no code is out of the roll-up.
+ * The line's answer has no such gap, and the guard is where the difference shows. That same task —
+ * landed from one attempt, then run again — has a MERGED receipt, because the landing it did is a
+ * target that moved, and that alone keeps it in the roll-up whatever its sessions look like. And it
+ * has commits of its own in every other sense this lane can see: a branch the line was handed and
+ * found something on answers `LANDED`, `CONFLICT`, `CHECK_FAILED`, `ERROR` or `READY`, none of which
+ * is `ALREADY_LANDED`-on-the-upstream, and none of which this exemption overlooks. Only work whose
+ * whole record is "there was nothing of it to land" gets anything out — and a declaration, which is
+ * §1.1's first half and authoritative wherever this lane reads it.
+ *
+ * The one session this does read is not that half either: `jobSawTheFinishedBranch` looks at the
+ * session a landing was queued FOR, never at which session is newest, and it can only keep a task in.
  */
 export function taskHasNothingToLand(task: LandingServingTask): boolean {
-  return task.codeless;
+  return task.codeless || lineSawNothingToLand(task);
 }
 
 /**
@@ -341,10 +552,12 @@ export function taskHasNothingToLand(task: LandingServingTask): boolean {
  *
  * Work with nothing to land (`taskHasNothingToLand`) is not delivery and does not take part in
  * either: it neither withholds LANDED nor supplies it. So a criterion served by three tasks, two of
- * them on `main` and the third an acceptance task that declares it needs no code, is LANDED — and
- * before this rule it could not be, at any time, by any receipt, which left every project holding
+ * them on `main` and the third an acceptance task that declares it needs no code — or, since this
+ * unit, one the line looked at and found no commit of its own on — is LANDED, and before this rule it
+ * could not be, at any time, by any receipt, which left every project holding
  * such a task unable to reach DONE (2026-09-22: 48 finished tasks, one of them a criteria-12
- * acceptance task). A criterion served only by such work is LANDED too — all of zero commits are on
+ * acceptance task, and still 48 of them after the declaration alone was honoured, because that task
+ * declared nothing). A criterion served only by such work is LANDED too — all of zero commits are on
  * the upstream, and §2.5 J9 answers TRUE for the same facts one level down ("nothing left to wait
  * for"). But one that NOBODY serves is still UNKNOWN, which is the case that answer has always been
  * about: nothing is filed under the criterion, so there is nothing to stand on.
@@ -384,16 +597,20 @@ export async function readLandingBranches(
 }
 
 /**
- * Every criterion this project states, each with its serving work's merge receipts.
+ * Every criterion this project states, each with its serving work's merge receipts and the line's
+ * answers about its branches.
  *
- * One call, whose nested select carries every serving task's receipts with it — not one query per
- * criterion and not one per task. It reads the criterion rows again rather than borrowing the work
- * side's, which keeps this lane genuinely bolted on: the three clauses are untouched, and nothing
- * here can change the answer they fold.
+ * One call, whose nested select carries every serving task's receipts and jobs with it — not one
+ * query per criterion and not one per task. It reads the criterion rows again rather than borrowing
+ * the work side's, which keeps this lane genuinely bolted on: the three clauses are untouched, and
+ * nothing here can change the answer they fold.
  *
  * `codeless` rides along as a scalar on the same `task` row the receipts hang off, so reading what
  * `taskHasNothingToLand` needs costs this read no statement at all — which is why the project detail
- * page's fixed cost does not move for it.
+ * page's fixed cost does not move for it. The jobs cost two: their own relation beside the receipts,
+ * and the sessions they were queued for one level below it — each one statement for all of the
+ * project's serving tasks together (`project-get-query-count.pg.spec.ts` carries the number and the
+ * argument).
  */
 export function readCriterionLandingFacts(
   prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition'>,
@@ -406,17 +623,38 @@ export function readCriterionLandingFacts(
       id: true,
       servingTasks: {
         where: { ownerId },
-        select: {
-          // SR5's escape hatch: work that declares it needs no code has nothing to land, and the
-          // fold lets it out of the roll-up rather than waiting for a commit that cannot exist. Read
-          // the same way §2.5 J9 reads it for a dependent's wait.
-          codeless: true,
-          mergeReceipts: { select: { result: true, targetBranch: true } },
-        },
+        select: LANDING_SERVING_WORK_SELECT,
       },
     },
   });
 }
+
+/**
+ * What the fold reads about one serving task, as a Prisma `select`.
+ *
+ * Spelled ONCE, here, and spread by every caller that folds this lane: the criterion a project page
+ * shows, the facts the coordinator is woken for, the settled card, and the mirror those are asserted
+ * against. A reader that wrote its own copy would be a second author of the fold's input, and the
+ * copy that drifts is the one that quietly keeps answering a question the fold stopped asking —
+ * which is what these three facts are: SR5's escape hatch, the merges recorded against the task, and
+ * the answers the line gave about its branches (§2.2 J-T5), with what each branch's session had
+ * reported by then.
+ */
+export const LANDING_SERVING_WORK_SELECT = {
+  codeless: true,
+  mergeReceipts: { select: { result: true, targetBranch: true } },
+  integrationJobs: {
+    select: {
+      state: true,
+      mainSyncSha: true,
+      targetShaBefore: true,
+      upstreamSha: true,
+      sourceRef: true,
+      startedAt: true,
+      session: { select: { finishedAt: true, worktreeBranch: true, worktreeDirty: true } },
+    },
+  },
+} as const;
 
 /** Every criterion this project states, and where the work filed under each has landed. */
 export async function readCriterionLanding(

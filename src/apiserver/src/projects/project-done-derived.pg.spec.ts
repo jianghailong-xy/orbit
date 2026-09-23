@@ -166,6 +166,7 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
     routeSettledProjects: async () => [],
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],
+    routeReadyDependents: async () => [],
     routeTaskExceptions: async () => [],
   } as unknown as CompletionInputRouter;
 
@@ -722,6 +723,7 @@ test('the clause for a criterion its own evidence wrote takes its place in order
     routeSettledProjects: async () => [],
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],
+    routeReadyDependents: async () => [],
     routeTaskExceptions: async () => [],
   } as unknown as CompletionInputRouter;
 

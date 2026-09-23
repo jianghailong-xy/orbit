@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import type { TaskDispatchRefusal } from '@orbit/shared';
+
 import { AttemptBudgetDimension } from './attempt-budget';
 import { canonicalJson, compare } from './canonical-json';
 import type { CriterionLanding } from './project-criterion-landing';
@@ -99,6 +101,16 @@ export const COORDINATOR_WAKE_EVENTS = [
    * delivered — and the spelling stays because the rows already written say it.
    */
   'CRITERIA_DECISION_PENDING',
+  /**
+   * A start of the task was refused before its run could begin: the runner would not stand a
+   * checkout on the commit it was pinned to (`tasks/task-dispatch-refusal.ts`).
+   */
+  'TASK_DISPATCH_REFUSED',
+  /**
+   * A task that waits on prerequisites can now be started — every one of them is finished and on
+   * the project's integration line — and it will not start by itself (`autoRunWhenReady = false`).
+   */
+  'DEPENDENT_READY',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
@@ -318,6 +330,41 @@ export function attemptBudgetSpentFact(spent: {
     subjectId: spent.taskId,
     subjectVersion: spent.sessionId,
     detail: { sessionId: spent.sessionId, dimension: spent.dimension },
+  };
+}
+
+/**
+ * `TASK_DISPATCH_REFUSED` — a start of this task never became a run: the runner refused the
+ * checkout its pinned commit would have been.
+ *
+ * Keyed on the refused run, like the two attempt facts: one refusal is one fact however many times
+ * it is delivered, and a second start refused the same way is a second run and a second fact. The
+ * refusal itself — code, commits, the prerequisites that landed them — rides in `detail`, which is
+ * what the message is rendered from.
+ */
+export function taskDispatchRefusedFact(refused: {
+  projectId: string;
+  taskId: string;
+  taskTitle: string;
+  refusal: TaskDispatchRefusal;
+}): WakeFact {
+  const { refusal } = refused;
+  return {
+    event: 'TASK_DISPATCH_REFUSED',
+    projectId: refused.projectId,
+    subjectType: 'TASK',
+    subjectId: refused.taskId,
+    subjectVersion: refusal.sessionId,
+    detail: {
+      taskTitle: refused.taskTitle,
+      sessionId: refusal.sessionId,
+      code: refusal.code,
+      fixAction: refusal.fixAction,
+      baseSha: refusal.baseSha,
+      ref: refusal.ref,
+      missing: refusal.missing,
+      reason: refusal.reason,
+    },
   };
 }
 
@@ -549,5 +596,63 @@ export function criterionUnlandedFact(
     subjectId: criterionSubjectId(projectId, criterionKey),
     subjectVersion: settlementVersion(serving),
     detail: { criterionKey, taskCount: serving.length, landing },
+  };
+}
+
+/**
+ * `DEPENDENT_READY` — a task that waits on prerequisites can now be started, and nothing will
+ * start it unless somebody decides to.
+ *
+ * WHY THIS IS A FACT AT ALL
+ * =========================
+ * A prerequisite's landing receipt releases the tasks downstream of it (contract §2.5 J10), and
+ * for a dependent with `autoRunWhenReady = true` "releases" means the platform starts it. For one
+ * with `autoRunWhenReady = false` it meant nothing: the dispatch skips it by design, and no other
+ * fact in this set is about it. On 2026-09-23 a project stood still for hours that way — its last
+ * prerequisite had landed, its coordinator was awake and had just been told about that landing,
+ * and the one task left was never started, because being startable reached nobody. Starting it is
+ * the coordinator's decision (the flag says so), and this is the fact that puts the decision in
+ * front of it. It does not start anything.
+ *
+ * THE PREDICATE IS THE PRODUCER'S, AND IT IS BORROWED
+ * ===================================================
+ * "Startable" is `manualRunnableTaskSql` — the execute gate's own predicate, which reaches the
+ * dependency rule through `dependenciesSatisfiedSql` and therefore requires every prerequisite to
+ * be DONE, verified and LANDED on its project's integration line (§2.5 J9), exactly as the
+ * dispatch that starts an auto-run dependent does. It is SQL, so it is applied where the rows are
+ * read (`dependent-ready.producer.ts`) and not restated here over a row: a second spelling of
+ * "startable" in TypeScript would be a second answer to the question the Run button asks.
+ *
+ * THE VERSION IS THE DEPENDENT'S DISPATCH EPOCH
+ * =============================================
+ * `task_dispatch_epoch.epoch` (0137, 0154) advances when the task's own `status` or `run_at`
+ * moves, when a prerequisite's `status` moves and when its own set of prerequisites changes —
+ * which is to say, every time this task may have become ready AGAIN — and it does not move for a
+ * merge receipt, a comment, a title, or anything else. It is the generation the automatic door
+ * already names its dispatch by (`dep:<taskId>:<epoch>`), so the fact that tells a coordinator
+ * "you may start this" and the dispatch that would have started it by itself are keyed on the same
+ * moment. So:
+ *
+ *   * the same readiness re-derived — a receipt reported twice, a promotion that lands the same
+ *     work on the upstream too, the prerequisite's completion edge running again — is one fact;
+ *   * a prerequisite that is reopened, redone and landed again moved the epoch twice, and is a
+ *     second fact, because the work the task would start on is not the work it was told about.
+ */
+export function dependentReadyFact(ready: {
+  projectId: string;
+  /** The dependent: the task that can now be started. */
+  taskId: string;
+  /** Display only — the message names the task by it. */
+  title: string;
+  /** `task_dispatch_epoch.epoch` at the read that found it startable. */
+  dispatchEpoch: bigint | number | string;
+}): WakeFact {
+  return {
+    event: 'DEPENDENT_READY',
+    projectId: ready.projectId,
+    subjectType: 'TASK',
+    subjectId: ready.taskId,
+    subjectVersion: String(ready.dispatchEpoch),
+    detail: { title: ready.title },
   };
 }

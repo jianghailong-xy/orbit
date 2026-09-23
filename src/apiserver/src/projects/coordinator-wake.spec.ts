@@ -13,6 +13,7 @@ import {
   attemptEndedUnsettledFact,
   criterionReadyFact,
   criterionSubjectId,
+  dependentReadyFact,
   isSettledTaskStatus,
   projectAcceptanceLandedFact,
   projectTasksSettledFact,
@@ -293,16 +294,72 @@ test('a criterion is ready only when every task serving it is DONE', () => {
   assert.notEqual(wakeIdempotencyKey(elsewhere), wakeIdempotencyKey(ready));
 });
 
+test('a ready dependent is one fact per dispatch epoch, whatever else is written about it', () => {
+  const ready = dependentReadyFact({
+    projectId: PROJECT,
+    taskId: TASK,
+    title: '下游',
+    dispatchEpoch: 3n,
+  });
+  assert.equal(ready.event, 'DEPENDENT_READY');
+  assert.equal(ready.subjectType, 'TASK');
+  assert.equal(ready.subjectId, TASK);
+  assert.equal(
+    wakeIdempotencyKey(ready),
+    `${WAKE_KEY_VERSION}:DEPENDENT_READY:TASK:${TASK}:3`,
+  );
+
+  // The same readiness re-derived — a second receipt for one landing, the completion edge running
+  // again — reads the same epoch, and a title is display: renaming the task in between is the same
+  // fact.
+  const again = dependentReadyFact({
+    projectId: PROJECT,
+    taskId: TASK,
+    title: '改了名的下游',
+    dispatchEpoch: 3,
+  });
+  assert.equal(wakeIdempotencyKey(again), wakeIdempotencyKey(ready));
+  assert.equal(
+    wakeIdempotencyKey(dependentReadyFact({
+      projectId: PROJECT, taskId: TASK, title: '下游', dispatchEpoch: '3',
+    })),
+    wakeIdempotencyKey(ready),
+    'the epoch reads as bigint from SQL and must key the same fact as any other spelling of it',
+  );
+
+  // A prerequisite reopened, redone and landed again moved the epoch: a second fact.
+  const later = dependentReadyFact({
+    projectId: PROJECT,
+    taskId: TASK,
+    title: '下游',
+    dispatchEpoch: 5n,
+  });
+  assert.notEqual(wakeIdempotencyKey(later), wakeIdempotencyKey(ready));
+
+  // And it is not any other fact about the same task, because the event is in the key.
+  const ended = attemptEndedUnsettledFact({
+    projectId: PROJECT,
+    taskId: TASK,
+    taskStatus: 'OPEN',
+    sessionId: SESSION_ONE,
+  })!;
+  assert.notEqual(wakeIdempotencyKey(ended), wakeIdempotencyKey(ready));
+});
+
+// Pointed at 0299 since `DEPENDENT_READY` joined the set. This assertion went red on purpose the
+// moment the constant grew — the CHECK before it (0298's) did not list the new live event, and a
+// wake the database refuses is a delivery that throws — and it is repointed rather than loosened:
+// the new migration restates the whole list, so the claim is the same three-way equality it was.
 test('the events this unit knows about are exactly those the latest migration accepts', () => {
   const sql = readFileSync(
     path.resolve(
       __dirname,
-      '../../prisma/migrations/0250_criteria_decision_pending_wake/migration.sql',
+      '../../prisma/migrations/0299_dependent_ready_wake/migration.sql',
     ),
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0250 no longer constrains the event column');
+  assert.ok(check, 'migration 0299 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,

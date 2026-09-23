@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>任务启动消息 → 任务卡 — iPhone 效果图</title>
+<style>
+  :root {
+    --tint:#3E69F6; --label:#000; --label-2:rgba(60,60,67,.6); --label-3:rgba(60,60,67,.3);
+    --sep:rgba(60,60,67,.18); --green:#34C759;
+    --card-face:rgb(243,246,254);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 36px 56px; background:#ececef; color:#16161a; width:1380px;
+         font:15px/1.55 -apple-system,"SF Pro Text","Nimbus Sans","Noto Sans CJK SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.01em; margin:0 0 8px; }
+  .lede { color:#55555e; max-width:1240px; margin:0 0 6px; font-size:15px; }
+  .lede b { color:#16161a; }
+  code { font-family:"DejaVu Sans Mono",ui-monospace,monospace; font-size:12.5px; background:#e0e0e6; border-radius:4px; padding:1px 5px; }
+  .row { display:flex; gap:40px; align-items:flex-start; margin-top:24px; }
+  figure { margin:0; width:393px; }
+  figcaption { margin-top:14px; font-size:13.5px; line-height:1.6; color:#55555e; }
+  figcaption > b:first-child { display:block; font-size:14.5px; color:#16161a; margin-bottom:3px; }
+  figcaption ul { margin:6px 0 0; padding-left:18px; } figcaption li { margin-top:3px; }
+  .tag { display:inline-block; font:600 12px/1 "DejaVu Sans Mono",monospace; padding:4px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#ffe4e0; color:#b3261e; } .tag.new { background:#e3ebff; color:#2346c4; }
+
+  /* ── phone: 393×852 pt, geometry measured off the owner's screenshot (1179×2556 @3x) ── */
+  .phone { width:393px; height:852px; border-radius:54px; overflow:hidden; background:#fff; position:relative;
+           color:var(--label); box-shadow:0 14px 44px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08);
+           font-family:-apple-system,"SF Pro Text","Nimbus Sans","Noto Sans CJK SC",sans-serif; }
+  .status { position:absolute; top:0; left:0; right:0; height:54px; display:flex; justify-content:space-between; align-items:center; padding:6px 30px 0 43px; }
+  .status .time { font-size:17px; font-weight:700; display:flex; align-items:center; gap:4px; letter-spacing:-.2px; }
+  .status .sys { display:flex; gap:6px; align-items:center; }
+  .nav { position:absolute; top:59px; left:16px; right:16px; height:44px; display:flex; align-items:center; z-index:3; }
+  .glass { width:44px; height:44px; border-radius:50%; background:rgba(250,250,250,.92); border:1px solid rgba(0,0,0,.07);
+           box-shadow:0 2px 8px rgba(0,0,0,.06); display:grid; place-items:center; flex:none; }
+  .nav .titles { flex:1; min-width:0; text-align:center; padding:0 26px; }
+  .nav .t { font-size:16.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.3; }
+  .nav .s { font-size:12.5px; color:var(--label-2); line-height:1.3; margin-top:1px; }
+  .thread { position:absolute; top:110px; left:0; right:0; height:534px; overflow:hidden; padding:9px 16px 0; }
+  .sbar { position:absolute; right:4px; top:116px; width:3px; height:36px; border-radius:2px; background:rgba(0,0,0,.35); }
+  .jump { position:absolute; left:177px; top:590px; width:40px; height:40px; border-radius:50%; background:#fff; z-index:4;
+          box-shadow:0 3px 12px rgba(0,0,0,.14); border:1px solid rgba(0,0,0,.05); display:grid; place-items:center; }
+  .dock { position:absolute; top:644px; left:0; right:0; bottom:0; border-top:.5px solid #c6c6c8; padding:12px 16px 0; background:#fff; }
+  .bgbar { white-space:nowrap; height:30px; border-radius:10px; background:#f5f5f5; border:1px solid #e1e1e1; display:flex; align-items:center; gap:10px; padding:0 10px; font-size:15px; }
+  .bgbar b { font-weight:600; } .bgbar .n { color:#8a8a8d; font-size:13.5px; } .bgbar .chev { margin-left:auto; display:flex; }
+  .brbar { height:29px; margin-top:8px; border-radius:10px; background:#f5f5f5; border:1px solid #e1e1e1; display:flex; align-items:center; gap:7px; padding:0 8px;
+           font:14px/1 "DejaVu Sans Mono",monospace; white-space:nowrap; overflow:hidden; }
+  .brbar .br { display:flex; align-items:center; gap:3px; background:#e8e8e8; border:1px solid #d6d6d6; border-radius:7px; padding:2px 6px; }
+  .brbar .g { color:#8a8a8d; } .brbar .add { color:#5cbf5c; } .brbar .del { color:#e84a3f; } .brbar .g2 { color:#8a8a8d; }
+  .composer { height:52px; margin-top:9px; border-radius:22px; background:#fafafa; border:1px solid #e3e3e3; box-shadow:0 2px 8px rgba(0,0,0,.05);
+              display:flex; align-items:center; padding:0 11px 0 20px; }
+  .composer .ph { font-size:17px; color:#bdbdc0; margin-left:16px; }
+  .composer .stop { margin-left:auto; width:28px; height:28px; border-radius:50%; background:var(--tint); display:grid; place-items:center; }
+  .composer .stop i { width:9px; height:9px; background:#fff; border-radius:2px; }
+  .foot { display:flex; align-items:center; gap:11px; margin-top:13px; font-size:15.5px; color:#8a8a8d; }
+  .foot .sp { flex:1; } .foot .ctx { display:flex; align-items:center; gap:4px; }
+
+  /* ── ① the person's bubble (UserBubbleView: tint 15%, r12, 12/8, orbitProse 17) ── */
+  .bubble { margin-left:60px; background:rgb(226,233,254); border-radius:12px; padding:8px 12px; }
+  .md { font-size:17px; line-height:28.8px; word-break:break-word; }
+  .md p, .md ul, .md ol { margin:0; } .md > * + * { margin-top:8.7px; }
+  .md ol, .md ul { padding-left:26px; } .md li + li { margin-top:0; }
+  .md h2 { font-size:20px; line-height:26px; font-weight:600; margin-top:14px; }
+  .md code { font:13.5px/1 "DejaVu Sans Mono",monospace; background:rgba(0,0,0,.055); border-radius:0; padding:1px 1px; }
+
+  /* ── the task-start card (OpenItemDeliveryCardView chrome in the tint: 6% face, 28% stroke, r8, 10/8, spacing 6) ── */
+  .tcard { border-radius:8px; padding:8px 10px 9px; background:var(--card-face); border:1px solid rgba(62,105,246,.28);
+           display:flex; flex-direction:column; gap:6px; }
+  .tcard .sp { flex:1; }
+  .head { display:flex; align-items:center; gap:6px; height:18px; }
+  .head .name { font-size:13px; font-weight:600; color:var(--tint); }
+  .head .cap { font-size:11px; color:var(--label-2); padding:1px 7px; border-radius:99px; background:rgba(0,0,0,.04); border:1px solid rgba(62,105,246,.35); }
+  .title { font-size:17px; font-weight:600; line-height:22px; }
+  .proj { font-size:13px; line-height:17px; display:flex; gap:5px; }
+  .proj .k { color:var(--label-2); } .proj .v { color:var(--tint); }
+  .desc.md { font-size:17px; line-height:22.5px; } .desc.md > * + * { margin-top:6px; }
+  .desc.md code, .crit.md code { font:13.5px/1 "DejaVu Sans Mono",monospace; background:rgba(0,0,0,.05); padding:1px 2px; border-radius:3px; }
+  .desc.md h2 { font-size:19px; line-height:24px; margin-top:12px; }
+  .clamp { position:relative; max-height:73.5px; overflow:hidden; }
+  .clamp .fade { position:absolute; left:0; right:0; bottom:0; height:13px; background:linear-gradient(rgba(243,246,254,0), var(--card-face)); }
+  .sect { font-size:13px; color:var(--label-2); margin-top:4px; }
+  .crit.md { font-size:17px; line-height:22.5px; }
+  .judged { background:rgba(0,0,0,.045); border-radius:6px; padding:6px 8px 7px; display:flex; flex-direction:column; gap:3px; }
+  .judged .jl { display:flex; align-items:center; gap:6px; font-size:13px; line-height:17px; font-weight:500; }
+  .judged .js { font-size:13px; line-height:17px; color:var(--label-2); }
+  .judged .jm { font:12.5px/17px "DejaVu Sans Mono",monospace; color:var(--label-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .judged .jm.full { white-space:pre-wrap; word-break:break-all; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; }
+  .judged .more { display:flex; align-items:center; gap:5px; font-size:13px; line-height:17px; color:var(--tint); margin-top:2px; }
+  .links { display:flex; align-items:center; font-size:13px; line-height:17px; color:var(--tint); min-height:22px; }
+  .links .tog { display:flex; align-items:center; gap:5px; }
+  .meta { font-size:11px; line-height:14px; color:var(--label-2); }
+  .raw { display:flex; align-items:center; font-size:11px; line-height:14px; color:var(--label-2); padding-top:5px; border-top:.5px solid rgba(60,60,67,.14); }
+
+  /* ── what follows the turn (ToolGroupCardView row; assistant prose) ── */
+  .tg { white-space:nowrap; display:flex; align-items:center; gap:7px; margin-top:14px; padding:6px 10px 6px 11px; border-left:3px solid #9a9aa0; font-size:13px; }
+  .tg .cv { display:flex; transform:scale(.8); } .tg .ic { width:20px; height:20px; border-radius:5px; background:rgba(120,120,128,.14); display:grid; place-items:center; }
+  .tg .cv, .tg .ic, .tg .tt, .tg .cn, .tg svg { flex:none; } .tg .tt { font:600 13px/1 "DejaVu Sans Mono",monospace; } .tg .cn { color:var(--label-2); }
+  .tg .bd { font:11px/1 "DejaVu Sans Mono",monospace; color:var(--label-2); background:rgba(120,120,128,.14); border-radius:4px; padding:2px 5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .reply { font-size:17px; line-height:25px; margin-top:12px; }
+  .reply code { font:14px/1 "DejaVu Sans Mono",monospace; background:rgba(0,0,0,.05); padding:1px 3px; border-radius:3px; }
+
+  .sticky { position:absolute; top:110px; left:0; right:0; height:32px; z-index:4; display:flex; align-items:center; gap:8px; padding:0 16px;
+            background:rgba(249,249,249,.86); -webkit-backdrop-filter:blur(18px) saturate(1.6); backdrop-filter:blur(18px) saturate(1.6); border-bottom:.5px solid #c6c6c8; white-space:nowrap; overflow:hidden; }
+  .sticky .sl { font-size:13px; color:var(--label-2); flex:none; } .sticky .st { font-size:15px; overflow:hidden; text-overflow:ellipsis; }
+  .mark { outline:1.5px dashed #2346c4; outline-offset:-3px; }
+  .callout { position:absolute; top:146px; right:10px; z-index:5; font-size:11.5px; line-height:1.35; color:#2346c4; background:#fff;
+             border:1px solid #c9d5fb; border-radius:7px; padding:3px 7px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
+  /* ── annotations ── */
+  .clipnote { position:absolute; left:0; right:0; top:612px; z-index:5; }
+  .clipnote .line { border-top:2px dashed #b3261e; margin-top:32px; }
+  .clipnote .txt { position:absolute; left:14px; right:14px; top:0; font-size:12.5px; color:#b3261e; background:#fff;
+                   padding:4px 9px; border-radius:8px; border:1px solid #f0c9c5; text-align:center; }
+  .phone.dim .thread { }
+  .strip { display:grid; grid-template-columns:repeat(3, 393px); gap:40px; margin-top:12px; }
+  .strip .v .tcard { width:361px; }
+  .strip .v { background:#fff; border-radius:14px; padding:12px; box-shadow:0 4px 16px rgba(0,0,0,.06); }
+  .strip .vl { font:600 11.5px/1 "DejaVu Sans Mono",monospace; color:#6b6b72; margin-bottom:9px; }
+  .strip .tcard { gap:0; }
+  .note { margin-top:30px; padding:18px 22px; background:#fff; border:1px solid #dcdce2; border-radius:14px; font-size:14px; line-height:1.65; color:#3c3c43; }
+  .note h3 { margin:0 0 6px; font-size:15px; color:#16161a; }
+  .note .cols { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .note ul { margin:4px 0 0; padding-left:18px; } .note li { margin-top:4px; }
+  .note b { color:#16161a; }
+</style>
+
+<h1>任务启动消息 → 任务卡（iOS）</h1>
+<p class="lede">今天任务一开跑，控制面把<b>写给 agent 的整段派发 prompt</b>（这一例 3,850 字：任务描述 + 验收标准 + 四步汇报协议）
+原样画成<b>你自己发的右侧气泡</b>：一个会话打开，先要划过 <b id="m-lede">…</b> 才看得到 agent 在干什么，sticky 条还把它叫作「↑ Your question」。
+建议把这一轮画成<b>控制面卡片</b>：沿用 Exception item 投递卡（<code>OpenItemDeliveryCardView</code>）的骨架，换成主题蓝；卡上只放人要看的东西，原文收进卡底的折叠里。
+图里的数据全部是真的：任务 <code>34TcwNgAIo6tGUiIKjqnQ</code> 与会话 <code>0e7b3a62</code> 的第一条 user 事件，几何照你的截图量（393×852pt）。</p>
+
+<div class="row">
+  <figure>
+    <span class="tag now">① 今天</span>
+    <div class="phone"><div class="status"><span class="time">6:48 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round"><path d="M6 17h12l-1.6-2.2V10a4.4 4.4 0 0 0-8.8 0v4.8z" fill="#111"/><path d="M10 20h4"/><path d="M4 3.5 20 20.5" stroke="#fff" stroke-width="4"/><path d="M4 3.5 20 20.5"/></svg></span><span class="sys"><svg width="20" height="13" viewBox="0 0 20 13"><rect x="0" y="8.5" width="3.4" height="4.5" rx="1" fill="#111"/><rect x="5.4" y="6" width="3.4" height="7" rx="1" fill="#c4c4c6"/><rect x="10.8" y="3" width="3.4" height="10" rx="1" fill="#c4c4c6"/><rect x="16.2" y="0" width="3.4" height="13" rx="1" fill="#c4c4c6"/></svg><svg width="18" height="13" viewBox="0 0 18 13" fill="#111"><path d="M9 13 6.3 9.9a3.8 3.8 0 0 1 5.4 0z"/><path d="M9 6.1a6.9 6.9 0 0 1 4.9 2l1.6-1.8A9.3 9.3 0 0 0 9 3.6a9.3 9.3 0 0 0-6.5 2.7l1.6 1.8a6.9 6.9 0 0 1 4.9-2z"/><path d="M9 1.1c3.1 0 5.9 1.2 8 3.2L18 3a13 13 0 0 0-18 0l1 1.3a11.6 11.6 0 0 1 8-3.2z"/></svg><svg width="30" height="14" viewBox="0 0 30 14"><rect x="0.5" y="0.5" width="26" height="13" rx="4" fill="#c4c4c6"/><rect x="0.5" y="0.5" width="18.5" height="13" rx="4" fill="#111"/><rect x="27.6" y="4.5" width="2" height="5" rx="1" fill="#c4c4c6"/><text x="13" y="10.6" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle" font-family="Noto Sans CJK SC, sans-serif">70</text></svg></span></div><div class="nav"><div class="glass l"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5 7.5 12 15 19.5"/></svg></div><div class="titles"><div class="t">执行任务：runner + web：配额按账户归属</div><div class="s">Running · Open · just now</div></div><div class="glass r"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8v12.4M7.8 7 12 2.8 16.2 7"/><path d="M8.4 9.6H6.6a1.8 1.8 0 0 0-1.8 1.8v8.4a1.8 1.8 0 0 0 1.8 1.8h10.8a1.8 1.8 0 0 0 1.8-1.8v-8.4a1.8 1.8 0 0 0-1.8-1.8h-1.8"/></svg></div></div><div class="thread"><div class="bubble" id="bubble-today"><div class="md"><p>请开始执行任务「runner + web：配额按账户归属」。</p>
+<p>任务描述：<br>让每个账户的 plan usage 只进它自己那一行。</p>
+<p>背景：<code>codexSessionOnDefaultAccount</code>（src/runner-go/codex_state.go）今天回答的是「这个会话是不是跑在默认账户上」，一旦为假，runCodexAppServerSessionProcess 直接把 onRateLimits 置 nil（src/runner-go/codex_appserver.go）——也就是非默认账户的会话的滚动 rate limit 被整个丢掉。本任务把这个二值判断换成「这个会话属于哪个槽」，并让每个槽各持一份 plan usage 快照。</p>
+<p>要做的：</p>
+<ol>
+<li>runner：用槽解析替换 codexSessionOnDefaultAccount 的二值语义；非默认槽的会话把 rate limit 记进它自己那个槽的快照，而不是丢掉、也不是写进默认账户。</li>
+<li>runner：plan usage 探测（codexPlanUsageStateForEnv / ensureSharedCodexStateReady 那条路径）按槽各取一份；持有各自分区的 handshake 锁，不要用全新 sqlite_home 起 app-server 做在线探测（会无响应），也不要把 <code>~/.codex/auth.json</code> 拷进临时 CODEX_HOME（refresh token 轮换会让本机真实登录失效）。</li>
+<li>apiserver + shared：心跳里的 planUsage 由 <code>storeHeartbeatPlanUsage</code>（src/apiserver/src/runner-api/codex-reset-plan-usage.ts）存下，形状在 src/shared/src/planUsage.ts。让它能按账户各存一份，并新增 spec src/apiserver/src/providers/plan-usage-accounts.spec.ts（编译产物 build/providers/plan-usage-accounts.spec.js）。注意 <code>planUsageBlockedUntil</code>（src/shared/src/planUsage.ts；runner-api.controller.ts 派活时用它按额度挡 Codex）：拆成按账户以后，它要看这次会话要用的那个账户——至少不能因为 Default 的额度满了，就挡住跑在别的账户上的会话。</li>
+<li>web：账户子行各画自己的配额条（docs/mocks 里两条子行分别是 62% 与 8%）。</li>
+</ol>
+<p>注意：带 CODEX_API_KEY / OPENAI_* 的会话仍然不属于任何槽的订阅配额，保持今天的拒绝语义。codex reset（docs/codex-rate-limit-reset-contract.md）v1 只认默认账户，本任务不扩它。</p>
+<p>测试：runner-go 测试名以 <code>TestCodexAccountQuota</code> 开头；apiserver 见第 3 步；web 断言写进 RunnerEngines.accounts.test.tsx 或同名族的新文件。</p>
+<h2>本机跑测试的坑（协调会话转交——执行会话读不到这些经验）</h2>
+<ul>
+<li>跑 runner-go 整包一律加前缀 <code>env -u ORBIT_SESSION_ID -u ORBIT_AGENT_ID -u ORBIT_TASK_ID -u ORBIT_HOME -u ORBIT_ALLOW_ORCHESTRATION -u ORBIT_WATCHES -u ORBIT_BG_SOCKET -u ORBIT_BG_TOKEN -u ORBIT_SPAWN_DEPTH</code>。不加的话 TestProjectCreate* / TestTaskCLI* / TestCLITaskCreate* / TestR7Refusal* 会拿你这个会话的身份打到线上控制面：约 11 条红，其中一条无限轮询直到撞 -timeout。判法：失败信息里出现你自己会话的 id。</li>
+<li>整包在本机约 400–700 秒，负载高时会超过 go test 默认的 10 分钟，要带 <code>-timeout 30m</code>。</li>
+<li>本机干净 HEAD 上有 3 条与本项目无关的祖传红（驱动真 CLI）：TestRealClaudeAcceptsASetModel、TestRealClaudeTakesASetModelWithNoSystemPrompt、TestRealCodexDropsATierTheCatalogueDoesNotAdvertise/flex。验收命令用 <code>-skip</code> 跳过了它们，别去修。清掉 env、跳过这 3 条之后，整包在干净 HEAD（864cad31c）上 395 秒全绿——再红就是这次改动带出来的。</li>
+<li><code>go test -run '^TestX'</code> 一条都没匹配上时也退出 0（输出 &quot;[no tests to run]&quot;），所以验收要求输出里真有 <code>--- PASS: TestX…</code> 这一行。</li>
+<li>跑 npm 测试前先 <code>bash scripts/worktree-overlay.sh</code>（约 10 秒，幂等；它会用本树的源码重建 shared 的 dist）。收尾别删它铺下的 node_modules：验收在你回合结束后在同一棵树里跑（验收命令自己也会先跑一次它）。提交按具体文件 <code>git add</code>，不要 <code>git add -A</code>。</li>
+<li>apiserver 非 pg 全量在干净 HEAD 上 3372 条全绿、约 2 分钟——红了就是这次改动带出来的，不是祖传红。给 controller / service 加构造依赖或新调用，会让一批手写桩的 spec 在运行时崩（缺方法），补桩即可。</li>
+<li>shared 全量 vitest 里 codexRateLimitReset 的「随机交错」那条在负载下会超时抖动，所以验收只跑 <code>npm run test -w @orbit/shared -- planUsage</code>。</li>
+<li>web 全量 vitest 在本机负载下有与本项目无关的抖动（ProjectsPage.automatic 等），验收只跑 RunnerEngines*/RunnerSignIn* 这一组加 <code>tsc -b</code>；自测也按这组跑：<code>npm run test -w @orbit/web -- RunnerEngines RunnerSignIn</code>。</li>
+</ul>
+<p>验收标准（判定本任务是否完成的依据）：<br>配额按账户归属：每个账户的 plan usage 只进它自己那一行，非默认槽的会话不再把自己的 rate limit 记进默认账户的窗口。</p>
+<p>判法：runner-go 具名测试（名字以 TestCodexAccountQuota 开头）断言「这个会话属于哪个槽」的解析函数对三种输入（无 CODEX_HOME、指向 Default 槽、指向新增槽）分别返回 Default/Default/该槽，并断言非默认槽会话的 rate-limit 回调不写进默认账户的快照；apiserver spec src/apiserver/src/providers/plan-usage-accounts.spec.ts 断言心跳里按账户分开的 plan usage 被各自存下、读回时不互相覆盖；web 测试断言两条账户子行各自显示自己的百分比。验收命令依次：runner-go 该前缀（要求 <code>--- PASS</code> 行）→ runner-go 整包（清 ORBIT_<em>、跳过 3 条祖传红）→ 铺 overlay → shared 类型检查 → shared planUsage spec → apiserver 非 pg 全量 → 单跑新 spec → web <code>tsc -b</code> → RunnerEngines</em>/RunnerSignIn* 整组，全部退出码 0。干净 HEAD（864cad31c）基线：runner-go 整包 395 秒全绿；shared planUsage 8 条全绿；apiserver 非 pg 全量 3372 条全绿；web 该组 49 条全绿。</p>
+<p>请按以下步骤进行：</p>
+<ol>
+<li>先用 task_get 查看该任务的完整信息与历史评论。</li>
+<li>执行任务。</li>
+<li>完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 EXECUTABLE 验收命令（期望退出码 0），并把命令、原始输出和实际退出码写入任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让 coordinator 审批这个机械结论。</li>
+<li>如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。</li>
+</ol></div></div></div><div class="sbar"></div>
+   <div class="clipnote"><div class="line"></div><div class="txt">这一条气泡共 <b id="m-today">…</b>，agent 的第一个动作在它下面</div></div><div class="dock">
+  <div class="bgbar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" stroke="#6b6b70" stroke-width="1.2"><rect x=".6" y=".6" width="13.8" height="11.8" rx="2.2"/><path d="M3.4 4.4 5.6 6 3.4 7.6M7 8.2h3.2" stroke-linecap="round"/></svg><b>Background processes</b><span class="n">1 running · 3 total</span><span class="chev"><svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="#8a8a8e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5 6.5 6.5 1.5 11.5"/></svg></span></div>
+  <div class="brbar"><span class="br"><svg width="11" height="12" viewBox="0 0 11 12" fill="none" stroke="#5a5a60" stroke-width="1.3" stroke-linecap="round"><path d="M1.5 1v2.4c0 1.6 4 2.6 4 4.6V11M9.5 1v2.4c0 1.6-4 2.6-4 4.6"/></svg><span class="g">orbit/</span>ru…b<span class="g">-261220</span></span><span class="add">+1,552</span><span class="del">−107</span><span class="g2">· 26 f…</span></div>
+  <div class="composer"><span class="plus"><svg width="18" height="18" viewBox="0 0 18 18" stroke="#6b6b70" stroke-width="1.8" stroke-linecap="round"><path d="M9 1.5v15M1.5 9h15"/></svg></span><span class="ph">Message...</span><span class="stop"><i></i></span></div>
+  <div class="foot"><span>Auto</span><span class="sp"></span><span>orbitd@Claude</span><span>Opus 5.5</span><span>Max</span><span class="ctx"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#dcdce0" stroke-width="2.6"/><circle cx="8" cy="8" r="6" fill="none" stroke="#3E69F6" stroke-width="2.6" stroke-dasharray="19.98 99" transform="rotate(-90 8 8)" stroke-linecap="round"/></svg>53%</span></div>
+</div></div>
+    <figcaption><b>现状：整段 prompt 画成你的气泡</b>
+      <ul><li>右对齐、署你的名，其实<b>谁也没打这段字</b>。这一条是自动派发的（<code>TASK_LIST_AUTO</code>），没有人按过 Run。</li>
+      <li>一半篇幅是 agent 协议（「请按以下步骤进行 1–4」），对读者没有用。</li>
+      <li>把 3,850 字的真实 prompt 按 17pt、277pt 行宽排出来量高度，结果见红线处（一屏按聊天区 534pt 算）。</li></ul>
+    </figcaption>
+  </figure>
+  <figure>
+    <span class="tag new">② 建议 · 默认态</span>
+    <div class="phone"><div class="status"><span class="time">6:48 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round"><path d="M6 17h12l-1.6-2.2V10a4.4 4.4 0 0 0-8.8 0v4.8z" fill="#111"/><path d="M10 20h4"/><path d="M4 3.5 20 20.5" stroke="#fff" stroke-width="4"/><path d="M4 3.5 20 20.5"/></svg></span><span class="sys"><svg width="20" height="13" viewBox="0 0 20 13"><rect x="0" y="8.5" width="3.4" height="4.5" rx="1" fill="#111"/><rect x="5.4" y="6" width="3.4" height="7" rx="1" fill="#c4c4c6"/><rect x="10.8" y="3" width="3.4" height="10" rx="1" fill="#c4c4c6"/><rect x="16.2" y="0" width="3.4" height="13" rx="1" fill="#c4c4c6"/></svg><svg width="18" height="13" viewBox="0 0 18 13" fill="#111"><path d="M9 13 6.3 9.9a3.8 3.8 0 0 1 5.4 0z"/><path d="M9 6.1a6.9 6.9 0 0 1 4.9 2l1.6-1.8A9.3 9.3 0 0 0 9 3.6a9.3 9.3 0 0 0-6.5 2.7l1.6 1.8a6.9 6.9 0 0 1 4.9-2z"/><path d="M9 1.1c3.1 0 5.9 1.2 8 3.2L18 3a13 13 0 0 0-18 0l1 1.3a11.6 11.6 0 0 1 8-3.2z"/></svg><svg width="30" height="14" viewBox="0 0 30 14"><rect x="0.5" y="0.5" width="26" height="13" rx="4" fill="#c4c4c6"/><rect x="0.5" y="0.5" width="18.5" height="13" rx="4" fill="#111"/><rect x="27.6" y="4.5" width="2" height="5" rx="1" fill="#c4c4c6"/><text x="13" y="10.6" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle" font-family="Noto Sans CJK SC, sans-serif">70</text></svg></span></div><div class="nav"><div class="glass l"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5 7.5 12 15 19.5"/></svg></div><div class="titles"><div class="t">执行任务：runner + web：配额按账户归属</div><div class="s">Running · Open · just now</div></div><div class="glass r"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8v12.4M7.8 7 12 2.8 16.2 7"/><path d="M8.4 9.6H6.6a1.8 1.8 0 0 0-1.8 1.8v8.4a1.8 1.8 0 0 0 1.8 1.8h10.8a1.8 1.8 0 0 0 1.8-1.8v-8.4a1.8 1.8 0 0 0-1.8-1.8h-1.8"/></svg></div></div><div class="thread"><div class="tcard" id="card-default">
+  <div class="head"><svg width="13" height="13" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#3E69F6"/><path d="M6.3 4.9v6.2l5-3.1z" fill="#fff"/></svg><span class="name">Task started</span><span class="sp"></span><span class="cap">Auto-started</span></div>
+  <div class="title">runner + web：配额按账户归属</div>
+  <div class="proj"><span class="k">Project</span><span class="v">Codex 多账户：一台机器上登录多个 Codex</span></div>
+  <div class="desc md clamp "><p>让每个账户的 plan usage 只进它自己那一行。</p>
+<p>背景：<code>codexSessionOnDefaultAccount</code>（src/runner-go/codex_state.go）今天回答的是「这个会话是不是跑在默认账户上」，一旦为假，runCodexAppServerSessionProcess 直接把 onRateLimits 置 nil（src/runner-go/codex_appserver.go）——也就是非默认账户的会话的滚动 rate limit 被整个丢掉。本任务把这个二值判断换成「这个会话属于哪个槽」，并让每个槽各持一份 plan usage 快照。</p><div class="fade"></div></div>
+       <div class="judged">
+  <div class="jl"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#3a3a3f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.2l1.7 1.3 2.1-.2.7 2 1.9 1-.6 2.1.6 2-1.9 1.1-.7 2-2.1-.2L8 14.8l-1.7-1.3-2.1.2-.7-2-1.9-1.1.6-2-.6-2.1 1.9-1 .7-2 2.1.2z"/><path d="M5.4 8.1 7.2 9.9l3.4-3.6"/></svg><span>Judged by · its acceptance command</span></div>
+  <div class="js">Runs after each turn: exit 0 → Done, else Failed.</div>
+  <div class="jm ">{ out=$(env -u ORBIT_SESSION_ID -u ORBIT_AGENT_ID -u ORBIT_TASK_ID -u ORBIT_HOME -u ORBIT_ALLOW_ORCHESTRATION -u ORBIT_W</div>
+</div>
+       <div class="links"><span class="tog">Show details <svg width="10" height="7" viewBox="0 0 10 7" fill="none" stroke="#3E69F6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1.2 5 5.4l4-4.2"/></svg></span><span class="sp"></span><span class="lnk">Open the task ↗</span></div>
+  <div class="meta">Task 34TcwNgAIo6tGUiIKjqnQ · just now</div>
+  <div class="raw"><span>What the agent was told</span><span class="sp"></span><svg width="7" height="11" viewBox="0 0 7 11" fill="none" stroke="#3E69F6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1.3 1.2 5.6 5.5 1.3 9.8"/></svg></div>
+</div>
+  <div class="tg"><span class="cv"><svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="#8a8a8e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5 6.5 6.5 1.5 11.5"/></svg></span><span class="ic"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#6b6b70" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.4 2.2a3.6 3.6 0 0 0-4.3 4.6L2 10.9a1.4 1.4 0 0 0 2 2l4.1-4.1a3.6 3.6 0 0 0 4.6-4.3l-2 2-1.9-.4-.4-1.9z"/></svg></span><span class="tt">Tools × 6</span><span class="cn">6 succeeded</span><span class="bd">Bash × 3 · orbit × 2 · …</span><svg width="12" height="12" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="#34C759"/><path d="M4.6 8.3 7 10.6l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="reply">正在读前三次提交（槽模型、按槽登录、按账户上报）来摸清现有结构，接下来读 runner 的 plan usage 探测路径。</div>
+  <div class="tg"><span class="cv"><svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="#8a8a8e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5 6.5 6.5 1.5 11.5"/></svg></span><span class="ic"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" stroke="#6b6b70" stroke-width="1.2"><rect x=".6" y=".6" width="13.8" height="11.8" rx="2.2"/><path d="M3.4 4.4 5.6 6 3.4 7.6M7 8.2h3.2" stroke-linecap="round"/></svg></span><span class="tt">Bash × 5</span><span class="cn">5 succeeded</span><svg width="12" height="12" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="#34C759"/><path d="M4.6 8.3 7 10.6l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="reply">槽模型已经在 <code>codex_account_slot.go</code> 里；<code>codexSessionOnDefaultAccount</code> 只有两处调用，先把它换成按槽解析…</div></div><div class="dock">
+  <div class="bgbar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" stroke="#6b6b70" stroke-width="1.2"><rect x=".6" y=".6" width="13.8" height="11.8" rx="2.2"/><path d="M3.4 4.4 5.6 6 3.4 7.6M7 8.2h3.2" stroke-linecap="round"/></svg><b>Background processes</b><span class="n">1 running · 3 total</span><span class="chev"><svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="#8a8a8e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5 6.5 6.5 1.5 11.5"/></svg></span></div>
+  <div class="brbar"><span class="br"><svg width="11" height="12" viewBox="0 0 11 12" fill="none" stroke="#5a5a60" stroke-width="1.3" stroke-linecap="round"><path d="M1.5 1v2.4c0 1.6 4 2.6 4 4.6V11M9.5 1v2.4c0 1.6-4 2.6-4 4.6"/></svg><span class="g">orbit/</span>ru…b<span class="g">-261220</span></span><span class="add">+1,552</span><span class="del">−107</span><span class="g2">· 26 f…</span></div>
+  <div class="composer"><span class="plus"><svg width="18" height="18" viewBox="0 0 18 18" stroke="#6b6b70" stroke-width="1.8" stroke-linecap="round"><path d="M9 1.5v15M1.5 9h15"/></svg></span><span class="ph">Message...</span><span class="stop"><i></i></span></div>
+  <div class="foot"><span>Auto</span><span class="sp"></span><span>orbitd@Claude</span><span>Opus 5.5</span><span>Max</span><span class="ctx"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#dcdce0" stroke-width="2.6"/><circle cx="8" cy="8" r="6" fill="none" stroke="#3E69F6" stroke-width="2.6" stroke-dasharray="19.98 99" transform="rotate(-90 8 8)" stroke-linecap="round"/></svg>53%</span></div>
+</div></div>
+    <figcaption><b>一张卡，高约 <span id="m-card">…</span>；首屏就能看到 agent 的动作</b>
+      <ul><li><b>头</b>：▶ Task started，加来源胶囊（Auto-started / Started by you / Coordinator）。</li>
+      <li><b>标题 + 所属项目</b>（点项目名可跳转），<b>描述只露 3 行</b>，末尾渐隐。</li>
+      <li><b>判据行</b>：沿用任务面板的 <code>Judged by · …</code> 文案；EXECUTABLE 加一行命令首行。</li>
+      <li>Show details 就地展开；Open the task ↗ 进任务页。</li>
+      <li>脚注写任务 id 和时间；<b>What the agent was told</b> 一行折叠着逐字原文。</li></ul>
+    </figcaption>
+  </figure>
+  <figure>
+    <span class="tag new">③ 建议 · 点开 Show details，滚到卡尾</span>
+    <div class="phone"><div class="status"><span class="time">6:48 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round"><path d="M6 17h12l-1.6-2.2V10a4.4 4.4 0 0 0-8.8 0v4.8z" fill="#111"/><path d="M10 20h4"/><path d="M4 3.5 20 20.5" stroke="#fff" stroke-width="4"/><path d="M4 3.5 20 20.5"/></svg></span><span class="sys"><svg width="20" height="13" viewBox="0 0 20 13"><rect x="0" y="8.5" width="3.4" height="4.5" rx="1" fill="#111"/><rect x="5.4" y="6" width="3.4" height="7" rx="1" fill="#c4c4c6"/><rect x="10.8" y="3" width="3.4" height="10" rx="1" fill="#c4c4c6"/><rect x="16.2" y="0" width="3.4" height="13" rx="1" fill="#c4c4c6"/></svg><svg width="18" height="13" viewBox="0 0 18 13" fill="#111"><path d="M9 13 6.3 9.9a3.8 3.8 0 0 1 5.4 0z"/><path d="M9 6.1a6.9 6.9 0 0 1 4.9 2l1.6-1.8A9.3 9.3 0 0 0 9 3.6a9.3 9.3 0 0 0-6.5 2.7l1.6 1.8a6.9 6.9 0 0 1 4.9-2z"/><path d="M9 1.1c3.1 0 5.9 1.2 8 3.2L18 3a13 13 0 0 0-18 0l1 1.3a11.6 11.6 0 0 1 8-3.2z"/></svg><svg width="30" height="14" viewBox="0 0 30 14"><rect x="0.5" y="0.5" width="26" height="13" rx="4" fill="#c4c4c6"/><rect x="0.5" y="0.5" width="18.5" height="13" rx="4" fill="#111"/><rect x="27.6" y="4.5" width="2" height="5" rx="1" fill="#c4c4c6"/><text x="13" y="10.6" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle" font-family="Noto Sans CJK SC, sans-serif">70</text></svg></span></div><div class="nav"><div class="glass l"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5 7.5 12 15 19.5"/></svg></div><div class="titles"><div class="t">执行任务：runner + web：配额按账户归属</div><div class="s">Running · Open · just now</div></div><div class="glass r"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8v12.4M7.8 7 12 2.8 16.2 7"/><path d="M8.4 9.6H6.6a1.8 1.8 0 0 0-1.8 1.8v8.4a1.8 1.8 0 0 0 1.8 1.8h10.8a1.8 1.8 0 0 0 1.8-1.8v-8.4a1.8 1.8 0 0 0-1.8-1.8h-1.8"/></svg></div></div><div class="thread"><div id="wrap-open"><div class="tcard" id="card-open">
+  <div class="head"><svg width="13" height="13" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="#3E69F6"/><path d="M6.3 4.9v6.2l5-3.1z" fill="#fff"/></svg><span class="name">Task started</span><span class="sp"></span><span class="cap">Auto-started</span></div>
+  <div class="title">runner + web：配额按账户归属</div>
+  <div class="proj"><span class="k">Project</span><span class="v">Codex 多账户：一台机器上登录多个 Codex</span></div>
+  <div class="desc md "><p>让每个账户的 plan usage 只进它自己那一行。</p>
+<p>背景：<code>codexSessionOnDefaultAccount</code>（src/runner-go/codex_state.go）今天回答的是「这个会话是不是跑在默认账户上」，一旦为假，runCodexAppServerSessionProcess 直接把 onRateLimits 置 nil（src/runner-go/codex_appserver.go）——也就是非默认账户的会话的滚动 rate limit 被整个丢掉。本任务把这个二值判断换成「这个会话属于哪个槽」，并让每个槽各持一份 plan usage 快照。</p>
+<p>要做的：</p>
+<ol>
+<li>runner：用槽解析替换 codexSessionOnDefaultAccount 的二值语义；非默认槽的会话把 rate limit 记进它自己那个槽的快照，而不是丢掉、也不是写进默认账户。</li>
+<li>runner：plan usage 探测（codexPlanUsageStateForEnv / ensureSharedCodexStateReady 那条路径）按槽各取一份；持有各自分区的 handshake 锁，不要用全新 sqlite_home 起 app-server 做在线探测（会无响应），也不要把 <code>~/.codex/auth.json</code> 拷进临时 CODEX_HOME（refresh token 轮换会让本机真实登录失效）。</li>
+<li>apiserver + shared：心跳里的 planUsage 由 <code>storeHeartbeatPlanUsage</code>（src/apiserver/src/runner-api/codex-reset-plan-usage.ts）存下，形状在 src/shared/src/planUsage.ts。让它能按账户各存一份，并新增 spec src/apiserver/src/providers/plan-usage-accounts.spec.ts（编译产物 build/providers/plan-usage-accounts.spec.js）。注意 <code>planUsageBlockedUntil</code>（src/shared/src/planUsage.ts；runner-api.controller.ts 派活时用它按额度挡 Codex）：拆成按账户以后，它要看这次会话要用的那个账户——至少不能因为 Default 的额度满了，就挡住跑在别的账户上的会话。</li>
+<li>web：账户子行各画自己的配额条（docs/mocks 里两条子行分别是 62% 与 8%）。</li>
+</ol>
+<p>注意：带 CODEX_API_KEY / OPENAI_* 的会话仍然不属于任何槽的订阅配额，保持今天的拒绝语义。codex reset（docs/codex-rate-limit-reset-contract.md）v1 只认默认账户，本任务不扩它。</p>
+<p>测试：runner-go 测试名以 <code>TestCodexAccountQuota</code> 开头；apiserver 见第 3 步；web 断言写进 RunnerEngines.accounts.test.tsx 或同名族的新文件。</p>
+<h2>本机跑测试的坑（协调会话转交——执行会话读不到这些经验）</h2>
+<ul>
+<li>跑 runner-go 整包一律加前缀 <code>env -u ORBIT_SESSION_ID -u ORBIT_AGENT_ID -u ORBIT_TASK_ID -u ORBIT_HOME -u ORBIT_ALLOW_ORCHESTRATION -u ORBIT_WATCHES -u ORBIT_BG_SOCKET -u ORBIT_BG_TOKEN -u ORBIT_SPAWN_DEPTH</code>。不加的话 TestProjectCreate* / TestTaskCLI* / TestCLITaskCreate* / TestR7Refusal* 会拿你这个会话的身份打到线上控制面：约 11 条红，其中一条无限轮询直到撞 -timeout。判法：失败信息里出现你自己会话的 id。</li>
+<li>整包在本机约 400–700 秒，负载高时会超过 go test 默认的 10 分钟，要带 <code>-timeout 30m</code>。</li>
+<li>本机干净 HEAD 上有 3 条与本项目无关的祖传红（驱动真 CLI）：TestRealClaudeAcceptsASetModel、TestRealClaudeTakesASetModelWithNoSystemPrompt、TestRealCodexDropsATierTheCatalogueDoesNotAdvertise/flex。验收命令用 <code>-skip</code> 跳过了它们，别去修。清掉 env、跳过这 3 条之后，整包在干净 HEAD（864cad31c）上 395 秒全绿——再红就是这次改动带出来的。</li>
+<li><code>go test -run '^TestX'</code> 一条都没匹配上时也退出 0（输出 &quot;[no tests to run]&quot;），所以验收要求输出里真有 <code>--- PASS: TestX…</code> 这一行。</li>
+<li>跑 npm 测试前先 <code>bash scripts/worktree-overlay.sh</code>（约 10 秒，幂等；它会用本树的源码重建 shared 的 dist）。收尾别删它铺下的 node_modules：验收在你回合结束后在同一棵树里跑（验收命令自己也会先跑一次它）。提交按具体文件 <code>git add</code>，不要 <code>git add -A</code>。</li>
+<li>apiserver 非 pg 全量在干净 HEAD 上 3372 条全绿、约 2 分钟——红了就是这次改动带出来的，不是祖传红。给 controller / service 加构造依赖或新调用，会让一批手写桩的 spec 在运行时崩（缺方法），补桩即可。</li>
+<li>shared 全量 vitest 里 codexRateLimitReset 的「随机交错」那条在负载下会超时抖动，所以验收只跑 <code>npm run test -w @orbit/shared -- planUsage</code>。</li>
+<li>web 全量 vitest 在本机负载下有与本项目无关的抖动（ProjectsPage.automatic 等），验收只跑 RunnerEngines*/RunnerSignIn* 这一组加 <code>tsc -b</code>；自测也按这组跑：<code>npm run test -w @orbit/web -- RunnerEngines RunnerSignIn</code>。</li>
+</ul></div>
+       <div class="sect">Acceptance criteria</div>
+       <div class="crit md"><p>配额按账户归属：每个账户的 plan usage 只进它自己那一行，非默认槽的会话不再把自己的 rate limit 记进默认账户的窗口。</p>
+<p>判法：runner-go 具名测试（名字以 TestCodexAccountQuota 开头）断言「这个会话属于哪个槽」的解析函数对三种输入（无 CODEX_HOME、指向 Default 槽、指向新增槽）分别返回 Default/Default/该槽，并断言非默认槽会话的 rate-limit 回调不写进默认账户的快照；apiserver spec src/apiserver/src/providers/plan-usage-accounts.spec.ts 断言心跳里按账户分开的 plan usage 被各自存下、读回时不互相覆盖；web 测试断言两条账户子行各自显示自己的百分比。验收命令依次：runner-go 该前缀（要求 <code>--- PASS</code> 行）→ runner-go 整包（清 ORBIT_*、跳过 3 条祖传红）→ 铺 overlay → shared 类型检查 → shared planUsage spec → apiserver 非 pg 全量 → 单跑新 spec → web <code>tsc -b</code> → RunnerEngines*/RunnerSignIn* 整组，全部退出码 0。干净 HEAD（864cad31c）基线：runner-go 整包 395 秒全绿；shared planUsage 8 条全绿；apiserver 非 pg 全量 3372 条全绿；web 该组 49 条全绿。</p></div>
+       <div class="judged">
+  <div class="jl"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#3a3a3f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.2l1.7 1.3 2.1-.2.7 2 1.9 1-.6 2.1.6 2-1.9 1.1-.7 2-2.1-.2L8 14.8l-1.7-1.3-2.1.2-.7-2-1.9-1.1.6-2-.6-2.1 1.9-1 .7-2 2.1.2z"/><path d="M5.4 8.1 7.2 9.9l3.4-3.6"/></svg><span>Judged by · its acceptance command</span></div>
+  <div class="js">Runs after each turn: exit 0 → Done, else Failed.</div>
+  <div class="jm full">{ out=$(env -u ORBIT_SESSION_ID -u ORBIT_AGENT_ID -u ORBIT_TASK_ID -u ORBIT_HOME -u ORBIT_ALLOW_ORCHESTRATION -u ORBIT_WATCHES -u ORBIT_BG_SOCKET -u ORBIT_BG_TOKEN -u ORBIT_SPAWN_DEPTH go test -C src/runner-go -run '^TestCodexAccountQuota' -count=1 -timeout 30m -v ./... 2&gt;&amp;1); rc=$?; printf '%s\n' "$out"; [ "$rc" -eq 0 ] &amp;&amp; printf '%s\n' "$out" | grep -q '^--- PASS: TestCodexAccountQuota'; } &amp;&amp; env -u ORBIT_SESSION_ID -u ORBIT_AGENT_ID -u ORBIT_TASK_ID -u ORBIT_HOME -u ORBIT_ALLOW_ORCHESTRATION -u ORBIT_WATCHES -u ORBIT_BG_SOCKET -u ORBIT_BG_TOKEN -u ORBIT_SPAWN_DEPTH go test -C src/runner-go -count=1 -timeout 30m -skip '^(TestRealClaudeAcceptsASetModel|TestRealClaudeTakesASetModelWithNoSystemPrompt|TestRealCodexDropsATierTheCatalogueDoesNotAdvertise)$' ./... &amp;&amp; bash scripts/worktree-overlay.sh &gt;/dev/null &amp;&amp; (cd src/shared &amp;&amp; npx tsc -p tsconfig.json --noEmit) &amp;&amp; npm run test -w @orbit/shared -- planUsage &amp;&amp; npm run test -w @orbit/apiserver &amp;&amp; (cd src/apiserver &amp;&amp; node --test build/providers/plan-usage-accounts.spec.js) &amp;&amp; (cd src/web &amp;&amp; npx tsc -b) &amp;&amp; npm run test -w @orbit/web -- RunnerEngines RunnerSignIn</div>
+<div class="more">Show full command <svg width="10" height="7" viewBox="0 0 10 7" fill="none" stroke="#3E69F6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1.2 5 5.4l4-4.2"/></svg></div></div>
+       <div class="links"><span class="tog">Hide details <svg width="10" height="7" viewBox="0 0 10 7" fill="none" stroke="#3E69F6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5.8 5 1.6l4 4.2"/></svg></span><span class="sp"></span><span class="lnk">Open the task ↗</span></div>
+  <div class="meta">Task 34TcwNgAIo6tGUiIKjqnQ · just now</div>
+  <div class="raw"><span>What the agent was told</span><span class="sp"></span><svg width="7" height="11" viewBox="0 0 7 11" fill="none" stroke="#3E69F6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1.3 1.2 5.6 5.5 1.3 9.8"/></svg></div>
+</div>
+  <div class="tg"><span class="cv"><svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="#8a8a8e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5 6.5 6.5 1.5 11.5"/></svg></span><span class="ic"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#6b6b70" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.4 2.2a3.6 3.6 0 0 0-4.3 4.6L2 10.9a1.4 1.4 0 0 0 2 2l4.1-4.1a3.6 3.6 0 0 0 4.6-4.3l-2 2-1.9-.4-.4-1.9z"/></svg></span><span class="tt">Tools × 6</span><span class="cn">6 succeeded</span><span class="bd">Bash × 3 · orbit × 2 · …</span><svg width="12" height="12" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="#34C759"/><path d="M4.6 8.3 7 10.6l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="reply">正在读前三次提交（槽模型、按槽登录、按账户上报）来摸清现有结构，接下来读 runner 的 plan usage 探测路径。</div>
+  <div class="tg"><span class="cv"><svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="#8a8a8e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5 6.5 6.5 1.5 11.5"/></svg></span><span class="ic"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" stroke="#6b6b70" stroke-width="1.2"><rect x=".6" y=".6" width="13.8" height="11.8" rx="2.2"/><path d="M3.4 4.4 5.6 6 3.4 7.6M7 8.2h3.2" stroke-linecap="round"/></svg></span><span class="tt">Bash × 5</span><span class="cn">5 succeeded</span><svg width="12" height="12" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.2" fill="#34C759"/><path d="M4.6 8.3 7 10.6l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="reply">槽模型已经在 <code>codex_account_slot.go</code> 里；<code>codexSessionOnDefaultAccount</code> 只有两处调用，先把它换成按槽解析…</div></div></div><div class="sticky mark"><span class="sl">↑ Task started</span><span class="st">runner + web：配额按账户归属</span></div>
+   <div class="callout">今天这条写的是「↑ Your question · 请开始执行任务…」</div><div class="dock">
+  <div class="bgbar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" stroke="#6b6b70" stroke-width="1.2"><rect x=".6" y=".6" width="13.8" height="11.8" rx="2.2"/><path d="M3.4 4.4 5.6 6 3.4 7.6M7 8.2h3.2" stroke-linecap="round"/></svg><b>Background processes</b><span class="n">1 running · 3 total</span><span class="chev"><svg width="8" height="13" viewBox="0 0 8 13" fill="none" stroke="#8a8a8e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5 6.5 6.5 1.5 11.5"/></svg></span></div>
+  <div class="brbar"><span class="br"><svg width="11" height="12" viewBox="0 0 11 12" fill="none" stroke="#5a5a60" stroke-width="1.3" stroke-linecap="round"><path d="M1.5 1v2.4c0 1.6 4 2.6 4 4.6V11M9.5 1v2.4c0 1.6-4 2.6-4 4.6"/></svg><span class="g">orbit/</span>ru…b<span class="g">-261220</span></span><span class="add">+1,552</span><span class="del">−107</span><span class="g2">· 26 f…</span></div>
+  <div class="composer"><span class="plus"><svg width="18" height="18" viewBox="0 0 18 18" stroke="#6b6b70" stroke-width="1.8" stroke-linecap="round"><path d="M9 1.5v15M1.5 9h15"/></svg></span><span class="ph">Message...</span><span class="stop"><i></i></span></div>
+  <div class="foot"><span>Auto</span><span class="sp"></span><span>orbitd@Claude</span><span>Opus 5.5</span><span>Max</span><span class="ctx"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#dcdce0" stroke-width="2.6"/><circle cx="8" cy="8" r="6" fill="none" stroke="#3E69F6" stroke-width="2.6" stroke-dasharray="19.98 99" transform="rotate(-90 8 8)" stroke-linecap="round"/></svg>53%</span></div>
+</div></div>
+    <figcaption><b>展开后：描述全文 → 验收标准 → 判据与命令（整张卡 <span id="m-open">…</span>）</b>
+      <ul><li>描述按 Markdown 渲染，标题、列表、行内代码都和今天一样。</li>
+      <li>「请按以下步骤进行 1–4」<b>不在这里</b>。那是给 agent 的协议，只在卡底原文折叠里。</li>
+      <li>命令是给机器读的：展开后也只露 3 行，要看全文再点 Show full command。</li>
+      <li>卡片滚出屏幕以后，顶部 sticky 条显示「↑ Task started」和任务标题（虚线框处）。</li></ul>
+    </figcaption>
+  </figure>
+</div>
+
+<h3 style="margin:34px 0 0;font-size:16px">④ 另外三种完成判据下的判据行（文案取自 web 任务面板的 <code>COMPLETION_CRITERION_CHIP</code>，按卡片实际宽度画）</h3>
+<div class="strip">
+  <div class="v"><div class="vl">OWNER_CONFIRMED</div><div class="tcard" style="padding:8px 10px"><div class="judged">
+  <div class="jl"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#3a3a3f" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="5.4" r="2.8"/><path d="M2.6 14c.6-2.9 2.8-4.4 5.4-4.4s4.8 1.5 5.4 4.4"/></svg><span>Judged by · the account owner</span></div>
+  <div class="js">You confirm it in Orbit once the run says it is done — or send it back.</div>
+  
+</div></div></div><div class="v"><div class="vl">EVIDENCE_JUDGMENT</div><div class="tcard" style="padding:8px 10px"><div class="judged">
+  <div class="jl"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#3a3a3f" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3M5.6 8h4.8M5.6 10.6h3.2"/></svg><span>Judged by · submitted evidence</span></div>
+  <div class="js">The run submits evidence; an independent reviewer confirms it.</div>
+  
+</div></div></div><div class="v"><div class="vl">VERIFICATION</div><div class="tcard" style="padding:8px 10px"><div class="judged">
+  <div class="jl"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#3a3a3f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.2l1.7 1.3 2.1-.2.7 2 1.9 1-.6 2.1.6 2-1.9 1.1-.7 2-2.1-.2L8 14.8l-1.7-1.3-2.1.2-.7-2-1.9-1.1.6-2-.6-2.1 1.9-1 .7-2 2.1.2z"/><path d="M5.4 8.1 7.2 9.9l3.4-3.6"/></svg><span>Judged by · an independent check</span></div>
+  <div class="js">A separate verification task judges the work; this run does not settle it.</div>
+  
+</div></div></div>
+</div>
+
+<div class="note"><div class="cols">
+  <div><h3>怎么认出这一轮（不改 agent 读到的字）</h3><ul>
+    <li>派发任务时，apiserver 在 user 事件的 payload 里<b>另存一份 <code>taskStart</code> 快照</b>（任务 id、标题、项目、描述、验收标准、判据与命令、来源），做法照搬 <code>withOpenItemDelivery</code>。<code>text</code> 一个字不动，引擎续跑还要重放它。</li>
+    <li>客户端<b>只认 payload</b>，不按「请开始执行任务「」这个前缀去猜，这是 open-item 卡定下的规矩。没有 payload 的历史事件照旧画成气泡；要不要回填历史另议，那要改生产库的 run_event。</li>
+    <li>卡上画的是<b>派发那一刻</b>的快照，跟 agent 读到的一致；任务后来改了描述，看最新版请点 Open the task。</li>
+  </ul></div>
+  <div><h3>顺带要一起改的</h3><ul>
+    <li>sticky 条：从「↑ Your question · 请开始执行任务「…」」改成「↑ Task started · runner + web：配额按账户归属」（<code>StickySummary.of</code> 加一支）。</li>
+    <li>同一任务在老会话里重跑，派发 prompt 会作为新一轮进来，也画成这张卡，不只管第一条。</li>
+    <li>web 和 macOS 用同一张卡，文案放 OrbitKit，由 copy-parity 测试对齐 web。</li>
+    <li>UI 文案用英文（按现有约定），任务内容保持原文。</li>
+  </ul></div>
+</div></div>
+
+<script>
+  // Measured, not asserted: the bubble's full height at the owner's geometry, and the card's.
+  const viewport = document.querySelector('.thread').clientHeight;           // 534pt of transcript between nav and dock
+  const h = (id) => document.getElementById(id).getBoundingClientRect().height;
+  const t = h('bubble-today');
+  const fmt = (n) => Math.round(n).toLocaleString('en-US');
+  document.getElementById('m-today').textContent = '≈ ' + fmt(t) + 'pt ≈ ' + (t / viewport).toFixed(1) + ' 屏';
+  document.getElementById('m-lede').textContent = '≈ ' + (t / viewport).toFixed(1) + ' 屏（' + fmt(t) + 'pt）';
+  document.getElementById('m-card').textContent = fmt(h('card-default')) + 'pt';
+  document.getElementById('m-open').textContent = '≈ ' + fmt(h('card-open')) + 'pt';
+  document.getElementById('wrap-open').style.marginTop = (400 - h('card-open')) + 'px';
+  document.title += ' | today=' + Math.round(t) + ' card=' + Math.round(h('card-default')) + ' open=' + Math.round(h('card-open')) + ' vp=' + viewport;
+</script>
+</html>

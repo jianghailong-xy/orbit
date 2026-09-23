@@ -154,6 +154,7 @@ test('a tightening re-seals the standard set, so the confirmation it was settled
     routeSettledProjects: async () => [],
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],
+    routeReadyDependents: async () => [],
     routeTaskExceptions: async () => [],
   } as unknown as CompletionInputRouter;
 

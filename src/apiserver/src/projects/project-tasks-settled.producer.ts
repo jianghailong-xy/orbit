@@ -18,7 +18,7 @@ import {
 } from './coordinator-wake';
 import type { WakeAuthorizer } from './coordinator-wake.service';
 import { criterionKeyOf } from './project-acceptance';
-import { criterionLanding, readLandingBranches } from './project-criterion-landing';
+import { LANDING_SERVING_WORK_SELECT, criterionLanding, readLandingBranches } from './project-criterion-landing';
 import { criterionCoverage } from './wake-disposition';
 
 /**
@@ -240,10 +240,11 @@ export class ProjectTasksSettledProducer {
               id: true,
               title: true,
               status: true,
-              // SR5's escape hatch, which the fold reads — the same fact `criterionLanding`'s own
-              // reader carries, so the card agrees with the derivation it reports.
-              codeless: true,
-              mergeReceipts: { select: { result: true, targetBranch: true } },
+              // Everything the fold reads — SR5's escape hatch, the merges recorded against the
+              // task, and the answers the line gave about its branches — spread from the module
+              // that folds it, so the card agrees with the derivation it reports rather than with
+              // the shape that derivation had when this read was written.
+              ...LANDING_SERVING_WORK_SELECT,
             },
           },
         },

@@ -210,4 +210,10 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     resolveWhen:
       "The checkout's work reaches the branch: the ended session's Commit puts it there, a later run of the same task commits it, or it is committed by hand — each of which clears the session's worktreeDirty and so retires the Commit action this signal points at. The episode also ends when the task is cancelled or its work is abandoned. The timeline comment remains append-only audit evidence.",
   },
+  {
+    family: 'DURABLE_SIGNAL',
+    type: 'TASK_DISPATCH_REFUSED',
+    resolveWhen:
+      "Another run is put on the task — any start door's applyWorkspaceRun clears task.dispatch_refusal unless the refusal is that very run's — and that run is not refused in turn; a run refused again replaces the fact with its own. Also ends when the task is deleted. The timeline comment and the TASK_DISPATCH_REFUSED wake row remain append-only audit evidence.",
+  },
 ] as const satisfies readonly BlockerSignalExitRegistration[];

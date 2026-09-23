@@ -31,6 +31,7 @@ import {
 import { criterionKeyOf } from './project-acceptance';
 import { openFuseEpisodeId, refusingWhileFusePaused } from './project-fuse';
 import {
+  LANDING_SERVING_WORK_SELECT,
   type CriterionWithLandingFacts,
   type LandingBranches,
   criterionLanding,
@@ -669,10 +670,12 @@ function changedPathsOf(reported: unknown): string[] {
 const SERVING_WORK = {
   id: true,
   status: true,
-  // SR5's escape hatch, which the landing fold reads: work that declares it needs no code has
-  // nothing to land, and does not withhold LANDED.
-  codeless: true,
-  mergeReceipts: { select: { result: true, targetBranch: true } },
+  // Everything the landing fold reads, from the module that decides what "landed" means: SR5's
+  // escape hatch, the merges recorded against the task, and the answers the line gave about its
+  // branches. Spread rather than spelled, so this lane cannot come to read a fact the fold no
+  // longer reads — a wake raised for a criterion the fold calls LANDED is a person woken for
+  // nothing.
+  ...LANDING_SERVING_WORK_SELECT,
 } as const;
 
 function settlements(tasks: ReadonlyArray<{ id: string; status: string }>) {

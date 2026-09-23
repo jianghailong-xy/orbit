@@ -249,13 +249,14 @@ test('the delivery is handed rows the transaction has already committed',
           observed.push({ projectIds: named, statuses: rows.map((row) => row.status) });
           return [];
         },
-        // The write path delivers its exception and two criterion facts through the same router.
-        // This case is about the settled door only, so the other three answer with nothing
-        // rather than being absent — a double missing a method the subject calls fails for a
-        // reason that is not the subject's.
+        // The write path delivers its exception, two criterion facts and its ready dependents
+        // through the same router. This case is about the settled door only, so the other four
+        // answer with nothing rather than being absent — a double missing a method the subject
+        // calls fails for a reason that is not the subject's.
         routeTaskExceptions: async () => [],
         routeReadyCriteria: async () => [],
         routeUnlandedCriteria: async () => [],
+        routeReadyDependents: async () => [],
       } as unknown as CompletionInputRouter;
 
       // `dependsOnTaskIds` puts this write on `update`'s interactive-transaction branch, which is

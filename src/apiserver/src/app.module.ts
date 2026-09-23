@@ -15,6 +15,7 @@ import { SessionsModule } from './sessions/sessions.module';
 import { SessionTagsModule } from './session-tags/session-tags.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TaskListsModule } from './task-lists/task-lists.module';
+import { LinkPreviewsModule } from './link-previews/link-previews.module';
 import { WatchesModule } from './watches/watches.module';
 import { ProjectsModule } from './projects/projects.module';
 import { RunnersModule } from './runners/runners.module';
@@ -44,6 +45,7 @@ import { ScheduledWakeupModule } from './runner-api/scheduled-wakeup.module';
     SessionTagsModule,
     TasksModule,
     TaskListsModule,
+    LinkPreviewsModule,
     WatchesModule,
     ProjectsModule,
     RunnersModule,

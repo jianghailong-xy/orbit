@@ -1,5 +1,6 @@
 import { uuidToBase62 } from '@orbit/shared';
 
+import { dispatchRefusalNextStep } from '../tasks/task-dispatch-refusal';
 import { SettledCriterionReport, WakeFact } from './coordinator-wake';
 
 /**
@@ -119,6 +120,31 @@ export function describeWakeFact(fact: WakeFact): string {
         '这个项目收到了一次会放松验收标准的编辑。它没有生效——在册的标准一个字都没动——'
         + `而是被扣成了一条待决提案（提案 ${String(detail.intentId ?? fact.subjectId)}，`
         + `内容摘要 ${String(detail.actionDigest ?? '未知').slice(0, 16)}…），等账号所有者决定。`
+      );
+    case 'TASK_DISPATCH_REFUSED': {
+      const base = typeof detail.baseSha === 'string' ? detail.baseSha : null;
+      const missing = Array.isArray(detail.missing)
+        ? (detail.missing as Array<{ sha?: unknown; taskId?: unknown }>)
+        : [];
+      const named = missing.map((commit) => (
+        typeof commit.taskId === 'string'
+          ? `前置 ${uuidToBase62(commit.taskId)} 落地的 ${String(commit.sha).slice(0, 10)}`
+          : `提交 ${String(commit.sha).slice(0, 10)}`
+      ));
+      return (
+        `任务 ${uuidToBase62(fact.subjectId)}「${String(detail.taskTitle ?? '')}」的一次开工在起跑前被 `
+        + `runner 拒绝了：${String(detail.code ?? '未知')}。`
+        + (base ? `它钉在 ${base.slice(0, 10)}` : '')
+        + (base && named.length > 0 ? `，这个提交不包含${named.join('、')}` : '')
+        + (base ? '。' : '')
+        + '这次开工没有变成一次运行：没有启动引擎，任务状态没有被改动。'
+      );
+    }
+    case 'DEPENDENT_READY':
+      return (
+        `任务「${String(detail.title ?? '')}」（${uuidToBase62(fact.subjectId)}）现在可以开工了：`
+        + '它的前置都已完成并落地到这个项目的集成线（或本来就没有要落地的代码）。'
+        + '但它设了 autoRunWhenReady=false，平台不会自己开它——没人开工，它就一直停在这里。'
       );
     default:
       return `发生了 ${fact.event}，主体是 ${fact.subjectType} ${fact.subjectId}。`;
@@ -250,7 +276,14 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  * ======================================================
  * Lines 1, 3 and 4 are properties of the carrier and are the same for every fact delivered here.
  * Line 2 is not: it is the ACTION, and the merge order above is the action `CRITERION_UNLANDED`
- * calls for. The one other fact delivered here calls for a different one.
+ * calls for. The one other fact delivered here calls for a different one — and so does
+ * `TASK_DISPATCH_REFUSED`, whose action is the refusal's own next step, the sentence the task's
+ * comment gives (`dispatchRefusalNextStep`), so the two cannot advise differently.
+ *
+ * `DEPENDENT_READY`'s action is a decision rather than an order: whether to `task_start` a task
+ * that can now start and will not start by itself. The line names the task and the two calls, and
+ * says the one thing the reader cannot find out for itself — that nobody else is going to start
+ * it — without saying what to conclude.
  *
  * AND WHY THAT ONE CARRIES A SNAPSHOT THE MERGE CARD REFUSES TO
  * =============================================================
@@ -306,6 +339,38 @@ export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: st
       + `读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
       + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
       + '所以以你自己刚读到的库里状态为准。'
+    );
+  }
+  if (fact.event === 'TASK_DISPATCH_REFUSED') {
+    const detail = (fact.detail ?? {}) as { fixAction?: string; ref?: string | null };
+    const taskId = uuidToBase62(fact.subjectId);
+    return (
+      `【项目「${projectTitle}」有一个任务开不了工】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + `下一步：${dispatchRefusalNextStep({
+        fixAction: detail.fixAction ?? '未记录', ref: detail.ref ?? null,
+      })}\n\n`
+      + `这次拒绝记在任务上：task_get（taskId 传 ${taskId}）的 dispatchRefusal 是码、时间、钉住的提交和缺的`
+      + '提交，任务评论里有 runner 的原话。任务再开工之后这一栏会清空；再被拒会重新记一次、再通知你一次。\n\n'
+      + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
+      + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
+      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+      + '所以以你自己刚读到的库里状态为准。'
+    );
+  }
+  if (fact.event === 'DEPENDENT_READY') {
+    const taskId = uuidToBase62(fact.subjectId);
+    return (
+      `【项目「${projectTitle}」有一条下游任务可以开工了】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + '开不开工是你的判断，平台不会替你开：先用 task_get（taskId 传 '
+      + `${taskId}）看它的描述、依赖和评论，确认前置落地的成果就是它要的基线；决定开工就 task_start`
+      + `（taskId 传 ${taskId}）。决定先不开也可以，但这条消息同一代只会来一次，`
+      + '不开工它就一直停在这里。\n\n'
+      + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
+      + `${projectId}）读目标与作业指导，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
+      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+      + '所以以你自己刚读到的库里状态为准——它可能已经被开工了。'
     );
   }
   return (

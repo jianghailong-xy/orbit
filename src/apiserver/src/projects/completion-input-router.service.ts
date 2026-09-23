@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 
 import type { CoordinatorWakeEvent, WakeFact } from './coordinator-wake';
 import {
@@ -16,11 +16,19 @@ import {
   CriterionUnlandedProducer,
   type CriterionUnlandedDelivery,
 } from './criterion-unlanded.producer';
+import {
+  DependentReadyProducer,
+  type DependentReadyDelivery,
+} from './dependent-ready.producer';
 import type { MechanicalAction } from './mechanical-disposition';
 import {
   ProjectTasksSettledProducer,
   type SettledProjectDelivery,
 } from './project-tasks-settled.producer';
+import {
+  type DispatchRefusalDelivery,
+  TaskDispatchRefusalProducer,
+} from './task-dispatch-refusal.producer';
 import {
   TASK_EXCEPTION_CONSUMER,
   TaskExceptionInputProducer,
@@ -76,6 +84,19 @@ export class CompletionInputRouter {
     private readonly criteria: CriterionReadyProducer,
     private readonly disposition: WakeDispositionService,
     private readonly unlanded: CriterionUnlandedProducer,
+    /**
+     * The sixth door's producer. Optional only for the fixtures that build this router by hand
+     * with the six arguments before it; CoordinatorJudgmentModule provides it, so production
+     * always has it.
+     */
+    private readonly refusals?: TaskDispatchRefusalProducer,
+    /**
+     * The seventh door's producer, `DEPENDENT_READY`'s. `@Optional()` and last, for the reason
+     * `MergeReceiptService` gives about its own router: the fixtures that build this class by hand
+     * are about the doors before it, and for them this one delivers nothing rather than being a
+     * constructor argument every one of them has to be taught about. The module provides it.
+     */
+    @Optional() private readonly dependents?: DependentReadyProducer,
   ) {}
 
   /**
@@ -307,6 +328,45 @@ export class CompletionInputRouter {
     // work just landed derives no unlanded fact at all, and that is exactly when its blockers end.
     await this.disposition.resolveLandedBlockers(projectIds);
     return deliveries;
+  }
+
+  /**
+   * The sixth door: the starts one committed finalize recorded as refused before their run began.
+   *
+   * Task ids in, like the exception door, and the same post-commit position — and one difference
+   * that is why it does not go through `spend`: what a refused start is worth does not turn on the
+   * criteria. Nothing else will run the task until its line changes, so it is always one action
+   * owed by the conversation coordinating the project, and the producer hands it straight to that
+   * conversation under its own authorizer (`task-dispatch-refusal.producer.ts` says why).
+   */
+  async routeDispatchRefusals(
+    taskIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<DispatchRefusalDelivery[]> {
+    return this.refusals ? this.refusals.deliver(taskIds) : [];
+  }
+
+  /**
+   * The seventh door: the dependents a committed landing or completion released and did not
+   * start, because they do not start by themselves.
+   *
+   * Task ids in, like the door above: what a landing released is already known — the dependency
+   * dispatch that starts auto-run dependents on the same edge found them READY and left them alone
+   * — so the question is asked about those tasks, not about a whole project. The producer re-reads
+   * them after the commit through the execute gate's own predicate and derives one fact per
+   * dependent.
+   *
+   * Not through `spend` either, for a reason of its own. `spend` asks `WakeDispositionService`
+   * which terminal a fact is worth by the coverage of the criterion its TASK serves, and read that
+   * way a dependent that has not started is either work still on its way (recorded, told to nobody)
+   * or, when it is the only work serving its criterion, a stranded criterion (a judgment session
+   * opened for it). Neither is what this fact says: a decision is waiting and only the coordinator
+   * can make it, so the producer hands it to the standing conversation itself.
+   */
+  async routeReadyDependents(
+    taskIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<DependentReadyDelivery[]> {
+    if (!this.dependents) return [];
+    return this.dependents.afterCommit(taskIds);
   }
 }
 

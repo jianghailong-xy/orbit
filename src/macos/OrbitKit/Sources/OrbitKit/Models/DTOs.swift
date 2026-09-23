@@ -627,14 +627,20 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// The card this queued turn is, read by the same function the runner's echo is read by. Nil
     /// unless `openItemDelivery` is one.
     public var itemCard: OpenItemDelivery? { OpenItemDelivery.parseCard(openItemDelivery) }
+    /// The same for the message telling a coordinator its project was started (`projectStarted`),
+    /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
+    public let projectStarted: JSONValue?
+    public var startedCard: ProjectStarted? { ProjectStarted.parseCard(projectStarted) }
 
     public init(turnId: String, kind: String? = nil, content: String,
-                attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil) {
+                attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
+                projectStarted: JSONValue? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
+        self.projectStarted = projectStarted
     }
 }
 

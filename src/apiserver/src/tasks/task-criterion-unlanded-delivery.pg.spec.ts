@@ -715,6 +715,7 @@ test('the landing delivery happens after the write it is about has committed',
           observed.push({ projectIds: named, titles: rows.map((row) => row.title) });
           return [];
         },
+        routeReadyDependents: async () => [],
       } as unknown as CompletionInputRouter;
 
       // `dependsOnTaskIds` puts this write on `update`'s interactive-transaction branch, which is

@@ -114,6 +114,8 @@ import {
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
   type OpenItemDeliveryCard,
+  type ProjectStartedCard,
+  type TaskStartCard,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -169,6 +171,7 @@ import {
   recordTaskFailure,
   returnQueuedTurns,
 } from '../projects/project-open-item';
+import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -183,6 +186,7 @@ import {
   postWorkNotOnBranchComment,
   reclaimStalledTask,
 } from '../tasks/reclaim-stalled-task';
+import { readDispatchRefusal, recordDispatchRefusal } from '../tasks/task-dispatch-refusal';
 import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
@@ -217,7 +221,13 @@ import {
   waitingScheduledWakeup,
 } from '../tasks/owner-confirmation-read';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
-import { withControlPlaneNote, withOpenItemDelivery } from './control-plane-note';
+import {
+  withControlPlaneNote,
+  withOpenItemDelivery,
+  withProjectStarted,
+  withTaskStart,
+} from './control-plane-note';
+import { readTaskStartCard } from '../tasks/task-start-card';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
@@ -4264,6 +4274,8 @@ export class RunnerApiController {
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
         select: {
+          // Whose rows a control-plane turn's card may be read from (project-started.ts).
+          ownerId: true,
           status: true,
           runtimeSessionId: true,
           // Read under the row lock so the three conditional writes this transaction used to
@@ -4279,6 +4291,10 @@ export class RunnerApiController {
           // while this is still null, and the row is held FOR UPDATE across that decision.
           engineStartedAt: true,
           enginePhase: true,
+          // Which task this run executes and which door created it — read only when a user turn in
+          // this batch is the one that delivers the task's brief (`readTaskStartCard` below).
+          taskId: true,
+          runSource: true,
         },
       });
       // The owner fence alone is insufficient when the same runner process
@@ -4344,6 +4360,27 @@ export class RunnerApiController {
         const card = await readOpenItemDeliveryCard(tx, itemId);
         if (card) deliveryCards.set(turn.id, card);
       }
+      // The turn that hands a task's run its brief, and the task it was built from — drawn as a card
+      // rather than as the owner's own message (tasks/task-start-card.ts). Read only for a task
+      // run's opening or resume turn, so ordinary messages cost nothing here either.
+      const taskStartCards = new Map<string, TaskStartCard>();
+      for (const turn of userTurns) {
+        const card = await readTaskStartCard(
+          tx,
+          { id: sessionId, taskId: session.taskId, runSource: session.runSource },
+          turn,
+        );
+        if (card) taskStartCards.set(turn.id, card);
+      }
+      // And the turns telling a coordinator its project was started, by the same kind of key
+      // (`project-started:v1:`, project-started.ts) — read for those turns and no others.
+      const startedCards = new Map<string, ProjectStartedCard>();
+      for (const turn of userTurns) {
+        const start = projectStartOfTurn(turn.clientTurnId);
+        if (!start) continue;
+        const card = await readProjectStartedCard(tx, session.ownerId, start);
+        if (card) startedCards.set(turn.id, card);
+      }
       for (const e of durable) {
         if (e.type !== RunEventType.USER) continue;
         e.payload = withControlPlaneNote(
@@ -4353,6 +4390,14 @@ export class RunnerApiController {
         e.payload = withOpenItemDelivery(
           e.payload,
           (e.turnId ? deliveryCards.get(e.turnId) : undefined) ?? null,
+        );
+        e.payload = withTaskStart(
+          e.payload,
+          (e.turnId ? taskStartCards.get(e.turnId) : undefined) ?? null,
+        );
+        e.payload = withProjectStarted(
+          e.payload,
+          (e.turnId ? startedCards.get(e.turnId) : undefined) ?? null,
         );
       }
       if (durable.length > 0) {
@@ -5019,6 +5064,7 @@ export class RunnerApiController {
       // a CANCELLED (user end) goes back to OPEN (retryable). SUCCEEDED is left alone —
       // the workspace owns DONE.
       let taskReclaimed = false;
+      let dispatchRefused = false;
       if (current.taskId && effectiveStatus !== RunStatus.SUCCEEDED) {
         taskReclaimed = await reclaimStalledTask(
           tx,
@@ -5034,9 +5080,18 @@ export class RunnerApiController {
               }
             : undefined,
         );
-        // Genuine failure (not a user cancel): leave a note on the task explaining it.
+        // Genuine failure (not a user cancel): leave a note on the task explaining it. A run the
+        // runner refused at its checkout never started, so its note is the refusal itself, recorded
+        // on the task beside it — the generic note says to run the task again, which is the one
+        // thing that cannot help (tasks/task-dispatch-refusal.ts).
         if (effectiveStatus === RunStatus.FAILED) {
-          await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
+          const refused = readDispatchRefusal(dto.error, current);
+          if (refused) {
+            await recordDispatchRefusal(tx, current.taskId, current, refused, new Date());
+            dispatchRefused = true;
+          } else {
+            await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
+          }
         }
       }
       // The run ended without getting its work onto its branch. Say so on the task, whatever the
@@ -5057,6 +5112,7 @@ export class RunnerApiController {
         keepCheckout,
         retryAt,
         taskReclaimed,
+        dispatchRefused,
         taskId: current.taskId,
         currentWorkTerminalized,
       };
@@ -5072,6 +5128,12 @@ export class RunnerApiController {
       // The exception item this finalize opened, handed over (contract §4.4 X-D4 1). Before today
       // this door reclaimed the task and told nobody at all.
       await this.openItems?.deliverForTasks([outcome.taskId]);
+    }
+    // The refusal this finalize recorded: the task row moved, and the project's coordinator is told,
+    // because nothing else about a start that never became a run would tell anybody.
+    if ('dispatchRefused' in outcome && outcome.dispatchRefused && outcome.taskId) {
+      if (!outcome.taskReclaimed) this.realtime.publishTaskChanged(sessionId, outcome.taskId);
+      await this.tasks?.deliverDispatchRefusalAfterCommit(outcome.taskId);
     }
     if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);

@@ -41,6 +41,7 @@ import {
   FilePatch,
   MAX_PROMPT_CHARS,
   type OpenItemDeliveryCard,
+  type ProjectStartedCard,
   PermissionMode,
   type PermissionRule,
   ROOT_FALLBACK_PERMISSION_MODE,
@@ -95,6 +96,7 @@ import {
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { openItemIdOfTurn, readOpenItemDeliveryCard } from '../projects/project-open-item';
+import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import {
   MERGE_RECEIPT_RESULTS,
   MergeReceiptRow,
@@ -211,6 +213,8 @@ interface ListedQueuedTurn {
    *  this base rather than on one view, because BOTH projections carry it and both ends draw the
    *  queue (`listQueuedTurns`). */
   openItemDelivery?: OpenItemDeliveryCard;
+  /** The same for the message telling a coordinator its project was started (project-started.ts). */
+  projectStarted?: ProjectStartedCard;
 }
 
 interface ListedActiveTurn extends ListedQueuedTurn {
@@ -2442,6 +2446,42 @@ export class SessionsService {
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
+    return this.listRows(ownerId, {
+      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter}`,
+      visibility,
+      orderBy,
+      pageLimit,
+    });
+  }
+
+  /**
+   * These sessions' list rows, for a reader that names sessions instead of browsing a view of them
+   * (the link cards, `link-previews/`). The same query and the same mapping as `list`, so a row read
+   * here cannot say something different from the row the list draws for the same session.
+   *
+   * Open and Completed alike; a session in Trash is not returned, and neither is one that is not
+   * `ownerId`'s. No order is promised — key the result by `id`.
+   */
+  async listRowsByIds(ownerId: string, ids: readonly string[]) {
+    if (ids.length === 0) return [];
+    return this.listRows(ownerId, {
+      scope: Prisma.sql`AND s.id = ANY(${[...ids]}::uuid[])`,
+      visibility: Prisma.sql`s.deleted_at IS NULL`,
+      orderBy: Prisma.sql`s.created_at DESC`,
+      pageLimit: Prisma.empty,
+    });
+  }
+
+  /** The row query and its mapping, shared by `list` and `listRowsByIds`. */
+  private async listRows(
+    ownerId: string,
+    { scope, visibility, orderBy, pageLimit }: {
+      scope: Prisma.Sql;
+      visibility: Prisma.Sql;
+      orderBy: Prisma.Sql;
+      pageLimit: Prisma.Sql;
+    },
+  ) {
     // Raw query so the (potentially multi-KB) last-reply preview is truncated in SQL —
     // only ~200 chars per row ever leave the DB. It also omits big unused columns like
     // `prompt`; together this keeps the list payload flat as the session count grows.
@@ -2656,9 +2696,7 @@ export class SessionsService {
         ) n
       ) q ON s.status = 'PENDING' AND s.cancel_requested_at IS NULL
       WHERE s.owner_id = ${ownerId}::uuid
-        ${runnerFilter}
-        ${workspaceFilter}
-        ${tagFilter}
+        ${scope}
         AND (${visibility})
       ORDER BY ${orderBy}
       ${pageLimit}
@@ -4640,8 +4678,10 @@ export class SessionsService {
       // queue tail, `WorkspaceView`). Read after the filter, so neither an ordinary message nor an
       // accepted head the native client will not see costs a query.
       const deliveryCards = await this.openItemDeliveryCards(queued.map(({ turn }) => turn));
+      const startedCards = await this.projectStartedCards(ownerId, queued.map(({ turn }) => turn));
       return queued.map(({ turn, content }) => {
         const card = deliveryCards.get(turn.id);
+        const started = startedCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -4651,6 +4691,7 @@ export class SessionsService {
             mimeType: attachment.mimeType,
           })),
           ...(card ? { openItemDelivery: card } : {}),
+          ...(started ? { projectStarted: started } : {}),
         };
       });
     }
@@ -4701,9 +4742,11 @@ export class SessionsService {
       });
     // The card an exception item's delivery is, for the rows this snapshot actually returns.
     const deliveryCards = await this.openItemDeliveryCards(activeRows.map(({ turn }) => turn));
+    const startedCards = await this.projectStartedCards(ownerId, activeRows.map(({ turn }) => turn));
     const activeTurns: ListedActiveTurn[] = activeRows
       .map(({ turn, placement, content }) => {
         const card = deliveryCards.get(turn.id);
+        const started = startedCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -4720,6 +4763,7 @@ export class SessionsService {
               }
             : {}),
           ...(card ? { openItemDelivery: card } : {}),
+          ...(started ? { projectStarted: started } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({
@@ -4756,6 +4800,22 @@ export class SessionsService {
       const itemId = openItemIdOfTurn(turn.clientTurnId);
       if (!itemId) continue;
       const card = await readOpenItemDeliveryCard(this.prisma, itemId);
+      if (card) cards.set(turn.id, card);
+    }
+    return cards;
+  }
+
+  /** The card each project-start turn among these is drawn as, by turn id — read for those turns
+   *  and nothing else, by the same function the ingest path records the echo's with. */
+  private async projectStartedCards(
+    ownerId: string,
+    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
+  ): Promise<Map<string, ProjectStartedCard>> {
+    const cards = new Map<string, ProjectStartedCard>();
+    for (const turn of turns) {
+      const start = projectStartOfTurn(turn.clientTurnId);
+      if (!start) continue;
+      const card = await readProjectStartedCard(this.prisma, ownerId, start);
       if (card) cards.set(turn.id, card);
     }
     return cards;

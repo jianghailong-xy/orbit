@@ -900,7 +900,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	// Keep the machine's coding-engine CLIs current: the runner execs whatever engine
 	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
-	// Daily, best-effort, skips any engine with a live session (see engineUpdateLoop).
+	// Daily, best-effort, skips any engine with a live session its update could disturb (see
+	// engineUpdateLoop).
 	go engineUpdateLoop(loopCtx, residentProviderCount, doctorProxyVars(cfg.ServerURL))
 
 	// Engines are installed on demand rather than at register time; this is the consent

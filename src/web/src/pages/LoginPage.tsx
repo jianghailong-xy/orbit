@@ -7,6 +7,23 @@ interface AuthResponse {
   refreshToken: string;
 }
 
+/**
+ * Where a successful login goes: `next` when it is a path on this site, the root otherwise.
+ *
+ * `next` comes from the URL, so anyone can write it, and following it anywhere would make the
+ * login page an open redirect. Only a single leading `/` is a path here — `//host` and `/\host`
+ * are other sites to a browser, and so is anything with a scheme. The browser's own reading has the
+ * last word: it drops tabs and newlines before it looks, so `/<tab>/host` is `//host` to it.
+ */
+export function loginDestination(next: string | null): string {
+  if (!next || !/^\/(?![/\\])/.test(next)) return '/';
+  try {
+    return new URL(next, location.origin).origin === location.origin ? next : '/';
+  } catch {
+    return '/';
+  }
+}
+
 export function LoginPage() {
   const message = useToast();
 
@@ -15,10 +32,11 @@ export function LoginPage() {
       const res = await api<AuthResponse>('/auth/login', { method: 'POST', body: values });
       setSession(res);
       const next = new URLSearchParams(window.location.search).get('next');
-      // Land at the root and let <DefaultLanding> resolve the destination — the first workspace's
-      // session list, or onboarding (registration guide / runners) when there's no workspace to open
-      // yet. A full reload so BootGate pre-warms that first screen behind the splash.
-      location.href = next && next.startsWith('/') ? next : '/';
+      // Back to the page that sent the visitor here (`next`), else land at the root and let
+      // <DefaultLanding> resolve the destination — the first workspace's session list, or
+      // onboarding (registration guide / runners) when there's no workspace to open yet. A full
+      // reload so BootGate pre-warms that first screen behind the splash.
+      location.href = loginDestination(next);
     } catch (err) {
       message.error((err as Error).message);
     }

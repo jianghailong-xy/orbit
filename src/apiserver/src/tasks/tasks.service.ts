@@ -164,6 +164,7 @@ export {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
 } from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
+import { clearDispatchRefusal } from './task-dispatch-refusal';
 import {
   TASK_RUN_ACTION,
   TASK_RUN_LEASE_MS,
@@ -675,6 +676,10 @@ export const TASK_LIST_SELECT = {
   supersededByTaskId: true,
   supersededAt: true,
   terminalReason: true,
+  // The refusal the task's latest start met before its run began (task-dispatch-refusal.ts), in for
+  // the reason the rest are: a task that could not start looks like any other OPEN row, and the list
+  // is where a reader looking for why a project has stopped is looking.
+  dispatchRefusal: true,
   assignee: {
     select: {
       id: true,
@@ -1767,6 +1772,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Deliver the dependents a completion released and did not start, because they do not start by
+   * themselves (`autoRunWhenReady = false`).
+   *
+   * The completion edge's half of `DEPENDENT_READY`; a landing receipt is the other, and reaches
+   * the same router door from `MergeReceiptService`. Both are handed the ids `dispatchDependentsOf`
+   * found READY and left alone, and the producer re-reads them: which of the two edges releases a
+   * dependent is the dependency rule's business (§2.5 J9), not this door's.
+   *
+   * Logged rather than raised, for the same reason as its siblings.
+   */
+  private async deliverReadyDependents(taskIds: readonly string[]): Promise<void> {
+    if (!this.completionInputs) return;
+    if (taskIds.length === 0) return;
+    await this.completionInputs.routeReadyDependents(taskIds).catch((e) =>
+      this.logger.warn(`ready-dependent delivery failed: ${e?.message ?? e}`),
+    );
+  }
+
+  /**
    * Deliver the exception facts a committed task write leaves behind.
    *
    * The other half of the completion edge. `deliverSettledProjects` above answers "is there
@@ -1851,6 +1875,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   async deliverTaskExceptionsAfterCommit(taskId: string): Promise<void> {
     await this.deliverTaskExceptions([taskId]);
+  }
+
+  /**
+   * The runner door's other failure edge: a start the runner refused at its checkout, which the
+   * finalize that ended the run recorded on the task (`task-dispatch-refusal.ts`).
+   *
+   * Its own door rather than the exception one above, because what it is worth does not depend on
+   * the criteria the task serves: nothing else runs this task until the line it starts from
+   * changes, so the refusal always goes to the conversation coordinating the project. Logged rather
+   * than raised, like its siblings: the finalize is already committed, and the refusal is already
+   * on the task whatever this delivery comes to.
+   */
+  async deliverDispatchRefusalAfterCommit(taskId: string): Promise<void> {
+    if (!this.completionInputs) return;
+    await this.completionInputs.routeDispatchRefusals([taskId]).catch((e) =>
+      this.logger.warn(`dispatch-refusal delivery failed: ${e?.message ?? e}`),
+    );
   }
 
   /** An invalidation whose complete fetchable row set is unknown, deleted, or too wide. */
@@ -6450,9 +6491,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * running yet. Both are the live ground truth, distinct from Task.status (an
    * workspace-maintained label that can lag): the list breathes only for `running` and
    * shows a distinct queued indicator for `queued`. One grouped query covers the whole
-   * page. The list-detail view (TaskListsService) computes the same flags inline.
+   * page. The list-detail view (TaskListsService) computes the same flags inline. Public for the
+   * link cards (`link-previews/`), whose task pill is the list's.
    */
-  private async withRunning<T extends { id: string }>(
+  async withRunning<T extends { id: string }>(
     ownerId: string,
     tasks: T[],
     restrictToTaskIds = false,
@@ -8651,8 +8693,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * task knowing it did, and it answers there, where it writes.
    */
   async dispatchDependentsAfterCompletion(ownerId: string, doneTaskId: string): Promise<void> {
+    let undecided: string[] = [];
     try {
-      await this.dispatchDependentsOf(ownerId, doneTaskId);
+      undecided = await this.dispatchDependentsOf(ownerId, doneTaskId);
     } finally {
       // The completion edge every criterion shares. `update` reaches it for a verified subject and
       // the runner door reaches it for a task whose declared acceptance command just derived DONE
@@ -8673,6 +8716,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // this edge finds out whether the delivery it just settled is one a person has to look at,
       // and finding that out afterwards would mean the next task had already started.
       const stopped = await this.deliverProjectFactsOfTask(doneTaskId);
+      // What the dependency dispatch released and left for a decision: a dependent that does not
+      // start by itself. After the facts above rather than beside the dispatch, so a coordinator
+      // those facts reach is told about them first, exactly as it was before this fact existed; and
+      // not behind `stopped`, for the reason the dependency dispatch is not — this starts nothing.
+      await this.deliverReadyDependents(undecided);
       // The half of "start what this completion released" that the dependency dispatch above
       // cannot reach: a Project whose tasks depend on nothing releases nothing by finishing one of
       // them, so `dispatchDependentsOf` finds no edge, and until this pass existed a batch of
@@ -8698,8 +8746,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * receipt is the other one (contract §2.5 J10), and `MergeReceiptService` calls this directly.
    * Both edges ask the same predicate about the same rows, so the one that arrives second finds
    * nothing left to start rather than starting anything twice.
+   *
+   * Returns the dependents it found READY and OPEN and did not start because they do not start by
+   * themselves (`autoRunWhenReady = false`): a release that is a decision for the coordinator
+   * rather than a dispatch. Each caller hands them to `DEPENDENT_READY`'s door once its own facts
+   * are delivered; nothing here is told to anybody.
    */
-  async dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<void> {
+  async dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<string[]> {
     // The stored edge may still name W while the completion event comes from its tail S. Resolve
     // that relation in PostgreSQL, using the same fail-closed rules as the candidate scans and
     // commit trigger. This is the instant path; without the reverse-tail match only the periodic
@@ -8742,7 +8795,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          AND d."depends_on_task_id" IN (SELECT "id" FROM chain)
     `);
     const dependentIds = [...new Set(edges.map((e) => e.taskId))];
-    if (!dependentIds.length) return;
+    if (!dependentIds.length) return [];
     const states = await this.dependencyStatesFor(ownerId, dependentIds);
     const dependents = await this.prisma.task.findMany({
       where: { id: { in: dependentIds }, ownerId },
@@ -8780,10 +8833,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // READY, and the sweep this edge anticipates materialises it the moment a slot frees.
     const budget = await this.materialisationBudget();
     const now = new Date();
+    const undecided: string[] = [];
     for (const dep of dependents) {
       if ((states.get(dep.id) ?? 'NONE') !== 'READY') continue;
       if (dep.status !== 'OPEN') continue; // already running/done/cancelled — leave it
-      if (!dep.autoRunWhenReady) continue; // gate kept, manual trigger only
+      if (!dep.autoRunWhenReady) {
+        // Gate kept, manual trigger only — and the manual trigger is somebody's decision, so the
+        // caller is told which ones this release is waiting on (`DEPENDENT_READY`).
+        undecided.push(dep.id);
+        continue;
+      }
       // Scheduled for later: being ready is not permission to start early. The schedule is kept,
       // not consumed — dispatchDueScheduledTasks picks the task up once it comes due, and by then
       // this same READY state is one of the things it re-checks. Two independent triggers, and
@@ -8804,6 +8863,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+    return undecided;
   }
 
   /**
@@ -11834,6 +11894,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         await this.discardTaskAttachmentCopies(resumeAttachments);
         throw error;
       }
+      await this.clearStaleDispatchRefusal(task.id, plan.sessionId);
       return plan.sessionId;
     }
     const session = await this.createTaskSessionOrReadWinner(
@@ -11868,7 +11929,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         startsTaskWork: true,
       },
     );
+    await this.clearStaleDispatchRefusal(task.id, session.id);
     return session.id;
+  }
+
+  /**
+   * A run is away on this task, which answers the refusal its previous start met: the task stops
+   * saying its latest start was refused (`task-dispatch-refusal.ts`). If this run is refused too,
+   * its own finalize records it again.
+   *
+   * After the effect and outside it, so a start can never fail over bookkeeping — the run is the
+   * authoritative result — and logged rather than raised for the same reason.
+   */
+  private async clearStaleDispatchRefusal(taskId: string, sessionId: string): Promise<void> {
+    await clearDispatchRefusal(this.prisma, taskId, sessionId).catch((e) =>
+      this.logger.warn(`dispatch refusal of task ${taskId} not cleared: ${e?.message ?? e}`));
   }
 
   /**

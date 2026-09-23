@@ -1,4 +1,4 @@
-import type { OpenItemDeliveryCard } from '@orbit/shared';
+import type { OpenItemDeliveryCard, ProjectStartedCard, TaskStartCard } from '@orbit/shared';
 
 import { buildResumeContinuation } from './resume-continuation';
 
@@ -71,5 +71,38 @@ export function withOpenItemDelivery(
   const stored = { ...payload };
   delete stored.openItemDelivery;
   if (card !== null) stored.openItemDelivery = card;
+  return stored;
+}
+
+/**
+ * The same rule for the turn that starts a task's run: `taskStart` is the task as its brief was
+ * built from it (`TaskStartCard`, tasks/task-start-card.ts), recorded beside the echo so a client can
+ * draw the brief as a card rather than as the owner's own message. Absent — not empty — for every
+ * other turn, and a card arriving from the runner is dropped for the reason the two above give.
+ */
+export function withTaskStart(
+  payload: Record<string, unknown>,
+  card: TaskStartCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.taskStart;
+  if (card !== null) stored.taskStart = card;
+  return stored;
+}
+
+/**
+ * The same rule again for the message telling a coordinator its project was started
+ * (`projectStarted`, projects/project-started.ts): recorded when the control plane opened the turn
+ * and absent otherwise, and never taken from the runner.
+ */
+export function withProjectStarted(
+  payload: Record<string, unknown>,
+  card: ProjectStartedCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.projectStarted;
+  if (card !== null) stored.projectStarted = card;
   return stored;
 }

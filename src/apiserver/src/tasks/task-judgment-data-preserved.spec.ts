@@ -1096,7 +1096,31 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // relation, and no `task`, `session`, `project` or `project_acceptance_*` object is named,
       // so the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
       // UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
-      '0297_workspace_codex_account'],
+      '0297_workspace_codex_account',
+      // `task.dispatch_refusal` and one more accepted spelling of `project_coordinator_wake.event`.
+      // Read against every claim above: one nullable JSONB column added to `task` with no default,
+      // no NOT NULL and no constraint — so, like 0236, it ALTERs the table the 0177 pair lives on
+      // and reaches no stored row: every existing task reads NULL, nothing is backfilled, and
+      // `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. The other
+      // statement restates `project_coordinator_wake_event_chk` in full, as 0250 did, with
+      // TASK_DISPATCH_REFUSED added and every retired spelling kept. No function, trigger, type or
+      // index is created or dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer
+      // of the DONE fence and names none of the six preserved objects — and it has no INSERT,
+      // UPDATE or DELETE.
+      '0298_task_dispatch_refusal',
+      // 0250 again, statement for statement: `project_coordinator_wake`'s event CHECK, as 0298 left
+      // it, restated with one more spelling — `DEPENDENT_READY`, a task a landing made startable
+      // that will not start by itself. Read against every claim above: one `ALTER TABLE
+      // "project_coordinator_wake" DROP CONSTRAINT / ADD CONSTRAINT` over a table this file does not
+      // preserve and cannot reach one from; the event names a task but the string appears only
+      // inside the CHECK's list of permitted values, so no `task` row, neither 0177 relation,
+      // `task_executable_acceptance_pair` and no `project_acceptance_*` object is read, written or
+      // constrained. It creates no table, column, index, enum, type, function or trigger — so it is
+      // not another writer of the DONE fence and names none of the six preserved objects — carries
+      // no `ALTER TYPE` and no `DROP TYPE`, and has no INSERT, UPDATE or DELETE. The set only grows,
+      // so no stored event is refused by it and it needs no backfill.
+      '0299_dependent_ready_wake'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

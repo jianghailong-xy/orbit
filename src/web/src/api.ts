@@ -2,6 +2,7 @@ import type {
   BgShell,
   ConversationTurnKind,
   OpenItemDeliveryCard,
+  ProjectStartedCard,
   SessionCapabilities,
   SessionTurnIntent,
   SessionTurnPlacement,
@@ -528,6 +529,8 @@ export interface ActiveSessionTurn {
   /** An exception item's delivery carries the item's own fields beside its words (`OpenItemDeliveryCard`),
    *  read by the same function the runner's echo is read by. Absent on every turn a person typed. */
   openItemDelivery?: OpenItemDeliveryCard;
+  /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
+  projectStarted?: ProjectStartedCard;
 }
 
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores

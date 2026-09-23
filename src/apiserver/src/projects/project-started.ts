@@ -5,11 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { TaskStatus } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { type ProjectStartedCard, uuidToBase62 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import type { SessionsService } from '../sessions/sessions.service';
-import { derivedUuid } from './project-dispatch-identity';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
 
 /**
@@ -34,10 +33,18 @@ import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
  *
  * §2 — ONCE PER START, AND NEVER A REVIVAL
  * ========================================
- * Keyed by the confirmation that started the project, so a replay collapses onto the turn already
- * written. A conversation that has ended is not revived to be told (`sessionHasEnded`), and a
- * project with no conversation has nobody to tell. A turn is a notification, not an interrupt: a
- * coordinator in the middle of a turn reads this when that turn ends.
+ * Keyed by what the press wrote, so a replay collapses onto the turn already written. A
+ * conversation that has ended is not revived to be told (`sessionHasEnded`), and a project with no
+ * conversation has nobody to tell. A turn is a notification, not an interrupt: a coordinator in the
+ * middle of a turn reads this when that turn ends.
+ *
+ * §3 — AND A CARD, NOT THE READER'S BUBBLE
+ * ========================================
+ * The words are for the agent. A client draws the turn from `ProjectStartedCard` instead, recorded
+ * beside the runner's echo and on the queued turn the way an exception item's delivery is
+ * (`readProjectStartedCard`). The key is what makes a turn one of these: `project-started:v1:` and
+ * what the press wrote, read back by `projectStartOfTurn` — nothing is minted and nothing looked up
+ * to recognise one.
  */
 
 /** How many held tasks the message names before it counts the rest. */
@@ -57,11 +64,101 @@ export type ProjectStart =
   | { by: 'CONFIRMATION'; confirmationId: string; criteriaCount: number; at: Date }
   | { by: 'SWITCH'; configRevision: string; at: Date };
 
-/** The `clientTurnId` of the one turn that tells a coordinator about one start. */
+/** Every project-start turn's client id starts here, which is how a reader recognises one. */
+export const PROJECT_STARTED_TURN_PREFIX = 'project-started:v1:';
+
+/** The `clientTurnId` of the one turn that tells a coordinator about one start. §3. */
 export function projectStartedTurnId(projectId: string, start: ProjectStart): string {
-  return derivedUuid(start.by === 'CONFIRMATION'
-    ? `project-started:v1:turn:${start.confirmationId}`
-    : `project-started:v1:switch:${projectId}:${start.configRevision}`);
+  return start.by === 'CONFIRMATION'
+    ? `${PROJECT_STARTED_TURN_PREFIX}confirmation:${start.confirmationId}`
+    : `${PROJECT_STARTED_TURN_PREFIX}switch:${projectId}:${start.configRevision}`;
+}
+
+/** The start a turn tells of, as its key names it. */
+export type ProjectStartKey =
+  | { by: 'CONFIRMATION'; confirmationId: string }
+  | { by: 'SWITCH'; projectId: string; configRevision: string };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The start a turn tells of, read back off the turn's own key — or null for any other turn.
+ *
+ * Every reader that is not one of these answers null, and a key that only looks like one does too:
+ * this runs on the event-ingest path, where a throw costs a batch of somebody's transcript, and an
+ * id that is not a uuid would be one — the database refuses to compare it.
+ */
+export function projectStartOfTurn(clientTurnId: string | null | undefined): ProjectStartKey | null {
+  if (typeof clientTurnId !== 'string' || !clientTurnId.startsWith(PROJECT_STARTED_TURN_PREFIX)) {
+    return null;
+  }
+  const [by, id, revision, ...rest] = clientTurnId
+    .slice(PROJECT_STARTED_TURN_PREFIX.length)
+    .split(':');
+  if (rest.length > 0 || !id || !UUID.test(id)) return null;
+  if (by === 'confirmation' && revision === undefined) {
+    return { by: 'CONFIRMATION', confirmationId: id };
+  }
+  if (by === 'switch' && revision !== undefined && /^\d+$/.test(revision)) {
+    return { by: 'SWITCH', projectId: id, configRevision: revision };
+  }
+  return null;
+}
+
+type StartReader = Pick<PrismaService, 'project' | 'task' | 'projectStandardSetConfirmation'>;
+
+/** The open tasks nothing starts but the coordinator: the message's list and the card's. */
+async function readHeldTasks(
+  prisma: Pick<PrismaService, 'task'>,
+  projectId: string,
+): Promise<{ held: HeldTask[]; heldCount: number }> {
+  const where = { projectId, status: TaskStatus.OPEN, autoRunWhenReady: false };
+  const held = await prisma.task.findMany({
+    where,
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    take: PROJECT_STARTED_LISTED_TASKS,
+    select: { id: true, title: true },
+  });
+  return { held, heldCount: await prisma.task.count({ where }) };
+}
+
+/**
+ * The card a project-start turn is drawn as (§3), or null when its key names nothing of this
+ * owner's — a confirmation or a project that is gone, or somebody else's.
+ */
+export async function readProjectStartedCard(
+  prisma: StartReader,
+  ownerId: string | null | undefined,
+  key: ProjectStartKey,
+): Promise<ProjectStartedCard | null> {
+  if (!ownerId) return null;
+  let projectId: string;
+  let criteriaCount: number | null = null;
+  if (key.by === 'CONFIRMATION') {
+    const confirmation = await prisma.projectStandardSetConfirmation.findFirst({
+      where: { id: key.confirmationId, ownerId },
+      select: { projectId: true, criteriaMaterial: true },
+    });
+    if (!confirmation) return null;
+    projectId = confirmation.projectId;
+    criteriaCount = Array.isArray(confirmation.criteriaMaterial)
+      ? confirmation.criteriaMaterial.length
+      : null;
+  } else {
+    projectId = key.projectId;
+  }
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, ownerId },
+    select: { title: true },
+  });
+  if (!project) return null;
+  return {
+    by: key.by,
+    projectId,
+    projectTitle: project.title,
+    criteriaCount,
+    ...(await readHeldTasks(prisma, projectId)),
+  };
 }
 
 /** The message's words. `held` is at most `PROJECT_STARTED_LISTED_TASKS` of `heldCount`. */
@@ -133,18 +230,7 @@ export async function tellCoordinatorProjectStarted(
   if (!project || !sessionId || !project.coordinatorSession) return null;
   if (sessionHasEnded(project.coordinatorSession)) return null;
 
-  const where = {
-    projectId: input.projectId,
-    status: TaskStatus.OPEN,
-    autoRunWhenReady: false,
-  };
-  const held = await prisma.task.findMany({
-    where,
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    take: PROJECT_STARTED_LISTED_TASKS,
-    select: { id: true, title: true },
-  });
-  const heldCount = await prisma.task.count({ where });
+  const { held, heldCount } = await readHeldTasks(prisma, input.projectId);
 
   const clientTurnId = projectStartedTurnId(input.projectId, input.start);
   try {

@@ -3876,6 +3876,12 @@ model Task {
   /// dependent task's containment set (SR27): a "write the docs" prerequisite must not make the
   /// task after it demand a checkpoint that was never going to exist.
   codeless           Boolean  @default(false)
+  /// The refusal this task's most recent start met before its run could begin (migration 0298):
+  /// a `TaskDispatchRefusal` (@orbit/shared) — the §10.1 code and its fixAction, when, which run,
+  /// the commit it stood on and the prerequisite commits that commit did not contain. NULL when
+  /// the most recent start was not refused; cleared when another run is put on the task
+  /// (`tasks/task-dispatch-refusal.ts`).
+  dispatchRefusal    Json?    @map("dispatch_refusal")
 
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
