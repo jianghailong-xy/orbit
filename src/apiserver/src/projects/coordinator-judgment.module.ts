@@ -12,6 +12,7 @@ import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { ProjectFuseService } from './project-fuse.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
+import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 
@@ -73,6 +74,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     TaskExceptionInputProducer,
     CriterionReadyProducer,
     CriterionUnlandedProducer,
+    TaskDispatchRefusalProducer,
     WakeDispositionService,
   ],
   exports: [
@@ -87,6 +89,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     TaskExceptionInputProducer,
     CriterionReadyProducer,
     CriterionUnlandedProducer,
+    TaskDispatchRefusalProducer,
     WakeDispositionService,
   ],
 })

@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import type { TaskDispatchRefusal } from '@orbit/shared';
+
 import { AttemptBudgetDimension } from './attempt-budget';
 import { canonicalJson, compare } from './canonical-json';
 import type { CriterionLanding } from './project-criterion-landing';
@@ -99,6 +101,11 @@ export const COORDINATOR_WAKE_EVENTS = [
    * delivered — and the spelling stays because the rows already written say it.
    */
   'CRITERIA_DECISION_PENDING',
+  /**
+   * A start of the task was refused before its run could begin: the runner would not stand a
+   * checkout on the commit it was pinned to (`tasks/task-dispatch-refusal.ts`).
+   */
+  'TASK_DISPATCH_REFUSED',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
@@ -318,6 +325,41 @@ export function attemptBudgetSpentFact(spent: {
     subjectId: spent.taskId,
     subjectVersion: spent.sessionId,
     detail: { sessionId: spent.sessionId, dimension: spent.dimension },
+  };
+}
+
+/**
+ * `TASK_DISPATCH_REFUSED` — a start of this task never became a run: the runner refused the
+ * checkout its pinned commit would have been.
+ *
+ * Keyed on the refused run, like the two attempt facts: one refusal is one fact however many times
+ * it is delivered, and a second start refused the same way is a second run and a second fact. The
+ * refusal itself — code, commits, the prerequisites that landed them — rides in `detail`, which is
+ * what the message is rendered from.
+ */
+export function taskDispatchRefusedFact(refused: {
+  projectId: string;
+  taskId: string;
+  taskTitle: string;
+  refusal: TaskDispatchRefusal;
+}): WakeFact {
+  const { refusal } = refused;
+  return {
+    event: 'TASK_DISPATCH_REFUSED',
+    projectId: refused.projectId,
+    subjectType: 'TASK',
+    subjectId: refused.taskId,
+    subjectVersion: refusal.sessionId,
+    detail: {
+      taskTitle: refused.taskTitle,
+      sessionId: refusal.sessionId,
+      code: refusal.code,
+      fixAction: refusal.fixAction,
+      baseSha: refusal.baseSha,
+      ref: refusal.ref,
+      missing: refusal.missing,
+      reason: refusal.reason,
+    },
   };
 }
 

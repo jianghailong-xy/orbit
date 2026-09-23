@@ -186,6 +186,7 @@ import {
   postWorkNotOnBranchComment,
   reclaimStalledTask,
 } from '../tasks/reclaim-stalled-task';
+import { readDispatchRefusal, recordDispatchRefusal } from '../tasks/task-dispatch-refusal';
 import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
@@ -5063,6 +5064,7 @@ export class RunnerApiController {
       // a CANCELLED (user end) goes back to OPEN (retryable). SUCCEEDED is left alone —
       // the workspace owns DONE.
       let taskReclaimed = false;
+      let dispatchRefused = false;
       if (current.taskId && effectiveStatus !== RunStatus.SUCCEEDED) {
         taskReclaimed = await reclaimStalledTask(
           tx,
@@ -5078,9 +5080,18 @@ export class RunnerApiController {
               }
             : undefined,
         );
-        // Genuine failure (not a user cancel): leave a note on the task explaining it.
+        // Genuine failure (not a user cancel): leave a note on the task explaining it. A run the
+        // runner refused at its checkout never started, so its note is the refusal itself, recorded
+        // on the task beside it — the generic note says to run the task again, which is the one
+        // thing that cannot help (tasks/task-dispatch-refusal.ts).
         if (effectiveStatus === RunStatus.FAILED) {
-          await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
+          const refused = readDispatchRefusal(dto.error, current);
+          if (refused) {
+            await recordDispatchRefusal(tx, current.taskId, current, refused, new Date());
+            dispatchRefused = true;
+          } else {
+            await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
+          }
         }
       }
       // The run ended without getting its work onto its branch. Say so on the task, whatever the
@@ -5101,6 +5112,7 @@ export class RunnerApiController {
         keepCheckout,
         retryAt,
         taskReclaimed,
+        dispatchRefused,
         taskId: current.taskId,
         currentWorkTerminalized,
       };
@@ -5116,6 +5128,12 @@ export class RunnerApiController {
       // The exception item this finalize opened, handed over (contract §4.4 X-D4 1). Before today
       // this door reclaimed the task and told nobody at all.
       await this.openItems?.deliverForTasks([outcome.taskId]);
+    }
+    // The refusal this finalize recorded: the task row moved, and the project's coordinator is told,
+    // because nothing else about a start that never became a run would tell anybody.
+    if ('dispatchRefused' in outcome && outcome.dispatchRefused && outcome.taskId) {
+      if (!outcome.taskReclaimed) this.realtime.publishTaskChanged(sessionId, outcome.taskId);
+      await this.tasks?.deliverDispatchRefusalAfterCommit(outcome.taskId);
     }
     if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
