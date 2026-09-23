@@ -20,6 +20,22 @@ public enum OrbitLinkDestination: Equatable, Sendable {
     /// Nowhere in this app can show it: opened outside, at the link the card replaced.
     case web(URL)
 
+    /// Where a link goes with nothing read: the three kinds that are a page in this app whatever the
+    /// object turns out to be. Nil for a project — the conversation that coordinates it is an id only
+    /// a read can give — and for an id that names nothing.
+    ///
+    /// This is the answer for a link somebody wrote or pasted (`orbit-task:<id>`, or a page URL of
+    /// this deployment), as opposed to ``tap(for:preview:baseURL:)``, which answers for a card that
+    /// has already been read.
+    public static func inApp(for target: OrbitLinkTarget) -> OrbitLinkDestination? {
+        switch target.kind {
+        case .task:    return .task(id: PublicID.toPublic(target.id))
+        case .session: return .session(id: PublicID.toPublic(target.id))
+        case .list:    return .list(id: PublicID.toPublic(target.id))
+        case .project: return nil
+        }
+    }
+
     /// Where a tap on a card goes.
     ///
     /// `preview` is nil while a card is still loading, and the loading card's answer is the same as

@@ -24,12 +24,13 @@ struct OrbitApp: App {
                 .onOpenURL { url in
                     if let route = DeepLink.parse(url) { model.route(to: route) }
                 }
-                // A `Text` link naming a task or session (`[title](orbit-task:<id>)`) opens it here:
-                // nothing outside the app can open that scheme. Every other URL keeps the system action.
+                // A `Text` link naming an Orbit object opens here: nothing outside the app can open
+                // an `orbit-task:`-style scheme, and a page URL of this deployment is a page this app
+                // has. A project is answered from a read (its coordinator session), which is why the
+                // decision is the model's and not a switch over the URL. Every other URL keeps the
+                // system action.
                 .environment(\.openURL, OpenURLAction { url in
-                    guard let route = ReferenceLink.route(url) else { return .systemAction }
-                    model.route(to: route)
-                    return .handled
+                    model.openOrbitLink(url) ? .handled : .systemAction
                 })
                 .onChange(of: scenePhase) { _, phase in
                     // Checkpoint open transcripts when the app leaves the foreground.

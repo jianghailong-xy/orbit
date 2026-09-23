@@ -148,7 +148,11 @@ final class NavigationEntrancesWiringTests: XCTestCase {
             XCTAssertTrue(text.contains("DeepLink.parse(url)"), "\(path) parses an orbit:// URL")
             XCTAssertTrue(text.contains("model.route(to: route)"),
                           "and hands it to the one routing door")
-            XCTAssertTrue(text.contains("ReferenceLink.route(url)"),
+            // A transcript link — `[title](orbit-task:<id>)`, a page URL of this deployment — is a
+            // route too. It reaches `route(to:)` through the app's own link door, which answers a
+            // project from a read first; the shells still hand it over rather than opening a page
+            // themselves.
+            XCTAssertTrue(text.contains("model.openOrbitLink(url)"),
                           "a transcript link is a route too, and takes the same door")
             for opener in ["openRecentSession(", "openNeedsYouSession(", "openSession(",
                            "openAgent(", "openCreatedAgentSession(", "composeWithAgent(",
@@ -179,7 +183,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
         let route = code(try slice(app, from: "func route(to route: Route) {",
                                    to: "private func openSession("))
         for label in ["case .active:", "case .session(let id):", "case .task(let id):",
-                      "case .runner(let id):", "case .watch(let id):"] {
+                      "case .list(let id):", "case .runner(let id):", "case .watch(let id):"] {
             XCTAssertTrue(route.contains(label), "`route(to:)` still lands \(label)")
         }
     }

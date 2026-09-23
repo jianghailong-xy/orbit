@@ -23,6 +23,19 @@ public protocol LinkPreviewClient: Sendable {
 public actor OrbitLinkPreviewStore {
     private let client: any LinkPreviewClient
     private let maxRefs: Int
+    /// How long an answer stays current.
+    ///
+    /// Nil — the default — keeps every answer forever, which is what a one-shot read wants. A screen
+    /// that stays open passes an age instead: a card is a reading of a live object, and an hour-old
+    /// answer still claiming "Running" would be worse than no card at all. Nothing here polls; a
+    /// caller that is redrawing anyway asks again, and only what has gone stale costs a request.
+    private let maxAge: TimeInterval?
+
+    /// One answer, and when it was read.
+    private struct Answer {
+        let preview: LinkPreview
+        let at: Date
+    }
 
     /// One request in flight: the task, the keys it answers, and a number that identifies it while
     /// its keys are being resolved (two keys of one batch share a task, so the task itself cannot be
@@ -33,22 +46,24 @@ public actor OrbitLinkPreviewStore {
         let keys: [String]
     }
 
-    private var answers: [String: LinkPreview] = [:]
+    private var answers: [String: Answer] = [:]
     private var reads: [String: Read] = [:]
     private var nextReadID = 0
 
-    public init(client: any LinkPreviewClient, maxRefs: Int = linkPreviewMaxRefs) {
+    public init(client: any LinkPreviewClient, maxRefs: Int = linkPreviewMaxRefs,
+                maxAge: TimeInterval? = nil) {
         self.client = client
         self.maxRefs = max(1, maxRefs)
+        self.maxAge = maxAge
     }
 
     /// The card for each link asked for, reading whatever is not already known. Keyed by
     /// `LinkPreviews.key`, which is canonicalised: the two spellings of one id are one entry.
     ///
     /// At most `maxRefs` links go in one request (the endpoint refuses more), and a link whose
-    /// answer is already in hand — or already being read — costs no request at all. A read that
-    /// fails simply does not appear in the answer, which is what leaves its card loading.
-    public func previews(for refs: [OrbitLinkRef]) async -> [String: LinkPreview] {
+    /// answer is already in hand — current, and not already being read — costs no request at all. A
+    /// read that fails simply does not appear in the answer, which is what leaves its card loading.
+    public func previews(for refs: [OrbitLinkRef], now: Date = Date()) async -> [String: LinkPreview] {
         var answer: [String: LinkPreview] = [:]
         var missing: [OrbitLinkRef] = []
         var pending: [Read] = []
@@ -57,8 +72,8 @@ public actor OrbitLinkPreviewStore {
 
         for ref in refs where seen.insert(ref.target.key).inserted {
             let key = ref.target.key
-            if let hit = answers[key] {
-                answer[key] = hit
+            if let hit = answers[key], !isStale(hit, now: now) {
+                answer[key] = hit.preview
             } else if let read = reads[key] {
                 if pendingIDs.insert(read.id).inserted { pending.append(read) }
             } else {
@@ -76,7 +91,7 @@ public actor OrbitLinkPreviewStore {
 
         for read in pending {
             for (key, preview) in await read.task.value {
-                answers[key] = preview
+                answers[key] = Answer(preview: preview, at: now)
                 answer[key] = preview
             }
             // Whether it answered or threw, the flight is over: a refusal must not stop the next
@@ -86,8 +101,17 @@ public actor OrbitLinkPreviewStore {
         return answer
     }
 
-    /// The answer already in hand for one link, if there is one.
-    public func cachedPreview(for target: OrbitLinkTarget) -> LinkPreview? { answers[target.key] }
+    /// The answer already in hand for one link, if there is a current one. An answer past `maxAge`
+    /// is not one — the same reason `previews(for:)` re-reads it.
+    public func cachedPreview(for target: OrbitLinkTarget, now: Date = Date()) -> LinkPreview? {
+        guard let answer = answers[target.key], !isStale(answer, now: now) else { return nil }
+        return answer.preview
+    }
+
+    private func isStale(_ answer: Answer, now: Date) -> Bool {
+        guard let maxAge else { return false }
+        return now.timeIntervalSince(answer.at) >= maxAge
+    }
 
     /// Forget everything, for a sign-out or a server change: a card read from one account is not one
     /// to draw against another.

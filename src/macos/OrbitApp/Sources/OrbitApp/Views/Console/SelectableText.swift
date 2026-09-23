@@ -338,6 +338,12 @@ extension SelectableText {
             if let route = ReferenceLink.route(url) {
                 return UIAction(title: "Open") { [weak self] _ in self?.app?.route(to: route) }
             }
+            // Everything else this app can open — a project or task list reference, whose destination
+            // may need a read first, and a page URL of this deployment written as a markdown link —
+            // goes through the app's own link door, the same one a card's tap uses.
+            if app?.orbitRef(for: url) != nil {
+                return UIAction(title: "Open") { [weak self] _ in _ = self?.app?.openOrbitLink(url) }
+            }
             if let id = AttachmentLink.attachmentID(url) {
                 return UIAction(title: "Download") { [weak self, weak textView] _ in
                     self?.download(id, from: textView)

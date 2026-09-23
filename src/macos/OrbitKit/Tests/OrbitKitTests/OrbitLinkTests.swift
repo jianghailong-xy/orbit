@@ -661,6 +661,19 @@ final class OrbitLinkTests: XCTestCase {
                        URL(string: "https://orbitd.io/tasks/\(taskID)"))
     }
 
+    /// Where a link somebody wrote or pasted goes, with nothing read yet: three kinds are a page in
+    /// this app whatever the object turns out to be. A project is not one of them — its destination
+    /// is the conversation that coordinates it, which only a read can name.
+    func testALinkGoesInAppWithoutReadingAnything() {
+        XCTAssertEqual(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .task, id: taskUUID)),
+                       .task(id: taskID))
+        XCTAssertEqual(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .session, id: sessionUUID)),
+                       .session(id: sessionID))
+        XCTAssertEqual(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .list, id: listUUID)),
+                       .list(id: listID))
+        XCTAssertNil(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .project, id: projectUUID)))
+    }
+
     // MARK: the wire
 
     /// The four payloads, and the one answer that describes nothing.
@@ -822,6 +835,35 @@ final class OrbitLinkTests: XCTestCase {
         _ = await store.previews(for: [gone])
         let afterUnavailable = await stub.requests
         XCTAssertEqual(afterUnavailable.count, requests, "an unavailable answer is an answer")
+    }
+
+    /// A screen that stays open passes an age, so a card is a reading of the object as it is now
+    /// rather than as it was when the conversation was opened. Nothing polls: the ask that finds the
+    /// answer stale is one the screen was making anyway.
+    func testTheStoreRereadsWhatHasGoneStale() async {
+        let stub = StubPreviews()
+        let store = OrbitLinkPreviewStore(client: stub, maxAge: 60)
+        let link = ref(.task, taskUUID, .pageURL("https://orbitd.io/tasks/\(taskID)"))
+
+        let readAt = Date()
+        let first = await store.previews(for: [link], now: readAt)
+        XCTAssertEqual(first.count, 1)
+
+        // Inside its age the answer is still the answer, and asking again costs no request.
+        let fresh = readAt.addingTimeInterval(59)
+        let cached = await store.cachedPreview(for: OrbitLinkTarget(kind: .task, id: taskUUID), now: fresh)
+        XCTAssertNotNil(cached)
+        _ = await store.previews(for: [link], now: fresh)
+        let freshReads = await stub.requests
+        XCTAssertEqual(freshReads.count, 1)
+
+        // Past it the answer is no longer one, so the next ask reads again.
+        let expired = readAt.addingTimeInterval(61)
+        let stale = await store.cachedPreview(for: OrbitLinkTarget(kind: .task, id: taskUUID), now: expired)
+        XCTAssertNil(stale)
+        _ = await store.previews(for: [link], now: expired)
+        let secondReads = await stub.requests
+        XCTAssertEqual(secondReads.count, 2, "a card past its age is read again")
     }
 
     /// The gone task's canonical id, which the stub answers `unavailable`.
