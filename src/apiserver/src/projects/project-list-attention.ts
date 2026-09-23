@@ -7,6 +7,7 @@ import {
   type ProjectListOwnerItem as WireProjectListOwnerItem,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { escalatesAt } from './open-item-escalation.service';
 import { ownerItemKind } from './project-open-item';
 
 export type ProjectAttentionSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
@@ -204,8 +205,9 @@ async function readBlockers(
  * row's chip prints.
  *
  * `next_escalation_at` is the soonest deadline among the coordinator's items: the first one that
- * will stop being theirs. It is null for the kinds that were the owner's from birth, which is why
- * it is null-tolerant on the way in and read only for the rows that can have one.
+ * will stop being theirs, as the clock decides it (`escalatesAt` — a conversation still carrying an
+ * item moves its deadline on). It is null for the kinds that were the owner's from birth, which is
+ * why it is null-tolerant on the way in and read only for the rows that can have one.
  */
 async function readOpenItems(
   prisma: PrismaService,
@@ -219,7 +221,7 @@ async function readOpenItems(
            item.assignee_reason::text AS "assigneeReason",
            (count(*))::int AS "count",
            min(item.waiting_since) AS "oldestWaitingSince",
-           min(item.escalate_at) AS "nextEscalationAt"
+           min(${escalatesAt('item')}) AS "nextEscalationAt"
       FROM project_open_item item
       JOIN project proj ON proj.id = item.project_id
                        AND proj.owner_id = ${ownerId}::uuid

@@ -740,10 +740,11 @@ CHECK：`(state = 'OPEN') = (resolved_at IS NULL)`；`kind ∈ {PROMOTION_APPROV
 **X-E1**：新文件 `src/apiserver/src/projects/open-item-escalation.service.ts`，`ProjectOpenItemEscalationService` 注册在 ProjectsModule，`onModuleInit` 起 `setInterval(60_000)`。它不放进 `tasks.service.ts`（那里只许一个 interval）、不放进 PushModule（`judgment-delivery-removal.spec.ts` 钉死 providers）、不新增 compose 服务或 `start:*` 脚本。每一拍只做两条语句：
 
 ```sql
-UPDATE project_open_item
+UPDATE project_open_item item
    SET assignee = 'OWNER', assignee_reason = 'ESCALATED', assigned_at = now(),
        escalated_at = now(), updated_at = now()
- WHERE state = 'OPEN' AND assignee = 'COORDINATOR' AND escalate_at <= now()
+ WHERE item.state = 'OPEN' AND item.assignee = 'COORDINATOR' AND item.escalate_at <= now()
+   AND escalatesAt(item) <= now()
 RETURNING id, project_id;
 
 UPDATE project_open_item SET reminded_at = now(), updated_at = now()
@@ -752,6 +753,8 @@ RETURNING id, project_id;
 ```
 
 提交后对 RETURNING 的行调用 `PushService.notifyOwnerItem`。**它不写 `conversation_turn`、`session`、`project_coordinator_wake` 或投递行**：升级只通知 owner。多副本下两条语句本身是 CAS，重复执行不重复推送。
+
+「到期」看的是协调会话的沉默，不是待办的年龄（`escalatesAt`，定义在 `open-item-escalation.service.ts`；§4.8 的 `escalateAt` 与项目列表的 `nextEscalationAt` 读同一个表达式，卡片倒数的就是时钟会动手的那一刻）：`escalatesAt = GREATEST(escalate_at, 最后推进 + (escalate_at − waiting_since))`。「最后推进」只在以下都成立时存在：项目 `coordinator_enabled`，`coordinator_session_id` 指向的会话未结束（`sessionHasEnded` 的 SQL 版）、也没有被请求结束（`cancel_requested_at IS NULL`），该会话持有这条待办未被退回（`returned_at IS NULL`）的 ITEM 投递行；取值为该会话 `kind = 'message'`、交给过 engine（`delivered_at` 非空）的轮次中、`COALESCE(answered_at, delivered_at)` 不早于那条投递行 `created_at` 的最大者。于是收到之后还在跑轮次的会话一直持有它；卡住、停下或结束的会话在停下满一个窗口后交出；从没送到的待办照旧在 `escalate_at` 交出。时钟只读轮次、不写轮次；升级之后的归属不变——待办归 owner，协调会话的「标记已处理」照旧被拒（`OPEN_ITEM_NOT_COORDINATOR_ITEM`），X-E3 的终态事实照常解决它。
 
 **X-E2**：`escalate_at` 在创建或「Ask the coordinator again」时冻结；改项目的升级时长只影响之后创建的待办（附录 A-Q8）。
 
@@ -808,6 +811,10 @@ interface OpenItemRow {
 2. `a project-specific escalation time is honoured`
 3. `escalation writes no conversation_turn, session or wake row`
 4. `an item inside its window does not escalate`（阴性对照）
+5. `a coordinator that took the item and is still taking turns keeps it past its window`（改动前跑红：时钟只看待办的年龄）
+6. `an item never handed to a coordinator stuck in an earlier turn escalates as before, and is then the owner's to close`（阴性对照）
+7. `a coordinator conversation that has ended carries nothing, however recently it moved`（阴性对照）
+8. `an item whose coordinator went quiet for a full window after taking it escalates, and only its owner is told`（判据 9 的性质，走服务自己的 interval）
 
 外加 `src/apiserver/src/projects/task-failed-open-item-sites.spec.ts`（X 表来源普查）。
 
