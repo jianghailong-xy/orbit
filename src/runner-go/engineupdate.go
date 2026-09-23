@@ -22,10 +22,17 @@ import (
 // The runner execs whatever `claude`/`codex`/`kimi` is on PATH; nothing else keeps those CLIs
 // current, and the control plane pins new model slugs a stale engine will reject.
 // engineUpdateLoop closes that gap: once ~10 min after startup (staggered off the
-// boot-time selfUpdate and any burst of reclaimed sessions), then every 24h.
+// boot-time selfUpdate and any burst of reclaimed sessions), then every 24h — and, for any
+// engine a pass stepped over because sessions were running on it, the moment it falls idle.
 const (
 	engineUpdateInterval     = 24 * time.Hour
 	engineUpdateInitialDelay = 10 * time.Minute
+	// How often the loop looks back at an engine it stepped over for being busy. Short on
+	// purpose: what it is waiting for is the gap between one session ending and the next one
+	// starting, and on the machine this exists for — the one that is never idle at 24h-ticker
+	// o'clock — that gap is the only chance there is. Cheap to ask this often because while no
+	// engine is deferred, which is most runners most of the time, it asks nothing at all.
+	engineIdleRetryInterval = 15 * time.Second
 	// Ceiling for a single engine's update command. `claude update` / `codex update`
 	// download over the network, so allow minutes — but never let a wedged updater (slow
 	// mirror, DNS black hole, an unexpected prompt) block the loop forever; without this
@@ -56,9 +63,11 @@ const (
 )
 
 // engineUpdateLoop updates each installed engine in place, skipping any with a live
-// session so a binary is never swapped mid-turn. Installing a missing engine stays
+// session so a binary is never swapped mid-turn — and then retrying that engine as soon as
+// its sessions finish, rather than at the next daily tick. Installing a missing engine stays
 // `orbit doctor`'s interactive job. Best-effort — every failure is logged, never
-// fatal. ORBIT_NO_ENGINE_UPDATE disables it.
+// fatal. ORBIT_NO_ENGINE_UPDATE disables it, retry included: it turns the whole loop off
+// before anything is scheduled.
 func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVars []envVar) {
 	if os.Getenv("ORBIT_NO_ENGINE_UPDATE") != "" {
 		return
@@ -71,12 +80,20 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 	updateEngines(ctx, activeCount, proxyVars)
 	ticker := time.NewTicker(engineUpdateInterval)
 	defer ticker.Stop()
+	// The other half of "skipped — session(s) active". That skip files the engine; this picks
+	// it back up the moment the machine stops using it. Without it the only retry is the tick
+	// above, which samples a machine at one fixed instant — the question a runner that always
+	// has work answers "still busy" to every single day.
+	idle := time.NewTicker(engineIdleRetryInterval)
+	defer idle.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			updateEngines(ctx, activeCount, proxyVars)
+		case <-idle.C:
+			retryDeferredEngineUpdates(ctx, activeCount, proxyVars)
 		}
 	}
 }
@@ -103,6 +120,10 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 		}
 		if n := activeCount(spec.bin); n > 0 {
 			logln("engine-update:", spec.name, "skipped — session(s) active")
+			// Filed rather than dropped, which is what makes the line below a promise instead of
+			// a figure of speech: retryDeferredEngineUpdates comes back for it within seconds of
+			// the last session ending, so this engine's next chance is not 24h away.
+			deferEngineUpdate(spec.bin)
 			// The outcome is deliberately not recorded: a busy machine says nothing about whether
 			// updating works here, and writing it would leave every well-used engine reading
 			// "skipped" until the next daily pass. How far behind it is, though, is true whoever
@@ -112,11 +133,99 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 			lines = append(lines, spec.name+" — "+plural(n, "session")+" running, it'll update once they finish")
 			continue
 		}
+		// Whoever gets to it first settles it: an engine updated by this pass has nothing left
+		// owing, and leaving the to-do filed would send the idle retry after it again seconds later.
+		clearDeferredEngineUpdate(spec.bin)
 		if _, phrase := updateEngine(ctx, spec, servicePath, proxyVars); phrase != "" {
 			lines = append(lines, phrase)
 		}
 	}
 	return lines
+}
+
+// engineUpdateDeferred is the set of engines a pass declined to update because sessions were
+// running on them. A to-do, not a record — the outcome of a skip is still deliberately nothing.
+//
+// Skipping a busy engine is right: a binary must never be swapped mid-turn. On its own, though,
+// it was only half an answer, because the retry was the next 24h tick — one sample, at one fixed
+// instant, of a machine that may be permanently busy. The result was exactly backwards: the
+// runner doing the most work was the one that never updated, and its row just counted days
+// behind. That costs more than it used to, now that the model picker probes the CLI itself, so a
+// stale engine reads to a user as missing models rather than as an old engine.
+//
+// In memory on purpose. A restart loses the set, and the startup pass ten minutes later looks at
+// the same machine again and re-decides — the same answer, taken fresh, with nothing stale to
+// carry across a version of the runner that may not even skip for the same reasons.
+var engineUpdateDeferred struct {
+	mu   sync.Mutex
+	bins map[string]bool
+}
+
+func deferEngineUpdate(bin string) {
+	engineUpdateDeferred.mu.Lock()
+	defer engineUpdateDeferred.mu.Unlock()
+	if engineUpdateDeferred.bins == nil {
+		engineUpdateDeferred.bins = map[string]bool{}
+	}
+	engineUpdateDeferred.bins[bin] = true
+}
+
+func clearDeferredEngineUpdate(bin string) {
+	engineUpdateDeferred.mu.Lock()
+	defer engineUpdateDeferred.mu.Unlock()
+	delete(engineUpdateDeferred.bins, bin)
+}
+
+// deferredEngineUpdates copies the set out, so the retry can iterate engineSpecs in its own order
+// without holding a lock across a package manager.
+func deferredEngineUpdates() map[string]bool {
+	engineUpdateDeferred.mu.Lock()
+	defer engineUpdateDeferred.mu.Unlock()
+	if len(engineUpdateDeferred.bins) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(engineUpdateDeferred.bins))
+	for bin := range engineUpdateDeferred.bins {
+		out[bin] = true
+	}
+	return out
+}
+
+// retryDeferredEngineUpdates installs the engines an earlier pass stepped over, as soon as the
+// sessions it was stepping around are gone.
+//
+// Per engine, like the skip that filed them: one engine still mid-turn holds up nothing but
+// itself, and the others install the moment each one's own count reaches zero. An engine that is
+// still busy is simply left filed — no log line, no drift probe, nothing recorded — because this
+// runs every few seconds, and the pass that deferred it already said all of that once.
+func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) int, proxyVars []envVar) {
+	deferred := deferredEngineUpdates()
+	if len(deferred) == 0 {
+		return
+	}
+	// Bounded like a pass, for the same reason: every update holds the machine's one
+	// package-manager lock, whether the daily timer or an idle engine asked for it.
+	ctx, cancel := context.WithTimeout(ctx, engineUpdateBudget)
+	defer cancel()
+	servicePath := serviceLoginPath()
+	for _, spec := range engineSpecs {
+		if !deferred[spec.bin] {
+			continue
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		if activeCount(spec.bin) > 0 {
+			continue
+		}
+		// Cleared before the attempt, not after it. The to-do asked for an attempt; a failing
+		// updater that stayed filed would be retried every engineIdleRetryInterval for as long
+		// as the machine stayed idle. Its failure is recorded like any other, and the daily pass
+		// is what tries again.
+		clearDeferredEngineUpdate(spec.bin)
+		logln("engine-update:", spec.name, "retrying — its sessions have finished")
+		updateEngine(ctx, spec, servicePath, proxyVars)
+	}
 }
 
 func plural(n int, word string) string {
