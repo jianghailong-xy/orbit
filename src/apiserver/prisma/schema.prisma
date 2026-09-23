@@ -687,6 +687,12 @@ model Workspace {
   repoUrl             String?   @map("repo_url")
   // Custom environment variables injected into this workspace's runtime process (string map).
   env                 Json?     @map("env")
+  // Which Codex account this workspace's Codex sessions run on: the id of a slot the runner added
+  // (8 lowercase hex, src/runner-go/codex_account_slot.go), never a path. NULL is Default, the
+  // CODEX_HOME the runner's own environment selects. Dispatch resolves the id to that slot's
+  // CODEX_HOME from the accounts the assigned runner reports (providers/codex-account.ts); an id
+  // that runner does not report runs on Default rather than failing.
+  codexAccount        String?   @map("codex_account")
   agentKey            String?   @map("agent_key")
   enabled             Boolean   @default(true)
   // When workDir is NOT a git repo, the runner auto-`git init`s it (default .gitignore +

@@ -1779,7 +1779,8 @@ export class RunnerApiController {
         // Same standing "always allow" grants the claim path sends: a reclaimed session must
         // not start re-asking about calls this workspace already approved permanently.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
-        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+        // `engines` for the Codex account the workspace chose, resolved as the claim resolves it.
+        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
         // The account-level permission default, which replaced the per-workspace one.
         owner: { select: { preferences: true } },
       },
@@ -1868,6 +1869,8 @@ export class RunnerApiController {
           workspaceModel: workspace?.model,
           modelCatalog: s.assignedRunner?.modelCatalog,
           workspaceEnv: workspace?.env as Record<string, string> | null,
+          codexAccount: workspace?.codexAccount,
+          runnerEngines: s.assignedRunner?.engines,
         });
       let exec = resolveExec(s.model);
       // Same materialization as the claim path: an unset model is snapshotted, and one the runtime
@@ -2964,8 +2967,8 @@ export class RunnerApiController {
         provider: true,
         providerBuiltin: true,
         usesRuntimeDefaultModel: true,
-        workspace: { select: { model: true, env: true } },
-        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+        workspace: { select: { model: true, env: true, codexAccount: true } },
+        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
     });
     if (!session) return undefined;
@@ -2987,6 +2990,8 @@ export class RunnerApiController {
       workspaceModel: session.workspace?.model,
       modelCatalog: session.assignedRunner?.modelCatalog,
       workspaceEnv: session.workspace?.env as Record<string, string> | null,
+      codexAccount: session.workspace?.codexAccount,
+      runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
     // previous provider's variables must still go, which an empty map is how the runner is told.

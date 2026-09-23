@@ -1087,7 +1087,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // relation, and no `task`, `project` or `project_acceptance_*` object is named, so the 0177
       // pair and every stored task and criterion row are out of its reach. No INSERT, UPDATE or
       // DELETE: no stored row is read, locked, backfilled or rewritten.
-      '0296_runner_login_account'],
+      '0296_runner_login_account',
+      // `workspace.codex_account`: one nullable TEXT column, no default, on `workspace`, the row
+      // the workspace's other dispatch settings (`env`, `work_dir`) already live on. Read against
+      // every claim above: one `ADD COLUMN` statement and nothing else — no function, trigger,
+      // type, index or constraint is created or dropped, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects; `workspace` is not a preserved
+      // relation, and no `task`, `session`, `project` or `project_acceptance_*` object is named,
+      // so the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
+      // UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
+      '0297_workspace_codex_account'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

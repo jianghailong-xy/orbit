@@ -716,13 +716,20 @@ export function codexResetCreditDetails(block: PlanUsageRateLimitReset | null | 
 }
 
 /** Whether a workspace or session context runs on something other than the runner's default
- *  Codex account: a configured (non built-in) provider, or an env naming another CODEX_HOME,
- *  CODEX_API_KEY or any OPENAI_* value. Reset is refused there (ACCOUNT_OVERRIDE). */
+ *  Codex account: a configured (non built-in) provider, a Codex account other than Default picked
+ *  for it (`codexAccount`, a slot id), or an env naming another CODEX_HOME, CODEX_API_KEY or any
+ *  OPENAI_* value. Reset is refused there (ACCOUNT_OVERRIDE). */
 export function codexResetAccountOverride(context: {
   provider?: string | null;
+  codexAccount?: string | null;
   env?: Readonly<Record<string, string | null | undefined>> | null;
 }): boolean {
   if (context.provider != null && context.provider !== 'codex') return true;
+  // Judged on the choice, not on whether this runner still reports that account: a pick that
+  // does not resolve falls back to Default at dispatch, but the reset would still be spent on an
+  // account the workspace said it does not use.
+  const account = context.codexAccount?.trim();
+  if (account && account !== 'default') return true;
   return Object.entries(context.env ?? {}).some(
     ([key, value]) =>
       (key === 'CODEX_HOME' || key === 'CODEX_API_KEY' || key.startsWith('OPENAI_')) &&

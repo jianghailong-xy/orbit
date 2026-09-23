@@ -321,10 +321,23 @@ func engineAuthPreflight(bin string, agentEnv map[string]string) string {
 	if !ok {
 		return "" // ensureEngine already had its say about a missing binary
 	}
-	if probeAuth(bin, path) == authNo {
+	if sessionEngineAuth(bin, path, agentEnv) == authNo {
 		return engineSignedOutMessage(bin)
 	}
 	return ""
+}
+
+// sessionEngineAuth is probeAuth asked of the login a session's engine will run on. Codex keeps one
+// login per CODEX_HOME, and a session can run on an account other than the runner's own — dispatch
+// names it with a CODEX_HOME in the session's env — so Codex is asked in the environment its engine
+// is spawned with. The runner's own answer is Default's, and says nothing about that account.
+func sessionEngineAuth(bin, path string, agentEnv map[string]string) authState {
+	if bin != providerCodex {
+		return probeAuth(bin, path)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return codexLoginStatus(ctx, path, envWithAgent(agentEnv))
 }
 
 // hasInjectedCredentials reports whether this session carries provider credentials of its

@@ -6692,7 +6692,7 @@ export class SessionsService {
         include: {
           workspace: true,
           assignedRunner: {
-            select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true },
+            select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true },
           },
           // The account-level permission default, which replaced the per-workspace one.
           owner: { select: { preferences: true } },
@@ -6712,6 +6712,8 @@ export class SessionsService {
         workspaceModel: session.workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
+        codexAccount: session.workspace?.codexAccount,
+        runnerEngines: session.assignedRunner?.engines,
       });
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??
