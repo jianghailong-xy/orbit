@@ -30,7 +30,7 @@ import {
   Spin,
   Tooltip,
 } from 'antd';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, openTaskListConsole } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
@@ -425,9 +425,14 @@ export function TaskListView() {
   // param to the public id the rest of the app holds; the server takes either spelling.
   // "/lists/none" is the virtual "未分组" view — tasks with no list. It isn't a real
   // list id, so skip decoding and scope the query with the server's own `none` sentinel.
+  //
+  // A task's own address carries the list it was opened from in `?list=<key>`, and that param
+  // scopes the page exactly as the path does: the panel is what opened, so the list it opened
+  // over is still the background behind it rather than a jump to every task.
   const listMatch = useMatch('/lists/:key');
-  const isUnlisted = listMatch?.params.key === 'none';
-  const listId = listMatch && !isUnlisted ? routeId(listMatch.params.key) : null;
+  const listKey = listMatch?.params.key ?? searchParams.get('list');
+  const isUnlisted = listKey === 'none';
+  const listId = listKey && !isUnlisted ? routeId(listKey) : null;
   const isListView = !!listId;
   const scopeListId = isUnlisted ? 'none' : (listId ?? undefined);
 
@@ -529,10 +534,33 @@ export function TaskListView() {
   const deepTaskId = taskMatch ? routeId(taskMatch.params.id) : null;
   // Switching lists/sections closes any open panel; a deep link opens its task instead.
   useEffect(() => setSelectedTaskId(deepTaskId), [listId, loc.pathname, deepTaskId]);
+  // Opening a task writes its own address, which is the whole point: a task URL can be copied,
+  // bookmarked and pasted into a chat, and it reopens over the same background. `replace` and
+  // never `push` — the list and the panel above it are one place, and arrowing down a long list
+  // would otherwise leave one history entry per row for Back to walk through.
+  const openTask = useCallback(
+    (id: string) => {
+      // One spelling everywhere — the row's id, the address and the panel all hold the base62
+      // public id — so the effect above cannot flip the panel between two spellings of one task.
+      const publicId = encodeId(id);
+      setSelectedTaskId(publicId);
+      navigate(`/tasks/${publicId}${listKey ? `?list=${listKey}` : ''}`, { replace: true });
+    },
+    [listKey, navigate],
+  );
+  // Closing puts the address back where it was before the panel opened — the list it came from,
+  // or every task when there was none. Same replace, so Back still leaves the page rather than
+  // undoing one panel per press.
+  const closeTask = useCallback(() => {
+    setSelectedTaskId(null);
+    navigate(listKey ? `/lists/${listKey}` : '/tasks', { replace: true });
+  }, [listKey, navigate]);
   // The selection is scoped to what's currently visible; reset it whenever that set
   // changes (different list/section, or a different status filter) to avoid running
-  // tasks the user can no longer see.
-  useEffect(() => setSelection(EMPTY_SELECTION), [listId, loc.pathname, filter]);
+  // tasks the user can no longer see. Deliberately not keyed on the pathname: the panel opening
+  // does not change which rows are behind it, and neither a click nor an arrow key — which
+  // re-anchors the selection as it moves — may drop a multi-selection the user just built.
+  useEffect(() => setSelection(EMPTY_SELECTION), [scopeListId, filter]);
   // Re-sorting or re-searching keeps the selection — the rows are still there — but voids
   // the anchor: a range is defined by two rows' positions, which just moved under it.
   useEffect(() => setSelection(dropAnchor), [sortField, sortDir, query]);
@@ -583,6 +611,9 @@ export function TaskListView() {
         return { ids, anchor: null, base: null };
       });
       setSelectedTaskId((current) => (current === id ? null : current));
+      // The panel owns the address now, so deleting the task it is showing closes it the way the
+      // close button does — back to the list, not a task URL for something that no longer exists.
+      if (selectedTaskId === id) closeTask();
       qc.removeQueries({ queryKey: ['task', id], exact: true });
       message.success('Task deleted');
       await invalidateAfterDelete();
@@ -630,6 +661,8 @@ export function TaskListView() {
       const deletedIds = new Set(ids);
       setSelection(EMPTY_SELECTION);
       setSelectedTaskId((current) => (current && deletedIds.has(current) ? null : current));
+      // …and the address the panel owns goes back to the list with it.
+      if (selectedTaskId && deletedIds.has(selectedTaskId)) closeTask();
       for (const id of ids) qc.removeQueries({ queryKey: ['task', id], exact: true });
       message.success(`Deleted ${res.deleted} task${res.deleted === 1 ? '' : 's'}`);
       await invalidateAfterDelete();
@@ -776,9 +809,10 @@ export function TaskListView() {
   };
 
   // Keyboard driving of the list. Up/Down step the cursor, opening each task like tabs —
-  // the same selection a click drives; Shift+Up/Down extend the multi-selection as the
-  // cursor moves; Space checks the cursor row; Cmd/Ctrl+A checks everything visible. All
-  // skipped while typing, so the detail panel's comment box keeps its own keys.
+  // the same selection and the same address a click drives; Shift+Up/Down extend the
+  // multi-selection as the cursor moves; Space checks the cursor row; Cmd/Ctrl+A checks
+  // everything visible. All skipped while typing, so the detail panel's comment box keeps
+  // its own keys.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.altKey || isTypingTarget(e.target)) return;
@@ -815,11 +849,11 @@ export function TaskListView() {
           : // A plain move re-anchors, so a Shift-extend afterwards starts from here.
             anchorAt(prev, rows[next].id),
       );
-      setSelectedTaskId(rows[next].id);
+      openTask(rows[next].id);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rows, rowIds, selectedTaskId]);
+  }, [rows, rowIds, selectedTaskId, openTask]);
 
   // Esc clears a multi-selection first, and only falls through to the detail panel's own
   // Esc (a window listener too, but in the bubble phase) once there is none left.
@@ -959,7 +993,7 @@ export function TaskListView() {
         }}
         onClick={(e) => {
           if (e.shiftKey || e.metaKey || e.ctrlKey) pickRow(r.id, e.shiftKey);
-          else setSelectedTaskId(r.id);
+          else openTask(r.id);
         }}
       >
         <div
@@ -1051,7 +1085,7 @@ export function TaskListView() {
                 icon={<ArrowRightOutlined />}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedTaskId(r.id);
+                  openTask(r.id);
                 }}
               />
             </Tooltip>
@@ -1391,8 +1425,8 @@ export function TaskListView() {
         <TaskDetailPanel
           taskId={selectedTaskId}
           summary={rows.find((r: any) => r.id === selectedTaskId)}
-          onOpenTask={setSelectedTaskId}
-          onClose={() => setSelectedTaskId(null)}
+          onOpenTask={openTask}
+          onClose={closeTask}
           onDelete={() => remove.mutate(selectedTaskId)}
           deleting={remove.isPending && remove.variables === selectedTaskId}
         />
