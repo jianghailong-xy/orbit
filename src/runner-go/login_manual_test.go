@@ -22,7 +22,7 @@ func TestManualLoginRelayEndToEnd(t *testing.T) {
 
 	got := make(chan LoginResultRequest, 4)
 	r := &loginRelay{}
-	r.start("attempt-1", providerClaude, func(res LoginResultRequest) { got <- res })
+	r.start(LoginCommand{Action: "start", Engine: providerClaude, Attempt: "attempt-1"}, func(res LoginResultRequest) { got <- res })
 
 	select {
 	case res := <-got:
@@ -71,7 +71,7 @@ func TestManualCodexDeviceLoginEndToEnd(t *testing.T) {
 
 	got := make(chan LoginResultRequest, 4)
 	r := &loginRelay{}
-	r.start("attempt-1", providerCodex, func(res LoginResultRequest) { got <- res })
+	r.start(LoginCommand{Action: "start", Engine: providerCodex, Attempt: "attempt-1"}, func(res LoginResultRequest) { got <- res })
 
 	select {
 	case res := <-got:
@@ -102,14 +102,13 @@ func TestManualKimiDeviceLoginEndToEnd(t *testing.T) {
 
 	got := make(chan LoginResultRequest, 4)
 	r := &loginRelay{}
-	r.start("attempt-1", providerKimi, func(res LoginResultRequest) { got <- res })
+	r.start(LoginCommand{Action: "start", Engine: providerKimi, Attempt: "attempt-1"}, func(res LoginResultRequest) { got <- res })
 	t.Cleanup(func() {
 		r.mu.Lock()
-		cancel := r.cancel
-		r.mu.Unlock()
-		if cancel != nil {
-			cancel()
+		for _, run := range r.runs {
+			run.cancel()
 		}
+		r.mu.Unlock()
 	})
 
 	select {

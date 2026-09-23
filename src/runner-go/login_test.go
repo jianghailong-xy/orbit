@@ -97,7 +97,7 @@ func TestStoppingIdleLoginRelayReturns(t *testing.T) {
 
 func TestStoppingLoginRelayCancelsAndJoinsCurrentAttempt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &loginRelay{running: true, cancel: cancel}
+	r := &loginRelay{runs: map[string]*loginRun{providerClaude: {key: providerClaude, cancel: cancel}}}
 	finished := make(chan struct{})
 	r.wg.Add(1)
 	go func() {
@@ -157,23 +157,24 @@ func TestRejectionMarkerMatchesRealCLIOutput(t *testing.T) {
 // the user asking again, and must preempt. Getting this wrong locked the user out for the full
 // relay timeout: start() saw a relay running and returned, so the retry never reached the CLI.
 func TestStartIsIdempotentPerAttemptButPreemptsANewOne(t *testing.T) {
-	r := &loginRelay{running: true, attempt: "A"}
+	running := &loginRun{key: providerClaude, attempt: "A"}
+	r := &loginRelay{runs: map[string]*loginRun{providerClaude: running}}
 
 	// Same attempt redelivered: no-op, and the running relay is left alone.
-	r.start("A", providerClaude, func(LoginResultRequest) { t.Error("redelivered start should not report") })
+	r.start(LoginCommand{Action: "start", Engine: providerClaude, Attempt: "A"}, func(LoginResultRequest) { t.Error("redelivered start should not report") })
 	r.mu.Lock()
-	stillRunning, keptAttempt := r.running, r.attempt
+	kept := r.runs[providerClaude]
 	r.mu.Unlock()
-	if !stillRunning || keptAttempt != "A" {
-		t.Fatalf("redelivered start disturbed the relay: running=%v attempt=%q", stillRunning, keptAttempt)
+	if kept != running || kept.attempt != "A" {
+		t.Fatalf("redelivered start disturbed the relay: %+v", kept)
 	}
 
 	// An empty attempt (older control plane) keeps the old no-op behaviour rather than churning.
-	r.start("", providerClaude, func(LoginResultRequest) { t.Error("empty attempt should not restart") })
+	r.start(LoginCommand{Action: "start", Engine: providerClaude}, func(LoginResultRequest) { t.Error("empty attempt should not restart") })
 	r.mu.Lock()
-	stillRunning = r.running
+	kept = r.runs[providerClaude]
 	r.mu.Unlock()
-	if !stillRunning {
+	if kept != running {
 		t.Error("an attempt-less start from an old control plane should not preempt")
 	}
 }
@@ -305,7 +306,7 @@ func TestKimiLoginCleanExitIsSuccess(t *testing.T) {
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 
 	got := make(chan LoginResultRequest, 1)
-	(&loginRelay{}).start("kimi-clean-exit", providerKimi, func(res LoginResultRequest) { got <- res })
+	(&loginRelay{}).start(LoginCommand{Action: "start", Engine: providerKimi, Attempt: "kimi-clean-exit"}, func(res LoginResultRequest) { got <- res })
 	select {
 	case res := <-got:
 		if res.Status != loginDone {

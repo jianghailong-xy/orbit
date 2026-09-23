@@ -118,3 +118,74 @@ describe('RunnerSignIn choice of route', () => {
     expect(html).not.toContain('Use an API key instead');
   });
 });
+
+// One runner, several Codex accounts, one sign-in relay row. A card belongs to one account, and
+// the device code it shows is the one the user will type — for the account under that card.
+describe('RunnerSignIn for one Codex account', () => {
+  const WORK = '3fa91c2e';
+  const underWay = (account: string | null) =>
+    loginState({
+      status: 'awaiting_approval',
+      engine: 'codex',
+      url: 'https://auth.openai.com/codex/device',
+      userCode: 'ZXHO-K06HC',
+      account,
+    });
+  const card = (state: RunnerLoginState, props: { account?: string; accountName?: string }) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['runner-login', RUNNER], state);
+    return renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <RunnerSignIn runnerId={RUNNER} engine="codex" {...props} />
+      </QueryClientProvider>,
+    );
+  };
+
+  it("shows an account's own sign-in under it", () => {
+    expect(card(underWay(WORK), { account: WORK })).toContain('ZXHO-K06HC');
+    expect(card(underWay('default'), { account: 'default' })).toContain('ZXHO-K06HC');
+  });
+
+  it("never shows another account's code under this one", () => {
+    // Typed into the page, that code would sign Default in while the user meant Work.
+    const html = card(underWay('default'), { account: WORK });
+    expect(html).not.toContain('ZXHO-K06HC');
+    expect(html).toContain('Sign in to Codex');
+    expect(card(underWay(WORK), { account: 'default' })).not.toContain('ZXHO-K06HC');
+  });
+
+  it('adds an account only through a sign-in it started itself', () => {
+    // A card that has not pressed anything owns no sign-in, whatever is running on the runner.
+    for (const account of [null, 'default', WORK]) {
+      const html = card(underWay(account), { accountName: 'Personal' });
+      expect(html).not.toContain('ZXHO-K06HC');
+      expect(html).toContain('Sign in to Codex');
+    }
+  });
+
+  it("waits for that account's own probe, not the engine's", () => {
+    const runners = (work: 'yes' | 'no') => [
+      {
+        id: RUNNER,
+        engines: [
+          {
+            engine: 'codex' as const,
+            installed: true,
+            // The engine's answer is Default's.
+            auth: 'yes' as const,
+            accounts: [
+              { id: 'default', codexHome: '/root/.codex', auth: 'yes' as const },
+              { id: WORK, codexHome: `/root/.orbit/codex-accounts/${WORK}`, auth: work },
+            ],
+          },
+        ],
+      },
+    ];
+    expect(probeReportsSignedIn(runners('no'), RUNNER, 'codex', WORK)).toBe(false);
+    expect(probeReportsSignedIn(runners('yes'), RUNNER, 'codex', WORK)).toBe(true);
+    // An account the runner hasn't listed yet is not signed in, whatever Default says.
+    expect(probeReportsSignedIn(runners('yes'), RUNNER, 'codex', '0b05070e')).toBe(false);
+    // No account named: the engine's own answer, as before accounts.
+    expect(probeReportsSignedIn(runners('no'), RUNNER, 'codex')).toBe(true);
+  });
+});

@@ -2343,6 +2343,17 @@ body {
 .rd-adv-body {
   padding-top: 6px;
 }
+/* Which Codex account the workspace runs on: each option is the account, with its own quota and
+   sign-in on a quieter line under it. */
+.rd-codex-account {
+  width: 100%;
+}
+.rd-codex-account-status {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-3);
+  margin-top: 1px;
+}
 @media (max-width: 600px) {
   .rd-form-grid {
     grid-template-columns: 1fr;
@@ -6530,6 +6541,10 @@ button.chat-jump-start:hover {
 }
 .rsi-link:hover {
   color: var(--text-1);
+}
+/* Beside the button rather than under it, where the row already spaces it. */
+.rsi-actions .rsi-link {
+  margin-top: 0;
 }
 .rsi-done {
   display: flex;
@@ -11202,6 +11217,56 @@ button.chat-jump-start:hover {
 .re-act {
   display: flex;
   justify-content: flex-end;
+}
+/* Codex with more than one account: the engine's row heads a group, and each account is a row
+   under it. The head keeps what the engine owns — binary, version, updates — and says how many. */
+.re-grp .re-meta b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+/* An account row hangs off the engine above it: indented past the engine's tile, with a rail
+   drawn up into the row before it. */
+.re-acct .re-id {
+  position: relative;
+  padding-left: 38px;
+}
+.re-rail {
+  position: absolute;
+  left: 13px;
+  top: -26px;
+  width: 12px;
+  height: 36px;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-bottom-left-radius: 7px;
+}
+/* DEFAULT: the machine's own ~/.codex, the one a terminal's `codex` shares. */
+.re-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 16px;
+  vertical-align: 1px;
+}
+/* "+ Account": the new account's name, above the sign-in that adds it. */
+.re-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.re-add-label {
+  flex: none;
+  width: 118px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.re-add-hint {
+  margin: 10px 0;
 }
 
 /* An install or a sign-in in flight, opened under the row it belongs to. */

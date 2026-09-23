@@ -1078,7 +1078,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved row is read, locked or backfilled — the new table is empty and nothing in it is
       // derived from what this file guards. `task_owner_confirmation_request`, the table it
       // ALTERs, was created by 0267 and is not one of the preserved relations.
-      '0295_task_owner_confirmation_claim'],
+      '0295_task_owner_confirmation_claim',
+      // `runner.login_account` and `runner.login_account_name`: two nullable TEXT columns, no
+      // default, on `runner`, the machine row the sign-in relay's state already lives on. Read
+      // against every claim above: two `ADD COLUMN` statements and nothing else — no function,
+      // trigger, type, index or constraint is created or dropped, so it is not another writer of
+      // the DONE fence and names none of the six preserved objects; `runner` is not a preserved
+      // relation, and no `task`, `project` or `project_acceptance_*` object is named, so the 0177
+      // pair and every stored task and criterion row are out of its reach. No INSERT, UPDATE or
+      // DELETE: no stored row is read, locked, backfilled or rewritten.
+      '0296_runner_login_account',
+      // `workspace.codex_account`: one nullable TEXT column, no default, on `workspace`, the row
+      // the workspace's other dispatch settings (`env`, `work_dir`) already live on. Read against
+      // every claim above: one `ADD COLUMN` statement and nothing else — no function, trigger,
+      // type, index or constraint is created or dropped, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects; `workspace` is not a preserved
+      // relation, and no `task`, `session`, `project` or `project_acceptance_*` object is named,
+      // so the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
+      // UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
+      '0297_workspace_codex_account'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

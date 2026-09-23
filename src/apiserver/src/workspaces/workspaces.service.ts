@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { CODEX_DEFAULT_ACCOUNT } from '../providers/codex-account';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
 import {
   isBlockingRepoState,
@@ -20,6 +21,12 @@ import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
 
 /** Shape of the account-level preferences this service reads (users.controller owns the rest). */
 type OrchestrationPreference = { defaultEnableOrchestration?: unknown };
+
+/** Default is stored as NULL however the request spelled it: one value means "no other account". */
+function storedCodexAccount(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  return value === null || value === CODEX_DEFAULT_ACCOUNT ? null : value;
+}
 
 @Injectable()
 export class WorkspacesService {
@@ -86,6 +93,7 @@ export class WorkspacesService {
         // itself (canonicalRepoUrl), so nothing here has to agree with that function's shape.
         repoUrl: dto.repoUrl,
         env: (dto.env ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        codexAccount: storedCodexAccount(dto.codexAccount) ?? null,
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
         enableWorktree: dto.enableWorktree ?? false,
@@ -286,6 +294,7 @@ export class WorkspacesService {
       canDelegate: dto.canDelegate,
       maxConcurrentTasks: dto.maxConcurrentTasks,
       defaultMergeTarget: dto.defaultMergeTarget,
+      codexAccount: storedCodexAccount(dto.codexAccount),
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

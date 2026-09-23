@@ -6,6 +6,7 @@ import {
   providerPreset,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
+import { codexAccountOnRunner } from './codex-account';
 import { catalogModels } from './model-catalog';
 import { decryptSecret } from './provider-crypto';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
@@ -183,6 +184,12 @@ export function resolveProviderExec(args: {
    * the runtime CLI's own endpoint (see runtimeCatalogDefault). */
   modelCatalog?: unknown;
   workspaceEnv?: Record<string, string> | null;
+  /** The Codex account slot this session runs on (Workspace.codexAccount today). Only a built-in
+   *  Codex session reads it: it is resolved against `runnerEngines` into the CODEX_HOME injected
+   *  below, and a slot that runner does not report runs on Default (codexAccountOnRunner). */
+  codexAccount?: string | null;
+  /** Runner.engines of the assigned runner: where each Codex account's CODEX_HOME is reported. */
+  runnerEngines?: unknown;
 }): {
   provider: AgentProvider;
   model: string;
@@ -220,7 +227,16 @@ export function resolveProviderExec(args: {
   // each runner carries its own `claude auth login`, and a session that finds it missing surfaces
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
-  const env = workspaceEnv ?? undefined;
+  // A Codex session on an account other than Default runs in that account's CODEX_HOME. Built-in
+  // only: a configured provider brings its own key, so no sign-in on the machine is spent. The
+  // chosen account replaces any CODEX_HOME typed into the workspace's env.
+  const account =
+    provider === AgentProvider.CODEX
+      ? codexAccountOnRunner(args.codexAccount, args.runnerEngines)
+      : null;
+  const env = account
+    ? { ...(workspaceEnv ?? {}), CODEX_HOME: account.codexHome }
+    : (workspaceEnv ?? undefined);
   const pin = firstNonBlank(sessionModel);
   const retired = retiredPin(null, provider, args, pin);
   const explicitSessionModel = retired ? undefined : pin;

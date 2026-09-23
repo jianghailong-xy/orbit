@@ -241,15 +241,31 @@ public enum ReceiptAnchor {
         case unplaceable
     }
 
-    /// Where `stamp` sits among `items` — the whole rule, and the only place it is stated.
-    public static func place(items: [TranscriptItem], at stamp: String) -> Placement {
+    /// The rows' own clocks, read ONCE for every record placed against them.
+    ///
+    /// Reading a clock is what this rule costs — an `ISO8601DateFormatter` parse, microseconds on a
+    /// phone — and a render places every record against every row. Read per record, a coordinator's
+    /// nineteen records over a full window (1,000 rows) were 19,000 parses on each update of the
+    /// console — 2.8 s a render with that session's own tail replayed on Linux — and the account
+    /// owner's iOS console froze on open (2026-09-23). Read once, it is one parse a row.
+    public struct Clocks {
+        fileprivate let rows: [(id: String, at: Date)]
+
+        public init(_ items: [TranscriptItem]) {
+            rows = items.compactMap { item in
+                guard let own = item.clock, let at = ThinkingSummary.date(own) else { return nil }
+                return (item.id, at)
+            }
+        }
+    }
+
+    /// Where `stamp` sits among the rows `clocks` was read from — the whole rule, and the only place
+    /// it is stated.
+    public static func place(_ clocks: Clocks, at stamp: String) -> Placement {
         guard let at = ThinkingSummary.date(stamp) else { return .unplaceable }
         var anchor: String?
-        for item in items {
-            guard let own = item.clock, let when = ThinkingSummary.date(own), when <= at else {
-                continue
-            }
-            anchor = item.id
+        for row in clocks.rows where row.at <= at {
+            anchor = row.id
         }
         guard let anchor else { return .beforeWindow }
         return .after(anchor)
@@ -403,6 +419,9 @@ public enum TranscriptRows {
         var anchoredDecisions: [String: [DeliveredDecisionCard]] = [:]
         var trailingDecisions: [DeliveredDecisionCard] = []
         var headRecords: [DeliveredDecisionCard] = []
+        // Every record is placed against the same rows, so their clocks are read once — and only
+        // when there is a record to place (`ReceiptAnchor.Clocks`).
+        var clocks: ReceiptAnchor.Clocks?
         for card in decisionCards {
             switch card.placement {
             case .onArrival(nil):
@@ -410,7 +429,9 @@ public enum TranscriptRows {
             case .onArrival(let anchor?):
                 anchoredDecisions[anchor, default: []].append(card)
             case .at(let moment):
-                switch ReceiptAnchor.place(items: state.items, at: moment) {
+                let read = clocks ?? ReceiptAnchor.Clocks(state.items)
+                clocks = read
+                switch ReceiptAnchor.place(read, at: moment) {
                 case .after(let anchor): anchoredDecisions[anchor, default: []].append(card)
                 case .beforeWindow:      headRecords.append(card)
                 case .unplaceable:       break

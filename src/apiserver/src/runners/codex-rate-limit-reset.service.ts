@@ -203,6 +203,8 @@ export class CodexRateLimitResetService {
  * Whether the workspace a confirmation came from runs on something other than the runner's default
  * Codex account (§3). A workspace holds no provider, so its provider is the derived default a new
  * session there starts on; a configured provider is never the runner's own login, whatever its slug.
+ * A Codex account the workspace picked other than Default is the other account, which reset v1 does
+ * not read: confirming here would spend Default's credit for it.
  */
 async function accountOverride(
   tx: Prisma.TransactionClient,
@@ -212,13 +214,17 @@ async function accountOverride(
 ): Promise<boolean> {
   const workspace = await tx.workspace.findFirst({
     where: { id: workspaceId, ownerId, runnerId, deletedAt: null },
-    select: { env: true },
+    select: { env: true, codexAccount: true },
   });
   if (!workspace) throw new NotFoundException('workspace not found');
   const seed = (await lastProviderByWorkspace(tx, [workspaceId])).get(workspaceId) ?? DEFAULT_AGENT_PROVIDER;
   return (
     !seed.providerBuiltin ||
-    codexResetAccountOverride({ provider: seed.provider, env: workspace.env as Record<string, string> | null })
+    codexResetAccountOverride({
+      provider: seed.provider,
+      codexAccount: workspace.codexAccount,
+      env: workspace.env as Record<string, string> | null,
+    })
   );
 }
 
