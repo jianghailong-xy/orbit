@@ -309,7 +309,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `conflicts` | text[] NOT NULL DEFAULT `'{}'` | |
 | `error_code` / `error_detail` | text / jsonb NULL | 闭集见 J12 |
 | `receipt_ids` | uuid[] NOT NULL DEFAULT `'{}'` | 本作业写下的回执 |
-| `confirmed_automatically` | boolean NOT NULL DEFAULT false | 迁移 0299。只有 `LAND_PROMOTION` 可为真（CHECK）：这次落地由项目的 Automatic 授权确认，不是 owner 按的（§3.3 M-T11）；runner 收到的命令带 `automatic: true`，只落到 `upstream_sha_checked` 上（M-T12） |
+| `confirmed_automatically` | boolean NOT NULL DEFAULT false | 迁移 0300。只有 `LAND_PROMOTION` 可为真（CHECK）：这次落地由项目的 Automatic 授权确认，不是 owner 按的（§3.3 M-T11）；runner 收到的命令带 `automatic: true`，只落到 `upstream_sha_checked` 上（M-T12） |
 | `idempotency_key` | text NOT NULL UNIQUE | `ij:v1:<kind>:<taskId 或 promotionId>:<generation>` |
 | `created_at` / `started_at` / `finished_at` / `updated_at` | timestamptz | |
 
@@ -496,7 +496,7 @@ interface TaskIntegrationView {
 | `state` | text | CHECK ∈ {`CHECKING`, `READY`, `CONFIRMED`, `RECHECKING`, `MERGED`, `BLOCKED`, `DECLINED`, `CANCELLED`, `SUPERSEDED`} |
 | `check_job_id` / `land_job_id` | uuid NULL | 当前作业 |
 | `confirmed_by_user_id` / `confirmed_at` / `decided_at` | uuid / timestamptz | |
-| `confirmed_automatically` | boolean NOT NULL DEFAULT false | 迁移 0299。没人按：项目的 Automatic 授权确认了这次合入（M-T11），此时 `confirmed_by_user_id` 为 NULL。CHECK：`CONFIRMED` / `RECHECKING` / `MERGED` 行要么写明确认人、要么此列为真；此列为真时 `source_kind = 'PROJECT_BRANCH'` 且不写确认人（`MAIN` 线永远不能被记成自动确认） |
+| `confirmed_automatically` | boolean NOT NULL DEFAULT false | 迁移 0300。没人按：项目的 Automatic 授权确认了这次合入（M-T11），此时 `confirmed_by_user_id` 为 NULL。CHECK：`CONFIRMED` / `RECHECKING` / `MERGED` 行要么写明确认人、要么此列为真；此列为真时 `source_kind = 'PROJECT_BRANCH'` 且不写确认人（`MAIN` 线永远不能被记成自动确认） |
 | `merged_sha` / `merged_at` | char(40) / timestamptz NULL | |
 | `open_item_id` | uuid NULL | 当前卡片对应的待办（`PROMOTION_APPROVAL` 或阻塞它的协调会话待办） |
 | `receipt_ids` | uuid[] NOT NULL DEFAULT `'{}'` | |
