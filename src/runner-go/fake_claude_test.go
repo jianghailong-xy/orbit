@@ -524,8 +524,14 @@ func (f *fakeClaude) readLines(name string) []string {
 	if err != nil {
 		return nil // not spawned yet, or nothing recorded
 	}
+	// Only lines whose newline is down. The fake appends a record in one write, but that is
+	// not atomic to a reader polling alongside it: a record that crosses a page — a spawn's
+	// argv carries the whole system prompt — can be read cut short. Whatever follows the last
+	// newline is that record still arriving, left for the next poll.
+	s := string(b)
+	s = s[:strings.LastIndexByte(s, '\n')+1]
 	var out []string
-	for _, line := range strings.Split(string(b), "\n") {
+	for _, line := range strings.Split(s, "\n") {
 		if strings.TrimSpace(line) != "" {
 			out = append(out, line)
 		}
