@@ -48,6 +48,16 @@
  *      its way back) queues nothing; the generation this rule queues is bound to the branch the work
  *      ended on and can never be "left behind" by itself, so the queue stops there; and neither path
  *      opens an exception item or raises a wake.
+ *  (5) THE NEGATIVE FACE OF THE WHOLE RULE, read off the rule's own facts: the landing was first
+ *      claimed after every session of its task had finished, about the branch the work ENDED on,
+ *      with nothing left uncommitted, and the tip really was on the upstream — `jobSawTheFinishedBranch`
+ *      and `jobSawTipOnUpstream` on the rows the product wrote. That is a defect of nothing: the
+ *      answer is written down and NOTHING follows — no next generation (not even for a first attempt
+ *      that ended on a branch of its own), no candidate, no item, no wake. A repair here would be the
+ *      rule reading a settled task as unfinished work.
+ *  (6) the same generation, triggered again: the result resent (a response lost on its way back) and
+ *      the queue asked twice more add nothing at all. This is the negative half of "one generation is
+ *      owed at most one landing" — the half that says NO generation is owed here.
  *
  * Everything is produced the way the product produces it: the landing through `enqueueForDoneTask`
  * (J-T1a), the claim off the heartbeat (J-T2), the answer through the result the runner posts (J-T5),
@@ -73,6 +83,11 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import {
+  jobSawTheFinishedBranch,
+  jobSawTipOnUpstream,
+  type LandingJobFacts,
+} from '../projects/project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from '../projects/project-integration-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -298,6 +313,55 @@ test('a landing is not judged before the work it is about has stopped moving', {
       prisma.projectCoordinatorWake.count({ where: { projectId } }),
     ]);
     return { jobs, openItems, wakes };
+  }
+
+  /**
+   * Everything a landing's aftermath could add to, counted for the PROJECT: landings, promotion
+   * candidates, exception items and coordinator wakes. Read BEFORE a trigger and compared after it,
+   * so "nothing new" is a comparison rather than a number this file has to know — and so a row that
+   * is not this task's is still seen. Items and wakes are counted for the project because a wake is
+   * the project's and names no task at all.
+   *
+   * Receipts are deliberately not in it: a landing writes one by design (the line's own record of
+   * what it saw, which is what the criteria read), so a receipt is not a thing "nothing happened"
+   * can be asserted over.
+   */
+  async function projectLedger() {
+    const [jobs, promotions, openItems, wakes] = await Promise.all([
+      prisma.projectIntegrationJob.count({ where: { projectId } }),
+      prisma.projectPromotion.count({ where: { projectId } }),
+      prisma.projectOpenItem.count({ where: { projectId } }),
+      prisma.projectCoordinatorWake.count({ where: { projectId } }),
+    ]);
+    return { jobs, promotions, openItems, wakes };
+  }
+
+  /**
+   * The landing the line answered about, as the facts the criteria lane reads it by: this job's own
+   * columns and the work session it was queued for, which is exactly `jobSawTheFinishedBranch`'s
+   * input. Read rather than restated — the cases below call that predicate on these rows instead of
+   * spelling its conditions a second time, so the control is a control FOR the rule rather than a
+   * copy of it that can drift away from it.
+   */
+  async function landingTheLineAnswered(jobId: string) {
+    const row = await prisma.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: jobId },
+      select: {
+        state: true, sourceRef: true, mainSyncSha: true, targetShaBefore: true, upstreamSha: true,
+        startedAt: true, claimedAt: true,
+        session: { select: { finishedAt: true, worktreeBranch: true, worktreeDirty: true } },
+      },
+    });
+    const facts: LandingJobFacts = {
+      state: row.state,
+      mainSyncSha: row.mainSyncSha,
+      targetShaBefore: row.targetShaBefore,
+      upstreamSha: row.upstreamSha,
+      sourceRef: row.sourceRef,
+      startedAt: row.startedAt,
+      session: row.session,
+    };
+    return { row, facts };
   }
 
   // ═══ (1) the work is still running ═══════════════════════════════════════════════════════════
@@ -529,5 +593,132 @@ test('a landing is not judged before the work it is about has stopped moving', {
     assert.deepEqual(await owedFor(once), { jobs: 2, openItems: 0, wakes: 0 },
       'and the queue stops there: the second look was about the branch the work ended on, so there '
         + 'is no third generation, no item and no wake — one generation, at most one landing');
+  });
+
+  // ═══ (5) the negative control, read off the rule's own facts ═════════════════════════════════
+  // The shape (3) carries, pinned to the ordering this rule is written for and widened by one
+  // attempt: a task worked TWICE, its first attempt ending on a branch of its own before the second
+  // ended on the branch the DONE froze. Nothing here is a defect — the line looked at the branch the
+  // work ended on, after the work had stopped, and found nothing of the task's on it — and the case
+  // says so with the rule's own predicates rather than with a description of them.
+  await t.test('(5) claimed after the work ended, on the branch it ended on: nothing to repair',
+    async () => {
+      const settled = await doneTask('the work whose first attempt ended on a branch of its own');
+      const firstAttempt = `orbit/first-attempt-${settled.slice(0, 6)}`;
+      const endedOn = `orbit/where-the-work-ended-${settled.slice(0, 6)}`;
+      await workSession(settled, firstAttempt, {}, new Date(Date.now() - 60 * 60_000));
+      await workSession(settled, endedOn, {}, new Date(Date.now() - 30 * 60_000));
+      const jobId = await enqueue(settled);
+      assert.equal((await jobRow(jobId)).sourceRef, `refs/heads/${endedOn}`,
+        'the DONE freezes the newest work session, which here is the attempt that ends the work');
+
+      const job = await handOut(jobId, 'lease-settled');
+      assert.ok(job, 'every work session of this task has finished, so the landing is handed over');
+
+      const sessions = await prisma.session.findMany({
+        where: { taskId: settled, startsTaskWork: true, deletedAt: null },
+        select: { finishedAt: true },
+      });
+      assert.equal(sessions.length, 2, 'both attempts are work sessions of this task');
+
+      const before = await projectLedger();
+      const { answer: taken, after } = await answer(job, {
+        ...NOTHING_OF_ITS_OWN, sourceSha: sha('9'),
+      });
+      assert.ok(taken.accepted, `the answer was refused: ${JSON.stringify(taken)}`);
+      assert.equal(taken.state, 'ALREADY_LANDED', 'the line\'s answer is written down as final');
+
+      // …and the conditions under which that answer speaks for this task's whole work, read off the
+      // rows rather than restated: the ORDERING (claimed after every session of the task finished),
+      // the BRANCH (the one the work ended on, with nothing left uncommitted) and the TIP (on the
+      // upstream, so "nothing of its own" is about every commit the branch carried).
+      const { row, facts } = await landingTheLineAnswered(jobId);
+      assert.ok(sessions.every((session) => session.finishedAt !== null
+        && session.finishedAt.getTime() < row.claimedAt!.getTime()),
+      'the whole task had stopped moving before the claim: no session of it can commit after that '
+        + 'moment, which is the ordering the queue holds a landing for');
+      assert.ok(jobSawTheFinishedBranch(facts),
+        'and the line looked at the branch the work ENDED on, after it ended, with nothing left '
+          + 'uncommitted in the checkout — the three conditions of `jobSawTheFinishedBranch`, read '
+          + 'here off the rows the product wrote rather than restated');
+      assert.ok(jobSawTipOnUpstream(facts),
+        'and that branch\'s tip was on the upstream — the line was at that moment the upstream '
+          + 'itself, so the answer is about every commit the branch carried');
+
+      assert.equal(taken.openItemId, null,
+        'and it opens nothing: work already on the upstream is not a defect, so there is no card '
+          + 'for anybody to look at');
+      // What the aftermath DOES name is the task itself, and that is delivery rather than noise: an
+      // ALREADY_LANDED is a landing (its receipt is `ALREADY_MERGED`, which the criteria count), so
+      // the fact "this work is where it was going" still reaches the tasks waiting on it. The three
+      // things a DEFECT produces are what must not appear — and none of them does.
+      assert.equal(after?.landedTaskId, settled,
+        'the task is named as landed: the work really is where it was going, so what waited on it is '
+          + 'released — the honest half of this answer, not a repair');
+      assert.deepEqual(after?.openItemIds ?? null, [],
+        'and the aftermath names no item: nothing is delivered, no card is drawn, no phone is told');
+
+      assert.deepEqual(await owedFor(settled), { jobs: 1, openItems: 0, wakes: 0 },
+        'nothing further is owed and nothing was queued: the answer is about the branch this task\'s '
+          + 'work ended on, so there is no next generation — and none for the first attempt either, '
+          + 'whose branch is not the one the work ends on (`workBranchEndedOn`: the session that '
+          + 'finishes last is the one whose commits the work does not predate) — no item and no wake');
+      assert.deepEqual(await projectLedger(), before,
+        'and the project gained nothing at all: no landing, no candidate, no item, no wake');
+      const receipts = await prisma.sessionMergeReceipt.findMany({
+        where: { taskId: settled },
+        select: { result: true, targetBranch: true },
+      });
+      assert.deepEqual(receipts, [{ result: 'ALREADY_MERGED', targetBranch: PROJECT_LINE }],
+        'and the one row written is the line\'s record of what it saw, in this table\'s word for '
+          + '"nothing moved": a MERGED receipt would say a target changed, which is the one thing '
+          + 'this answer says did not happen');
+    });
+
+  // ═══ (6) the same generation, triggered again ════════════════════════════════════════════════
+  await t.test('(6) triggering the same generation again queues nothing further', async () => {
+    const looked = await doneTask('the work the line may look at twice');
+    const branch = `orbit/looked-at-twice-${looked.slice(0, 6)}`;
+    await workSession(looked, branch, {});
+    const jobId = await enqueue(looked);
+    const job = await handOut(jobId, 'lease-twice');
+    assert.ok(job, 'the session had finished, so the landing is handed over');
+    const before = await projectLedger();
+    const { answer: taken } = await answer(job, { ...NOTHING_OF_ITS_OWN, sourceSha: sha('8') });
+    assert.ok(taken.accepted, `the answer was refused: ${JSON.stringify(taken)}`);
+    assert.equal((await jobRow(jobId)).state, 'ALREADY_LANDED');
+    assert.deepEqual(await projectLedger(), before, 'and this look queued nothing');
+
+    const { row, facts } = await landingTheLineAnswered(jobId);
+    const claimedAt = row.claimedAt;
+    const finishedAt = facts.session?.finishedAt ?? null;
+    assert.ok(claimedAt !== null && finishedAt !== null
+      && claimedAt.getTime() > finishedAt.getTime(),
+    'this claim came after the session that holds the branch had finished — the ordering the rule '
+      + 'reads');
+    assert.ok(jobSawTheFinishedBranch(facts),
+      'and the branch it looked at is the one that session left, so the repeats below are questions '
+        + 'aimed at a settled task and not at work that is still moving');
+
+    // The runner's response was lost on its way back, so it sends the same result again: the
+    // identity of a result is `(id, claim_lease_owner, claim_generation)` and this job is terminal,
+    // so the second copy is answered `accepted: false` — and nothing follows from it.
+    const { answer: resent, after: fromTheCopy } = await answer(job, {
+      ...NOTHING_OF_ITS_OWN, sourceSha: sha('8'),
+    });
+    assert.equal(resent.accepted, false, 'a resent result is not applied twice');
+    assert.equal(resent.openItemId, null, 'and the copy opens nothing');
+    assert.equal(fromTheCopy, null, 'nor is there anything for the caller to deliver from it');
+    assert.deepEqual(await projectLedger(), before, 'and the copy queues nothing either');
+
+    // And the queue is asked again — by the runner that holds the branch, and by another one.
+    assert.equal(await handOut(jobId, 'lease-twice'), null,
+      'a job that reached a terminal state is not handed out again (J-T3)');
+    assert.equal(await handOut(jobId, 'lease-somewhere-else'), null,
+      'and it is not taken over by anybody else: there is nothing left for a second look to answer');
+    assert.deepEqual(await owedFor(looked), { jobs: 1, openItems: 0, wakes: 0 },
+      'one generation, one landing, and the answer was the work\'s own: no second generation, no '
+        + 'item and no wake — asking again what the line has answered is not a new fact about this '
+        + 'task');
   });
 });
