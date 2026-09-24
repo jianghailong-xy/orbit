@@ -69,6 +69,14 @@ struct WatchingCardStack: View {
                     Text(time)
                         .font(.orbitMeta)
                         .foregroundStyle(.secondary)
+                        // The deadline is the fact this line exists for, so it keeps its own width
+                        // and the target's name yields instead: the name already truncates, and
+                        // without the priority the greedy `.frame(maxWidth: .infinity)` beside it
+                        // won the HStack's slack, leaving "earliest 2 met · 13h left" a partial
+                        // width that folded onto two lines and grew the row with it. Web's
+                        // `.watch-strip-time` says the same thing as `flex: none`.
+                        .lineLimit(1)
+                        .layoutPriority(1)
                 }
                 Image(systemName: open ? "chevron.down" : "chevron.right")
                     .font(.orbitMeta)
