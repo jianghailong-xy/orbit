@@ -11253,6 +11253,23 @@ button.chat-jump-start:hover {
   line-height: 16px;
   vertical-align: 1px;
 }
+/* Two slots, one account: said under the second slot's row, in the second slot's own words, with
+   the way out beside it. Indented past the rail so it reads as that row's and not the card's. */
+.re-dup {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 7px;
+  padding-left: 38px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.re-dup b {
+  color: var(--text-2);
+  font-weight: 600;
+}
 /* "+ Account": the new account's name, above the sign-in that adds it. */
 .re-add {
   display: flex;
