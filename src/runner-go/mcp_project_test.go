@@ -1439,6 +1439,57 @@ func TestProjectSendToolPostsAsTheCallingSession(t *testing.T) {
 	}
 }
 
+// clientTurnId is project_send's retry key, offered the way session_send offers it: optional, so a
+// call without one is the call it always was — the message alone, the server minting the key — and
+// passed through as given when there is one, so a retry gets back the turn it already filed.
+func TestProjectSendToolTakesAnOptionalClientTurnId(t *testing.T) {
+	tools := toolDescriptors(false, true)
+	prop, _ := mcpToolProps(tools, "project_send")["clientTurnId"].(map[string]interface{})
+	if prop["type"] != "string" {
+		t.Fatalf("project_send clientTurnId schema = %#v", prop)
+	}
+	if got := mcpToolRequired(t, tools, "project_send"); strings.Join(got, ",") != "projectId,message" {
+		t.Fatalf("project_send required = %#v", got)
+	}
+
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var body map[string]interface{}
+		if err := json.Unmarshal(b, &body); err != nil {
+			t.Errorf("project_send body is not JSON: %v\n%s", err, b)
+		}
+		bodies = append(bodies, body)
+		_, _ = w.Write([]byte(projectSendDeliveredJSON))
+	}))
+	defer srv.Close()
+
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	mcp := &mcpServer{
+		t:                  NewTransport(srv.URL, "tok"),
+		sessionID:          "343dlzsYWKo5z8l2M8tsD",
+		orchestrationToken: "session-token",
+		allowOrchestration: true,
+	}
+	for _, args := range []map[string]interface{}{
+		{"projectId": "343dlzsYWKo5z8l2M8tsA", "message": "the shard is red"},
+		{"projectId": "343dlzsYWKo5z8l2M8tsA", "message": "the shard is red", "clientTurnId": "shard-4:Retry/7f3a"},
+	} {
+		if res := mcp.callTool("project_send", args); res["isError"] == true {
+			t.Fatalf("project_send %#v returned an error: %#v", args, res["content"])
+		}
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("project_send made %d requests, want 2", len(bodies))
+	}
+	if _, present := bodies[0]["clientTurnId"]; present || len(bodies[0]) != 1 {
+		t.Fatalf("project_send without a key sent %#v", bodies[0])
+	}
+	if len(bodies[1]) != 2 || bodies[1]["clientTurnId"] != "shard-4:Retry/7f3a" {
+		t.Fatalf("project_send with a key sent %#v", bodies[1])
+	}
+}
+
 // The refusal that asks for a person travels whole, action included — the same refusal the ensure
 // door meets, because it is the same landing: an agent that read only "409" would retry the one
 // thing this door exists to stop it retrying.
