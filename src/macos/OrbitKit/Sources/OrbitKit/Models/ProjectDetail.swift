@@ -137,13 +137,19 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     public let taskCount: Int
     public let acceptanceCriteriaItems: [ProjectCriterion]
     public let integration: ProjectIntegrationSettings?
+    /// How many tasks hold each status. Absent from a server that predates it — which is not the
+    /// same as zero, so a sentence that counts from it has to say so.
+    public let tasksByStatus: [String: Int]?
+    /// Every open blocker and the latest resolved ones; nil from a server that predates the read.
+    public let blockers: ProjectBlockers?
 
     public init(id: String, title: String, status: ProjectStatus = .open, goal: String? = nil,
                 instructions: String? = nil, createdAt: String = "", updatedAt: String? = nil,
                 coordinatorEnabled: Bool? = nil, configRevision: String? = nil,
                 coordinatorSessionId: String? = nil, taskCount: Int = 0,
                 acceptanceCriteriaItems: [ProjectCriterion] = [],
-                integration: ProjectIntegrationSettings? = nil) {
+                integration: ProjectIntegrationSettings? = nil,
+                tasksByStatus: [String: Int]? = nil, blockers: ProjectBlockers? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -157,6 +163,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         self.taskCount = taskCount
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.integration = integration
+        self.tasksByStatus = tasksByStatus
+        self.blockers = blockers
     }
 
     private struct Counts: Codable {
@@ -165,7 +173,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, instructions, createdAt, updatedAt, coordinatorEnabled,
-             configRevision, coordinatorSessionId, acceptanceCriteriaItems, integration
+             configRevision, coordinatorSessionId, acceptanceCriteriaItems, integration, tasksByStatus,
+             blockers
         case counts = "_count"
     }
 
@@ -185,6 +194,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         acceptanceCriteriaItems = try c.decodeIfPresent([ProjectCriterion].self,
                                                         forKey: .acceptanceCriteriaItems) ?? []
         integration = try c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
+        tasksByStatus = try? c.decodeIfPresent([String: Int].self, forKey: .tasksByStatus)
+        blockers = try? c.decodeIfPresent(ProjectBlockers.self, forKey: .blockers)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -202,6 +213,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         try c.encode(Counts(tasks: taskCount), forKey: .counts)
         try c.encode(acceptanceCriteriaItems, forKey: .acceptanceCriteriaItems)
         try c.encodeIfPresent(integration, forKey: .integration)
+        try c.encodeIfPresent(tasksByStatus, forKey: .tasksByStatus)
+        try c.encodeIfPresent(blockers, forKey: .blockers)
     }
 }
 

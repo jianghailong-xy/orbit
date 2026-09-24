@@ -78,6 +78,21 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("model.openProject(project.id)"))
     }
 
+    func testTheProjectPageDrawsTheWebsSectionsInTheWebsOrder() throws {
+        let view = code(try appSource("Views/ProjectsView.swift"))
+        let page = try slice(view, from: "private func page(", to: ".projectPageListStyle()")
+        let order = ["openItemsSection(", "overviewSection(", "coordinatorSection(", "goalSection(", "graphSection(",
+                     "blockersSection(", "runQueueSection(", "criteriaSection(", "instructionsSection(",
+                     "tasksSection("]
+        let positions = order.map { page.range(of: $0)?.lowerBound }
+        XCTAssertFalse(positions.contains(nil), "the page lost one of \(order)")
+        XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
+                       "the sections read in the web's order (ProjectPageSectionsCopyParityTests holds the web's)")
+        let overview = try slice(view, from: "private func overviewSection(", to: "private func overviewCell(")
+        XCTAssertTrue(overview.contains("model.selectedSection = .runners"),
+                      "the stalled banner's press goes where an engine signs in")
+    }
+
     func testAnOwnerItemOpensItsCardInTheCoordinatorConversation() throws {
         let app = code(try appSource("AppModel.swift"))
         let open = try slice(app, from: "func openProjectCoordinator(", to: "\n    }\n")

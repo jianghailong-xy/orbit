@@ -566,6 +566,34 @@ public final class APIClient: @unchecked Sendable {
         try await deleteRaw("projects/\(projectID)")
     }
 
+    /// The whole project's dependency picture, folded by the server, not a page of it.
+    public func projectDependencyGraph(_ projectID: String) async throws -> ProjectDependencyGraph {
+        try await get("projects/\(projectID)/dependency-graph")
+    }
+
+    /// The run queue: what can start now or is running, the tasks that release the most work first.
+    public func projectReadyToRun(_ projectID: String, limit: Int = 5) async throws -> ProjectReadyToRun {
+        try await get("projects/\(projectID)/panorama/ready",
+                      query: [URLQueryItem(name: "limit", value: String(limit))])
+    }
+
+    /// End one project blocker, with the reason the server records beside who gave it.
+    public func resolveProjectBlocker(projectID: String, blockerID: String, reason: String) async throws {
+        try await postRaw("projects/\(projectID)/blockers/\(blockerID)/resolve",
+                          body: ResolveProjectBlockerRequest(reason: reason))
+    }
+
+    /// Replace the project's coordinator conversation with an empty one. On a conversation that is
+    /// still open the server completes it first — the caller asks before pressing this.
+    public func replaceProjectCoordinator(_ projectID: String) async throws -> ProjectCoordinatorOpened {
+        try await postEmpty("projects/\(projectID)/coordinator/replace")
+    }
+
+    /// Lift a task list's pause, so its otherwise-ready tasks can run.
+    public func resumeTaskList(_ listID: String, note: String) async throws {
+        let _: Empty = try await patch("task-lists/\(listID)", body: ResumeTaskListRequest(note: note))
+    }
+
     // MARK: agents / runners
 
     public func agents() async throws -> [Agent] { try await get("agents") }

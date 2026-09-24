@@ -72,7 +72,8 @@ final class ProjectsModel {
     }
 }
 
-/// One project's page: its document, lanes, integration line, open items, coordinator and tasks.
+/// One project's page: its document, lanes, integration line, open items, coordinator, dependency
+/// graph, run queue and tasks.
 @MainActor
 @Observable
 final class ProjectDetailModel {
@@ -83,6 +84,10 @@ final class ProjectDetailModel {
     private(set) var integration: ProjectIntegrationView?
     private(set) var openItems: ProjectOpenItemsView?
     private(set) var coordinator: ProjectCoordinatorStatus?
+    private(set) var graph: ProjectDependencyGraph?
+    private(set) var readyQueue: ProjectReadyToRun?
+    /// Run-queue rows a Run press is starting: the row says so until the next read has it running.
+    private(set) var starting: Set<String> = []
     private(set) var tasks: [ProjectTaskRow] = []
     private(set) var nextTaskCursor: String?
     private(set) var loadingMoreTasks = false
@@ -113,6 +118,8 @@ final class ProjectDetailModel {
         async let integrationRead = api.projectIntegration(projectID)
         async let openItemsRead = api.projectOpenItems(projectID: projectID)
         async let coordinatorRead = api.projectCoordinatorStatus(projectID)
+        async let graphRead = api.projectDependencyGraph(projectID)
+        async let queueRead = api.projectReadyToRun(projectID)
         async let tasksRead = api.projectTaskPage(projectID)
         do {
             let fetched = try await documentRead
@@ -129,6 +136,8 @@ final class ProjectDetailModel {
         integration = (try? await integrationRead) ?? integration
         openItems = (try? await openItemsRead) ?? openItems
         coordinator = (try? await coordinatorRead) ?? coordinator
+        graph = (try? await graphRead) ?? graph
+        readyQueue = (try? await queueRead) ?? readyQueue
         if let page = try? await tasksRead {
             tasks = page.items
             nextTaskCursor = page.nextCursor
@@ -177,6 +186,48 @@ final class ProjectDetailModel {
     func resumeFuse(episodeID: String) async -> String? {
         await write("resume the coordinator") {
             _ = try await self.api.resumeProjectFuse(projectID: self.projectID, episodeID: episodeID)
+        }
+    }
+
+    /// End a blocker, with the reason the server records beside who gave it.
+    func resolveBlocker(_ blockerID: String, reason: String) async -> String? {
+        await write("resolve the blocker") {
+            try await self.api.resolveProjectBlocker(projectID: self.projectID, blockerID: blockerID,
+                                                     reason: reason)
+        }
+    }
+
+    /// Run one ready task from the run queue. The press is named here, once — see
+    /// `TasksModel.execute` — and the row says Starting until the reload has it queued or running.
+    func run(_ taskID: String) async -> String? {
+        let triggerId = PublicID.newToken()
+        starting.insert(taskID)
+        defer { starting.remove(taskID) }
+        return await write("start the task") {
+            try await self.api.executeTask(taskID, triggerId: triggerId)
+        }
+    }
+
+    /// Lift the pause on the list holding a ready task, so Run is offered for it.
+    func resumeList(_ listID: String) async -> String? {
+        await write("resume the task list") {
+            try await self.api.resumeTaskList(listID, note: ProjectPage.resumeListNote)
+        }
+    }
+
+    /// Replace the coordinator conversation with an empty one; the server completes an open one first.
+    func replaceCoordinator() async -> Result<ProjectCoordinatorOpened, ProjectActionError> {
+        busy = true
+        defer { busy = false }
+        do {
+            let opened = try await api.replaceProjectCoordinator(projectID)
+            onChanged()
+            await load()
+            return .success(opened)
+        } catch {
+            await load()
+            return .failure(ProjectActionError(
+                message: "Couldn't start a new coordinator: \(APIClient.failureReason(error))."))
         }
     }
 

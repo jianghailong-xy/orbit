@@ -97,17 +97,17 @@ struct ProjectMeter: View {
     var height: CGFloat = 5
 
     var body: some View {
-        let total = max(1, segments.reduce(0) { $0 + $1.value })
+        // Only the lanes that have work are drawn, so only the gaps between them come off the width:
+        // counting every lane's gap left the bar short of its track by a gap per empty lane.
+        let drawn = segments.filter { $0.value > 0 }
+        let total = max(1, drawn.reduce(0) { $0 + $1.value })
+        let gaps = CGFloat(max(0, drawn.count - 1)) * 1.5
         GeometryReader { geo in
             HStack(spacing: 1.5) {
-                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                    if segment.value > 0 {
-                        segment.color
-                            .frame(width: max(2, (geo.size.width - CGFloat(segments.count) * 1.5)
-                                            * CGFloat(segment.value) / CGFloat(total)))
-                    }
+                ForEach(Array(drawn.enumerated()), id: \.offset) { _, segment in
+                    segment.color
+                        .frame(width: max(2, (geo.size.width - gaps) * CGFloat(segment.value) / CGFloat(total)))
                 }
-                Spacer(minLength: 0)
             }
         }
         .frame(height: height)
@@ -344,19 +344,42 @@ struct ProjectDetailPane: View {
     }
 }
 
-/// One project's page, in the order a reader on a phone needs it: what is waiting on them, where
-/// the work stands, who is coordinating it, and then the goal, the criteria and the tasks.
+/// One project's page, card for card the page the web draws on a phone, in the web's order: what is
+/// waiting on the reader, where the work stands, who is coordinating it, the goal, the plan as a
+/// graph, what is standing in its way, what can start, the criteria, the instructions and the tasks.
 struct ProjectDetailView: View {
     @Environment(AppModel.self) private var model
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var hSize
+    #endif
     let projectID: String
 
     @State private var notice: String?
     @State private var confirmingStatus: ProjectStatus?
     @State private var confirmingDelete = false
+    @State private var confirmingReplace = false
     @State private var goalExpanded = false
+    @State private var instructionsExpanded = false
+    @State private var criteriaExpanded = false
+    /// Criteria whose "How it's checked" is open.
+    @State private var openMethods: Set<String> = []
+    /// Folds of the task graph the reader opened.
+    @State private var expandedFolds: Set<String> = []
+    @State private var blockerToResolve: ProjectBlocker?
+    @State private var resolveReason = ""
+    @State private var listToResume: ProjectReadyToRun.Item?
     /// The page's own header carries the whole title; the bar takes it once that header scrolls
     /// away, so one title is never drawn twice.
     @State private var headerOnScreen = true
+
+    /// A phone's width: two columns of lanes, four criteria before "View all" — the web's narrow page.
+    private var compact: Bool {
+        #if os(iOS)
+        return hSize == .compact
+        #else
+        return false
+        #endif
+    }
 
     var body: some View {
         if let store = model.projects?.detail(projectID) {
@@ -386,12 +409,21 @@ struct ProjectDetailView: View {
                 }
             }
         }
+        #if os(iOS)
+        // The session page's bar: nothing while the page's own header shows the title, then the
+        // title over a status line, centred, once it has scrolled away.
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        #else
         .navigationTitle(headerOnScreen && store.document != nil
                          ? "" : (store.document?.title ?? model.projects?.project(projectID)?.title ?? "Project"))
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            #if os(iOS)
+            if !headerOnScreen, let document = store.document {
+                ToolbarItem(placement: .principal) { ProjectNavTitle(document: document) }
+            }
+            #endif
             if let document = store.document {
                 ToolbarItem(placement: .primaryAction) { menu(store, document) }
             }
@@ -442,10 +474,48 @@ struct ProjectDetailView: View {
             overviewSection(store, document)
             coordinatorSection(store, document, now: now)
             goalSection(document)
+            graphSection(store)
+            blockersSection(store, document, now: now)
+            runQueueSection(store)
             criteriaSection(document)
+            instructionsSection(document)
             tasksSection(store, document)
         }
         .projectPageListStyle()
+        // Held on the list rather than beside the page's own alert: one view, one alert.
+        .alert(ProjectPage.resolveBlockerTitle, isPresented: Binding(get: { blockerToResolve != nil },
+                                                                   set: { if !$0 { blockerToResolve = nil } }),
+               presenting: blockerToResolve) { blocker in
+            TextField(ProjectPage.resolveBlockerQuestion, text: $resolveReason)
+            Button("Cancel", role: .cancel) { blockerToResolve = nil }
+            Button(ProjectPage.resolveBlockerConfirm) {
+                let reason = String(resolveReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .prefix(ProjectPage.blockerReasonLimit))
+                Task { notice = await store.resolveBlocker(blocker.id, reason: reason) }
+            }
+            .disabled(resolveReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: { blocker in
+            Text(ProjectPage.resolveBlockerMessage(blocker))
+        }
+        .confirmationDialog(listToResume?.pausedList.map(ProjectPage.resumeListQuestion) ?? "",
+                            isPresented: Binding(get: { listToResume != nil },
+                                                 set: { if !$0 { listToResume = nil } }),
+                            titleVisibility: .visible, presenting: listToResume) { item in
+            if let list = item.pausedList {
+                Button(ProjectPage.resumeListPress) {
+                    Task { notice = await store.resumeList(list.id) }
+                }
+            }
+        } message: { item in
+            Text(ProjectPage.resumeListDetail(item))
+        }
+        .confirmationDialog(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace,
+                            titleVisibility: .visible) {
+            Button(ProjectPage.replaceCoordinatorConfirm, role: .destructive) { replaceCoordinator(store) }
+            Button(ProjectPage.replaceCoordinatorKeep, role: .cancel) {}
+        } message: {
+            Text(ProjectPage.replaceCoordinatorDetail)
+        }
     }
 
     private func header(_ store: ProjectDetailModel, _ document: ProjectDocument, now: Date) -> some View {
@@ -585,42 +655,104 @@ struct ProjectDetailView: View {
         }
     }
 
+    /// Start the next coordinator and go to it, empty.
+    private func replaceCoordinator(_ store: ProjectDetailModel) {
+        Task {
+            switch await store.replaceCoordinator() {
+            case .success(let opened):
+                model.openProjectCoordinator(sessionID: opened.sessionId,
+                                             agentID: opened.workspaceId
+                                                ?? store.coordinator?.coordination.workspaceId)
+            case .failure(let error):
+                notice = error.message
+            }
+        }
+    }
+
     // MARK: work overview
 
     @ViewBuilder
     private func overviewSection(_ store: ProjectDetailModel, _ document: ProjectDocument) -> some View {
         if let panorama = store.panorama {
-            let cells = ProjectPage.overviewCells(panorama.buckets, taskCount: panorama.shape.taskCount,
+            let buckets = panorama.buckets
+            let cells = ProjectPage.overviewCells(buckets, taskCount: panorama.shape.taskCount,
                                                   line: document.integration?.line)
+            let stalled = ProjectPage.stalledOnReady(buckets)
             Section {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .topLeading), count: 3),
-                          alignment: .leading, spacing: 12) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .topLeading),
+                                         count: compact ? 2 : 3),
+                          alignment: .leading, spacing: 16) {
                     ForEach(cells) { cell in
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 4) {
-                                ProjectGlyphMark(glyph: cell.glyph, size: 8)
-                                Text(cell.label).lineLimit(1).minimumScaleFactor(0.8)
-                            }
-                            .font(.orbitMeta)
-                            .foregroundStyle(.secondary)
-                            Text(cell.value.formatted())
-                                .font(.title2.weight(.bold))
-                                .monospacedDigit()
-                            Text(cell.footnote)
-                                .font(.orbitMeta)
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(2)
-                        }
+                        overviewCell(cell, attention: stalled && cell.key == "ready")
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 6)
                 ProjectMeter(segments: cells.map { (value: $0.value, color: ProjectPalette.color($0.glyph)) },
-                             height: 7)
+                             height: 8)
                     .padding(.vertical, 4)
+                if stalled {
+                    banner(glyph: .triangle, title: ProjectPage.stalledTitle,
+                           text: ProjectPage.stalledSentence(ready: buckets.ready)) {
+                        Button(ProjectPage.stalledPress) { model.selectedSection = .runners }
+                            .font(.orbitLabel.weight(.semibold))
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                            .controlSize(.small)
+                    }
+                    .listRowBackground(Color.orange.opacity(0.1))
+                }
+                if ProjectPage.wrappingUp(status: document.status, buckets) {
+                    banner(glyph: .check, title: ProjectPage.wrapUpTitle,
+                           text: ProjectPage.wrapUpSentence(settled: buckets.done + buckets.cancelled)) {
+                        EmptyView()
+                    }
+                    .listRowBackground(Color.accentColor.opacity(0.08))
+                }
             } header: {
                 sectionHeader("Work overview", detail: ProjectPage.overviewSubtitle(panorama.shape))
             }
         }
+    }
+
+    /// One lane: its shape and name, the number, and a line saying what the number counts. The one
+    /// cell that changes colour is Ready, and only while nothing is picking that work up.
+    private func overviewCell(_ cell: ProjectPage.OverviewCell, attention: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                ProjectGlyphMark(glyph: cell.glyph, size: 8)
+                Text(cell.label)
+            }
+            .font(.orbitLabel)
+            .foregroundStyle(Color.primary)
+            Text(cell.value.formatted())
+                .font(.title2.weight(.bold))
+                .monospacedDigit()
+            Text(cell.footnote)
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if attention {
+                RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.13)).padding(-6)
+            }
+        }
+    }
+
+    /// A banner under the meter: a shape, what is going on, and — when there is one — the press.
+    private func banner<Action: View>(glyph: ProjectPage.Glyph, title: String, text: String,
+                                      @ViewBuilder action: () -> Action) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ProjectGlyphMark(glyph: glyph, size: 11).padding(.top, 3)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.orbitSubtext.weight(.semibold))
+                Text(text).font(.orbitLabel).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                action()
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     // MARK: coordinator
@@ -631,6 +763,7 @@ struct ProjectDetailView: View {
         if let status = store.coordinator {
             let pill = ProjectPage.coordinatorPill(status)
             let coordination = status.coordination
+            let finished = ProjectPage.coordinatorFinished(status)
             Section {
                 if let session = coordination.session {
                     VStack(alignment: .leading, spacing: 2) {
@@ -640,6 +773,12 @@ struct ProjectDetailView: View {
                                 .compactMap { $0 }.joined(separator: " · "))
                             .font(.orbitLabel)
                             .foregroundStyle(.secondary)
+                        if status.state == .live && finished {
+                            Text(ProjectPage.finishedCoordinatorNote)
+                                .font(.orbitLabel)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.top, 4)
+                        }
                     }
                 }
                 if let workspace = coordination.workspaceName {
@@ -659,9 +798,40 @@ struct ProjectDetailView: View {
                 if status.state == .unavailable, let action = status.openability.requiredAction {
                     Text(action).font(.orbitLabel).foregroundStyle(.red)
                 }
-                if status.openability.canOpen || status.state == .live {
+                if status.state == .live, coordination.session != nil {
+                    let note = ProjectPage.dispatchNote(openTaskCount: document.tasksByStatus.map { $0["OPEN"] ?? 0 },
+                                                        finished: finished)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(note.heading).font(.orbitMeta).foregroundStyle(.secondary)
+                        Text(note.text).font(.orbitLabel).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                    // The lead press is the safe one — go to the conversation. Starting the next
+                    // coordinator is a one-way door, so it is held behind the press, where it is
+                    // chosen rather than hit.
+                    Menu {
+                        Button {
+                            if finished { replaceCoordinator(store) } else { confirmingReplace = true }
+                        } label: {
+                            Text(ProjectPage.startNewCoordinator)
+                            Text(ProjectPage.startNewCoordinatorDetail(finished: finished))
+                        }
+                    } label: {
+                        Text(ProjectPage.coordinatorPress(finished: finished, needsReply: pill.label == "Needs you"))
+                            .frame(maxWidth: .infinity)
+                    } primaryAction: {
+                        openCoordinator(store, focus: nil)
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(store.busy)
+                } else if status.openability.canOpen {
                     Button { openCoordinator(store, focus: nil) } label: {
-                        Text(coordinatorButton(status, pill: pill)).frame(maxWidth: .infinity)
+                        Text(status.state == .neverOpened ? "Start coordinator" : "Start a new coordinator")
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
@@ -696,14 +866,6 @@ struct ProjectDetailView: View {
         }
     }
 
-    private func coordinatorButton(_ status: ProjectCoordinatorStatus, pill: ProjectPage.Pill) -> String {
-        switch status.state {
-        case .neverOpened: return "Start coordinator"
-        case .trashed: return "Start a new coordinator"
-        default: return pill.label == "Needs you" ? "Reply to coordinator" : "Open conversation"
-        }
-    }
-
     private func color(_ tone: ProjectPage.Tone) -> Color {
         switch tone {
         case .neutral: return .secondary
@@ -713,37 +875,263 @@ struct ProjectDetailView: View {
         }
     }
 
-    // MARK: goal and criteria
+    // MARK: goal
 
     @ViewBuilder
     private func goalSection(_ document: ProjectDocument) -> some View {
         if let goal = document.goal?.trimmingCharacters(in: .whitespacesAndNewlines), !goal.isEmpty {
             Section {
-                VStack(alignment: .leading, spacing: 6) {
-                    MarkdownView(source: goal)
-                        .font(.orbitProse)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(maxHeight: goalExpanded ? nil : 96, alignment: .top)
-                        .clipped()
-                    Button(goalExpanded ? "Less" : "More") { goalExpanded.toggle() }
-                        .font(.orbitLabel)
-                        .buttonStyle(.borderless)
-                }
+                folded(goal, expanded: $goalExpanded, height: 132)
             } header: {
                 sectionHeader("Goal", detail: nil)
             }
         }
     }
 
+    /// Markdown held to a few lines until More, which is what a long brief costs a phone otherwise.
+    private func folded(_ source: String, expanded: Binding<Bool>, height: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            MarkdownView(source: source)
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxHeight: expanded.wrappedValue ? nil : height, alignment: .top)
+                .clipped()
+            Button(expanded.wrappedValue ? "Less" : "More") { expanded.wrappedValue.toggle() }
+                .font(.orbitLabel)
+                .buttonStyle(.borderless)
+        }
+    }
+
+    // MARK: task graph
+
     @ViewBuilder
-    private func criteriaSection(_ document: ProjectDocument) -> some View {
-        if !document.acceptanceCriteriaItems.isEmpty {
+    private func graphSection(_ store: ProjectDetailModel) -> some View {
+        if let graph = store.graph, !graph.marks.isEmpty {
             Section {
-                ForEach(document.acceptanceCriteriaItems) { criterion in
-                    criterionRow(criterion, ref: document.integration?.ref)
+                ProjectGraphCard(graph: graph, expanded: $expandedFolds, onOpenTask: openTask)
+            } header: {
+                sectionHeader("Task graph", detail: "Prerequisite → dependent")
+            }
+        }
+    }
+
+    // MARK: blockers
+
+    @ViewBuilder
+    private func blockersSection(_ store: ProjectDetailModel, _ document: ProjectDocument,
+                                 now: Date) -> some View {
+        if let blockers = document.blockers, !blockers.open.isEmpty {
+            Section {
+                ForEach(blockers.open) { blocker in blockerRow(blocker, store: store, now: now) }
+                if let summary = ProjectPage.blockersResolvedSummary(blockers) {
+                    DisclosureGroup {
+                        ForEach(blockers.resolved) { blocker in
+                            Text(ProjectPage.blockerResolvedLine(blocker))
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                        }
+                    } label: {
+                        Text(summary).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
                 }
             } header: {
-                sectionHeader("Acceptance criteria", detail: nil)
+                sectionHeader("Blockers", detail: ProjectPage.blockersOpen(blockers.open.count))
+            }
+        }
+    }
+
+    private func blockerRow(_ blocker: ProjectBlocker, store: ProjectDetailModel, now: Date) -> some View {
+        let headline = ProjectPage.blockerHeadline(blocker)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(headline.tag)
+                    .font(.orbitMeta.weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .foregroundStyle(headline.tone == .warning ? ProjectPalette.warningInk : ProjectPalette.tone(headline.tone))
+                    .background(ProjectPalette.tone(headline.tone).opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
+                Text(headline.title).font(.orbitLabel.weight(.semibold)).lineLimit(1)
+                Spacer(minLength: 4)
+                Text(ProjectPage.blockerSince(blocker.firstSeenAt, now: now))
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let subject = ProjectPage.blockerSubjectLine(blocker) {
+                        Text(subject).font(.orbitSubtext).lineLimit(2)
+                    }
+                    Text(blocker.requiredAction)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let paths = ProjectPage.blockerPathsLine(blocker.detail.paths) {
+                        Text(paths).font(.orbitMeta.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 6)
+                Button(ProjectPage.resolveBlockerPress) {
+                    resolveReason = ""
+                    blockerToResolve = blocker
+                }
+                .font(.orbitLabel.weight(.semibold))
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .disabled(store.busy)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    // MARK: run queue
+
+    @ViewBuilder
+    private func runQueueSection(_ store: ProjectDetailModel) -> some View {
+        if let queue = store.readyQueue {
+            Section {
+                if let truncated = queue.impactTruncated {
+                    let notice = ProjectPage.queueImpactTruncated(maxTasks: truncated.maxTasks)
+                    Label {
+                        Text("\(notice.title). \(notice.detail)")
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle")
+                    }
+                    .font(.orbitLabel)
+                    .foregroundStyle(.orange)
+                }
+                if queue.items.isEmpty {
+                    Text(ProjectPage.queueEmpty).font(.orbitLabel).foregroundStyle(.secondary)
+                } else {
+                    ForEach(queue.items) { item in queueRow(item, store: store) }
+                }
+            } header: {
+                sectionHeader("Run queue", detail: ProjectPage.queueSummary(queue))
+            } footer: {
+                if !queue.items.isEmpty {
+                    Text(ProjectPage.queueHelp(queue))
+                }
+            }
+        }
+    }
+
+    private func queueRow(_ item: ProjectReadyToRun.Item, store: ProjectDetailModel) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.title).font(.orbitSubtext).lineLimit(1)
+                HStack(spacing: 5) {
+                    queueStateMark(item.runState)
+                    Text(ProjectPage.queueRowState(item))
+                }
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                Text(ProjectPage.queueImpact(item))
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Spacer(minLength: 6)
+            queueAction(item, store: store)
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func queueStateMark(_ state: ProjectReadyToRun.RunState) -> some View {
+        switch state {
+        case .ready:
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case .running:
+            ProgressView().controlSize(.mini)
+        case .queued:
+            Image(systemName: "clock").foregroundStyle(Color.accentColor)
+        case .paused:
+            Image(systemName: "pause.circle").foregroundStyle(.orange)
+        }
+    }
+
+    @ViewBuilder
+    private func queueAction(_ item: ProjectReadyToRun.Item, store: ProjectDetailModel) -> some View {
+        switch item.runState {
+        case .ready:
+            Button {
+                Task { notice = await store.run(item.taskId) }
+            } label: {
+                Label(store.starting.contains(item.taskId) ? ProjectPage.runPressStarting : ProjectPage.runPress,
+                      systemImage: "play.circle")
+            }
+            .font(.orbitLabel.weight(.semibold))
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.small)
+            .disabled(store.busy)
+            .accessibilityLabel("Run \(item.title)")
+        case .paused where item.pausedList != nil:
+            Button(ProjectPage.resumeListPress) { listToResume = item }
+                .font(.orbitLabel.weight(.semibold))
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .disabled(store.busy)
+        case .running where item.sessionId != nil, .queued where item.sessionId != nil:
+            Button(ProjectPage.openRunSession) {
+                if let session = item.sessionId { model.route(to: .session(session)) }
+            }
+            .font(.orbitLabel.weight(.semibold))
+            .buttonStyle(.borderless)
+        default:
+            Text(ProjectPage.queueRowTag(item.runState))
+                .font(.orbitMeta.weight(.semibold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .foregroundStyle(.secondary)
+                .background(Color.secondary.opacity(0.13), in: RoundedRectangle(cornerRadius: 5))
+        }
+    }
+
+    // MARK: criteria
+
+    private var criteriaLimit: Int {
+        compact ? ProjectPage.criteriaPreviewCompact : ProjectPage.criteriaPreviewRegular
+    }
+
+    private func criteriaSection(_ document: ProjectDocument) -> some View {
+        let criteria = document.acceptanceCriteriaItems
+        let shown = criteriaExpanded ? criteria : Array(criteria.prefix(criteriaLimit))
+        return Section {
+            if criteria.isEmpty {
+                Text(ProjectPage.noCriteria).font(.orbitLabel).foregroundStyle(.secondary)
+            } else {
+                Text(ProjectPage.criteriaStanding(count: criteria.count))
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(shown) { criterion in
+                    criterionRow(criterion, ref: document.integration?.ref)
+                }
+                if let disclosure = ProjectPage.criteriaDisclosure(total: criteria.count, limit: criteriaLimit,
+                                                                   expanded: criteriaExpanded, compact: compact) {
+                    VStack(spacing: 4) {
+                        Button {
+                            withAnimation { criteriaExpanded.toggle() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(disclosure.press)
+                                Image(systemName: criteriaExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.orbitMeta.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        Text(disclosure.meta).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            sectionHeader("Acceptance criteria", detail: nil)
+        } footer: {
+            if !criteria.isEmpty {
+                Text(ProjectPage.criteriaOutcomeNote)
             }
         }
     }
@@ -775,6 +1163,26 @@ struct ProjectDetailView: View {
                         }
                     }
                 }
+                if let method = criterion.verificationMethod, !method.isEmpty {
+                    let open = openMethods.contains(criterion.id)
+                    Button {
+                        if open { openMethods.remove(criterion.id) } else { openMethods.insert(criterion.id) }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: open ? "chevron.down" : "chevron.right")
+                                .font(.orbitMeta.weight(.semibold))
+                            Text(ProjectPage.howItsChecked)
+                        }
+                        .font(.orbitLabel)
+                    }
+                    .buttonStyle(.borderless)
+                    if open {
+                        Text(method)
+                            .font(.orbitLabel)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         }
         .padding(.vertical, 2)
@@ -801,6 +1209,20 @@ struct ProjectDetailView: View {
         .frame(width: 22, height: 22)
     }
 
+    // MARK: instructions
+
+    private func instructionsSection(_ document: ProjectDocument) -> some View {
+        Section {
+            if let text = document.instructions?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+                folded(text, expanded: $instructionsExpanded, height: 180)
+            } else {
+                Text(ProjectPage.noInstructions).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+        } header: {
+            sectionHeader(ProjectPage.instructionsHeading, detail: nil)
+        }
+    }
+
     // MARK: tasks
 
     @ViewBuilder
@@ -813,7 +1235,7 @@ struct ProjectDetailView: View {
             ForEach(groups) { group in
                 groupLabel(group.heading)
                 ForEach(group.tasks) { task in
-                    taskRow(task, document: document, settled: group.settled)
+                    taskRow(task, document: document, group: group)
                 }
             }
             if store.nextTaskCursor != nil {
@@ -829,11 +1251,10 @@ struct ProjectDetailView: View {
         }
     }
 
-    private func taskRow(_ task: ProjectTaskRow, document: ProjectDocument, settled: Bool) -> some View {
-        let tags = [ProjectPage.workTag(task),
-                    ProjectPage.integrationTag(task, ref: document.integration?.ref,
-                                               upstreamRef: document.integration?.upstreamRef)]
-            .compactMap { $0 }
+    private func taskRow(_ task: ProjectTaskRow, document: ProjectDocument,
+                         group: ProjectPage.TaskGroup) -> some View {
+        let tags = ProjectPage.rowTags(task, heading: group.heading, ref: document.integration?.ref,
+                                       upstreamRef: document.integration?.upstreamRef)
         return Button { openTask(task.id) } label: {
             HStack(spacing: 10) {
                 ProjectGlyphMark(glyph: ProjectPage.taskGlyph(task), size: 9)
@@ -841,7 +1262,7 @@ struct ProjectDetailView: View {
                     Text(task.title)
                         .font(.orbitSubtext)
                         .lineLimit(2)
-                        .foregroundStyle(settled ? .secondary : .primary)
+                        .foregroundStyle(group.settled ? .secondary : .primary)
                     if !tags.isEmpty || task.unmetCount > 0 || task.blocksCount > 0 {
                         HStack(spacing: 6) {
                             ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
@@ -959,6 +1380,29 @@ struct ProjectDetailView: View {
         .textCase(nil)
     }
 }
+
+#if os(iOS)
+/// The bar's title once the page's own header has scrolled away — the session page's shape: the
+/// name over a status line, centred, cut short rather than wrapped.
+private struct ProjectNavTitle: View {
+    let document: ProjectDocument
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(document.title)
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Text("\(document.status == .done ? "Completed" : document.status.label) · \(document.taskCount) task\(document.taskCount == 1 ? "" : "s")")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: 240)
+        .clipped()
+    }
+}
+#endif
 
 private extension View {
     /// Grouped cards on iOS, the platform's plain inset list on macOS.
