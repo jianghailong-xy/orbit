@@ -296,6 +296,11 @@ type HeartbeatResponse struct {
 	// reply with the URL to approve), then `code` carrying what they pasted back. Nil on older
 	// control planes, and whenever no sign-in is in flight for this runner.
 	LoginRequest *LoginCommand `json:"loginRequest,omitempty"`
+	// A Codex account slot the user asked to remove from the web. Nil on older control planes, and
+	// whenever no removal is in flight for this runner. Only a runner that declares
+	// codex-account-remove/v1 is ever handed one: a runner that ignored it would leave a slot the
+	// page has already said goodbye to.
+	CodexAccountRemoveRequest *CodexAccountRemoveCommand `json:"codexAccountRemoveRequest,omitempty"`
 	// An engine CLI the user asked to install from the web. Nil on older control planes, and
 	// whenever no install is in flight for this runner.
 	InstallRequest *InstallCommand `json:"installRequest,omitempty"`
@@ -513,6 +518,27 @@ type LoginCommand struct {
 	Account string `json:"account,omitempty"`
 	// Sign in a NEW Codex account: the runner adds a slot under this name and signs into that.
 	AccountName string `json:"accountName,omitempty"`
+}
+
+// CodexAccountRemoveCommand mirrors @orbit/shared: the Codex account slot the control plane asked
+// this runner to remove. Redelivered every heartbeat until the runner reports an outcome, so
+// carrying it out twice has to be the same as carrying it out once.
+type CodexAccountRemoveCommand struct {
+	// "default", or the id of a slot this runner added. Default is never removable.
+	Account string `json:"account"`
+	// Identifies this request (the server's codexAccountRemoveAt), so a report can be matched to the
+	// request it answers.
+	Attempt string `json:"attempt,omitempty"`
+}
+
+// CodexAccountRemoveResultRequest is the runner's word on a removal: "done" once the slot's
+// directory and record are gone, or "failed" with the machine's own reason — Default, a slot a live
+// session is in, or a directory that would not go away.
+type CodexAccountRemoveResultRequest struct {
+	Account string `json:"account"`
+	Status  string `json:"status"` // "done" | "failed"
+	Message string `json:"message,omitempty"`
+	Attempt string `json:"attempt,omitempty"`
 }
 
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card

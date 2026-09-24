@@ -78,6 +78,8 @@ import {
   RunInboxResponse,
   RunnerHeartbeatRequest,
   RunnerHeartbeatResponse,
+  CodexAccountRemoveCommand,
+  CodexAccountRemoveResult,
   InstallCommand,
   InstallResult,
   LoginCommand,
@@ -366,6 +368,10 @@ export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
 /** Runner signs in the Codex account a login `start` names (`account`, `accountName`). One that
  *  does not would ignore the account and sign in its machine's Default instead. */
 export const CODEX_ACCOUNT_LOGIN_V1 = 'codex-account-login/v1';
+/** Runner removes a Codex account slot the control plane names — its CODEX_HOME and the record
+ *  beside it, and nothing else. One that does not would ignore the request and leave the account
+ *  the page has already said goodbye to. */
+export const CODEX_ACCOUNT_REMOVE_V1 = 'codex-account-remove/v1';
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -1092,6 +1098,7 @@ export class RunnerApiController {
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
     let artifactRequests: RunnerHeartbeatResponse['artifactRequests'] = [];
     let loginRequest: RunnerHeartbeatResponse['loginRequest'];
+    let codexAccountRemoveRequest: RunnerHeartbeatResponse['codexAccountRemoveRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
@@ -1119,6 +1126,10 @@ export class RunnerApiController {
       loginRequest = await this.drainLoginRequest(
         runner.id,
         runnerSupportsCapability(capabilities, CODEX_ACCOUNT_LOGIN_V1),
+      );
+      codexAccountRemoveRequest = await this.drainCodexAccountRemoveRequest(
+        runner.id,
+        runnerSupportsCapability(capabilities, CODEX_ACCOUNT_REMOVE_V1),
       );
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
@@ -1156,6 +1167,7 @@ export class RunnerApiController {
       commitRequests,
       artifactRequests,
       loginRequest,
+      codexAccountRemoveRequest,
       installRequest,
       agentDirs,
       repoCleanupRequest,
@@ -1584,6 +1596,96 @@ export class RunnerApiController {
       return { action: 'code', code: r.loginCode };
     }
     return undefined;
+  }
+
+  /**
+   * The account removal this runner still owes, if one is in flight.
+   *
+   * Redelivered every heartbeat until the runner's report moves the row on, exactly like the
+   * sign-in relay's start, and for the same reason: the request reaches the machine on its next
+   * check-in and nothing else carries it. A process that does not declare account removal has no
+   * such operation at all, so asking it to carry one out would leave the account on the machine
+   * while the page said it was gone — it is refused here, in words the person who pressed the
+   * button can read.
+   *
+   * An abandoned request is swept here rather than by a timer: a runner offline past the window has
+   * not removed anything, and the row would otherwise stay `pending` forever.
+   */
+  private async drainCodexAccountRemoveRequest(
+    runnerId: string,
+    removesAccounts = false,
+  ): Promise<CodexAccountRemoveCommand | undefined> {
+    const r = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: {
+        codexAccountRemoveAccount: true,
+        codexAccountRemoveStatus: true,
+        codexAccountRemoveAt: true,
+      },
+    });
+    if (r?.codexAccountRemoveStatus !== 'pending') return undefined;
+    const started = r.codexAccountRemoveAt?.getTime() ?? 0;
+    if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
+      await this.prisma.runner.update({
+        where: { id: runnerId },
+        data: {
+          codexAccountRemoveStatus: 'failed',
+          codexAccountRemoveMessage: 'This runner did not answer — try again.',
+        },
+      });
+      return undefined;
+    }
+    const account = r.codexAccountRemoveAccount;
+    if (!account) return undefined;
+    if (!removesAccounts) {
+      await this.prisma.runner.update({
+        where: { id: runnerId },
+        data: {
+          codexAccountRemoveStatus: 'failed',
+          codexAccountRemoveMessage:
+            'This runner is too old to remove a Codex account — update it, then try again.',
+        },
+      });
+      return undefined;
+    }
+    return { account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '' };
+  }
+
+  /**
+   * Runner → control plane: what one account removal came to.
+   *
+   * A report names the request it is about. One about a request this row has moved past — the
+   * person asked again, or cancelled by starting something else — changes nothing.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('codex-account-remove-result')
+  @HttpCode(200)
+  async codexAccountRemoveResult(@CurrentRunner() runner: { id: string }, @Body() body: CodexAccountRemoveResult) {
+    const status = body?.status;
+    if (status !== 'done' && status !== 'failed') {
+      throw new BadRequestException('Unknown removal status');
+    }
+    if (body.account !== undefined && !CODEX_ACCOUNT_PATTERN.test(String(body.account))) {
+      throw new BadRequestException('Unknown account');
+    }
+    const attempt = body.attempt ? new Date(body.attempt) : undefined;
+    if (attempt && Number.isNaN(attempt.getTime())) {
+      throw new BadRequestException('attempt must be the request this reports on');
+    }
+    const { count } = await this.prisma.runner.updateMany({
+      where: {
+        id: runner.id,
+        codexAccountRemoveStatus: 'pending',
+        ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
+        ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
+      },
+      data: {
+        codexAccountRemoveStatus: status,
+        // Only a failure carries one; a success clears whatever the last one said.
+        codexAccountRemoveMessage: status === 'failed' ? (body.message ?? null) : null,
+      },
+    });
+    return { ok: true, applied: count > 0 };
   }
 
   /**

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Tag } from 'antd';
 import type {
   LoginEngine,
+  RunnerCodexAccountRemoveState,
   RunnerEngineAccount,
   RunnerEngineHealth,
   RunnerInstallState,
@@ -423,7 +424,8 @@ function EngineRow({
 }
 
 /** One Codex account, under its engine's row: its name, where it lives on the machine, its own
- *  sign-in state, and its own way back in. */
+ *  sign-in state, its own way back in, and — for every account but Default — the way off this
+ *  machine. */
 function AccountRow({
   runner,
   account,
@@ -439,10 +441,31 @@ function AccountRow({
   signIn: string | null;
   onSignIn: (panel: string | null) => void;
 }) {
+  const message = useToast();
+  const qc = useQueryClient();
   const kind = accountKindOf(account);
   const isDefault = account.id === 'default';
   const panel = accountPanel(account.id);
-  const [removing, setRemoving] = useState(false);
+  // What became of the last removal asked for here, if it was this account's: the button says it
+  // is under way, and a machine that refused says why.
+  const removal = runner.codexAccountRemove;
+  const mine = removal?.account === account.id ? removal : null;
+  const removing = mine?.status === 'pending';
+  const refused = mine?.status === 'failed' ? mine.message : null;
+  const remove = useMutation({
+    mutationFn: () =>
+      api<RunnerCodexAccountRemoveState>(
+        `/runners/${runner.id}/codex-accounts/${account.id}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: (state) => {
+      // A refusal the control plane could make itself (an older runner, or the account that is the
+      // machine's own CODEX_HOME) arrives as an error; anything the machine decided arrives here.
+      if (state?.status === 'failed' && state.message) message.error(state.message);
+      void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
+    },
+    onError: (e: Error) => message.error(e.message || 'Could not remove the account'),
+  });
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
   const snapshot = codexAccountPlanUsage(runner.planUsage, account.id);
@@ -484,31 +507,50 @@ function AccountRow({
             Sign in
           </Button>
         )}
+        {/* Default has nothing to remove: it is the CODEX_HOME the machine's own environment
+            selects, the one `codex` typed in a terminal shares. Every other account is a slot this
+            runner added, and this is the way back off the machine — the one thing the page could
+            not do before, which left whoever signed one in twice with a directory to delete by
+            hand. */}
+        {!isDefault && (
+          <Button
+            size="small"
+            type="text"
+            danger
+            disabled={!runner.online || removing}
+            loading={removing}
+            onClick={() => remove.mutate()}
+          >
+            Remove
+          </Button>
+        )}
       </div>
       {/* The same account, signed in twice. Two rows of quota for one account read as two quotas,
-          so the repeat is named on the row that made it — with the one way out: an account slot is
-          a directory on that machine, and whoever removes it removes that directory. */}
+          so the repeat is named on the row that made it — with the one way out right there: this
+          slot's CODEX_HOME and the record beside it go, and the other sign-in is untouched. */}
       {duplicateOf && (
         <div className="re-dup">
           <span>
             This is the same account as <b>{accountNameOf(duplicateOf)}</b> — signing in twice does
             not double the quota.
           </span>
-          <button className="re-link" type="button" onClick={() => setRemoving((open) => !open)}>
+          <button
+            className="re-link"
+            type="button"
+            disabled={!runner.online || removing}
+            onClick={() => remove.mutate()}
+          >
             Remove
           </button>
         </div>
       )}
-      {duplicateOf && removing && (
-        <div className="re-panel">
-          <div className="re-panel-row">
-            Removing this account means deleting its CODEX_HOME on{' '}
-            {runner.displayName || runner.name}:
-          </div>
-          <code className="re-cmd">{tildePath(account.codexHome)}</code>
+      {/* The machine would not do it, and its reason is the only thing that can explain why: a
+          session is running on that account, or the runner is too old to remove one at all. */}
+      {refused && (
+        <div className="re-panel bad">
+          <div className="re-panel-row">{refused}</div>
           <div className="re-panel-hint">
-            Orbit doesn’t remove accounts from a runner yet. Delete that directory there and this
-            row goes away on the machine’s next check-in.
+            {tildePath(account.codexHome)} on {runner.displayName || runner.name} is untouched.
           </div>
         </div>
       )}
@@ -707,7 +749,11 @@ export function RunnerEngines() {
           // A finished install is still in flight to the UI — it waits for the probe that
           // retires it. A finished update isn't: its summary is terminal and stays until
           // dismissed, so polling on it would never stop.
-          (r.install?.status === 'done' && r.install?.mode !== 'update'),
+          (r.install?.status === 'done' && r.install?.mode !== 'update') ||
+          // Same for an account removal: the machine answers on its next check-in, and the page
+          // has to be there to take the answer — a refusal is news the person who pressed it has
+          // to see, and the row it is about leaves once the probe catches up.
+          r.codexAccountRemove?.status === 'pending',
       )
         ? 4000
         : false,

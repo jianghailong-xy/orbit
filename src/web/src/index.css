@@ -11405,6 +11405,9 @@ button.chat-jump-start:hover {
 .re-act {
   display: flex;
   justify-content: flex-end;
+  /* An account's row holds two actions — sign in, and off this machine — and a group head one;
+     one child is a no-op. */
+  gap: 8px;
 }
 /* Codex with more than one account: the engine's row heads a group, and each account is a row
    under it. The head keeps what the engine owns — binary, version, updates — and says how many. */

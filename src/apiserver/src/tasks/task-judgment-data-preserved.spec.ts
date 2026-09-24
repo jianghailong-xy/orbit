@@ -1144,7 +1144,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
       // UPDATE or DELETE: no stored row is read beyond the scans that validate the CHECKs, and
       // none is locked for longer, backfilled or rewritten.
-      '0301_project_promotion_automatic_merge'],
+      '0301_project_promotion_automatic_merge',
+      // `runner.codex_account_remove_account`, `_status`, `_message` and `_at`: four nullable
+      // columns (one TEXT pair, one TEXT, one TIMESTAMP(3)) with no default and no NOT NULL, added
+      // to the removal relay — the request that takes a Codex account slot away from a machine,
+      // beside the sign-in relay's own columns (0296). Read against every claim above: four
+      // `ADD COLUMN`s and nothing else — no function, trigger, type, index or constraint is created
+      // or dropped, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects; `runner` is not a preserved relation, and no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
+      // and criterion row are out of its reach. No INSERT, UPDATE or DELETE: no stored row is read,
+      // locked, backfilled or rewritten.
+      '0302_runner_codex_account_remove'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

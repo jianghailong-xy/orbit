@@ -503,6 +503,20 @@ model Runner {
   // When the current relay started, so an abandoned one can be timed out.
   loginAt       DateTime? @map("login_at")
 
+  // Removing a Codex account slot from this machine — the one relay that takes an account away
+  // rather than adding one. The same shape as the sign-in relay above and for the same reason: the
+  // request has to reach the runner on its heartbeat, and the page that asked has to be able to
+  // read what became of it.
+  //   NULL       — nothing in flight
+  //   pending    — user asked; the next heartbeat tells the runner to remove it
+  //   done | failed — terminal, codexAccountRemoveMessage explains a failure
+  codexAccountRemoveAccount String?   @map("codex_account_remove_account")
+  codexAccountRemoveStatus  String?   @map("codex_account_remove_status")
+  codexAccountRemoveMessage String?   @map("codex_account_remove_message")
+  // When the current removal was asked for: the identity every report names, and the deadline an
+  // abandoned one is swept by.
+  codexAccountRemoveAt      DateTime? @map("codex_account_remove_at")
+
   // Per-engine health on this machine — installed / version / signed in — reported by heartbeat
   // from the same probe `orbit doctor` prints. Shape: @orbit/shared RunnerEngineHealth[].
   engines        Json?     @map("engines")

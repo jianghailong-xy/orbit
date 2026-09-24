@@ -958,7 +958,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// goroutine itself. Stop dispatching it as soon as drain begins and join anything
 	// already running before a self-update replaces this process image.
 	var heartbeatOps sync.WaitGroup
-	login := &loginRelay{}
+	// The sign-in relay reclaims the slot an add-account attempt leaves empty; a slot one of this
+	// runner's live sessions is stuck to is not one it may take away.
+	login := &loginRelay{liveSessionIDs: pool.sessionIDs}
 	install := &installRelay{}
 	// Codex rate-limit reset steps outlive the drain signal (a started step still reports), and are
 	// stopped only once the heartbeat has: nothing can be delivered to this process after that.
@@ -1001,7 +1003,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsage.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
-				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsageProbe.snapshot()),
+				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
 				AgentDirProbes:       agentDirs.snapshot(),
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
@@ -1338,6 +1340,25 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("repo-cleanup-result POST failed:", err)
 				}
 				repoHealth.refresh() // report the repaired state on the next heartbeat, not in a minute
+			}
+			// Remove a Codex account slot the user asked to be rid of. Carried out here, on the
+			// heartbeat's own goroutine, for the reason the repair above is: it is a directory
+			// removal, and the request is redelivered until we report, so a second one racing the
+			// first would only fight over a directory that is already going. A slot one of this
+			// runner's live sessions is stuck to is refused inside — the session's thread lives in
+			// that CODEX_HOME.
+			if rr := resp.CodexAccountRemoveRequest; rr != nil {
+				res := CodexAccountRemoveResultRequest{Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
+				if err := removeCodexAccount(codexUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
+					res.Status, res.Message = "failed", firstLine(err.Error())
+				} else {
+					// Re-probe the engines as well, so the account leaves the page's list on the
+					// next beat rather than in five minutes.
+					go engineHealth.refresh()
+				}
+				if err := t.codexAccountRemoveResult(res); err != nil {
+					logln("codex-account-remove-result POST failed:", err)
+				}
 			}
 			// Report what Claude Code history sits under a directory someone is typing into the
 			// new-workspace form. On its own goroutine: reading a directory's transcripts takes a

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -421,18 +422,25 @@ func fetchCodexPlanUsage(ctx context.Context, reader *codexResetReader) (*PlanUs
 
 // fetchCodexAccountPlanUsage reads the windows of one added account slot: account/rateLimits/read on
 // a bare app-server of that slot, and nothing else. No account/read, so no reset block: reset v1 is
-// Default's alone (docs/codex-rate-limit-reset-contract.md §3).
-func fetchCodexAccountPlanUsage(ctx context.Context, codexHome string) (*PlanUsage, error) {
+// Default's alone (docs/codex-rate-limit-reset-contract.md §3). The account id beside the windows
+// comes back with them: that same read is where the slot's account fingerprint comes from, and it is
+// turned into one by the caller — never stored, reported or logged, so the provider's own id for the
+// account stays on this machine (§3).
+func fetchCodexAccountPlanUsage(ctx context.Context, codexHome string) (*PlanUsage, string, error) {
 	var usage *PlanUsage
+	var accountID string
 	err := withCodexAccountAppServer(ctx, codexHome, 30*time.Second, func(cctx context.Context, app *codexAppServer) error {
 		rateLimits, err := app.request(cctx, codexRateLimitsReadMethod, nil)
 		if err != nil {
 			return err
 		}
-		usage, err = parseCodexPlanUsage(rateLimits)
-		return err
+		if usage, err = parseCodexPlanUsage(rateLimits); err != nil {
+			return err
+		}
+		accountID, _ = rateLimits["accountId"].(string)
+		return nil
 	})
-	return usage, err
+	return usage, strings.TrimSpace(accountID), err
 }
 
 // withDefaultCodexAppServer runs use on a bare app-server of the runner's default Codex account — the

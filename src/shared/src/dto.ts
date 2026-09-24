@@ -630,6 +630,11 @@ export interface RunnerHeartbeatResponse {
   /** One step of a browser-less runtime login the user started from the web. Absent on
    *  older control planes, and whenever no sign-in is in flight for this runner. */
   loginRequest?: LoginCommand;
+  /** A Codex account slot to remove from this machine. Absent on older control planes, and whenever
+   *  no removal is in flight for this runner. Only a runner that declares
+   *  `codex-account-remove/v1` is ever handed one: a runner that ignored it would leave the account
+   *  the page has already said goodbye to. */
+  codexAccountRemoveRequest?: CodexAccountRemoveCommand;
   /** An engine install the user started from the web. Absent on older control planes, and
    *  whenever no install is in flight for this runner. */
   installRequest?: InstallCommand;
@@ -919,6 +924,33 @@ export interface LoginCommand {
   accountName?: string;
 }
 
+/**
+ * Control plane → runner: remove one Codex account from this machine — the slot's own CODEX_HOME
+ * with everything Codex keeps in it, and the record beside it — and stop reading and reporting it.
+ *
+ * Redelivered every heartbeat until the runner reports an outcome, so carrying it out twice must be
+ * the same as carrying it out once. `default` is never removable: it is the CODEX_HOME the runner's
+ * own environment selects, the one `codex` typed in a terminal shares.
+ */
+export interface CodexAccountRemoveCommand {
+  /** `default`, or the id of a slot the runner added. */
+  account: string;
+  /** Identifies this removal (Runner.codexAccountRemoveAt), so a report can be matched to the
+   *  request it answers. */
+  attempt?: string;
+}
+
+/** Runner → control plane: what one removal came to. */
+export interface CodexAccountRemoveResult {
+  account: string;
+  /** `done` once the slot's directory and record are gone; `failed` with the machine's own reason
+   *  — Default, a slot a live session is in, or a directory that would not go away. */
+  status: 'done' | 'failed';
+  message?: string;
+  /** The `attempt` of the request this reports on. */
+  attempt?: string;
+}
+
 /** Runner → control plane: progress of a sign-in relay. */
 export interface LoginResult {
   /** `awaiting_code` (paste-back flow) and `awaiting_approval` (device flow) carry `url`; only
@@ -1081,6 +1113,20 @@ export interface RunnerLoginState {
    *  names none — the runner's own login — and for a new account until the runner reports the
    *  slot it added. */
   account?: string | null;
+}
+
+/**
+ * Browser-facing view of a runner's account-removal relay, for the row that asked for one.
+ *
+ * Nothing about the account itself is here — only which slot is going, and what the machine said.
+ */
+export interface RunnerCodexAccountRemoveState {
+  /** The slot being removed (`default` is never it), or null when nothing is in flight. */
+  account: string | null;
+  status: 'pending' | 'done' | 'failed' | null;
+  /** The machine's own words when it failed: the account is in use by a session, the runner is too
+   *  old to remove accounts at all, or the directory would not go away. */
+  message: string | null;
 }
 
 /** Control plane → runner: merge one session's worktree branch into a target branch. */

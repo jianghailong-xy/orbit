@@ -73,6 +73,7 @@ func init() {
 		integrationJobCapabilityV1,
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
+		codexAccountRemoveCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -629,6 +630,11 @@ func (t *Transport) claudeHistoryResult(b RunnerClaudeHistoryResult) error {
 // whether this machine ended up signed in.
 func (t *Transport) loginResult(b LoginResultRequest) error {
 	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
+}
+
+// codexAccountRemoveResult reports what a heartbeat-delivered account removal came to.
+func (t *Transport) codexAccountRemoveResult(b CodexAccountRemoveResultRequest) error {
+	return t.do(nil, "POST", "/runner/codex-account-remove-result", b, nil, 15*time.Second)
 }
 
 // installResult reports one step of a browser-requested engine install: the command being run,
