@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { SessionsController } from './sessions.controller';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
+import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 import type { SessionInterruptDto, SessionResumeDto, SessionTurnDto } from './dto';
 
 /**
@@ -12,11 +13,13 @@ import type { SessionInterruptDto, SessionResumeDto, SessionTurnDto } from './dt
  * end's word — takes the key the worker is about to write: the wake can no longer be queued under it,
  * its delivery becomes a `WAKE_KEY_TAKEN` dead letter, and the observer is never woken.
  *
- * So every door refuses the prefix with a 400 that names it. Six doors let a caller name a turn key:
+ * So every door refuses the prefix with a 400 that names it. Seven doors let a caller name a turn key:
  * four on the public API and two on the runner API, which is what the MCP tools (`session_send`,
- * `session_interrupt`) and the CLI's `--client-turn-id` travel through. Each is pinned separately
- * because the guard has to be per-door: it cannot move into `SessionsService.createTurn`, which is
- * precisely where the delivery worker writes these keys from.
+ * `session_interrupt`) and the CLI's `--client-turn-id` travel through, and a seventh on the runner
+ * API that addresses a project instead of a session: `POST /runner/projects/:id/coordinator/messages`,
+ * which `project_send` and `orbit project send --client-turn-id` travel through to its coordinator.
+ * Each is pinned separately because the guard has to be per-door: it cannot move into
+ * `SessionsService.createTurn`, which is precisely where the delivery worker writes these keys from.
  *
  * Every case sends an ordinary key through the same door afterwards, so no case can pass by refusing
  * everything.
@@ -27,6 +30,7 @@ const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 const ORDINARY_KEY = '33333333-3333-4333-8333-333333333333';
 /** A real wake key: a watch's REVOKED end, exactly as watch-delivery.service.ts writes one. */
 const RESERVED_KEY = 'watch:44444444-4444-4444-8444-444444444444:revoked';
+const PROJECT_ID = '55555555-5555-4555-8555-555555555555';
 
 // `[K3]` guards attempts at the runner door; nothing here is an attempt, so both calls are no-ops.
 const ATTEMPTS = { assertMayEndSession: async () => undefined, chargeSteer: async () => undefined };
@@ -39,6 +43,7 @@ function doors() {
   const turns: SessionTurnDto[] = [];
   const resumes: SessionResumeDto[] = [];
   const interrupts: Array<SessionInterruptDto | undefined> = [];
+  const coordinatorMessages: Array<{ message: string; clientTurnId: string }> = [];
   const sessions = {
     createTurn: async (_ownerId: string, _id: string, dto: SessionTurnDto) => {
       turns.push(dto);
@@ -54,6 +59,18 @@ function doors() {
     },
     assertHostedByRunner: async () => undefined,
   };
+  const projects = {
+    sendToCoordinator: async (
+      _ownerId: string,
+      _projectId: string,
+      _actingSessionId: string,
+      message: string,
+      clientTurnId: string,
+    ) => {
+      coordinatorMessages.push({ message, clientTurnId });
+      return { sessionId: 'coordinator-session', created: false, workspaceId: null, turn: { clientTurnId } };
+    },
+  };
   const browser = new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never, {} as never);
   const runner = new RunnerSessionsController(
     sessions as never,
@@ -61,7 +78,14 @@ function doors() {
     {} as never,
     ATTEMPTS as never,
   );
-  return { turns, resumes, interrupts, browser, runner };
+  // The project door files the message as the acting session its authorizer answers with.
+  const project = new RunnerProjectsController(
+    projects as never,
+    {} as never,
+    {} as never,
+    { assert: async () => CALLER } as never,
+  );
+  return { turns, resumes, interrupts, coordinatorMessages, browser, runner, project };
 }
 
 /** What each door owes a caller that named a reserved key: a 400 saying which prefix it may not use. */
@@ -213,4 +237,34 @@ test('POST /runner/sessions/:id/interrupt refuses a follow-up keyed in the wake 
     d.interrupts.map((dto) => dto?.clientTurnId),
     [ORDINARY_KEY, undefined],
   );
+});
+
+test('POST /runner/projects/:id/coordinator/messages refuses a clientTurnId in the wake namespace, trimmed first', async () => {
+  const d = doors();
+
+  await refuses('the project coordinator door', async () =>
+    d.project.sendToCoordinator(RUNNER, PROJECT_ID, CALLER, 'tok', {
+      message: 'a message for the coordinator, not a wake',
+      clientTurnId: RESERVED_KEY,
+    }),
+  );
+  // This door trims before it files as well, so the padded key is the same key and is refused as one.
+  // Judging the untrimmed value would let `project_send` file a wake key by padding it.
+  await refuses('the project coordinator door, padded', async () =>
+    d.project.sendToCoordinator(RUNNER, PROJECT_ID, CALLER, 'tok', {
+      message: 'a message for the coordinator, not a wake',
+      clientTurnId: `  ${RESERVED_KEY}  `,
+    }),
+  );
+  assert.equal(d.coordinatorMessages.length, 0, 'a refused coordinator message still reached the service');
+
+  // The controls: the caller's own key survives, and a caller that names none still gets one minted.
+  await d.project.sendToCoordinator(RUNNER, PROJECT_ID, CALLER, 'tok', {
+    message: 'again',
+    clientTurnId: ORDINARY_KEY,
+  });
+  await d.project.sendToCoordinator(RUNNER, PROJECT_ID, CALLER, 'tok', { message: 'fresh' });
+  assert.equal(d.coordinatorMessages.length, 2);
+  assert.equal(d.coordinatorMessages[0].clientTurnId, ORDINARY_KEY);
+  assert.match(d.coordinatorMessages[1].clientTurnId, /^[0-9a-f-]{36}$/);
 });
