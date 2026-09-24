@@ -522,6 +522,7 @@ async function readCandidateWork(
 
 /** Why a report was refused, in the shape the controller turns into a status code. */
 export type IntegrationResultRefusal = 'STALE_CLAIM' | 'NOT_FOUND' | 'ALREADY_FINAL' | 'INVALID_RESULT';
+
 export const INTEGRATION_RESULT_REFUSAL_STATUS: Record<IntegrationResultRefusal, number> = {
   STALE_CLAIM: 409,
   NOT_FOUND: 404,
