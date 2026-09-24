@@ -242,8 +242,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		}
 		if allowOrchestration {
 			// The session family as advertised, minus `import`: it is the one session verb that
-			// refuses to run in a session at all (cliSessionImport), so it is recorded in the test's
-			// exception table rather than pre-approved here.
+			// refuses to run in a session at all (cliSessionImport), and the capability document
+			// withholds it from a running agent for the same reason (HeadlessOnly), so there is no
+			// reader here to pre-approve it for.
 			for _, action := range []string{"create", "list", "search", "get", "await", "send", "interrupt", "merge", "end", "complete", "delete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}

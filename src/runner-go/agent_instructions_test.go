@@ -235,22 +235,6 @@ var advertisedCapabilityFamilies = []struct {
 	{"agentCLICapabilities", agentCLICapabilities, true},
 }
 
-// cliAllowedToolExemptions are the capabilities `capabilities --json` advertises to a running agent
-// that the allowlist deliberately does NOT pre-approve, each with its reason — the same shape as
-// cliParityExemptTools in cli_mcp_parity_test.go, and for the same purpose: an exception is a
-// decision somebody wrote down, never a rule that was forgotten. The test below fails both when an
-// entry here is also in the allowlist (so the reason is fiction) and when one stops naming anything
-// the document advertises (so the table has outlived its subject).
-var cliAllowedToolExemptions = map[string]string{
-	"session_import": "`orbit session import` refuses inside a session — 'session import is a headless operation; run " +
-		"`orbit session import` from a shell' (cliSessionImport) — because what it imports is a Claude Code transcript " +
-		"on this machine's disk, and the machine is the thing a session's agent is not holding. This list is only ever " +
-		"handed to a session's engine (claude_spawn.go, kimi_acp.go), and sessionCLICapabilities is composed for a " +
-		"session in turn, so the entry is offered in the one context it cannot run in: a rule for it would pre-approve " +
-		"a door whose every answer is that refusal. The drift is in the advertisement, not here — the command is a real " +
-		"door off headlessSessionCLICapabilities — and widening this list would only hide it.",
-}
-
 // This is the contract orbitCLIAllowedTools states about itself, asserted rather than trusted: "An
 // action missing here is pre-approved for nobody: the agent hits a permission prompt for a command
 // `capabilities --json` just told it to run." The allowlist is a hand-written enumeration, so it
@@ -259,6 +243,12 @@ var cliAllowedToolExemptions = map[string]string{
 //
 // It walks the spec tables themselves rather than a copy of them: a new capability is covered the
 // moment it is declared, and the failure names the family and the exact rule that is missing.
+//
+// Every advertised capability is pre-approved, with no table of exceptions: the one entry that ever
+// needed one — session_import, offered in the single context it refuses to run in — was drift in the
+// ADVERTISEMENT rather than in the allowlist, so it was fixed there (HeadlessOnly) instead of being
+// written down here. A capability withheld from a running agent needs no rule, and inventing one
+// would only hide the next advertisement that reaches the wrong reader.
 //
 // One direction only, deliberately: the watch and await rules are emitted whether or not watches are
 // on, so this list is a superset of the document in that one dimension. Over-approving costs a rule
@@ -270,7 +260,6 @@ func TestEveryAdvertisedCapabilityIsPreApproved(t *testing.T) {
 	ungated := stringSet(orbitCLIAllowedTools(exe, false))
 	orchestrated := stringSet(orbitCLIAllowedTools(exe, true))
 
-	seen := map[string]bool{}
 	missing := []string{}
 	for _, family := range advertisedCapabilityFamilies {
 		if len(family.specs) == 0 {
@@ -287,15 +276,7 @@ func TestEveryAdvertisedCapabilityIsPreApproved(t *testing.T) {
 				t.Fatalf("%s %s argv = %#v: a capability argv is `orbit <verb...>`, and the rule is its tail",
 					family.name, spec.Tool, spec.Argv)
 			}
-			seen[spec.Tool] = true
 			rule := "Bash(" + exe + " " + strings.Join(spec.Argv[1:], " ") + " *)"
-			if reason, exempt := cliAllowedToolExemptions[spec.Tool]; exempt {
-				if ungated[rule] || orchestrated[rule] {
-					t.Errorf("%s is recorded as not pre-approved but %s is in the allowlist anyway — the reason "+
-						"there says: %s", spec.Tool, rule, reason)
-				}
-				continue
-			}
 			// Where the document offers the capability decides which list has to carry it: demanding
 			// an orchestration verb of a non-orchestrator would ask for a rule for a command that
 			// agent cannot see, and the session rules' whole point is that they are not there.
@@ -310,12 +291,6 @@ func TestEveryAdvertisedCapabilityIsPreApproved(t *testing.T) {
 			if !rules[rule] {
 				missing = append(missing, family.name+" "+spec.Tool+": "+rule)
 			}
-		}
-	}
-	for tool, reason := range cliAllowedToolExemptions {
-		if !seen[tool] {
-			t.Errorf("allowlist exemption %q names no capability any family advertises — it has outlived its "+
-				"subject: %s", tool, reason)
 		}
 	}
 	if len(missing) > 0 {
