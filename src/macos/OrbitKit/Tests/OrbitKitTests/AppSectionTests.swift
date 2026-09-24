@@ -23,12 +23,13 @@ final class AppSectionTests: XCTestCase {
                        [.runners, .agents, .projects, .tasks, .following, .settings, .admin])
     }
 
-    /// The drawer and the iPad sidebar lead with the work — projects, tasks, what is followed — set
-    /// apart from, and above, the Workspaces; what is left is the Manage group, still role-gated.
+    /// The drawer and the iPad sidebar lead with the work — projects and tasks — set apart from, and
+    /// above, the Workspaces; what is left is the Manage group, still role-gated. Following is not
+    /// work you open: it has no drawer row, and on iPad it sits in Manage.
     func testWorkSectionsLeadAndManagementGroupKeepsTheRest() {
-        XCTAssertEqual(AppSection.workSections, [.projects, .tasks, .following])
-        XCTAssertEqual(AppSection.managementSections(isAdmin: false), [.runners, .settings])
-        XCTAssertEqual(AppSection.managementSections(isAdmin: true), [.runners, .settings, .admin])
+        XCTAssertEqual(AppSection.workSections, [.projects, .tasks])
+        XCTAssertEqual(AppSection.managementSections(isAdmin: false), [.runners, .following, .settings])
+        XCTAssertEqual(AppSection.managementSections(isAdmin: true), [.runners, .following, .settings, .admin])
     }
 
     func testEverySectionHasTitleAndIcon() {

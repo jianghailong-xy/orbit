@@ -48,8 +48,11 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     }
 
     /// What the iPhone drawer and the regular-width iPad sidebar lead with, ABOVE the Workspaces and
-    /// set apart from them: the work itself — its projects, its tasks, and what is being followed.
-    public static let workSections: [AppSection] = [.projects, .tasks, .following]
+    /// set apart from them: the work itself — its projects and its tasks. Following is not among them:
+    /// its watches are the waits agents keep for their own sessions, already drawn on each session's
+    /// row, header and Watching strip, and that strip, a watch's link and its alert are what open it.
+    /// The iPhone drawer has no row for it; on iPad it falls to the Manage group below.
+    public static let workSections: [AppSection] = [.projects, .tasks]
 
     /// Destinations shown below the regular-width iPad sidebar's first-class Workspace group.
     /// Keep this derived from ``visible(isAdmin:)`` so role gating and the cross-client navigation

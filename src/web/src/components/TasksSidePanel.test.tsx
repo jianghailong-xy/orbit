@@ -83,9 +83,10 @@ describe('TasksSidePanel nav', () => {
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     const keys = [...topBlock.matchAll(/key:\s*'([^']+)'/g)].map((match) => match[1]);
     // The judgment inbox stood first here until migration 0229 removed the project acceptance
-    // judgment: the page it opened read an endpoint that is no longer served. Following is the
-    // watches page (docs/watch-contract.md): what you and your sessions are waiting on.
-    expect(keys).toEqual(['projects', 'following', 'runners', 'providers']);
+    // judgment: the page it opened read an endpoint that is no longer served. Following (the
+    // watches page, docs/watch-contract.md) stood after Projects until it left the sidebar: its
+    // watches are agents' waits, reached from the session that keeps them.
+    expect(keys).toEqual(['projects', 'runners', 'providers']);
     expect(source).not.toContain('tp-workspaces-head');
     expect(source).not.toContain('<span className="tp-group-name">Workspaces</span>');
   });

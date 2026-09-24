@@ -6,7 +6,6 @@ import {
   CodeOutlined,
   DesktopOutlined,
   DisconnectOutlined,
-  EyeOutlined,
   FolderOutlined,
   InboxOutlined,
   LoadingOutlined,
@@ -105,8 +104,8 @@ const TOP: TopNavItem[] = [
     label: 'Projects',
     shortcut: projectsShortcutLabel(),
   },
-  // What you and your sessions are waiting on: watches, which wait on the server, not in a process.
-  { key: 'following', icon: <EyeOutlined />, label: 'Following' },
+  // No Following here: its watches are the waits agents keep for their own sessions, already shown
+  // in each session's header and Watching strip, and those are what link to /following.
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.

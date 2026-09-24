@@ -4,8 +4,8 @@ import XCTest
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the Projects
 /// section and the drawer that leads to it to the source they are: the section's stack is the only
 /// copy of which project is showing, the three-column shells select through a projection of it, and
-/// the iPhone drawer leads with the work — Projects, Tasks, Following — above the Workspaces, with
-/// the open projects closing the rail where the task lists and Recents used to be.
+/// the iPhone drawer leads with the work — Projects, Tasks — above the Workspaces, with the open
+/// projects closing the rail where the task lists and Recents used to be.
 final class ProjectsWiringTests: XCTestCase {
     private struct SourceMissing: Error, CustomStringConvertible {
         let path: String

@@ -64,9 +64,9 @@ enum SidebarSelection: Hashable {
     case agent(String)
 }
 
-/// The leftmost rail, now a source list. iPad leads with the work (Projects, Tasks, Following), then
-/// grouped, first-level Workspace rows, and keeps administrative destinations under Manage; macOS
-/// retains its expandable, runner-grouped Workspaces section. Admin is role-gated on both.
+/// The leftmost rail, now a source list. iPad leads with the work (Projects, Tasks), then grouped,
+/// first-level Workspace rows, and keeps Following and the administrative destinations under Manage;
+/// macOS retains its expandable, runner-grouped Workspaces section. Admin is role-gated on both.
 struct SectionSidebar: View {
     @Environment(AppModel.self) private var model
     let isAdmin: Bool
@@ -105,8 +105,8 @@ struct SectionSidebar: View {
         #endif
         return List(selection: selection) {
             #if os(iOS)
-            // The work leads — projects, tasks, what is followed — above the Workspaces and set
-            // apart from them, the same order as the iPhone drawer.
+            // The work leads — projects and tasks — above the Workspaces and set apart from them,
+            // the same order as the iPhone drawer.
             Section {
                 ForEach(AppSection.workSections) { section in
                     Label(section.title, systemImage: section.systemImage)

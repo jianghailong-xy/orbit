@@ -327,7 +327,8 @@ private struct CompactSections: View {
                     }
             }
 
-        // FOLLOWING — watches → one watch's record
+        // FOLLOWING — watches → one watch's record. Following isn't in the drawer rail: it is entered
+        // from a session's Watching strip, a watch's deep link (`.watch(id)`) or its alert.
         case .following:
             NavigationStack(path: $model.nav.path) {
                 FollowingListView(rowNavigation: .push)
@@ -624,10 +625,10 @@ private struct NavigationDrawer: View {
             .padding(.bottom, 8)
 
             List {
-                // The work leads the rail — projects, tasks, and what is followed — ABOVE the
-                // Workspaces and set apart from them by a rule; the open projects themselves close
-                // it, where the task lists and Recents used to be. Runners lives under Settings,
-                // Settings is the action bar's gear below, and Admin sits inside Settings.
+                // The work leads the rail — projects and tasks — ABOVE the Workspaces and set apart
+                // from them by a rule; the open projects themselves close it, where the task lists
+                // and Recents used to be. Runners lives under Settings, Settings is the action bar's
+                // gear below, Admin sits inside Settings, and Following has no row (see its section).
                 ForEach(AppSection.workSections) { section in
                     if section == .projects {
                         projectsRow
