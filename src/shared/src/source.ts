@@ -137,10 +137,13 @@ export interface SessionSourceSnapshot {
  * The refusal a task's most recent start met before its run could begin, as the task records it
  * (`task.dispatchRefusal`, migration 0298). Null on the task once another run is put on it.
  *
- * The runner decides these at the checkout — after the pin froze, so the session's SOURCE state
- * cannot carry them — and ends the run FAILED with `<code>: <reason>` as its error. Recorded on the
- * TASK because that is what the detail and the list show: before this, a start refused this way
- * left the task untouched and said so nowhere but that one session's error line.
+ * The runner decides these, and there are two gates it can decide one at. A REFUSED SOURCE never
+ * reaches a checkout (`BASE_REF_NOT_FOUND` and its siblings at resolution) and ends the start with
+ * the session at REFUSED and no pin; a checkout refusal is decided after the pin froze, so the
+ * session's SOURCE state cannot carry it at all (`DEPENDENCY_BASE_NOT_LANDED` and the rest of the
+ * admission gate). Both are recorded here, in the same shape, because the reader is the same
+ * reader: the detail and the list show a task that could not start, and which gate stopped it is
+ * what `code` says.
  */
 export interface TaskDispatchRefusal {
   code: SourceRefusalCode;
@@ -149,14 +152,19 @@ export interface TaskDispatchRefusal {
   refusedAt: string;
   /** The run that was refused. */
   sessionId: string;
-  /** The commit the run was pinned to, which is what it failed to contain. */
+  /**
+   * The commit the run was pinned to, which is what it failed to contain. Null when no pin froze:
+   * a refusal at resolution stops before one exists, and a selector that named a SHA has nothing
+   * to resolve.
+   */
   baseSha: string | null;
   /** The ref its selector resolved, e.g. `refs/heads/project/<id>`; null for a SHA selector. */
   ref: string | null;
   /**
    * The prerequisite commits the pinned commit does not contain, each with the prerequisite task a
    * merge receipt says landed it (null when no receipt of a prerequisite names that commit).
-   * Empty for every code but DEPENDENCY_BASE_NOT_LANDED.
+   * Empty for every code but DEPENDENCY_BASE_NOT_LANDED — and for that one too when there is no
+   * pin, because the message that names them is a checkout's.
    */
   missing: Array<{ sha: string; taskId: string | null }>;
   /** The runner's own words, after the code. */

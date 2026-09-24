@@ -33,9 +33,13 @@
  * And four controls that are the rows of (a) with ONE fact changed, so each is a control for one
  * condition of the fact rather than for the case as a whole:
  *
- *  - the line looked before the session had finished. This is the ordering that lost this rule's own
- *    first delivery on 2026-09-22: the landing is queued by the DONE, the runner commits when it
- *    finishes the session, and the commit appeared fifteen seconds after the line had answered;
+ *  - the line looked while the session that makes the branch was not at its end. This is the
+ *    ordering that lost this rule's own first delivery on 2026-09-22: the landing is queued by the
+ *    DONE, the runner commits when it finishes the session, and the commit appeared fifteen seconds
+ *    after the line had answered. Since 2026-09-23 the queue refuses to take that claim or to write
+ *    its answer final (`task-landing-races-final-commit.pg.spec.ts`), so the row this control needs
+ *    is reached the way the queue can still reach it — the session had finished, and finished again
+ *    after the line looked, which is the same fact to the fold;
  *  - the session ended on another branch (`git checkout -b` inside its checkout);
  *  - the session finished with work it could not commit;
  *  - the line had moved past the upstream, so what it found the tip inside was only the LINE.
@@ -397,12 +401,17 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
     declaredCodelessAt.key);
   await prisma.task.update({ where: { id: declaredTask }, data: { codeless: true } });
 
-  // ── (a) with one fact changed: the line looked before the session had finished ─────────────────
-  // Queued by the DONE while the runner was still finishing the session; the finish, recorded
-  // fifteen seconds after the line looked, is where the runner commits whatever the session left.
+  // ── (a) with one fact changed: the answer is about a branch that went on growing ───────────────
+  // The row this control is about is the one a build before 2026-09-23 wrote: the line answered
+  // ALREADY_LANDED while the session that produces the branch was still running. The queue does not
+  // take that claim any more (`task-landing-races-final-commit.pg.spec.ts` refuses to hand a landing
+  // over until the task's work has stopped moving, and refuses to write the answer final before
+  // that), so the row is reached the way this queue can still reach it — the session had finished,
+  // and finished AGAIN fifteen seconds after the line looked, which is the same fact to the fold
+  // ("an answer about a branch that went back to work stops counting by itself").
   await twoPiecesOnMain(lookedTooSoonAt.key, 'too-soon');
   const tooSoonTask = await settledTask('the work the line looked at too soon', lookedTooSoonAt.key);
-  const tooSoonSession = await workSession(tooSoonTask, 'orbit/looked-at-too-soon', 'NOT_FINISHED');
+  const tooSoonSession = await workSession(tooSoonTask, 'orbit/looked-at-too-soon', {});
   const tooSoonAnswer = await offeredToTheLine(tooSoonTask, NOTHING_OF_ITS_OWN);
   await prisma.session.update({
     where: { id: tooSoonSession },
@@ -413,13 +422,6 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
       worktreeDirty: false,
     },
   });
-
-  // ── (a) with one fact changed: HEAD ended on a branch the line was never handed ────────────────
-  await twoPiecesOnMain(endedElsewhereAt.key, 'elsewhere');
-  const elsewhereTask = await settledTask('the work committed on a branch of its own making',
-    endedElsewhereAt.key);
-  await workSession(elsewhereTask, 'orbit/started-here', { worktreeBranch: 'feat/where-the-work-went' });
-  await offeredToTheLine(elsewhereTask, NOTHING_OF_ITS_OWN);
 
   // ── (a) with one fact changed: the finish left work uncommitted ────────────────────────────────
   await twoPiecesOnMain(leftUncommittedAt.key, 'uncommitted');
@@ -433,6 +435,16 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
   const movedOnTask = await settledTask('the work offered to a line ahead of main', lineHadMovedOnAt.key);
   await workSession(movedOnTask, 'orbit/offered-to-a-line-ahead');
   await offeredToTheLine(movedOnTask, { ...NOTHING_OF_ITS_OWN, targetShaBefore: LINE_AHEAD_OF_UPSTREAM });
+
+  // ── (a) with one fact changed: HEAD ended on a branch the line was never handed ────────────────
+  // LAST among the fixtures, because the answer this one draws queues a second landing for the
+  // branch the work ended on (the fix's other half, §2.6) and the beats above are each about their
+  // own job. The case's own read is a query, and it sees both rows.
+  await twoPiecesOnMain(endedElsewhereAt.key, 'elsewhere');
+  const elsewhereTask = await settledTask('the work committed on a branch of its own making',
+    endedElsewhereAt.key);
+  await workSession(elsewhereTask, 'orbit/started-here', { worktreeBranch: 'feat/where-the-work-went' });
+  await offeredToTheLine(elsewhereTask, NOTHING_OF_ITS_OWN);
 
   /** What the table holds about one task — so each case is shown to be the shape it claims. */
   async function recordOf(taskId: string) {
@@ -516,17 +528,20 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
     });
 
   // ═══ the four controls: (a) with one fact changed ═════════════════════════════════════════════
-  await t.test('an answer taken before the session finished does not count', async () => {
+  await t.test('an answer taken while the session that makes the branch was not at its end '
+    + 'does not count', async () => {
     const finished = await prisma.session.findUniqueOrThrow({
       where: { id: tooSoonSession },
       select: { finishedAt: true },
     });
     assert.ok(finished.finishedAt && finished.finishedAt > tooSoonAnswer.lookedAt,
-      'the fixture has to be the ordering it names: the line looked, then the session finished');
+      'the fixture has to be the ordering it names: the line looked, and the session finished after');
     assert.deepEqual(answerOf(stated, LOOKED_TOO_SOON),
       { satisfied: true, clauses: [], landing: 'ON_INTEGRATION_LINE' },
-      'the line looked before the runner had committed what the session left, so the answer is about '
-        + 'a branch that may have grown since — the way this rule’s own first delivery was lost');
+      'the session that produces this branch went on after the line looked — a revive and a later '
+        + 'finish are the same fact to this fold as a finish that had not happened yet — so the '
+        + 'answer is about a branch that may have grown since, which is how this rule’s own first '
+        + 'delivery was lost');
   });
 
   await t.test('an answer about a branch the session did not end on does not count', async () => {

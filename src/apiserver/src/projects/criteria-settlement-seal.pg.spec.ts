@@ -151,6 +151,7 @@ test('a tightening re-seals the standard set, so the confirmation it was settled
    * this file is allowed to notice.
    */
   const completionInputs = {
+    routeSettledUnmerged: async () => [],
     routeSettledProjects: async () => [],
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],

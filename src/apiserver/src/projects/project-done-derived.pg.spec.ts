@@ -163,6 +163,7 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
    * is allowed to notice.
    */
   const completionInputs = {
+    routeSettledUnmerged: async () => [],
     routeSettledProjects: async () => [],
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],
@@ -720,6 +721,7 @@ test('the clause for a criterion its own evidence wrote takes its place in order
   /** The router both post-commit edges are held behind; the first timeline says why a stand-in
    *  that answers with nothing is what a fixture building these services directly needs. */
   const completionInputs = {
+    routeSettledUnmerged: async () => [],
     routeSettledProjects: async () => [],
     routeReadyCriteria: async () => [],
     routeUnlandedCriteria: async () => [],

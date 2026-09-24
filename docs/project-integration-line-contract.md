@@ -41,7 +41,7 @@
 
 **G4（投递不计费）**：外部事实（任务状态变化、合并回执、证据修订、owner 答复、例外待办）的记账与投递，不经过任何按次数计费的授权器（§6.6）。
 
-**G5（不加唤醒事件、不加 blocker kind）**：新机制放在新表里。`COORDINATOR_WAKE_EVENTS` 与 `project_blocker_kind_chk` 两个闭集不增加成员：前者每加一个事件要改 8–10 处，而且正是本项目要替换的旧通道；后者被 `project-source-contract.spec.ts`（SR50/SR51）按设计拒绝任何新增。前者有一处例外：`DEPENDENT_READY`（附录 B 修订 3）。
+**G5（不加唤醒事件、不加 blocker kind）**：新机制放在新表里。`COORDINATOR_WAKE_EVENTS` 与 `project_blocker_kind_chk` 两个闭集不增加成员：前者每加一个事件要改 8–10 处，而且正是本项目要替换的旧通道；后者被 `project-source-contract.spec.ts`（SR50/SR51）按设计拒绝任何新增。前者有两处例外：`DEPENDENT_READY`（附录 B 修订 3）与 `PROJECT_SETTLED_UNMERGED`（附录 B 修订 4）。
 
 ### 0.3 平台发给会话的消息（G6、G7）
 
@@ -325,15 +325,15 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | # | from | 已提交事实 | to | 附带写入（同一事务） |
 |---|---|---|---|---|
 | J-T1 | — | 入队事实（§2.3） | `QUEUED` | L3（第一条）；同任务更早的 `QUEUED` 行 → `SUPERSEDED` |
-| J-T2 | `QUEUED` | 心跳领取 CAS：该 runner 声明 `integration-job/v1` 且未 draining；同 `serial_key` 无 `RUNNING`；按 `(created_at, id)` 取最早 | `RUNNING` | `claim_generation + 1`、`claim_lease_owner`、`claimed_at`、`heartbeat_at` |
+| J-T2 | `QUEUED` | 心跳领取 CAS：该 runner 声明 `integration-job/v1` 且未 draining；`LAND_TASK` 还要求该任务没有 `finished_at IS NULL` 的工作会话（见 J-T1e）；同 `serial_key` 无 `RUNNING`；按 `(created_at, id)` 取最早 | `RUNNING` | `claim_generation + 1`、`claim_lease_owner`、`claimed_at`、`heartbeat_at` |
 | J-T3 | `RUNNING` | 领取时发现 `heartbeat_at < now() - 10 min`（runner 失联） | `RUNNING`（换认领者） | `claim_generation + 1`。旧认领者的结果回报被 409 `STALE_CLAIM` 拒绝 |
 | J-T4 | `RUNNING` | 进度回报（`phase`、`heartbeat_at`；晋升重检见 M-T7） | `RUNNING` | |
-| J-T5 | `RUNNING` | 结果回报：`LANDED` / `ALREADY_LANDED` / `NOTHING_TO_LAND`（0300） | 同名终态 | 回执（J8，`NOTHING_TO_LAND` 仅在该任务没有任何会话报告过工作时）；解决该任务的集成类待办（X 表，仅落地）；提交后边沿见 J9–J11 |
+| J-T5 | `RUNNING` | 结果回报：`LANDED` / `ALREADY_LANDED` / `NOTHING_TO_LAND`（0300） | 同名终态 | 回执（J8，`NOTHING_TO_LAND` 仅在该任务没有任何会话报告过工作时）；解决该任务的集成类待办（X 表，仅落地）；提交后边沿见 J9–J11。抢跑的 `ALREADY_LANDED`（判定的领取早于该任务工作结束）不落终态，退回 `QUEUED`（见 J-T1e） |
 | J-T6 | `RUNNING` | 结果回报：`READY`（仅 `CHECK_PROMOTION`） | `READY` | 晋升 → `READY`（M-T2） |
 | J-T7 | `RUNNING` | 结果回报：`CONFLICT` / `CHECK_FAILED` / `ERROR` | 同名终态 | 例外待办（§4.2）；晋升 → `BLOCKED`（若有） |
 | J-T8 | `QUEUED` / `RUNNING` | 任务被重开或取消、晋升被取代或拒绝、owner 取消（写 `cancel_requested_at`） | `CANCELLED` | `RUNNING` 行由 runner 在下一个阶段边界回报 `CANCELLED` |
 
-**J5（不自动重试）**：`CONFLICT`、`CHECK_FAILED`、`ERROR` 之后平台不再入队，重试只由 J-T1b、J-T1c 两个事实触发（判据 6）。唯一例外是 runner 在同一次作业内处理「推送时目标被别人推进」：回到 FETCH，最多再做 2 轮（附录 A-Q5），不另起作业。
+**J5（不自动重试）**：`CONFLICT`、`CHECK_FAILED`、`ERROR` 之后平台不再入队，重试只由 J-T1b、J-T1c 两个事实触发（判据 6）。唯一例外是 runner 在同一次作业内处理「推送时目标被别人推进」：回到 FETCH，最多再做 2 轮（附录 A-Q5），不另起作业。（J-T1e 的补排不在此列：它入队的是**另一条分支上的首次落地**，不是对任何失败作业的重试，被抢跑判掉的那个作业本身仍是终态。）
 
 ### 2.3 触发点
 
@@ -352,6 +352,15 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 **J-T1c（任务分支来了新提交）**：该任务工作会话的 `turnComplete` 提交时，若 `dto.branchSha` 与该任务最近一条失败作业的 `source_sha` 不同、任务仍是 DONE、且有 OPEN 的集成类待办，同一事务入队下一个 generation（效果图 5：「push to the task branch — Orbit re-integrates and re-checks on its own」）。
 
 **J-T1d（线开始时补入队）**：见 L3 第 4 步。
+
+**J-T1e（不许抢跑；判成了「没有独有提交」而成果在另一条分支上）**：`LAND_TASK` 的 `ALREADY_LANDED` 只在**该任务的工作已经停止移动**时才写成终态，因为 runner 在**结束会话**时才提交 worktree（SR13），而作业由结束它的那次 DONE 入队——线可能在提交存在之前就被交给一条空分支，那时它唯一能给的答案就是 `ALREADY_LANDED`，而那是终态、按设计不再重投。两条守卫（`project-integration-job.ts` 的 `landingWorkHasSettled` / `landingJudgedTooEarly`，SQL 见 `integration-job-relay.ts#claimOne`）：
+
+- **领取（J-T2）**：该任务任一工作会话 `finished_at IS NULL` 时不领取，留在 `QUEUED`；会话结束后第一个心跳领取（那时 fetch 到的分支才带着收尾提交）。
+- **判定（J-T5）**：回报的 `claimed_at` 早于某工作会话的 `finished_at`（或该会话尚未结束）时不落终态，该行退回 `QUEUED` 清空认领，由下一次领取重判。
+
+**补排**：终态 `ALREADY_LANDED` 的 `source_ref` 若**不是**该任务工作结束所在的分支（该任务最后结束的工作会话的 `worktree_branch`，缺省回落 `branch`；`workBranchEndedOn`），成果就没有任何路线——同一事务入队下一个 generation，`source_ref` 指向那条分支（`queueLandingBehindTheWork`，`landingLeftWorkBehind` 为判据）。2026-09-23 的事故：任务 `01a0ce5e…` 的 DONE 冻结了**已经失败的那轮 retry** 的分支 `orbit/autorun-false-830a9b`（tip 就是项目分支 tip，什么都没带），而 151 轮那条会话的 `789a8fffc` 在 `orbit/autorun-false-91f94d` 上；线答 ALREADY_LANDED 时那条会话还有 2 分 42 秒没跑完，成果最后靠两次人工 cherry-pick 才落地。用例见 `src/apiserver/src/tasks/task-landing-races-final-commit.pg.spec.ts`。
+
+**J-T1e 的候选一侧（§3.4 M-F2）**：同一场竞态在晋升候选上重演——`CHECK_PROMOTION` 是唯一解析并冻结 source tip 的东西（`TASK_BRANCH` 候选的 `source_sha` 由它回写，0293），候选由结束任务的那次 DONE 入队，于是检查可能在收尾提交存在之前就把 tip 冻成「owner 被问的那个 commit」，owner 合下的是旧 commit，后面那个再没人问。同一个问题因此也问候选：候选 `session_id` 所属任务的工作会话仍有 `finished_at IS NULL`（或回报的 `claimed_at` 早于某条工作会话的 `finished_at`）时该检查退回 `QUEUED`（`landingJudgedTooEarly`），由**上面同一条**领取守卫按 `session_id` 找到那个任务压住——不冻结、不开卡；工作已停止移动、而检查看的分支不是该任务工作结束所在的分支时（`checkSawTheFinishedBranch`，即 `workBranchEndedOn` 那条分支 ≠ 候选的 `source_ref`），候选**不冻结**：它被取代（`SUPERSEDED`，那条 job 自己仍是它当时答案的记录），同一事务按那条分支补一个候选（`refileCandidateBehindTheWork`），即 DONE 在工作停止移动之后写才会产生的那个候选。候选没有 `task_id`（0293），所以「点名」落在候选/卡上而不是任务行：退回事小、补排的那个候选 `source_ref` 指着成果所在的分支，卡最终问的就是它。`PROJECT_BRANCH` 候选不受影响：它的 `source_sha` 由平台在检查之前写死（取自 LANDED 作业的 `landed_sha`），检查按具名提交合并，没有解析竞态。用例见 `src/apiserver/src/projects/promotion-candidate-freeze.pg.spec.ts`。
 
 **J-T2 的投递**：`HeartbeatResponse` 新增 `integrationJobs: IntegrationJobCommand[]`，由 `integration-job-relay.ts` 的 `dispatchIntegrationJobs`（照抄 `codex-reset-relay.ts` 的 `dispatchCodexResetCommand`）填入，每拍每个 runner 至多 2 条、串行键互不相同。结果与进度路由：
 
@@ -1380,3 +1389,4 @@ SELECT count(*) FROM project_coordinator_wake
 - **v1 修订 2**（2026-09-22）：明确一条边界——`coordinator_enabled` 只约束**自动**交付（生产者唤醒、平台自动把待办投递给协调会话），不约束 **owner 自己按下的那一次**。§4.7 的「让协调会话再看一次」与 §4.4 第 1 条的 `askable` 都改按**会话**判（存在活着的协调会话即可），计数那条读也去掉 `coordinatorEnabled: true`。缘由：2026-09-22 owner 报一个「标准集确认过、却从未启动」的项目（`coordinator_enabled=false`、`config_revision=0`）——它的 3 条异常卡画在协调会话里，而会话列表行、标题栏、needs-you 条三处全暗，因为计数比「卡片画在哪」多写了一句开关判据：**同一个事实两条判据**，指向的正是当初把开关写进判据的理由（「点了打不开东西的 badge 比暗的更糟」）的反面。同族的第二处：卡片上的「Ask the coordinator again」被同一条开关判据藏起来，而真按下去也会在 `deliver` 那一行被弹回 owner（`handToOwner(NO_COORDINATOR)`），转一圈回到原处。选择把开关收窄成「别自行动手」而不是「人也叫不动」：自动那一半一字未动（四个 wake producer 与 `coordinator-disabled-negatives.spec.ts` 照旧成立），只有 owner 自己那一次按压走 `deliver(itemId, 'OWNER')`。F12 的「开关检查保留」说的是生产者那一族，未受影响。
 - **v1 修订 3**（2026-09-23）：G5 对 `COORDINATOR_WAKE_EVENTS` 开一处例外，增 `DEPENDENT_READY`（迁移 0299）。一条前置落地（§2.5 J9 的谓词，在 J10 的两条边沿上：回执提交，以及没有要落地的代码时的 DONE）放出一条 `autoRunWhenReady = false`、当前可开工的下游时，平台把「它可以开工了」送到协调会话并点名那条下游；开不开工是会话的判断（§0.1），平台不开。缘由：2026-09-23 项目 `34Tcl0kralZrY8opuLJU4` 的最后一条任务前置已落地、协调会话醒着，却没有任何事实因为它可开工而到达，项目停了两个多小时，直到有人去看——目标里点名的不送达事件之一（依赖就绪但 autoRun=false）。不放新表，因为它不是例外待办：没有异常要处理、没有终态要记，要的只是送到一次。载体是 G6（`CoordinatorDeliveryService.queue`：`createTurn` + `NEXT_TURN`，`participateSendTransaction` 里重读会话未结束并把唤醒行绑成 DELIVERED），不走 `resume`（X-D3）；幂等键复用唤醒账本的（事件，下游任务，`task_dispatch_epoch`），同一代只投一次。会话忙时排在未读消息之后；会话已结束或项目没有协调会话时拒绝并交还键，不复活会话，下游留在 owner 的 Ready-to-run 列表上（默认做法；要推给 owner 就改成 OWNER 待办）。此前 0298 已为 `TASK_DISPATCH_REFUSED` 在这个闭集里加过一次。
 - **v1 修订 4**（2026-09-23）：M7 放开一处——项目分支 + Automatic + 检查干净 → 平台自行合入 main（新增 M-T11、M-T12，迁移 0301 的 `confirmed_automatically` 两列，runner 能力 `promotion-automatic-land/v1`，§3.6 `merged.automatic` / `merged.revert`，V8 文案）。缘由：owner 2026-09-23 的决定「有自己的项目集成分支 + automatic 就可以合并；如果是 main 或非 automatic，就需要人来点」；线上实测两个项目（一个 30 小时 15 张、一个 6 小时 6 张）的 21 张晋升卡里 20 张在几分钟内被按下，按已经不是决策而是形式。边界：项目分支是已过线检查的暂存区（干净），Automatic 是 owner 已给过的授权（可以自己动），两者都在才不越权；「干净」一字不放宽——检查红、有冲突、main 在检查后前进、有 OPEN 集成类待办，任一即出卡，main 前进由 runner 在推送前判（只落到 `upstream_sha_checked`，动了就原样交回），声明不了这一点的旧 runner 不参与自动落地；授权在领取时重读一次，检查之后被收回（Automatic 关、线改、新开集成类待办）的落地不下发、交回 owner。代价：`coordinator_enabled` 从此同时是「自动交付例外」与「自动合入 main」的授权，为前者打开的项目会顺带得到后者；不另加开关（owner 明确选择复用 Automatic），改为在该列注释与 Automatic 文案里写明。部署顺序：apiserver 先上即安全——没声明 `promotion-automatic-land/v1` 的 runner 一律出卡，与今天一致；runner 升版（root `package.json` 版本号 bump、自更新）之后，自动合入才对该 runner 上的项目生效。
+- **v1 修订 5**（2026-09-23）：G5 对 `COORDINATOR_WAKE_EVENTS` 再开一处例外，增 `PROJECT_SETTLED_UNMERGED`（迁移 0303）。结算后的项目，若它的集成线上仍有成果没有任何回执说到 upstream，平台把「这些提交停在集成线上、没进 main」送到协调会话并点名提交（`detail.commits`）；合并由谁做是会话/owner 的判断（M7），平台不合、不排候选、也不改任何守卫。缘由：2026-09-23 项目 `34ODoUKJGEsfbgcJDGS4q` 已 DONE，而 `d6b55d2d853f8b2410977674e3ec54c39f52a34e` 停在 `project/34ODoUKJGEsfbgcJDGS4q` 上、比 main 多一个提交：承载它的落地作业在会话写下这个提交之前九分钟就已终态 `ALREADY_LANDED`（§2.2 J-T5 的那条答案是「分支上已经没有 line 没见过的提交」，而会话后来又提交了一次），于是没有任何一次「队列变短了」来为这个 tip 排候选（M-F1/M-F4），而结算之后连会重新读这条线的写入也停了——它最终由人手工重放进 main。不放新表，因为它不是例外待办：没有失败要处理、没有终态要记，要的只是送到一次。载体是 G6（`CoordinatorDeliveryService.deliver` → `sessions.resume`，`createTurn`），不走 `WakeDispositionService`（那条规则读的是一条验收标准的覆盖度，而结算要求每条标准都已 LANDED，没有标准可读）；幂等键是（事件，项目，`(taskId, tipSha)` 对的摘要），同一批残留只投一次、残留移动一次就再投一次。读的是 `project-criterion-landing.ts` 自己的两个折叠（`taskLanding` 与 `taskHasNothingToLand`）而不是第二份「线上的、不在 main 上的」判断；只在**已结算**的项目上读，所以线上有活而项目还开着的常态不会产生任何东西。此前 0298 为 `TASK_DISPATCH_REFUSED`、0299 为 `DEPENDENT_READY` 已各加过一次。

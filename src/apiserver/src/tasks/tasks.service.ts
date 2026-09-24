@@ -1714,6 +1714,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`settled-project delivery failed: ${e?.message ?? e}`),
     );
     await this.reprojectProjectStatus(projectIds);
+    // After the projection, for the reason the receipt edge gives about its own copy of this line:
+    // the fact is about a project that has SETTLED, so it is asked of the row the projection has
+    // just written. On this path it is the settlement itself that can leave work behind — the task
+    // write that made the last criterion satisfied is not a landing, and the line stays where it is.
+    await this.completionInputs.routeSettledUnmerged(projectIds).catch((e) =>
+      this.logger.warn(`settled-unmerged delivery failed: ${e?.message ?? e}`),
+    );
   }
 
   /**

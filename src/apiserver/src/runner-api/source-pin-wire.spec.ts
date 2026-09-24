@@ -63,6 +63,11 @@ function stubPrisma(options: { updated: number; after: Record<string, unknown> }
       },
       findUniqueOrThrow: async () => options.after,
     },
+    // The pin route freezes the session and, when a refusal wins the compare-and-set, the task
+    // record it implies in ONE transaction, so the route reaches the database through a
+    // transaction client. This stub runs the closure on itself: every case here either writes and
+    // commits or throws before writing, so a rollback is a case nothing asserts and nothing needs.
+    $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(prisma),
   };
   return { prisma: prisma as unknown as PrismaService, writes };
 }

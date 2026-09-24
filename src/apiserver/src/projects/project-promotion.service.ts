@@ -13,10 +13,13 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
+  LandingWorkSessionFacts,
   PROMOTION_AUTOMATIC_LAND,
   integrationSerialKey,
   queuePromotionJob,
+  queueTaskBranchCandidate,
   shortBranchName,
+  workBranchEndedOn,
 } from './project-integration-job';
 import {
   LIVE_PROMOTION_STATES,
@@ -163,7 +166,7 @@ export class ProjectPromotionService {
 
     // M-T6: one live candidate per source. The older one is retired first, in this transaction, so
     // the index below never has two to choose between.
-    await this.supersedeLiveCandidates(tx, projectId, codebase.integrationRef);
+    await supersedeLiveCandidates(tx, projectId, codebase.integrationRef);
 
     const promotionId = randomUUID();
     const [created] = await tx.projectPromotion.createManyAndReturn({
@@ -241,41 +244,6 @@ export class ProjectPromotionService {
       },
     });
     return tasks.filter((task) => task.mergeReceipts.length === 0).map((task) => task.id);
-  }
-
-  /** M-T6: retire the candidate that was standing, its check job and its card. */
-  private async supersedeLiveCandidates(
-    tx: Prisma.TransactionClient,
-    projectId: string,
-    sourceRef: string,
-  ): Promise<void> {
-    const live = await tx.projectPromotion.findMany({
-      where: { projectId, sourceRef, state: { in: [...LIVE_PROMOTION_STATES] } },
-      select: { id: true, checkJobId: true, openItemId: true },
-    });
-    for (const row of live) {
-      await tx.projectPromotion.update({
-        where: { id: row.id },
-        data: { state: 'SUPERSEDED' satisfies PromotionState, decidedAt: new Date() },
-      });
-      if (row.checkJobId) {
-        await tx.projectIntegrationJob.updateMany({
-          where: { id: row.checkJobId, state: { in: ['QUEUED', 'RUNNING'] } },
-          data: { state: 'CANCELLED', finishedAt: new Date() },
-        });
-      }
-      if (row.openItemId) {
-        await tx.projectOpenItem.updateMany({
-          where: { id: row.openItemId, state: 'OPEN' },
-          data: {
-            state: 'SUPERSEDED',
-            resolution: 'PROMOTION_MOVED_ON',
-            resolvedBy: 'PLATFORM',
-            resolvedAt: new Date(),
-          },
-        });
-      }
-    }
   }
 
   // ── the owner's doors (M-F3) ──────────────────────────────────────────────────────────────────
@@ -778,6 +746,115 @@ export async function automaticLandingRefusal(
 /** The checks a promotion carries, as the check reported them. */
 function storedChecks(promotion: PromotionRow): IntegrationCheckResult[] {
   return Array.isArray(promotion.checks) ? (promotion.checks as unknown as IntegrationCheckResult[]) : [];
+}
+
+/**
+ * M-T6: retire the candidates standing on one source, their check jobs and their cards.
+ *
+ * `keepJobIds` names a job whose result is being applied right now: a terminal job row is written
+ * once (`project_integration_job_terminal_guard`), so cancelling that one here would make the very
+ * update that records what it answered fail — the whole result, and with it the retirement, would
+ * roll back. Every other caller leaves it empty and takes the job out of the queue too.
+ */
+async function supersedeLiveCandidates(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  sourceRef: string,
+  keepJobIds: readonly string[] = [],
+): Promise<void> {
+  const live = await tx.projectPromotion.findMany({
+    where: { projectId, sourceRef, state: { in: [...LIVE_PROMOTION_STATES] } },
+    select: { id: true, checkJobId: true, openItemId: true },
+  });
+  for (const row of live) {
+    await tx.projectPromotion.update({
+      where: { id: row.id },
+      data: { state: 'SUPERSEDED' satisfies PromotionState, decidedAt: new Date() },
+    });
+    if (row.checkJobId && !keepJobIds.includes(row.checkJobId)) {
+      await tx.projectIntegrationJob.updateMany({
+        where: { id: row.checkJobId, state: { in: ['QUEUED', 'RUNNING'] } },
+        data: { state: 'CANCELLED', finishedAt: new Date() },
+      });
+    }
+    if (row.openItemId) {
+      await tx.projectOpenItem.updateMany({
+        where: { id: row.openItemId, state: 'OPEN' },
+        data: {
+          state: 'SUPERSEDED',
+          resolution: 'PROMOTION_MOVED_ON',
+          resolvedBy: 'PLATFORM',
+          resolvedAt: new Date(),
+        },
+      });
+    }
+  }
+}
+
+/**
+ * The candidate a task's work is owed after the one that was made for it turned out to be about a
+ * branch the work did not end on (§3.4 M-F2, J-T1e one level up).
+ *
+ * WHAT THIS IS FOR
+ * ----------------
+ * `queueTaskBranchCandidate` freezes the NEWEST work session of the DONE that queued it, and that is
+ * the right branch exactly while the task's work has stopped moving. The DONE is written while a
+ * session can still be running, and then the branch the candidate names and the branch the work ends
+ * on come apart — the 2026-09-23 shape of the landing incident, one level up: this deployment has
+ * seen a DONE freeze a one-turn retry that had already FAILED, whose branch was the project branch's
+ * tip and carried nothing, while the 151-turn session holding the work ended on another branch. A
+ * landing answers that by filing the NEXT generation bound to the branch the work ended on
+ * (`queueLandingBehindTheWork`); this is the same move for a candidate, and the state it writes is
+ * the same one M-T6 uses when a second landing supersedes the candidate that was standing: the
+ * retired row goes on saying what the platform had frozen and which branch it was about, and the
+ * candidate the owner is finally asked about is the one that names the branch the work is on.
+ *
+ * The retired candidate's own check job is NOT cancelled: the result being applied right now is that
+ * job's — the caller is inside that transaction — and a terminal row is written once.
+ *
+ * Answers null when there is nothing to file: the candidate is not a `TASK_BRANCH` one (a project
+ * branch is not a branch any work session ends on), it has already ended, no finished session names
+ * a branch, the project's binding is gone, or a live candidate for that branch already stands (M-T6's
+ * index — one branch is one question, and that standing candidate is the one asking it).
+ */
+export async function refileCandidateBehindTheWork(
+  tx: Prisma.TransactionClient,
+  input: {
+    promotionId: string;
+    taskId: string;
+    sessions: ReadonlyArray<LandingWorkSessionFacts>;
+  },
+): Promise<{ promotionId: string; jobId: string } | null> {
+  const promotion = await tx.projectPromotion.findFirst({
+    where: { id: input.promotionId },
+    select: {
+      id: true, projectId: true, ownerId: true, codebaseId: true, sourceKind: true,
+      sourceRef: true, state: true, checkJobId: true,
+    },
+  });
+  if (!promotion || promotion.sourceKind !== 'TASK_BRANCH') return null;
+  if (!LIVE_PROMOTION_STATES.includes(promotion.state as PromotionState)) return null;
+  const ended = workBranchEndedOn(input.sessions);
+  if (ended === null) return null;
+  const codebase = await tx.projectCodebase.findUnique({
+    where: { id: promotion.codebaseId },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  if (!codebase) return null;
+  const session = input.sessions.find((row) => row.sessionId === ended.sessionId)!;
+
+  await supersedeLiveCandidates(
+    tx, promotion.projectId, promotion.sourceRef,
+    promotion.checkJobId ? [promotion.checkJobId] : [],
+  );
+
+  return queueTaskBranchCandidate(tx, {
+    ownerId: promotion.ownerId,
+    projectId: promotion.projectId,
+    taskId: input.taskId,
+    codebase,
+    session: { id: session.sessionId, branch: ended.branch, runnerId: session.runnerId },
+  });
 }
 
 /**

@@ -22,6 +22,10 @@ import {
 } from './dependent-ready.producer';
 import type { MechanicalAction } from './mechanical-disposition';
 import {
+  ProjectSettledUnmergedProducer,
+  type SettledUnmergedDelivery,
+} from './project-settled-unmerged.producer';
+import {
   ProjectTasksSettledProducer,
   type SettledProjectDelivery,
 } from './project-tasks-settled.producer';
@@ -97,6 +101,11 @@ export class CompletionInputRouter {
      * constructor argument every one of them has to be taught about. The module provides it.
      */
     @Optional() private readonly dependents?: DependentReadyProducer,
+    /**
+     * The eighth door's producer, and optional for the same reason: the fixtures that construct
+     * this router by hand pass the six before it. CoordinatorJudgmentModule provides it.
+     */
+    private readonly unmerged?: ProjectSettledUnmergedProducer,
   ) {}
 
   /**
@@ -367,6 +376,27 @@ export class CompletionInputRouter {
   ): Promise<DependentReadyDelivery[]> {
     if (!this.dependents) return [];
     return this.dependents.afterCommit(taskIds);
+  }
+
+  /**
+   * The eighth door: the work a project that has settled left sitting on its integration line.
+   *
+   * Project ids in, like the settled door — and unlike every door above it, this one is called
+   * AFTER the status re-projection on its edges rather than beside them, because what it reads is
+   * the settled state itself: a project that is not DONE justifies nothing here (its line being
+   * ahead is the ordinary state of work in flight, and the landing that put it there is what makes
+   * the next promotion candidate).
+   *
+   * It does not go through `spend`, and the reason is the one the sixth door gives in the other
+   * direction: what this fact is worth does not turn on the criteria. A project cannot settle while
+   * one of its criteria reads unlanded, so the rule `spend` asks — the coverage of the criterion a
+   * fact bears on — has no criterion to be about here. It is one action owed by the conversation
+   * coordinating the project, and the producer hands it straight there under its own authorizer.
+   */
+  async routeSettledUnmerged(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<SettledUnmergedDelivery[]> {
+    return this.unmerged ? this.unmerged.afterCommit(projectIds) : [];
   }
 }
 

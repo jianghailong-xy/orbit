@@ -313,6 +313,214 @@ export function integrationDedupeKey(state: string, jobId: string): string {
   }
 }
 
+// ── when a task's landing may be judged, and which branch that judgment is about ───────────────
+
+/**
+ * One work session of a landing's task, as the two rules below read it.
+ *
+ * Every field here is the runner's finalize's, not this process's opinion: `finishedAt` is written
+ * after the runner committed the checkout (SR13), `worktreeBranch` is where that checkout's HEAD
+ * ended, and `branch` is the branch the session was STARTED on. The last two are the same branch
+ * unless the agent made one of its own mid-session (`git checkout -b`), which is exactly the case
+ * where a landing handed the started branch learns nothing about the work.
+ */
+export interface LandingWorkSessionFacts {
+  sessionId: string;
+  /** The branch the session was started on — what an enqueue freezes (§2.3 J-T1a). */
+  branch: string | null;
+  /** Where its checkout's HEAD ended, as the finalize reported it. */
+  worktreeBranch: string | null;
+  /** When the runner finished with the checkout. Null while the session can still commit. */
+  finishedAt: Date | null;
+  /** The runner the session's checkout is on, which is where a landing for it can be worked. */
+  runnerId: string | null;
+}
+
+/** The branch a session ended on. `worktree_branch` when the runner said, else the started branch. */
+function endedOnBranch(session: LandingWorkSessionFacts): string | null {
+  return session.worktreeBranch ?? session.branch;
+}
+
+/**
+ * The branch a task's work ENDED on: of the work sessions that have finished, the one that finished
+ * LAST, spelled as the branch its checkout's HEAD ended on. Null when nothing has finished on a
+ * branch, which is "cannot tell" rather than "nothing".
+ *
+ * WHY THE LAST TO FINISH, AND NOT THE NEWEST SESSION
+ * ==================================================
+ * `enqueueForDoneTask` freezes the NEWEST work session at the moment the DONE is written (J-T1a), and
+ * that is the right branch for the landing exactly while the task's work has stopped moving. It is
+ * written while a session can still be running, and then "newest" and "the one that holds the work"
+ * come apart: on 2026-09-23 this task had a 151-turn session in flight and a one-turn retry beside it
+ * that had already FAILED, and the DONE — written after both had started — froze the retry's branch,
+ * whose tip was the project branch's tip. The line answered ALREADY_LANDED about a branch that
+ * carried nothing, and the commit the running session made afterwards had no route to the line: it
+ * took two hand cherry-picks (789a8fffc onto the project branch, then that onto the upstream) to get
+ * it anywhere. The session that finishes LAST is the one whose commits the task's work does not
+ * predate, so its branch is the one a landing for this task is about.
+ *
+ * `null` is not `NO_BRANCH`: a task whose sessions have not finished yet has work that may still
+ * move, and `landingWorkHasSettled` is the question asked about that, separately.
+ */
+export function workBranchEndedOn(
+  sessions: ReadonlyArray<LandingWorkSessionFacts>,
+): { sessionId: string; branch: string } | null {
+  let best: { sessionId: string; branch: string; finishedAt: Date } | null = null;
+  for (const session of sessions) {
+    if (session.finishedAt === null) continue;
+    const branch = endedOnBranch(session);
+    if (branch === null) continue;
+    const better = best === null
+      || session.finishedAt.getTime() > best.finishedAt.getTime()
+      // Two sessions can finish in the same millisecond; the id is the tie-break, and v7 uuids make
+      // it the later session as well.
+      || (session.finishedAt.getTime() === best.finishedAt.getTime() && session.sessionId > best.sessionId);
+    if (better) best = { sessionId: session.sessionId, branch, finishedAt: session.finishedAt };
+  }
+  return best === null ? null : { sessionId: best.sessionId, branch: best.branch };
+}
+
+/**
+ * Whether the task's work has stopped moving: every work session of it has finished.
+ *
+ * A task with no work sessions at all has settled — there is nothing to wait for, and its landing
+ * could not have been queued in the first place (J-T1a refuses work with no branch).
+ *
+ * `finished_at`, and not a terminal `status`, for the reason `project-criterion-landing.ts` gives
+ * about its own reading: the finish is recorded after the runner committed the checkout (SR13), so
+ * it is the only column that says the branch cannot grow. What that costs, said rather than left to
+ * be discovered: a session that reaches a terminal status with no finish recorded — an end whose
+ * finalize killed the runner, or a row from a build older than this column — holds its task's
+ * landings until it is revived and finishes. Measured on 2026-09-23: two such rows on this
+ * deployment, both from 2026-09-15, neither with a landing queued; and a landing held that way is
+ * visible rather than silent (it stays `QUEUED`, and the criteria stop reading the task as "nothing
+ * to land" because no job ever answered about it).
+ */
+export function landingWorkHasSettled(sessions: ReadonlyArray<LandingWorkSessionFacts>): boolean {
+  return sessions.every((session) => session.finishedAt !== null);
+}
+
+/**
+ * Whether an answer taken at `claimedAt` was taken before the task's work had settled — the timing
+ * this rule exists to remove (§2.6 J-T1a).
+ *
+ * The runner commits a worktree when it FINISHES the session, and a landing is queued by the DONE
+ * that ends it: the two are the same beat, so the line can be handed a branch that carries nothing
+ * yet and answer the only thing it can answer about such a branch, `ALREADY_LANDED` — a terminal
+ * answer which by design is never re-queued, while the commit arrives seconds later. This rule's own
+ * first delivery was lost that way on 2026-09-22 (the line answered at 04:23:09Z, the commit
+ * appeared at 04:23:24Z), and the 2026-09-23 incident above is the same window with the work on a
+ * second branch.
+ *
+ * `claimedAt` null is an answer nobody can date, and an undated answer is not one to write down as
+ * final: the next claim dates it, and a claim always sets it.
+ */
+export function landingJudgedTooEarly(
+  claimedAt: Date | null,
+  sessions: ReadonlyArray<LandingWorkSessionFacts>,
+): boolean {
+  if (claimedAt === null) return true;
+  // Work that has not finished cannot have been looked at after it did — the same question the
+  // claim guard's SQL asks, so it is asked here through the same predicate rather than restated.
+  if (!landingWorkHasSettled(sessions)) return true;
+  return sessions.some((session) => session.finishedAt!.getTime() > claimedAt.getTime());
+}
+
+/**
+ * Whether this `ALREADY_LANDED` is an answer about a branch the task's work did not end on.
+ *
+ * The answer is true of the branch the line was handed and says nothing about any other one, so when
+ * the work ended somewhere else the landing has delivered nothing and never will: the job is
+ * terminal, a terminal job is not offered again (§2.2 J-T3), and the branch holding the commits is
+ * not on anybody's queue. `queueLandingBehindTheWork` is what closes it.
+ */
+export function landingLeftWorkBehind(
+  job: { sourceRef: string },
+  sessions: ReadonlyArray<LandingWorkSessionFacts>,
+): boolean {
+  const ended = workBranchEndedOn(sessions);
+  return ended !== null && `refs/heads/${ended.branch}` !== job.sourceRef;
+}
+
+/**
+ * Whether a promotion's check looked at the branch the task's work ENDED on — the question
+ * `jobSawTheFinishedBranch` asks for the criterion lane, asked here about a candidate (§3.4, J-T1e
+ * one level up).
+ *
+ * A `TASK_BRANCH` candidate's source is resolved by the check itself and written onto the candidate
+ * as the commit the owner is about to be asked about (M-S1, 0293), so "the tip the owner is asked
+ * about is the tip of the branch the work ended on" is only true when the check looked at that
+ * branch. `jobSawTheFinishedBranch` in `projects/project-criterion-landing.ts` is the same condition
+ * written for the criterion lane's audit — read it there. Two things differ, and both are this
+ * caller's:
+ *
+ *  - it asks about the TASK's work sessions rather than about the job's own one, for the reason
+ *    `landingLeftWorkBehind` gives: an enqueue freezes the NEWEST session, and the session that
+ *    holds the work may be another one;
+ *  - it does not read `worktree_dirty`. That column says what a finish could not commit, and a
+ *    session that has already ended is not something this guard can wait for: a candidate held on it
+ *    would be fetched, merged and checked again once per heartbeat with no answer at the end of it.
+ *    What that costs, said rather than left to be discovered: a commit made afterwards from that
+ *    session's own Commit action lands after the card was drawn, which no freeze can have seen. The
+ *    lane that DOES read it is asking a different question — not "may the owner be asked now" but
+ *    "does this task have nothing of its own at all" — where withholding is free.
+ *
+ * `false` covers two things, and the caller acts on the first of them only: the check looked at
+ * another branch — the work is elsewhere, and `refileCandidateBehindTheWork` files the candidate that
+ * branch is owed — or nothing finished on a branch at all, which `workBranchEndedOn` refuses to guess
+ * at and which no re-check of THIS candidate could ever learn about, so the candidate stands as the
+ * DONE left it.
+ */
+export function checkSawTheFinishedBranch(
+  check: { sourceRef: string },
+  sessions: ReadonlyArray<LandingWorkSessionFacts>,
+): boolean {
+  const ended = workBranchEndedOn(sessions);
+  return ended !== null && `refs/heads/${ended.branch}` === check.sourceRef;
+}
+
+/**
+ * The landing a task is owed after the line answered `ALREADY_LANDED` about a branch its work did not
+ * end on: the NEXT generation, bound to the branch the work ended on (§2.3 J-T1a, §2.6).
+ *
+ * A generation rather than a re-pointed row, because that is what a second look at the same task IS
+ * here: the first row says what the line was handed and what it answered, and this one is a landing
+ * for the branch the work actually ended on — the row a DONE would have queued had it been written
+ * after the work settled rather than during it. The generation counter, the idempotency key and the
+ * serial key all already work this way.
+ *
+ * Answers null when there is nothing to offer: no finished session names a branch, the project's
+ * binding is gone, or a landing of this task is already in flight for that branch (J3's index).
+ */
+export async function queueLandingBehindTheWork(
+  tx: Prisma.TransactionClient,
+  input: {
+    ownerId: string;
+    projectId: string;
+    taskId: string;
+    sessions: ReadonlyArray<LandingWorkSessionFacts>;
+  },
+): Promise<LandingQueued | null> {
+  const ended = workBranchEndedOn(input.sessions);
+  if (ended === null) return null;
+  const codebase = await tx.projectCodebase.findFirst({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  if (!codebase) return null;
+  const session = input.sessions.find((row) => row.sessionId === ended.sessionId)!;
+  return queueLandingForWork(tx, {
+    ownerId: input.ownerId,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    codebase,
+    session: { id: session.sessionId, branch: ended.branch, runnerId: session.runnerId },
+    // The line's own two refs decide which of the two things a landing is (§2.3): a project that
+    // integrates into its upstream has no branch of its own to land on, and gets a candidate.
+    line: codebase.integrationRef === codebase.upstreamRef ? 'MAIN' : 'PROJECT_BRANCH',
+  });
+}
+
 // ── enqueue (J-T1a) ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -436,34 +644,26 @@ export async function enqueueForDoneTask(
   // L3 step 4. Only on the beat the line started: afterwards every DONE queues itself.
   const onTheStartingBeat = first.startedAt.getTime() >= Date.now() - 1_000;
 
-  // A MAIN-line project has no branch of its own to land a task on, so nothing lands here: what
-  // this DONE makes is a candidate — this task's branch, checked by the platform and then offered
-  // to the owner, because every merge into the upstream is their decision (§3.4 M-F2, M7).
-  if (first.line === 'MAIN') {
-    const candidate = await queueTaskBranchCandidate(tx, {
-      ownerId, projectId, taskId, codebase, session,
-    });
-    if (!candidate) return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
-    const alsoQueuedTaskIds = onTheStartingBeat
-      ? await backfillFinishedCodeTasks(tx, { ownerId, projectId, codebase, exceptTaskId: taskId, line: 'MAIN' })
-      : [];
-    return {
-      enqueued: true,
-      kind: 'PROMOTION',
-      promotionId: candidate.promotionId,
-      jobId: candidate.jobId,
-      projectId,
-      alsoQueuedTaskIds,
-    };
-  }
-
-  const jobId = await queueLandTask(tx, { ownerId, projectId, taskId, codebase, session });
-  if (!jobId) return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
+  const queued = await queueLandingForWork(tx, {
+    ownerId, projectId, taskId, codebase, session, line: first.line,
+  });
+  if (queued === null) return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
 
   const alsoQueuedTaskIds = onTheStartingBeat
-    ? await backfillFinishedCodeTasks(tx, { ownerId, projectId, codebase, exceptTaskId: taskId, line: 'PROJECT_BRANCH' })
+    ? await backfillFinishedCodeTasks(tx, {
+      ownerId, projectId, codebase, exceptTaskId: taskId, line: first.line,
+    })
     : [];
-  return { enqueued: true, kind: 'LAND_TASK', jobId, projectId, alsoQueuedTaskIds };
+  return queued.kind === 'PROMOTION'
+    ? {
+      enqueued: true,
+      kind: 'PROMOTION',
+      promotionId: queued.promotionId,
+      jobId: queued.jobId,
+      projectId,
+      alsoQueuedTaskIds,
+    }
+    : { enqueued: true, kind: 'LAND_TASK', jobId: queued.jobId, projectId, alsoQueuedTaskIds };
 }
 
 interface CodebaseForJob {
@@ -471,6 +671,58 @@ interface CodebaseForJob {
   canonicalRepoUrl: string;
   integrationRef: string;
   upstreamRef: string;
+}
+
+/** What one work session's branch was given a route to: a landing on the line, or a candidate. */
+export type LandingQueued =
+  | { kind: 'LAND_TASK'; jobId: string }
+  | { kind: 'PROMOTION'; promotionId: string; jobId: string };
+
+/**
+ * Give ONE work session's branch its route to the project's integration line (§2.3 J-T1a).
+ *
+ * Which route depends on the line and that is the whole of the difference: a `PROJECT_BRANCH` line
+ * gets a `LAND_TASK` and the platform replays the branch onto its own ref, while a `MAIN` project —
+ * whose integration ref IS its upstream — gets a candidate for a promotion the owner confirms
+ * (§3.4 M-F2). Null when this branch already has one in flight.
+ *
+ * The caller decides WHICH session, because the two callers answer that differently and both
+ * answers are facts about the same task: `enqueueForDoneTask` freezes the newest session at the
+ * moment the DONE is written, and `queueLandingBehindTheWork` binds the branch the work ended on
+ * once it has. Extracted rather than duplicated so the line's two routes stay one decision.
+ */
+async function queueLandingForWork(
+  tx: Prisma.TransactionClient,
+  input: {
+    ownerId: string;
+    projectId: string;
+    taskId: string;
+    codebase: CodebaseForJob;
+    session: { id: string; branch: string; runnerId: string | null };
+    /** Which line the project has: its integration ref is its upstream, or a branch of its own. */
+    line: 'MAIN' | 'PROJECT_BRANCH';
+  },
+): Promise<LandingQueued | null> {
+  if (input.line === 'MAIN') {
+    const candidate = await queueTaskBranchCandidate(tx, {
+      ownerId: input.ownerId,
+      projectId: input.projectId,
+      taskId: input.taskId,
+      codebase: input.codebase,
+      session: input.session,
+    });
+    return candidate === null
+      ? null
+      : { kind: 'PROMOTION', promotionId: candidate.promotionId, jobId: candidate.jobId };
+  }
+  const jobId = await queueLandTask(tx, {
+    ownerId: input.ownerId,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    codebase: input.codebase,
+    session: input.session,
+  });
+  return jobId === null ? null : { kind: 'LAND_TASK', jobId };
 }
 
 /**
@@ -629,8 +881,13 @@ async function backfillFinishedCodeTasks(
  *
  * Answers null when the partial unique index already holds a live candidate for this ref: one branch
  * is one question, and the one already standing is the one being asked.
+ *
+ * The second caller is `refileCandidateBehindTheWork` (`project-promotion.service.ts`): a check that
+ * found it was handed a branch the task's work did not end on retires that candidate and files this
+ * one for the branch the work is on, which is the same row a DONE written after the work settled
+ * would have made.
  */
-async function queueTaskBranchCandidate(
+export async function queueTaskBranchCandidate(
   tx: Prisma.TransactionClient,
   input: {
     ownerId: string;

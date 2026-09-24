@@ -146,9 +146,25 @@ export function describeWakeFact(fact: WakeFact): string {
         + '它的前置都已完成并落地到这个项目的集成线（或本来就没有要落地的代码）。'
         + '但它设了 autoRunWhenReady=false，平台不会自己开它——没人开工，它就一直停在这里。'
       );
+    case 'PROJECT_SETTLED_UNMERGED': {
+      const commits = unmergedCommitsOf(fact);
+      const short = commits.map((sha) => sha.slice(0, 10));
+      return (
+        `这个项目已经结算（DONE），但它的集成线上还有 ${String(detail.taskCount ?? '一些')} 件`
+        + `成果没有合并回默认分支：${short.length > 0 ? short.join('、') : '（提交列表见下）'}。`
+        + '这些提交所在的落地作业在会话写下最后一个提交之前就已经终态，所以没有任何晋升候选'
+        + '点名过它们——结算之后也不会再有写入来重新发现。'
+      );
+    }
     default:
       return `发生了 ${fact.event}，主体是 ${fact.subjectType} ${fact.subjectId}。`;
   }
+}
+
+/** The commits a `PROJECT_SETTLED_UNMERGED` fact names, in the order its `detail` carries them. */
+function unmergedCommitsOf(fact: WakeFact): string[] {
+  const detail = (fact.detail ?? {}) as Record<string, unknown>;
+  return Array.isArray(detail.commits) ? detail.commits.map((sha) => String(sha)) : [];
 }
 
 /**
@@ -350,8 +366,9 @@ export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: st
       + `下一步：${dispatchRefusalNextStep({
         fixAction: detail.fixAction ?? '未记录', ref: detail.ref ?? null,
       })}\n\n`
-      + `这次拒绝记在任务上：task_get（taskId 传 ${taskId}）的 dispatchRefusal 是码、时间、钉住的提交和缺的`
-      + '提交，任务评论里有 runner 的原话。任务再开工之后这一栏会清空；再被拒会重新记一次、再通知你一次。\n\n'
+      + `这次拒绝记在任务上：task_get（taskId 传 ${taskId}）的 dispatchRefusal 是码、fixAction、时间、哪次`
+      + '运行、起跑用的 ref、它钉住的提交（解析期就被拒的没有）和缺的提交，任务评论里有 runner 的原话。'
+      + '任务再开工之后这一栏会清空；再被拒会重新记一次、再通知你一次。\n\n'
       + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
       + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
       + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
@@ -371,6 +388,27 @@ export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: st
       + `${projectId}）读目标与作业指导，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
       + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
       + '所以以你自己刚读到的库里状态为准——它可能已经被开工了。'
+    );
+  }
+  if (fact.event === 'PROJECT_SETTLED_UNMERGED') {
+    const commits = unmergedCommitsOf(fact);
+    return (
+      `【项目「${projectTitle}」结算了，还有成果停在集成线上没进 main】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + (commits.length > 0
+        ? `要落地的提交：${commits.map((sha) => `\`${sha}\``).join('、')}\n\n`
+        : '')
+      + '平台没有替它们排晋升候选，也不会再排：候选是在一次次落地之后排的，而承载这些提交的落地作业'
+      + '在提交写出来之前就已经终态。所以没有人在等它们，也没有别的东西会重新发现它们。\n\n'
+      + '要做的只有一件事：把这些提交送进 main。走哪条路是你的判断——整条项目分支都该合的话，'
+      + '合并卡是账号所有者的（本项目页面上的 Merge 卡，你替不了他点）；只该合这一部分、'
+      + '或者要按任务分别落地的话，把成果合进 main 之后用合并回执记下来（merge_receipt），'
+      + '回执才是「已经在 main 上」的证据。无论走哪条，先 project_get 读目标、'
+      + 'task_list 读每个任务的状态，再自己看一眼那些提交，别只照着这条消息里的 sha 动手。\n\n'
+      + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
+      + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
+      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+      + '所以以你自己刚读到的库里状态为准。'
     );
   }
   return (

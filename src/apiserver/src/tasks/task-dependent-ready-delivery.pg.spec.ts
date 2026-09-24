@@ -88,7 +88,8 @@ import { TasksService } from './tasks.service';
  *   (d) one generation is one message however often it is re-derived, and the next generation
  *       (the prerequisite reopened and finished again) is a second one;
  *   (e) the database accepts exactly the live events and the retired ones — every event that was
- *       live before this fact is unchanged, and DEPENDENT_READY is new.
+ *       live before this fact is unchanged, and the events added since (DEPENDENT_READY, then
+ *       PROJECT_SETTLED_UNMERGED) are new.
  *
  * And the delivery guarantee (contract §4.4): a coordinator busy with a message it has not read
  * gets this one queued behind it rather than refused; one that has ended is never written to or
@@ -687,16 +688,19 @@ test('(d) one generation is delivered once however often it is re-derived, and t
   });
 
 // -------------------------------------------------------------------------------------------------
-// (e) The closed set, as the database holds it: the earlier events unchanged, one new.
+// (e) The closed set, as the database holds it: the earlier events unchanged, the new ones added.
 // -------------------------------------------------------------------------------------------------
 
-test('(e) the database accepts exactly the live and retired events: those that were live are unchanged, and DEPENDENT_READY is new',
+test('(e) the database accepts exactly the live and retired events: those that were live are unchanged, and the events added since are new',
   { skip, timeout: 120_000 }, async () => {
     const stack = await connect();
     try {
       // The closed set this unit states, against the one it replaced.
-      assert.deepEqual([...COORDINATOR_WAKE_EVENTS], [...LIVE_BEFORE, 'DEPENDENT_READY'],
-        'the live set is not the one it was plus DEPENDENT_READY');
+      // Written for 0299; 0303 added a second spelling, and it is listed here rather than
+      // loosened: every event that was live before DEPENDENT_READY is still unchanged.
+      assert.deepEqual(
+        [...COORDINATOR_WAKE_EVENTS], [...LIVE_BEFORE, 'DEPENDENT_READY', 'PROJECT_SETTLED_UNMERGED'],
+        'the live set is not the one it was plus the events added since');
 
       // The CHECK as the migrated database holds it — not the migration's text, which is what
       // `coordinator-wake.spec.ts` reads: this is the constraint every INSERT actually meets.

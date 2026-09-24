@@ -703,6 +703,7 @@ test('the landing delivery happens after the write it is about has committed',
       // connection could see at the moment the write path called it. Nothing is asserted inside it
       // — a throw here would be swallowed by the caller's own logging and the case would pass.
       const probe = {
+        routeSettledUnmerged: async () => [],
         routeSettledProjects: async () => [],
         routeTaskExceptions: async () => [],
         routeReadyCriteria: async () => [],

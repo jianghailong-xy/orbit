@@ -326,6 +326,11 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
+      // The task's work has STOPPED MOVING: this is the column the LAND_TASK claim guard reads
+      // (contract §2.6 J-T1a), and a fixture that leaves it null is a task whose work is still in
+      // flight — the line holds such a job QUEUED by design, which is not what this scenario is
+      // about. A minute ago, so the claim that follows is unambiguously later than it.
+      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${label}`,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
