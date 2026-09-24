@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom';
 import type { ReferencedTask } from '../lib/referencedTask';
+import { AppLink } from './AppLink';
 import { TaskStatusPill } from './TaskStatusPill';
 
 /**
@@ -33,9 +33,9 @@ export function ReferencedTaskNote({ tasks }: { tasks: ReferencedTask[] }) {
               </span>
             ))}
             {/* The title is the row, and the row is the link — the id is under it for reading. */}
-            <Link className="reftask-title" to={`/tasks/${task.id}`}>
+            <AppLink className="reftask-title" to={`/tasks/${task.id}`}>
               {task.title}
-            </Link>
+            </AppLink>
             {outcome(task) && <span className="reftask-outcome">{outcome(task)}</span>}
           </div>
           <div className="reftask-meta">{meta(task)}</div>

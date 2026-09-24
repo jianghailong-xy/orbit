@@ -54,6 +54,7 @@ import { steerDeliveryState } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
+import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import type { TaskRunConflict } from '../lib/taskRunHandoff';

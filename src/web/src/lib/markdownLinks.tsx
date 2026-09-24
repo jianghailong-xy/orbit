@@ -1,7 +1,7 @@
 import type { AnchorHTMLAttributes } from 'react';
 import { defaultUrlTransform, type ExtraProps } from 'react-markdown';
-import { Link } from 'react-router-dom';
 import { SameOriginLink } from '../components/SameOriginLink';
+import { AppLink } from '../components/AppLink';
 import { encodeId } from './idCodec';
 
 /** `#`-references the composer materialises, and the same links agents are told to write when they
@@ -65,9 +65,9 @@ export function ReferenceLink({
   const to = referenceRoute(href);
   if (to) {
     return (
-      <Link className="md-reference" to={to.path} title={to.label}>
+      <AppLink className="md-reference" to={to.path} title={to.label}>
         {children}
-      </Link>
+      </AppLink>
     );
   }
   return (

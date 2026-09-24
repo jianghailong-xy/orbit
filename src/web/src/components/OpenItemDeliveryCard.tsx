@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { CheckCircleFilled, ExclamationCircleFilled } from '@ant-design/icons';
-import { Link } from 'react-router-dom';
 import type { OpenItemAction, OpenItemDeliveryCard as Delivery, OpenItemKind } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
+import { AppLink } from './AppLink';
 import { relTime } from './Transcript';
 
 /**
@@ -190,7 +190,7 @@ export function OpenItemDeliveryCard({
         <div className="oic-title">{card.title}</div>
         {card.task && taskHref && (
           <div className="oic-where">
-            Task <Link to={taskHref}>{card.task.title}</Link>
+            Task <AppLink to={taskHref}>{card.task.title}</AppLink>
           </div>
         )}
         {why && <div className="oic-why">{why}</div>}
@@ -222,8 +222,8 @@ export function OpenItemDeliveryCard({
         )}
         {(taskHref || sessionHref) && (
           <div className="oic-links">
-            {taskHref && <Link to={taskHref}>Open the task ↗</Link>}
-            {sessionHref && <Link to={sessionHref}>Open the failed session ↗</Link>}
+            {taskHref && <AppLink to={taskHref}>Open the task ↗</AppLink>}
+            {sessionHref && <AppLink to={sessionHref}>Open the failed session ↗</AppLink>}
           </div>
         )}
         <div className="oic-meta">
