@@ -22,7 +22,8 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 /** How long an engine may go without a successful update before that becomes the row's problem.
- *  Orbit tries daily, so a week is six missed passes — well past a bad night on the network. */
+ *  Orbit tries every 30 min, so a week is hundreds of missed passes — well past a bad night on
+ *  the network. */
 const STALE_UPDATE_MS = 7 * DAY;
 
 export function ago(iso: string, now: number): string {
@@ -39,8 +40,8 @@ export function ago(iso: string, now: number): string {
  * settle on its own ("is 2.1.220 the new one?" is unanswerable; "9d behind 2.1.228" isn't).
  *
  * `quiet` is a footnote in the meta line. `warn` means this machine has actually drifted and only
- * a person can say why, so it earns colour and a panel. Everything routine stays quiet — a daily
- * job that reports success loudly is a daily job people learn to stop reading.
+ * a person can say why, so it earns colour and a panel. Everything routine stays quiet — a job
+ * that reports success loudly is a job people learn to stop reading.
  */
 export function updateNoteOf(
   update: RunnerEngineUpdate | undefined,
@@ -56,7 +57,7 @@ export function updateNoteOf(
   if (update.status === 'skipped') return { tone: 'quiet', text: 'not auto-updated' };
   // Drift decides first, because it is the reading taken on the binary. The rule underneath used
   // to be "a clean run in the last week means updating works here", and it was wrong in the one
-  // case that matters: a machine that can't download anything still runs clean every day nothing
+  // case that matters: a machine that can't download anything still runs clean every pass nothing
   // is published, so its week never expired and the row stayed quiet for as long as the release
   // schedule was quiet. Being behind is true regardless of what the last command returned.
   const behindSince = update.behindSince ? Date.parse(update.behindSince) : NaN;
@@ -71,7 +72,7 @@ export function updateNoteOf(
       tone: 'quiet',
       text:
         update.status === 'failed'
-          ? 'last update failed · retrying daily'
+          ? 'last update failed · retrying every 30 min'
           : update.latest
             ? `updating to ${update.latest}`
             : 'update pending',
@@ -81,8 +82,8 @@ export function updateNoteOf(
   const lastOk = Number.isNaN(parsed) ? null : parsed;
   if (lastOk !== null && now - lastOk <= STALE_UPDATE_MS) {
     // Current, or nothing to compare against. A failure since the last clean run is worth a word
-    // but not an alarm: the daily pass retries on its own, and most of these are a network blip.
-    if (update.status === 'failed') return { tone: 'quiet', text: 'last update failed · retrying daily' };
+    // but not an alarm: the pass retries on its own, and most of these are a network blip.
+    if (update.status === 'failed') return { tone: 'quiet', text: 'last update failed · retrying every 30 min' };
     // "checked" and "updated" are different claims and are worth different words — the whole
     // point of splitting them is that a row can no longer say "updated 5m ago" about a pass that
     // did nothing but ask.

@@ -2275,11 +2275,14 @@ private struct PromotionApprovalCardView: View {
         }
     }
 
-    /// C: the receipt.
+    /// C: the receipt — and, for a merge the Automatic setting made, how to take it back.
     private func merged(_ view: ProjectPromotionView) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CardRow(label: "Commit", value: PromotionCards.mergedLine(view))
             CardRow(label: "Now on main", value: PromotionCards.tasksLine(view))
+            if let undo = PromotionCards.revertLine(view) {
+                CardRow(label: "Undo", value: undo)
+            }
         }
     }
 
@@ -2364,6 +2367,9 @@ private struct PromotionReceiptCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 CardRow(label: "Commit", value: PromotionCards.mergedLine(promotion))
                 CardRow(label: "Now on main", value: PromotionCards.tasksLine(promotion))
+                if let undo = PromotionCards.revertLine(promotion) {
+                    CardRow(label: "Undo", value: undo)
+                }
             }
         }
         .approvalChrome(.orange, dimmed: true)

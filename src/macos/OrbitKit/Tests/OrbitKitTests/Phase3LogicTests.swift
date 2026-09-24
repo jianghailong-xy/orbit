@@ -34,13 +34,30 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertEqual(ReferenceLink.route(URL(string: "orbit-session:5rYtl8WA1NSca2rDrCMHmW")!),
                        .session("5rYtl8WA1NSca2rDrCMHmW"))
         XCTAssertFalse(ReferenceLink.isInert(URL(string: "orbit-task:34MUgGQQWqTXPwyihadZ7")!))
+        // A task list switches the Tasks page to its scope — under the spelling the page knows it
+        // by, whichever spelling the link used.
+        XCTAssertEqual(ReferenceLink.route(URL(string: "orbit-list:347en66xizlGSG9a6Nej5")!),
+                       .list("347en66xizlGSG9a6Nej5"))
+        let listUUID = "01a0cca0-aeaa-7618-bd5a-caccc089108c"
+        XCTAssertEqual(ReferenceLink.route(URL(string: "orbit-list:\(listUUID)")!),
+                       ReferenceLink.route(URL(string: "orbit-list:\(PublicID.toPublic(listUUID))")!))
+        XCTAssertNotEqual(ReferenceLink.route(URL(string: "orbit-list:\(listUUID)")!), .list(listUUID))
     }
 
+    /// A project is not inert either — it goes to the conversation that coordinates it, which the
+    /// app looks up on a read. So `route` has nothing to return for it, but a view must still draw
+    /// its title as a link (`isInert` false), because a tap does lead somewhere.
+    func testAProjectHasADestinationWithoutARoute() {
+        let project = URL(string: "orbit-project:34MUgGQQWqTXPwyihadZ7")!
+        XCTAssertNil(ReferenceLink.route(project))
+        XCTAssertFalse(ReferenceLink.isInert(project))
+    }
+
+    /// Only a reference that names nothing at all is drawn as prose.
     func testReferenceLinkWithNowhereToGoIsInert() {
-        for raw in ["orbit-project:34MUgGQQWqTXPwyihadZ7", "orbit-list:34MUgGQQWqTXPwyihadZ7", "orbit-task:not-an-id"] {
-            XCTAssertNil(ReferenceLink.route(URL(string: raw)!), raw)
-            XCTAssertTrue(ReferenceLink.isInert(URL(string: raw)!), raw)
-        }
+        let raw = "orbit-task:not-an-id"
+        XCTAssertNil(ReferenceLink.route(URL(string: raw)!), raw)
+        XCTAssertTrue(ReferenceLink.isInert(URL(string: raw)!), raw)
     }
 
     func testOtherLinksAreNotReferences() {

@@ -7,7 +7,7 @@
 - `docs/project-source-contract.md`（下称 **PSC**）：复用 `ProjectCodebase`、`integrationRef`、SR2（`defaultMergeTarget` 不是基线）、SR44（合并不回写代码库）与 P4 / G5（依赖 closure）的语义。§1.5 收窄 P5，并给出不改 source-pin/v1 握手的最小实现。
 - `docs/completion-input-routing.md`（下称 **CIR**）：「There is no scheduler, timeout, startup sweep or elapsed-time interpretation in this path」一句改为「对 agent 仍然没有时钟；对人允许超时升级（`docs/project-integration-line-contract.md` §4.6）」。
 - `src/apiserver/src/projects/coordinator-wake.ts` §0：时钟「may not CREATE, DECIDE or RESOLVE a wake. It may re-observe, lease and re-deliver an already committed immutable fact」。本文的时钟用途都在这句话之内，唯一新增的是 §4.6 对人的升级。
-- `src/apiserver/src/projects/mechanical-disposition.ts` §2（2026-09-06 owner 划的线）：收窄为「进 main 必须经 owner 确认；进项目分支由平台自动完成」（§3.5 M12）。
+- `src/apiserver/src/projects/mechanical-disposition.ts` §2（2026-09-06 owner 划的线）：收窄为「进 main 必须经 owner 确认；进项目分支由平台自动完成」（§3.5 M12）；2026-09-23 再划一处例外：项目分支 + Automatic + 检查干净，由平台自行合入 main 并留收据（§3.3 M7、M-T11）。
 - `docs/project-done-gate.md`：DONE 投影的输入与重算边沿不变；`landing = 'LANDED'` 的含义收窄为「在 upstream（main）上」（§1.4、§3.5）。
 - `docs/project-coordinator-status-contract.md`：`coordination` 增加两个字段（§7.2 V9）。
 
@@ -258,7 +258,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `commitsAheadOfUpstream` | number | 最近一条终态 `LAND_TASK` 的 `ahead_of_upstream` | `NO_LANDING_YET` |
 | `lastUpstreamSyncAt` | Date | 最近一条 `main_sync_sha` 非空的 `LANDED` 作业的 `finished_at` | `NEVER_SYNCED` |
 | `integratingCount` / `queuedCount` | number | 本项目 `RUNNING` / `QUEUED` 作业数 | — |
-| `mergeCheckOnTip` | `'PASSING' \| 'FAILING' \| 'UNKNOWN'` | 最近一条终态 `LAND_TASK`：`LANDED` / `ALREADY_LANDED` → PASSING；`CHECK_FAILED` → FAILING；其余 → UNKNOWN | — |
+| `mergeCheckOnTip` | `'PASSING' \| 'FAILING' \| 'UNKNOWN'` | 最近一条终态 `LAND_TASK`：`LANDED` / `ALREADY_LANDED` → PASSING；`CHECK_FAILED` → FAILING；其余（含 `NOTHING_TO_LAND`——没有可检的树）→ UNKNOWN | — |
 
 项目列表行带 `integration: { line, ref } | null`（§7.1）。
 
@@ -295,7 +295,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `promotion_id` | uuid NULL | FK `project_promotion`（0273 补外键） |
 | `serial_key` | text NOT NULL | 串行键，见 J1 |
 | `target_ref` / `upstream_ref` / `source_ref` | text NOT NULL | 全名；`upstream_ref` 入队时从代码库行冻结 |
-| `state` | text | CHECK ∈ {`QUEUED`, `RUNNING`, `LANDED`, `ALREADY_LANDED`, `READY`, `CONFLICT`, `CHECK_FAILED`, `ERROR`, `CANCELLED`, `SUPERSEDED`} |
+| `state` | text | CHECK ∈ {`QUEUED`, `RUNNING`, `LANDED`, `ALREADY_LANDED`, `NOTHING_TO_LAND`, `READY`, `CONFLICT`, `CHECK_FAILED`, `ERROR`, `CANCELLED`, `SUPERSEDED`} |
 | `phase` | text NULL | CHECK ∈ {`FETCH`, `MAIN_SYNC`, `REBASE`, `MERGE`, `CHECK`, `VERIFY`, `PUSH`}：进行到或停在哪一步 |
 | `runner_id` | uuid NULL | 入队时 = 源会话的 `assigned_runner_id`；认领时写实际认领者 |
 | `claim_lease_owner` / `claim_generation` / `claimed_at` / `heartbeat_at` | text / bigint DEFAULT 0 / timestamptz / timestamptz | 租约，形状照抄 `CodexRateLimitResetOperation` |
@@ -309,6 +309,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `conflicts` | text[] NOT NULL DEFAULT `'{}'` | |
 | `error_code` / `error_detail` | text / jsonb NULL | 闭集见 J12 |
 | `receipt_ids` | uuid[] NOT NULL DEFAULT `'{}'` | 本作业写下的回执 |
+| `confirmed_automatically` | boolean NOT NULL DEFAULT false | 迁移 0301。只有 `LAND_PROMOTION` 可为真（CHECK）：这次落地由项目的 Automatic 授权确认，不是 owner 按的（§3.3 M-T11）；runner 收到的命令带 `automatic: true`，只落到 `upstream_sha_checked` 上（M-T12） |
 | `idempotency_key` | text NOT NULL UNIQUE | `ij:v1:<kind>:<taskId 或 promotionId>:<generation>` |
 | `created_at` / `started_at` / `finished_at` / `updated_at` | timestamptz | |
 
@@ -327,7 +328,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | J-T2 | `QUEUED` | 心跳领取 CAS：该 runner 声明 `integration-job/v1` 且未 draining；`LAND_TASK` 还要求该任务没有 `finished_at IS NULL` 的工作会话（见 J-T1e）；同 `serial_key` 无 `RUNNING`；按 `(created_at, id)` 取最早 | `RUNNING` | `claim_generation + 1`、`claim_lease_owner`、`claimed_at`、`heartbeat_at` |
 | J-T3 | `RUNNING` | 领取时发现 `heartbeat_at < now() - 10 min`（runner 失联） | `RUNNING`（换认领者） | `claim_generation + 1`。旧认领者的结果回报被 409 `STALE_CLAIM` 拒绝 |
 | J-T4 | `RUNNING` | 进度回报（`phase`、`heartbeat_at`；晋升重检见 M-T7） | `RUNNING` | |
-| J-T5 | `RUNNING` | 结果回报：`LANDED` / `ALREADY_LANDED` | 同名终态 | 回执（J8）；解决该任务的集成类待办（X 表）；提交后边沿见 J9–J11。抢跑的 `ALREADY_LANDED`（判定的领取早于该任务工作结束）不落终态，退回 `QUEUED`（见 J-T1e） |
+| J-T5 | `RUNNING` | 结果回报：`LANDED` / `ALREADY_LANDED` / `NOTHING_TO_LAND`（0300） | 同名终态 | 回执（J8，`NOTHING_TO_LAND` 仅在该任务没有任何会话报告过工作时）；解决该任务的集成类待办（X 表，仅落地）；提交后边沿见 J9–J11。抢跑的 `ALREADY_LANDED`（判定的领取早于该任务工作结束）不落终态，退回 `QUEUED`（见 J-T1e） |
 | J-T6 | `RUNNING` | 结果回报：`READY`（仅 `CHECK_PROMOTION`） | `READY` | 晋升 → `READY`（M-T2） |
 | J-T7 | `RUNNING` | 结果回报：`CONFLICT` / `CHECK_FAILED` / `ERROR` | 同名终态 | 例外待办（§4.2）；晋升 → `BLOCKED`（若有） |
 | J-T8 | `QUEUED` / `RUNNING` | 任务被重开或取消、晋升被取代或拒绝、owner 取消（写 `cancel_requested_at`） | `CANCELLED` | `RUNNING` 行由 runner 在下一个阶段边界回报 `CANCELLED` |
@@ -392,7 +393,7 @@ interface IntegrationJobCommand {
 |---|---|---|
 | **J-S1 FETCH** | `git fetch <remote> <target_ref> <upstream_ref>`；T0 = 远端目标 tip（`PROJECT_BRANCH` 线目标不存在时 T0 = U）；U = 远端 upstream tip；S = `git rev-parse refs/heads/<源分支>` → `source_sha` | fetch 失败 → `ERROR / FETCH_FAILED`；源分支不存在 → `ERROR / SOURCE_BRANCH_MISSING`；upstream 不存在 → `ERROR / BASE_REF_NOT_FOUND` |
 | **J-S2 MAIN_SYNC**（仅 `PROJECT_BRANCH`） | U 不是 T0 的祖先时，在 T0 上 `git merge --no-ff -m "Merge <upstream> into <target>" U` → M = `main_sync_sha`，base = M；否则 base = T0 | 冲突 → `CONFLICT`（`phase = MAIN_SYNC`，冲突路径来自 `git diff --name-only --diff-filter=U`） |
-| **J-S3 已包含** | S 是 base 的祖先 → `ALREADY_LANDED`，不推送，丢弃 M | |
+| **J-S3 已包含** | S 是 base 的祖先：S **等于会话记录的 base**（分支停在 fork 点，自己没有提交）→ `NOTHING_TO_LAND`（0300）；否则 → `ALREADY_LANDED`。两者都不推送，丢弃 M | |
 | **J-S4 REBASE / MERGE** | fork = `git merge-base S base`；`git rev-list --merges fork..S` 非空 → **MERGE 模式** `git merge --no-ff S`（保住合并提交里的冲突解法）；否则 `git rebase --onto base <fork 或 sessionBaseSha> S`。结果 C = `tested_sha` | 冲突 → `CONFLICT`（`phase = REBASE` 或 `MERGE`） |
 | **J-S5 CHECK** | 组合树自带 `scripts/worktree-overlay.sh` 时先运行它（见下方「检查前的铺环境」），再在 C 上依次跑任务验收命令（有 `acceptance_command` 时）与合并检查命令（有配置时），逐条比对退出码 | 铺环境失败或超时 → `ERROR / CHECK_TREE_UNPREPARED`；任一退出码不一致 → `CHECK_FAILED`（什么都不推送） |
 | **J-S6a 落地前核对** | `tested_tree_sha = git rev-parse C^{tree}`；要求 `HEAD = C` 且 `git status --porcelain --untracked-files=no` 为空（检查不得改动或提交已跟踪文件） | → `ERROR / CHECK_MUTATED_TREE` |
@@ -406,7 +407,9 @@ interface IntegrationJobCommand {
 
 ### 2.5 回执与派发下游
 
-**J8（回执）**：`receiveResult` 在同一事务里，通过新方法 `MergeReceiptService.fromIntegrationJob(tx, job)` 为 `LANDED` / `ALREADY_LANDED` 写回执：
+**J8（回执）**：`receiveResult` 在同一事务里，通过新方法 `MergeReceiptService.fromIntegrationJob(tx, job)` 为 `LANDED` / `ALREADY_LANDED` 写回执；`NOTHING_TO_LAND`（0300）写回执的形状相同（`result = ALREADY_MERGED`、`target_sha_after = NULL`），但**只在该任务没有任何 work 会话报告过工作时**才写：那种情况下「本任务没有东西可落」正是 J9 释放下游所依据的事实；反过来，任务的工作在**另一条分支**上时这一行不写回执——回执照写就等于宣称这份工作在那个目标上，而这正是 2026-09-23 假回执骗过晋升卡的那句假话——同时往任务上写一条评论（`task_comment`，同一个事务）留下可见信号。
+
+`NOTHING_TO_LAND` 与 `ALREADY_LANDED` 的另一个入口是**旧 runner**：早于 0300 的二进制没有这个状态可报，它对同一种分支（tip 等于该会话的 `base_sha`）报的仍是 `ALREADY_LANDED`。控制面在自己的行里就有这个事实的两半（`source_sha` 与 `session.base_sha`），因此收到的 `ALREADY_LANDED` 若满足该等式，落库时同样写成 `NOTHING_TO_LAND`——旧二进制不能替控制面写下那句正面结论。
 
 | 列 | 取值 |
 |---|---|
@@ -500,6 +503,7 @@ interface TaskIntegrationView {
 | `state` | text | CHECK ∈ {`CHECKING`, `READY`, `CONFIRMED`, `RECHECKING`, `MERGED`, `BLOCKED`, `DECLINED`, `CANCELLED`, `SUPERSEDED`} |
 | `check_job_id` / `land_job_id` | uuid NULL | 当前作业 |
 | `confirmed_by_user_id` / `confirmed_at` / `decided_at` | uuid / timestamptz | |
+| `confirmed_automatically` | boolean NOT NULL DEFAULT false | 迁移 0301。没人按：项目的 Automatic 授权确认了这次合入（M-T11），此时 `confirmed_by_user_id` 为 NULL。CHECK：`CONFIRMED` / `RECHECKING` / `MERGED` 行要么写明确认人、要么此列为真；此列为真时 `source_kind = 'PROJECT_BRANCH'` 且不写确认人（`MAIN` 线永远不能被记成自动确认） |
 | `merged_sha` / `merged_at` | char(40) / timestamptz NULL | |
 | `open_item_id` | uuid NULL | 当前卡片对应的待办（`PROMOTION_APPROVAL` 或阻塞它的协调会话待办） |
 | `receipt_ids` | uuid[] NOT NULL DEFAULT `'{}'` | |
@@ -512,7 +516,7 @@ interface TaskIntegrationView {
 | # | from | 已提交事实 | to | 附带写入 |
 |---|---|---|---|---|
 | M-T1 | — | 候选事实（§3.4） | `CHECKING` | 同一事务入队 `CHECK_PROMOTION` |
-| M-T2 | `CHECKING` | 检查作业 `READY` | `READY`（状态 A） | `PROMOTION_APPROVAL` 待办（负责人 OWNER）；提交后推送 `approve-merge-to-main` |
+| M-T2 | `CHECKING` | 检查作业 `READY`，且 M-T11 不成立 | `READY`（状态 A） | `PROMOTION_APPROVAL` 待办（负责人 OWNER）；提交后推送 `approve-merge-to-main` |
 | M-T3 | `CHECKING` | 检查作业 `CONFLICT` / `CHECK_FAILED` / `ERROR` | `BLOCKED`（状态 D） | 协调会话待办（§4.2），`promotion_id` 指向本行 |
 | M-T4 | `READY` | owner 确认写入（CAS `state = READY`，且 `source_sha` 与请求体一致） | `CONFIRMED` | 入队 `LAND_PROMOTION`；审批待办 `RESOLVED / APPROVED` |
 | M-T5 | `READY` | owner「Not now」写入 | `DECLINED` | 审批待办 `RESOLVED / DECLINED`（附录 A-Q6） |
@@ -521,12 +525,16 @@ interface TaskIntegrationView {
 | M-T8 | `CONFIRMED` / `RECHECKING` | 落地作业 `LANDED` | `MERGED`（状态 C） | 回执（M9） |
 | M-T9 | `RECHECKING` | 落地作业 `CONFLICT` / `CHECK_FAILED` / `ERROR` | `BLOCKED`（状态 D） | 协调会话待办；解决之后内容已经变了，重新走 A，要 owner 再点一次 |
 | M-T10 | `CONFIRMED` / `RECHECKING` | owner「Cancel」写入，作业尚未进入 `PUSH` | `CANCELLED` | 作业 `cancel_requested_at` |
+| M-T11 | `CHECKING` | 检查作业 `READY`，且同一事务读到：`source_kind = PROJECT_BRANCH` 且绑定仍是该项目分支（upstream 仍是它的 upstream）；`project.coordinator_enabled = true`；干净——无冲突、每条检查 `exit_code = expected` 且未超时、回报带 `upstreamSha` 与 `testedTreeSha`、本项目无 OPEN 的 `INTEGRATION_*` 待办；做检查的 runner 声明了 `promotion-automatic-land/v1` | `CONFIRMED`（`confirmed_automatically = true`，不写确认人） | 同一事务入队 `LAND_PROMOTION`（`confirmed_automatically = true`）；**不开** `PROMOTION_APPROVAL` 待办 |
+| M-T12 | `CONFIRMED`（自动确认） | 落地作业 `READY`：runner 发现 upstream 已不在 `upstream_sha_checked`，什么都没合、没检查、没推（推送时才输掉的竞态走 J5 的重取回合，在重取时照此交回）；或领取时平台对同一行重读 M-T11（检查留下的事实 + 项目此刻的 `coordinator_enabled`、绑定、OPEN 集成类待办），授权已不成立——作业不下发给 runner，直接记 `READY`；授权读不出来也不下发 | `READY`（状态 A） | `confirmed_automatically` 复位为 false、`confirmed_at` / `land_job_id` 清空；开 `PROMOTION_APPROVAL` 待办（负责人 OWNER，payload 的 `upstreamShaChecked` 取本行、不取作业看到的新 tip）；作业行保留 `confirmed_automatically = true` |
 
-**M5（确认后 main 前进 → 自动重检，不再问）**：owner 确认的是「这批任务、这些检查」。upstream 前进而检查仍然通过，结论不变，直接落地（状态 B）；重检失败就交给协调会话。
+**M5（确认后 main 前进 → 自动重检，不再问）**：owner 确认的是「这批任务、这些检查」。upstream 前进而检查仍然通过，结论不变，直接落地（状态 B）；重检失败就交给协调会话。**只适用于 owner 按下的确认**：Automatic 的自动确认（M-T11）授权的是「这棵测过的树、落到检查时的那个 main tip」，main 一动就不再干净，交回 owner（M-T12），不重检、不合并。
 
 **M6（落地方式）**：`PROJECT_BRANCH` 源用 `git merge --no-ff <source_sha>` 合到 upstream tip，任务提交保持为 main 的祖先；`TASK_BRANCH` 源 rebase 后 fast-forward（附录 A-Q7）。两者都要求落地的树等于最后一次通过检查的树。
 
-**M7（每次都问）**：不存在「自动合入 main」的分支，`MAIN` 线项目与紧急修复也一样（owner 决定 2）。以后放开是 owner 的决定，不是配置项。
+**M7（谁对合入 main 说是）**：owner——按卡片。唯一例外是两件事**同时**成立（owner 决定，2026-09-23：「有自己的项目集成分支 + automatic 就可以合并；如果是 main 或非 automatic，就需要人来点」）：这条线是项目自己的分支（`PROJECT_BRANCH`，已过线检查的暂存区，提供「这次落地是干净的」），且项目的 Automatic（`coordinator_enabled`）开着（owner 已经给过的授权，提供「这个项目可以自己动」）。此时由平台自行确认并合入，留收据（M-T11、§3.6 的 `merged.automatic` / `merged.revert`）。任一不成立——`MAIN` 线项目、Automatic 关、检查红、有冲突、main 在检查后前进、项目上有 OPEN 的集成类待办——都照旧出卡，一个字不改。不为凑自动放宽「干净」：前三条在 M-T11 的判据里，main 前进由 runner 在推送前执行（M-T12），声明不了这一点的 runner 不会被交给自动落地（领取也会跳过它）。「落地那一刻」的授权读两次：检查回来 `READY` 时决定出卡还是自动确认，作业被领取、即将下发给 runner 时再读一次——owner 在这之间关掉 Automatic（或线改成了 main、项目上新开了集成类待办），这次落地就交回 owner 出卡，不凭一个已经收回的授权推送。
+
+语义代价写明：`coordinator_enabled` 原本只管「平台可以自动把例外待办交给协调会话」，现在同一个开关也是「允许平台自主合入 main」的授权——为了让协调会话处理例外而打开 Automatic 的 `PROJECT_BRANCH` 项目，会顺带开始自动合入 main。owner 选择复用这个开关而不是加第二个；Automatic 的说明文案（§7.2 V8）必须说出这一点，`schema.prisma` 里该列的注释同样写明。
 
 **M8（合入 main 不等于项目完成）**：卡片显示判据满足数（效果图 4「3 of 6 met on this branch — merging does not close the project」），由客户端从 `project_get` 的判据项计算；DONE 仍由 §3.5 的投影决定。
 
@@ -553,7 +561,7 @@ interface TaskIntegrationView {
 | 步 | `CHECK_PROMOTION` | `LAND_PROMOTION` |
 |---|---|---|
 | M-S1 | fetch upstream 与源；U = upstream tip | 同左；U′ = 当前 upstream tip |
-| M-S2 | `PROJECT_BRANCH`：在 U 上 `git merge --no-ff -m "Merge <source> into <upstream>" <source_sha>`；`TASK_BRANCH`：在 U 上 rebase 源 | U′ = `upstream_sha_checked` → 重做同一合并；否则回报进度 `upstreamMoved` 并在 U′ 上重做 |
+| M-S2 | `PROJECT_BRANCH`：在 U 上 `git merge --no-ff -m "Merge <source> into <upstream>" <source_sha>`；`TASK_BRANCH`：在 U 上 rebase 源 | U′ = `upstream_sha_checked` → 重做同一合并；否则回报进度 `upstreamMoved` 并在 U′ 上重做。命令带 `automatic: true`（M-T11）时，U′ ≠ `upstream_sha_checked`（或命令没给它）→ 不合并、不检查、不回报 `upstreamMoved`，直接回报 `READY`（M-T12）；已在 upstream 上的源仍先回报 `ALREADY_LANDED` |
 | M-S3 | 跑检查（组合树自带 `scripts/worktree-overlay.sh` 时先运行它，同 J-S5）：`PROJECT_BRANCH` 跑合并检查；`TASK_BRANCH` 跑任务验收命令与合并检查 | U′ 未变：要求重做的合并树 = `merge_tree_sha`，不等 → `ERROR / PROMOTION_TREE_NONDETERMINISTIC`；U′ 变了：重跑检查 |
 | M-S4 | 回报 `READY { upstreamShaChecked, mergeTreeSha, commitsAhead, filesChanged, includedLandedShas }`，`includedLandedShas` 为逐个 `merge-base --is-ancestor` 核实过的候选 | 落地前核对（同 J-S6a）→ 推送 upstream（不 force）→ 前移本地 upstream → 远端核对（同 J-S7）→ 回报 `LANDED` |
 
@@ -567,7 +575,7 @@ interface TaskIntegrationView {
 
 **M11**：`docs/project-done-gate.md` 第一节补一句：「`landing = 'LANDED'` 指服务任务都在项目的 upstream 上；在项目分支上的读作 `ON_INTEGRATION_LINE`」。
 
-**M12**：`mechanical-disposition.ts` §2 的最后两句改为：「the account owner drew the line on 2026-09-06 and narrowed it on 2026-09-13: landing on a project branch is the platform's, performed by an integration job; landing on the upstream always goes through the owner's confirmation card. `MERGE_AND_RELEASE_NEXT` remains a decision, never a merge performed from here.」
+**M12**：`mechanical-disposition.ts` §2 的最后两句改为：「the account owner drew the line on 2026-09-06 and narrowed it on 2026-09-13: landing on a project branch is the platform's, performed by an integration job; landing on the upstream always goes through the owner's confirmation card. `MERGE_AND_RELEASE_NEXT` remains a decision, never a merge performed from here.」（2026-09-23 修订 3：分号后一句改为 landing on the upstream goes through the owner's confirmation card, except a clean project branch of a project whose Automatic setting is on, which the platform lands itself and leaves a receipt for（M-T11）。）
 
 ### 3.6 读模型
 
@@ -1102,7 +1110,7 @@ interface ProjectListAttention {
 - `Wake-ups`：`delivered · last <age>` / `queued · <age>` / `returned · <age>`（琥珀）/ `none yet`。来源：发往当前协调会话的最近一条平台投递（`project_open_item_delivery` 与 `project_coordinator_wake.status = DELIVERED` 取较新者），送达看 `conversation_turn.delivered_at`。
 - `Self-started today`：`<selfStartedTurns> of <limit>` + 进度条，取 `assessSpend` 的 `spend.selfStartedTurns` 与 `limits`；暂停时显示 `paused`。
 
-**V8（Automatic 说明文案）**：`PROJECT_BRANCH`：`Tasks land on <ref> by themselves and start once their prerequisites land. Merging into main always asks you.`；`MAIN`：`Tasks are checked on main by themselves and start once their prerequisites land. Merging into main always asks you.`；未决定：保持现有文案。
+**V8（Automatic 说明文案）**：`PROJECT_BRANCH`：`Tasks land on <ref> by themselves and start once their prerequisites land. It also merges <ref> into main by itself when the checks pass cleanly, and leaves you a receipt with the commit to revert.`（修订 3：原句 `Merging into main always asks you.` 对 `PROJECT_BRANCH` 已不成立，留着它就是在没告知的情况下扩大授权范围）；`MAIN`：`Tasks are checked on main by themselves and start once their prerequisites land. Merging into main always asks you.`（不变）；未决定：现有文案后加 `If its work lands on a branch of its own, it also merges that branch into main by itself when the checks pass cleanly.`
 
 **V9（状态接口）**：`GET /projects/:id/coordinator/status` 的 `coordination` 增加 `wakeups: { state: 'DELIVERED' | 'QUEUED' | 'RETURNED' | 'NONE'; at: Date | null }` 与 `fuse: { selfStartedToday: number; limit: number; paused: boolean; episodeId: string | null }`，并写进 `docs/project-coordinator-status-contract.md` 的字段表。
 
@@ -1378,4 +1386,5 @@ SELECT count(*) FROM project_coordinator_wake
 - **v1 修订 1**（2026-09-21）：§2.4 增「检查前的铺环境」（J-S5 与 M-S3 跑检查前，先在组合树里运行仓库自带的 `scripts/worktree-overlay.sh`），J12 增 `CHECK_TREE_UNPREPARED`。缘由：2026-09-21 集成线第一次在真实运行中跑起来时，一条验收命令为 `cd src/web && npx vitest run …` 的任务被判 `CHECK_FAILED`——组合树是纯 git 树，没有 `node_modules`，命令死在 `Cannot find package '@vitejs/plugin-react'`，与实现无关。选「组合树应当被铺好」而不是「验收命令必须自包含」：后者要判的是命令的形状，而形状不是错——同一条命令在会话 worktree（已铺 overlay）里是通过的，判据 6 要的是同一条命令在同一种树上得到同一个判决；把约束改写成「作者必须自带铺设」还会让今天所有以前端命令声明的任务追溯性地作废，而作者写的命令在别处是正确的。铺环境写在平台一侧只有一处，且不动「落地的树 = 测过的树」的判定（`node_modules`/`dist` 均 gitignored，不进 `C^{tree}`，也不出现在 J-S6a 的 `git status --porcelain --untracked-files=no` 里）。
 - **v1 修订 2**（2026-09-22）：明确一条边界——`coordinator_enabled` 只约束**自动**交付（生产者唤醒、平台自动把待办投递给协调会话），不约束 **owner 自己按下的那一次**。§4.7 的「让协调会话再看一次」与 §4.4 第 1 条的 `askable` 都改按**会话**判（存在活着的协调会话即可），计数那条读也去掉 `coordinatorEnabled: true`。缘由：2026-09-22 owner 报一个「标准集确认过、却从未启动」的项目（`coordinator_enabled=false`、`config_revision=0`）——它的 3 条异常卡画在协调会话里，而会话列表行、标题栏、needs-you 条三处全暗，因为计数比「卡片画在哪」多写了一句开关判据：**同一个事实两条判据**，指向的正是当初把开关写进判据的理由（「点了打不开东西的 badge 比暗的更糟」）的反面。同族的第二处：卡片上的「Ask the coordinator again」被同一条开关判据藏起来，而真按下去也会在 `deliver` 那一行被弹回 owner（`handToOwner(NO_COORDINATOR)`），转一圈回到原处。选择把开关收窄成「别自行动手」而不是「人也叫不动」：自动那一半一字未动（四个 wake producer 与 `coordinator-disabled-negatives.spec.ts` 照旧成立），只有 owner 自己那一次按压走 `deliver(itemId, 'OWNER')`。F12 的「开关检查保留」说的是生产者那一族，未受影响。
 - **v1 修订 3**（2026-09-23）：G5 对 `COORDINATOR_WAKE_EVENTS` 开一处例外，增 `DEPENDENT_READY`（迁移 0299）。一条前置落地（§2.5 J9 的谓词，在 J10 的两条边沿上：回执提交，以及没有要落地的代码时的 DONE）放出一条 `autoRunWhenReady = false`、当前可开工的下游时，平台把「它可以开工了」送到协调会话并点名那条下游；开不开工是会话的判断（§0.1），平台不开。缘由：2026-09-23 项目 `34Tcl0kralZrY8opuLJU4` 的最后一条任务前置已落地、协调会话醒着，却没有任何事实因为它可开工而到达，项目停了两个多小时，直到有人去看——目标里点名的不送达事件之一（依赖就绪但 autoRun=false）。不放新表，因为它不是例外待办：没有异常要处理、没有终态要记，要的只是送到一次。载体是 G6（`CoordinatorDeliveryService.queue`：`createTurn` + `NEXT_TURN`，`participateSendTransaction` 里重读会话未结束并把唤醒行绑成 DELIVERED），不走 `resume`（X-D3）；幂等键复用唤醒账本的（事件，下游任务，`task_dispatch_epoch`），同一代只投一次。会话忙时排在未读消息之后；会话已结束或项目没有协调会话时拒绝并交还键，不复活会话，下游留在 owner 的 Ready-to-run 列表上（默认做法；要推给 owner 就改成 OWNER 待办）。此前 0298 已为 `TASK_DISPATCH_REFUSED` 在这个闭集里加过一次。
-- **v1 修订 4**（2026-09-23）：G5 对 `COORDINATOR_WAKE_EVENTS` 再开一处例外，增 `PROJECT_SETTLED_UNMERGED`（迁移 0300）。结算后的项目，若它的集成线上仍有成果没有任何回执说到 upstream，平台把「这些提交停在集成线上、没进 main」送到协调会话并点名提交（`detail.commits`）；合并由谁做是会话/owner 的判断（M7），平台不合、不排候选、也不改任何守卫。缘由：2026-09-23 项目 `34ODoUKJGEsfbgcJDGS4q` 已 DONE，而 `d6b55d2d853f8b2410977674e3ec54c39f52a34e` 停在 `project/34ODoUKJGEsfbgcJDGS4q` 上、比 main 多一个提交：承载它的落地作业在会话写下这个提交之前九分钟就已终态 `ALREADY_LANDED`（§2.2 J-T5 的那条答案是「分支上已经没有 line 没见过的提交」，而会话后来又提交了一次），于是没有任何一次「队列变短了」来为这个 tip 排候选（M-F1/M-F4），而结算之后连会重新读这条线的写入也停了——它最终由人手工重放进 main。不放新表，因为它不是例外待办：没有失败要处理、没有终态要记，要的只是送到一次。载体是 G6（`CoordinatorDeliveryService.deliver` → `sessions.resume`，`createTurn`），不走 `WakeDispositionService`（那条规则读的是一条验收标准的覆盖度，而结算要求每条标准都已 LANDED，没有标准可读）；幂等键是（事件，项目，`(taskId, tipSha)` 对的摘要），同一批残留只投一次、残留移动一次就再投一次。读的是 `project-criterion-landing.ts` 自己的两个折叠（`taskLanding` 与 `taskHasNothingToLand`）而不是第二份「线上的、不在 main 上的」判断；只在**已结算**的项目上读，所以线上有活而项目还开着的常态不会产生任何东西。此前 0298 为 `TASK_DISPATCH_REFUSED`、0299 为 `DEPENDENT_READY` 已各加过一次。
+- **v1 修订 4**（2026-09-23）：M7 放开一处——项目分支 + Automatic + 检查干净 → 平台自行合入 main（新增 M-T11、M-T12，迁移 0301 的 `confirmed_automatically` 两列，runner 能力 `promotion-automatic-land/v1`，§3.6 `merged.automatic` / `merged.revert`，V8 文案）。缘由：owner 2026-09-23 的决定「有自己的项目集成分支 + automatic 就可以合并；如果是 main 或非 automatic，就需要人来点」；线上实测两个项目（一个 30 小时 15 张、一个 6 小时 6 张）的 21 张晋升卡里 20 张在几分钟内被按下，按已经不是决策而是形式。边界：项目分支是已过线检查的暂存区（干净），Automatic 是 owner 已给过的授权（可以自己动），两者都在才不越权；「干净」一字不放宽——检查红、有冲突、main 在检查后前进、有 OPEN 集成类待办，任一即出卡，main 前进由 runner 在推送前判（只落到 `upstream_sha_checked`，动了就原样交回），声明不了这一点的旧 runner 不参与自动落地；授权在领取时重读一次，检查之后被收回（Automatic 关、线改、新开集成类待办）的落地不下发、交回 owner。代价：`coordinator_enabled` 从此同时是「自动交付例外」与「自动合入 main」的授权，为前者打开的项目会顺带得到后者；不另加开关（owner 明确选择复用 Automatic），改为在该列注释与 Automatic 文案里写明。部署顺序：apiserver 先上即安全——没声明 `promotion-automatic-land/v1` 的 runner 一律出卡，与今天一致；runner 升版（root `package.json` 版本号 bump、自更新）之后，自动合入才对该 runner 上的项目生效。
+- **v1 修订 5**（2026-09-23）：G5 对 `COORDINATOR_WAKE_EVENTS` 再开一处例外，增 `PROJECT_SETTLED_UNMERGED`（迁移 0303）。结算后的项目，若它的集成线上仍有成果没有任何回执说到 upstream，平台把「这些提交停在集成线上、没进 main」送到协调会话并点名提交（`detail.commits`）；合并由谁做是会话/owner 的判断（M7），平台不合、不排候选、也不改任何守卫。缘由：2026-09-23 项目 `34ODoUKJGEsfbgcJDGS4q` 已 DONE，而 `d6b55d2d853f8b2410977674e3ec54c39f52a34e` 停在 `project/34ODoUKJGEsfbgcJDGS4q` 上、比 main 多一个提交：承载它的落地作业在会话写下这个提交之前九分钟就已终态 `ALREADY_LANDED`（§2.2 J-T5 的那条答案是「分支上已经没有 line 没见过的提交」，而会话后来又提交了一次），于是没有任何一次「队列变短了」来为这个 tip 排候选（M-F1/M-F4），而结算之后连会重新读这条线的写入也停了——它最终由人手工重放进 main。不放新表，因为它不是例外待办：没有失败要处理、没有终态要记，要的只是送到一次。载体是 G6（`CoordinatorDeliveryService.deliver` → `sessions.resume`，`createTurn`），不走 `WakeDispositionService`（那条规则读的是一条验收标准的覆盖度，而结算要求每条标准都已 LANDED，没有标准可读）；幂等键是（事件，项目，`(taskId, tipSha)` 对的摘要），同一批残留只投一次、残留移动一次就再投一次。读的是 `project-criterion-landing.ts` 自己的两个折叠（`taskLanding` 与 `taskHasNothingToLand`）而不是第二份「线上的、不在 main 上的」判断；只在**已结算**的项目上读，所以线上有活而项目还开着的常态不会产生任何东西。此前 0298 为 `TASK_DISPATCH_REFUSED`、0299 为 `DEPENDENT_READY` 已各加过一次。

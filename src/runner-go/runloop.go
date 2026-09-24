@@ -23,12 +23,20 @@ const (
 	heartbeatInterval                   = 30 * time.Second
 	selfUpdateCheckInterval             = 10 * time.Minute
 	runtimeDefaultRefreshHeartbeatTicks = 10 // ~5 minutes
-	// Refreshed once at startup and every four hours after that. Each pass spawns one `claude -p
-	// "/model <alias>"` per tier alias, so an hourly cadence was launching the engine four times
-	// an hour purely to re-read a list that changes on CLI releases — but a daily one meant a
-	// model released this morning stayed invisible until tomorrow. Four hours is the compromise;
-	// the control plane can also ask for a pass now (HeartbeatResponse.RefreshModelCatalog).
-	modelCatalogRefreshHeartbeatTicks = 480 // ~4 hours
+	// Refreshed once at startup and every hour after that. What a pass costs is process spawns, not
+	// model calls: Claude Code takes three per tier alias (`/model <alias>`, `/context`, and the
+	// `/fast` capability probe) — 12 for the four aliases — plus one each for codex, kimi and
+	// opencode, all local slash commands that spend no tokens. Measured on vmi3129740 on 2026-09-24
+	// at load 39 on 8 cores: 15 spawns, 96s wall (~2m on a quieter pass of the same box), in a
+	// background goroutine nothing waits on.
+	//
+	// Hourly is the cadence the owner asked for. Four hours — the compromise, made on that spawn
+	// cost when it was the only thing being weighed — meant a model released this morning could
+	// stay invisible most of the day. The CLI is what changes the list, so a CLI this runner
+	// installs is re-read on the spot instead of waiting for this ticker (see
+	// refreshCatalogAfterEngineUpdate). The control plane can also ask for a pass now
+	// (HeartbeatResponse.RefreshModelCatalog).
+	modelCatalogRefreshHeartbeatTicks = 120 // ~1 hour
 )
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
@@ -92,6 +100,54 @@ func restartForUpdate(updateRequested, drainTimedOut bool, signals <-chan os.Sig
 		return false
 	default:
 		return true
+	}
+}
+
+// coalescingRefresh returns the trigger for a background refresh that never loses a request.
+//
+// Its one caller is the model catalog, where a refresh spawns a CLI per runtime and takes tens of
+// seconds to two minutes — longer than the gap between the events that ask for one. Triggers arrive
+// in bursts: two engines can move in the same pass a few seconds apart (a pass asks once per engine
+// that moved), the hourly ticker can land in the middle of one, and the Engines panel's buttons are
+// pressed by a person. Dropping those arrivals was what a TryLock did, and it lost exactly the
+// request carrying the newest models: the second engine's CLI was re-read only at the next hourly
+// tick, if at all.
+//
+// So a request arriving during a refresh is remembered and served by one more run of the same
+// refresh once the current one finishes. However many arrive, they cost one extra run: what all of
+// them want is a catalog that reflects the last of them, and re-reading the CLIs N times over would
+// spend minutes producing the answer the last read already has. A request arriving after the run
+// finished is an ordinary refresh, not a catch-up.
+//
+// Runs the refresh on the caller's own goroutine — callers want it off their own, so they say so
+// (see refreshCatalogAfterEngineUpdate).
+func coalescingRefresh(refresh func()) func() {
+	var mu sync.Mutex
+	// running is held across the whole cycle — the refresh and the decision that follows it — so a
+	// request arriving at any point in it is either seen by the pending check below or, if it lands
+	// after running is cleared, becomes the refresh itself. Neither is dropped.
+	var running, pending bool
+	return func() {
+		mu.Lock()
+		if running {
+			pending = true
+			mu.Unlock()
+			return
+		}
+		running = true
+		mu.Unlock()
+		for {
+			refresh()
+			mu.Lock()
+			again := pending
+			pending = false
+			if !again {
+				running = false
+				mu.Unlock()
+				return
+			}
+			mu.Unlock()
+		}
 	}
 }
 
@@ -801,16 +857,18 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	var modelSnapshotMu sync.Mutex
 	var hbModelCatalog *ModelCatalog
 	var hbRuntimeDefaultModels map[string]string
-	var modelCatalogRefreshMu sync.Mutex
 	// Let the UI follow the runner's own CLIs (Codex `codex debug models`, Claude `claude -p
 	// "/model"`, which auto-track new releases) instead of a hardcoded web/mobile list. Refreshed
 	// hourly in the background: model lineups change rarely, and the Claude fetch spawns a
-	// few `claude -p` processes, so there's no reason to run it often.
-	refreshModelCatalog := func() {
-		if !modelCatalogRefreshMu.TryLock() {
-			return
-		}
-		defer modelCatalogRefreshMu.Unlock()
+	// few `claude -p` processes, so there's no reason to run it often — which is also why the one
+	// event that does change the lineup, an engine this runner just updated, refreshes it on the
+	// spot instead (see refreshCatalogAfterEngineUpdate below).
+	//
+	// coalescingRefresh, because those two triggers now overlap by design: a pass that moves two
+	// engines asks at 09:38:50 and again at 09:38:58, and a refresh takes tens of seconds to two
+	// minutes. A request that arrives during one is served by one more run after it, so the second
+	// engine's new models are in the list seconds later rather than at the next hourly tick.
+	refreshModelCatalog := coalescingRefresh(func() {
 		catalog := &ModelCatalog{}
 		if codexCLIAvailable() {
 			if models, err := fetchCodexModelCatalog(loopCtx); err != nil {
@@ -856,7 +914,21 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// Same catalog the heartbeat reports, handed to the running sessions: it carries each
 		// model's context window, which is the denominator they ship with every occupancy reading.
 		publishModelCatalog(published)
-	}
+	})
+	// The other way the catalog goes stale: this runner installs a newer engine, whose point is
+	// often a model the old CLI did not have. Every path that updates one ends in updateEngine, so
+	// they all report a version that really moved — the periodic pass, the idle retry, and the Engines
+	// panel's Update button (see updateEngines) — and the picker re-reads the CLI now instead of up
+	// to an hour from now, which on 2026-09-24 left Opus 5.5 missing from a runner that had been
+	// running 2.1.280 since 16:20Z.
+	//
+	// Off the reporter's own goroutine, and that is a precondition now rather than a courtesy: the
+	// pass calls this between engines (see updateEngines), so it has to hand the refresh off and
+	// return — a pass spawns a dozen CLIs and takes seconds, and the updater that just finished, a
+	// loop that still has engines to walk or a relay with a person waiting on it, has nothing to
+	// gain by waiting for it. Overlap is no longer a loss either: a request arriving during one is
+	// served by one more run after it (see coalescingRefresh).
+	refreshCatalogAfterEngineUpdate := func() { go refreshModelCatalog() }
 	// Runtime defaults come from user-owned config/environment only, so refresh them more often
 	// without paying the catalog's process-spawn cost. Probe errors remain visible in logs, while
 	// mergeRuntimeDefaultModels applies the null/empty/last-good heartbeat semantics.
@@ -900,9 +972,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	// Keep the machine's coding-engine CLIs current: the runner execs whatever engine
 	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
-	// Daily, best-effort, skips any engine with a live session its update could disturb (see
-	// engineUpdateLoop).
-	go engineUpdateLoop(loopCtx, residentProviderCount, doctorProxyVars(cfg.ServerURL))
+	// Every 30 min, best-effort, skips any engine with a live session its update could disturb (see
+	// engineUpdateLoop). An engine whose version really moved re-reads the model catalog on
+	// the spot — the CLI is what the list is made of, and its new release may be the reason
+	// the update happened.
+	go engineUpdateLoop(loopCtx, residentProviderCount, doctorProxyVars(cfg.ServerURL), refreshCatalogAfterEngineUpdate)
 
 	// Engines are installed on demand rather than at register time; this is the consent
 	// that was collected there (see ensureEngine).
@@ -934,7 +1008,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// goroutine itself. Stop dispatching it as soon as drain begins and join anything
 	// already running before a self-update replaces this process image.
 	var heartbeatOps sync.WaitGroup
-	login := &loginRelay{}
+	// The sign-in relay reclaims the slot an add-account attempt leaves empty; a slot one of this
+	// runner's live sessions is stuck to is not one it may take away.
+	login := &loginRelay{liveSessionIDs: pool.sessionIDs}
 	install := &installRelay{}
 	// Codex rate-limit reset steps outlive the drain signal (a started step still reports), and are
 	// stopped only once the heartbeat has: nothing can be delivered to this process after that.
@@ -977,7 +1053,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsage.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
-				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsageProbe.snapshot()),
+				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
 				AgentDirProbes:       agentDirs.snapshot(),
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
@@ -1275,19 +1351,19 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						logln("install-result POST failed:", err)
 					}
 				}
-				// The same slot also carries "update every engine now" (the daily loop's work,
+				// The same slot also carries "update every engine now" (the engine loop's work,
 				// on demand). Live sessions are visible from here, so unlike `orbit
 				// engine-update` this one won't swap a binary mid-turn.
 				if ir.Mode == "update" {
-					install.startUpdate(residentProviderCount, doctorProxyVars(cfg.ServerURL), report, engineHealth.refresh)
+					install.startUpdate(residentProviderCount, doctorProxyVars(cfg.ServerURL), report, engineHealth.refresh, refreshCatalogAfterEngineUpdate)
 				} else {
 					install.start(ir.Engine, report, engineHealth.refresh)
 				}
 			}
 			// Re-read the runtime CLIs' model lists because someone asked from the UI. On its
 			// own goroutine: a pass spawns several CLIs and can take seconds, and nothing here
-			// waits for it — the refreshed catalog rides a later heartbeat. The refresher's own
-			// TryLock makes a request that lands mid-pass a no-op rather than a second spawn.
+			// waits for it — the refreshed catalog rides a later heartbeat. A request that lands
+			// mid-pass is served by one more run once that one ends, rather than dropped.
 			if resp.RefreshModelCatalog {
 				logln("model catalog refresh requested by the control plane")
 				go refreshModelCatalog()
@@ -1314,6 +1390,25 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("repo-cleanup-result POST failed:", err)
 				}
 				repoHealth.refresh() // report the repaired state on the next heartbeat, not in a minute
+			}
+			// Remove a Codex account slot the user asked to be rid of. Carried out here, on the
+			// heartbeat's own goroutine, for the reason the repair above is: it is a directory
+			// removal, and the request is redelivered until we report, so a second one racing the
+			// first would only fight over a directory that is already going. A slot one of this
+			// runner's live sessions is stuck to is refused inside — the session's thread lives in
+			// that CODEX_HOME.
+			if rr := resp.CodexAccountRemoveRequest; rr != nil {
+				res := CodexAccountRemoveResultRequest{Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
+				if err := removeCodexAccount(codexUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
+					res.Status, res.Message = "failed", firstLine(err.Error())
+				} else {
+					// Re-probe the engines as well, so the account leaves the page's list on the
+					// next beat rather than in five minutes.
+					go engineHealth.refresh()
+				}
+				if err := t.codexAccountRemoveResult(res); err != nil {
+					logln("codex-account-remove-result POST failed:", err)
+				}
 			}
 			// Report what Claude Code history sits under a directory someone is typing into the
 			// new-workspace form. On its own goroutine: reading a directory's transcripts takes a

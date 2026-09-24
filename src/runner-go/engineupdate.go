@@ -22,21 +22,28 @@ import (
 // The runner execs whatever `claude`/`codex`/`kimi` is on PATH; nothing else keeps those CLIs
 // current, and the control plane pins new model slugs a stale engine will reject.
 // engineUpdateLoop closes that gap: once ~10 min after startup (staggered off the
-// boot-time selfUpdate and any burst of reclaimed sessions), then every 24h — and, for any
+// boot-time selfUpdate and any burst of reclaimed sessions), then every 30 min — and, for any
 // engine a pass stepped over because sessions were running on it, the moment it falls idle.
+//
+// 30 min, not an hour, because a model a new CLI brings has to reach the picker within two hours
+// of the release — and that budget has to hold one interval to notice plus one more to retry a
+// release feed that was momentarily unreachable. The feed does go missing (runner logs, 09-20 and
+// 09-21: `could not reach …/claude-code-releases/latest`), and a single failed pass must not
+// spend the whole budget. Asking this often is close to free: a pass with nothing to fetch is one
+// GET per engine and no updater at all (TestUpdateEngineSkipsTheCommandWhenAlreadyCurrent).
 const (
-	engineUpdateInterval     = 24 * time.Hour
+	engineUpdateInterval     = 30 * time.Minute
 	engineUpdateInitialDelay = 10 * time.Minute
 	// How often the loop looks back at an engine it stepped over for being busy. Short on
 	// purpose: what it is waiting for is the gap between one session ending and the next one
-	// starting, and on the machine this exists for — the one that is never idle at 24h-ticker
-	// o'clock — that gap is the only chance there is. Cheap to ask this often because while no
+	// starting, and on the machine this exists for — the one that is never idle when the ticker
+	// fires — that gap is the only chance there is. Cheap to ask this often because while no
 	// engine is deferred, which is most runners most of the time, it asks nothing at all.
 	engineIdleRetryInterval = 15 * time.Second
 	// Ceiling for a single engine's update command. `claude update` / `codex update`
 	// download over the network, so allow minutes — but never let a wedged updater (slow
 	// mirror, DNS black hole, an unexpected prompt) block the loop forever; without this
-	// the goroutine could hang and the 24h ticker would never fire again.
+	// the goroutine could hang and the loop's ticker would never fire again.
 	engineUpdateTimeout = 5 * time.Minute
 	// Ceiling for a whole pass over every engine, which is the number that actually has to
 	// hold. Two things are measured against it, and neither knows how many engines a machine
@@ -64,13 +71,16 @@ const (
 
 // engineUpdateLoop updates each installed engine in place, skipping any with a live
 // session so a binary is never swapped mid-turn — and then retrying that engine as soon as
-// its sessions finish, rather than at the next daily tick. A native Claude Code install is the
+// its sessions finish, rather than at the next tick. A native Claude Code install is the
 // exception: its update swaps nothing a session runs, so it goes ahead busy or not (see
 // nativeClaudeInstall). Installing a missing engine stays
 // `orbit doctor`'s interactive job. Best-effort — every failure is logged, never
 // fatal. ORBIT_NO_ENGINE_UPDATE disables it, retry included: it turns the whole loop off
 // before anything is scheduled.
-func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVars []envVar) {
+//
+// onEngineUpdated is handed to both schedulers it drives, so a pass that really moved an engine's
+// version reports it wherever it came from — see updateEngines for what it promises.
+func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVars []envVar, onEngineUpdated func()) {
 	if os.Getenv("ORBIT_NO_ENGINE_UPDATE") != "" {
 		return
 	}
@@ -79,7 +89,7 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 		return
 	case <-time.After(engineUpdateInitialDelay):
 	}
-	updateEngines(ctx, activeCount, proxyVars)
+	updateEngines(ctx, activeCount, proxyVars, onEngineUpdated)
 	ticker := time.NewTicker(engineUpdateInterval)
 	defer ticker.Stop()
 	// The other half of "skipped — session(s) active". That skip files the engine; this picks
@@ -93,9 +103,9 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			updateEngines(ctx, activeCount, proxyVars)
+			updateEngines(ctx, activeCount, proxyVars, onEngineUpdated)
 		case <-idle.C:
-			retryDeferredEngineUpdates(ctx, activeCount, proxyVars)
+			retryDeferredEngineUpdates(ctx, activeCount, proxyVars, onEngineUpdated)
 		}
 	}
 }
@@ -103,7 +113,21 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 // updateEngines updates every engine on this machine, returning one human line per engine that
 // had anything to say — the summary a browser-requested update reports back (the per-engine
 // record it leaves behind is engineUpdateLog's job).
-func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars []envVar) []string {
+//
+// onEngineUpdated, when not nil, is called the moment an engine's version really moves — inside the
+// pass, before the engine after it is even looked at. A CLI that moved may have brought a model
+// lineup with it, and the caller re-reads the model catalog on that (see runLoop) rather than
+// waiting for its own ticker — the version is the one thing that changes the list between ticks,
+// and installing it is this function's job. Only `updated` counts: `checked` is a version that did
+// not move, and `failed` is one that never arrived. A pass that moves several engines calls it once
+// per engine; calls landing during one catalog refresh are coalesced by the caller.
+//
+// Called from this pass's own goroutine, between engines — so it must return promptly. The engines
+// behind this one are each allowed engineUpdateTimeout (a wedged updater is stopped only by its own
+// ceiling), and a callback that took minutes would re-create the delay this exists to remove: live
+// on 2026-09-24, Claude Code moved at 09:38:50 and the catalog was not re-read until Kimi had
+// printed nothing at all for 5m0s. The runner's own callback hands the work to another goroutine.
+func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars []envVar, onEngineUpdated func()) []string {
 	// One budget for the pass, not one per engine — see engineUpdateBudget. Each engine's own
 	// ceiling is derived from this context, so it is really min(engineUpdateTimeout, what's left).
 	ctx, cancel := context.WithTimeout(ctx, engineUpdateBudget)
@@ -127,11 +151,11 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 				logln("engine-update:", spec.name, "skipped — session(s) active")
 				// Filed rather than dropped, which is what makes the line below a promise instead of
 				// a figure of speech: retryDeferredEngineUpdates comes back for it within seconds of
-				// the last session ending, so this engine's next chance is not 24h away.
+				// the last session ending, so this engine's next chance is not half an hour away.
 				deferEngineUpdate(spec.bin)
 				// The outcome is deliberately not recorded: a busy machine says nothing about whether
 				// updating works here, and writing it would leave every well-used engine reading
-				// "skipped" until the next daily pass. How far behind it is, though, is true whoever
+				// "skipped" until the next pass. How far behind it is, though, is true whoever
 				// is busy — and this is the machine that most needs it said. It is worth saying out
 				// loud to whoever just pressed the button, too: silence reads as "nothing happened".
 				noteEngineDrift(ctx, spec, servicePath)
@@ -145,10 +169,17 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 		// owing, and leaving the to-do filed would send the idle retry after it again seconds later.
 		clearDeferredEngineUpdate(spec.bin)
 		rec, phrase := updateEngine(ctx, spec, servicePath, proxyVars)
-		if n > 0 && rec.Status == updateUpdated {
-			// The one thing about this update the version numbers don't say: the sessions that were
-			// busy are still on whatever they started with, and only their next spawn moves.
-			phrase += " — native install, so what's already running (" + plural(n, "session") + ") keeps the version it started with"
+		if rec.Status == updateUpdated {
+			if n > 0 {
+				// The one thing about this update the version numbers don't say: the sessions that were
+				// busy are still on whatever they started with, and only their next spawn moves.
+				phrase += " — native install, so what's already running (" + plural(n, "session") + ") keeps the version it started with"
+			}
+			// Now, not after the loop. This is the engine whose model list just changed, and the
+			// engines still to come in this pass are each allowed minutes of their own.
+			if onEngineUpdated != nil {
+				onEngineUpdated()
+			}
 		}
 		if phrase != "" {
 			lines = append(lines, phrase)
@@ -206,7 +237,7 @@ func nativeClaudeInstall(spec engineSpec, servicePath string) (string, bool) {
 // running on them. A to-do, not a record — the outcome of a skip is still deliberately nothing.
 //
 // Skipping a busy engine is right: a binary must never be swapped mid-turn. On its own, though,
-// it was only half an answer, because the retry was the next 24h tick — one sample, at one fixed
+// it was only half an answer, because the retry was the next tick — one sample, at one fixed
 // instant, of a machine that may be permanently busy. The result was exactly backwards: the
 // runner doing the most work was the one that never updated, and its row just counted days
 // behind. That costs more than it used to, now that the model picker probes the CLI itself, so a
@@ -257,13 +288,18 @@ func deferredEngineUpdates() map[string]bool {
 // itself, and the others install the moment each one's own count reaches zero. An engine that is
 // still busy is simply left filed — no log line, no drift probe, nothing recorded — because this
 // runs every few seconds, and the pass that deferred it already said all of that once.
-func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) int, proxyVars []envVar) {
+//
+// onEngineUpdated is updateEngines' contract, unchanged, down to where in the loop it is called: an
+// engine this retry installs really did move a version, and the caller hears about it there and then
+// rather than once the retry is done — the point of this path is that the update did not wait for
+// the loop's next tick, and neither should the model list that came with it.
+func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) int, proxyVars []envVar, onEngineUpdated func()) {
 	deferred := deferredEngineUpdates()
 	if len(deferred) == 0 {
 		return
 	}
 	// Bounded like a pass, for the same reason: every update holds the machine's one
-	// package-manager lock, whether the daily timer or an idle engine asked for it.
+	// package-manager lock, whether the loop's ticker or an idle engine asked for it.
 	ctx, cancel := context.WithTimeout(ctx, engineUpdateBudget)
 	defer cancel()
 	servicePath := serviceLoginPath()
@@ -279,11 +315,13 @@ func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) in
 		}
 		// Cleared before the attempt, not after it. The to-do asked for an attempt; a failing
 		// updater that stayed filed would be retried every engineIdleRetryInterval for as long
-		// as the machine stayed idle. Its failure is recorded like any other, and the daily pass
-		// is what tries again.
+		// as the machine stayed idle. Its failure is recorded like any other, and the loop's
+		// next pass is what tries again.
 		clearDeferredEngineUpdate(spec.bin)
 		logln("engine-update:", spec.name, "retrying — its sessions have finished")
-		updateEngine(ctx, spec, servicePath, proxyVars)
+		if rec, _ := updateEngine(ctx, spec, servicePath, proxyVars); rec.Status == updateUpdated && onEngineUpdated != nil {
+			onEngineUpdated()
+		}
 	}
 }
 
@@ -426,9 +464,9 @@ func humanSize(n int64) string {
 // silently pinned to a CLI that rejects the model slugs the control plane hands it.
 func updateEngine(ctx context.Context, spec engineSpec, servicePath string, proxyVars []envVar) (EngineUpdateReport, string) {
 	// Every package-manager run on this machine takes the same lock, whichever path asked for
-	// it: the daily loop, a browser-requested update, and a session's on-demand install can all
+	// it: the update loop, a browser-requested update, and a session's on-demand install can all
 	// want the one global prefix at once. The relay's own single-flight doesn't cover this —
-	// it only stops a second *relay* job, and the daily timer isn't a relay job. Held across
+	// it only stops a second *relay* job, and the loop's timer isn't a relay job. Held across
 	// the version probes too, so `before` can't be measured against another updater's write.
 	engineInstall.mu.Lock()
 	defer engineInstall.mu.Unlock()
@@ -445,7 +483,7 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	if !mayUpdate {
 		logln("engine-update:", spec.name, "skipped — package-managed install at", binPath)
 		// Not a failure and not fixable by retrying — so it is recorded as its own state, with
-		// the fact that explains it. Reading "update failed" every day about a deliberate
+		// the fact that explains it. Reading "update failed" every pass about a deliberate
 		// choice is how a real warning gets tuned out.
 		rec := recordEngineUpdate(spec.bin, updateSkipped,
 			"Installed by a package manager ("+binPath+") — Orbit updates it through that, rather than installing a second copy alongside it.",
@@ -637,7 +675,7 @@ func updateErrDetail(err error, out []byte) string {
 }
 
 // cmdEngineUpdate is the `orbit engine-update` entry point: update every installed engine
-// once, now. Unlike the daily loop it can't see the runner's live sessions (that state
+// once, now. Unlike the update loop it can't see the runner's live sessions (that state
 // lives in the `orbit run` process), so it updates unconditionally — run it when the
 // machine is idle if a mid-turn binary swap would matter.
 func cmdEngineUpdate() {
@@ -645,7 +683,9 @@ func cmdEngineUpdate() {
 	if cfg := loadConfig(); cfg != nil {
 		server = cfg.ServerURL
 	}
-	for _, line := range updateEngines(context.Background(), func(string) int { return 0 }, doctorProxyVars(server)) {
+	// No catalog-refresh callback: this is a one-shot CLI with no sessions to publish a refreshed
+	// catalog to, and the `orbit run` process that has them re-reads it on its own schedule.
+	for _, line := range updateEngines(context.Background(), func(string) int { return 0 }, doctorProxyVars(server), nil) {
 		fmt.Println("  " + line)
 	}
 }
@@ -670,8 +710,8 @@ type engineUpdateFacts struct {
 
 // engineUpdateLog is the per-engine update record, kept next to the runner's config.
 //
-// On disk rather than in memory for two reasons: a runner restarts (daily self-update, service
-// reload) and would otherwise report "never updated" for the next 24h, and `orbit engine-update`
+// On disk rather than in memory for two reasons: a runner restarts (periodic self-update, service
+// reload) and would otherwise report "never updated" until its next pass, and `orbit engine-update`
 // runs in a different process than `orbit run` — a shared file is the only way both of their
 // results reach the same heartbeat.
 //

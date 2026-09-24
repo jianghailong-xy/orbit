@@ -18,6 +18,7 @@ import {
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
 import { encodeId } from '../lib/idCodec';
+import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { taskStartOwnedByCompletionDeclaration, type FilterableTask } from '../lib/taskFilters';
 import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
@@ -1467,6 +1468,8 @@ export function TaskDetailPanel({
                       <Markdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight, mentionPlugin]}
+                        urlTransform={referenceUrlTransform}
+                        components={{ a: ReferenceLink }}
                       >
                         {c.body}
                       </Markdown>

@@ -594,7 +594,13 @@ export class MergeReceiptService {
       taskId: string | null;
       projectId: string | null;
       jobId: string;
-      state: 'LANDED' | 'ALREADY_LANDED';
+      /**
+       * `NOTHING_TO_LAND` is the line's answer that the branch it was handed carried nothing of the
+       * task's (0300). It is recorded as `ALREADY_MERGED` — nothing moved, and a `target_sha_after`
+       * here would claim it did — and it is written by the caller only when the task has no branch
+       * with reported work of its own: the receipt is what §2.5 J9 releases dependents on.
+       */
+      state: 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND';
       sourceBranch: string;
       targetBranch: string;
       sourceSha: string | null;
@@ -604,6 +610,10 @@ export class MergeReceiptService {
       testedTreeSha: string | null;
       landedTreeSha: string | null;
       mainSyncSha: string | null;
+      /** A merge into the upstream nobody pressed: the project's Automatic setting confirmed it
+       *  (integration contract §3.3 M-T11). Written into the receipt's `detail` so the ledger itself
+       *  says which merges a person made and which the platform made on its own. */
+      confirmedAutomatically?: boolean;
     },
   ): Promise<string[]> {
     const sourceSha = normalizeSha(args.sourceSha, 'sourceSha');
@@ -635,6 +645,7 @@ export class MergeReceiptService {
           ...(args.testedTreeSha ? { testedTreeSha: args.testedTreeSha } : {}),
           ...(args.landedTreeSha ? { landedTreeSha: args.landedTreeSha } : {}),
           ...(args.mainSyncSha ? { mainSyncSha: args.mainSyncSha } : {}),
+          ...(args.confirmedAutomatically ? { confirmedAutomatically: true } : {}),
         } as Prisma.InputJsonValue,
         idempotencyKey: mergeReceiptIdempotencyKey({
           sessionId: args.sessionId,

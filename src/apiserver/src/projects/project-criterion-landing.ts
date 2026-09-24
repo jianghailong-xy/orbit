@@ -353,7 +353,10 @@ export function lineStartedSql(alias: string): string {
  * reaches it by asking whether the source tip is an ancestor of the base it is working from, and for
  * a project with a line of its own that base is the TARGET — so a branch whose work was merged into
  * the project branch an hour ago and a branch that carries nothing at all are answered identically.
- * The other two conditions are what makes the base the UPSTREAM instead:
+ * `NOTHING_TO_LAND` (0300) is the second of those said on its own: the runner reports it when the
+ * source tip did not move off the commit its session started at, which is exactly "no commit of its
+ * own". Both are accepted, and the other two conditions below are unchanged for both — they are what
+ * makes the base the UPSTREAM instead:
  *
  *  - no merge of the upstream into the target ran (`main_sync_sha` is null), so the base is the
  *    target tip itself rather than a commit that absorbed the upstream into it; and
@@ -364,6 +367,13 @@ export function lineStartedSql(alias: string): string {
  * and with it every commit the branch carried, is on the upstream. The line observed the branch and
  * found no commit of its own on it. Nothing here resolves ancestry: the answer is what the runner
  * resolved, and these are the columns it reports beside it.
+ *
+ * WHY `NOTHING_TO_LAND` DOES NOT WIDEN THIS: a row carrying it is still read with both conditions.
+ * The state says the branch was empty; it does not say the branch was the task's WORK — a task whose
+ * session died before it delivered and whose work is on another branch gets the same answer, and
+ * letting that out of the roll-up on the state alone would be the false green this file refuses to
+ * give. Where the line was at the upstream, the two readings coincide and the exemption stands; where
+ * the line has moved past it, `jobSawTheFinishedBranch` and these conditions still withhold it.
  *
  * What it does NOT cover, said here rather than left to be discovered: an answer computed against a
  * line that has moved PAST the upstream proves only that the tip is inside the LINE, and a task whose
@@ -385,7 +395,7 @@ export function lineStartedSql(alias: string): string {
  * `jobSawTheFinishedBranch`.
  */
 export function jobSawTipOnUpstream(job: LandingJobFacts): boolean {
-  return job.state === 'ALREADY_LANDED'
+  return (job.state === 'ALREADY_LANDED' || job.state === 'NOTHING_TO_LAND')
     && job.mainSyncSha === null
     && job.targetShaBefore !== null
     && job.targetShaBefore === job.upstreamSha;

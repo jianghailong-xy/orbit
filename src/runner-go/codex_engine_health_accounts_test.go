@@ -202,50 +202,92 @@ func TestCodexEngineHealthAccountsOnlyForAnInstalledCodex(t *testing.T) {
 	}
 }
 
-func TestCodexEngineHealthAccountsCarryOnlyAFingerprintPrefixAndOnlyOnDefault(t *testing.T) {
-	const fingerprint = "cxa1_9f3a41c7e2d5b8a60123456789abcdef"
+// One account, one fingerprint: each row is labelled with the prefix of the fingerprint this runner
+// read for THAT account — Default's from the reset block of the read that produced its credits, an
+// added slot's from its own account/rateLimits/read — so two slots holding one account are the same
+// on the page, and no slot is ever labelled with another's.
+func TestCodexEngineHealthAccountsCarryEachAccountsFingerprintPrefix(t *testing.T) {
+	const defaultFingerprint = "cxa1_9f3a41c7e2d5b8a60123456789abcdef"
+	const workFingerprint = "cxa1_2b7e9013c4d5e6f708192a3b4c5d6e7f"
 	engines := []EngineHealthReport{
 		{Engine: providerClaude, Installed: true, Auth: "yes"},
 		{Engine: providerCodex, Installed: true, Auth: "yes", Accounts: []EngineAccountReport{
 			{ID: codexAccountDefaultSlot, CodexHome: "/home/u/.codex", Auth: "yes"},
 			{ID: "3fa91c2e", Name: "Work", CodexHome: "/home/u/.orbit/codex-accounts/3fa91c2e", Auth: "yes"},
+			{ID: "7c21de40", Name: "Personal", CodexHome: "/home/u/.orbit/codex-accounts/7c21de40", Auth: "no"},
 		}},
 	}
-	usage := &PlanUsage{RateLimitReset: &PlanUsageRateLimitReset{
-		ProtocolVersion: codexRateLimitResetProtocolVersion, Support: codexResetSupported, AccountFingerprint: fingerprint,
-	}}
+	usage := accountUsageWithFingerprints(t, defaultFingerprint, map[string]string{"3fa91c2e": workFingerprint})
 
 	out := withCodexAccountFingerprints(engines, usage)
-	// The usage probe reads Default, so its fingerprint labels Default and nothing else.
 	if got := out[1].Accounts[0].FingerprintPrefix; got != "cxa1_9f3a41c7" {
 		t.Fatalf("Default's fingerprint prefix = %q, want cxa1_9f3a41c7", got)
 	}
-	if got := out[1].Accounts[1].FingerprintPrefix; got != "" {
-		t.Fatalf("Work carries Default's fingerprint %q", got)
+	if got := out[1].Accounts[1].FingerprintPrefix; got != "cxa1_2b7e9013" {
+		t.Fatalf("Work's fingerprint prefix = %q, want cxa1_2b7e9013 (its own read, not Default's)", got)
 	}
-	// Only the prefix goes on the wire; the whole fingerprint stays with the reset block.
+	// Nobody has read Personal: it is left unlabelled rather than given Work's fingerprint, which
+	// would draw two different accounts as one.
+	if got := out[1].Accounts[2].FingerprintPrefix; got != "" {
+		t.Fatalf("Personal carries a fingerprint nobody read for it: %q", got)
+	}
+	// Only the prefix goes on the wire; the whole fingerprint stays behind.
 	b, _ := json.Marshal(HeartbeatRequest{Engines: out})
-	if strings.Contains(string(b), fingerprint) {
-		t.Fatalf("the heartbeat's engines carry the whole fingerprint: %s", b)
+	for _, fingerprint := range []string{defaultFingerprint, workFingerprint} {
+		if strings.Contains(string(b), fingerprint) {
+			t.Fatalf("the heartbeat's engines carry the whole fingerprint %s: %s", fingerprint, b)
+		}
 	}
 	// The snapshot the probe keeps is shared with it: labelling must not write into it.
-	if engines[1].Accounts[0].FingerprintPrefix != "" {
+	if engines[1].Accounts[0].FingerprintPrefix != "" || engines[1].Accounts[1].FingerprintPrefix != "" {
 		t.Fatal("labelling wrote into the probe's snapshot")
 	}
 
 	// Nothing read, nothing usable: the snapshot goes out as it is.
-	for name, u := range map[string]*PlanUsage{
-		"no usage":     nil,
-		"no block":     {},
-		"no account":   {RateLimitReset: &PlanUsageRateLimitReset{Support: codexResetAccountUnidentified}},
-		"not a cxa1_":  {RateLimitReset: &PlanUsageRateLimitReset{AccountFingerprint: "acct_1234567890"}},
-		"a short cxa1": {RateLimitReset: &PlanUsageRateLimitReset{AccountFingerprint: "cxa1_9f3a"}},
+	for name, fingerprints := range map[string]struct {
+		block *PlanUsageRateLimitReset
+		slots map[string]string
+	}{
+		"no block":                       {nil, nil},
+		"no account":                     {&PlanUsageRateLimitReset{Support: codexResetAccountUnidentified}, nil},
+		"not a cxa1_":                    {&PlanUsageRateLimitReset{AccountFingerprint: "acct_1234567890"}, nil},
+		"a short cxa1":                   {&PlanUsageRateLimitReset{AccountFingerprint: "cxa1_9f3a"}, nil},
+		"a slot's read named no account": {nil, map[string]string{"3fa91c2e": ""}},
+		"a slot's read produced a value that is not a fingerprint": {nil, map[string]string{"3fa91c2e": "acct_1234567890"}},
 	} {
-		if got := withCodexAccountFingerprints(engines, u); got[1].Accounts[0].FingerprintPrefix != "" {
-			t.Fatalf("%s: Default labelled %q", name, got[1].Accounts[0].FingerprintPrefix)
+		u := newCodexAccountUsage(codexResetTestLeaseOwner)
+		if fingerprints.block != nil {
+			u.def.store(&PlanUsage{RateLimitReset: fingerprints.block})
+		}
+		for id, fingerprint := range fingerprints.slots {
+			u.slots[id] = &codexSlotUsage{fingerprint: fingerprint}
+		}
+		if got := withCodexAccountFingerprints(engines, u); got[1].Accounts[0].FingerprintPrefix != "" ||
+			got[1].Accounts[1].FingerprintPrefix != "" {
+			t.Fatalf("%s: accounts labelled %q / %q", name, got[1].Accounts[0].FingerprintPrefix, got[1].Accounts[1].FingerprintPrefix)
 		}
 	}
 	if withCodexAccountFingerprints(nil, usage) != nil {
 		t.Fatal("no probe yet must stay nil, which the heartbeat omits")
 	}
+	if withCodexAccountFingerprints(engines, nil) == nil {
+		t.Fatal("no account usage must leave the snapshot alone rather than drop it")
+	}
+}
+
+// accountUsageWithFingerprints is a runner's account usage with Default's fingerprint read (the
+// reset block of its last read) and each named slot's (its own read).
+func accountUsageWithFingerprints(t *testing.T, defaultFingerprint string, slots map[string]string) *codexAccountUsage {
+	t.Helper()
+	u := newCodexAccountUsage(codexResetTestLeaseOwner)
+	if defaultFingerprint != "" {
+		u.def.store(&PlanUsage{RateLimitReset: &PlanUsageRateLimitReset{
+			ProtocolVersion: codexRateLimitResetProtocolVersion, Support: codexResetSupported,
+			AccountFingerprint: defaultFingerprint,
+		}})
+	}
+	for id, fingerprint := range slots {
+		u.slots[id] = &codexSlotUsage{fingerprint: fingerprint}
+	}
+	return u
 }

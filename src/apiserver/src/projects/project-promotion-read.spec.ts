@@ -41,6 +41,7 @@ function row(over: Record<string, unknown> = {}): Record<string, unknown> {
     checkJobId: null,
     landJobId: null,
     confirmedByUserId: null,
+    confirmedAutomatically: false,
     confirmedAt: null,
     recheckedAt: null,
     upstreamMovedBy: null,
@@ -322,6 +323,10 @@ test('a merge carries the commit it put on main, and nothing about a re-check', 
     sha: 'd0bae85bc5c687634550ae95bb5a0e4f749f3560',
     byUserId: 'user-1',
     at: mergedAt,
+    // Pressed by a person, so not the Automatic setting's (§3.3 M-T11) — and a project branch lands
+    // as a merge commit, which one revert against its first parent takes back out of main.
+    automatic: false,
+    revert: 'git revert -m 1 d0bae85bc5c687634550ae95bb5a0e4f749f3560',
   });
   // The card's own rule, inherited: the row's order, and a task the table no longer holds left out.
   assert.deepEqual(view?.tasks, [

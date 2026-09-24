@@ -18,6 +18,14 @@ import (
 // INTEGRATION_JOB_CLAIM in src/apiserver/src/projects/project-integration-job.ts.
 const integrationJobCapabilityV1 = "integration-job/v1"
 
+// The capability that says this runner honours an automatic landing's one extra rule (§3.3 M-T12):
+// land only onto the upstream tip the check ran against, and hand the candidate back untouched when
+// the upstream has moved, rather than checking the new tip and merging it as an owner-confirmed
+// landing does (M5). The control plane confirms nothing by itself for a runner that has not said
+// this, and never hands such a runner an automatic landing. Its apiserver twin is
+// PROMOTION_AUTOMATIC_LAND in src/apiserver/src/projects/project-integration-job.ts.
+const promotionAutomaticLandCapabilityV1 = "promotion-automatic-land/v1"
+
 // Where a throwaway integration worktree lives, under the same worktrees directory as everything
 // else this runner stages. Prefixed so the garbage collector can recognise one that outlived its
 // job (a process killed mid-run) and remove it.
@@ -194,6 +202,24 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 
 	// ── J-S3 already contained ────────────────────────────────────────────────────────────────
 	if isAncestor(scratch, sourceSha, base) {
+		// THE EMPTY BRANCH FIRST, because "already contained" is trivially true of one: its tip is
+		// the commit it forked at, and every fork point is in the target it forked from. A branch
+		// whose tip IS the commit its session started at carries nothing of the task's own, and
+		// answering ALREADY_LANDED for it is what wrote a receipt for a delivery that did not exist
+		// (2026-09-23, project 34Tq39ByZ0rV4c6pJkfw7): the landing had been queued for a retry
+		// session that died on a 429 without a commit, the branch tip was the upstream, and the
+		// promotion card counted the task as work the merge did not contain. The same test the
+		// control plane applies to an older runner's spelling of this answer.
+		//
+		// Only when the claim names a base: without one, emptiness and a genuine landing are not
+		// distinguishable here — `merge-base S T` answers S in both — and an answer that cannot be
+		// told apart is not one to give.
+		if cmd.SessionBaseSha != "" && sourceSha == cmd.SessionBaseSha {
+			// Nothing to land, and nothing was pushed: the absorb commit is discarded with the
+			// worktree, exactly as in the answer below.
+			result.State, result.Phase = "NOTHING_TO_LAND", "REBASE"
+			return result
+		}
 		// Nothing to land, and the absorb commit is discarded with the worktree: a merge of
 		// upstream that carries no task work is not this job's to push.
 		result.State, result.Phase = "ALREADY_LANDED", "REBASE"
@@ -405,6 +431,17 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	// carries no change at all.
 	if isAncestor(scratch, sourceSha, upstreamSha) {
 		result.State, result.Phase = "ALREADY_LANDED", "MERGE"
+		return result
+	}
+
+	// M-T12: an automatic landing — the project's Automatic setting confirmed it, nobody pressed
+	// Merge — is authorized for one combination: this source onto the upstream tip its check ran
+	// against. With the upstream anywhere else there is nothing it may land, and it does not do what
+	// a landing the owner confirmed does (M5), re-check the new tip and merge it: it merges nothing,
+	// reports READY, and the owner is asked. A landing that names no checked tip has nothing to be
+	// held to, and lands nothing either.
+	if landing && cmd.Automatic && (cmd.UpstreamShaChecked == "" || cmd.UpstreamShaChecked != upstreamSha) {
+		result.State, result.Phase = "READY", "MERGE"
 		return result
 	}
 

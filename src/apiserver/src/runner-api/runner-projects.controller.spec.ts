@@ -107,6 +107,7 @@ for (const method of [
   'updateProject',
   'removeProject',
   'resolveBlocker',
+  'ensureCoordinator',
 ] as const) {
   test(`the project id is resolved through PublicIdPipe on ${method}`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
@@ -508,7 +509,7 @@ test('removeProject preserves the service refusal for a non-empty project', asyn
 // that unit added — the manual trigger — deliberately did NOT join it. Enqueuing a signal
 // attributed to USER is how a person drives a MANUAL project, so an agent able to do it would be
 // driving its own coordinator; that one stays on the door a person signs in to.
-test('the runner project bridge exposes exactly create, the reads, update, the question, and guarded delete', () => {
+test('the runner project bridge exposes exactly create, the reads, update, the question, the coordinator door, and guarded delete', () => {
   const handlers = Object.getOwnPropertyNames(RunnerProjectsController.prototype).filter(
     (name) => name !== 'constructor',
   );
@@ -520,6 +521,12 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // refusal for any other session is the whole authority check.
     'askOwner',
     'createProject',
+    // §7.5's one write about the BINDING itself, and the only rotation an agent may perform. It is
+    // not `replace` smuggled onto the machine door: the service opens a replacement only when the
+    // conversation the project points at can no longer be handed a message, and hands the standing
+    // one straight back otherwise. Ending a conversation somebody is still in stays on the owner's
+    // confirmation card — that press is not here, and its absence is the assertion below.
+    'ensureCoordinator',
     'getProject',
     // Unit L7's one, and it is a GET on purpose. §7 RB2 puts the ANSWER to a cross-project
     // crossing with the user, so this door carries the question and not the write: an agent that
@@ -550,6 +557,9 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
   assert.deepEqual(verbs, {
     askOwner: RequestMethod.POST,
     createProject: RequestMethod.POST,
+    // POST because it may open one, like the owner's open and replace. The verb is not the
+    // authority: what keeps this from being a `replace` is the service's reachability check.
+    ensureCoordinator: RequestMethod.POST,
     getProject: RequestMethod.GET,
     // Unit L7: GET. The verb is the assertion — a POST appearing here would be a coordinator
     // answering a crossing on a person's behalf.
@@ -670,4 +680,64 @@ test('a create without a workspaceId still routes on the session header alone', 
   await f.controller.createProject(RUNNER, undefined, undefined, { title: 'Nightly sweep' });
 
   assert.deepEqual(f.calls.map((call) => call.path), ['in-session', 'headless']);
+});
+
+// ── The coordinator door (§7.5) ───────────────────────────────────────────────────────────────
+
+test('ensureCoordinator is exposed as POST projects/:id/coordinator/ensure', () => {
+  const handler = RunnerProjectsController.prototype.ensureCoordinator;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id/coordinator/ensure');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
+/** A controller whose `ensureCoordinator` records the gate call and the service call. */
+function ensureSpy(refuses = false) {
+  const gate: unknown[][] = [];
+  const service: unknown[][] = [];
+  const projects = {
+    ensureCoordinator: async (...args: unknown[]) => {
+      service.push(args);
+      return { sessionId: 'session-1', created: false, workspaceId: 'workspace-1' };
+    },
+  } as never;
+  const authorizer = refuses
+    ? orchestrationRefuses()
+    : ({
+        assert: async (...args: unknown[]) => {
+          gate.push(args);
+          return args[1] as string;
+        },
+      } as never);
+  return {
+    gate,
+    service,
+    controller: new RunnerProjectsController(projects, acceptanceDouble(), {} as never, authorizer),
+  };
+}
+
+// The credential is spent BEFORE anything is opened, which is the half a caller cannot see from the
+// response: a refusal that arrived with a replacement already opened would be a conversation this
+// session was never allowed to open, and by then nothing takes it back.
+test('the ensure door is gated before it opens anything, and hands over the gated session', async () => {
+  const f = ensureSpy();
+
+  const answer = await f.controller.ensureCoordinator(RUNNER, 'project-1', SESSION_ID, 'a-credential');
+
+  // The three things the proof is bound to: this machine, this conversation, this credential.
+  assert.deepEqual(f.gate, [[RUNNER, SESSION_ID, 'a-credential']]);
+  // What the service is told is the session the GATE established, under the runner's own owner —
+  // not a body field, and not the raw header either.
+  assert.deepEqual(f.service, [['owner-1', 'project-1', SESSION_ID]]);
+  assert.deepEqual(answer, { sessionId: 'session-1', created: false, workspaceId: 'workspace-1' });
+});
+
+test('a refused orchestration credential opens no coordinator', async () => {
+  const f = ensureSpy(true);
+
+  await assert.rejects(
+    () => f.controller.ensureCoordinator(RUNNER, 'project-1', SESSION_ID, 'stale-token'),
+    (e: unknown) => e instanceof ForbiddenException,
+  );
+
+  assert.deepEqual(f.service, []);
 });

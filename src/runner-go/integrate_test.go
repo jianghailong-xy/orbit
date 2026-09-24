@@ -348,6 +348,64 @@ func TestIntegrationAlreadyLandedPushesNothing(t *testing.T) {
 	}
 }
 
+// TestIntegrationNothingToLandForAnEmptyBranch: a branch whose tip is the commit its session
+// started at carries nothing of the task's own — and J-S3's "already contained" is trivially true
+// of it, because a fork point is in the target it forked from. That answer is NOTHING_TO_LAND
+// (0300), and it is not ALREADY_LANDED: on 2026-09-23 the landing for a retry session that had died
+// on a 429 was answered the positive way here, and the receipt written from it said a delivery was
+// on the line that no branch held (project 34Tq39ByZ0rV4c6pJkfw7).
+func TestIntegrationNothingToLandForAnEmptyBranch(t *testing.T) {
+	r := newIntegrationRepo(t)
+	// The line, at the commit the retry session will fork at and never move off.
+	r.checkoutNew("project/line", "main")
+	r.write("line.txt", "on the line\n")
+	r.commit("project branch")
+	r.push("project/line")
+	before := r.originRev("refs/heads/project/line")
+
+	fork := r.rev("main")
+	r.checkoutNew("orbit/empty", "main")
+	r.push("orbit/empty")
+	r.checkout("main")
+
+	command := r.command("orbit/empty", "project/line")
+	command.SessionBaseSha = fork
+	result := runIntegrationJob(command, silent)
+	if result.State != "NOTHING_TO_LAND" {
+		t.Fatalf("state = %s (%s), want NOTHING_TO_LAND", result.State, result.ErrorCode)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Fatalf("the target moved: %s -> %s", before, got)
+	}
+}
+
+// TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits is the control for the case
+// above: the same J-S3 path, the same claim naming a base, and a branch whose tip is a DESCENDANT
+// of that base. There is a commit of the task's on it and the target already contains it, so the
+// answer stays the positive one.
+func TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits(t *testing.T) {
+	r := newIntegrationRepo(t)
+	fork := r.rev("main")
+	r.checkoutNew("task/i", "main")
+	r.write("i.txt", "from i\n")
+	r.commit("task i")
+	r.push("task/i")
+	r.checkoutNew("project/line", "task/i")
+	r.push("project/line")
+	before := r.originRev("refs/heads/project/line")
+	r.checkout("main")
+
+	command := r.command("task/i", "project/line")
+	command.SessionBaseSha = fork
+	result := runIntegrationJob(command, silent)
+	if result.State != "ALREADY_LANDED" {
+		t.Fatalf("state = %s (%s), want ALREADY_LANDED", result.State, result.ErrorCode)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Fatalf("the target moved: %s -> %s", before, got)
+	}
+}
+
 // TestIntegrationLeavesNoWorktreeBehind: the scratch worktree is removed on every exit path,
 // including the failing ones, because a leftover is what the NEXT attempt trips over.
 func TestIntegrationLeavesNoWorktreeBehind(t *testing.T) {
@@ -460,6 +518,171 @@ func TestPromotionOfATaskBranchRebasesAndFastForwards(t *testing.T) {
 	}
 	if body, _ := git(r.work, "show", landed.LandedSha+":a.txt"); body != "from a" {
 		t.Fatalf("the landed commit does not carry the task's file: %q", body)
+	}
+}
+
+// checkedProjectBranch is a project branch with one task's work on it, checked for promotion the
+// way the queue checks it: the CHECK_PROMOTION's READY, whose upstream tip and tree are what a
+// landing of it is held to.
+func checkedProjectBranch(t *testing.T, r *integrationRepo) (sourceSha string, checked integrationResult) {
+	t.Helper()
+	r.checkoutNew("project/p", "main")
+	r.write("feature.txt", "from the project\n")
+	sourceSha = r.commit("task on the project branch")
+	r.push("project/p")
+	r.checkout("main")
+	check := r.promotionCommand("CHECK_PROMOTION", "project/p", "PROJECT_BRANCH")
+	check.SourceSha = sourceSha
+	checked = runIntegrationJob(check, silent)
+	if checked.State != "READY" {
+		t.Fatalf("check state = %s (%s %s), want READY", checked.State, checked.ErrorCode, checked.Phase)
+	}
+	return sourceSha, checked
+}
+
+// automaticLanding is the LAND_PROMOTION the project's Automatic setting queues for that check
+// (§3.3 M-T11): the same frozen facts an owner-confirmed landing carries, plus the mark.
+func automaticLanding(r *integrationRepo, sourceSha string, checked integrationResult) IntegrationJobCommand {
+	land := r.promotionCommand("LAND_PROMOTION", "project/p", "PROJECT_BRANCH")
+	land.SourceSha = sourceSha
+	land.UpstreamShaChecked = checked.UpstreamSha
+	land.MergeTreeSha = checked.TestedTreeSha
+	land.Automatic = true
+	return land
+}
+
+// TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst is M-T11's landing when nothing
+// moved: the merge the check built is rebuilt on the same tip, comes out as the same tree, and is
+// pushed — a merge commit whose first parent is exactly the upstream the check ran against, which is
+// what makes `git revert -m 1 <merge>` the receipt's undo.
+func TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+
+	landed := runIntegrationJob(automaticLanding(r, sourceSha, checked), silent)
+	if landed.State != "LANDED" {
+		t.Fatalf("landing state = %s (%s %s), want LANDED", landed.State, landed.ErrorCode, landed.Phase)
+	}
+	if landed.LandedTreeSha != checked.TestedTreeSha {
+		t.Fatalf("landed tree %q is not the tree the check passed %q", landed.LandedTreeSha, checked.TestedTreeSha)
+	}
+	if got := r.originRev("refs/heads/main"); got != landed.LandedSha {
+		t.Fatalf("origin main is %s, the result claims %s", got, landed.LandedSha)
+	}
+	if parent, _ := git(r.work, "rev-parse", landed.LandedSha+"^1"); parent != checked.UpstreamSha {
+		t.Fatalf("the merge's first parent is %s, want the checked upstream %s", parent, checked.UpstreamSha)
+	}
+}
+
+// TestAutomaticPromotionHandsBackAMovedUpstream is M-T12, the half of "clean" the control plane
+// cannot see: main moved after the check. An owner-confirmed landing re-checks the new tip and
+// merges it (M5) — that is what the owner confirmed. An automatic one lands NOTHING: no merge, no
+// check, no push, no upstreamMoved report (which would move the promotion to RECHECKING, a state
+// whose card promises it lands on its own), and READY, so the owner is asked. The owner-confirmed
+// run of the very same job is the control: it is what the Automatic mark is the difference from.
+func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	r.write("elsewhere.txt", "somebody else landed first\n")
+	moved := r.commit("main moved after the check")
+	r.push("main")
+
+	var reports []string
+	handedBack := runIntegrationJob(automaticLanding(r, sourceSha, checked), func(phase string, m *IntegrationUpstreamMoved) {
+		if m != nil {
+			reports = append(reports, "upstreamMoved")
+		}
+		reports = append(reports, phase)
+	})
+	if handedBack.State != "READY" {
+		t.Fatalf("automatic landing onto a moved main = %s (%s %s), want READY", handedBack.State, handedBack.ErrorCode, handedBack.Phase)
+	}
+	if got := r.originRev("refs/heads/main"); got != moved {
+		t.Fatalf("an automatic landing pushed onto a moved main: main is %s, want it left at %s", got, moved)
+	}
+	if handedBack.TestedSha != "" || len(handedBack.Checks) != 0 {
+		t.Fatalf("it merged or checked something (tested %q, %d checks): it was to land nothing", handedBack.TestedSha, len(handedBack.Checks))
+	}
+	if handedBack.UpstreamSha != moved {
+		t.Fatalf("the result names upstream %q, want the tip it found %q", handedBack.UpstreamSha, moved)
+	}
+	for _, report := range reports {
+		if report == "upstreamMoved" {
+			t.Fatalf("the automatic landing reported upstreamMoved (%v): the promotion would read RECHECKING", reports)
+		}
+	}
+
+	// The control: the same landing without the mark is the owner's, and it re-checks and lands.
+	confirmed := automaticLanding(r, sourceSha, checked)
+	confirmed.Automatic = false
+	landed := runIntegrationJob(confirmed, silent)
+	if landed.State != "LANDED" {
+		t.Fatalf("the owner-confirmed control = %s (%s %s), want LANDED after a re-check", landed.State, landed.ErrorCode, landed.Phase)
+	}
+	if parent, _ := git(r.work, "rev-parse", landed.LandedSha+"^1"); parent != moved {
+		t.Fatalf("the control landed onto %s, want the moved tip %s", parent, moved)
+	}
+}
+
+// TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush is M-T12's last window: main was where
+// the check left it when the landing fetched, and moved before the push. The push is refused (no
+// force), the lost race is taken again from the fetch (runIntegrationJob's refetch round), and there
+// an automatic landing finds main moved and hands the candidate back: READY, nothing on main. The
+// move is made from the landing's own PUSH report, which the runner sends just before it pushes, so
+// the race is exact rather than timed. The owner-confirmed run of the same job through the same race
+// is the control: it merges again onto the main that moved and lands (M5).
+func TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush(t *testing.T) {
+	for _, automatic := range []bool{true, false} {
+		r := newIntegrationRepo(t)
+		sourceSha, checked := checkedProjectBranch(t, r)
+		land := automaticLanding(r, sourceSha, checked)
+		land.Automatic = automatic
+
+		var moved string
+		result := runIntegrationJob(land, func(phase string, _ *IntegrationUpstreamMoved) {
+			if phase != "PUSH" || moved != "" {
+				return
+			}
+			r.write("elsewhere.txt", "somebody else landed in between\n")
+			moved = r.commit("main moved between the fetch and the push")
+			r.push("main")
+		})
+		if moved == "" {
+			t.Fatalf("automatic=%v: the landing never reached PUSH (%s %s %s)", automatic, result.State, result.ErrorCode, result.Phase)
+		}
+		if automatic {
+			if result.State != "READY" || result.LandedSha != "" {
+				t.Fatalf("automatic landing whose push lost the race = %s %q (%s %s), want READY with nothing landed",
+					result.State, result.LandedSha, result.ErrorCode, result.Phase)
+			}
+			if got := r.originRev("refs/heads/main"); got != moved {
+				t.Fatalf("main is %s, want it left at the commit that moved it %s", got, moved)
+			}
+			continue
+		}
+		if result.State != "LANDED" {
+			t.Fatalf("the owner-confirmed control = %s (%s %s), want LANDED onto the moved main", result.State, result.ErrorCode, result.Phase)
+		}
+		if parent, _ := git(r.work, "rev-parse", result.LandedSha+"^1"); parent != moved {
+			t.Fatalf("the control landed onto %s, want the main that moved %s", parent, moved)
+		}
+	}
+}
+
+// TestAutomaticPromotionWithNoCheckedTipLandsNothing: a mark with nothing to hold the landing to is
+// not a licence to land anywhere. The control plane never sends one; the runner does not trust that.
+func TestAutomaticPromotionWithNoCheckedTipLandsNothing(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	land := automaticLanding(r, sourceSha, checked)
+	land.UpstreamShaChecked = ""
+
+	result := runIntegrationJob(land, silent)
+	if result.State != "READY" {
+		t.Fatalf("an automatic landing with no checked tip = %s (%s %s), want READY", result.State, result.ErrorCode, result.Phase)
+	}
+	if got := r.originRev("refs/heads/main"); got != checked.UpstreamSha {
+		t.Fatalf("main moved to %s, want it left at %s", got, checked.UpstreamSha)
 	}
 }
 

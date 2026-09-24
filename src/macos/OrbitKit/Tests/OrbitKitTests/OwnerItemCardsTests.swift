@@ -304,6 +304,24 @@ final class OwnerItemCardsTests: XCTestCase {
         let merged = candidate(.merged, merged: .init(sha: "324cf0031a", at: "2026-09-13T12:00:00Z"))
         XCTAssertEqual(PromotionCards.mergedLine(merged, now: now),
                        "324cf00 · merge of project/bg-jobs · by you · 2m")
+        // A pressed merge's receipt is what it always was: its own heading, and no undo row.
+        XCTAssertEqual(PromotionCards.title(merged), "✓ Merged into main")
+        XCTAssertNil(PromotionCards.revertLine(merged))
+    }
+
+    /// C when nobody pressed Merge (§3.3 M-T11): the Automatic setting merged a clean project
+    /// branch, and the receipt is the only place the owner learns it — so it says it was the setting,
+    /// not them, and gives the one command that takes the merge back out of main. The same words as
+    /// web's `MERGED_AUTOMATICALLY_HEADING` / `UNDER_AUTOMATIC`.
+    func testAnAutomaticMergeSaysSoAndHowToUndoIt() {
+        let now = RelativeTime.parse("2026-09-13T12:02:00Z")!
+        let merged = candidate(.merged, merged: .init(
+            sha: "324cf0031a", at: "2026-09-13T12:00:00Z",
+            automatic: true, revert: "git revert -m 1 324cf0031a"))
+        XCTAssertEqual(PromotionCards.title(merged), "✓ Merged into main automatically")
+        XCTAssertEqual(PromotionCards.mergedLine(merged, now: now),
+                       "324cf00 · merge of project/bg-jobs · under your Automatic setting · 2m")
+        XCTAssertEqual(PromotionCards.revertLine(merged), "git revert -m 1 324cf0031a")
     }
 
     /// The two cards have their own transcript rows, addressed the way the bar above the transcript

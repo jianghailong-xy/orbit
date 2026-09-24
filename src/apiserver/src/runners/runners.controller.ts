@@ -91,6 +91,19 @@ export class RunnersController {
     return this.runners.cancelLogin(user.userId, id);
   }
 
+  // Removing one Codex account from a runner: the slot's own CODEX_HOME and the record beside it.
+  // Owner-scoped in the service like the relay above, because it deletes credentials on that
+  // machine. The account is a slot id or 'default'; the service refuses anything else, and refuses
+  // Default itself — that is the CODEX_HOME a terminal's `codex` shares.
+  @Delete(':id/codex-accounts/:account')
+  removeCodexAccount(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('account') account: string,
+  ) {
+    return this.runners.removeCodexAccount(user.userId, id, account);
+  }
+
   // Engine-install relay for one runner, owner-scoped like the sign-in above: it runs an
   // installer on that machine, so only the owner may start one.
   @Get(':id/install')
@@ -112,7 +125,7 @@ export class RunnersController {
     return this.runners.cancelInstall(user.userId, id);
   }
 
-  // Update every engine CLI on this machine now — the daily pass, on demand. Shares the relay
+  // Update every engine CLI on this machine now — the periodic pass, on demand. Shares the relay
   // slot (and so the DELETE above) with installs, since both run a package manager there.
   @Post(':id/engine-update')
   startEngineUpdate(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {

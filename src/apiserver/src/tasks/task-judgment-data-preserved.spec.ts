@@ -1121,6 +1121,41 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // no `ALTER TYPE` and no `DROP TYPE`, and has no INSERT, UPDATE or DELETE. The set only grows,
       // so no stored event is refused by it and it needs no backfill.
       '0299_dependent_ready_wake',
+      // 0281's state CHECK again, statement for statement, with one more spelling —
+      // `NOTHING_TO_LAND`, the line answering that the branch it was handed carried nothing of the
+      // task's own (contract §2.4 J-S3). Read against every claim above: one `ALTER TABLE
+      // "project_integration_job" DROP CONSTRAINT / ADD CONSTRAINT` over a table this file does not
+      // preserve and cannot reach one from; the state names a task in its own column, but the string
+      // appears only inside the CHECK's list of permitted values, so no `task` row, neither 0177
+      // relation, `task_executable_acceptance_pair` and no `project_acceptance_*` object is read,
+      // written or constrained. It creates no table, column, index, enum, type, function or trigger
+      // — so it is not another writer of the DONE fence and names none of the six preserved objects
+      // — carries no `ALTER TYPE` and no `DROP TYPE`, and has no INSERT, UPDATE or DELETE. The set
+      // only grows, so no stored state is refused by it and it needs no backfill.
+      '0300_integration_job_nothing_to_land',
+      // `project_promotion.confirmed_automatically` and `project_integration_job.
+      // confirmed_automatically`: two BOOLEAN NOT NULL DEFAULT false columns (a constant default,
+      // so catalog-only — no row is rewritten), `project_promotion_confirmed_by_chk` dropped and
+      // re-added with one more OR arm, two new CHECKs, two `COMMENT ON`s. Read against every claim
+      // above: no function, trigger, type or index is created, replaced or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects; both tables
+      // it ALTERs were created by 0281 and 0286 and neither is a preserved relation, and no `task`,
+      // `session`, `project`, `session_merge_receipt` or `project_acceptance_*` object is named, so
+      // the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
+      // UPDATE or DELETE: no stored row is read beyond the scans that validate the CHECKs, and
+      // none is locked for longer, backfilled or rewritten.
+      '0301_project_promotion_automatic_merge',
+      // `runner.codex_account_remove_account`, `_status`, `_message` and `_at`: four nullable
+      // columns (one TEXT pair, one TEXT, one TIMESTAMP(3)) with no default and no NOT NULL, added
+      // to the removal relay — the request that takes a Codex account slot away from a machine,
+      // beside the sign-in relay's own columns (0296). Read against every claim above: four
+      // `ADD COLUMN`s and nothing else — no function, trigger, type, index or constraint is created
+      // or dropped, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects; `runner` is not a preserved relation, and no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
+      // and criterion row are out of its reach. No INSERT, UPDATE or DELETE: no stored row is read,
+      // locked, backfilled or rewritten.
+      '0302_runner_codex_account_remove',
       // The second accepted spelling of `project_coordinator_wake.event`, and the producer of the
       // fact about it. Read against every claim above: one statement, `ALTER TABLE
       // project_coordinator_wake DROP CONSTRAINT … ADD CONSTRAINT … CHECK`, so — like 0250, 0298 and
@@ -1131,7 +1166,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // is not another writer of the DONE fence and names none of the six preserved objects — and it
       // has no INSERT, UPDATE or DELETE. The `project_acceptance_*` tables are not named, and
       // neither is the 0177 pair.
-      '0300_project_settled_unmerged'],
+      '0303_project_settled_unmerged'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

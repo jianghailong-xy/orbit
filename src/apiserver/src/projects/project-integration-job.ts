@@ -1,5 +1,6 @@
 import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
 import { startOnFirstIntegration } from './project-integration-line';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
 // sets a candidate is written with, and `project-promotion.ts` needs the shape a check reports.
@@ -34,6 +35,12 @@ export const INTEGRATION_JOB_STATES = [
   'RUNNING',
   'LANDED',
   'ALREADY_LANDED',
+  // The branch the line was handed carried nothing of the task's own, so there was nothing to land
+  // (0300). Deliberately NOT `ALREADY_LANDED`: that answer is reached by asking whether the source
+  // tip is an ancestor of the base, and an EMPTY branch passes that trivially — every branch's
+  // fork point is in the target it forked from. Reading the two as one is what let a landing job
+  // started for a retry session that died commit a receipt for work no branch held.
+  'NOTHING_TO_LAND',
   'READY',
   'CONFLICT',
   'CHECK_FAILED',
@@ -73,7 +80,8 @@ export type IntegrationErrorCode = (typeof INTEGRATION_ERROR_CODES)[number];
 
 /** A job the runner is not going to touch again. */
 const TERMINAL_STATES: ReadonlySet<string> = new Set<IntegrationJobState>([
-  'LANDED', 'ALREADY_LANDED', 'READY', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'CANCELLED', 'SUPERSEDED',
+  'LANDED', 'ALREADY_LANDED', 'NOTHING_TO_LAND', 'READY', 'CONFLICT', 'CHECK_FAILED', 'ERROR',
+  'CANCELLED', 'SUPERSEDED',
 ]);
 
 export function isTerminalJobState(state: string): boolean {
@@ -138,6 +146,17 @@ export const INTEGRATION_JOBS_PER_HEARTBEAT = 2;
 
 /** The capability a runner declares before it is handed any of this (J-T2). */
 export const INTEGRATION_JOB_CLAIM = 'integration-job/v1';
+
+/**
+ * The capability a runner declares when it honours an automatic landing's one extra rule (§3.3
+ * M-T12): land only onto the upstream tip the check ran against, and when the upstream has moved,
+ * merge nothing and report READY so the owner is asked. A runner that has not declared it would
+ * check the moved tip again and merge it (M5), which is the right thing after an owner's press and
+ * not a thing the Automatic setting authorizes — so the platform confirms nothing by itself for a
+ * landing such a runner would do, and never hands one an automatic landing to do. Its runner twin
+ * is `promotionAutomaticLandCapabilityV1` in `src/runner-go/integrate.go`.
+ */
+export const PROMOTION_AUTOMATIC_LAND = 'promotion-automatic-land/v1';
 
 /** Longest check output an item and a job row carry, per §2.1 (`outputTail` ≤ 16 KB). */
 export const MAX_CHECK_OUTPUT_TAIL = 16 * 1_024;
@@ -506,12 +525,30 @@ export type EnqueueOutcome =
     };
 
 /** The columns a landing needs from the task's own work session. */
-const WORK_SESSION_SELECT = {
-  id: true,
-  branch: true,
-  isolationStatus: true,
-  assignedRunnerId: true,
-} as const;
+const WORK_SESSION_SELECT = LANDING_WORK_SESSION_SELECT;
+
+/**
+ * The task's finished branches, newest first, as the two landing producers read them.
+ *
+ * Read through one WHERE so that "which session is this task's work" has one answer: sessions that
+ * started work of this task's, were not deleted, and can carry work at all — a worktree and a
+ * branch. A session that took no worktree is not the work's branch, and letting it shadow an older
+ * one that did is the same bug as letting a session that reported nothing shadow one that did
+ * (`landing-source-branch.ts`).
+ */
+function workSessionsOfTaskSelect() {
+  return {
+    where: {
+      startsTaskWork: true,
+      deletedAt: null,
+      isolationStatus: 'worktree',
+      branch: { not: null },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: LANDING_SESSION_CANDIDATES,
+    select: WORK_SESSION_SELECT,
+  } satisfies Prisma.Task$sessionsArgs;
+}
 
 /**
  * Give this task's branch a route to its project's integration line, in the transaction that wrote
@@ -523,9 +560,13 @@ const WORK_SESSION_SELECT = {
  * owner confirms (§3.4 M-F2). Neither is a message to anybody: both are rows, and the platform
  * carries them from there.
  *
- * Does nothing for work that has no branch: a codeless task, a task in no project, a task whose
- * latest work session never took a worktree. Those are the majority of DONE writes, and the check is
+ * Does nothing for work that has no branch: a codeless task, a task in no project, a task none of
+ * whose work sessions took a worktree. Those are the majority of DONE writes, and the check is
  * three columns rather than an inference from the title.
+ *
+ * WHICH of the task's branches is handed over is `landing-source-branch.ts`, and it is not simply
+ * the newest: a session that reported no work must not stand in for the one that carried the
+ * delivery (2026-09-23, the retry that died on a 429).
  *
  * Starting the line is part of THIS transaction (L3): a project that had not decided where its work
  * lands decides it here, once, and the same transaction back-queues the project's other finished
@@ -542,16 +583,11 @@ export async function enqueueForDoneTask(
     select: {
       projectId: true,
       codeless: true,
-      sessions: {
-        where: { startsTaskWork: true, deletedAt: null },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: WORK_SESSION_SELECT,
-      },
+      sessions: workSessionsOfTaskSelect(),
     },
   });
-  const work = task?.sessions[0];
-  if (!task?.projectId || task.codeless || work?.isolationStatus !== 'worktree' || !work.branch) {
+  const work = landingWorkSession(task?.sessions ?? []);
+  if (!task?.projectId || task.codeless || !work?.branch) {
     return { enqueued: false, reason: 'NOT_A_CODE_TASK', projectId: task?.projectId ?? null };
   }
   const projectId = task.projectId;
@@ -753,12 +789,7 @@ async function backfillFinishedCodeTasks(
     },
     select: {
       id: true,
-      sessions: {
-        where: { startsTaskWork: true, deletedAt: null },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: WORK_SESSION_SELECT,
-      },
+      sessions: workSessionsOfTaskSelect(),
       mergeReceipts: {
         where: { targetBranch: { in: landedBranches }, result: { in: ['MERGED', 'ALREADY_MERGED'] } },
         take: 1,
@@ -768,8 +799,8 @@ async function backfillFinishedCodeTasks(
   });
   const queued: string[] = [];
   for (const candidate of candidates) {
-    const work = candidate.sessions[0];
-    if (work?.isolationStatus !== 'worktree' || !work.branch) continue;
+    const work = landingWorkSession(candidate.sessions);
+    if (!work?.branch) continue;
     if (candidate.mergeReceipts.length > 0) continue;
     const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
     if (input.line === 'MAIN') {
@@ -890,6 +921,10 @@ export interface PromotionJobSubject {
  *
  * A job whose `source_sha` is null leaves the runner to resolve the source ref itself and report the
  * commit it resolved — the only way a `TASK_BRANCH` candidate's source is knowable (0293).
+ *
+ * `confirmedAutomatically` marks a LAND_PROMOTION the project's Automatic setting queued rather than
+ * the owner's press (M-T11) — on the job itself, because the job is the record of what was sent out
+ * to be pushed, and because it is what tells the runner the landing is bound to the checked tip.
  */
 export async function queuePromotionJob(
   tx: Prisma.TransactionClient,
@@ -897,6 +932,7 @@ export async function queuePromotionJob(
     kind: Extract<IntegrationJobKind, 'CHECK_PROMOTION' | 'LAND_PROMOTION'>;
     promotion: PromotionJobSubject;
     canonicalRepoUrl: string;
+    confirmedAutomatically?: boolean;
   },
 ): Promise<string> {
   const previous = await tx.projectIntegrationJob.aggregate({
@@ -933,6 +969,7 @@ export async function queuePromotionJob(
       upstreamRef: input.promotion.upstreamRef,
       sourceRef: input.promotion.sourceRef,
       sourceSha: input.promotion.sourceSha,
+      confirmedAutomatically: input.confirmedAutomatically === true,
       idempotencyKey: integrationIdempotencyKey({
         kind: input.kind,
         subjectId: input.promotion.id,

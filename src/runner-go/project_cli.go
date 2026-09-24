@@ -35,6 +35,7 @@ const projectHelp = `orbit project — read and write an Orbit project's durable
 Usage:
   orbit project get PROJECT_ID [--json]
   orbit project crossings PROJECT_ID [--state STATE] [--json]
+  orbit project ensure-coordinator PROJECT_ID [--json]
   orbit project resolve-blocker PROJECT_ID --blocker-id ID --reason TEXT [--json]
   orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]
   orbit project create --title TITLE [options]
@@ -80,6 +81,32 @@ revision), instructions, project status, coordinator binding, and task distribut
 
 Returns the shape of the project, not its tasks — use ` + "`orbit task list`" + ` for those.
 PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
+`,
+	"ensure-coordinator": `orbit project ensure-coordinator — take the conversation that coordinates this project, opening the next one only when the standing one cannot take a message
+
+Usage:
+  orbit project ensure-coordinator PROJECT_ID [--json]
+
+Returns this project's coordinator session. A replacement is opened ONLY when the conversation the
+project points at can no longer be handed a message — no runner, a runner that is offline, a run
+that never started, a row in Trash, a run that was replaced — and a conversation that CAN still
+receive is handed straight back. So a conversation somebody is still in is never displaced, and
+this is not a way to end one: that press stays with the account owner.
+
+  created: false   the sessionId returned is the one to send to — ` + "`orbit session send --resume-if-ended`" + `
+  created: true    replacedSessionId and replaceReason say what the replacement left behind
+
+The refusal that stays is COORDINATOR_UNAVAILABLE (owner: USER): the project's coordination
+workspace is disabled, trashed or no longer recorded, and where a project's coordination lives is
+the account owner's decision. It is left exactly as the server raised it, requiredAction included,
+because that action names a person — a retry answers the same thing.
+
+This command acts for the session it runs in: the replacement is opened for the conversation that
+asks, and a terminal outside one has no such conversation (a person moves a coordinator from the
+project page in the Orbit app).
+
+Options:
+  --json            emit compact JSON
 `,
 	"resolve-blocker": `orbit project resolve-blocker — end one open blocker, saying why it no longer blocks
 
@@ -264,6 +291,7 @@ PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID w
 var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
 	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
+	{Tool: "project_ensure_coordinator", Argv: []string{"orbit", "project", "ensure-coordinator"}, Usage: "orbit project ensure-coordinator PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "The session that coordinates this project, opening a replacement ONLY when the conversation the project points at can no longer be handed a message — no runner, an offline runner, a run that never started, a row in Trash, or a run that was replaced (§13.6 SU6) — and never displacing a conversation that can still receive one: alive, or ended in a way its runner can still revive, comes back as created:false with that same sessionId and not one row written. So created:false means that session is the one to send to (`orbit session send --resume-if-ended`), and created:true carries replacedSessionId and replaceReason saying what the replacement left behind. The refusal that stays is COORDINATOR_UNAVAILABLE (owner: USER, requiredAction: rebind): the project's coordination workspace is disabled, trashed or no longer recorded, and where a project's coordination lives is the account owner's decision (§8.2) — so that refusal is theirs to act on, and a retry answers the same thing. The acting session is never the one replaced, and a project with no coordinator at all gets its FIRST one, freely landed where its work already runs. This command acts for the session it runs in, and it is advertised only where the orchestration grant it spends exists.", Mutates: true, RequiresOrchestration: true},
 	{Tool: "project_blocker_resolve", Argv: []string{"orbit", "project", "resolve-blocker"}, Usage: "orbit project resolve-blocker PROJECT_ID --blocker-id ID --reason TEXT [--json]", Arguments: []string{"[project-id] (required)", "--blocker-id <id> (required; as 'orbit project get' spells it in blockers.open[].id)", "--reason <text> (required; why this no longer blocks)", "--json"}, Description: "End one of a project's open blockers, saying why it no longer blocks — the write half of what `orbit project get` shows in blockers.open. Run from inside a session it first puts the blocker and your reason on a confirmation card and waits for the account owner's answer: nothing is written if they decline, and the reason they give says what they want instead. Typed at a terminal outside a session there is nobody to ask and the resolution is written straight away, because that caller is the owner. Resolve one when you can say what changed — the work landed, the question was answered elsewhere, the condition no longer holds — and not to get past a wait you disagree with: a HUMAN_DECISION_REQUIRED blocker is the project asking for a judgment, and the card is where you argue for it rather than a formality around it. An agent's resolution records resolved_by = COORDINATOR with the reason it gave; a resolution is final, so an already-resolved blocker is refused rather than restated, and a condition that returns raises a new episode.", Mutates: true},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up and advances the evidence version automatically. Nothing judges the observation: migration 0229 removed the project acceptance judgment, so this records what was seen and stops there.", Mutates: true},
 	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--workspace-id <id> (open the coordinator in this workspace instead of in the calling session; needs orchestration enabled)", "--integration-line <MAIN|PROJECT_BRANCH>", "--project-branch <ref>", "--upstream-ref <ref>", "--merge-check-command <text>", "--merge-check-timeout-seconds <n>", "--escalate-after-seconds <n>", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text and a reader-facing verificationMethod. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is created if they decline. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project — record a second from the same conversation and the server opens THAT project its own coordinator in the same workspace and says so — and headless there is no session and so no such binding. --workspace-id says the coordinator belongs elsewhere: it OPENS the conversation there, since a project that names a coordination workspace has a coordinator, and it needs orchestration enabled because it names a workspace rather than inheriting one. The integration line — where this project's finished tasks land, with the project branch and upstream as full refs, the check run on the combined tree before a landing, and the window an exception waits on the coordinator — is the account owner's to choose, so it is accepted at a terminal and refused for an agent session; unchosen, it is decided at the first integration and locked from then on.", Mutates: true},
@@ -308,6 +336,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectDelete(args[1:], out)
 	case "crossings":
 		return cliProjectCrossings(args[1:], out)
+	case "ensure-coordinator":
+		return cliProjectEnsureCoordinator(args[1:], out)
 	case "resolve-blocker":
 		return cliProjectResolveBlocker(args[1:], out)
 	case "merge-evidence":
@@ -370,6 +400,60 @@ func cliProjectCrossings(args []string, out io.Writer) error {
 	raw, err := t.getProjectHandoffs(id, *state)
 	if err != nil {
 		return fmt.Errorf("get project crossings: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliProjectEnsureCoordinator takes the session that coordinates this project, opening the next
+// conversation only when the standing one can no longer be handed a message.
+//
+// The CLI half of the project_ensure_coordinator tool, and the path an agent needs after a
+// delivery to its own project's coordinator was refused: the pointer is not a mailbox, and the
+// owner's `replace` is behind a confirmation card, so without this the only way out was asking a
+// person. What it will not do is end a conversation somebody is still in — that press stays on the
+// owner's card — so an agent that meets COORDINATOR_UNAVAILABLE hands it over rather than retrying.
+//
+// It acts for the conversation it runs in and has no headless form: the replacement is opened FOR
+// the session that asks, which is also why the acting session is never the one replaced. The
+// session and its credential travel the way every other acting-session call sends them
+// (ORBIT_SESSION_ID plus the credential the runner injected), and the orchestration gate this
+// spends is the one `project create --workspace-id` spends — which is the grant the capability
+// document advertises it under (RequiresOrchestration), so it never appears where its tool is not
+// offered either.
+func cliProjectEnsureCoordinator(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project ensure-coordinator")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	sessionID := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+	if sessionID == "" {
+		return fmt.Errorf("orbit project ensure-coordinator acts for the Orbit session it runs in " +
+			"(ORBIT_SESSION_ID), and there is none here: the replacement it opens is for the " +
+			"conversation that asks. Run it from inside a session, or move the project's coordinator " +
+			"from its page in the Orbit app")
+	}
+	if !mcpOrchestrationEnabled() {
+		return fmt.Errorf(orchestrationOffMsg)
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.ensureProjectCoordinator(
+		sessionID,
+		strings.TrimSpace(os.Getenv(envOrchestrationToken)),
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("ensure project coordinator: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

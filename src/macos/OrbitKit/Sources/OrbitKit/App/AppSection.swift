@@ -57,7 +57,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     public static func forRoute(_ route: Route) -> AppSection {
         switch route {
         case .active, .session: return .agents
-        case .task:             return .tasks
+        case .task, .list:      return .tasks
         case .runner:           return .runners
         case .watch:            return .following
         }

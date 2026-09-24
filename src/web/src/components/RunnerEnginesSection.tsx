@@ -38,9 +38,9 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
     mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
   });
-  // The model picker lists what these CLIs report, re-read by the runner every few hours — so a
-  // model released today, or one a fresh CLI just learned about, is invisible until that pass.
-  // This asks for the pass now. There is no relay to watch: the refreshed catalog simply arrives
+  // The model picker lists what these CLIs report, re-read hourly by the runner — and on the spot
+  // after it installs a newer engine. This asks for a pass now, for a model a CLI learned about
+  // some other way. There is no relay to watch: the refreshed catalog simply arrives
   // on a heartbeat, which is why the toast promises a minute rather than showing progress.
   const refreshModels = useMutation({
     mutationFn: () => api(`/runners/${runner.id}/refresh-models`, { method: 'POST' }),
@@ -55,7 +55,7 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
     <section className="rd-section">
       <div className="rd-section-head">
         <div className="rd-section-title">Engines</div>
-        {/* Understated on purpose: Orbit updates these every day, so this is the escape hatch for
+        {/* Understated on purpose: Orbit updates these every 30 min, so this is the escape hatch for
             when that isn't soon enough — not the way the CLIs are meant to stay current. The
             models button sits here for the same reason it exists: what a CLI offers is a fact
             about this machine's engines, and updating one is exactly when the other goes stale. */}

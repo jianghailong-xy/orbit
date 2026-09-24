@@ -696,7 +696,7 @@ test('(e) the database accepts exactly the live and retired events: those that w
     const stack = await connect();
     try {
       // The closed set this unit states, against the one it replaced.
-      // Written for 0299; 0300 added a second spelling, and it is listed here rather than
+      // Written for 0299; 0303 added a second spelling, and it is listed here rather than
       // loosened: every event that was live before DEPENDENT_READY is still unchanged.
       assert.deepEqual(
         [...COORDINATOR_WAKE_EVENTS], [...LIVE_BEFORE, 'DEPENDENT_READY', 'PROJECT_SETTLED_UNMERGED'],

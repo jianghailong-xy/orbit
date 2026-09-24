@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type {
   LoginEngine,
+  RunnerCodexAccountRemoveState,
   RunnerInstallState,
   RunnerLoginState,
   SlashCommandInfo,
@@ -18,7 +19,8 @@ import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
+import { CODEX_ACCOUNT_REMOVE_V1 } from '../runner-api/runner-api.controller';
+import { CODEX_ACCOUNT_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
@@ -118,6 +120,11 @@ export class RunnersService {
         installCommand: true,
         installMessage: true,
         installMode: true,
+        // The account-removal relay the Providers page reads its outcome from: which slot is
+        // going, and — when the machine refused — what it said.
+        codexAccountRemoveAccount: true,
+        codexAccountRemoveStatus: true,
+        codexAccountRemoveMessage: true,
       },
     });
     // How many slots each runner is currently using, so the list can show
@@ -146,6 +153,9 @@ export class RunnersService {
       installCommand,
       installMessage,
       installMode,
+      codexAccountRemoveAccount,
+      codexAccountRemoveStatus,
+      codexAccountRemoveMessage,
       ...r
     }) => ({
       ...r,
@@ -160,6 +170,11 @@ export class RunnersService {
         installCommand,
         installMessage,
         installMode,
+      }),
+      codexAccountRemove: codexAccountRemoveStateOf({
+        codexAccountRemoveAccount,
+        codexAccountRemoveStatus,
+        codexAccountRemoveMessage,
       }),
       online: isRunnerOnline(r, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
@@ -458,6 +473,50 @@ export class RunnersService {
   }
 
   /**
+   * Ask this runner to remove one Codex account slot: the slot's own CODEX_HOME with everything
+   * Codex keeps in it, and the record beside it. The next heartbeat picks it up and the runner
+   * reports what happened.
+   *
+   * `default` is refused here rather than on the runner: it is the CODEX_HOME the machine's own
+   * environment selects, and the one `codex` typed in a terminal shares, so there is nothing to
+   * remove without taking the user's own login with it.
+   *
+   * A runner that has not declared `codex-account-remove/v1` is refused in words the person who
+   * pressed the button can act on — the alternative is a request that sits pending until the
+   * relay's timeout and then fails with nothing useful in it. The heartbeat refuses it too, for a
+   * runner whose declared capabilities went stale between this call and its next check-in.
+   *
+   * Removing an account the runner no longer reports is allowed and ends the same way: the runner
+   * finds nothing left to remove and reports done. A workspace that had selected the slot keeps
+   * pointing at it and reads as "not on this runner" — nothing here rewrites one.
+   */
+  async removeCodexAccount(ownerId: string, id: string, account: string): Promise<RunnerCodexAccountRemoveState> {
+    if (!CODEX_ACCOUNT_PATTERN.test(account ?? '')) {
+      throw new BadRequestException('Unknown account');
+    }
+    if (account === 'default') {
+      throw new BadRequestException(
+        "Default is this machine's own CODEX_HOME, which a terminal's codex shares — it cannot be removed",
+      );
+    }
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (!runner.capabilitiesReportedAt || !(runner.capabilities ?? []).includes(CODEX_ACCOUNT_REMOVE_V1)) {
+      throw new BadRequestException(CODEX_ACCOUNT_REMOVE_TOO_OLD);
+    }
+    const r = await this.prisma.runner.update({
+      where: { id },
+      data: {
+        codexAccountRemoveAccount: account,
+        codexAccountRemoveStatus: 'pending',
+        codexAccountRemoveMessage: null,
+        codexAccountRemoveAt: new Date(),
+      },
+    });
+    return codexAccountRemoveStateOf(r);
+  }
+
+  /**
    * Ask this runner to install one engine's CLI. The next heartbeat picks it up; the runner
    * reports the command it is running, then whether it worked.
    *
@@ -492,7 +551,7 @@ export class RunnersService {
   /**
    * Ask this runner to update every engine CLI on it, now.
    *
-   * The same work the runner already does daily on its own — this is the escape hatch for when
+   * The same work the runner already does on its own every 30 min — this is the escape hatch for when
    * that isn't soon enough, or when it has been failing and someone wants to watch it try. It
    * shares the install relay's one slot deliberately: both drive a package manager against that
    * machine's single global prefix.
@@ -524,9 +583,9 @@ export class RunnersService {
   /**
    * Ask this runner to re-read what models its runtime CLIs offer, now.
    *
-   * The model picker lists what the machine's own CLIs report, refreshed by the runner on a timer.
-   * That timer is what makes a model released today invisible until tomorrow — and the same gap
-   * follows every CLI update, since installing a newer binary does not itself re-read the list.
+   * The model picker lists what the machine's own CLIs report, refreshed by the runner on a timer —
+   * hourly, and on the spot after it installs a newer engine, so the gap this closes is a model a
+   * CLI learned about some other way.
    * This is the escape hatch, in the same spirit as the engine update next to it.
    *
    * Nothing is reported back: the refreshed catalog arrives on a later heartbeat as
@@ -672,6 +731,25 @@ export function installStateOf(r: {
     // A row written before updates shared this relay is an install, which is also what a client
     // that doesn't know about modes assumes.
     mode: r.installStatus ? (r.installMode === 'update' ? 'update' : 'install') : null,
+  };
+}
+
+/** What a runner that does not declare account removal is told: the machine cannot do this, and
+ *  the only thing that changes that is updating it. The heartbeat refuses the same request in the
+ *  same words — it cannot import this one, since that file already imports this module. */
+const CODEX_ACCOUNT_REMOVE_TOO_OLD =
+  'This runner is too old to remove a Codex account — update it, then try again.';
+
+/** Project a runner row onto the browser-facing account-removal view. */
+export function codexAccountRemoveStateOf(r: {
+  codexAccountRemoveAccount?: string | null;
+  codexAccountRemoveStatus?: string | null;
+  codexAccountRemoveMessage?: string | null;
+}): RunnerCodexAccountRemoveState {
+  return {
+    account: r.codexAccountRemoveStatus ? (r.codexAccountRemoveAccount ?? null) : null,
+    status: (r.codexAccountRemoveStatus as RunnerCodexAccountRemoveState['status']) ?? null,
+    message: r.codexAccountRemoveStatus ? (r.codexAccountRemoveMessage ?? null) : null,
   };
 }
 

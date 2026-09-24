@@ -71,7 +71,9 @@ func init() {
 		sessionSourcePinV1,
 		codexRateLimitResetCapabilityV1,
 		integrationJobCapabilityV1,
+		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
+		codexAccountRemoveCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -628,6 +630,11 @@ func (t *Transport) claudeHistoryResult(b RunnerClaudeHistoryResult) error {
 // whether this machine ended up signed in.
 func (t *Transport) loginResult(b LoginResultRequest) error {
 	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
+}
+
+// codexAccountRemoveResult reports what a heartbeat-delivered account removal came to.
+func (t *Transport) codexAccountRemoveResult(b CodexAccountRemoveResultRequest) error {
+	return t.do(nil, "POST", "/runner/codex-account-remove-result", b, nil, 15*time.Second)
 }
 
 // installResult reports one step of a browser-requested engine install: the command being run,
@@ -1254,6 +1261,39 @@ func (t *Transport) deleteProject(id string) (json.RawMessage, error) {
 	}
 	var out json.RawMessage
 	err := t.do(nil, "DELETE", "/runner/projects/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// ensureProjectCoordinator answers "which conversation coordinates this project, and can it take a
+// message" — and opens the next one only when the answer to the second half is no.
+//
+// The one door on the machine side that may rotate a coordinator (POST
+// /runner/projects/:id/coordinator/ensure), and it exists for the agent that has just been refused
+// a delivery to its own project's coordinator: the pointer is not a mailbox, and the owner's
+// `replace` is behind a confirmation card, so without this the only way out was telling a person.
+// What it will NOT do is displace a conversation that can still receive — alive, or ended with a
+// revival that would work, comes back as `created: false` with that same id and not one row
+// written. So `created: false` means the conversation it names is the one to send to, and
+// `created: true` carries `replacedSessionId` / `replaceReason` saying what it left behind.
+//
+// It spends the orchestration gate, unlike the other project routes here: a live session plus its
+// credential, exactly as createProject does when it names a workspace, because a replacement it
+// may not open is a conversation this caller was never allowed to open. Headless there is no
+// session to act for, and an empty sessionID sends no header rather than an empty one — the server
+// refuses that rather than reading it as the owner.
+//
+// COORDINATOR_UNAVAILABLE is left to travel as the server raised it: its `requiredAction` names the
+// account owner, because where a project's coordination lives is theirs to decide, so the caller
+// hands it to a person instead of retrying.
+func (t *Transport) ensureProjectCoordinator(sessionID, orchestrationToken, id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	// No body: §7.5 freezes a rotation as "the SESSION is replaced; the agent and the workspace are
+	// not", so there is nothing to name here that the server's delegation does not already decide.
+	err := t.doOrchestration("POST", "/runner/projects/"+url.PathEscape(id)+"/coordinator/ensure",
+		nil, &out, sessionID, orchestrationToken)
 	return out, err
 }
 

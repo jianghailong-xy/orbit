@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import type { useToast } from '../lib/toast';
 import {
   OPEN_THE_RUN,
@@ -9,6 +8,7 @@ import {
   readTaskRunConflict,
   sessionHref,
 } from '../lib/taskRunHandoff';
+import { AppLink } from './AppLink';
 
 /**
  * What one task's current run looks like when it is not the session you are in.
@@ -45,9 +45,9 @@ export function TaskRunHandoffNotice({
         {conflict.actions.map((action) =>
           action.kind === 'OPEN_RUN' ? (
             action.href && (
-              <Link className="run-handoff-open" key={action.kind} to={action.href}>
+              <AppLink className="run-handoff-open" key={action.kind} to={action.href}>
                 {action.label}
-              </Link>
+              </AppLink>
             )
           ) : (
             <button
@@ -82,9 +82,9 @@ export function TaskRunHandedOverNotice({
       <div className="run-handoff-title">{TASK_RUN_HANDED_OVER_TITLE}</div>
       <div className="run-handoff-body">{TASK_RUN_HANDED_OVER_BODY}</div>
       <div className="run-handoff-actions">
-        <Link className="run-handoff-open" onClick={onDismiss} to={sessionHref(sessionId)}>
+        <AppLink className="run-handoff-open" onClick={onDismiss} to={sessionHref(sessionId)}>
           {OPEN_THE_RUN}
-        </Link>
+        </AppLink>
       </div>
     </div>
   );

@@ -102,7 +102,7 @@ import {
   refuseSessionAuthoredCriteriaDecision,
 } from './coordinator-authority';
 import { withSessionState } from '../sessions/session-state';
-import { SessionsService } from '../sessions/sessions.service';
+import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
 import { openFuseEpisodeId } from './project-fuse';
@@ -3885,6 +3885,83 @@ export class ProjectsService {
     // one asked was addressed to it, and this rotation is the moment it stops being able to read it.
     await this.openItems?.deliverOwed(id, project.coordinatorSessionId ?? undefined);
     return { sessionId: session.id, created: true, workspaceId: runIn };
+  }
+
+  /**
+   * A coordinator for a project whose own conversation can no longer be reached — the agent's door.
+   *
+   * `coordinator` above resolves-or-creates and never leaves a standing conversation behind, which
+   * is exactly right for a reader: every link that OPENS a coordinator goes through it, and a
+   * reader who meant to read must not be the reason a second conversation exists. It is also, until
+   * this method, the reason an agent had nowhere to go: a coordinator that finds the conversation
+   * its project points at unreachable could neither deliver to it (the pointer is not a mailbox)
+   * nor replace it (`replace` ends a conversation, and it is behind the owner's confirmation card),
+   * so the project simply had no coordinator and the only way out was telling a person.
+   *
+   * This door is for that agent, and the whole of what it adds is the JUDGEMENT of when a
+   * replacement is allowed. Three outcomes, and only the middle one writes:
+   *
+   *   reachable → the conversation is handed straight back, `created: false`, and not one row is
+   *     written. Ended-but-revivable counts as reachable, deliberately and not merely by default:
+   *     an ended conversation is the record of everything decided in it, and a project whose work
+   *     continues should go on being discussed in it — which is `coordinator`'s own resolution;
+   *   unreachable → the rotation `replace` performs, delegated rather than re-derived: the same
+   *     compare-and-swap, the same `project_coordinator_rotation_count` and the same fixed landing,
+   *     so §7.5's "the SESSION is replaced; the agent and the workspace are not" holds of an agent's
+   *     rotation for exactly the reason it holds of an owner's;
+   *   no pointer at all → the free branch, by calling `coordinator` as the owner's open does. A
+   *     project that has never had a coordinator must not come to have two different first
+   *     conversations depending on which door was used.
+   *
+   * Reachability is `SessionsService.receiveBlockedReasonFor` and nothing else — alive, or ended
+   * with a revival that would work, with §13.6 SU6 applied on top. This method does not re-judge
+   * any of it; it only decides what to do about the answer.
+   *
+   * A landing that cannot open at all goes out as `COORDINATOR_UNAVAILABLE`, raised by the
+   * delegation and deliberately NOT translated here: its `requiredAction` names the account owner
+   * (moving a coordinator is theirs, PAC §8.2), and an agent that meets it should hand it to a
+   * person rather than retry.
+   */
+  async ensureCoordinator(
+    ownerId: string,
+    id: string,
+    actingSessionId: string,
+  ): Promise<{
+    sessionId: string;
+    created: boolean;
+    workspaceId: string | null;
+    /** The conversation this call ended, when it rotated. Absent when it reused or created one. */
+    replacedSessionId?: string;
+    /** Why the conversation it left behind could not be handed a message. */
+    replaceReason?: SessionReceiveBlockedReason;
+  }> {
+    const project = await this.prisma.project.findFirst({
+      where: { id, ownerId },
+      select: { id: true, coordinatorSessionId: true, coordinatorWorkspaceId: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+
+    const standing = project.coordinatorSessionId;
+    if (standing == null) return this.coordinator(ownerId, id);
+
+    const blockedReason = await this.sessions.receiveBlockedReasonFor(ownerId, standing);
+    if (blockedReason == null || standing === actingSessionId) {
+      // The second arm is not a courtesy. A rotation COMPLETES the conversation it leaves behind,
+      // and completing a LIVE one is not a lifecycle write: it enqueues an `end` control turn and
+      // cancels the runner's process. A session that is authenticating this very request is running
+      // that process, so replacing the source when the source IS the caller would stop the caller
+      // mid-request — and a conversation that is talking to us is not one this door may declare
+      // unreachable while it does.
+      return { sessionId: standing, created: false, workspaceId: project.coordinatorWorkspaceId };
+    }
+
+    const replaced = await this.coordinator(ownerId, id, undefined, 'replace');
+    // Only a rotation this call actually performed is reported as one. Losing the swap means
+    // somebody else bound the next conversation, and naming the session they replaced as OURS would
+    // attribute their rotation to this request.
+    return replaced.created
+      ? { ...replaced, replacedSessionId: standing, replaceReason: blockedReason }
+      : replaced;
   }
 
   /**

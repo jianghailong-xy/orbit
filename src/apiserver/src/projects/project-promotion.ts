@@ -12,11 +12,20 @@ import type { IntegrationCheckResult } from './project-integration-job';
  * keyed on). Everything that touches the database is `project-promotion.service.ts`, and everything
  * that touches a repository is `src/runner-go/integrate.go`.
  *
- * ONE THING IS NOT CONFIGURABLE HERE, AND THAT IS THE POINT
- * --------------------------------------------------------
- * M7: there is no "merge automatically" branch. Every promotion is offered to the account owner and
- * waits, whatever the project's line is and however small the change. The owner drew that line on
- * 2026-09-13; relaxing it is a decision of theirs, not a column somebody sets.
+ * WHO SAYS YES TO A MERGE INTO MAIN
+ * ---------------------------------
+ * M7: the account owner, by pressing the card — unless BOTH of two things are true, in which case
+ * the platform says yes by itself and leaves a receipt (M-T11). The line is the project's own
+ * branch (`PROJECT_BRANCH`), which every task on it already passed its checks to reach; and the
+ * project's Automatic setting (`coordinator_enabled`) is on, which is an authorization the owner
+ * already gave. Either one missing — a MAIN-line project, Automatic off — and the card is put in
+ * front of the owner exactly as it always was. The owner drew the first line on 2026-09-13 and
+ * moved it to this one on 2026-09-23; it is still theirs to move, not a column somebody sets.
+ *
+ * What the setting authorizes is a CLEAN landing and nothing wider: no conflict, every check green,
+ * no integration exception standing open on the project, and main exactly where the check left it.
+ * `automaticConfirmationRefusal` below is that whole definition, and the runner enforces its last
+ * clause at the moment of the push (M-T12).
  */
 
 /** What is being promoted (§3.2). A MAIN-line project has no branch of its own, so it promotes the
@@ -105,6 +114,81 @@ export function promotionPrincipalRefusal(
   return null;
 }
 
+/** A check that ran and ended the way it was asked to. A timeout is not a pass, whatever it exited. */
+function checkPassed(check: IntegrationCheckResult): boolean {
+  return !check.timedOut && check.exitCode === check.expectedExitCode;
+}
+
+/**
+ * What `automaticConfirmationRefusal` weighs, all of it read in the transaction that applies the
+ * check's READY — so the answer is about the moment the owner's card would otherwise have opened.
+ */
+export interface AutomaticConfirmationFacts {
+  /** The candidate's own kind. */
+  sourceKind: string;
+  /** The project's line as its binding says now: a branch of its own, main itself, or no binding. */
+  line: 'PROJECT_BRANCH' | 'MAIN' | null;
+  /** The project's Automatic setting, `coordinator_enabled`. */
+  coordinatorEnabled: boolean;
+  /** What the check reported. */
+  conflicts: readonly string[];
+  checks: readonly IntegrationCheckResult[];
+  /** The upstream tip the check ran against, and the combined tree it passed on. */
+  upstreamShaChecked: string | null;
+  mergeTreeSha: string | null;
+  /** OPEN `INTEGRATION_CONFLICT` / `INTEGRATION_CHECK_FAILED` / `INTEGRATION_ERROR` items of this
+   *  project — its line's own problems, and its earlier merges' into main. */
+  openIntegrationItems: number;
+  /** Whether the runner that will do the landing declared that it hands back a moved upstream
+   *  instead of checking again and merging (`PROMOTION_AUTOMATIC_LAND`, M-T12). */
+  runnerHandsBackMovedUpstream: boolean;
+}
+
+/**
+ * Why this checked candidate is put in front of the owner rather than merged by the platform, or
+ * null when the platform may confirm it itself (M7, M-T11).
+ *
+ * THE WHOLE DEFINITION, AND NOT A WORD WIDER. The owner's rule has two halves — the line is the
+ * project's own branch, and Automatic is on — and a clean landing under them. Clean is: nothing
+ * conflicted, every check green, the check said which main it ran against and which tree it passed
+ * (without those there is nothing to hold the landing to), and no integration exception standing
+ * open on the project. The last clause, "main has not moved since the check", cannot be known here —
+ * the control plane has no repository — so it is enforced where it can be, at the push: the landing
+ * is sent out bound to the checked tip, and a runner that finds main elsewhere lands nothing and
+ * hands the candidate back (M-T12). Which is why a runner that has not said it does that is itself a
+ * refusal: on an older one, a moved main would be checked again and merged, and that is not clean.
+ *
+ * Every refusal is today's behaviour, unchanged: the card, exactly as it would have opened.
+ */
+export function automaticConfirmationRefusal(facts: AutomaticConfirmationFacts): string | null {
+  if (facts.sourceKind !== 'PROJECT_BRANCH' || facts.line !== 'PROJECT_BRANCH') {
+    return 'the project integrates on main itself, and a merge into main from a MAIN line always asks';
+  }
+  if (!facts.coordinatorEnabled) return 'Automatic is off for this project';
+  if (facts.conflicts.length > 0) return 'the check reported conflicts';
+  if (!facts.checks.every(checkPassed)) return 'a check on the combined tree did not pass';
+  if (!facts.upstreamShaChecked || !facts.mergeTreeSha) {
+    return 'the check did not say which main it ran against and which tree it passed on';
+  }
+  if (facts.openIntegrationItems > 0) return 'an integration exception is still open on this project';
+  if (!facts.runnerHandsBackMovedUpstream) {
+    return 'the runner that would land it has not said it lands nothing when main has moved since the check';
+  }
+  return null;
+}
+
+/**
+ * The one command that takes a merge back out of the upstream, as a person types it in a checkout —
+ * or null when there is no one command.
+ *
+ * A project branch lands as a merge commit (M6), and reverting that commit against its first parent
+ * — the upstream as it was before — undoes the whole merge and nothing else. A task branch lands as
+ * a fast-forward of however many commits the task made, and no single sha names all of them.
+ */
+export function promotionRevertCommand(landsAs: 'MERGE_COMMIT' | 'FAST_FORWARD', mergedSha: string): string | null {
+  return landsAs === 'MERGE_COMMIT' ? `git revert -m 1 ${mergedSha}` : null;
+}
+
 /** `pr:v1:<promotionId>` — one approval card per candidate, however often the check is replayed. */
 export function promotionDedupeKey(promotionId: string): string {
   return `pr:v1:${promotionId}`;
@@ -141,6 +225,7 @@ export const PROMOTION_COLUMNS = {
   checkJobId: true,
   landJobId: true,
   confirmedByUserId: true,
+  confirmedAutomatically: true,
   confirmedAt: true,
   recheckedAt: true,
   upstreamMovedBy: true,
@@ -232,7 +317,13 @@ export function promotionView(row: PromotionRow, facts: PromotionFacts): Project
     recheckedAt: row.recheckedAt,
     recheck: facts.recheck,
     merged: row.mergedSha && row.mergedAt
-      ? { sha: row.mergedSha, byUserId: row.confirmedByUserId, at: row.mergedAt }
+      ? {
+        sha: row.mergedSha,
+        byUserId: row.confirmedByUserId,
+        at: row.mergedAt,
+        automatic: row.confirmedAutomatically,
+        revert: promotionRevertCommand(promotionLandsAs(row.sourceKind), row.mergedSha),
+      }
       : null,
   };
 }

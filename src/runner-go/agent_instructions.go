@@ -191,20 +191,35 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	rules := []string{}
 	for _, command := range commandForms {
 		rules = append(rules, "Bash("+command+" capabilities --json)")
-		for _, action := range []string{"list", "get", "create", "update", "delete", "start", "comment", "await", "progress"} {
+		// Every task verb the CLI has. An action missing here is pre-approved for nobody: the agent
+		// hits a permission prompt for a command `capabilities --json` just told it to run — which is
+		// what happened to the twelve this list was short of. Still enumerated rather than `task *`,
+		// for the reason the project list gives below, and TestEveryAdvertisedCapabilityIsPreApproved
+		// walks baseCLICapabilities and fails when it falls behind it, so the next verb cannot be
+		// added to the document and forgotten here.
+		for _, action := range []string{
+			"list", "get", "create", "update", "delete", "start", "comment", "await", "progress",
+			"labels", "attribution", "dependency-graph", "dependency-add", "dependency-remove",
+			"evidence-list", "evidence-submit", "evidence-decide",
+			"create-batch", "batch-pin", "reopen", "request-confirmation",
+		} {
 			rules = append(rules, "Bash("+command+" task "+action+" *)")
 		}
 		// Every task-list subcommand the CLI has. An action missing here is pre-approved for
 		// nobody: the agent hits a permission prompt for a command `capabilities --json` just
 		// told it to run — which is what happened to get/update when they were added.
-		for _, action := range []string{"list", "create", "get", "update", "delete"} {
+		for _, action := range []string{"list", "create", "get", "update", "delete", "propose-dag"} {
 			rules = append(rules, "Bash("+command+" task-list "+action+" *)")
 		}
 		// Every project verb the CLI has. An action missing here is pre-approved for nobody: the
 		// agent hits a permission prompt for a command `capabilities --json` just told it to run.
 		// Still enumerated rather than `project *`, so a verb added later is a decision somebody
-		// makes here rather than one it inherits.
-		for _, action := range []string{"get", "create", "update", "delete"} {
+		// makes here rather than one it inherits. Three of them are answers an agent had to be
+		// refused to reach: crossings says what a refusal is waiting on, resolve-blocker ends this
+		// project's own wait with the owner's answer on a card in front of them, and merge-evidence
+		// records what a target branch was observed to contain. The one project verb NOT here is
+		// ensure-coordinator, which OPENS a conversation and so rides the orchestration gate below.
+		for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence"} {
 			rules = append(rules, "Bash("+command+" project "+action+" *)")
 		}
 		// Every watch verb: they wait on Orbit's own work for the session they run in, which is the
@@ -212,10 +227,35 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		for _, action := range []string{"create", "get", "list", "update", "cancel"} {
 			rules = append(rules, "Bash("+command+" watch "+action+" *)")
 		}
+		// The two single-command families: `orbit notify` is how a session reaches the human the
+		// runner works for — the reader most likely to be stuck without one is the plain
+		// single-session agent — and `orbit provider list` answers for the `--provider` field the
+		// task commands above take, which need no orchestration to be given one.
+		rules = append(rules, "Bash("+command+" notify *)")
+		rules = append(rules, "Bash("+command+" provider list *)")
+		// The merge receipts are the one pair of session verbs advertised OUTSIDE the orchestration
+		// gate (mergeReceiptCLICapabilities, §13.7): recording that a branch was merged is evidence
+		// about the caller's own work rather than a power over somebody else's session, and the agent
+		// most likely to need it is the plain single-session one with no session_* tools at all.
+		for _, action := range []string{"merge-receipt", "merge-receipts"} {
+			rules = append(rules, "Bash("+command+" session "+action+" *)")
+		}
 		if allowOrchestration {
+			// The session family as advertised, minus `import`: it is the one session verb that
+			// refuses to run in a session at all (cliSessionImport), so it is recorded in the test's
+			// exception table rather than pre-approved here.
 			for _, action := range []string{"create", "list", "search", "get", "await", "send", "interrupt", "merge", "end", "complete", "delete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
+			// The agent verbs ride the same gate and have no headless form: no service-token scope
+			// names them, so they are advertised only where a live session has the grant.
+			for _, action := range []string{"list", "create", "update"} {
+				rules = append(rules, "Bash("+command+" agent "+action+" *)")
+			}
+			// The one project verb that OPENS a conversation, and so spends the orchestration
+			// credential rather than the machine's own: it is advertised where that grant exists
+			// (RequiresOrchestration), which is where its rule belongs too.
+			rules = append(rules, "Bash("+command+" project ensure-coordinator *)")
 		}
 	}
 	return rules

@@ -45,7 +45,7 @@ func runUpdateRelay(t *testing.T, activeCount func(string) int) []InstallResultR
 		mu.Lock()
 		got = append(got, res)
 		mu.Unlock()
-	}, func() { close(done) })
+	}, func() { close(done) }, nil)
 
 	select {
 	case <-done:
@@ -95,7 +95,7 @@ func TestUpdateRelayNamesEveryEngineItSkipped(t *testing.T) {
 			t.Errorf("outcome = %q, want it to contain %q", outcome.Message, want)
 		}
 	}
-	// Busy is not failure: the daily pass picks these up, so the run as a whole succeeded.
+	// Busy is not failure: the next pass picks these up, so the run as a whole succeeded.
 	if outcome.Status != installDone {
 		t.Errorf("status = %q, want %q — an engine skipped for being busy is not an error", outcome.Status, installDone)
 	}
@@ -126,12 +126,12 @@ func TestUpdateRelayRefusesToRunTwice(t *testing.T) {
 		}
 		mu.Unlock()
 		<-release // hold the first run open so the redelivery lands mid-flight
-	}, nil)
+	}, nil, nil)
 
 	<-first
 	relay.startUpdate(func(string) int { return 1 }, nil, func(InstallResultRequest) {
 		t.Error("a redelivered update started a second run")
-	}, nil)
+	}, nil, nil)
 	close(release)
 	relay.stop()
 }
@@ -146,7 +146,7 @@ func TestUpdateRelayRefusesWhileAnInstallHoldsTheSlot(t *testing.T) {
 
 	relay.startUpdate(func(string) int { return 1 }, nil, func(InstallResultRequest) {
 		t.Error("an update started while an install held the slot")
-	}, func() { t.Error("the after-hook ran for a job that never started") })
+	}, func() { t.Error("the after-hook ran for a job that never started") }, nil)
 }
 
 // The verdict has to actually reach the report. Testing updateRunFailed alone leaves the wiring
@@ -155,7 +155,7 @@ func TestUpdateRelayRefusesWhileAnInstallHoldsTheSlot(t *testing.T) {
 func TestUpdateRelayReportsAFailedEngineAsAFailedRun(t *testing.T) {
 	orig := updateEnginesFn
 	t.Cleanup(func() { updateEnginesFn = orig })
-	updateEnginesFn = func(context.Context, func(string) int, []envVar) []string {
+	updateEnginesFn = func(context.Context, func(string) int, []envVar, func()) []string {
 		return []string{
 			"Claude Code — already up to date (2.1.221)",
 			"OpenCode — update failed: npm error code EACCES",
@@ -180,7 +180,7 @@ func TestUpdateRelayReportsAFailedEngineAsAFailedRun(t *testing.T) {
 func TestUpdateRelayReportsADeliberateSkipAsASuccessfulRun(t *testing.T) {
 	orig := updateEnginesFn
 	t.Cleanup(func() { updateEnginesFn = orig })
-	updateEnginesFn = func(context.Context, func(string) int, []envVar) []string {
+	updateEnginesFn = func(context.Context, func(string) int, []envVar, func()) []string {
 		return []string{"OpenCode — owned by another user, left alone"}
 	}
 
@@ -203,8 +203,8 @@ func TestUpdateRunFailedReadsTheVerdictOffTheLines(t *testing.T) {
 			t.Errorf("a run containing %q should be reported as failed", line)
 		}
 	}
-	// The deliberate outcomes are not failures — retrying them changes nothing, and a daily
-	// warning about a choice Orbit made is how a real warning gets tuned out.
+	// The deliberate outcomes are not failures — retrying them changes nothing, and a warning
+	// every pass about a choice Orbit made is how a real warning gets tuned out.
 	for _, line := range []string{
 		"Kimi Code — package-managed install, left alone",
 		"OpenCode — owned by another user, left alone",

@@ -630,6 +630,11 @@ export interface RunnerHeartbeatResponse {
   /** One step of a browser-less runtime login the user started from the web. Absent on
    *  older control planes, and whenever no sign-in is in flight for this runner. */
   loginRequest?: LoginCommand;
+  /** A Codex account slot to remove from this machine. Absent on older control planes, and whenever
+   *  no removal is in flight for this runner. Only a runner that declares
+   *  `codex-account-remove/v1` is ever handed one: a runner that ignored it would leave the account
+   *  the page has already said goodbye to. */
+  codexAccountRemoveRequest?: CodexAccountRemoveCommand;
   /** An engine install the user started from the web. Absent on older control planes, and
    *  whenever no install is in flight for this runner. */
   installRequest?: InstallCommand;
@@ -882,7 +887,7 @@ export type LoginEngine = 'claude' | 'codex' | 'kimi';
 /**
  * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:
  * OpenCode authenticates per-provider with no relayable flow, so it is never a sign-in row — but
- * it is installed on the machine, it is updated by the same daily pass, and its version drifts
+ * it is installed on the machine, it is updated by the same periodic pass, and its version drifts
  * like any other. Which of these a given page offers to sign in is that page's question.
  */
 export type ReportedEngine = LoginEngine | 'opencode';
@@ -919,6 +924,33 @@ export interface LoginCommand {
   accountName?: string;
 }
 
+/**
+ * Control plane → runner: remove one Codex account from this machine — the slot's own CODEX_HOME
+ * with everything Codex keeps in it, and the record beside it — and stop reading and reporting it.
+ *
+ * Redelivered every heartbeat until the runner reports an outcome, so carrying it out twice must be
+ * the same as carrying it out once. `default` is never removable: it is the CODEX_HOME the runner's
+ * own environment selects, the one `codex` typed in a terminal shares.
+ */
+export interface CodexAccountRemoveCommand {
+  /** `default`, or the id of a slot the runner added. */
+  account: string;
+  /** Identifies this removal (Runner.codexAccountRemoveAt), so a report can be matched to the
+   *  request it answers. */
+  attempt?: string;
+}
+
+/** Runner → control plane: what one removal came to. */
+export interface CodexAccountRemoveResult {
+  account: string;
+  /** `done` once the slot's directory and record are gone; `failed` with the machine's own reason
+   *  — Default, a slot a live session is in, or a directory that would not go away. */
+  status: 'done' | 'failed';
+  message?: string;
+  /** The `attempt` of the request this reports on. */
+  attempt?: string;
+}
+
 /** Runner → control plane: progress of a sign-in relay. */
 export interface LoginResult {
   /** `awaiting_code` (paste-back flow) and `awaiting_approval` (device flow) carry `url`; only
@@ -951,7 +983,7 @@ export interface RunnerEngineHealth {
   /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. */
   auth: 'yes' | 'no' | 'unknown';
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
-   *  the first daily pass — shown as "not reported yet", never as a problem. */
+   *  the first pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
   /** Codex only: every account signed into this machine's CLI, Default first, each with its own
    *  sign-in state. `auth` above stays Default's answer, which is what every reader older than
@@ -986,7 +1018,7 @@ export interface RunnerEngineAccount {
 /**
  * The updater's last word on one engine, reported alongside its health.
  *
- * Orbit updates these CLIs itself, daily. That is invisible without this: a version string alone
+ * Orbit updates these CLIs itself, every 30 min. That is invisible without this: a version string alone
  * can't say whether it is the newest one, so the useful question is not "which version is this"
  * but "is this machine still being kept current" — which the runner answers by asking each
  * engine's release feed what is published and comparing it against the binary on disk.
@@ -1000,7 +1032,7 @@ export interface RunnerEngineUpdate {
    *
    *  `updated` and `checked` were one word until finding nothing to do was taken as proof the
    *  update path works. It isn't: a machine that can no longer download anything answers
-   *  "nothing to fetch" on every day no release ships, and reads healthy right up until one does. */
+   *  "nothing to fetch" on every pass where no release ships, and reads healthy right up until one does. */
   status: 'updated' | 'checked' | 'failed' | 'skipped' | 'ok';
   /** ISO time of the attempt this describes. */
   at: string;
@@ -1081,6 +1113,20 @@ export interface RunnerLoginState {
    *  names none — the runner's own login — and for a new account until the runner reports the
    *  slot it added. */
   account?: string | null;
+}
+
+/**
+ * Browser-facing view of a runner's account-removal relay, for the row that asked for one.
+ *
+ * Nothing about the account itself is here — only which slot is going, and what the machine said.
+ */
+export interface RunnerCodexAccountRemoveState {
+  /** The slot being removed (`default` is never it), or null when nothing is in flight. */
+  account: string | null;
+  status: 'pending' | 'done' | 'failed' | null;
+  /** The machine's own words when it failed: the account is in use by a session, the runner is too
+   *  old to remove accounts at all, or the directory would not go away. */
+  message: string | null;
 }
 
 /** Control plane → runner: merge one session's worktree branch into a target branch. */
@@ -1945,9 +1991,12 @@ export interface EventSearchResponse {
 /** What a job is putting where. Only LAND_TASK has a producer today; promotions are §3. */
 export type IntegrationJobKind = 'LAND_TASK' | 'CHECK_PROMOTION' | 'LAND_PROMOTION';
 
-/** Where a job is, or stopped. The three failures differ because they need different people. */
+/** Where a job is, or stopped. The three failures differ because they need different people.
+ *  `NOTHING_TO_LAND` is neither: the branch the line was handed carried nothing of the task's, so
+ *  there was no landing to make (0300). It is not `ALREADY_LANDED`, which an empty branch reaches
+ *  trivially — every branch's fork point is in the target it forked from. */
 export type IntegrationJobState =
-  | 'QUEUED' | 'RUNNING' | 'LANDED' | 'ALREADY_LANDED' | 'READY'
+  | 'QUEUED' | 'RUNNING' | 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND' | 'READY'
   | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED';
 
 /** The step the runner is on, or the one it stopped at. */
@@ -2011,6 +2060,12 @@ export interface IntegrationJobCommand {
    *  tree, and an upstream that moved must be checked again before anything lands. */
   upstreamShaChecked?: string;
   mergeTreeSha?: string;
+  /** LAND_PROMOTION queued by the project's Automatic setting rather than by the owner's press
+   *  (§3.3 M-T11). Such a landing is authorized onto `upstreamShaChecked` and nowhere else: a runner
+   *  that finds the upstream anywhere else merges nothing, checks nothing, and reports `READY` so the
+   *  promotion goes back to the owner as a card (M-T12). Sent only to a runner that declared
+   *  `promotion-automatic-land/v1`; absent on every other job. */
+  automatic?: boolean;
   checks: IntegrationCheckSpec[];
   /** Somebody asked for this job to stop; the runner checks it at each phase boundary. */
   cancelRequested: boolean;

@@ -111,7 +111,7 @@ export const COORDINATOR_WAKE_EVENTS = [
    * the project's integration line — and it will not start by itself (`autoRunWhenReady = false`).
    *
    * Its producer is `dependent-ready.producer.ts`, which landed on main with migration 0299 while
-   * this branch was cut, and it is named here and in `0300_project_settled_unmerged` for the reason
+   * this branch was cut, and it is named here and in `0303_project_settled_unmerged` for the reason
    * that migration states: every restatement of the database's CHECK is a revocation for the
    * spellings it leaves out, and one that names only this branch's own set would take
    * DEPENDENT_READY away from a producer that is already writing it.

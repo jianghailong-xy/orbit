@@ -416,10 +416,23 @@ describe('ProjectCoordinatorCard — what Automatic says it does', () => {
       integration: { line: 'PROJECT_BRANCH', ref: 'project/bg-jobs' },
     }));
     expect(body).toContain('Tasks land on project/bg-jobs by themselves and start once their');
-    expect(body).toContain('prerequisites land. Merging into main always asks you.');
+    expect(body).toContain('prerequisites land.');
     // The sentence it replaced described a platform that no longer opens a judgment session for a
     // failed task, and a task that waits for a prerequisite to be DONE rather than to land.
     expect(body).not.toContain('opens a judgment session');
+  });
+
+  it('says that on a branch of its own, Automatic also merges into main without asking', () => {
+    // Owner decision 2026-09-23 (contract §3.3 M-T11): the same switch is now the authorization to
+    // merge a clean project branch into main by itself. A sentence that still promised "merging into
+    // main always asks you" would be the switch widening its own grant without saying so.
+    const body = text(paint(liveStatus(), {
+      automatic: true,
+      integration: { line: 'PROJECT_BRANCH', ref: 'project/bg-jobs' },
+    }));
+    expect(body).toContain('It also merges project/bg-jobs into main by itself when the');
+    expect(body).toContain('checks pass cleanly, and leaves you a receipt with the commit to revert.');
+    expect(body).not.toContain('Merging into main always asks you');
   });
 
   it('states it for a project whose line is main', () => {
@@ -432,6 +445,8 @@ describe('ProjectCoordinatorCard — what Automatic says it does', () => {
     const body = text(paint(liveStatus(), { automatic: true }));
     expect(body).toContain('Starts ready tasks on its own');
     expect(body).not.toContain('Merging into main always asks you');
+    // …and says what it will do if the line that is decided turns out to be a branch of its own.
+    expect(body).toContain('it also merges that branch into main by itself when');
   });
 
   it('draws the two progress rows a payload carries them on, and neither when it does not', () => {

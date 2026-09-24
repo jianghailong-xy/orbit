@@ -1,6 +1,5 @@
 import { useContext, useState, type ReactNode } from 'react';
 import { PlayCircleFilled, SafetyCertificateOutlined } from '@ant-design/icons';
-import { Link } from 'react-router-dom';
 import type { TaskStartCard as Card } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
 import {
@@ -19,6 +18,7 @@ import {
   taskStartHasDetails,
   taskStartJudgedHow,
 } from '../lib/taskStartCard';
+import { AppLink } from './AppLink';
 import { ExportCtx, MD, relTime } from './Transcript';
 
 /**
@@ -81,7 +81,7 @@ export function TaskStartCard({
         {card.project && (
           <div className="tsc-where">
             Project{' '}
-            {projectHref ? <Link to={projectHref}>{card.project.title}</Link> : card.project.title}
+            {projectHref ? <AppLink to={projectHref}>{card.project.title}</AppLink> : card.project.title}
           </div>
         )}
         {card.description && (
@@ -126,7 +126,7 @@ export function TaskStartCard({
               {shown ? TASK_START_HIDE_DETAILS : TASK_START_SHOW_DETAILS}
             </button>
           )}
-          {taskHref && <Link to={taskHref}>{TASK_START_OPEN_TASK}</Link>}
+          {taskHref && <AppLink to={taskHref}>{TASK_START_OPEN_TASK}</AppLink>}
         </div>
         <div className="tsc-meta">
           Task {taskPublic ?? card.taskId}

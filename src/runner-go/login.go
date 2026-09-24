@@ -191,8 +191,16 @@ type loginRelay struct {
 	// The sign-ins running now, by the account each one writes (loginAccountKey).
 	runs map[string]*loginRun
 	// The slot the latest add-account attempt created, so a redelivery of that start signs into
-	// it instead of adding the account a second time.
+	// it instead of adding the account a second time — and so the attempt that fails has exactly
+	// the slot it created to take away again.
 	addedAttempt, addedSlot string
+	// That slot has been reclaimed: the attempt ended without a sign-in and its account is gone
+	// from this machine. A redelivery of that start is told so rather than adding it back.
+	addedReclaimed bool
+	// liveSessionIDs names every session this runner is running, so reclaiming a slot the attempt
+	// above created leaves one a live session is stuck to alone. Set by the run loop; nil in a
+	// runner that has none.
+	liveSessionIDs func() []string
 }
 
 // loginRun is one sign-in the relay is driving.
@@ -209,6 +217,11 @@ type loginRun struct {
 	// Everything the CLI has printed. Shared with submitCode so a rejected code — which the CLI
 	// signals only by re-prompting — can be spotted.
 	out *syncBuffer
+	// slot is the Codex account this attempt ADDED, empty when it signs into one the runner already
+	// had. It belongs to the run rather than to the relay — several attempts can be in flight at
+	// once, each with a slot of its own — so the run that ends without signing in knows exactly
+	// which empty account to take away again.
+	slot string
 }
 
 // loginAccountKey names the account a sign-in writes: the engine's one login, or for codex one
@@ -259,10 +272,23 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	if flow.engine == providerCodex {
 		account, name = lr.Account, strings.TrimSpace(lr.AccountName)
 	}
+	createdSlot := ""
 	r.mu.Lock()
 	if name != "" {
 		// A new account is added once per attempt, and every redelivery of its start signs into
-		// the slot the first one added. An account that then fails to sign in stays, signed out.
+		// the slot the first one added.
+		if r.addedAttempt == attempt && r.addedReclaimed {
+			// That attempt's slot is gone: it ended without signing in, and leaving an empty
+			// account behind on every failed attempt is what made "+ Account" accumulate them.
+			// Say so rather than adding the account a second time under the same attempt.
+			r.mu.Unlock()
+			report(LoginResultRequest{
+				Status:  loginFailed,
+				Message: "the sign-in for this Codex account did not complete — start it again",
+				Attempt: attempt,
+			})
+			return
+		}
 		if r.addedSlot != "" && r.addedAttempt == attempt {
 			account = r.addedSlot
 		} else {
@@ -272,7 +298,8 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 				report(LoginResultRequest{Status: loginFailed, Message: "could not add the Codex account: " + firstLine(err.Error()), Attempt: attempt})
 				return
 			}
-			r.addedAttempt, r.addedSlot, account = attempt, slot.ID, slot.ID
+			r.addedAttempt, r.addedSlot, account, r.addedReclaimed = attempt, slot.ID, slot.ID, false
+			createdSlot = slot.ID
 		}
 	}
 	key := loginAccountKey(flow.engine, account)
@@ -292,6 +319,16 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		res.Attempt, res.Account = attempt, account
 		send(res)
 	}
+	// A sign-in that cannot even start still added this attempt's account, and an account nobody
+	// signed into and nobody can sign into again — the attempt is over — is not one to leave on the
+	// machine. Take it away again before reporting, so a press that fails at once does not add an
+	// empty account to the pile.
+	giveUp := func(message string) {
+		if createdSlot != "" {
+			r.dropAddedSlot(createdSlot)
+		}
+		report(LoginResultRequest{Status: loginFailed, Message: message})
+	}
 	// Default, or no account named (an older control plane): the CLI runs in this process's own
 	// environment, exactly as before accounts. Any other account runs in its slot's CODEX_HOME, and
 	// so does every codex process of its sign-in — even printing its help, codex writes into the
@@ -301,7 +338,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		home, err := codexAccountSlotHome(account)
 		if err != nil {
 			// Never fall back to Default: that would sign this account in over the machine's own.
-			report(LoginResultRequest{Status: loginFailed, Message: "this runner has no Codex account " + account + " — add the account again"})
+			giveUp("this runner has no Codex account " + account + " — add the account again")
 			return
 		}
 		env = envWithValue(os.Environ(), "CODEX_HOME", home)
@@ -311,7 +348,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	if flow.engine == providerCodex {
 		spec, _ := specFor(providerCodex)
 		if path, ok := lookLoginEngine(providerCodex); !ok || !supportsLoginFlag(path, spec, env) {
-			report(LoginResultRequest{Status: loginFailed, Message: "this runner's codex is too old to sign in from the browser — run `codex update` on that machine, or sign in there with `" + loginCommandIn(env, "codex login") + "`"})
+			giveUp("this runner's codex is too old to sign in from the browser — run `codex update` on that machine, or sign in there with `" + loginCommandIn(env, "codex login") + "`")
 			return
 		}
 	}
@@ -344,7 +381,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		if err != nil {
 			r.mu.Unlock()
 			cancel()
-			report(LoginResultRequest{Status: loginFailed, Message: "could not open a pipe to the sign-in: " + err.Error()})
+			giveUp("could not open a pipe to the sign-in: " + err.Error())
 			return
 		}
 		stdin = p
@@ -360,10 +397,10 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		}
 		// `script` missing is the one failure worth naming precisely: everything else the user
 		// can act on, but this one means the relay can never work on this machine.
-		report(LoginResultRequest{Status: loginFailed, Message: signInStartError(err, flow)})
+		giveUp(signInStartError(err, flow))
 		return
 	}
-	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out}
+	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot}
 	if r.runs == nil {
 		r.runs = map[string]*loginRun{}
 	}
@@ -400,6 +437,10 @@ func (r *loginRelay) pump(run *loginRun, flow loginFlow, cmd *exec.Cmd, env []st
 	waited := make(chan error, 1)
 	go func() { waited <- cmd.Wait() }()
 
+	// Set by the paths that end this sign-in with an account signed in. Every other way out — the
+	// CLI failed, the relay timed out, a newer attempt replaced this one — leaves the slot this
+	// attempt added empty, and the defer below takes it away again.
+	signedIn := false
 	defer func() {
 		run.cancel()
 		if run.stdin != nil {
@@ -411,6 +452,9 @@ func (r *loginRelay) pump(run *loginRun, flow loginFlow, cmd *exec.Cmd, env []st
 			delete(r.runs, run.key)
 		}
 		r.mu.Unlock()
+		if !signedIn {
+			r.reclaimAddedSlot(run)
+		}
 	}()
 
 	// Poll the accumulated output rather than scanning lines: the TUI redraws with carriage
@@ -439,6 +483,7 @@ poll:
 
 	if !sent {
 		if exited && exitErr == nil && flow.successOnExit {
+			signedIn = true
 			report(LoginResultRequest{Status: loginDone})
 			return
 		}
@@ -459,12 +504,14 @@ poll:
 		exitErr = <-waited
 	}
 	if exitErr == nil && flow.successOnExit {
+		signedIn = true
 		report(LoginResultRequest{Status: loginDone})
 		return
 	}
 	// The CLI's exit code isn't a reliable success signal, so ask the question `orbit doctor`
 	// asks: is this machine actually signed in now?
 	if probeAuthNow(flow.engine, env) == authYes {
+		signedIn = true
 		report(LoginResultRequest{Status: loginDone})
 		return
 	}
@@ -473,6 +520,62 @@ poll:
 		msg += " (" + firstLine(exitErr.Error()) + ")"
 	}
 	report(LoginResultRequest{Status: loginFailed, Message: msg})
+}
+
+// reclaimAddedSlot takes away the slot this attempt added, once the attempt has ended without
+// signing in: the CLI failed, the relay timed out, or a newer attempt replaced this one. Such a slot
+// is a CODEX_HOME nobody signed into and nobody can sign into again — the attempt it belonged to is
+// over — so leaving it behind is what made a retried "+ Account" accumulate empty accounts of the
+// same name. The account the user already had is untouched: this only ever removes a slot this
+// process created for this attempt.
+//
+// The record is kept that it is gone (addedReclaimed), so a redelivery of that same start is told
+// the sign-in did not complete instead of adding a second slot for an attempt the server has moved
+// past.
+func (r *loginRelay) reclaimAddedSlot(run *loginRun) {
+	slot := run.slot
+	if slot == "" || !r.dropAddedSlot(slot) {
+		return
+	}
+	// The relay remembers it only while this was still the attempt the relay is adding for: a
+	// redelivery of THAT start is told the sign-in did not complete rather than adding the account
+	// again. A newer attempt owns that memory now, and leaves the older one's slot to this call.
+	r.mu.Lock()
+	if r.addedAttempt == run.attempt && r.addedSlot == slot {
+		r.addedReclaimed = true
+	}
+	r.mu.Unlock()
+}
+
+// dropAddedSlot takes added slot id off this machine, and says whether it is gone. It is the one
+// way a slot an attempt added stops existing — the reclaim above, and a sign-in that could not
+// start at all — so both leave exactly the same thing behind: nothing.
+//
+// Two slots stay. One that did end up signed in: the sign-in can land between the probe that
+// reported failure and this call, and an account with credentials in it is not ours to delete. And
+// one a live session is stuck to (codexSessionAccountHomes), which the user can remove from the
+// page once that session is over.
+func (r *loginRelay) dropAddedSlot(slot string) bool {
+	if home, err := codexAccountSlotHome(slot); err != nil || codexAccountSignedIn(home) {
+		return false
+	}
+	var liveHomes map[string]bool
+	if r.liveSessionIDs != nil {
+		liveHomes = codexSessionAccountHomes(r.liveSessionIDs())
+	}
+	if err := removeCodexAccountSlot(slot, liveHomes); err != nil {
+		logln("codex account", slot, "was not reclaimed:", firstLine(err.Error()))
+		return false
+	}
+	return true
+}
+
+// codexAccountSignedIn asks the question `orbit doctor` asks about one Codex account: is the CLI in
+// this CODEX_HOME signed in. Unanswered — no CLI to ask — counts as not signed in, since the slot
+// this is asked about was created minutes ago and has only ever been signed out.
+func codexAccountSignedIn(codexHome string) bool {
+	path, ok := lookLoginEngine(providerCodex)
+	return ok && codexSlotLoginStatus(path, codexHome) == authYes
 }
 
 // submitCode hands the user's pasted authorization code to the waiting CLI, then watches for the

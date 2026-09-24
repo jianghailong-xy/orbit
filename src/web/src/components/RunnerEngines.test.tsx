@@ -94,7 +94,7 @@ describe('what one engine row says', () => {
 });
 
 describe('what a row says about being kept current', () => {
-  it('stays quiet while the daily pass is working', () => {
+  it('stays quiet while the update pass is working', () => {
     expect(updateNoteOf({ status: 'ok', at: hoursAgo(6), okAt: hoursAgo(6) }, NOW)).toEqual({
       tone: 'quiet',
       text: 'updated 6h ago',
@@ -105,17 +105,17 @@ describe('what a row says about being kept current', () => {
   });
 
   it('never reported is silence, not an accusation', () => {
-    // An older runner, or one whose first daily pass hasn't run. Neither is a problem, and
+    // An older runner, or one whose first pass hasn't run. Neither is a problem, and
     // inventing one would put a warning on every machine the day this ships.
     expect(updateNoteOf(undefined, NOW)).toBeNull();
   });
 
   it('treats one failure over a working week as a footnote, not an alarm', () => {
-    // The daily pass retries on its own; most of these are a network blip. Shouting here is how
+    // The pass retries on its own; most of these are a network blip. Shouting here is how
     // a real warning gets tuned out.
     expect(
       updateNoteOf({ status: 'failed', at: hoursAgo(2), okAt: daysAgo(1), message: 'ETIMEDOUT' }, NOW),
-    ).toEqual({ tone: 'quiet', text: 'last update failed · retrying daily' });
+    ).toEqual({ tone: 'quiet', text: 'last update failed · retrying every 30 min' });
   });
 
   it('warns once nothing has actually landed in a week', () => {
@@ -200,16 +200,16 @@ describe('what a row says about being kept current', () => {
     ).toEqual({ tone: 'warn', text: '9d behind 2.1.228' });
   });
 
-  it('stays quiet about drift a daily pass is expected to close', () => {
-    // These CLIs ship most days, so "behind" is the normal state of a healthy machine for a few
-    // hours. Warning here would mean warning on every runner, every release.
+  it('stays quiet about drift the next pass is expected to close', () => {
+    // These CLIs ship most days, so "behind" is the normal state of a healthy machine until the
+    // pass that installs it. Warning here would mean warning on every runner, every release.
     expect(
       updateNoteOf({ status: 'checked', at: hoursAgo(2), okAt: hoursAgo(2), latest: '2.1.228', behindSince: hoursAgo(5) }, NOW),
     ).toEqual({ tone: 'quiet', text: 'updating to 2.1.228' });
     // A failure inside that window is still just a footnote — the pass retries on its own.
     expect(
       updateNoteOf({ status: 'failed', at: hoursAgo(2), okAt: daysAgo(1), latest: '2.1.228', behindSince: hoursAgo(5), message: 'blip' }, NOW),
-    ).toEqual({ tone: 'quiet', text: 'last update failed · retrying daily' });
+    ).toEqual({ tone: 'quiet', text: 'last update failed · retrying every 30 min' });
   });
 
   it('falls back to the old reading for a runner that reports no drift at all', () => {
@@ -383,7 +383,7 @@ describe('the "On your runners" section', () => {
     const box = runner({ engines: [health({ engine: 'claude', version: '2.1.220' })] });
     const html = render([box]);
     // The answer to "do I have to manage this?" — said once, at the top, not per row.
-    expect(html).toContain('Orbit keeps these CLIs updated daily.');
+    expect(html).toContain('Orbit keeps these CLIs updated every 30 min.');
     // But not the lever. `POST /runners/:id/engine-update` takes no engine: its object is the
     // machine, and every other control on this page is scoped to one (runner, engine) pair. It
     // lives on the machine's own page, which this card already links to.

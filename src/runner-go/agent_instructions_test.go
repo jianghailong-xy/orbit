@@ -128,13 +128,29 @@ func TestOrbitCLIAllowedToolsRejectsPolicyMetacharacters(t *testing.T) {
 func TestOrbitCLIAllowedToolsAddsSessionRulesOnlyForOrchestrators(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
 	base := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
-	if strings.Contains(base, " session ") {
-		t.Fatalf("non-orchestrator gained session CLI rules: %q", base)
+	// Asserted verb by verb rather than as the substring " session ", because the merge receipts
+	// ARE pre-approved without the grant — they are advertised ungated (§13.7) — and a substring
+	// check would have to be widened to the point of not saying anything. What must not be here is
+	// the orchestration family itself, and the same goes for the agent verbs beside it.
+	for _, action := range []string{"create", "list", "search", "get", "await", "send", "interrupt", "merge", "end", "complete", "delete"} {
+		if strings.Contains(base, " session "+action+" *)") {
+			t.Errorf("non-orchestrator gained session %s rule: %q", action, base)
+		}
+	}
+	for _, action := range []string{"list", "create", "update"} {
+		if strings.Contains(base, " agent "+action+" *)") {
+			t.Errorf("non-orchestrator gained agent %s rule: %q", action, base)
+		}
 	}
 	enabled := strings.Join(orbitCLIAllowedTools(exe, true), "\n")
-	for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete", "delete"} {
+	for _, action := range []string{"create", "list", "search", "get", "await", "send", "interrupt", "merge", "end", "complete", "delete"} {
 		if !strings.Contains(enabled, "Bash("+exe+" session "+action+" *)") {
 			t.Errorf("orchestrator missing session %s rule in %q", action, enabled)
+		}
+	}
+	for _, action := range []string{"list", "create", "update"} {
+		if !strings.Contains(enabled, "Bash("+exe+" agent "+action+" *)") {
+			t.Errorf("orchestrator missing agent %s rule in %q", action, enabled)
 		}
 	}
 }
@@ -189,6 +205,123 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 		if !strings.Contains(form, "writes nothing until they confirm it") {
 			t.Errorf("form does not keep the confirm-first rule: %q", form)
 		}
+	}
+}
+
+// advertisedCapabilityFamilies is every family `orbit capabilities` composes, paired with whether
+// the document offers that family only where the orchestration grant exists. buildCLICapabilities
+// appends sessionCLICapabilities and agentCLICapabilities inside its includeOrchestration branch and
+// every other family outside it, so a rule for an orchestration verb is needed exactly where that
+// verb is advertised — a non-orchestrator never reads those two families at all. watchCLICapabilities
+// is SessionOnly rather than gated: its rules are harmless in a session that cannot make a watch, and
+// the session told to wait on Orbit's own work is the reader they exist for.
+//
+// The list is deliberately the same one cli_mcp_parity_test.go and cli_help_flag_coverage_test.go
+// walk. Those two ask different questions of it (does every MCP tool have a command; does every
+// argument have help text) and cannot carry the gate, but a family added to `capabilities` and
+// forgotten in all three is what every one of them is here to catch.
+var advertisedCapabilityFamilies = []struct {
+	name              string
+	specs             []cliCapabilitySpec
+	orchestrationOnly bool
+}{
+	{"baseCLICapabilities", baseCLICapabilities, false},
+	{"providerCLICapabilities", providerCLICapabilities, false},
+	{"projectCLICapabilities", projectCLICapabilities, false},
+	{"notifyCLICapabilities", notifyCLICapabilities, false},
+	{"mergeReceiptCLICapabilities", mergeReceiptCLICapabilities, false},
+	{"watchCLICapabilities", watchCLICapabilities, false},
+	{"sessionCLICapabilities", sessionCLICapabilities, true},
+	{"agentCLICapabilities", agentCLICapabilities, true},
+}
+
+// cliAllowedToolExemptions are the capabilities `capabilities --json` advertises to a running agent
+// that the allowlist deliberately does NOT pre-approve, each with its reason — the same shape as
+// cliParityExemptTools in cli_mcp_parity_test.go, and for the same purpose: an exception is a
+// decision somebody wrote down, never a rule that was forgotten. The test below fails both when an
+// entry here is also in the allowlist (so the reason is fiction) and when one stops naming anything
+// the document advertises (so the table has outlived its subject).
+var cliAllowedToolExemptions = map[string]string{
+	"session_import": "`orbit session import` refuses inside a session — 'session import is a headless operation; run " +
+		"`orbit session import` from a shell' (cliSessionImport) — because what it imports is a Claude Code transcript " +
+		"on this machine's disk, and the machine is the thing a session's agent is not holding. This list is only ever " +
+		"handed to a session's engine (claude_spawn.go, kimi_acp.go), and sessionCLICapabilities is composed for a " +
+		"session in turn, so the entry is offered in the one context it cannot run in: a rule for it would pre-approve " +
+		"a door whose every answer is that refusal. The drift is in the advertisement, not here — the command is a real " +
+		"door off headlessSessionCLICapabilities — and widening this list would only hide it.",
+}
+
+// This is the contract orbitCLIAllowedTools states about itself, asserted rather than trusted: "An
+// action missing here is pre-approved for nobody: the agent hits a permission prompt for a command
+// `capabilities --json` just told it to run." The allowlist is a hand-written enumeration, so it
+// drifts the moment a verb is added to a family and not to it — project_get's four siblings went
+// unnoticed, and `agent` was advertised to every orchestrator with no rule at all.
+//
+// It walks the spec tables themselves rather than a copy of them: a new capability is covered the
+// moment it is declared, and the failure names the family and the exact rule that is missing.
+//
+// One direction only, deliberately: the watch and await rules are emitted whether or not watches are
+// on, so this list is a superset of the document in that one dimension. Over-approving costs a rule
+// nobody can use; under-approving costs the prompt this test exists to remove.
+func TestEveryAdvertisedCapabilityIsPreApproved(t *testing.T) {
+	exe := "/usr/local/bin/orbit"
+	// The path the document rewrites argv[0] to, and a shellWordSafe one, so the unquoted rule is
+	// the form that matches the argv an agent copies out of `capabilities --json`.
+	ungated := stringSet(orbitCLIAllowedTools(exe, false))
+	orchestrated := stringSet(orbitCLIAllowedTools(exe, true))
+
+	seen := map[string]bool{}
+	missing := []string{}
+	for _, family := range advertisedCapabilityFamilies {
+		if len(family.specs) == 0 {
+			t.Errorf("%s advertises nothing; an empty family passes this test vacuously", family.name)
+		}
+		for _, spec := range family.specs {
+			if spec.HeadlessOnly {
+				// A human terminal door: the document withholds it from a running agent
+				// (buildCLICapabilities drops it when a session is acting), so there is no reader
+				// to pre-approve it for.
+				continue
+			}
+			if len(spec.Argv) < 2 || spec.Argv[0] != "orbit" {
+				t.Fatalf("%s %s argv = %#v: a capability argv is `orbit <verb...>`, and the rule is its tail",
+					family.name, spec.Tool, spec.Argv)
+			}
+			seen[spec.Tool] = true
+			rule := "Bash(" + exe + " " + strings.Join(spec.Argv[1:], " ") + " *)"
+			if reason, exempt := cliAllowedToolExemptions[spec.Tool]; exempt {
+				if ungated[rule] || orchestrated[rule] {
+					t.Errorf("%s is recorded as not pre-approved but %s is in the allowlist anyway — the reason "+
+						"there says: %s", spec.Tool, rule, reason)
+				}
+				continue
+			}
+			// Where the document offers the capability decides which list has to carry it: demanding
+			// an orchestration verb of a non-orchestrator would ask for a rule for a command that
+			// agent cannot see, and the session rules' whole point is that they are not there.
+			gated := family.orchestrationOnly || spec.RequiresOrchestration
+			rules := ungated
+			if gated {
+				rules = orchestrated
+				if ungated[rule] {
+					t.Errorf("%s rides the orchestration gate but is pre-approved without the grant: %s", spec.Tool, rule)
+				}
+			}
+			if !rules[rule] {
+				missing = append(missing, family.name+" "+spec.Tool+": "+rule)
+			}
+		}
+	}
+	for tool, reason := range cliAllowedToolExemptions {
+		if !seen[tool] {
+			t.Errorf("allowlist exemption %q names no capability any family advertises — it has outlived its "+
+				"subject: %s", tool, reason)
+		}
+	}
+	if len(missing) > 0 {
+		t.Fatalf("%d advertised capabilities are pre-approved for nobody, so an agent that runs one hits a "+
+			"permission prompt for a command `capabilities --json` just told it to run:\n  %s",
+			len(missing), strings.Join(missing, "\n  "))
 	}
 }
 

@@ -170,9 +170,9 @@ type EngineUpdateReport struct {
 	//
 	// "updated" and "checked" used to be one word, "ok", on the reasoning that a no-op proves the
 	// path works. It doesn't: finding nothing to fetch only proves the version check works, and a
-	// machine that cannot download anything answers exactly that on every day no release happens
-	// to ship. Workstation reported green for two days that way, and only turned red when 2.1.227
-	// shipped and forced a real download — long after it had actually stopped being updatable.
+	// machine that cannot download anything answers exactly that on every pass where no release
+	// happens to ship. Workstation reported green for two days that way, and only turned red when
+	// 2.1.227 shipped and forced a real download — long after it had actually stopped being updatable.
 	Status string `json:"status"`
 	// RFC3339 time of the attempt this describes.
 	At string `json:"at"`
@@ -296,6 +296,11 @@ type HeartbeatResponse struct {
 	// reply with the URL to approve), then `code` carrying what they pasted back. Nil on older
 	// control planes, and whenever no sign-in is in flight for this runner.
 	LoginRequest *LoginCommand `json:"loginRequest,omitempty"`
+	// A Codex account slot the user asked to remove from the web. Nil on older control planes, and
+	// whenever no removal is in flight for this runner. Only a runner that declares
+	// codex-account-remove/v1 is ever handed one: a runner that ignored it would leave a slot the
+	// page has already said goodbye to.
+	CodexAccountRemoveRequest *CodexAccountRemoveCommand `json:"codexAccountRemoveRequest,omitempty"`
 	// An engine CLI the user asked to install from the web. Nil on older control planes, and
 	// whenever no install is in flight for this runner.
 	InstallRequest *InstallCommand `json:"installRequest,omitempty"`
@@ -365,10 +370,15 @@ type IntegrationJobCommand struct {
 	// LAND_PROMOTION: the upstream tip the last passing check ran against, and the tree it made.
 	// M-S2 and M-S3 compare both — an unmoved upstream must reproduce the same tree, and a moved one
 	// must be checked again before anything lands.
-	UpstreamShaChecked string                 `json:"upstreamShaChecked,omitempty"`
-	MergeTreeSha       string                 `json:"mergeTreeSha,omitempty"`
-	Checks             []IntegrationCheckSpec `json:"checks"`
-	CancelRequested    bool                   `json:"cancelRequested"`
+	UpstreamShaChecked string `json:"upstreamShaChecked,omitempty"`
+	MergeTreeSha       string `json:"mergeTreeSha,omitempty"`
+	// LAND_PROMOTION queued by the project's Automatic setting rather than the owner's press
+	// (§3.3 M-T11). It is authorized onto UpstreamShaChecked and nowhere else: if the upstream has
+	// moved, the job merges nothing, checks nothing and reports READY, and the owner is asked
+	// (M-T12). Only sent to a process that declared promotionAutomaticLandCapabilityV1.
+	Automatic       bool                   `json:"automatic,omitempty"`
+	Checks          []IntegrationCheckSpec `json:"checks"`
+	CancelRequested bool                   `json:"cancelRequested"`
 }
 
 // IntegrationCheckSpec is one command to run on the combined tree before anything is pushed.
@@ -475,7 +485,7 @@ type InstallCommand struct {
 	// "install" (or empty, from a control plane that only ever installed) or "update": the same
 	// one-slot relay drives both, because both run a package manager against this machine's one
 	// global prefix and must never overlap. An update names no engine — it does every installed
-	// one, like the daily loop.
+	// one, like the engine-update loop.
 	Mode string `json:"mode,omitempty"`
 }
 
@@ -508,6 +518,27 @@ type LoginCommand struct {
 	Account string `json:"account,omitempty"`
 	// Sign in a NEW Codex account: the runner adds a slot under this name and signs into that.
 	AccountName string `json:"accountName,omitempty"`
+}
+
+// CodexAccountRemoveCommand mirrors @orbit/shared: the Codex account slot the control plane asked
+// this runner to remove. Redelivered every heartbeat until the runner reports an outcome, so
+// carrying it out twice has to be the same as carrying it out once.
+type CodexAccountRemoveCommand struct {
+	// "default", or the id of a slot this runner added. Default is never removable.
+	Account string `json:"account"`
+	// Identifies this request (the server's codexAccountRemoveAt), so a report can be matched to the
+	// request it answers.
+	Attempt string `json:"attempt,omitempty"`
+}
+
+// CodexAccountRemoveResultRequest is the runner's word on a removal: "done" once the slot's
+// directory and record are gone, or "failed" with the machine's own reason — Default, a slot a live
+// session is in, or a directory that would not go away.
+type CodexAccountRemoveResultRequest struct {
+	Account string `json:"account"`
+	Status  string `json:"status"` // "done" | "failed"
+	Message string `json:"message,omitempty"`
+	Attempt string `json:"attempt,omitempty"`
 }
 
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card

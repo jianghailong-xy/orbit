@@ -20,7 +20,7 @@ type engineSpec struct {
 	name       string   // display name, e.g. "Claude Code"
 	bin        string   // executable on PATH, e.g. "claude"
 	installCmd string   // recommended install, run via `sh -c` when the user consents
-	updateCmd  string   // in-place update run daily by engineUpdateLoop; empty => re-run installCmd (idempotent)
+	updateCmd  string   // in-place update run periodically by engineUpdateLoop; empty => re-run installCmd (idempotent)
 	installAlt string   // alternative shown if the default install is declined/fails
 	loginArgs  []string // interactive sign-in argv
 	// latestURL names the newest published version in a few kilobytes, so it can be asked before

@@ -473,3 +473,68 @@ pinned by `src/web/src/components/ProjectCoordinatorCard.test.tsx:389`). Behind 
 `src/web/src/pages/ProjectCoordinatorSection.test.tsx:338`. `WORKSPACE_TRASHED` and
 `WORKSPACE_UNBOUND` keep both offers — repair the workspace this project is bound to, or move the
 project off it.
+
+## The agent's door: `POST /runner/projects/:id/coordinator/ensure`
+
+| | |
+| --- | --- |
+| Method / path | `POST /api/runner/projects/:id/coordinator/ensure` |
+| Auth | the machine's runner token (`RunnerAuthGuard`) **and** a live session — `X-Orbit-Session-Id` with an `X-Orbit-Session-Token` from `RunnerOrchestrationAuthorizer.assert`, so the caller is a session this runner is running, for this owner, in a workspace that still has orchestration on |
+| `:id` | `PublicIdPipe`, as every other route on `RunnerProjectsController` |
+| Body | none |
+| Side effects | at most one, and only in the middle case below |
+| Response | `{ sessionId, created, workspaceId, replacedSessionId?, replaceReason? }` — every id a public id |
+
+Until this route, no door on the machine side touched the coordination binding, while the agent that
+coordinates a project is exactly the caller that has to open one: it plans, it dispatches, and it is
+the one that discovers the conversation its project points at can no longer be reached. All three
+doors that could open or replace a coordinator were behind the owner's JWT, so the only way out was
+telling a person — and the state is not rare: the conversation's runner is offline, the run never
+started, the row is in Trash, or its run was replaced (§13.6 SU6) and may not be revived.
+
+**The rule the door exists to hold, and the whole of what it adds: it never displaces a conversation
+that can still be handed a message.** Three outcomes, and only the second writes:
+
+| The conversation the project points at | What `ensure` answers |
+| --- | --- |
+| can be handed a message — alive, or ended in a way its runner can still revive | `created: false` with that same `sessionId`. Not one row is written: no completion, no pointer, no generation |
+| cannot, and no message could revive it | the rotation `POST :id/coordinator/replace` performs — the standing conversation is COMPLETED, the pointer is swapped through the same compare-and-swap, and `coordinator_generation` advances once |
+| there is none (`coordinator_session_id IS NULL`) | the owner's open: a FIRST coordinator, freely landed where this project's work already runs |
+
+Reachability is not re-derived here and must not be: it is
+`SessionsService.receiveBlockedReasonFor`, which asks `deriveSessionCapabilities(...).canSend` — the
+same predicate every Session payload already publishes as `canSend`, so a card's affordance and this
+door cannot come to opposite answers about one row — and then §13.6 SU6 through the same
+`taskWorkRefusalFor` the revive itself is fenced by. The word it answers with rides back as
+`replaceReason`: the capability's own reason (`TRASHED`, `ENDING`, `NOT_STARTED`,
+`MISSING_CONTEXT`, `NO_RUNNER`, `RUNNER_OFFLINE`), `RUN_RETIRED` for the SU6 case, or `SESSION_GONE`
+for a pointer whose row is not there at all.
+
+What the middle case is *not* is `replace`. That endpoint ends a conversation, and it stays where it
+was: a press behind the owner's confirmation card, because a person is the only one who may decide
+that a conversation somebody is still in is over. This door reaches the same rotation from the other
+side — it can only fire where a delivery to that conversation would itself be refused, and its first
+question is whether that is true. Two consequences worth naming:
+
+- **the ended conversation is reused rather than abandoned.** "Ended" is not "unreachable": an
+  ended conversation is the record of everything the project has decided, and a project whose work
+  continues should go on being discussed in it. A conversation is only replaced when its run can no
+  longer be resumed at all — which is what the capability fold is asked;
+- **the acting session is never the one replaced.** A rotation completes the conversation it leaves
+  behind, and completing a LIVE one ends its process, so rotating away the caller would stop the
+  caller mid-request. A conversation that is authenticating this call answers exactly as one that
+  can receive a message does: `created: false`.
+
+§7.5 holds here as everywhere: the replacement strategy is "the SESSION is replaced; the agent and
+the workspace are not", so this door takes no workspace and cannot move one. A landing that cannot
+open at all — the coordination workspace disabled, trashed, or no longer recorded — is
+`COORDINATOR_UNAVAILABLE` (409, `owner: USER`, `requiredAction` = rebind), raised by the shared
+rotation and deliberately not translated: who the coordinator is and where it runs is the account
+owner's decision (§8.2), and an agent that meets this refusal hands it to a person instead of
+retrying.
+
+The behaviour above is pinned by
+`src/apiserver/src/projects/project-coordinator-ensure.pg.spec.ts`: reuse of a live conversation and
+of an ended-but-revivable one, replacement for each of the four unreachable shapes (offline runner,
+never ran, Trash, replaced run), the refusal that leaves the standing conversation standing, and the
+orchestration gate refusing without writing a row.

@@ -149,14 +149,19 @@ public enum ReferencedTaskNote {
     /// The lifecycle pill for the status the block named — in this app's own labels, which are the
     /// browser's (`TaskStatusPill`'s STATUS_PILL). A status neither of them knows is drawn under its
     /// own name rather than under a wrong one.
-    public static func pill(_ task: ReferencedTask) -> TaskPill {
-        switch TaskStatus(rawValue: task.status) {
+    public static func pill(_ task: ReferencedTask) -> TaskPill { pill(status: task.status) }
+
+    /// The same pill, for a caller that holds the status on its own rather than a whole block — an
+    /// Orbit link card reads the task's status off `LinkPreviewTask` and wants this app's word for
+    /// it, not a second copy of the table.
+    public static func pill(status: String) -> TaskPill {
+        switch TaskStatus(rawValue: status) {
         case .done:       return TaskPill(kind: .done, label: "Done")
         case .inProgress: return TaskPill(kind: .inProgress, label: "In progress")
         case .open:       return TaskPill(kind: .open, label: "Open")
         case .failed:     return TaskPill(kind: .failed, label: "Failed")
         case .cancelled:  return TaskPill(kind: .cancelled, label: "Cancelled")
-        case nil:         return TaskPill(kind: .open, label: task.status)
+        case nil:         return TaskPill(kind: .open, label: status)
         }
     }
 

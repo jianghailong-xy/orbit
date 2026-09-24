@@ -12,7 +12,7 @@ import (
 //
 // It used to be only the three a user can sign into, on the reasoning that a row nobody could act
 // on is worse than no row. That reasoning belongs to the Providers page, and it silently became
-// the whole report: the daily pass updates four engines and its own summary names all four, so
+// the whole report: the periodic pass updates four engines and its own summary names all four, so
 // the machine's update report described software the control plane had never been told existed.
 // Which engines you can sign into is the reader's question to ask, not this probe's to decide.
 
@@ -39,7 +39,7 @@ func probeEngineHealth() []EngineHealthReport {
 }
 
 func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
-	// What the updater last managed to do here, read fresh each probe: the daily loop and
+	// What the updater last managed to do here, read fresh each probe: the update loop and
 	// `orbit engine-update` both write it, and neither can reach into this snapshot.
 	updates := loadEngineUpdateLog()
 	out := make([]EngineHealthReport, 0, len(specs))
@@ -101,17 +101,18 @@ func codexSlotLoginStatus(binPath, codexHome string) authState {
 // whole fingerprint the rate-limit reset binds its operations to.
 const codexAccountFingerprintPrefixLen = len(codexAccountFingerprintPrefix) + 8
 
-// withCodexAccountFingerprints labels the Default account in an engine snapshot with the prefix
-// of the fingerprint the Codex usage probe last read. That probe reads Default — the account the
-// runner's own environment selects (contract §3) — so its fingerprint is Default's and no other
-// account's. The snapshot is shared with the probe that refreshes it, so a labelled copy is
-// returned rather than the snapshot written to.
-func withCodexAccountFingerprints(engines []EngineHealthReport, codexUsage *PlanUsage) []EngineHealthReport {
-	if codexUsage == nil || codexUsage.RateLimitReset == nil {
+// withCodexAccountFingerprints labels every Codex account in an engine snapshot with the prefix of
+// the account fingerprint this runner has read for it — each slot's own, read out of that slot's
+// CODEX_HOME (codexAccountUsage.accountFingerprintPrefixes), so two slots holding one account carry
+// the same prefix and the page can say so. A slot nobody has read one for is left unlabelled rather
+// than given another account's. The snapshot is shared with the probe that refreshes it, so a
+// labelled copy is returned rather than the snapshot written to.
+func withCodexAccountFingerprints(engines []EngineHealthReport, codexUsage *codexAccountUsage) []EngineHealthReport {
+	if codexUsage == nil {
 		return engines
 	}
-	fingerprint := codexUsage.RateLimitReset.AccountFingerprint
-	if !codexAccountFingerprintPattern.MatchString(fingerprint) {
+	prefixes := codexUsage.accountFingerprintPrefixes()
+	if len(prefixes) == 0 {
 		return engines
 	}
 	out := append([]EngineHealthReport(nil), engines...)
@@ -121,8 +122,8 @@ func withCodexAccountFingerprints(engines []EngineHealthReport, codexUsage *Plan
 		}
 		accounts := append([]EngineAccountReport(nil), out[i].Accounts...)
 		for j := range accounts {
-			if accounts[j].ID == codexAccountDefaultSlot {
-				accounts[j].FingerprintPrefix = fingerprint[:codexAccountFingerprintPrefixLen]
+			if prefix := prefixes[accounts[j].ID]; prefix != "" {
+				accounts[j].FingerprintPrefix = prefix
 			}
 		}
 		out[i].Accounts = accounts
