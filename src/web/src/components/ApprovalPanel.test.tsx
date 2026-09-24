@@ -645,10 +645,19 @@ describe('one waiting completion decision on the session page', () => {
       (card) => !card.matches('.evidence-decision, .criteria-decision'),
     );
 
+  /** The words ON a button. A card that holds the keyboard draws its key inside the button it
+   *  presses (`CardHotkey.ts`), as a span of its own: what the control does is the label, and what
+   *  presses it is not. */
+  const labelOf = (button: HTMLButtonElement): string => {
+    const hint = button.querySelector<HTMLElement>('.approval-kbd');
+    const text = button.textContent ?? '';
+    return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
+  };
+
   /** Every control in scope labelled with one of the two verdicts, in document order. */
   const verdictControls = (scope: HTMLElement): string[] =>
     [...scope.querySelectorAll('button')]
-      .map((button) => (button.textContent ?? '').trim())
+      .map((button) => labelOf(button))
       .filter((label) => VERDICTS.includes(label));
 
   async function sessionPage(): Promise<HTMLDivElement> {

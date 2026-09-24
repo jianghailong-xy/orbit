@@ -448,6 +448,15 @@ async function coordinatorWithTheCard(): Promise<void> {
   expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
 }
 
+/** The words ON a button. A card that holds the keyboard draws its key inside the button it
+ *  presses (`CardHotkey.ts`), as a span of its own: what the control does is the label, and what
+ *  presses it is not. */
+const labelOf = (button: HTMLButtonElement): string => {
+  const hint = button.querySelector<HTMLElement>('.approval-kbd');
+  const text = button.textContent ?? '';
+  return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
+};
+
 describe('the settlement question on the pinned line', { timeout: 60_000 }, () => {
   it('is one more in the count while the card is on screen and still a question, and opens no list', async () => {
     await coordinatorWithTheCard();
@@ -565,7 +574,7 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     expect(strip()!.textContent).not.toContain(ACCEPTANCE_START_LABEL);
     expect(strip()!.textContent).not.toContain(OWNER_SEND_BACK_ACTION);
     // The answer is still where it lives: on the card.
-    expect([...settlementCards()[0]!.querySelectorAll('button')].map((button) => button.textContent))
+    expect([...settlementCards()[0]!.querySelectorAll<HTMLButtonElement>('button')].map(labelOf))
       .toContain(ACCEPTANCE_START_LABEL);
   });
 });

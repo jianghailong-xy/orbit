@@ -30,6 +30,7 @@ import {
   type SettlementProjectDocument,
 } from './ProjectSettlementCard';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
+import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
 import { acceptanceConfirmationKey } from '../lib/acceptanceConfirmation';
 
 /**
@@ -428,8 +429,30 @@ describe('the wired card', () => {
   const buttons = (card: HTMLElement): HTMLButtonElement[] => [
     ...card.querySelectorAll<HTMLButtonElement>('.project-settlement-actions button'),
   ];
+/** What a control draws INSIDE itself to say which key presses it, or nothing. */
+  const hintOn = (button: HTMLElement): string | null =>
+    button.querySelector('.approval-kbd')?.textContent ?? null;
+
+  /** One keypress, as the browser delivers it: on the window, with whatever focus is standing. */
+  async function key(init: KeyboardEventInit = {}): Promise<void> {
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
+      );
+    });
+    await turn();
+  }
+
+  /** The words ON a button. The card draws its key inside the button it presses, as a span of its
+   *  own (`CardHotkey.ts`): what the control does is the label, and what presses it is not. */
+  const labelOf = (button: HTMLButtonElement): string => {
+    const hint = button.querySelector<HTMLElement>('.approval-kbd');
+    const text = button.textContent ?? '';
+    return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
+  };
+
   const action = (card: HTMLElement, label: string): HTMLButtonElement => {
-    const found = buttons(card).find((button) => button.textContent === label);
+    const found = buttons(card).find((button) => labelOf(button) === label);
     if (!found) throw new Error(`no "${label}" on the card`);
     return found;
   };
@@ -526,6 +549,31 @@ describe('the wired card', () => {
     expect(armed[0]!.projectId).toBe(PROJECT);
     expect(armed[0]!.facts).toContain('Orbit has not recorded it done');
     expect(cardsIn(node)).toHaveLength(1);
+  });
+
+  it('takes the keyboard: the bare key confirms at the door and the chord hands the facts over', async () => {
+    const { card } = await delivered();
+
+    // One card asking, so it holds the keys — and each control says which key presses it, on the
+    // control itself: a shortcut nobody can see is a shortcut nobody has.
+    expect(hintOn(action(card(), SETTLEMENT_CONFIRM_ACTION))).toBe(ENTER_HINT);
+    expect(hintOn(action(card(), OWNER_SEND_BACK_ACTION))).toBe(SHORTCUT_HINT);
+
+    // The chord first, because it leaves the card standing: it hands the facts over and writes
+    // nothing, exactly as the button does.
+    await key({ metaKey: true });
+    expect(armed, 'the composer was not armed, or armed more than once').toHaveLength(1);
+    expect(armed[0]!.projectId).toBe(PROJECT);
+    expect(armed[0]!.facts).toContain('Orbit has not recorded it done');
+    expect(writes(), 'the chord wrote something').toEqual([]);
+
+    // And the bare key is the press itself: the same door, and the version the card read.
+    await key();
+    await until(() => writes().length > 0, 'the key to reach the door');
+    const [press] = writes();
+    expect(press!.method).toBe('POST');
+    expect(press!.path).toBe(`/projects/${PROJECT}/acceptance/confirmation`);
+    expect(press!.body).toEqual({ criteriaDigest: 'digest-1' });
   });
 
   it('shows a refusal on the card rather than eating it', async () => {

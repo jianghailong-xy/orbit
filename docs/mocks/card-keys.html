@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>卡片快捷键 · Enter / ⌘ + Enter — mockup</title>
+<style>
+  /* 真实 token，抄自 src/web/src/index.css :root（light） */
+  :root {
+    --bg-raised:#ffffff; --bg-base:#ffffff; --bg-sunken:#f7f8fa; --bg-hover:#f2f3f5;
+    --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+    --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-solid:#2ea121;
+    --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 40px 52px; background:#ececef; color:#16161a;
+         font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",
+         "Noto Serif CJK SC",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:26px; letter-spacing:-.02em; margin:0 0 10px; }
+  .lede { color:#55555e; max-width:1180px; margin:0 0 6px; font-size:14.5px; }
+  .lede b { color:#16161a; }
+  .row { display:flex; gap:44px; align-items:flex-start; margin-top:32px; }
+  figure { margin:0; width:520px; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#e3e3e8; color:#55555e; }
+  .tag.new { background:#d8ecff; color:#0a5ca8; }
+  figcaption { margin-top:14px; font-size:13px; line-height:1.6; color:#55555e; }
+  figcaption b { color:#16161a; }
+  figcaption ul { margin:6px 0 0; padding-left:18px; }
+  figcaption li { margin-top:3px; }
+  h2.sec { font-size:16px; margin:44px 0 12px; color:#16161a; }
+  h2.sec span { color:#8b8b95; font-weight:500; font-size:14px; }
+
+  /* ── 卡片本体：抄 .approval-card / .decision-ask / .evidence-decision ── */
+  .approval-card { border:1px solid var(--brand); border-radius:10px; background:var(--brand-tint);
+                   overflow:hidden; }
+  .approval-head { padding:10px 14px; font-size:13.5px; font-weight:600; color:var(--text-1);
+                   background:var(--brand-tint); border-bottom:1px solid var(--brand-border);
+                   display:flex; align-items:center; gap:10px; }
+  .provenance { flex:none; margin-left:auto; padding:2px 7px; border:1px solid var(--warning-border);
+                border-radius:4px; background:var(--bg-raised); color:var(--warning);
+                font-size:11px; font-weight:600; letter-spacing:.04em; }
+  .approval-body { padding:4px 14px 14px; font-size:13.5px; color:var(--text-1); }
+  .chip { font-size:11px; font-weight:600; letter-spacing:.03em; color:var(--text-3); margin:8px 0 4px; }
+  .standard { margin-top:10px; padding:8px 10px; border:1px solid var(--brand-border);
+              border-radius:8px; background:var(--bg-raised); }
+  .standard .h { font-size:11px; font-weight:600; letter-spacing:.03em; color:var(--text-3); }
+  .standard .t { margin-top:2px; font-size:13px; line-height:1.55; color:var(--text-1); }
+  .gaps { margin-top:10px; padding:8px 10px; border:1px solid var(--warning-border);
+          border-radius:8px; background:var(--warning-bg); }
+  .gaps .h { font-size:11px; font-weight:600; letter-spacing:.03em; color:var(--warning); }
+  .gaps ul { margin:4px 0 0; padding-left:18px; font-size:13px; line-height:1.5; color:var(--text-1); }
+  .gaps li + li { margin-top:4px; }
+  .toggle { display:inline-flex; align-items:center; gap:5px; margin-top:8px; font-size:12.5px;
+            color:var(--text-2); }
+  .toggle.plain { text-decoration:underline; color:var(--text-2); }
+  .account { margin-top:10px; }
+  .meta { margin-top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+          font-size:11.5px; color:var(--text-3); }
+  .actions { display:flex; flex-direction:column; align-items:stretch; gap:8px; margin-top:12px; }
+  .btn { padding:6px 16px; border-radius:6px; font-size:13px; border:1px solid transparent;
+         text-align:center; }
+  .btn.primary { background:var(--brand); color:#fff; }
+  .btn.secondary { background:var(--bg-raised); color:var(--text-2); border-color:var(--border); }
+  .hint { margin-top:8px; font-size:12px; line-height:1.5; color:var(--text-3); }
+  /* 改后的第三颗按钮：和另外三张卡同一个控件、同一个词，虚线框标出改动处 */
+  .mark { position:relative; }
+  .mark:before { content:''; position:absolute; inset:-6px -5px; border:2px dashed var(--warning);
+                 border-radius:10px; pointer-events:none; }
+
+  /* 改前卡片里那只自带的框 */
+  .why { display:flex; flex-direction:column; gap:6px; padding:10px; border:1px solid var(--border);
+         border-radius:8px; background:var(--bg-raised); }
+  .why .lbl { font-size:12px; color:var(--text-2); }
+  .why .field { height:70px; padding:6px 8px; border:1px solid var(--border); border-radius:6px;
+                background:var(--bg-base); font-size:12.5px; color:var(--text-4); }
+
+  /* ── 底部主输入框：抄 .composer / .composer-replyto / .composer-box ── */
+  .composer { width:1180px; border:1px solid var(--border); border-radius:12px;
+              background:var(--bg-raised); padding:10px 12px 12px; }
+  .replyto { display:flex; align-items:center; gap:8px; margin-bottom:8px; padding:6px 10px;
+             border:1px solid var(--brand-border); border-radius:8px; background:var(--brand-tint);
+             font-size:12.5px; color:var(--text-2); }
+  .replyto .ic { flex:none; color:var(--brand); font-weight:600; }
+  .replyto .t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .replyto .x { flex:none; color:var(--text-3); }
+  .cbox { display:flex; align-items:flex-end; gap:8px; border:1px solid var(--brand); border-radius:10px;
+          padding:6px; }
+  .cbox .ph { flex:1; padding:6px 2px; font-size:14px; color:var(--text-4); }
+  .cbox .ph:after { content:'|'; color:var(--brand); margin-left:1px; animation:none; }
+  .cbox .send { flex:none; width:30px; height:30px; border-radius:6px; background:var(--brand);
+                color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; }
+
+  table.copy { border-collapse:collapse; margin-top:6px; font-size:13px; width:1180px; }
+  table.copy th, table.copy td { text-align:left; vertical-align:top; padding:7px 12px 7px 0;
+                                 border-bottom:1px solid #dcdce1; }
+  table.copy th { font-size:12px; letter-spacing:.03em; color:#55555e; }
+  table.copy code { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:#16161a; }
+  table.copy td.k { width:340px; }
+  .del { color:#b3261e; } .add { color:#1a7f37; }
+  /* 这次的改动：按钮里多出来的键位提示，抄 web 的 .approval-kbd（margin-left:8px; font-size:11px; opacity:.75） */
+  .kbd { margin-left:8px; font-size:11px; opacity:.75; }
+  .btn.marked { position:relative; }
+  .btn .kbd { font-weight:400; }
+  .note { width:1180px; margin-top:26px; }
+  .note h2.sec { margin-top:0; }
+  .cards2 { display:flex; gap:44px; align-items:flex-start; }
+  .mini { width:520px; }
+  .mini .approval-card { margin-top:10px; }
+  .mini .approval-body { padding:12px 14px; }
+  .mini .chip { font-size:12.5px; }
+  .mini .actions { margin-top:10px; }
+  .mini .hint { font-size:12px; color:var(--text-3); margin-top:8px; }
+  .strike { color:#b3261e; }
+</style>
+
+<body>
+<h1>卡片快捷键：Enter 确认，⌘ + Enter 交给主输入框</h1>
+<p class="lede">「这类卡片」＝ web 上成对出现 <b>第一动作 / Chat about this</b> 的四张：<b>证据判定卡</b>、<b>owner 确认卡</b>、<b>开工确认卡</b>、<b>项目结算卡</b>。它们本来就共用一个发送动作（<code>OWNER_SEND_BACK_ACTION</code>），现在共用一对键。</p>
+<p class="lede">审批卡（ApprovalPanel）早就吃 Enter＝Approve、⌘/Ctrl + Enter＝Always allow；这次把四张卡也接到<b>同一个判定</b>上（web <code>CardHotkey.ts</code>），而不是各写一份——两条规则会漂，一条不会。macOS/iOS 这次没动。</p>
+
+<div class="row">
+  <figure>
+    <span class="tag now">改前</span>
+    <div class="approval-card">
+      <div class="approval-head">Does this evidence settle the task?<span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">清掉 runner-go 的死常量 projectStatusJSON：判据 1 的唯一残留</div>
+        <div class="standard">
+          <div class="h">WHAT IT HAS TO SATISFY</div>
+          <div class="t">删除之后，数据库里没有任何对象再读或写 <code>automation_policy</code>：函数体、约束、索引、视图、触发器五处全部为零。</div>
+        </div>
+        <div class="gaps">
+          <div class="h">WHAT THIS EVIDENCE DOES NOT ESTABLISH · 4</div>
+          <ul>
+            <li>本任务不确立判据 1 的全部内容…</li>
+            <li>改动只在分支上，尚未合入 main…</li>
+          </ul>
+          <div class="toggle">2 more ▾</div>
+        </div>
+        <div class="toggle">3 checked for you ▾</div>
+        <div class="meta">34RsCY2kv9pFBDE9eseZ9 · rev 1 · 2LNKzJcvXSeIBL8qB97vky</div>
+        <div class="actions">
+          <div class="btn primary">Confirm done</div>
+          <div class="btn secondary">Chat about this</div>
+        </div>
+        <div class="hint">Your next message is sent back as the reason — the only thing the next attempt can aim at. The task stays open.</div>
+      </div>
+    </div>
+    <figcaption><b>改前：只有鼠标</b>
+      <ul>
+        <li>两颗按钮，一条鼠标路。</li>
+        <li>审批卡有 <span class="kbd">Enter</span> 提示，这四张卡没有——同一个动作，两种规矩。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag new">改后</span>
+    <div class="approval-card">
+      <div class="approval-head">Does this evidence settle the task?<span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">清掉 runner-go 的死常量 projectStatusJSON：判据 1 的唯一残留</div>
+        <div class="standard">
+          <div class="h">WHAT IT HAS TO SATISFY</div>
+          <div class="t">删除之后，数据库里没有任何对象再读或写 <code>automation_policy</code>：函数体、约束、索引、视图、触发器五处全部为零。</div>
+        </div>
+        <div class="gaps">
+          <div class="h">WHAT THIS EVIDENCE DOES NOT ESTABLISH · 4</div>
+          <ul>
+            <li>本任务不确立判据 1 的全部内容…</li>
+            <li>改动只在分支上，尚未合入 main…</li>
+          </ul>
+          <div class="toggle">2 more ▾</div>
+        </div>
+        <div class="toggle">3 checked for you ▾</div>
+        <div class="meta">34RsCY2kv9pFBDE9eseZ9 · rev 1 · 2LNKzJcvXSeIBL8qB97vky</div>
+        <div class="actions">
+          <div class="btn primary marked">Confirm done<span class="kbd">Enter</span></div>
+          <div class="btn secondary marked">Chat about this<span class="kbd">⌘ + Enter</span></div>
+        </div>
+        <div class="hint">Your next message is sent back as the reason — the only thing the next attempt can aim at. The task stays open.</div>
+      </div>
+    </div>
+    <figcaption><b>改后：一对键，写在按钮上</b>
+      <ul>
+        <li>新增的就是按钮里那几个浅灰小字，样式照抄审批卡那颗 <code>.approval-kbd</code>（11px、75% 不透明度）。</li>
+        <li>不写出来，没人知道有快捷键；键盘上没有 ⌘ 的机器显示 <b>Ctrl + Enter</b>。</li>
+        <li>两颗键按的就是这两颗按钮，一个不多一个不少：按钮 disabled，键位提示跟着走。</li>
+      </ul>
+    </figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">四张卡，同一对键 <span>第一动作是各自的那颗，第二动作一律是 Chat about this</span></h2>
+<div class="cards2">
+  <div class="mini">
+    <div class="approval-card">
+      <div class="approval-body">
+        <div class="chip">证据判定卡 · Does this evidence settle the task?</div>
+        <div class="actions">
+          <div class="btn primary marked">Confirm done<span class="kbd">Enter</span></div>
+          <div class="btn secondary marked">Chat about this<span class="kbd">⌘ + Enter</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mini">
+    <div class="approval-card">
+      <div class="approval-body">
+        <div class="chip">owner 确认卡 · Confirm this task is done?</div>
+        <div class="actions">
+          <div class="btn primary marked">Confirm done<span class="kbd">Enter</span></div>
+          <div class="btn secondary marked">Chat about this<span class="kbd">⌘ + Enter</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mini">
+    <div class="approval-card">
+      <div class="approval-body">
+        <div class="chip">开工确认卡 · When is this project done?（项目还没开始）</div>
+        <div class="actions">
+          <div class="btn primary marked">Start the project<span class="kbd">Enter</span></div>
+          <div class="btn secondary marked">Chat about this<span class="kbd">⌘ + Enter</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mini">
+    <div class="approval-card">
+      <div class="approval-body">
+        <div class="chip">项目结算卡 · 为什么这个项目还没算完成？（确认判据集）</div>
+        <div class="actions">
+          <div class="btn primary marked">Confirm the criteria<span class="kbd">Enter</span></div>
+          <div class="btn secondary marked">Chat about this<span class="kbd">⌘ + Enter</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 class="sec">两张卡同时在问 <span>键位收回：一次回车不能答两个问题</span></h2>
+<div class="cards2">
+  <div class="mini">
+    <div class="approval-card">
+      <div class="approval-head">Confirm this task is done?<span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">整理 9 月发票并归档</div>
+        <div class="actions">
+          <div class="btn primary">Confirm done</div>
+          <div class="btn secondary">Chat about this</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mini">
+    <div class="approval-card">
+      <div class="approval-head">Does this evidence settle the task?<span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">Web：证据裁决卡改为系统卡</div>
+        <div class="actions">
+          <div class="btn primary">Confirm done</div>
+          <div class="btn secondary">Chat about this</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="lede" style="margin-top:14px">两张（或更多）同时在问时，<b>四张卡都不带键位、Enter 也不响应</b>：回车得在两问之间挑一个，而<b>按错门的键</b>比没有键更糟。读者照旧点他正在看的那颗按钮。只剩一张卡在问时，键位自己回来——包括另一张卡被答掉、走 stale、或它自己那一下正在飞的时候。</p>
+
+<h2 class="sec">键位落在哪 <span>四张卡 + 审批卡共用同一段判定</span></h2>
+<table class="copy">
+  <tr><th>操作</th><th>结果</th></tr>
+  <tr><td class="k"><code>Enter</code></td><td>第一动作：Confirm done / Start the project / Confirm the criteria / 审批卡的 Approve。</td></tr>
+  <tr><td class="k"><code>⌘ + Enter</code>（非 Mac 是 <code>Ctrl + Enter</code>）</td><td>第二动作：Chat about this——接管底部主输入框，下一次发送就是理由；审批卡上是 Always allow。</td></tr>
+  <tr><td class="k">光标在输入框里（底部主输入框、任何 textarea/input）</td><td>两颗键都不响：打字的地方归打字。</td></tr>
+  <tr><td class="k">焦点在按钮上 + <code>Enter</code></td><td>让给那颗按钮自己的回车（焦点在哪颗就按哪颗）；<code>⌘ + Enter</code> 仍然归卡片。</td></tr>
+  <tr><td class="k">按钮 disabled（走 stale、按下正在飞、已记录）</td><td>那颗按钮的键跟着死，另一颗不受影响。</td></tr>
+</table>
+
+</body>
+</html>

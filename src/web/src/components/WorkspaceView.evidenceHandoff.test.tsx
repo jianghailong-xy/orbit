@@ -263,10 +263,19 @@ async function mount(): Promise<void> {
 const card = (): HTMLElement =>
   mounted().querySelector<HTMLElement>('.evidence-decision:not(.evidence-decision-receipt)')!;
 
+/** The words ON a button. A card that holds the keyboard draws its key inside the button it
+ *  presses (`CardHotkey.ts`), as a span of its own: what the control does is the label, and what
+ *  presses it is not. */
+const labelOf = (button: HTMLButtonElement): string => {
+  const hint = button.querySelector<HTMLElement>('.approval-kbd');
+  const text = button.textContent ?? '';
+  return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
+};
+
 /** The card's own actions, by the words on them. */
 const cardActions = (): Array<{ label: string; button: HTMLButtonElement }> =>
   [...card().querySelectorAll<HTMLButtonElement>('button.card-action')].map((button) => ({
-    label: button.textContent ?? '',
+    label: labelOf(button),
     button,
   }));
 

@@ -511,6 +511,15 @@ describe('the record a confirmation leaves, in the conversation it was made in',
  * reaches the composer, leaves the card up and leaves starting the project live is a fact about the
  * page the two live on.
  */
+/** The words ON a button. A card that holds the keyboard draws its key inside the button it
+ *  presses (`CardHotkey.ts`), as a span of its own: what the control does is the label, and what
+ *  presses it is not. */
+const labelOf = (button: HTMLButtonElement): string => {
+  const hint = button.querySelector<HTMLElement>('.approval-kbd');
+  const text = button.textContent ?? '';
+  return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
+};
+
 describe('Chat about this on the settlement card', { timeout: 60_000 }, () => {
   it('arms the composer with this plan, keeps the card up with Start the project live, and reaches no door', async () => {
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
@@ -522,8 +531,7 @@ describe('Chat about this on the settlement card', { timeout: 60_000 }, () => {
       ...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
     ];
     // Exactly two, and it is the second one that hands the reply over.
-    expect(actions().map((button) => button.textContent))
-      .toEqual([ACCEPTANCE_START_LABEL, OWNER_SEND_BACK_ACTION]);
+    expect(actions().map(labelOf)).toEqual([ACCEPTANCE_START_LABEL, OWNER_SEND_BACK_ACTION]);
     expect(count('.composer-replyto'), 'the composer was already armed').toBe(0);
     const requestedBefore = requested.length;
 
