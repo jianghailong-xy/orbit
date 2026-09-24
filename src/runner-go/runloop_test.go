@@ -20,15 +20,17 @@ func TestRuntimeModelRefreshCadence(t *testing.T) {
 	if got := time.Duration(runtimeDefaultRefreshHeartbeatTicks) * heartbeatInterval; got != 5*time.Minute {
 		t.Fatalf("runtime default refresh cadence = %s, want 5m", got)
 	}
-	// Four-hourly, not hourly and not daily: each pass execs the engine once per tier alias, so
-	// hourly spent four launches an hour re-reading a list that moves on CLI releases — while
-	// daily meant a model released this morning stayed invisible until tomorrow.
-	if got := time.Duration(modelCatalogRefreshHeartbeatTicks) * heartbeatInterval; got != 4*time.Hour {
-		t.Fatalf("model catalog refresh cadence = %s, want 4h", got)
+	// Hourly, which is what the owner asked for: the pass costs process spawns and no model tokens,
+	// so the cost is not what a stale list may be traded against. Four hours was the compromise the
+	// previous cadence made on that cost, and it meant a model released this morning could stay
+	// invisible most of the day. A CLI this runner updates is re-read on the spot, so the timer only
+	// ever has to cover a CLI that changed some other way.
+	if got := time.Duration(modelCatalogRefreshHeartbeatTicks) * heartbeatInterval; got != time.Hour {
+		t.Fatalf("model catalog refresh cadence = %s, want 1h", got)
 	}
 }
 
-// The on-demand pass the control plane can ask for between those four-hour ones: a machine whose
+// The on-demand pass the control plane can ask for between those hourly ones: a machine whose
 // CLI just learned about a new model shouldn't have to wait out the timer. Absent means no
 // request — an older control plane must not read as one, or every beat would respawn the CLIs.
 func TestHeartbeatResponseCarriesModelCatalogRefresh(t *testing.T) {

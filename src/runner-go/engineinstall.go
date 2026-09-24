@@ -99,7 +99,11 @@ func (r *installRelay) start(engine string, report func(InstallResultRequest), a
 // Unlike the daily loop this one has a person waiting, so what it skipped is reported rather than
 // only logged: an engine left alone because a session is mid-turn looks identical to one the
 // button silently missed.
-func (r *installRelay) startUpdate(activeCount func(string) int, proxyVars []envVar, report func(InstallResultRequest), after func()) {
+//
+// onEngineUpdated is updateEngines' contract, passed straight through: the button is a third way an
+// engine's version moves on this machine, and the model list that came with the new version must
+// not be the one path that waits for the catalog ticker.
+func (r *installRelay) startUpdate(activeCount func(string) int, proxyVars []envVar, report func(InstallResultRequest), after func(), onEngineUpdated func()) {
 	r.mu.Lock()
 	if r.running {
 		r.mu.Unlock()
@@ -120,7 +124,7 @@ func (r *installRelay) startUpdate(activeCount func(string) int, proxyVars []env
 			}
 		}()
 		report(InstallResultRequest{Status: installInstalling, Command: engineUpdateManualCmd})
-		lines := updateEnginesFn(context.Background(), activeCount, proxyVars)
+		lines := updateEnginesFn(context.Background(), activeCount, proxyVars, onEngineUpdated)
 		res := InstallResultRequest{Status: installDone, Command: engineUpdateManualCmd}
 		if len(lines) == 0 {
 			// Nothing on PATH to update. Saying "done" with no detail would read as success.

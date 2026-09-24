@@ -70,7 +70,10 @@ const (
 // `orbit doctor`'s interactive job. Best-effort — every failure is logged, never
 // fatal. ORBIT_NO_ENGINE_UPDATE disables it, retry included: it turns the whole loop off
 // before anything is scheduled.
-func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVars []envVar) {
+//
+// onEngineUpdated is handed to both schedulers it drives, so a pass that really moved an engine's
+// version reports it wherever it came from — see updateEngines for what it promises.
+func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVars []envVar, onEngineUpdated func()) {
 	if os.Getenv("ORBIT_NO_ENGINE_UPDATE") != "" {
 		return
 	}
@@ -79,7 +82,7 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 		return
 	case <-time.After(engineUpdateInitialDelay):
 	}
-	updateEngines(ctx, activeCount, proxyVars)
+	updateEngines(ctx, activeCount, proxyVars, onEngineUpdated)
 	ticker := time.NewTicker(engineUpdateInterval)
 	defer ticker.Stop()
 	// The other half of "skipped — session(s) active". That skip files the engine; this picks
@@ -93,9 +96,9 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			updateEngines(ctx, activeCount, proxyVars)
+			updateEngines(ctx, activeCount, proxyVars, onEngineUpdated)
 		case <-idle.C:
-			retryDeferredEngineUpdates(ctx, activeCount, proxyVars)
+			retryDeferredEngineUpdates(ctx, activeCount, proxyVars, onEngineUpdated)
 		}
 	}
 }
@@ -103,13 +106,22 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 // updateEngines updates every engine on this machine, returning one human line per engine that
 // had anything to say — the summary a browser-requested update reports back (the per-engine
 // record it leaves behind is engineUpdateLog's job).
-func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars []envVar) []string {
+//
+// onEngineUpdated, when not nil, is called once at the end of a pass in which some engine's version
+// really moved. A CLI that moved may have brought a model lineup with it, and the caller re-reads
+// the model catalog on that (see runLoop) rather than waiting for its own ticker — the version is
+// the one thing that changes the list between ticks, and installing it is this function's job.
+// Only `updated` counts: `checked` is a version that did not move, and `failed` is one that never
+// arrived. A pass that moved several engines still calls it once — the catalog refresh re-reads
+// every runtime, and its own TryLock drops a call that arrives during one.
+func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars []envVar, onEngineUpdated func()) []string {
 	// One budget for the pass, not one per engine — see engineUpdateBudget. Each engine's own
 	// ceiling is derived from this context, so it is really min(engineUpdateTimeout, what's left).
 	ctx, cancel := context.WithTimeout(ctx, engineUpdateBudget)
 	defer cancel()
 	servicePath := serviceLoginPath()
 	var lines []string
+	var updated bool
 	for _, spec := range engineSpecs {
 		if err := ctx.Err(); err != nil {
 			// Out of budget. Said out loud, and deliberately not recorded: these commands never
@@ -145,14 +157,20 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 		// owing, and leaving the to-do filed would send the idle retry after it again seconds later.
 		clearDeferredEngineUpdate(spec.bin)
 		rec, phrase := updateEngine(ctx, spec, servicePath, proxyVars)
-		if n > 0 && rec.Status == updateUpdated {
-			// The one thing about this update the version numbers don't say: the sessions that were
-			// busy are still on whatever they started with, and only their next spawn moves.
-			phrase += " — native install, so what's already running (" + plural(n, "session") + ") keeps the version it started with"
+		if rec.Status == updateUpdated {
+			updated = true
+			if n > 0 {
+				// The one thing about this update the version numbers don't say: the sessions that were
+				// busy are still on whatever they started with, and only their next spawn moves.
+				phrase += " — native install, so what's already running (" + plural(n, "session") + ") keeps the version it started with"
+			}
 		}
 		if phrase != "" {
 			lines = append(lines, phrase)
 		}
+	}
+	if updated && onEngineUpdated != nil {
+		onEngineUpdated()
 	}
 	return lines
 }
@@ -257,7 +275,12 @@ func deferredEngineUpdates() map[string]bool {
 // itself, and the others install the moment each one's own count reaches zero. An engine that is
 // still busy is simply left filed — no log line, no drift probe, nothing recorded — because this
 // runs every few seconds, and the pass that deferred it already said all of that once.
-func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) int, proxyVars []envVar) {
+//
+// onEngineUpdated is updateEngines' contract, unchanged: an engine this retry installs really did
+// move a version, and the caller hears about it once per retry rather than not at all — the point
+// of this path is that the update did not wait for the daily tick, and neither should the model
+// list that came with it.
+func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) int, proxyVars []envVar, onEngineUpdated func()) {
 	deferred := deferredEngineUpdates()
 	if len(deferred) == 0 {
 		return
@@ -267,6 +290,7 @@ func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) in
 	ctx, cancel := context.WithTimeout(ctx, engineUpdateBudget)
 	defer cancel()
 	servicePath := serviceLoginPath()
+	var updated bool
 	for _, spec := range engineSpecs {
 		if !deferred[spec.bin] {
 			continue
@@ -283,7 +307,12 @@ func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) in
 		// is what tries again.
 		clearDeferredEngineUpdate(spec.bin)
 		logln("engine-update:", spec.name, "retrying — its sessions have finished")
-		updateEngine(ctx, spec, servicePath, proxyVars)
+		if rec, _ := updateEngine(ctx, spec, servicePath, proxyVars); rec.Status == updateUpdated {
+			updated = true
+		}
+	}
+	if updated && onEngineUpdated != nil {
+		onEngineUpdated()
 	}
 }
 
@@ -645,7 +674,9 @@ func cmdEngineUpdate() {
 	if cfg := loadConfig(); cfg != nil {
 		server = cfg.ServerURL
 	}
-	for _, line := range updateEngines(context.Background(), func(string) int { return 0 }, doctorProxyVars(server)) {
+	// No catalog-refresh callback: this is a one-shot CLI with no sessions to publish a refreshed
+	// catalog to, and the `orbit run` process that has them re-reads it on its own schedule.
+	for _, line := range updateEngines(context.Background(), func(string) int { return 0 }, doctorProxyVars(server), nil) {
 		fmt.Println("  " + line)
 	}
 }

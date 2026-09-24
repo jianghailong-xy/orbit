@@ -23,12 +23,20 @@ const (
 	heartbeatInterval                   = 30 * time.Second
 	selfUpdateCheckInterval             = 10 * time.Minute
 	runtimeDefaultRefreshHeartbeatTicks = 10 // ~5 minutes
-	// Refreshed once at startup and every four hours after that. Each pass spawns one `claude -p
-	// "/model <alias>"` per tier alias, so an hourly cadence was launching the engine four times
-	// an hour purely to re-read a list that changes on CLI releases — but a daily one meant a
-	// model released this morning stayed invisible until tomorrow. Four hours is the compromise;
-	// the control plane can also ask for a pass now (HeartbeatResponse.RefreshModelCatalog).
-	modelCatalogRefreshHeartbeatTicks = 480 // ~4 hours
+	// Refreshed once at startup and every hour after that. What a pass costs is process spawns, not
+	// model calls: Claude Code takes three per tier alias (`/model <alias>`, `/context`, and the
+	// `/fast` capability probe) — 12 for the four aliases — plus one each for codex, kimi and
+	// opencode, all local slash commands that spend no tokens. Measured on vmi3129740 on 2026-09-24
+	// at load 39 on 8 cores: 15 spawns, 96s wall (~2m on a quieter pass of the same box), in a
+	// background goroutine nothing waits on.
+	//
+	// Hourly is the cadence the owner asked for. Four hours — the compromise, made on that spawn
+	// cost when it was the only thing being weighed — meant a model released this morning could
+	// stay invisible most of the day. The CLI is what changes the list, so a CLI this runner
+	// installs is re-read on the spot instead of waiting for this ticker (see
+	// refreshCatalogAfterEngineUpdate). The control plane can also ask for a pass now
+	// (HeartbeatResponse.RefreshModelCatalog).
+	modelCatalogRefreshHeartbeatTicks = 120 // ~1 hour
 )
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
@@ -805,7 +813,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Let the UI follow the runner's own CLIs (Codex `codex debug models`, Claude `claude -p
 	// "/model"`, which auto-track new releases) instead of a hardcoded web/mobile list. Refreshed
 	// hourly in the background: model lineups change rarely, and the Claude fetch spawns a
-	// few `claude -p` processes, so there's no reason to run it often.
+	// few `claude -p` processes, so there's no reason to run it often — which is also why the one
+	// event that does change the lineup, an engine this runner just updated, refreshes it on the
+	// spot instead (see refreshCatalogAfterEngineUpdate below).
 	refreshModelCatalog := func() {
 		if !modelCatalogRefreshMu.TryLock() {
 			return
@@ -857,6 +867,18 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// model's context window, which is the denominator they ship with every occupancy reading.
 		publishModelCatalog(published)
 	}
+	// The other way the catalog goes stale: this runner installs a newer engine, whose point is
+	// often a model the old CLI did not have. Every path that updates one ends in updateEngine, so
+	// they all report a version that really moved — the daily pass, the idle retry, and the Engines
+	// panel's Update button (see updateEngines) — and the picker re-reads the CLI now instead of up
+	// to an hour from now, which on 2026-09-24 left Opus 5.5 missing from a runner that had been
+	// running 2.1.280 since 16:20Z.
+	//
+	// Off the reporter's own goroutine: a pass spawns a dozen CLIs and takes seconds, and the
+	// updater that just finished — a loop that still has engines to walk, or a relay with a person
+	// waiting on it — has nothing to gain by waiting for it. Overlap is free: TryLock drops a
+	// refresh that arrives during one.
+	refreshCatalogAfterEngineUpdate := func() { go refreshModelCatalog() }
 	// Runtime defaults come from user-owned config/environment only, so refresh them more often
 	// without paying the catalog's process-spawn cost. Probe errors remain visible in logs, while
 	// mergeRuntimeDefaultModels applies the null/empty/last-good heartbeat semantics.
@@ -901,8 +923,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Keep the machine's coding-engine CLIs current: the runner execs whatever engine
 	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
 	// Daily, best-effort, skips any engine with a live session its update could disturb (see
-	// engineUpdateLoop).
-	go engineUpdateLoop(loopCtx, residentProviderCount, doctorProxyVars(cfg.ServerURL))
+	// engineUpdateLoop). An engine whose version really moved re-reads the model catalog on
+	// the spot — the CLI is what the list is made of, and its new release may be the reason
+	// the update happened.
+	go engineUpdateLoop(loopCtx, residentProviderCount, doctorProxyVars(cfg.ServerURL), refreshCatalogAfterEngineUpdate)
 
 	// Engines are installed on demand rather than at register time; this is the consent
 	// that was collected there (see ensureEngine).
@@ -1279,7 +1303,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				// on demand). Live sessions are visible from here, so unlike `orbit
 				// engine-update` this one won't swap a binary mid-turn.
 				if ir.Mode == "update" {
-					install.startUpdate(residentProviderCount, doctorProxyVars(cfg.ServerURL), report, engineHealth.refresh)
+					install.startUpdate(residentProviderCount, doctorProxyVars(cfg.ServerURL), report, engineHealth.refresh, refreshCatalogAfterEngineUpdate)
 				} else {
 					install.start(ir.Engine, report, engineHealth.refresh)
 				}

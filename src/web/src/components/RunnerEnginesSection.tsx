@@ -38,9 +38,9 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
     mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
   });
-  // The model picker lists what these CLIs report, re-read by the runner every few hours — so a
-  // model released today, or one a fresh CLI just learned about, is invisible until that pass.
-  // This asks for the pass now. There is no relay to watch: the refreshed catalog simply arrives
+  // The model picker lists what these CLIs report, re-read hourly by the runner — and on the spot
+  // after it installs a newer engine. This asks for a pass now, for a model a CLI learned about
+  // some other way. There is no relay to watch: the refreshed catalog simply arrives
   // on a heartbeat, which is why the toast promises a minute rather than showing progress.
   const refreshModels = useMutation({
     mutationFn: () => api(`/runners/${runner.id}/refresh-models`, { method: 'POST' }),

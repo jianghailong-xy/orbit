@@ -302,7 +302,7 @@ func TestUpdateEnginesOutOfBudgetBlamesNoEngine(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	defer cancel()
 
-	lines := updateEngines(ctx, func(string) int { return 0 }, nil)
+	lines := updateEngines(ctx, func(string) int { return 0 }, nil, nil)
 
 	if len(lines) != len(engineSpecs) {
 		t.Fatalf("got %d lines for %d engines: %q", len(lines), len(engineSpecs), lines)
@@ -326,7 +326,7 @@ func TestUpdateEnginesShutdownIsSilent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if lines := updateEngines(ctx, func(string) int { return 0 }, nil); len(lines) != 0 {
+	if lines := updateEngines(ctx, func(string) int { return 0 }, nil, nil); len(lines) != 0 {
 		t.Fatalf("shutdown produced %q, want silence", lines)
 	}
 	if log := loadEngineUpdateLog(); len(log) != 0 {
@@ -405,7 +405,7 @@ func TestBusyEngineUpdatesTheMomentItsSessionsFinish(t *testing.T) {
 	active := map[string]int{busy.bin: 4}
 	activeCount := func(bin string) int { return active[bin] }
 
-	lines := updateEngines(context.Background(), activeCount, nil)
+	lines := updateEngines(context.Background(), activeCount, nil, nil)
 
 	if engineUpdateRuns(t, busyRuns) != 0 {
 		t.Fatal("swapped the binary of an engine with sessions running on it")
@@ -424,14 +424,14 @@ func TestBusyEngineUpdatesTheMomentItsSessionsFinish(t *testing.T) {
 	}
 
 	// Still busy: the retry must not install behind a live session either.
-	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil, nil)
 	if engineUpdateRuns(t, busyRuns) != 0 {
 		t.Fatal("the idle retry ran an updater while sessions were still running")
 	}
 
 	// The last session ends. This is the edge the whole change is about.
 	active[busy.bin] = 0
-	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil, nil)
 
 	if engineUpdateRuns(t, busyRuns) != 1 {
 		t.Fatal("the engine went idle and its deferred update never ran")
@@ -442,7 +442,7 @@ func TestBusyEngineUpdatesTheMomentItsSessionsFinish(t *testing.T) {
 
 	// The to-do is discharged, not standing: a retry every 15s must not keep re-running a
 	// package manager against an engine that is already current.
-	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil, nil)
 	if engineUpdateRuns(t, busyRuns) != 1 {
 		t.Fatal("the deferred update stayed filed after it ran")
 	}
@@ -523,7 +523,7 @@ func TestNativeClaudeUpdatesWhileItsSessionsRun(t *testing.T) {
 	active := map[string]int{providerClaude: 3}
 	activeCount := func(bin string) int { return active[bin] }
 
-	lines := updateEngines(context.Background(), activeCount, nil)
+	lines := updateEngines(context.Background(), activeCount, nil, nil)
 
 	if engineUpdateRuns(t, runs) != 1 {
 		t.Fatal("a native install waited on its sessions — its updater replaces nothing they run")
@@ -539,7 +539,7 @@ func TestNativeClaudeUpdatesWhileItsSessionsRun(t *testing.T) {
 		t.Fatalf("lines = %q, want the update reported, saying the running sessions keep theirs", lines)
 	}
 	// Nothing left owing: the retry must not run the updater a second time.
-	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil, nil)
 	if engineUpdateRuns(t, runs) != 1 {
 		t.Fatal("the idle retry updated an engine the pass already had")
 	}
@@ -553,7 +553,7 @@ func TestNpmClaudeStillWaitsForItsSessions(t *testing.T) {
 	active := map[string]int{providerClaude: 3}
 	activeCount := func(bin string) int { return active[bin] }
 
-	lines := updateEngines(context.Background(), activeCount, nil)
+	lines := updateEngines(context.Background(), activeCount, nil, nil)
 
 	if engineUpdateRuns(t, runs) != 0 {
 		t.Fatal("rewrote an npm install under the sessions running out of it")
@@ -566,7 +566,7 @@ func TestNpmClaudeStillWaitsForItsSessions(t *testing.T) {
 	}
 
 	active[providerClaude] = 0
-	retryDeferredEngineUpdates(context.Background(), activeCount, nil)
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil, nil)
 	if engineUpdateRuns(t, runs) != 1 {
 		t.Fatal("its sessions finished and the deferred update never ran")
 	}
@@ -635,7 +635,7 @@ func TestNoEngineUpdateEnvDisablesTheIdleRetryToo(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		engineUpdateLoop(ctx, func(string) int { return 0 }, nil)
+		engineUpdateLoop(ctx, func(string) int { return 0 }, nil, nil)
 	}()
 
 	select {
@@ -948,5 +948,185 @@ func TestUpdateEngineMessageSurvivesAnUnreadableInstalledVersion(t *testing.T) {
 	}
 	if !strings.Contains(rec.Message, "fetching 2.1.229") {
 		t.Fatalf("message = %q, want it to still name the version it was reaching for", rec.Message)
+	}
+}
+
+// The picker's list is probed out of the engine CLIs themselves, so the one event that changes it
+// between catalog passes is a CLI that moves versions — and installing that CLI is this loop's
+// job. Live on 2026-09-24: a runner was auto-updated to Claude Code 2.1.280 at 16:20Z, a CLI that
+// can run Opus 5.5, and its catalog went on listing `claude-opus-5` for up to four hours, because
+// installing a newer CLI re-read nothing. So a pass that really moved a version reports it.
+func TestUpdatedEngineReReadsTheModelCatalog(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("needs a shell")
+	}
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	const latest = "2.1.280"
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(latest))
+	}))
+	defer feed.Close()
+
+	a, aRuns := fakeUpdatableEngine(t, dir, "orbit-fake-a", "2.1.226", latest, feed.URL)
+	b, bRuns := fakeUpdatableEngine(t, dir, "orbit-fake-b", "0.9.0", latest, feed.URL)
+	saved := engineSpecs
+	engineSpecs = []engineSpec{a, b}
+	t.Cleanup(func() { engineSpecs = saved })
+	// Keep the real PATH: the updater runs through `sh`, which has to be findable.
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	refreshes := 0
+	updateEngines(context.Background(), func(string) int { return 0 }, nil, func() { refreshes++ })
+
+	if engineUpdateRuns(t, aRuns) != 1 || engineUpdateRuns(t, bRuns) != 1 {
+		t.Fatalf("the pass moved %d + %d versions, want both engines updated",
+			engineUpdateRuns(t, aRuns), engineUpdateRuns(t, bRuns))
+	}
+	// Once for the pass, not once per engine: the refresh re-reads every runtime it can see, and a
+	// second request arriving during one is dropped by its own TryLock anyway.
+	if refreshes != 1 {
+		t.Fatalf("a pass that moved two versions re-read the catalog %d times, want 1", refreshes)
+	}
+}
+
+// The other half of that contract: nothing moved, so there is nothing new to read. Both of these
+// are passes that leave the CLIs exactly as they were — one the release feed says is already
+// current (no package manager runs at all), one whose updater failed — and the catalog is a probe
+// of those CLIs.
+func TestAPassThatChangesNoVersionLeavesTheModelCatalogAlone(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("needs a shell")
+	}
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	const installed = "2.1.226"
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(installed))
+	}))
+	defer feed.Close()
+
+	current, currentRuns := fakeUpdatableEngine(t, dir, "orbit-fake-current", installed, installed, feed.URL)
+	// No feed to ask, so the updater is what decides — and it fails. Built from the same fake so
+	// the binary and its --version are real files, then given an updater that only exits non-zero.
+	broken, brokenRuns := fakeUpdatableEngine(t, dir, "orbit-fake-broken", "0.9.0", "9.9.9", "")
+	broken.updateCmd = "printf x >> " + brokenRuns + "; echo 'npm error code EACCES' >&2; exit 1"
+	saved := engineSpecs
+	engineSpecs = []engineSpec{current, broken}
+	t.Cleanup(func() { engineSpecs = saved })
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	refreshes := 0
+	updateEngines(context.Background(), func(string) int { return 0 }, nil, func() { refreshes++ })
+
+	if engineUpdateRuns(t, currentRuns) != 0 {
+		t.Fatal("an engine the feed says is current ran its updater")
+	}
+	// Without this the test would pass on a pass that never got as far as an update at all.
+	if engineUpdateRuns(t, brokenRuns) != 1 {
+		t.Fatal("the failing engine's updater never ran, so nothing here proves a failed update is quiet")
+	}
+	if log := loadEngineUpdateLog(); log[current.bin].Status != updateChecked || log[broken.bin].Status != updateFailed {
+		t.Fatalf("recorded %q / %q, want %q / %q",
+			log[current.bin].Status, log[broken.bin].Status, updateChecked, updateFailed)
+	}
+	if refreshes != 0 {
+		t.Fatalf("no engine changed version, yet the catalog was re-read %d times", refreshes)
+	}
+}
+
+// The idle retry is a second scheduler for the same work, so it owes the same report: the engine it
+// installs the moment the machine falls idle may well be the one whose new models the picker is
+// missing, and making it wait for the catalog ticker would be the same staleness one path over.
+func TestTheIdleRetryReReadsTheModelCatalogWhenItUpdates(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("needs a shell")
+	}
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	const latest = "2.1.280"
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(latest))
+	}))
+	defer feed.Close()
+
+	busy, busyRuns := fakeUpdatableEngine(t, dir, "orbit-fake-busy", "2.1.226", latest, feed.URL)
+	saved := engineSpecs
+	engineSpecs = []engineSpec{busy}
+	t.Cleanup(func() { engineSpecs = saved })
+	t.Cleanup(func() { clearDeferredEngineUpdate(busy.bin) })
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	active := map[string]int{busy.bin: 3}
+	activeCount := func(bin string) int { return active[bin] }
+	refreshes := 0
+	onUpdated := func() { refreshes++ }
+
+	updateEngines(context.Background(), activeCount, nil, onUpdated)
+	if refreshes != 0 {
+		t.Fatal("the engine was skipped for being busy, and the catalog re-read for it anyway")
+	}
+
+	active[busy.bin] = 0
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil, onUpdated)
+	if engineUpdateRuns(t, busyRuns) != 1 {
+		t.Fatal("the engine went idle and its deferred update never ran")
+	}
+	if refreshes != 1 {
+		t.Fatalf("the idle retry installed a new version and re-read the catalog %d times, want 1", refreshes)
+	}
+
+	// The to-do is discharged by the retry, so the runs that follow within seconds of each other —
+	// every engineIdleRetryInterval — must not keep re-reading a catalog nothing changed.
+	retryDeferredEngineUpdates(context.Background(), activeCount, nil, onUpdated)
+	if refreshes != 1 {
+		t.Fatalf("a retry with nothing left to install re-read the catalog (%d calls)", refreshes)
+	}
+}
+
+// The third way an engine's version moves on this machine: the Engines panel's Update button, which
+// runs through the same pass (see installRelay.startUpdate). Pressing it is what someone does when
+// the picker looks wrong, so it is the last path that may leave the picker as it was.
+func TestTheUpdateButtonReReadsTheModelCatalogAfterAVersionChange(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("needs a shell")
+	}
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	const latest = "2.1.280"
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(latest))
+	}))
+	defer feed.Close()
+
+	spec, runs := fakeUpdatableEngine(t, dir, "orbit-relay-fake", "2.1.226", latest, feed.URL)
+	saved := engineSpecs
+	engineSpecs = []engineSpec{spec}
+	t.Cleanup(func() { engineSpecs = saved })
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	refreshes := make(chan struct{}, 4)
+	done := make(chan struct{})
+	relay := &installRelay{}
+	relay.startUpdate(func(string) int { return 0 }, nil,
+		func(InstallResultRequest) {}, func() { close(done) }, func() { refreshes <- struct{}{} })
+
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the update relay never finished")
+	}
+	if engineUpdateRuns(t, runs) != 1 {
+		t.Fatal("the relay never ran the fake updater")
+	}
+	select {
+	case <-refreshes:
+	default:
+		t.Fatal("the Update button moved an engine's version and nothing re-read the catalog")
+	}
+	select {
+	case <-refreshes:
+		t.Fatal("the catalog was re-read more than once for one run of the button")
+	default:
 	}
 }

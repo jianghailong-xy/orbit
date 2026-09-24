@@ -524,9 +524,9 @@ export class RunnersService {
   /**
    * Ask this runner to re-read what models its runtime CLIs offer, now.
    *
-   * The model picker lists what the machine's own CLIs report, refreshed by the runner on a timer.
-   * That timer is what makes a model released today invisible until tomorrow — and the same gap
-   * follows every CLI update, since installing a newer binary does not itself re-read the list.
+   * The model picker lists what the machine's own CLIs report, refreshed by the runner on a timer —
+   * hourly, and on the spot after it installs a newer engine, so the gap this closes is a model a
+   * CLI learned about some other way.
    * This is the escape hatch, in the same spirit as the engine update next to it.
    *
    * Nothing is reported back: the refreshed catalog arrives on a later heartbeat as
