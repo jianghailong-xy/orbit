@@ -509,7 +509,7 @@ test('removeProject preserves the service refusal for a non-empty project', asyn
 // that unit added — the manual trigger — deliberately did NOT join it. Enqueuing a signal
 // attributed to USER is how a person drives a MANUAL project, so an agent able to do it would be
 // driving its own coordinator; that one stays on the door a person signs in to.
-test('the runner project bridge exposes exactly create, the reads, update, the question, the coordinator door, and guarded delete', () => {
+test('the runner project bridge exposes exactly create, the reads, update, the question, the coordinator doors, and guarded delete', () => {
   const handlers = Object.getOwnPropertyNames(RunnerProjectsController.prototype).filter(
     (name) => name !== 'constructor',
   );
@@ -546,6 +546,12 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // cannot produce for itself is work that landed by hand. The owner's half of the same door is the
     // user API's, which is why this one takes the acting session and refuses without it.
     'resolveOpenItem',
+    // The second half of the coordinator pair above, and the one that does not go stale: a message
+    // ADDRESSED to the project, resolved to whichever conversation coordinates it at the moment of
+    // delivery. `ensureCoordinator` answers with an id, and an id is exactly what a rotation between
+    // those two requests invalidates — which is why the delivery has to be resolvable in one call
+    // rather than being a `session send` the caller lines up behind a read.
+    'sendToCoordinator',
     'updateProject',
   ]);
   const verbs = Object.fromEntries(
@@ -568,6 +574,10 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     removeProject: RequestMethod.DELETE,
     resolveBlocker: RequestMethod.POST,
     resolveOpenItem: RequestMethod.POST,
+    // POST: it writes a turn, and a rotation is a side effect it may have. Both are the send the
+    // project's coordinator would have received anyway — this door moves WHERE it is addressed from
+    // a session to a project, and adds no authority to it.
+    sendToCoordinator: RequestMethod.POST,
     updateProject: RequestMethod.PATCH,
   });
 });

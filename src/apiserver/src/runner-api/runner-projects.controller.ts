@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   Body,
@@ -6,27 +7,32 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  Optional,
   Param,
   Patch,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Runner } from '@prisma/client';
+import { Prisma, Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
+import { type SessionLifecycleActor } from '../projects/attempt-budget';
 import {
   AskOwnerDto,
   CreateProjectDto,
   RecordMergeEvidenceDto,
   ResolveOpenItemDto,
   ResolveProjectBlockerDto,
+  SendToCoordinatorDto,
   UpdateProjectDto,
 } from '../projects/dto';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { HANDOFF_STORED_STATES, type HandoffStoredState } from '../projects/project-handoff';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { SessionAttemptService } from '../projects/session-attempt.service';
 import { ProjectsService } from '../projects/projects.service';
+import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -70,6 +76,16 @@ export class RunnerProjectsController {
     // are: Nest injects by type rather than by position, while the specs that build this controller
     // by hand to exercise one route would each have to stub a service they never reach.
     private readonly openItems: ProjectOpenItemService = undefined as unknown as ProjectOpenItemService,
+    /**
+     * The attempt charge the coordinator-message door spends, exactly as `RunnerSessionsController`
+     * spends it on `POST sessions/:id/turns`. `@Optional()` and not merely a default, for the reason
+     * that controller's fuse records: the question mark is TypeScript's and Nest cannot see it, so
+     * without the decorator a module that stands this controller up without the provider fails to
+     * construct it — `runner-project-edit-attribution.pg.spec.ts`, a spec about something else,
+     * which lists this controller and provides only the collaborators its routes reach. Absent, this
+     * one route sends without charging, which is what every hand-built controller in the specs does.
+     */
+    @Optional() private readonly attempts?: SessionAttemptService,
   ) {}
 
   /**
@@ -179,6 +195,79 @@ export class RunnerProjectsController {
       orchestrationToken,
     );
     return this.projects.ensureCoordinator(runner.ownerId, id, actingSessionId);
+  }
+
+  /**
+   * Hand one message to this project's coordinator, addressing the PROJECT rather than a session.
+   *
+   * The other door an agent knocks on, and the one that does not go stale. `ensure` above answers
+   * with a session id, and between that answer and a `session send` there is a window a rotation
+   * fits through: the id the caller is holding names a conversation that no longer coordinates
+   * anything, and the message reaches a reader instead of the project. So this resolves the
+   * conversation at the moment of DELIVERY — inside this same request, the way the server's own
+   * deliveries already do (`coordinator-delivery.service.ts`) — and reports what it resolved.
+   *
+   * It is also the reason this door may rotate where `ensure` may not be asked to: the caller is not
+   * choosing a replacement, it is asking for a delivery, and a coordinator that cannot take the
+   * message is not a coordinator this request can use. The replacement is `ensure`'s own rotation,
+   * under the same conditions and with the same compare-and-swap, so nothing about §7.5 moves here.
+   * A conversation that can still be handed a message — alive, or ended with a revival that would
+   * work — is never displaced: for an ended one the message REVIVES it, which is what "only replace
+   * the unusable" means.
+   *
+   * `X-Orbit-Session-Id` plus a live orchestration credential gates it, exactly as it gates the two
+   * routes above: the caller has to be a session this runner is running, for this owner, in a
+   * workspace that still has orchestration on. There is no headless path and no service token — this
+   * is an agent spending orchestration to talk to its project's coordinator, and the credential is
+   * what proves it has one.
+   *
+   * The response says what happened rather than what was asked for: `created` and `sessionId` name
+   * the conversation the message is on, and `replacedSessionId`/`replaceReason` are present only when
+   * this call rotated to get there. `turn.clientTurnId` is the key the message was written under, so
+   * a caller that never saw this body can repeat the request with the same key and get that same turn
+   * back instead of a second copy.
+   */
+  @Post('projects/:id/coordinator/messages')
+  async sendToCoordinator(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
+    @Body() dto: SendToCoordinatorDto,
+  ) {
+    // The gate BEFORE the write, as at the create and ensure doors: a refusal that arrived with a
+    // replacement already opened — or a message already on a conversation — would be work this
+    // session was never allowed to ask for.
+    const actingSessionId = await this.orchestration.assert(
+      runner,
+      sessionId?.trim(),
+      orchestrationToken,
+    );
+    const provided = dto.clientTurnId?.trim();
+    assertClientTurnIdNotReserved(provided);
+    // The send door's own charge, in the same place and with the same reading: a NEW turn that has
+    // already passed idempotency and placement spends one coordinator steer against the attempt the
+    // target conversation runs, and a retry that finds its committed key spends nothing. The service
+    // invokes it under the Session lock, inside the transaction that writes the turn.
+    //
+    // The actor is always the agent: `orchestration.assert` above admits no headless caller, so there
+    // is no "USER" arm to fall back to here — a session this runner is running IS the caller, and
+    // naming it is what makes `chargeSteer`'s own exemption ("a session steering the attempt it runs
+    // is not steering somebody else's") apply where it should.
+    const actor: SessionLifecycleActor = { kind: 'AGENT_SESSION', sessionId: actingSessionId };
+    return this.projects.sendToCoordinator(
+      runner.ownerId,
+      id,
+      actingSessionId,
+      dto.message,
+      provided || randomUUID(),
+      this.attempts
+        ? {
+            chargeSteer: (sessionId: string, tx: Prisma.TransactionClient) =>
+              this.attempts!.chargeSteer(runner.ownerId, sessionId, actor, tx),
+          }
+        : undefined,
+    );
   }
 
   @Get('projects/:id')
