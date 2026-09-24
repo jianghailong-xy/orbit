@@ -317,8 +317,13 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 func TestProjectCommandsArePreApprovedForAgents(t *testing.T) {
 	rules := strings.Join(orbitCLIAllowedTools("/usr/local/bin/orbit", false), "\n")
 	// Every verb capabilities advertises, individually. A write the document names but that is not
-	// pre-approved stalls on a permission prompt the agent cannot answer headless.
-	for _, action := range []string{"get", "create", "update", "delete"} {
+	// pre-approved stalls on a permission prompt the agent cannot answer headless. The three reads
+	// and writes that joined the family later — crossings, resolve-blocker, merge-evidence — are
+	// listed here for the same reason they are in the allowlist; ensure-coordinator is not, because
+	// it is advertised under the orchestration grant alone and never appears in this list.
+	// TestEveryAdvertisedCapabilityIsPreApproved walks the specs themselves and reddens the moment
+	// this list and that one fall out of step, which is how the three came to be added here.
+	for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence"} {
 		if !strings.Contains(rules, "Bash(/usr/local/bin/orbit project "+action+" *)") {
 			t.Fatalf("project %s is not pre-approved: %q", action, rules)
 		}
