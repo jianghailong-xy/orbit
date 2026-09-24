@@ -217,8 +217,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// makes here rather than one it inherits. Three of them are answers an agent had to be
 		// refused to reach: crossings says what a refusal is waiting on, resolve-blocker ends this
 		// project's own wait with the owner's answer on a card in front of them, and merge-evidence
-		// records what a target branch was observed to contain. The one project verb NOT here is
-		// ensure-coordinator, which OPENS a conversation and so rides the orchestration gate below.
+		// records what a target branch was observed to contain. The two project verbs NOT here —
+		// ensure-coordinator and send — are the deliveries to a coordinator, which OPEN a
+		// conversation and so ride the orchestration gate below.
 		for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence"} {
 			rules = append(rules, "Bash("+command+" project "+action+" *)")
 		}
@@ -257,6 +258,12 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			// credential rather than the machine's own: it is advertised where that grant exists
 			// (RequiresOrchestration), which is where its rule belongs too.
 			rules = append(rules, "Bash("+command+" project ensure-coordinator *)")
+			// Its delivery half, on the same grant and for the same reason: the coordinator is
+			// resolved at the moment of delivery and may be replaced to take the message, so the
+			// credential it spends is the one that makes the ask a session's own. Pre-approving it
+			// anywhere else would be a rule for a command `capabilities --json` never offers that
+			// agent — which is what TestEveryAdvertisedCapabilityIsPreApproved refuses.
+			rules = append(rules, "Bash("+command+" project send *)")
 		}
 	}
 	return rules

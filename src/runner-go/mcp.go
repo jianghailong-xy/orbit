@@ -545,6 +545,28 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_send":
+		// The other half of the same door, and gated the same way: it spends the caller's
+		// orchestration credential on a delivery that may open a conversation, so it rides the gate
+		// the session_* tools ride rather than the ungated project_* path.
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "projectId")
+		message := getString(args, "message")
+		if id == "" || message == "" {
+			return toolResult("projectId and message are required", true)
+		}
+		// No sessionId in the body: the PROJECT is the address, and the conversation it resolves to
+		// is decided by the server at the moment of delivery. The acting session travels as the
+		// header it already is, which is also what makes the delivery the caller's own.
+		raw, err := s.t.sendProjectCoordinator(s.sessionID, s.orchestrationToken, id,
+			map[string]interface{}{"message": message})
+		if err != nil {
+			return toolResult("send to project coordinator failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "ask_owner":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -3111,6 +3133,44 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"description": "The project whose coordinator to take, as shown in its web UI URL (/projects/<id>).",
 					},
 				}, "projectId"),
+			},
+			// The other delivery to that same conversation, and the one that does not go stale:
+			// project_ensure_coordinator answers with a session id, and between that answer and a
+			// send to it a rotation fits through — the id then names a conversation that no longer
+			// coordinates anything, and the message reaches a reader instead of the project. So this
+			// addresses the PROJECT and the server resolves the conversation at the moment of
+			// delivery. It spends the same live orchestration credential, which is why it sits here
+			// rather than beside the ungated project_* tools above.
+			map[string]interface{}{
+				"name": "project_send",
+				"description": "Hand one message to this project's coordinator. The project is the " +
+					"ADDRESS: the coordinator is resolved at the moment of delivery, so nothing this " +
+					"call resolved earlier can go stale — which is the whole difference between this " +
+					"and `project_ensure_coordinator` followed by a send to the id it answers with. A " +
+					"conversation that can be handed the message is delivered to and NOT displaced, " +
+					"an ended one whose runner can still revive it included: that case REVIVES it " +
+					"(what `session_send` with `resumeIfEnded` does) rather than replacing it. Only a " +
+					"conversation that cannot take a message at all is replaced — by the rotation " +
+					"`project_ensure_coordinator` performs, under the same conditions — and the " +
+					"message goes to the replacement in the same call. The response says what " +
+					"happened rather than what was asked for: `created` and `sessionId` name the " +
+					"conversation the message is on, and `replacedSessionId`/`replaceReason` are " +
+					"present only when this call rotated to get there. The refusal that stays is " +
+					"COORDINATOR_UNAVAILABLE (409, owner: USER, requiredAction: rebind), which names " +
+					"the account owner because where a project's coordination lives is their decision " +
+					"— a retry answers the same thing; a write refused after a coordinator WAS found " +
+					"comes back as COORDINATOR_MESSAGE_UNDELIVERED with the sentence that refused it " +
+					"inside. The acting session is the authority and there is no headless form.",
+				"inputSchema": obj(map[string]interface{}{
+					"projectId": map[string]interface{}{
+						"type":        "string",
+						"description": "The project whose coordinator the message is for, as shown in its web UI URL (/projects/<id>).",
+					},
+					"message": map[string]interface{}{
+						"type":        "string",
+						"description": "The message to deliver to that project's coordinator.",
+					},
+				}, "projectId", "message"),
 			},
 		)
 	}

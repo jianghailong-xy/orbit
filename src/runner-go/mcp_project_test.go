@@ -145,6 +145,15 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 // gate rather than sitting with the tools above, because the route behind it spends a live session
 // credential — a replacement this caller may not open is a conversation it was never allowed to
 // open — so it is offered exactly where the session_* tools are.
+//
+// project_send is the second project tool on that gate, and it is admitted for the reason it was
+// built: ensure answers with a session id, and an id is exactly what a rotation invalidates, so the
+// two-call path leaves a window in which the caller's message reaches a reader instead of the
+// project. Delivery resolves the conversation at the moment the message is written — rotating only
+// when the standing one cannot take it, which is the same rotation ensure performs — so it spends
+// the same credential and belongs in the same block. That is a decision, not an inheritance: a
+// project tool that appears here without spending orchestration would be one offered under a grant
+// it does not use.
 func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 	for _, tc := range []struct {
 		tools         []map[string]interface{}
@@ -183,7 +192,7 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 			"project_blocker_resolve",
 		}
 		if tc.orchestration {
-			want = append(want, "project_ensure_coordinator")
+			want = append(want, "project_ensure_coordinator", "project_send")
 		}
 		for _, name := range want {
 			if !seen[name] {
@@ -1318,6 +1327,146 @@ func TestProjectEnsureCoordinatorToolCarriesTheOwnerActionOfARefusal(t *testing.
 	for _, want := range []string{"COORDINATOR_UNAVAILABLE", ensureCoordinatorRequiredAction, "USER"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("project_ensure_coordinator's refusal does not carry %q: %q", want, text)
+		}
+	}
+}
+
+// project_send is the delivery to that same conversation, so it rides the same gate and for the
+// same reason: the server resolves the coordinator at the moment of delivery and may open one to
+// take the message, which spends the caller's live orchestration credential. A caller without the
+// grant gets no tool rather than one whose every call is refused.
+func TestProjectSendToolRidesTheOrchestrationGate(t *testing.T) {
+	tools := toolDescriptors(false, true)
+	if !hasMCPTool(tools, "project_send") {
+		t.Fatal("project_send is missing from the orchestration tools")
+	}
+	if hasMCPTool(toolDescriptors(false, false), "project_send") {
+		t.Fatal("project_send is offered with no orchestration grant")
+	}
+	// The project is the address and the message is the payload: a session id here would be the
+	// snapshot the door exists to refuse, and a call without a message would wake a coordinator to
+	// read nothing.
+	props := mcpToolProps(tools, "project_send")
+	for _, field := range []string{"projectId", "message"} {
+		prop, _ := props[field].(map[string]interface{})
+		if prop["type"] != "string" {
+			t.Fatalf("project_send %s schema = %#v", field, props[field])
+		}
+	}
+	if _, present := props["sessionId"]; present {
+		t.Fatalf("project_send names a session: %#v", props)
+	}
+
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(projectSendDeliveredJSON))
+	}))
+	defer srv.Close()
+
+	// A caller that reaches it anyway is told the same thing the missing tool would have said.
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	res := mcp.callTool("project_send", map[string]interface{}{"projectId": "proj-1", "message": "hello"})
+	if res["isError"] != true {
+		t.Fatalf("project_send answered without the grant: %#v", res)
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	if len(content) == 0 || !strings.Contains(content[0]["text"].(string), orchestrationOffMsg) {
+		t.Fatalf("project_send result = %#v", res)
+	}
+	if hit {
+		t.Fatal("a project_send call without the grant reached the server")
+	}
+}
+
+// One POST to the coordinator-messages route, as the calling session: the header is the authority
+// that makes the delivery the caller's own, and the body carries the message alone.
+func TestProjectSendToolPostsAsTheCallingSession(t *testing.T) {
+	var method, path, session, token, raw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		token = r.Header.Get("X-Orbit-Session-Token")
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		_, _ = w.Write([]byte(projectSendRotatedJSON))
+	}))
+	defer srv.Close()
+
+	// The credential lookup is confined to a temp home; the token the runner injected is what
+	// travels, exactly as it does in a real session.
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	mcp := &mcpServer{
+		t:                  NewTransport(srv.URL, "tok"),
+		sessionID:          "343dlzsYWKo5z8l2M8tsD",
+		orchestrationToken: "session-token",
+		allowOrchestration: true,
+	}
+	res := mcp.callTool("project_send", map[string]interface{}{
+		"projectId": "343dlzsYWKo5z8l2M8tsA",
+		"message":   "the shard is red",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_send returned an error: %#v", res["content"])
+	}
+	if method != http.MethodPost || path != "/api/runner/projects/343dlzsYWKo5z8l2M8tsA/coordinator/messages" {
+		t.Fatalf("project_send hit %s %s", method, path)
+	}
+	if session != "343dlzsYWKo5z8l2M8tsD" {
+		t.Fatalf("project_send session header = %q", session)
+	}
+	if token != "session-token" {
+		t.Fatalf("project_send credential header = %q", token)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &body); err != nil {
+		t.Fatalf("project_send body is not JSON: %v\n%s", err, raw)
+	}
+	if len(body) != 1 || body["message"] != "the shard is red" {
+		t.Fatalf("project_send body = %#v", body)
+	}
+	// The result is the server's document, so a model reads created / replacedSessionId /
+	// replaceReason without the tool having an opinion about them.
+	content, _ := res["content"].([]map[string]interface{})
+	text, _ := content[0]["text"].(string)
+	var got map[string]interface{}
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatalf("project_send result is not JSON: %v\n%s", err, text)
+	}
+	if got["created"] != true || got["replacedSessionId"] != "343dlzsYWKo5z8l2M8tsB" ||
+		got["replaceReason"] != "RUNNER_OFFLINE" {
+		t.Fatalf("project_send result = %#v", got)
+	}
+}
+
+// The refusal that asks for a person travels whole, action included — the same refusal the ensure
+// door meets, because it is the same landing: an agent that read only "409" would retry the one
+// thing this door exists to stop it retrying.
+func TestProjectSendToolCarriesTheOwnerActionOfARefusal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"statusCode":409,"error":"Conflict","code":"COORDINATOR_UNAVAILABLE",` +
+			`"message":"its coordination workspace is disabled — its coordinator cannot be opened anywhere else",` +
+			`"owner":"USER","requiredAction":"` + ensureCoordinatorRequiredAction + `"}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	mcp := &mcpServer{
+		t:                  NewTransport(srv.URL, "tok"),
+		sessionID:          "343dlzsYWKo5z8l2M8tsD",
+		orchestrationToken: "session-token",
+		allowOrchestration: true,
+	}
+	res := mcp.callTool("project_send", map[string]interface{}{"projectId": "proj-1", "message": "still there?"})
+	if res["isError"] != true {
+		t.Fatalf("a 409 COORDINATOR_UNAVAILABLE reported success: %#v", res)
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	text, _ := content[0]["text"].(string)
+	for _, want := range []string{"COORDINATOR_UNAVAILABLE", ensureCoordinatorRequiredAction, "USER"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("project_send's refusal does not carry %q: %q", want, text)
 		}
 	}
 }

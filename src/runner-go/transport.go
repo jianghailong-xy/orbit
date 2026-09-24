@@ -1297,6 +1297,26 @@ func (t *Transport) ensureProjectCoordinator(sessionID, orchestrationToken, id s
 	return out, err
 }
 
+// sendProjectCoordinator hands one message to whichever conversation coordinates this project. The
+// project is the ADDRESS (POST /runner/projects/:id/coordinator/messages) and never a session id
+// in the body: the conversation is resolved at the moment of DELIVERY, which is the whole of what
+// this door adds to ensureProjectCoordinator above — between that call's answer and a
+// sendSessionMessage the coordinator can rotate, and the id the caller holds then names a
+// conversation that no longer coordinates anything.
+//
+// Same gate, same credential, no headless form (the server refuses an empty session header rather
+// than reading it as the owner), and COORDINATOR_UNAVAILABLE travels as the server raised it: its
+// `requiredAction` names the account owner, so the caller hands it to a person instead of retrying.
+func (t *Transport) sendProjectCoordinator(sessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/projects/"+url.PathEscape(id)+"/coordinator/messages",
+		body, &out, sessionID, orchestrationToken)
+	return out, err
+}
+
 // askOwner files a coordinator's question for the account owner and returns at once: the answer
 // arrives later as a turn, not as this call's result.
 //

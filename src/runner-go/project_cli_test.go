@@ -204,7 +204,11 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// to open the next one, and it is admitted here — not beside the four the commands above cover
 	// — because it is the only one that spends the orchestration credential, and it is advertised
 	// under that grant alone (RequiresOrchestration), exactly where its tool is offered.
-	if len(specs) != 8 {
+	// The ninth is `send`, the delivery to that same conversation: resolving a coordinator and then
+	// sending to the id that came back is two calls with a rotation-sized hole between them, and
+	// addressing the project instead closes it. It spends the same credential and is advertised
+	// under the same grant, so it is the one other entry a caller without orchestration cannot see.
+	if len(specs) != 9 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -234,7 +238,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// safe to run while exploring, and a write advertised as a read is the wrong answer.
 	for _, tool := range []string{
 		"project_create", "project_update", "project_delete",
-		"project_merge_evidence", "project_ensure_coordinator",
+		"project_merge_evidence", "project_ensure_coordinator", "project_send",
 	} {
 		write, ok := specs[tool]
 		if !ok {
@@ -319,8 +323,10 @@ func TestProjectCommandsArePreApprovedForAgents(t *testing.T) {
 	// Every verb capabilities advertises, individually. A write the document names but that is not
 	// pre-approved stalls on a permission prompt the agent cannot answer headless. The three reads
 	// and writes that joined the family later — crossings, resolve-blocker, merge-evidence — are
-	// listed here for the same reason they are in the allowlist; ensure-coordinator is not, because
-	// it is advertised under the orchestration grant alone and never appears in this list.
+	// listed here for the same reason they are in the allowlist; neither ensure-coordinator nor
+	// send is, because both are advertised under the orchestration grant alone and never appear in
+	// this list — they are pre-approved in the orchestrated one, which is the only list whose
+	// readers can see them.
 	// TestEveryAdvertisedCapabilityIsPreApproved walks the specs themselves and reddens the moment
 	// this list and that one fall out of step, which is how the three came to be added here.
 	for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence"} {
@@ -1447,6 +1453,269 @@ func TestProjectEnsureCoordinatorIsAdvertisedWhereItsToolIsOffered(t *testing.T)
 			}
 			if advertised != nil && advertised.MCPInputSchema == nil {
 				t.Fatal("the advertised command carries no MCP schema to act on")
+			}
+		})
+	}
+}
+
+// ── send ──────────────────────────────────────────────────────────────────────────────────────
+
+// The two answers the delivery door gives, as the server writes them: the conversation the message
+// went to, and — only when this call rotated to reach it — what it left behind. A caller reads
+// these to tell "delivered to the coordinator that was there" from "delivered to the one opened in
+// its place", so the CLI may not reshape either.
+const (
+	projectSendDeliveredJSON = `{"sessionId":"343dlzsYWKo5z8l2M8tsC","created":false,"workspaceId":"ws-1",` +
+		`"turn":{"clientTurnId":"turn-1"}}`
+	projectSendRotatedJSON = `{"sessionId":"343dlzsYWKo5z8l2M8tsC","created":true,"workspaceId":"ws-1",` +
+		`"replacedSessionId":"343dlzsYWKo5z8l2M8tsB","replaceReason":"RUNNER_OFFLINE",` +
+		`"turn":{"clientTurnId":"turn-1"}}`
+)
+
+// One POST to the coordinator-messages route, as the calling session. The project is the ADDRESS —
+// never a session id in the body — which is the whole reason this command exists beside
+// ensure-coordinator: the conversation is resolved at the moment of delivery, so a rotation between
+// two calls cannot send the message to a reader instead of to the project.
+func TestProjectSendPostsTheCoordinatorMessagesRouteAsTheCallingSession(t *testing.T) {
+	var method, path, session, token, raw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		token = r.Header.Get("X-Orbit-Session-Token")
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		_, _ = w.Write([]byte(projectSendDeliveredJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	// The same context the other delivery has: a live session with orchestration on and the
+	// credential the runner injected.
+	ensureCoordinatorSession(t, "343dlzsYWKo5z8l2M8tsB")
+
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{"send", "343dlzsYWKo5z8l2M8tsA", "--message", "the shard is red", "--json"},
+		strings.NewReader(""), &out)
+	if err != nil {
+		t.Fatalf("project send: %v", err)
+	}
+	if method != http.MethodPost || path != "/api/runner/projects/343dlzsYWKo5z8l2M8tsA/coordinator/messages" {
+		t.Fatalf("project send hit %s %s", method, path)
+	}
+	if session != "343dlzsYWKo5z8l2M8tsB" {
+		t.Fatalf("project send session header = %q", session)
+	}
+	if token != "session-token" {
+		t.Fatalf("project send credential header = %q", token)
+	}
+	// The body carries the message and nothing else: an id here would be a conversation named by the
+	// caller, which is exactly the snapshot this door refuses to take.
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &body); err != nil {
+		t.Fatalf("project send body is not JSON: %v\n%s", err, raw)
+	}
+	if len(body) != 1 || body["message"] != "the shard is red" {
+		t.Fatalf("project send body = %#v", body)
+	}
+	// The result is the server's document, so a model reads created / replacedSessionId /
+	// replaceReason without the command having an opinion about them.
+	if out.String() == "" {
+		t.Fatal("project send printed nothing")
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("project send output is not JSON: %v\n%s", err, out.String())
+	}
+	if got["created"] != false || got["sessionId"] != "343dlzsYWKo5z8l2M8tsC" {
+		t.Fatalf("project send output = %#v", got)
+	}
+}
+
+// The rotation answer is what tells a caller a conversation was replaced to take its message, and
+// it travels whole — a delivery reported as `created: false` would hide the one thing this door
+// exists to make visible.
+func TestProjectSendPrintsWhatTheDeliveryResolved(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(projectSendRotatedJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	ensureCoordinatorSession(t, "343dlzsYWKo5z8l2M8tsB")
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"send", "343dlzsYWKo5z8l2M8tsA", "--message", "shard 4 lost", "--json"},
+		strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project send: %v", err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("project send output is not JSON: %v\n%s", err, out.String())
+	}
+	if got["created"] != true || got["replacedSessionId"] != "343dlzsYWKo5z8l2M8tsB" ||
+		got["replaceReason"] != "RUNNER_OFFLINE" {
+		t.Fatalf("project send output = %#v", got)
+	}
+}
+
+// --message-file - is the same message through stdin, for a body a shell would mangle.
+func TestProjectSendReadsTheMessageFromStdin(t *testing.T) {
+	var raw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		_, _ = w.Write([]byte(projectSendDeliveredJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	ensureCoordinatorSession(t, "343dlzsYWKo5z8l2M8tsB")
+
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{"send", "proj-1", "--message-file", "-", "--json"},
+		strings.NewReader("line one\nline two with \"quotes\"\n"), &out)
+	if err != nil {
+		t.Fatalf("project send: %v", err)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &body); err != nil {
+		t.Fatalf("project send body is not JSON: %v\n%s", err, raw)
+	}
+	if body["message"] != "line one\nline two with \"quotes\"\n" {
+		t.Fatalf("project send sent %#v", body["message"])
+	}
+}
+
+// The refusal that asks for a PERSON travels whole, action included: an agent that read only "409"
+// would retry the one thing this door exists to stop it retrying.
+func TestProjectSendFailsAndPrintsTheOwnerAction(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"statusCode":409,"error":"Conflict","code":"COORDINATOR_UNAVAILABLE",` +
+			`"message":"its coordination workspace is disabled — its coordinator cannot be opened anywhere else",` +
+			`"owner":"USER","requiredAction":"` + ensureCoordinatorRequiredAction + `"}`))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	ensureCoordinatorSession(t, "343dlzsYWKo5z8l2M8tsB")
+
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{"send", "proj-1", "--message", "still there?", "--json"},
+		strings.NewReader(""), &out)
+	if err == nil {
+		t.Fatal("a refused project send reported success")
+	}
+	for _, want := range []string{"COORDINATOR_UNAVAILABLE", ensureCoordinatorRequiredAction, "USER"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("project send error does not carry %q: %v", want, err)
+		}
+	}
+	if out.String() != "" {
+		t.Fatalf("project send printed a body for a refused call: %q", out.String())
+	}
+}
+
+// Every precondition is refused before the request, so a call that cannot work is a sentence rather
+// than a round trip: no project named, no message to deliver, no session to deliver FROM, and no
+// orchestration grant to spend on a door that may open a conversation.
+func TestProjectSendRequiresAProjectAMessageASessionAndAGrant(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(projectSendDeliveredJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	ensureCoordinatorSession(t, "343dlzsYWKo5z8l2M8tsB")
+	err := cmdProjectCLI([]string{"send", "--message", "hello", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "project id is required") {
+		t.Fatalf("project send without an id = %v", err)
+	}
+
+	err = cmdProjectCLI([]string{"send", "proj-1", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "--message or --message-file - is required") {
+		t.Fatalf("project send without a message = %v", err)
+	}
+	// An empty message is not a message: the server's own floor is MinLength(1), and a blank turn
+	// would wake a coordinator to read nothing.
+	err = cmdProjectCLI([]string{"send", "proj-1", "--message", "   ", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "--message or --message-file - is required") {
+		t.Fatalf("project send with a blank message = %v", err)
+	}
+	// Both spellings at once is the same stdin read twice, as everywhere else a --*-file flag
+	// exists beside its direct form.
+	err = cmdProjectCLI([]string{"send", "proj-1", "--message", "hi", "--message-file", "-", "--json"},
+		strings.NewReader("hi"), &out)
+	if err == nil || !strings.Contains(err.Error(), "cannot be used together") {
+		t.Fatalf("project send with both message forms = %v", err)
+	}
+
+	t.Setenv("ORBIT_SESSION_ID", "")
+	err = cmdProjectCLI([]string{"send", "proj-1", "--message", "hi", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "ORBIT_SESSION_ID") {
+		t.Fatalf("a headless project send = %v", err)
+	}
+
+	ensureCoordinatorSession(t, "343dlzsYWKo5z8l2M8tsB")
+	t.Setenv(envMCPOrchestration, "0")
+	err = cmdProjectCLI([]string{"send", "proj-1", "--message", "hi", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), orchestrationOffMsg) {
+		t.Fatalf("a project send without the grant = %v", err)
+	}
+	if hit {
+		t.Fatal("a project send that cannot work reached the server")
+	}
+}
+
+// The two doors travel together, exactly as the ensure pair does: `orbit capabilities` takes each
+// command's schema from the MCP descriptor, so this is advertised where its tool is offered and
+// never as a capability with nothing behind it.
+func TestProjectSendIsAdvertisedWhereItsToolIsOffered(t *testing.T) {
+	for _, orchestration := range []bool{true, false} {
+		t.Run(fmt.Sprintf("orchestration=%v", orchestration), func(t *testing.T) {
+			t.Setenv("ORBIT_HOME", t.TempDir())
+			t.Setenv("ORBIT_SESSION_ID", "session-1")
+			t.Setenv("ORBIT_AGENT_ID", "")
+			t.Setenv("ORBIT_TASK_ID", "")
+			t.Setenv("ORBIT_SERVICE_TOKEN", "")
+			if orchestration {
+				t.Setenv(envMCPOrchestration, "1")
+			} else {
+				t.Setenv(envMCPOrchestration, "0")
+			}
+
+			var out bytes.Buffer
+			if err := cmdCapabilitiesCLI([]string{"--json"}, &out); err != nil {
+				t.Fatal(err)
+			}
+			var doc cliCapabilitiesDocument
+			if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+				t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
+			}
+			var advertised *cliCapability
+			for i := range doc.Capabilities {
+				if doc.Capabilities[i].ID == "project_send" {
+					advertised = &doc.Capabilities[i]
+				}
+			}
+			if (advertised != nil) != orchestration {
+				t.Fatalf("advertised with orchestration=%v: %v", orchestration, advertised != nil)
+			}
+			if advertised == nil {
+				return
+			}
+			if advertised.MCPInputSchema == nil {
+				t.Fatal("the advertised command carries no MCP schema to act on")
+			}
+			props, _ := advertised.MCPInputSchema["properties"].(map[string]interface{})
+			for _, field := range []string{"projectId", "message"} {
+				if _, ok := props[field]; !ok {
+					t.Fatalf("project_send schema has no %s: %#v", field, advertised.MCPInputSchema)
+				}
 			}
 		})
 	}
