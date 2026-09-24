@@ -20,6 +20,7 @@ import {
   LandingWorkSessionFacts,
   MAX_CHECK_OUTPUT_TAIL,
   PROMOTION_AUTOMATIC_LAND,
+  checkSawTheFinishedBranch,
   integrationDedupeKey,
   integrationItemTitle,
   isTerminalJobState,
@@ -41,6 +42,7 @@ import {
   applyPromotionJobResult,
   automaticLandingRefusal,
   markPromotionRechecking,
+  refileCandidateBehindTheWork,
 } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -307,20 +309,30 @@ async function claimOne(
        WHERE w."runner_id" = ${runnerId}::uuid
          AND c."cancel_requested_at" IS NULL
          AND NOT (c."serial_key" = ANY(${alreadyTaken}::text[]))
-         -- J-T1a / §2.6: a landing is not judged while the task's own work can still move. The
-         -- runner commits a worktree when it FINISHES the session (SR13), so a branch handed to the
-         -- line during that session is a branch that carries nothing yet: the line can only answer
-         -- ALREADY_LANDED about it, that answer is terminal by design, and the commit arrives
-         -- afterwards with no route at all. The job stays QUEUED instead, and the first heartbeat
-         -- after the session ends is handed it. landingWorkHasSettled is the same rule in
-         -- TypeScript (projects/project-integration-job.ts), and the two are read together.
+         -- J-T1a / §2.6 / §3.4: a job whose subject is work is not judged while that work can still
+         -- move. The runner commits a worktree when it FINISHES the session (SR13), so a branch
+         -- handed to the line during that session is a branch that carries nothing yet: a landing
+         -- can only answer ALREADY_LANDED about it, that answer is terminal by design, and the
+         -- commit arrives afterwards with no route at all. The job stays QUEUED instead, and the
+         -- first heartbeat after the session ends is handed it. landingWorkHasSettled is the same
+         -- rule in TypeScript (projects/project-integration-job.ts), and the two are read together.
          --
-         -- Deliberately only LAND_TASK: it is the kind whose subject is one task. A promotion's
-         -- subject is a branch (its row names no task on purpose), and a candidate's own source is
-         -- resolved and frozen by the check it exists to run (M-S1, 0293).
-         AND (c."kind" <> 'LAND_TASK' OR c."task_id" IS NULL OR NOT EXISTS (
+         -- TWO KINDS, AND WHY THE SECOND ONE HAD TO BE ADDED. A LAND_TASK names its task. A
+         -- CHECK_PROMOTION does not — a candidate's subject is a branch, which is why its row names
+         -- no task on purpose (0293) — so the task is the one the job's own session belongs to, and
+         -- for a TASK_BRANCH candidate that session is the work session the DONE froze. That check
+         -- is the thing that resolves the branch's tip and freezes it as the commit the owner is
+         -- about to be asked to merge (M-S1), so judging it while the task can still commit hands
+         -- the owner a tip the work then moves past: the same race, one level up, and the check is
+         -- the only thing that ever looks at that branch again. A PROJECT_BRANCH candidate's source
+         -- is named by the platform before its check runs, so this holds it for no reason — it is
+         -- the same question about the same work, and the answer costs it one heartbeat. A
+         -- LAND_PROMOTION is deliberately out: the owner confirmed a NAMED commit, and a named
+         -- commit does not change while a session runs.
+         AND (c."kind" NOT IN ('LAND_TASK', 'CHECK_PROMOTION') OR NOT EXISTS (
               SELECT 1 FROM "session" w
-               WHERE w."task_id" = c."task_id"
+                JOIN "session" jw ON jw."id" = c."session_id"
+               WHERE w."task_id" = COALESCE(c."task_id", jw."task_id")
                  AND w."starts_task_work" = true
                  AND w."deleted_at" IS NULL
                  AND w."finished_at" IS NULL))
@@ -485,9 +497,31 @@ async function readLandingWorkSessions(
   }));
 }
 
+/**
+ * The work of the task a candidate's job belongs to, and which task that is (§3.4 J-T1e).
+ *
+ * One level up from `readLandingWorkSessions`: a promotion job names no task of its own — the session
+ * it carries is how the queue finds a checkout to work in, which is why it names one at all — and for
+ * a `TASK_BRANCH` candidate that session is the work session the DONE froze. The task is read off it
+ * and the same rule then applies to that task's work. Null when the job names no session or that
+ * session belongs to no task: there is no work to ask about, and a candidate nothing can be said
+ * about is judged as it always was.
+ */
+async function readCandidateWork(
+  tx: Prisma.TransactionClient,
+  sessionId: string | null,
+): Promise<{ taskId: string; sessions: LandingWorkSessionFacts[] } | null> {
+  if (!sessionId) return null;
+  const session = await tx.session.findUnique({
+    where: { id: sessionId },
+    select: { taskId: true },
+  });
+  if (!session?.taskId) return null;
+  return { taskId: session.taskId, sessions: await readLandingWorkSessions(tx, session.taskId) };
+}
+
 /** Why a report was refused, in the shape the controller turns into a status code. */
 export type IntegrationResultRefusal = 'STALE_CLAIM' | 'NOT_FOUND' | 'ALREADY_FINAL' | 'INVALID_RESULT';
-
 export const INTEGRATION_RESULT_REFUSAL_STATUS: Record<IntegrationResultRefusal, number> = {
   STALE_CLAIM: 409,
   NOT_FOUND: 404,
@@ -689,6 +723,52 @@ export async function applyIntegrationJobResult(
       jobLanded(effectiveState) ? effectiveState
         : wroteNothingOfItsOwn && ownWork.length === 0 ? 'NOTHING_TO_LAND'
           : null;
+    // §3.4, J-T1e one level up: a candidate's subject is a BRANCH, so the task it is about is the one
+    // its session belongs to — and the same two questions are asked of that task's work before the
+    // check may freeze the tip it resolved as the commit the owner will be shown. A `TASK_BRANCH`
+    // candidate's source is resolved by the check itself (M-S1, 0293), and the check is the only
+    // thing that ever looks at that branch: freeze a tip while the work can still move and the owner
+    // is asked to merge a commit the branch has already moved past, with nothing left to ask again.
+    if (job.kind === 'CHECK_PROMOTION' && job.promotionId && state === 'READY') {
+      const candidate = await readCandidateWork(tx, job.sessionId);
+      if (candidate) {
+        if (landingJudgedTooEarly(job.claimedAt, candidate.sessions)) {
+          // The same refusal as the landing above, and for the same reason: this is not an answer, it
+          // is the same question asked too early. The row goes back to the queue, where the claim
+          // guard above holds it until the task's work has stopped moving; the check then resolves
+          // the branch as it stands by then — carrying the commit this one could not have seen.
+          await tx.projectIntegrationJob.update({
+            where: { id: job.id },
+            data: {
+              state: 'QUEUED',
+              phase: null,
+              claimLeaseOwner: null,
+              claimedAt: null,
+              heartbeatAt: null,
+            },
+          });
+          return {
+            answer: { accepted: true, state: 'QUEUED' as never, receiptIds: [], openItemId: null },
+            after: null,
+          };
+        }
+        if (!checkSawTheFinishedBranch(job, candidate.sessions)) {
+          // The check looked at a branch the task's work did not end on, so the tip it resolved is
+          // not the work's — and no re-check of that branch would ever make it so. The candidate is
+          // retired and the branch the work IS on gets the candidate it was owed, which is what
+          // asking the owner about this work means. Written BEFORE the promotion is applied below,
+          // and that order is the whole of how the freeze is refused: `applyPromotionJobResult` will
+          // not move a promotion that has already ended. The job row still records what this check
+          // answered, about the branch it was handed — the fact that retired the candidate.
+          await refileCandidateBehindTheWork(tx, {
+            promotionId: job.promotionId,
+            taskId: candidate.taskId,
+            sessions: candidate.sessions,
+          });
+        }
+      }
+    }
+
     const receiptIds = receiptState && job.sessionId && !job.promotionId
       ? await MergeReceiptService.fromIntegrationJob(tx, {
         ownerId: job.ownerId,

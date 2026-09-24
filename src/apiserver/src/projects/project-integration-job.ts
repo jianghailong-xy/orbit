@@ -443,6 +443,43 @@ export function landingLeftWorkBehind(
 }
 
 /**
+ * Whether a promotion's check looked at the branch the task's work ENDED on — the question
+ * `jobSawTheFinishedBranch` asks for the criterion lane, asked here about a candidate (§3.4, J-T1e
+ * one level up).
+ *
+ * A `TASK_BRANCH` candidate's source is resolved by the check itself and written onto the candidate
+ * as the commit the owner is about to be asked about (M-S1, 0293), so "the tip the owner is asked
+ * about is the tip of the branch the work ended on" is only true when the check looked at that
+ * branch. `jobSawTheFinishedBranch` in `projects/project-criterion-landing.ts` is the same condition
+ * written for the criterion lane's audit — read it there. Two things differ, and both are this
+ * caller's:
+ *
+ *  - it asks about the TASK's work sessions rather than about the job's own one, for the reason
+ *    `landingLeftWorkBehind` gives: an enqueue freezes the NEWEST session, and the session that
+ *    holds the work may be another one;
+ *  - it does not read `worktree_dirty`. That column says what a finish could not commit, and a
+ *    session that has already ended is not something this guard can wait for: a candidate held on it
+ *    would be fetched, merged and checked again once per heartbeat with no answer at the end of it.
+ *    What that costs, said rather than left to be discovered: a commit made afterwards from that
+ *    session's own Commit action lands after the card was drawn, which no freeze can have seen. The
+ *    lane that DOES read it is asking a different question — not "may the owner be asked now" but
+ *    "does this task have nothing of its own at all" — where withholding is free.
+ *
+ * `false` covers two things, and the caller acts on the first of them only: the check looked at
+ * another branch — the work is elsewhere, and `refileCandidateBehindTheWork` files the candidate that
+ * branch is owed — or nothing finished on a branch at all, which `workBranchEndedOn` refuses to guess
+ * at and which no re-check of THIS candidate could ever learn about, so the candidate stands as the
+ * DONE left it.
+ */
+export function checkSawTheFinishedBranch(
+  check: { sourceRef: string },
+  sessions: ReadonlyArray<LandingWorkSessionFacts>,
+): boolean {
+  const ended = workBranchEndedOn(sessions);
+  return ended !== null && `refs/heads/${ended.branch}` === check.sourceRef;
+}
+
+/**
  * The landing a task is owed after the line answered `ALREADY_LANDED` about a branch its work did not
  * end on: the NEXT generation, bound to the branch the work ended on (§2.3 J-T1a, §2.6).
  *
@@ -844,8 +881,13 @@ async function backfillFinishedCodeTasks(
  *
  * Answers null when the partial unique index already holds a live candidate for this ref: one branch
  * is one question, and the one already standing is the one being asked.
+ *
+ * The second caller is `refileCandidateBehindTheWork` (`project-promotion.service.ts`): a check that
+ * found it was handed a branch the task's work did not end on retires that candidate and files this
+ * one for the branch the work is on, which is the same row a DONE written after the work settled
+ * would have made.
  */
-async function queueTaskBranchCandidate(
+export async function queueTaskBranchCandidate(
   tx: Prisma.TransactionClient,
   input: {
     ownerId: string;
