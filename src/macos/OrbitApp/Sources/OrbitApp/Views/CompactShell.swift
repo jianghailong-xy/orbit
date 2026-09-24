@@ -847,7 +847,7 @@ private struct NavigationDrawer: View {
     /// so the rail keeps a single column for state instead of one on each side.
     @ViewBuilder
     private var projectRows: some View {
-        let open = model.projects?.drawerProjects ?? []
+        let open = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
         if !open.isEmpty {
             drawerGroupLabel(AppSection.projects.title, count: open.count)
             ForEach(open) { project in
@@ -869,13 +869,14 @@ private struct NavigationDrawer: View {
                         .lineLimit(1)
                         .foregroundStyle(.primary)
                     Spacer(minLength: 6)
-                    switch ProjectAttention.drawerMark(project) {
+                    switch ProjectAttention.drawerMark(
+                        project, coordinator: model.projectCoordinators[PublicID.storageKey(project.id)]) {
                     case .needsYou(let count):
                         NeedsYouCountCapsule(count: count)
                     case .running:
                         if live {
                             SpinnerGlyph(color: .secondary)
-                                .accessibilityLabel("Tasks running")
+                                .accessibilityLabel("Running")
                         }
                     case .idle:
                         EmptyView()

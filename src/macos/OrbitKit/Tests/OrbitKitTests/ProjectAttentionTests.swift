@@ -464,4 +464,49 @@ final class ProjectAttentionTests: XCTestCase {
             ownerItems: [ProjectListOwnerItem(kind: .unknown, count: 1, oldestWaitingSince: at(Self.hour))]))
         XCTAssertEqual(ProjectAttention.needsYouCount([quiet, unknown]), 0)
     }
+
+    // MARK: the drawer, beside the live session list
+
+    /// A project's coordinator conversation as the Open list carries it: `projectId` in the public
+    /// spelling the list serves, whatever spelling the project row came in.
+    private func coordinator(of project: ProjectSummary, state: SessionRunState, lastTurn: TimeInterval,
+                             engineTurnActive: Bool = false) -> Session {
+        Session(id: "s-\(project.id)", title: nil, status: .cancelled, runState: state, agentId: "a",
+                assignedRunnerId: nil, pendingApprovals: 0, branch: nil, updatedAt: nil,
+                projectId: PublicID.toPublic(project.id), engineTurnActive: engineTurnActive,
+                lastTurnAt: at(lastTurn))
+    }
+
+    func testAWorkingCoordinatorMarksItsProjectRunningAndSortsItByItsTurn() {
+        let busyTasks = project(title: "FineWeb", running: 2, lastActivityAt: .some(at(20 * Self.minute)))
+        let coordinated = project(title: "Claude 账号池", ready: 2, lastActivityAt: .some(at(10 * Self.quiet)))
+        let quiet = project(title: "Quiet", ready: 1, lastActivityAt: .some(at(Self.hour)))
+        let pulses = ProjectAttention.coordinatorPulses([
+            coordinator(of: coordinated, state: .running, lastTurn: Self.minute),
+            coordinator(of: quiet, state: .awaitingInput, lastTurn: 30 * Self.quiet),
+        ])
+
+        XCTAssertEqual(ProjectAttention.drawerProjects([busyTasks, coordinated, quiet], coordinators: pulses)
+                        .map(\.title), ["Claude 账号池", "FineWeb", "Quiet"],
+                       "a coordinator's turn a minute ago is newer than any task write")
+        XCTAssertEqual(ProjectAttention.drawerProjects([busyTasks, coordinated, quiet]).map(\.title),
+                       ["FineWeb", "Quiet", "Claude 账号池"], "without the session list: task activity alone")
+        XCTAssertEqual(ProjectAttention.drawerMark(
+            coordinated, coordinator: pulses[PublicID.storageKey(coordinated.id)]), .running)
+        XCTAssertEqual(ProjectAttention.drawerMark(coordinated), .idle)
+        XCTAssertEqual(ProjectAttention.drawerMark(quiet, coordinator: pulses[PublicID.storageKey(quiet.id)]), .idle,
+                       "a coordinator waiting for a reply is not working")
+    }
+
+    func testACoordinatorIsWorkingExactlyWhenTheSessionListDrawsItsSpinner() {
+        let p = project(title: "P")
+        let selfDriven = coordinator(of: p, state: .awaitingInput, lastTurn: Self.minute, engineTurnActive: true)
+        XCTAssertEqual(ProjectAttention.coordinatorPulses([selfDriven])[PublicID.storageKey(p.id)]?.working, true)
+        let queued = coordinator(of: p, state: .queued, lastTurn: Self.minute)
+        XCTAssertEqual(ProjectAttention.coordinatorPulses([queued])[PublicID.storageKey(p.id)]?.working, false)
+        let ordinary = Session(id: "x", title: nil, status: .cancelled, runState: .running, agentId: "a",
+                               assignedRunnerId: nil, pendingApprovals: 0, branch: nil, updatedAt: nil)
+        XCTAssertTrue(ProjectAttention.coordinatorPulses([ordinary]).isEmpty,
+                      "a session that coordinates nothing is nobody's coordinator")
+    }
 }

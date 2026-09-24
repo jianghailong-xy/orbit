@@ -133,9 +133,27 @@ public enum ProjectDrawerMark: Equatable, Sendable {
     /// One of the four owner items is waiting on the reader, with how many items wait — the four
     /// kinds together. The row's amber count, as a Workspace row counts its sessions waiting on you.
     case needsYou(Int)
-    /// Tasks are running.
+    /// Tasks are running, or its coordinator is working.
     case running
     case idle
+}
+
+/// What the live session list says about a project's coordinator conversation.
+///
+/// The drawer's project rows are fetched — on mount, and again after a task or approval event — but
+/// a coordinator's turns arrive on the session stream, which names no project. Read beside the row,
+/// they are what makes a project whose coordinator is working read as running, and sort where the
+/// work is, the moment the session list shows it rather than at the next fetch.
+public struct ProjectCoordinatorPulse: Equatable, Sendable {
+    /// The conversation draws the session list's running spinner.
+    public let working: Bool
+    /// Its newest turn: activity the project's own task stamps do not record.
+    public let lastTurnAt: String?
+
+    public init(working: Bool, lastTurnAt: String?) {
+        self.working = working
+        self.lastTurnAt = lastTurnAt
+    }
 }
 
 public enum ProjectAttention {
@@ -479,18 +497,47 @@ public enum ProjectAttention {
         all.filter(needsYou).count
     }
 
-    public static func drawerMark(_ project: ProjectSummary) -> ProjectDrawerMark {
+    public static func drawerMark(_ project: ProjectSummary,
+                                  coordinator: ProjectCoordinatorPulse? = nil) -> ProjectDrawerMark {
         if needsYou(project) {
             let items = (project.attention?.ownerItems ?? []).filter { $0.kind != .unknown }
             return .needsYou(items.reduce(0) { $0 + $1.count })
         }
-        if project.buckets.running > 0 { return .running }
+        if project.buckets.running > 0 || coordinator?.working == true { return .running }
         return .idle
     }
 
+    /// The coordinator conversations in a live session list, keyed by `PublicID.storageKey` of the
+    /// project each coordinates (a session's `projectId` is set on coordinators alone). The running
+    /// test is the session list's own spinner, so the two marks cannot disagree about one
+    /// conversation.
+    public static func coordinatorPulses(_ sessions: [Session]) -> [String: ProjectCoordinatorPulse] {
+        var pulses: [String: ProjectCoordinatorPulse] = [:]
+        for session in sessions {
+            guard let projectID = session.projectId else { continue }
+            var working = false
+            if case .spinner = SessionStatusGlyph.make(for: session).shape { working = true }
+            let key = PublicID.storageKey(projectID)
+            let seen = pulses[key]
+            let newest = rank(session.lastTurnAt) > rank(seen?.lastTurnAt) ? session.lastTurnAt : seen?.lastTurnAt
+            pulses[key] = ProjectCoordinatorPulse(working: working || seen?.working == true, lastTurnAt: newest)
+        }
+        return pulses
+    }
+
+    /// A project's newest activity: its latest task write, or its coordinator's latest turn when that
+    /// is newer.
+    private static func latestActivity(_ project: ProjectSummary,
+                                       _ coordinators: [String: ProjectCoordinatorPulse]) -> String? {
+        let turn = coordinators[PublicID.storageKey(project.id)]?.lastTurnAt
+        return rank(turn) > rank(project.lastActivityAt) ? turn : project.lastActivityAt
+    }
+
     /// The drawer's project rows: open projects only, the ones waiting on the reader first (longest
-    /// wait first), then by most recent task activity.
-    public static func drawerProjects(_ all: [ProjectSummary]) -> [ProjectSummary] {
+    /// wait first), then by most recent activity — a task write or a coordinator turn, whichever is
+    /// newer.
+    public static func drawerProjects(_ all: [ProjectSummary],
+                                      coordinators: [String: ProjectCoordinatorPulse] = [:]) -> [ProjectSummary] {
         all.filter { $0.status == .open }.sorted { a, b in
             let aNeeds = needsYou(a), bNeeds = needsYou(b)
             if aNeeds != bNeeds { return aNeeds }
@@ -499,7 +546,7 @@ public enum ProjectAttention {
                                           leadOwnerItem(b)?.oldestWaitingSince)
                 if byWait != 0 { return byWait < 0 }
             }
-            let byActivity = byInstantDesc(a.lastActivityAt, b.lastActivityAt)
+            let byActivity = byInstantDesc(latestActivity(a, coordinators), latestActivity(b, coordinators))
             if byActivity != 0 { return byActivity < 0 }
             let byCreated = byInstantDesc(a.createdAt, b.createdAt)
             if byCreated != 0 { return byCreated < 0 }

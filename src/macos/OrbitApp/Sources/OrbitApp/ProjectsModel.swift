@@ -33,8 +33,11 @@ final class ProjectsModel {
     /// How many projects have something waiting on the reader in person — the drawer's count.
     var needsYouCount: Int { ProjectAttention.needsYouCount(projects) }
 
-    /// The drawer's project rows: open projects, the ones waiting on the reader first.
-    var drawerProjects: [ProjectSummary] { ProjectAttention.drawerProjects(projects) }
+    /// The drawer's project rows: open projects, the ones waiting on the reader first, then the most
+    /// recently active — a coordinator's live turns counted beside the fetched task activity.
+    func drawerProjects(coordinators: [String: ProjectCoordinatorPulse]) -> [ProjectSummary] {
+        ProjectAttention.drawerProjects(projects, coordinators: coordinators)
+    }
 
     func load() async {
         loadState.begin()

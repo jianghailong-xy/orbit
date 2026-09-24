@@ -253,6 +253,9 @@ final class AppModel {
     /// Workspace ids with a background job in flight and nobody generating — read off the same
     /// glyph, so the two marks can never disagree about one row. Drawn quieter than the spinner.
     private(set) var jobWorkspaceIDs: Set<String> = []
+    /// Each project's coordinator conversation as the Open list shows it, by project — what the
+    /// drawer's project rows read beside their fetched summaries (`ProjectCoordinatorPulse`).
+    private(set) var projectCoordinators: [String: ProjectCoordinatorPulse] = [:]
     #endif
 
     let tokenStore: TokenStore
@@ -542,6 +545,7 @@ final class AppModel {
         #if os(iOS)
         runningWorkspaceIDs = []
         jobWorkspaceIDs = []
+        projectCoordinators = [:]
         #endif
         sessionDetails.removeAll()
         resetNavigation()
@@ -1120,6 +1124,7 @@ final class AppModel {
             #if os(iOS)
             runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
             jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
+            projectCoordinators = ProjectAttention.coordinatorPulses(list)
             #endif
             // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
             // here instead of leaving it to fetch the identical payload on its own timer.
