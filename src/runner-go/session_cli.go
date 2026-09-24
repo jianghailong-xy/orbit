@@ -214,7 +214,10 @@ needs the session:create scope and may import only into its pinned workspace.
 
 var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", "--provider <claude|codex|kimi|opencode|configured slug>", permissionModeFlagSpec(), "--wait[=true|false]", "--json"}, Mutates: true},
-	{Tool: "session_import", Argv: []string{"orbit", "session", "import"}, Usage: "orbit session import CLAUDE_SESSION_ID [--workspace ID] [--json]", Arguments: []string{"[claude-session-id] (required)", "--workspace <id>", "--json"}, Mutates: true},
+	// The one session verb a session cannot run: cliSessionImport refuses inside one, and the
+	// transcript it imports is on this machine's disk. A running agent is the reader that never
+	// gets it — the headless door below is where this command is advertised.
+	{Tool: "session_import", Argv: []string{"orbit", "session", "import"}, Usage: "orbit session import CLAUDE_SESSION_ID [--workspace ID] [--json]", Arguments: []string{"[claude-session-id] (required)", "--workspace <id>", "--json"}, Mutates: true, HeadlessOnly: true},
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},

@@ -182,6 +182,19 @@ export const COORDINATOR_UNAVAILABLE_CODE = 'COORDINATOR_UNAVAILABLE';
 export const COORDINATOR_SESSION_LIVE_CODE = 'COORDINATOR_SESSION_LIVE';
 
 /**
+ * "The conversation was resolved, and this message still did not reach it."
+ *
+ * The other half of the pair `COORDINATOR_UNAVAILABLE_CODE` opens, and deliberately not the same
+ * one. That code says the project has nowhere to open a coordinator and only the account owner can
+ * fix it (its `requiredAction` is a rebind); this one says a coordinator WAS found — possibly a
+ * fresh one, opened for this very message — and the write onto it was refused. Same addressee in
+ * neither case: the sentence that refused the write rides along inside this one, because a caller
+ * that has to tell "no coordinator anywhere" from "the coordinator would not take it" cannot read
+ * both out of one phrase.
+ */
+export const COORDINATOR_MESSAGE_UNDELIVERED_CODE = 'COORDINATOR_MESSAGE_UNDELIVERED';
+
+/**
  * Which press `coordinator` is answering.
  *
  * `open` resolves-or-creates and never leaves a standing conversation behind; `replace` is the
@@ -3962,6 +3975,173 @@ export class ProjectsService {
     return replaced.created
       ? { ...replaced, replacedSessionId: standing, replaceReason: blockedReason }
       : replaced;
+  }
+
+  /**
+   * Hand one message to whichever conversation coordinates this project — the address resolved at
+   * the moment of DELIVERY, which is the whole of what this door adds to `ensureCoordinator` above.
+   *
+   * THE HOLE IT CLOSES. Resolving a coordinator and then sending to the id that came back is two
+   * requests, and between them a rotation is invisible to the caller: the id it is holding names a
+   * conversation that no longer coordinates anything, and the message lands on a reader instead of
+   * on the project's coordinator. So a caller addresses the PROJECT and this resolves the
+   * conversation inside the same request, in the same order the server's own deliveries do
+   * (`coordinator-delivery.service.ts` — the dependent-ready and dispatch-refusal facts).
+   *
+   * THREE OUTCOMES, and the middle one is the only one that writes anything:
+   *
+   *   * reachable → delivered to the standing conversation. `created: false`, and nothing about the
+   *     coordination changed;
+   *   * unreachable → the SAME resolution, and the same rotation, `ensureCoordinator` above performs
+   *     (delegated to it rather than re-derived: one rule, one compare-and-swap, one generation),
+   *     and the message then goes to the conversation that replaced the one it could not use. This
+   *     is the honest reading of "deliver to this project's coordinator" — the caller asked for a
+   *     delivery, not for a particular row — and the response says what happened rather than leaving
+   *     the caller to discover it;
+   *   * no coordinator at all → the first one, opened exactly as the owner's own open opens it, and
+   *     the message is queued behind its opening turn.
+   *
+   * "REACHABLE" INCLUDES ENDED-BUT-REVIVABLE, and that case is a REVIVE rather than a replacement —
+   * the direct consequence of the rule above: a conversation is only replaced when it cannot be
+   * handed a message, and a conversation whose runner can still bring it back can be. So the
+   * delivery asks `resume` for an ended conversation (which is `session send --resume-if-ended`) and
+   * `createTurn` for every other shape, which is the same pair, and the same placement rules, the
+   * send door uses. Nothing is added here about WHERE the message sits: a live turn joins it, a
+   * queued one queues behind it, and a conversation that has just been opened reads it after its
+   * opening turn.
+   *
+   * IDEMPOTENCY AND SPEND ARE THE SEND DOOR'S, unchanged. `clientTurnId` is the caller's key and the
+   * turn's uniqueness: a retry that repeats it gets its committed turn back on whichever
+   * conversation it was written to, and — because the conversation it was written to is the one the
+   * project points at — a retry does not rotate, since the replacement is reachable by construction.
+   * The attempt charge is the caller's (`participateSendTransaction` → `SessionAttemptService.chargeSteer`,
+   * supplied by the runner door, which holds that dependency) and runs under the same lock and in the
+   * same transaction as the turn: a retry that observes the durable key spends nothing.
+   *
+   * WHAT IT REFUSES, and this is the distinction the code above exists for: a landing that cannot
+   * open does not come back here as anything of this method's making — `ensureCoordinator`'s
+   * delegation raises `COORDINATOR_UNAVAILABLE`, whose addressee is the account owner. A write that
+   * is refused AFTER the conversation was resolved comes back as `COORDINATOR_MESSAGE_UNDELIVERED`,
+   * which says the opposite thing to a caller: there is a coordinator, and this message is not on
+   * it. Every ordinary refusal from the send is translated that way; anything else is a fault and is
+   * re-raised as itself.
+   */
+  async sendToCoordinator(
+    ownerId: string,
+    id: string,
+    actingSessionId: string,
+    message: string,
+    clientTurnId: string,
+    opts?: {
+      /**
+       * The orchestration charge, against the conversation this call ends up delivering to.
+       *
+       * A function of the session rather than a ready-made `participateSendTransaction`, because
+       * WHICH conversation this is, is this method's answer to compute and not the caller's to know:
+       * the caller supplies the verb (`SessionAttemptService.chargeSteer`, which the runner door
+       * holds), and this decides what it is spent on. Invoked inside the transaction that writes the
+       * turn, so a retry that replays its key never reaches it.
+       */
+      chargeSteer?: (sessionId: string, tx: Prisma.TransactionClient) => Promise<void>;
+    },
+  ): Promise<{
+    sessionId: string;
+    created: boolean;
+    workspaceId: string | null;
+    /** The conversation this call ended, when it rotated. Absent when it reused or created one. */
+    replacedSessionId?: string;
+    /** Why the conversation it left behind could not be handed a message. */
+    replaceReason?: SessionReceiveBlockedReason;
+    /** The turn the message became, by the key the caller can repeat. */
+    turn: { clientTurnId: string };
+  }> {
+    const resolved = await this.ensureCoordinator(ownerId, id, actingSessionId);
+    const turn = { clientTurnId, content: message };
+    const charge = opts?.chargeSteer
+      ? {
+          participateSendTransaction: (tx: Prisma.TransactionClient) =>
+            opts.chargeSteer!(resolved.sessionId, tx),
+        }
+      : undefined;
+    try {
+      // One branch, and it is the send door's own: `resume` is the only verb that may write to a
+      // conversation whose run has ended (it revives it), and `createTurn` is the only one that may
+      // write to a conversation that is live or still waiting for a runner — a PENDING row that has
+      // not been claimed yet is neither terminal nor resumable, so `resume` refuses it (`NOT_TERMINAL`)
+      // while queueing onto it is exactly what the composer does.
+      if (await this.conversationHasEnded(ownerId, resolved.sessionId)) {
+        await this.sessions.resume(ownerId, resolved.sessionId, turn, charge);
+      } else {
+        await this.sessions.createTurn(ownerId, resolved.sessionId, turn, charge);
+      }
+    } catch (e) {
+      // The refusals a send gives for an ordinary state of the world rather than a fault: the
+      // conversation is gone, it ended or is being written right now (`SessionNotSendable` is one of
+      // these), its workspace is gone or disabled, it runs on no runner, the attempt budget refused
+      // the steer, or the key names a turn written with another body. Same set and same reading as
+      // `coordinator-delivery.service.ts` translates for the server's own deliveries; anything else
+      // is a fault and is left alone.
+      if (
+        e instanceof NotFoundException
+        || e instanceof ConflictException
+        || e instanceof ForbiddenException
+        || e instanceof BadRequestException
+      ) {
+        throw ProjectsService.coordinatorMessageUndelivered(
+          resolved.replacedSessionId == null
+            ? ProjectsService.refusalSentence(e)
+            : `${ProjectsService.refusalSentence(e)} (the coordinator this project named was ` +
+              'replaced by this same call, and the message did not reach the replacement either)',
+        );
+      }
+      throw e;
+    }
+    return { ...resolved, turn: { clientTurnId } };
+  }
+
+  /**
+   * Whether this conversation's run is over — the branch the delivery above takes.
+   *
+   * Deliberately the same line `resume` draws for itself (`SessionsService.TERMINAL`): a terminal
+   * run is what a revive is for, and every other state a resolved coordinator can be in — live,
+   * waiting for a runner, awaiting input — is written to directly. Read here rather than inferred
+   * from `receiveBlockedReasonFor`'s answer, which says whether a message CAN be delivered and not
+   * which verb delivers it. A row that vanished between the resolution and this read is not read as
+   * ended: the write below is what refuses it, with the refusal this door translates.
+   */
+  private async conversationHasEnded(ownerId: string, sessionId: string): Promise<boolean> {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: { status: true },
+    });
+    return session != null && SessionsService.TERMINAL.includes(session.status);
+  }
+
+  /** The sentence an `HttpException` carries, for the refusal that wraps it. */
+  private static refusalSentence(error: Error): string {
+    const response = (error as { getResponse?: () => unknown }).getResponse?.();
+    return typeof response === 'string'
+      ? response
+      : ((response as { message?: string } | undefined)?.message ?? error.message);
+  }
+
+  /**
+   * The delivery refusal above, structured the way the coordinator pair is: a code a caller switches
+   * on, and the sentence that actually refused the write inside the message.
+   *
+   * It carries no ids and no `requiredAction`, and both omissions are the contrast with
+   * `coordinatorUnavailable`: there is nothing here for the account owner to press, and the caller's
+   * own next move (retry, or read the conversation and decide) does not depend on knowing which row
+   * it was — which is also why an id could not be put here even if it helped: error bodies are the
+   * one response `PublicIdInterceptor` does not rewrite, so it would go out raw.
+   */
+  private static coordinatorMessageUndelivered(reason: string): ConflictException {
+    return new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: COORDINATOR_MESSAGE_UNDELIVERED_CODE,
+      message: `${reason} — the message was not handed to this project’s coordinator`,
+    });
   }
 
   /**

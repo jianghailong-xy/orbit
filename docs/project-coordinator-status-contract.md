@@ -538,3 +538,74 @@ The behaviour above is pinned by
 of an ended-but-revivable one, replacement for each of the four unreachable shapes (offline runner,
 never ran, Trash, replaced run), the refusal that leaves the standing conversation standing, and the
 orchestration gate refusing without writing a row.
+
+## The agent's second door: `POST /runner/projects/:id/coordinator/messages`
+
+| | |
+| --- | --- |
+| Method / path | `POST /api/runner/projects/:id/coordinator/messages` |
+| Auth | the machine's runner token (`RunnerAuthGuard`) **and** a live session — `X-Orbit-Session-Id` with `X-Orbit-Session-Token` from `RunnerOrchestrationAuthorizer.assert`, exactly as `ensure` above. No headless path and no service token: this is an agent spending orchestration to talk to its project's coordinator |
+| `:id` | `PublicIdPipe` |
+| Body | `{ message, clientTurnId? }` — `clientTurnId` is the same idempotency key `POST /runner/sessions/:id/turns` takes, minted by the door when absent |
+| Side effects | a turn on the coordinator conversation, and — only when that conversation cannot take one — the same rotation `ensure` performs |
+| Response | `{ sessionId, created, workspaceId, replacedSessionId?, replaceReason?, turn: { clientTurnId } }` — every id a public id, `replacedSessionId`/`replaceReason` present only when this call rotated to deliver |
+
+**The two doors are a pair, and the split is the point.** `ensure` answers "which conversation
+coordinates this project, opening one if the last one is unreachable" — the question a caller asks
+when it wants *that conversation*, to read it or to keep it. This door answers "put this message in
+front of whatever coordinates this project", which is a different question with a different failure
+mode: resolving a coordinator and then sending to the id that came back is two requests, and a
+rotation between them is invisible to the caller — the id it holds names a conversation that no
+longer coordinates anything, and the message lands on a reader instead of on the project's
+coordinator. So the message names the PROJECT and the conversation is resolved at the moment of
+DELIVERY, in the same request and in the same order the server's own deliveries already work
+(`coordinator-delivery.service.ts`, the dependent-ready and dispatch-refusal facts).
+
+What that means in practice:
+
+- **deliverable → delivered, `created: false`, and nothing about the coordination moves.** The
+  resolution, and the word `replaceReason` would carry, are `ensure`'s own — this door delegates to
+  it rather than re-deriving the rule, so there is one compare-and-swap, one
+  `project_coordinator_rotation_count`, and one answer per row;
+- **ended-but-revivable → REVIVED, not replaced.** The delivery is `resume` — i.e. `session send
+  --resume-if-ended` — because a conversation whose runner can still bring it back is a conversation
+  that can be handed a message, and only one that cannot is replaced;
+- **unreachable → the message goes to the replacement**, in this same call. The caller asked for a
+  delivery, not for a particular row, and the response says which of the two happened (with
+  `replacedSessionId` and `replaceReason`) instead of leaving the caller to discover it;
+- **no coordinator at all → the first one**, opened exactly as the owner's own open opens it, with
+  the message queued behind its opening turn.
+
+Nothing about WHERE the message sits is decided here. It is the send door's own placement — a live
+turn joins it, a queued message queues behind it, a conversation that has just been opened reads it
+after its opening turn — and nothing in this door adds an interruption or a reordering. A message is
+still a notification, never a stop (§0 of `coordinator-delivery.service.ts`).
+
+**Idempotency and spend are the send door's, unchanged.** `clientTurnId` is the caller's key and the
+turn's uniqueness (`(session_id, client_turn_id)`): a retry that repeats it gets its committed turn
+back. Rotation does not break that — the replacement is reachable by construction, so a retry
+resolves to the conversation the first attempt already wrote to and replays rather than rotating
+again. The orchestration charge (`participateSendTransaction` → `SessionAttemptService.chargeSteer`)
+is spent on whatever conversation the delivery resolved to, inside the transaction that writes the
+turn, so a retry that observes the durable key spends nothing.
+
+**The refusal surface is two sentences, and they are not interchangeable.** A project with nowhere
+to open a coordinator is `COORDINATOR_UNAVAILABLE` (409, `owner: USER`, `requiredAction` = rebind),
+raised by the shared rotation and not translated here: who the coordinator is and where it runs is
+the account owner's decision (§8.2), and an agent that meets it hands it to a person instead of
+retrying. The opposite outcome — a coordinator WAS resolved, possibly a fresh one opened for this
+very message, and the write onto it was refused anyway — is `COORDINATOR_MESSAGE_UNDELIVERED` (409,
+no `owner` and no `requiredAction`, because there is nothing for the owner to press), and the
+sentence that actually refused the write rides inside its message. One of those sends a person to a
+setting; the other tells the caller its message is not there. A caller that could not tell them
+apart would go and change a setting that has nothing to do with why.
+
+The behaviour above is pinned by
+`src/apiserver/src/projects/project-coordinator-send.pg.spec.ts`: delivery to a live conversation
+with the coordination untouched, a revive that is provably `resume` rather than a replacement, one
+call that rotates past an offline runner AND delivers to the replacement (the generation advancing
+exactly once, the outgoing conversation completed, the message landing behind the new coordinator's
+opening turn), the same `clientTurnId` sent twice writing one turn and spending one rotation, the
+landing refusal leaving every row where it was, the delivery refusal carrying its own code and
+rolling back its transaction, and the orchestration gate refusing without opening a conversation or
+writing a turn.

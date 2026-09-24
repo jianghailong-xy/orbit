@@ -201,3 +201,55 @@ func TestSessionCLIImportRefusesInsideASession(t *testing.T) {
 		t.Fatalf("error = %v, want the headless-only refusal", err)
 	}
 }
+
+// The refusal above is only half the contract; the other half is that `capabilities --json` must not
+// send an agent at the door in the first place. Asserted in BOTH directions, because either one
+// alone is satisfiable by a document that has lost the command entirely: the headless operator, for
+// whom `orbit session import` is the whole door, reaches it only through this advertisement.
+func TestSessionImportIsAdvertisedOnlyHeadless(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	t.Setenv(envServiceToken, "")
+	t.Setenv("ORBIT_AGENT_ID", "")
+	// A whole document is too long to read in a failure; its ids are the part that matters.
+	advertisedIDs := func(doc cliCapabilitiesDocument) string {
+		ids := make([]string, 0, len(doc.Capabilities))
+		for _, capability := range doc.Capabilities {
+			ids = append(ids, capability.ID)
+		}
+		return strings.Join(ids, ", ")
+	}
+
+	// In a session, with the orchestration grant and a session credential — the reader this
+	// document is composed for. `import` is withheld, while the verbs beside it are not: the
+	// absence has to be specific to this command, not the whole family dropping out.
+	t.Setenv(envMCPOrchestration, "true")
+	t.Setenv(envOrchestrationToken, "session-token")
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	inSession := buildCLICapabilities("/opt/orbit")
+	if capability := sessionCLICapabilityByID(inSession.Capabilities, "session_import"); capability != nil {
+		t.Errorf("a running agent is advertised `orbit session import`, which refuses inside every session: %#v", capability)
+	}
+	if capability := sessionCLICapabilityByID(inSession.Capabilities, "session_create"); capability == nil {
+		t.Fatalf("the session family is missing from the in-session document, so the check above proves nothing. Advertised: %s",
+			advertisedIDs(inSession))
+	}
+
+	// Headless (launchd/cron): the runner credential reaches `import` (runnerCredentialActions), so
+	// the document offers it — with the narrower description that credential answers for. The
+	// orchestration env flag is deliberately varied: it alone never decides what a headless process
+	// may run.
+	t.Setenv("ORBIT_SESSION_ID", "")
+	t.Setenv(envOrchestrationToken, "")
+	for _, allow := range []string{"", "true"} {
+		t.Setenv(envMCPOrchestration, allow)
+		headless := buildCLICapabilities("/opt/orbit")
+		capability := sessionCLICapabilityByID(headless.Capabilities, "session_import")
+		if capability == nil {
+			t.Fatalf("`orbit session import` is missing headless (allow=%q), which is the only door it has. Advertised: %s",
+				allow, advertisedIDs(headless))
+		}
+		if got, want := capability.Description, headlessActionDescription["import"]; got != want {
+			t.Errorf("headless session_import description = %q, want %q", got, want)
+		}
+	}
+}

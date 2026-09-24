@@ -499,6 +499,28 @@ export class AskOwnerDto {
 }
 
 /**
+ * One message an agent hands to the conversation that coordinates a project.
+ *
+ * The project is the ADDRESS (`:id` on the route), never a session id in this body, and that is the
+ * whole point of the field below: a caller that resolved a coordinator and then sent to it holds an
+ * id that a rotation invalidates, and it has no way to see that happen. Naming the project instead
+ * makes the server resolve the conversation at the moment of delivery — see
+ * `ProjectsService.sendToCoordinator`.
+ *
+ * `clientTurnId` is the same idempotency key `POST /runner/sessions/:id/turns` takes, with the same
+ * meaning: a retry that repeats it gets the turn it already filed back rather than a second copy of
+ * the message. Omitted, one is minted here for a caller that does not care.
+ *
+ * No length bound is declared here, deliberately. The bound that matters is on the turn itself
+ * (`assertPromptSize`, whose limit is a client-rendering one), and a second, different bound at this
+ * door would refuse a message the conversation it is addressed to would accept.
+ */
+export class SendToCoordinatorDto {
+  @IsString() @MinLength(1) message!: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) clientTurnId?: string;
+}
+
+/**
  * The owner confirming a merge into main (contract §3.4 M-F3).
  *
  * `sourceSha` is FRESHNESS, not a key: it says which candidate the card the owner pressed was drawn

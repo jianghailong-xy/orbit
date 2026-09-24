@@ -56,6 +56,14 @@ export const NOT_NOW = 'Not now';
 export const MERGING = 'Merging…';
 export const CANCEL_MERGE = 'Cancel';
 export const OPEN_COORDINATOR = 'Open coordinator';
+/** State D's press, which reads rather than acts: who has the branch, and for how long. It moved
+ *  onto the button from the body's `Who` row (owner decision 2026-09-24) because the grey
+ *  `Merge to main` it used to say reads as "you cannot press this" — the opposite of what state D
+ *  means, which is that the reader does not have to. */
+export const RESOLVING = 'Coordinator is resolving it';
+/** The same press when the clock has handed the item to the reader: the `Who` row's other holder,
+ *  carried so that moving the sentence onto the button loses nothing. */
+export const IT_IS_YOURS = 'It is yours';
 
 /** State C's heading, and state B's one sentence about what the reader has to do (nothing). */
 export const MERGED_HEADING = '✓ Merged into main';
@@ -355,9 +363,11 @@ function MergedRows({
 }
 
 /**
- * State D's body: why it cannot merge, who has it, and what happens when they are done — or when
- * they are not. The "who" and the "when" come from the exception item, which is where the platform
- * records whose problem this is; a card without one says the first two and stops.
+ * State D's body: why it cannot merge, and what happens when whoever has it is done — or when they
+ * are not. Who has it is NOT a row here any more: it is on the press (`resolvingPress`), which is
+ * the thing the reader looks at, and saying it twice was the whole of what this card got wrong.
+ * The "when" still comes from the exception item, which is where the platform records whose
+ * problem this is; a card without one says the reason and stops.
  */
 function BlockedRows({
   promotion,
@@ -370,7 +380,6 @@ function BlockedRows({
 }): JSX.Element {
   const upstream = shortRef(promotion.upstreamRef);
   const failed = promotion.checks.filter((check) => !passed(check));
-  const waited = item ? formatSpan(now - Date.parse(item.waitingSince)) : null;
   const escalatesIn =
     item?.escalateAt != null ? Date.parse(item.escalateAt) - now : null;
   return (
@@ -400,13 +409,6 @@ function BlockedRows({
           </span>
         )}
       </Row>
-      {item ? (
-        <Row k="Who">
-          {item.assignee === 'COORDINATOR'
-            ? `The coordinator is resolving it on the project branch${waited ? ` · ${waited}` : ''}`
-            : `It is yours${waited ? ` · waiting ${waited}` : ''}`}
-        </Row>
-      ) : null}
       <Row k="Then">
         {`checks re-run and this card comes back as “Merge ${shortRef(promotion.sourceRef)} into ${upstream}?”`}
         {escalatesIn != null && escalatesIn > 0
@@ -417,6 +419,26 @@ function BlockedRows({
       </Row>
     </>
   );
+}
+
+/**
+ * State D's press: who has the branch and how long they have had it, which is the sentence the
+ * body's `Who` row used to carry, and whether the mark over it turns.
+ *
+ * The mark is `.promotion-spin`, the card's one moving part, and it says somebody else is working
+ * on the branch — so it is drawn over the coordinator's sentence and not over the reader's own,
+ * which is waiting on them rather than on anybody. A card whose item has not been read says who
+ * state D means and stops, exactly as the row did without one: the wait is the item's to know.
+ */
+export function resolvingPress(
+  item: ProjectOpenItemRow | null,
+  now: number,
+): { label: string; spinning: boolean } {
+  const waited = item ? formatSpan(now - Date.parse(item.waitingSince)) : null;
+  if (item && item.assignee !== 'COORDINATOR') {
+    return { label: `${IT_IS_YOURS}${waited ? ` · waiting ${waited}` : ''}`, spinning: false };
+  }
+  return { label: `${RESOLVING}${waited ? ` · ${waited}` : ''}`, spinning: true };
 }
 
 /** `POST /projects/:id/promotions/:promotionId/{confirm|decline|cancel}` — the owner's three doors
@@ -478,6 +500,8 @@ export function ProjectPromotionCard({
   const merging = promotion.state === 'CONFIRMED' || promotion.state === 'RECHECKING';
   const blocked = promotion.state === 'BLOCKED';
   const coordinator = item?.delivery.sessionId ?? null;
+  // D's press says who has the branch, and the body's rows no longer repeat it (`BlockedRows`).
+  const resolving = resolvingPress(item, now);
 
   return (
     <div
@@ -520,11 +544,24 @@ export function ProjectPromotionCard({
           <CardActionButton
             tone="primary"
             // The one rule `CardAction` exists for: a press that the door would refuse — a merge
-            // while the tree is blocked, or one already under way — is disabled, never lit.
+            // while the tree is blocked, or one already under way — is disabled, never lit. A
+            // blocked one is disabled AND says who has the branch instead, so a grey button reads
+            // as a state rather than as a refusal (`resolvingPress`).
             disabled={merging || blocked || decide.isPending}
             onClick={() => decide.mutate('confirm')}
           >
-            {merging ? MERGING : MERGE_TO_MAIN}
+            {merging ? (
+              MERGING
+            ) : blocked ? (
+              <>
+                {resolving.spinning ? (
+                  <span className="promotion-spin" aria-hidden="true" />
+                ) : null}
+                {resolving.label}
+              </>
+            ) : (
+              MERGE_TO_MAIN
+            )}
           </CardActionButton>
           {merging ? (
             <CardActionButton disabled={decide.isPending} onClick={() => decide.mutate('cancel')}>
