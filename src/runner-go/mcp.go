@@ -560,8 +560,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// No sessionId in the body: the PROJECT is the address, and the conversation it resolves to
 		// is decided by the server at the moment of delivery. The acting session travels as the
 		// header it already is, which is also what makes the delivery the caller's own.
-		raw, err := s.t.sendProjectCoordinator(s.sessionID, s.orchestrationToken, id,
-			map[string]interface{}{"message": message})
+		body := map[string]interface{}{"message": message}
+		copyIfPresent(body, args, "clientTurnId")
+		raw, err := s.t.sendProjectCoordinator(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("send to project coordinator failed: "+err.Error(), true)
 		}
@@ -3160,7 +3161,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"the account owner because where a project's coordination lives is their decision " +
 					"— a retry answers the same thing; a write refused after a coordinator WAS found " +
 					"comes back as COORDINATOR_MESSAGE_UNDELIVERED with the sentence that refused it " +
-					"inside. The acting session is the authority and there is no headless form.",
+					"inside. The acting session is the authority and there is no headless form. Reuse " +
+					"clientTurnId after an uncertain response.",
 				"inputSchema": obj(map[string]interface{}{
 					"projectId": map[string]interface{}{
 						"type":        "string",
@@ -3169,6 +3171,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"message": map[string]interface{}{
 						"type":        "string",
 						"description": "The message to deliver to that project's coordinator.",
+					},
+					"clientTurnId": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional idempotency key the message is written under. Re-sending the same message with this key returns the turn it already filed instead of delivering a second copy — use it when retrying a call whose answer you never saw. Omitted, the server mints one and every call is a new message.",
 					},
 				}, "projectId", "message"),
 			},

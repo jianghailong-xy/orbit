@@ -1586,6 +1586,90 @@ func TestProjectSendReadsTheMessageFromStdin(t *testing.T) {
 	}
 }
 
+// --client-turn-id is what makes a retry safe: the key the message is written under travels exactly
+// as it was given, beside the message, so a call whose answer was lost can be repeated with it and
+// get the same turn back instead of a second copy.
+func TestProjectSendCarriesTheClientTurnId(t *testing.T) {
+	var raw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		_, _ = w.Write([]byte(projectSendDeliveredJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	ensureCoordinatorSession(t, "343dlzsYWKo5z8l2M8tsB")
+
+	const key = "shard-4:Retry/7f3a"
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{"send", "343dlzsYWKo5z8l2M8tsA", "--message", "the shard is red",
+		"--client-turn-id", key, "--json"}, strings.NewReader(""), &out)
+	if err != nil {
+		t.Fatalf("project send: %v", err)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &body); err != nil {
+		t.Fatalf("project send body is not JSON: %v\n%s", err, raw)
+	}
+	if len(body) != 2 || body["message"] != "the shard is red" || body["clientTurnId"] != key {
+		t.Fatalf("project send body = %#v", body)
+	}
+}
+
+// Without a key the request is the one this command always sent — the message alone — and the
+// server mints the key itself. An empty or blank --client-turn-id is no key either, exactly as for
+// `session send`: the route floors the field at one character, so an empty string sent for "none"
+// would be refused where the caller asked for nothing.
+func TestProjectSendSendsNoClientTurnIdWhenNoneIsGiven(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"omitted", nil},
+		{"empty", []string{"--client-turn-id", ""}},
+		{"blank", []string{"--client-turn-id", "   "}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var raw string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				b, _ := io.ReadAll(r.Body)
+				raw = string(b)
+				// The route answers with turn.clientTurnId, the key the message was written under. This
+				// one mints none and answers with exactly the key it was sent, so a key the command
+				// made up — an empty one included — would come back out in what it prints.
+				var req map[string]interface{}
+				_ = json.Unmarshal(b, &req)
+				resp := map[string]interface{}{"sessionId": "343dlzsYWKo5z8l2M8tsC", "created": false, "workspaceId": "ws-1"}
+				if key, sent := req["clientTurnId"]; sent {
+					resp["turn"] = map[string]interface{}{"clientTurnId": key}
+				}
+				_ = json.NewEncoder(w).Encode(resp)
+			}))
+			defer srv.Close()
+
+			configureCLITestRunner(t, srv.URL)
+			ensureCoordinatorSession(t, "343dlzsYWKo5z8l2M8tsB")
+
+			args := append([]string{"send", "343dlzsYWKo5z8l2M8tsA", "--message", "the shard is red"}, tc.args...)
+			var out bytes.Buffer
+			if err := cmdProjectCLI(append(args, "--json"), strings.NewReader(""), &out); err != nil {
+				t.Fatalf("project send: %v", err)
+			}
+			var body map[string]interface{}
+			if err := json.Unmarshal([]byte(raw), &body); err != nil {
+				t.Fatalf("project send body is not JSON: %v\n%s", err, raw)
+			}
+			if _, present := body["clientTurnId"]; present || len(body) != 1 || body["message"] != "the shard is red" {
+				t.Fatalf("project send body = %#v", body)
+			}
+			if out.Len() == 0 || strings.Contains(out.String(), "clientTurnId") {
+				t.Fatalf("project send printed %q", out.String())
+			}
+		})
+	}
+}
+
 // The refusal that asks for a PERSON travels whole, action included: an agent that read only "409"
 // would retry the one thing this door exists to stop it retrying.
 func TestProjectSendFailsAndPrintsTheOwnerAction(t *testing.T) {
