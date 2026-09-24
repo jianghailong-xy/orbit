@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 项目页 — 列表 + 详情（效果图）</title>
+<style>
+  :root {
+    --tint: #3E69F6;
+    --tint-bg: rgba(62, 105, 246, .12);
+    --amber: #FF9500;
+    --amber-ink: #B35A00;
+    --amber-bg: rgba(255, 149, 0, .14);
+    --green: #34C759;
+    --green-ink: #248A3D;
+    --red: #FF3B30;
+    --gray: #AEAEB2;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .18);
+    --surface: #fff;
+    --grouped: #F2F2F7;
+    --fill: rgba(0, 0, 0, .065);
+    --glass: rgba(255, 255, 255, .62);
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #e4e4e9; color: #16161a;
+    font: 15px/1.55 "Nimbus Sans", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1640px; margin: 0 0 28px; }
+  .lede code, figcaption code { font: 12.5px "DejaVu Sans Mono", monospace; background: #d9d9e0; border-radius: 4px; padding: 1px 5px; }
+  .row { display: flex; gap: 36px; align-items: flex-start; }
+  figure { margin: 0; width: 393px; }
+  figcaption { margin-top: 16px; font-size: 13.5px; line-height: 1.55; color: #4a4a52; }
+  figcaption > b { color: #16161a; display: block; font-size: 14.5px; margin-bottom: 4px; }
+  figcaption li b, figcaption br + b { color: #16161a; }
+  figcaption ol { margin: 6px 0 0; padding-left: 18px; }
+  figcaption li { margin: 3px 0; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; margin-bottom: 8px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+  .num { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; background: var(--amber); color: #fff;
+         font-size: 11px; font-weight: 700; align-items: center; justify-content: center; margin-right: 4px; vertical-align: 1px; }
+
+  /* ── 手机外壳 ─────────────────────────────────────────── */
+  .phone { width: 393px; height: 852px; background: var(--surface); overflow: hidden; position: relative;
+           border-radius: 44px; box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08); color: var(--label); }
+  .phone.grouped { background: var(--grouped); }
+  .status { height: 59px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 28px 0 39px; font-size: 17px; font-weight: 600; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 500; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 25px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700; position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px; background: var(--label-3); border-radius: 0 1px 1px 0; }
+  .nav { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; gap: 8px; position: relative; }
+  .nav .ttl { position: absolute; left: 70px; right: 70px; text-align: center; font-size: 17px; font-weight: 600;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 44px; background: var(--glass);
+             border-radius: 999px; flex: none; box-shadow: 0 1px 4px rgba(0,0,0,.08), inset 0 0 0 .5px rgba(0,0,0,.05); }
+  .platter.circle { width: 44px; }
+  .ico { width: 20px; height: 20px; stroke: var(--label); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .searchWrap { height: 56px; padding-top: 6px; }
+  .search { margin: 0 16px; height: 40px; border-radius: 20px; background: var(--fill); display: flex; align-items: center;
+            gap: 7px; padding: 0 12px; font-size: 17px; color: var(--label-2); }
+  .search .ico { width: 17px; height: 17px; stroke: var(--label-2); stroke-width: 2.2; }
+  .mk { outline: 1.6px dashed var(--mark); outline-offset: 3px; border-radius: 6px; position: relative; }
+  .mk > .badge { position: absolute; top: -12px; right: -12px; }
+  .badge { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: var(--amber); color: #fff;
+           font-size: 11.5px; font-weight: 700; align-items: center; justify-content: center; z-index: 3; }
+
+  /* ── 列表 ─────────────────────────────────────────────── */
+  .sec { display: flex; align-items: baseline; gap: 7px; padding: 14px 16px 6px; }
+  .sec b { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .sec .n { font-size: 13px; color: var(--label-2); font-weight: 600; }
+  .sec .fold { margin-left: auto; font-size: 15px; color: var(--tint); }
+  .prow { padding: 9px 16px 10px; border-bottom: .5px solid var(--sep); margin-left: 0; }
+  .prow .l1 { display: flex; align-items: baseline; gap: 10px; }
+  .prow .t { flex: 1; min-width: 0; font-size: 16.5px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .when { flex: none; font-size: 13px; color: var(--label-2); }
+  .chip { display: inline-block; font-size: 12.5px; font-weight: 600; border-radius: 7px; padding: 1.5px 7px; margin-top: 5px;
+          max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip.warn { background: var(--amber-bg); color: var(--amber-ink); }
+  .chip.brand { background: var(--tint-bg); color: var(--tint); }
+  .l3 { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+  .meter { flex: 0 0 104px; display: flex; gap: 1.5px; height: 5px; border-radius: 3px; overflow: hidden; background: var(--fill); }
+  .meter i { display: block; height: 100%; }
+  .counts { display: flex; gap: 9px; font-size: 12.5px; color: var(--label-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .counts span { display: inline-flex; align-items: center; gap: 3px; }
+  .g { display: inline-block; flex: none; }
+  .g.disc { width: 7px; height: 7px; border-radius: 50%; background: var(--tint); }
+  .g.tri { width: 0; height: 0; border-left: 4.5px solid transparent; border-right: 4.5px solid transparent; border-bottom: 8px solid var(--amber); }
+  .g.sq { width: 7.5px; height: 7.5px; border: 1.5px solid #8e8e93; border-radius: 1.5px; }
+  .g.chk { color: var(--green); font-weight: 700; font-size: 12px; line-height: 1; }
+  .g.x { color: var(--red); font-weight: 700; font-size: 12px; line-height: 1; }
+  .line { margin-left: auto; font-size: 12.5px; color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+
+  /* ── 详情（inset grouped） ──────────────────────────────── */
+  .scroll { position: absolute; top: 103px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  .head { padding: 8px 20px 14px; }
+  .head h2 { font-size: 24px; line-height: 1.25; letter-spacing: -.02em; margin: 0 0 9px; font-weight: 700; }
+  .head .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; color: var(--label-2); }
+  .pill { font-size: 12.5px; font-weight: 600; border-radius: 7px; padding: 1.5px 8px; }
+  .pill.open { background: var(--tint-bg); color: var(--tint); }
+  .branch { display: inline-flex; align-items: center; gap: 4px; }
+  .card { background: var(--surface); margin: 0 16px 14px; border-radius: 20px; overflow: hidden; position: relative; }
+  .card.mk { overflow: visible; }
+  .ch { display: flex; align-items: baseline; gap: 8px; padding: 13px 16px 4px; }
+  .ch b { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+  .ch .sub { font-size: 13px; color: var(--label-2); }
+  .ch .right { margin-left: auto; font-size: 13px; color: var(--label-2); }
+  .grp { padding: 10px 16px 2px; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--label-2); text-transform: uppercase; }
+  .item { display: flex; gap: 10px; padding: 10px 16px 11px; border-top: .5px solid var(--sep); align-items: flex-start; }
+  .item:first-of-type { border-top: none; }
+  .item .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; flex: none; }
+  .item .body { flex: 1; min-width: 0; }
+  .item .it { font-size: 15.5px; font-weight: 600; line-height: 1.35; }
+  .item .id { font-size: 13px; color: var(--label-2); line-height: 1.4; margin-top: 2px; }
+  .item .who { font-size: 12.5px; color: var(--label-2); margin-top: 4px; }
+  .btn { flex: none; align-self: center; font-size: 14px; font-weight: 600; border-radius: 999px; padding: 6px 13px; }
+  .btn.primary { background: var(--tint); color: #fff; }
+  .btn.plain { background: var(--fill); color: var(--tint); }
+  .btn.wide { display: block; text-align: center; padding: 11px; font-size: 16px; border-radius: 14px; margin: 10px 16px 4px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; padding: 4px 8px 6px; }
+  .cell { padding: 8px 8px 8px; }
+  .cell .k { font-size: 12.5px; color: var(--label-2); display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .cell .v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .cell .f { font-size: 11.5px; color: var(--label-3); line-height: 1.3; }
+  .bigmeter { display: flex; gap: 2px; height: 7px; border-radius: 4px; overflow: hidden; margin: 2px 16px 14px; background: var(--fill); }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px; border-top: .5px solid var(--sep); font-size: 15px; }
+  .kv span:first-child { color: var(--label-2); }
+  .kv span:last-child { text-align: right; }
+  .toggle { width: 51px; height: 31px; border-radius: 16px; background: var(--green); position: relative; flex: none; }
+  .toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+  .toggle.off { background: #e9e9eb; }
+  .toggle.off::after { right: auto; left: 2px; }
+  .auto { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 2px; border-top: .5px solid var(--sep); font-size: 16px; }
+  .note { font-size: 13px; color: var(--label-2); padding: 2px 16px 13px; line-height: 1.45; }
+  .goal { font-size: 15px; line-height: 1.5; padding: 4px 16px 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .more { font-size: 15px; color: var(--tint); padding: 4px 16px 13px; }
+  .crit { display: flex; gap: 11px; padding: 10px 16px 11px; border-top: .5px solid var(--sep); }
+  .crit .o { flex: none; width: 22px; height: 22px; border-radius: 50%; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .crit .o.met { background: var(--green); color: #fff; }
+  .crit .o.not { background: var(--fill); color: var(--label-2); }
+  .crit .tx { font-size: 15px; line-height: 1.42; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .crit .st { font-size: 13px; margin-top: 3px; }
+  .crit .st .ok { color: var(--green-ink); font-weight: 600; }
+  .crit .st .wait { color: var(--amber-ink); font-weight: 600; }
+  .trow { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: .5px solid var(--sep); }
+  .trow .tt { flex: 1; min-width: 0; font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trow .ts { flex: none; font-size: 12.5px; font-weight: 600; border-radius: 7px; padding: 1.5px 7px; }
+  .ts.run { background: var(--tint-bg); color: var(--tint); }
+  .ts.ready { background: var(--amber-bg); color: var(--amber-ink); }
+  .ts.wait { background: var(--fill); color: var(--label-2); }
+  .ts.main { background: rgba(52,199,89,.16); color: var(--green-ink); }
+  .ts.fail { background: rgba(255,59,48,.12); color: #C9261B; }
+  .chev { width: 13px; height: 13px; stroke: var(--label-3); fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .tg { padding: 10px 16px 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--label-2); text-transform: uppercase; }
+  .tg + .trow { border-top: none; }
+
+  /* ── 抽屉 ─────────────────────────────────────────────── */
+  .drawer { position: absolute; top: 0; bottom: 0; left: 0; width: 299px; background: var(--grouped); }
+  .peek { position: absolute; top: 0; bottom: 0; left: 299px; width: 393px; background: #fff; border-radius: 40px 0 0 40px;
+          box-shadow: -10px 0 30px rgba(0,0,0,.13); z-index: 2; }
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.22); }
+  .dh { padding: 70px 20px 10px; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .drow { display: flex; align-items: center; gap: 14px; padding: 11px 20px; font-size: 17px; }
+  .drow .ico { width: 22px; height: 22px; stroke: var(--tint); }
+  .drow .cnt { margin-left: auto; font-size: 15px; color: var(--label-2); }
+  .drow.sel { background: var(--fill); border-radius: 12px; margin: 0 10px; padding: 11px 10px; }
+</style>
+
+<h1>iOS 项目页 — 效果图</h1>
+<p class="lede">
+  抽屉里加一项 <b>Projects</b>。列表的分区、排序、标签文案与 web <code>projectAttention.ts</code> 同一套规则（搬进 OrbitKit，两端文案做 parity 测试）；
+  详情页按手机阅读顺序排：先「要你做的」，再进度、协调会话、判据、任务。数据全部来自已有接口（<code>GET /projects</code>、<code>/projects/:id</code>、<code>/panorama</code>、<code>/open-items</code>、<code>/tasks/page</code>、<code>/coordinator/status</code>），服务端不用改。
+  图中项目标题取自线上真实项目，状态为示意。
+</p>
+
+<div class="row">
+
+  <!-- ① 抽屉 · 现在 -->
+  <figure>
+    <span class="tag now">① 抽屉 · 现在</span>
+    <div class="phone" style="background:var(--grouped)">
+      <div class="peek"><div class="status" style="padding-left:24px"><span>10:04</span></div><div class="nav" style="padding-left:12px"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></div></div>
+      <div class="drawer">
+        <div class="dh" style="display:flex;align-items:center;justify-content:space-between;padding:66px 14px 8px 20px">Orbit<span class="platter circle" style="width:40px;height:40px;background:var(--fill);box-shadow:none"><svg class="ico" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg></span></div>
+        <div class="drow"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>orbit <span style="color:var(--label-2)">· wikova</span></span><span class="cnt"><i class="g disc" style="background:var(--amber)"></i></span></div>
+        <div class="drow"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>wikids <span style="color:var(--label-2)">· wikova</span></span></div>
+        <div class="drow"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>wikova-develop <span style="color:var(--label-2)">· mac-mini</span></span></div>
+        <div class="drow"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><path d="M4 13l3-7h10l3 7v5H4zM4 13h5l1 2h4l1-2h5"/></svg>No list<span class="cnt">12</span></div>
+        <div class="mk" style="margin:14px 8px 0;padding-bottom:4px"><div style="display:flex;gap:8px;padding:0 12px 4px;font-size:15px;font-weight:600;color:var(--label-2)">Task Lists <span style="font-weight:400;font-size:13px;padding-top:2px">9</span></div>
+        <div class="drow" style="padding-left:24px;font-size:16px"><i class="g disc" style="background:#c7c7cc"></i>Release checklist<span class="cnt">6</span></div>
+        <div class="drow" style="padding-left:24px;font-size:16px"><i class="g disc" style="background:#c7c7cc"></i>Bugs<span class="cnt">14</span></div><span class="badge" style="position:absolute;top:-10px;right:-10px">2</span></div>
+        <div class="drow"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><circle cx="12" cy="12" r="3"/><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/></svg>Following</div>
+        <div class="mk" style="margin:12px 8px 0;padding-bottom:2px"><div style="padding:4px 12px 4px;font-size:15px;font-weight:600;color:var(--label-2)">Recents</div>
+        <div class="drow" style="font-size:16px;padding-left:12px">iOS 项目页面缺失</div>
+        <div class="drow" style="font-size:16px;padding-left:12px">Ship the 0.1.172 release</div><span class="badge" style="position:absolute;top:-10px;right:-10px">3</span></div>
+        <div style="position:absolute;left:14px;right:14px;bottom:34px;display:flex;align-items:center;justify-content:space-between">
+          <span style="background:var(--tint);color:#fff;font-weight:600;font-size:16px;border-radius:999px;padding:11px 18px;box-shadow:0 2px 8px rgba(0,0,0,.12)">✎&nbsp; New session</span>
+          <span class="platter circle" style="width:44px;background:#fff"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg></span>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>现在：Workspace 在最上面，任务列表和 Recents 跟在后面</b>
+      虚线框里的两块是这次要换掉 / 去掉的：<span class="num">2</span>Task Lists 预览、<span class="num">3</span>Recents。
+    </figcaption>
+  </figure>
+
+  <!-- ② 抽屉 · 改后 -->
+  <figure>
+    <span class="tag after">② 抽屉 · 改后</span>
+    <div class="phone" style="background:var(--grouped)">
+      <div class="peek"><div class="status" style="padding-left:24px"><span>10:04</span></div><div class="nav" style="padding-left:12px"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></div></div>
+      <div class="drawer">
+        <div class="dh" style="display:flex;align-items:center;justify-content:space-between;padding:66px 14px 8px 20px">Orbit<span class="platter circle" style="width:40px;height:40px;background:var(--fill);box-shadow:none"><svg class="ico" viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg></span></div>
+        <div class="mk" style="margin:0 8px">
+        <div class="drow sel" style="margin:0;padding-left:12px"><svg class="ico" viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg><b style="font-weight:600">Projects</b><span class="cnt" style="color:var(--amber-ink);font-weight:600">2</span></div>
+        <span class="badge" style="position:absolute;top:-10px;right:-10px">1</span></div>
+        <div class="drow"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>Tasks</div>
+        <div class="drow"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><circle cx="12" cy="12" r="3"/><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/></svg>Following</div>
+        <div class="mk" style="margin:8px 8px 0;padding-top:6px"><div style="border-top:.5px solid rgba(60,60,67,.3);margin:0 12px 4px"></div><div style="padding:6px 12px 0;font-size:15px;font-weight:600;color:var(--label-2)">Workspaces</div>
+        <div class="drow" style="padding-left:12px"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>orbit <span style="color:var(--label-2)">· wikova</span></span><span class="cnt"><i class="g disc" style="background:var(--amber)"></i></span></div>
+        <div class="drow" style="padding-left:12px"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>wikids <span style="color:var(--label-2)">· wikova</span></span></div>
+        <div class="drow" style="padding-left:12px"><svg class="ico" viewBox="0 0 24 24" style="stroke:var(--label)"><path d="M3 7h7l2 2h9v10H3z"/></svg><span>wikova-develop <span style="color:var(--label-2)">· mac-mini</span></span></div>
+        <span class="badge" style="position:absolute;top:-10px;right:-10px">2</span></div>
+        <div class="mk" style="margin:10px 8px 0"><div style="display:flex;gap:8px;padding:4px 12px 2px;font-size:15px;font-weight:600;color:var(--label-2)">Projects <span style="font-weight:400;font-size:13px;padding-top:2px">26</span></div>
+        <div class="drow" style="padding-left:24px;font-size:16px;padding-top:7px;padding-bottom:7px"><i class="g disc" style="background:var(--amber)"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">把「什么算完成」从项目末尾搬到开工前</span></div>
+        <div class="drow" style="padding-left:24px;font-size:16px;padding-top:7px;padding-bottom:7px"><i class="g disc" style="background:var(--amber)"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Postgres 性能与容量治理</span></div>
+        <div class="drow" style="padding-left:24px;font-size:16px;padding-top:7px;padding-bottom:7px"><svg class="g" viewBox="0 0 12 12" style="width:10px;height:10px"><circle cx="6" cy="6" r="4.6" fill="none" stroke="#c7c7cc" stroke-width="1.8"/><path d="M6 1.4a4.6 4.6 0 0 1 4.6 4.6" fill="none" stroke="var(--tint)" stroke-width="1.8" stroke-linecap="round"/></svg><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">落地可靠性：做出来的成果必须真的到达目的地</span></div>
+        <div class="drow" style="padding-left:24px;font-size:16px;padding-top:7px;padding-bottom:7px"><i class="g disc" style="background:#c7c7cc"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">FineWeb × Common Crawl → RocksDB 语料库</span></div>
+        <div class="drow" style="padding-left:24px;font-size:16px;padding-top:7px;padding-bottom:7px"><i class="g disc" style="background:#c7c7cc"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Wikids AI 游戏模块：狼人杀 MVP</span></div>
+        <span class="badge" style="position:absolute;top:-10px;right:-10px">3</span></div>
+        <div style="position:absolute;left:14px;right:14px;bottom:34px;display:flex;align-items:center;justify-content:space-between">
+          <span style="background:var(--tint);color:#fff;font-weight:600;font-size:16px;border-radius:999px;padding:11px 18px;box-shadow:0 2px 8px rgba(0,0,0,.12)">✎&nbsp; New session</span>
+          <span class="platter circle" style="width:44px;background:#fff"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg></span>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>改后：导航在上，Workspace 在中间，项目列表在最下面</b>
+      <ol>
+        <li><span class="num">1</span>顶部一行 <b>Projects</b>，点进项目列表页；琥珀数字 = 有事等你本人处理的项目数（为 0 不显示）。下面是 Tasks、Following。</li>
+        <li><span class="num">2</span>分隔线 + 「Workspaces」组，workspace 行照旧。</li>
+        <li><span class="num">3</span>最下面是项目列表，占掉原来 Task Lists 和 Recents 的位置：只列未结束的项目，等你处理的（琥珀点）排最前，其余按最近活动；运行中显示转圈；点一行直接进该项目详情，往下滑继续加载。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <!-- ② 项目列表 -->
+  <figure>
+    <span class="tag after">③ Projects 列表</span>
+    <div class="phone">
+      <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
+      <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span><span class="ttl">Projects</span><span></span></div>
+      <div class="searchWrap"><div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search projects</div></div>
+
+      <div class="sec"><b>Needs attention</b><span class="n">3</span></div>
+      <div class="prow">
+        <div class="l1"><span class="t">把「什么算完成」从项目末尾搬到开工前</span><span class="when">2h</span></div>
+        <span class="chip warn mk">Needs you · Approve merge to main · 2h<span class="badge">1</span></span>
+        <div class="l3"><span class="meter"><i style="flex:9;background:var(--green)"></i><i style="flex:1;background:var(--gray)"></i></span><span class="counts"><span><i class="g chk">✓</i>9</span></span><span class="line">⎇ project/criteria</span></div>
+      </div>
+      <div class="prow">
+        <div class="l1"><span class="t">Postgres 性能与容量治理</span><span class="when">35m</span></div>
+        <span class="chip warn">Needs you · 1 question from coordinator · 35m</span>
+        <div class="l3"><span class="meter"><i style="flex:3;background:var(--amber)"></i><i style="flex:1;background:var(--red)"></i><i style="flex:35;background:var(--green)"></i></span><span class="counts"><span><i class="g tri"></i>3</span><span><i class="g x">✕</i>1</span><span><i class="g chk">✓</i>35</span></span><span class="line">main</span></div>
+      </div>
+      <div class="prow">
+        <div class="l1"><span class="t">Wikids AI 游戏模块：狼人杀 MVP</span><span class="when">3d</span></div>
+        <span class="chip warn">Ready · no activity 3d</span>
+        <div class="l3"><span class="meter"><i style="flex:5;background:var(--amber)"></i><i style="flex:20;background:var(--green)"></i></span><span class="counts"><span><i class="g tri"></i>5</span><span><i class="g chk">✓</i>20</span></span></div>
+      </div>
+
+      <div class="sec"><b>Running</b><span class="n">1</span></div>
+      <div class="prow">
+        <div class="l1"><span class="t">落地可靠性：做出来的成果必须真的到达目的地</span><span class="when">now</span></div>
+        <span class="chip brand mk">Coordinator · resolving a merge conflict · 18m<span class="badge">2</span></span>
+        <div class="l3"><span class="meter"><i style="flex:1;background:var(--tint)"></i><i style="flex:2;background:var(--amber)"></i><i style="flex:1;background:var(--gray)"></i><i style="flex:3;background:var(--green)"></i></span><span class="counts"><span><i class="g disc"></i>1</span><span><i class="g tri"></i>2</span><span><i class="g sq"></i>1</span><span><i class="g chk">✓</i>3</span></span><span class="line">⎇ project/landing</span></div>
+      </div>
+
+      <div class="sec"><b>Ready</b><span class="n">1</span></div>
+      <div class="prow">
+        <div class="l1"><span class="t">FineWeb × Common Crawl → RocksDB 语料库</span><span class="when">17m</span></div>
+        <div class="l3"><span class="meter"><i style="flex:98;background:var(--amber)"></i><i style="flex:2;background:var(--green)"></i></span><span class="counts"><span><i class="g tri"></i>109,662</span><span><i class="g chk">✓</i>213</span></span></div>
+      </div>
+
+      <div class="sec"><b>Waiting</b><span class="n">1</span></div>
+      <div class="prow">
+        <div class="l1"><span class="t">Session 状态模型正交化与兼容收敛</span><span class="when">1mo</span></div>
+        <div class="l3"><span class="meter"><i style="flex:16;background:var(--gray)"></i><i style="flex:8;background:var(--green)"></i></span><span class="counts"><span><i class="g sq"></i>16</span><span><i class="g chk">✓</i>8</span></span></div>
+      </div>
+
+      <div class="sec mk" style="margin:10px 12px 0;padding:8px 4px 6px"><b>Completed</b><span class="n">44</span><span class="fold">Show</span><span class="badge" style="position:absolute;top:-10px;right:-10px">3</span></div>
+    </div>
+    <figcaption>
+      <b>列表：分区与标签照搬 web 的规则</b>
+      <ol>
+        <li><span class="num">1</span>琥珀标签 = 要你本人做的事（批准合入 main / 回答协调会话提问 / 升级给你 / 保险丝暂停），后跟已等多久；也包括「Ready · no activity 3d」这类停滞。</li>
+        <li><span class="num">2</span>蓝色标签 = 协调会话自己在处理的例外，不算 Needs you，项目仍按活动归到 Running。</li>
+        <li><span class="num">3</span>Completed（DONE + CANCELLED）默认折叠。</li>
+      </ol>
+      每行：标题 + 最近活动时间；标签；进度条 + 分桶计数（● 运行 ▲ 可开工 □ 等待 ✕ 失败 ✓ 完成）+ 集成线。下拉刷新，搜索只按标题过滤。
+    </figcaption>
+  </figure>
+
+</div>
+
+<div class="row" style="margin-top:44px">
+  <!-- ③ 详情：上半 -->
+  <figure>
+    <span class="tag after">④ 项目详情 · 上半屏</span>
+    <div class="phone grouped">
+      <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
+      <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl"></span><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></span></div>
+      <div class="scroll">
+        <div class="head">
+          <h2>落地可靠性：做出来的成果必须真的到达目的地</h2>
+          <div class="meta"><span class="pill open">Open</span><span>7 tasks</span><span class="branch">⎇ project/landing · 3 ahead of main</span></div>
+        </div>
+
+        <div class="card mk"><span class="badge" style="position:absolute;top:-10px;right:-10px">1</span>
+          <div class="ch"><b>Open items</b><span class="sub">1 needs you · 1 with the coordinator</span></div>
+          <div class="grp">Needs you</div>
+          <div class="item"><span class="dot" style="background:var(--amber)"></span>
+            <div class="body"><div class="it">The coordinator has a question</div><div class="id">Start t4 first, or run t4 and t7 together?</div><div class="who">Blocks 2 tasks · waiting 35m</div></div>
+            <span class="btn primary">Answer</span></div>
+          <div class="grp">With the coordinator</div>
+          <div class="item"><span class="dot" style="background:var(--tint)"></span>
+            <div class="body"><div class="it">Merge conflict: 集成线合并冲突</div><div class="id">3 files conflict with project/landing · nothing landed</div><div class="who">18m · goes to you in 1h 42m</div></div>
+            <span class="btn plain">Open</span></div>
+        </div>
+
+        <div class="card mk"><span class="badge" style="position:absolute;top:-10px;right:-10px">2</span>
+          <div class="ch"><b>Work overview</b><span class="sub">7 tasks · 5 dependencies</span></div>
+          <div class="grid">
+            <div class="cell"><div class="k"><i class="g disc"></i>Running</div><div class="v">1</div><div class="f">active sessions</div></div>
+            <div class="cell"><div class="k"><i class="g tri"></i>Ready</div><div class="v">2</div><div class="f">can start now</div></div>
+            <div class="cell"><div class="k"><i class="g sq"></i>Waiting</div><div class="v">1</div><div class="f">on a prerequisite</div></div>
+            <div class="cell"><div class="k" style="color:var(--tint)">⟳ Integrating</div><div class="v">1</div><div class="f">checks on the combined tree</div></div>
+            <div class="cell"><div class="k" style="color:var(--green-ink)">⎇ On branch</div><div class="v">1</div><div class="f">not on main yet</div></div>
+            <div class="cell"><div class="k" style="color:var(--green-ink)">✓ On main</div><div class="v">1</div><div class="f">landed on main</div></div>
+          </div>
+          <div class="bigmeter"><i style="flex:1;background:var(--tint)"></i><i style="flex:2;background:var(--amber)"></i><i style="flex:1;background:var(--gray)"></i><i style="flex:1;background:#8fb0ff"></i><i style="flex:1;background:#8fd9a3"></i><i style="flex:1;background:var(--green)"></i></div>
+        </div>
+
+        <div class="card mk"><span class="badge" style="position:absolute;top:-10px;right:-10px">3</span>
+          <div class="ch"><b>Coordinator</b><span class="pill open" style="margin-left:2px">● Working</span></div>
+          <div class="note" style="padding-bottom:6px">last active 1m ago · 2nd coordinator of this project</div>
+          <div class="kv"><span>Workspace</span><span>orbit</span></div>
+          <div class="kv"><span>Wake-ups</span><span>delivered · 4m ago</span></div>
+          <div class="kv"><span>Self-started today</span><span>6 of 30</span></div>
+          <span class="btn primary wide">Open conversation</span>
+          <div class="auto"><span>Automatic</span><span class="toggle"></span></div>
+          <div class="note">Tasks land on project/landing by themselves and start once their prerequisites land. Merging into main always asks you.</div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>详情上半：先回答「在等谁、等什么」</b>
+      <ol>
+        <li><span class="num">1</span>Open items 分两组：<b>Needs you</b> 的按钮（Answer / Review / Resume）跳进协调会话并定位到那张卡——和 Needs-you 条同一个跳法，卡片不重做一份；<b>With the coordinator</b> 的 Open 进协调会话或出事的任务会话。没有待办时整张卡不出现。</li>
+        <li><span class="num">2</span>Work overview：有集成线的项目把 Done 拆成 Integrating / On branch / On main 三格（与 web 一致）；没有集成线就是 Done / Failed / Cancelled。</li>
+        <li><span class="num">3</span>协调会话卡：状态、唤醒是否送达、今日自启动配额；<b>Open conversation</b> 进协调会话；Automatic 开关与 web 同一个接口。</li>
+      </ol>
+      右上 <b style="display:inline">···</b>：Record as done / Record as cancelled / Delete project（空项目才可删）/ Copy link。
+    </figcaption>
+  </figure>
+
+  <!-- ④ 详情：下半 -->
+  <figure>
+    <span class="tag after">⑤ 项目详情 · 往下滑</span>
+    <div class="phone grouped">
+      <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
+      <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">落地可靠性：做出来的成果必须真的到达目的地</span><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></span></div>
+      <div class="scroll" style="top:111px">
+        <div class="card">
+          <div class="ch"><b>Goal</b></div>
+          <div class="goal">完成一个任务不等于成果到达了目的地。让每一份被判定「做完」的工作都能证明它真的落在了该落的分支上：集成线、合并回执、以及落地失败时有人被叫醒去处理，而不是静默留在某个会话的 worktree 里。</div>
+          <div class="more">More</div>
+        </div>
+
+        <div class="card mk"><span class="badge" style="position:absolute;top:-10px;right:-10px">4</span>
+          <div class="ch"><b>Acceptance criteria</b></div>
+          <div class="crit"><span class="o met">1</span><div><div class="tx">任务 DONE 后，其提交在 24 小时内出现在集成线上，或有一条说明原因的待办。</div><div class="st"><span class="ok">Met by its work</span> · on main</div></div></div>
+          <div class="crit"><span class="o not">2</span><div><div class="tx">集成冲突与检查失败会先交给协调会话，超时升级给 owner。</div><div class="st"><span class="ok">Met by its work</span> · on project/landing · <span class="wait">not on main yet</span></div></div></div>
+          <div class="crit"><span class="o not">3</span><div><div class="tx">合并回执能在项目页上逐条追溯到任务。</div><div class="st"><b>Not met by its work</b><br><span style="color:var(--label-2)">Work filed under it has not settled by the criterion that work declared.</span><br><span style="color:var(--tint)">合并回执回填到任务行</span> <span style="color:var(--label-2)">— needs its acceptance command to run</span></div></div></div>
+        </div>
+
+        <div class="card mk"><span class="badge" style="position:absolute;top:-10px;right:-10px">5</span>
+          <div class="ch"><b>Tasks</b><span class="right">7</span></div>
+          <div class="tg">Running</div>
+          <div class="trow"><i class="g disc"></i><span class="tt">集成线合并冲突的自动重试</span><span class="ts run">Running</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+          <div class="tg">Ready</div>
+          <div class="trow"><i class="g tri"></i><span class="tt">合并回执回填到任务行</span><span class="ts ready">Ready</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+          <div class="trow"><i class="g tri"></i><span class="tt">落地失败的待办文案</span><span class="ts ready">Ready</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+          <div class="tg">Waiting</div>
+          <div class="trow"><i class="g sq"></i><span class="tt">线上端到端验证</span><span class="ts wait">Waits for 1</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+          <div class="tg">Done</div>
+          <div class="trow"><i class="g chk">✓</i><span class="tt">集成线的 schema 与迁移</span><span class="ts main">On main</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+          <div class="trow"><i class="g chk">✓</i><span class="tt">LAND_TASK 作业</span><span class="ts ready" style="background:rgba(52,199,89,.16);color:var(--green-ink)">On project/landing</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>详情下半：目标、判据、任务</b>
+      <ol>
+        <li><span class="num">4</span>判据逐条写「它的工作满足了没有、落在哪」（Met by its work · on main / on 项目分支 · not on main yet / Not met by its work + 卡住它的任务），与 web 同一份服务端答案；和 web 一样不出现「N of M met」这种比值，没满足也不标红。</li>
+        <li><span class="num">5</span>任务照 web 的分段（Running / Integrating / Ready / Waiting / Blocked by level / Landed / Done）排，行尾标签说它卡在哪（Waits for 1 task to land、On main、Checks failed · coordinator…）；点一行在 Tasks 里打开 iOS 已有的任务详情。首屏 100 条，多了点 Load more。</li>
+      </ol>
+      目标默认 3 行，More 展开成完整 markdown。手机上不画依赖图（web 的 graph 卡）。
+    </figcaption>
+  </figure>
+
+
+  <figure style="width:420px">
+    <span class="tag now" style="background:#e5e5ea;color:#3a3a3c">这一版不做（web 上有）</span>
+    <div style="background:#fff;border-radius:18px;padding:16px 18px;font-size:14px;line-height:1.6;color:#3a3a3c;box-shadow:0 0 0 1px rgba(0,0,0,.06)">
+      <ul style="margin:0;padding-left:18px">
+        <li>集成线设置（落哪条线 / 合并检查命令 / 升级时限）——只读显示</li>
+        <li>任务依赖图、链式进度条</li>
+        <li>Blockers 的 Resolve…、Run queue 的 Resume list</li>
+        <li>跨项目 crossings 的批准 / 拒绝</li>
+        <li>协调会话的 replace / rebind / restore（状态异常时给一句说明 + 去 web）</li>
+        <li>New project（web 也是跳到新会话里让 agent 建）</li>
+      </ul>
+      <p style="margin:12px 0 0;color:#6b6b73">都能后补，接口已在；先把「看得到、能处理要你做的事、能进协调会话」做完整。</p>
+    </div>
+  </figure>
+</div>
+</html>

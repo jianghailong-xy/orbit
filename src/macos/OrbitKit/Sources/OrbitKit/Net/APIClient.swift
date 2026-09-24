@@ -503,6 +503,69 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/promotions/\(promotionID)/cancel")
     }
 
+    // MARK: projects — the index and one project's page
+
+    /// `GET /projects`: every project this account owns, newest first; `status` narrows the read.
+    public func projects(status: ProjectStatus? = nil) async throws -> [ProjectSummary] {
+        try await get("projects", query: status.map { [URLQueryItem(name: "status", value: $0.rawValue)] } ?? [])
+    }
+
+    /// `GET /projects/:id`: the project's own record — goal, criteria and what the read says about
+    /// their work, the integration settings, the Automatic switch.
+    public func project(_ projectID: String) async throws -> ProjectDocument {
+        try await get("projects/\(projectID)")
+    }
+
+    /// Where the project's work stands, lane by lane, and how many dependencies it has.
+    public func projectPanorama(_ projectID: String) async throws -> ProjectPanorama {
+        try await get("projects/\(projectID)/panorama")
+    }
+
+    /// The integration line and what its queue is doing.
+    public func projectIntegration(_ projectID: String) async throws -> ProjectIntegrationView {
+        try await get("projects/\(projectID)/integration")
+    }
+
+    /// One page of the project's top-level tasks, newest first.
+    public func projectTaskPage(_ projectID: String, cursor: String? = nil,
+                                limit: Int = 100) async throws -> ProjectTaskPage {
+        var q = [URLQueryItem(name: "limit", value: String(limit))]
+        if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
+        return try await get("projects/\(projectID)/tasks/page", query: q)
+    }
+
+    /// What the project's coordination is, and what opening it would do right now — a read, so the
+    /// card knows before any press whether the press would refuse.
+    public func projectCoordinatorStatus(_ projectID: String) async throws -> ProjectCoordinatorStatus {
+        try await get("projects/\(projectID)/coordinator/status")
+    }
+
+    /// Resolve-or-create the project's one coordinator conversation. Idempotent: a second press
+    /// answers with the same conversation and `created: false`.
+    public func openProjectCoordinator(_ projectID: String) async throws -> ProjectCoordinatorOpened {
+        try await postEmpty("projects/\(projectID)/coordinator")
+    }
+
+    /// Record the project done or cancelled, or reopen it.
+    public func updateProjectStatus(_ projectID: String,
+                                    to status: ProjectStatus) async throws -> ProjectDocument {
+        try await patch("projects/\(projectID)", body: UpdateProjectStatusRequest(status: status))
+    }
+
+    /// Flip the Automatic switch, fenced on the revision the page read — a write racing another
+    /// edit of the project's authorisation set is refused rather than applied over it.
+    public func setProjectAutomatic(_ projectID: String, enabled: Bool,
+                                    expectedConfigRevision: String) async throws -> ProjectDocument {
+        try await patch("projects/\(projectID)",
+                        body: SetProjectAutomaticRequest(coordinatorEnabled: enabled,
+                                                         expectedConfigRevision: expectedConfigRevision))
+    }
+
+    /// Remove an EMPTY project; one that still holds tasks is a 409 naming how many.
+    public func deleteProject(_ projectID: String) async throws {
+        try await deleteRaw("projects/\(projectID)")
+    }
+
     // MARK: agents / runners
 
     public func agents() async throws -> [Agent] { try await get("agents") }

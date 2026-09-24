@@ -15,16 +15,20 @@ final class AppSectionTests: XCTestCase {
     }
 
     func testNavOrder() {
-        // Runners first, then Agents, then Tasks (where Skills used to sit), then Following (watches),
-        // then Settings; Admin last for admins.
-        XCTAssertEqual(AppSection.visible(isAdmin: false), [.runners, .agents, .tasks, .following, .settings])
-        XCTAssertEqual(AppSection.visible(isAdmin: true), [.runners, .agents, .tasks, .following, .settings, .admin])
+        // Runners first, then Agents, then Projects just before the Tasks they are for (where Skills
+        // used to sit), then Following (watches), then Settings; Admin last for admins.
+        XCTAssertEqual(AppSection.visible(isAdmin: false),
+                       [.runners, .agents, .projects, .tasks, .following, .settings])
+        XCTAssertEqual(AppSection.visible(isAdmin: true),
+                       [.runners, .agents, .projects, .tasks, .following, .settings, .admin])
     }
 
-    func testIPadManagementGroupKeepsNavOrderAndRoleGate() {
-        XCTAssertEqual(AppSection.managementSections(isAdmin: false), [.runners, .tasks, .following, .settings])
-        XCTAssertEqual(AppSection.managementSections(isAdmin: true),
-                       [.runners, .tasks, .following, .settings, .admin])
+    /// The drawer and the iPad sidebar lead with the work — projects, tasks, what is followed — set
+    /// apart from, and above, the Workspaces; what is left is the Manage group, still role-gated.
+    func testWorkSectionsLeadAndManagementGroupKeepsTheRest() {
+        XCTAssertEqual(AppSection.workSections, [.projects, .tasks, .following])
+        XCTAssertEqual(AppSection.managementSections(isAdmin: false), [.runners, .settings])
+        XCTAssertEqual(AppSection.managementSections(isAdmin: true), [.runners, .settings, .admin])
     }
 
     func testEverySectionHasTitleAndIcon() {

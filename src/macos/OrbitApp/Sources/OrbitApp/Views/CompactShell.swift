@@ -294,6 +294,22 @@ private struct CompactSections: View {
                     }
             }
 
+        // PROJECTS — the index → one project's page. The path IS the section's stack, like every
+        // section here. A task a project's rows open is opened where tasks live (`route(to: .task)`),
+        // so the Tasks stack stays the one page its detail store follows.
+        case .projects:
+            NavigationStack(path: $model.nav.path) {
+                ProjectsListView(rowNavigation: .push)
+                    .drawerToggle(open: openDrawer)
+                    .refreshable { await model.projects?.load() }
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)
+                        default:                            EmptyView()
+                        }
+                    }
+            }
+
         // RUNNERS — runner list → detail. Same single stack as Agents: the rows carry their own
         // destination and push it, so a deep link (`.runner(id)`) and a row tap are one navigation.
         // Runners isn't in the drawer rail, so this section is only ever entered by that deep link
@@ -583,24 +599,14 @@ private struct NavigationDrawer: View {
     /// still render their static content — only the animated live cues are held back, so opening never
     /// waits on anything. See the call site in `CompactShell`.
     let live: Bool
-    /// The drawer is a quick switcher, not the full task-list directory. Four rows preserve room
-    /// for task lists and Recents on a compact screen; the directory page owns the complete set.
-    private let taskListPreviewLimit = 4
-    /// How many Recents rows are currently rendered. Grows a page at a time as you scroll to the
-    /// bottom of the feed (see `recentsRows`); never reset, so a drawer you reopen keeps the window
-    /// you scrolled to — resetting it under a preserved scroll offset would leave the list stranded
-    /// past its own end.
-    @State private var recentsShown = RecentsLogic.pageSize
 
     var body: some View {
-        let isAdmin = model.user?.role == "ADMIN"
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Orbit")
                     .font(.title2.weight(.bold))
-                // The ⌘K palette's touch entry point. It sits here, above Recents, because it does
-                // what Recents does — jump to a session — just without being limited to the most
-                // recent ones or to any one agent. iPad keyboards get ⌘K itself as well.
+                // The ⌘K palette's touch entry point: jump to any session, in any workspace. iPad
+                // keyboards get ⌘K itself as well.
                 Spacer()
                 Button {
                     close()
@@ -618,22 +624,20 @@ private struct NavigationDrawer: View {
             .padding(.bottom, 8)
 
             List {
-                // Runners is dropped from the drawer rail on iOS (it lives under Settings); Settings is
-                // the action bar's gear below, and Admin sits inside Settings. Workspaces occupy the
-                // former Agents destination directly, with Runner demoted to same-line metadata.
-                ForEach(AppSection.visible(isAdmin: isAdmin).filter { ![.runners, .settings, .admin].contains($0) }) { section in
-                    // The Agents nav row is replaced in place by first-level Workspace rows.
-                    if section == .agents {
-                        agentsRows
-                    } else if section == .tasks {
-                        taskRows
+                // The work leads the rail — projects, tasks, and what is followed — ABOVE the
+                // Workspaces and set apart from them by a rule; the open projects themselves close
+                // it, where the task lists and Recents used to be. Runners lives under Settings,
+                // Settings is the action bar's gear below, and Admin sits inside Settings.
+                ForEach(AppSection.workSections) { section in
+                    if section == .projects {
+                        projectsRow
                     } else {
                         sectionRow(section)
                     }
                 }
-                // Recents trails the drawer: the most-recent sessions across every agent, kept below the
-                // machine/section rail so the primary nav destinations stay at the top.
-                recentsRows
+                workspacesHeader
+                agentsRows
+                projectRows
             }
             .listStyle(.plain)
             // Let each row's own padding set its height and let the drawer background show through, so
@@ -647,6 +651,9 @@ private struct NavigationDrawer: View {
             // Task-list summaries and the No-list count are navigation data, so fetch them with the
             // drawer rather than waiting until the user opens one list.
             .task { await model.tasks?.loadNavigation() }
+            // The rail's first row counts the projects waiting on you, and its last rows are the
+            // open projects: fetch them with the drawer rather than waiting for the section.
+            .task { await model.projects?.load() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
@@ -779,61 +786,99 @@ private struct NavigationDrawer: View {
         .drawerRow()
     }
 
-    // MARK: Task lists
+    // MARK: Projects
 
-    /// Compact task IA: No list remains a peer destination, while named lists are capped to a
-    /// four-row quick-switch preview. The current list is kept visible even when it falls
-    /// outside the newest four; every list (including completed ones) lives on the searchable
-    /// directory page reached by View All. A generic Tasks row remains as the empty-data fallback.
+    /// The rail's first row: the Projects index. The amber number is how many projects have something
+    /// waiting on the reader in person — a merge to confirm, a question, an escalation, a pause —
+    /// and nothing at all when none has; a project that merely went quiet is not counted.
+    private var projectsRow: some View {
+        let selected = model.selectedSection == .projects && model.sectionAtRoot
+        let waiting = model.projects?.needsYouCount ?? 0
+        return Button {
+            model.selectedSection = .projects
+            model.nav.popToRoot()
+            close()
+        } label: {
+            pill(selected: selected) {
+                HStack(spacing: 12) {
+                    Image(systemName: AppSection.projects.systemImage)
+                        .frame(width: 24)
+                        .foregroundStyle(selected ? Color.accentColor : .primary)
+                    Text(AppSection.projects.title)
+                        .fontWeight(selected ? .semibold : .regular)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    if waiting > 0 {
+                        Text("\(waiting)")
+                            .font(.orbitMeta.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel("\(waiting) waiting on you")
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+    }
+
+    /// The rule and the group label that set the Workspaces apart from the work above them.
+    private var workspacesHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+                .padding(.leading, DrawerMetrics.textLeading)
+                .padding(.trailing, DrawerMetrics.hInset)
+            Text(AppSection.agents.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, DrawerMetrics.textLeading)
+                .padding(.top, 14)
+                .padding(.bottom, 4)
+        }
+        .padding(.top, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    /// The open projects, closing the rail: those waiting on the reader first, then by the most
+    /// recent task activity. Tapping one opens its page. Hidden until the index has loaded.
     @ViewBuilder
-    private var taskRows: some View {
-        if let tasks = model.tasks {
-            if tasks.unlistedCount > 0 {
-                taskScopeRow(scope: .unlisted, title: "No list", count: tasks.unlistedCount,
-                             systemImage: "tray")
-            }
-
-            if !tasks.lists.isEmpty {
-                let preview = taskListPreview(tasks)
-                drawerGroupLabel("Task Lists", count: tasks.lists.count)
-                ForEach(preview) { list in
-                    taskListRow(list, completed: TaskListLogic.listIsCompleted(list))
-                }
-                if tasks.lists.count > preview.count {
-                    allTaskListsRow
-                }
-            }
-
-            if tasks.unlistedCount == 0 && tasks.lists.isEmpty {
-                sectionRow(.tasks)
+    private var projectRows: some View {
+        let open = model.projects?.drawerProjects ?? []
+        if !open.isEmpty {
+            drawerGroupLabel(AppSection.projects.title, count: open.count)
+            ForEach(open) { project in
+                projectRow(project)
             }
         }
     }
 
-    /// Preserve recency (the server returns newest first), but replace the last preview slot with
-    /// the selected list when needed so reopening the drawer never hides your current context.
-    private func taskListPreview(_ tasks: TasksModel) -> [TaskListSummary] {
-        let active = tasks.activeLists
-        var preview = Array(active.prefix(taskListPreviewLimit))
-        guard case .list(let selectedID) = tasks.scope,
-              let selected = tasks.lists.first(where: { $0.id == selectedID }),
-              !preview.contains(where: { $0.id == selectedID }) else { return preview }
-        if preview.count == taskListPreviewLimit { preview.removeLast() }
-        preview.append(selected)
-        return preview
-    }
-
-    private var allTaskListsRow: some View {
-        Button { openTaskListsDirectory() } label: {
-            pill(selected: model.taskListsDirectoryPresented, indent: 12) {
+    private func projectRow(_ project: ProjectSummary) -> some View {
+        let selected = model.selectedSection == .projects
+            && model.selectedProjectID.map(PublicID.storageKey) == PublicID.storageKey(project.id)
+        return Button {
+            model.openProject(project.id)
+            close()
+        } label: {
+            pill(selected: selected, indent: 12) {
                 HStack(spacing: 10) {
-                    Image(systemName: "ellipsis").frame(width: 8)
-                        .foregroundStyle(.secondary)
-                    Text("View All Lists").foregroundStyle(.primary)
-                    Spacer(minLength: 6)
-                    Image(systemName: "chevron.forward")
-                        .font(.orbitMeta)
-                        .foregroundStyle(.tertiary)
+                    switch ProjectAttention.drawerMark(project) {
+                    case .needsYou:
+                        Circle().fill(Color.orange).frame(width: 8, height: 8)
+                    case .running:
+                        if live {
+                            ProgressView().controlSize(.mini).tint(.blue)
+                        } else {
+                            Circle().fill(Color.accentColor).frame(width: 8, height: 8)
+                        }
+                    case .idle:
+                        Circle().fill(Color.secondary.opacity(0.45)).frame(width: 8, height: 8)
+                    }
+                    Text(project.title)
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
                 }
             }
         }
@@ -854,130 +899,6 @@ private struct NavigationDrawer: View {
         .listRowInsets(EdgeInsets())
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
-    }
-
-    private func taskListRow(_ list: TaskListSummary, completed: Bool) -> some View {
-        let running = (list.runningTasks ?? 0) > 0
-        return Button {
-            openTaskScope(.list(list.id))
-        } label: {
-            pill(selected: taskScopeSelected(.list(list.id)), indent: 12) {
-                HStack(spacing: 10) {
-                    if running && live {
-                        ProgressView().controlSize(.mini).tint(.blue)
-                    } else {
-                        Circle().fill(completed ? Color.green : Color.secondary.opacity(0.45))
-                            .frame(width: 8, height: 8)
-                    }
-                    Text(list.title)
-                        .lineLimit(1)
-                        .foregroundStyle(completed ? .secondary : .primary)
-                    Spacer(minLength: 6)
-                    Text("\(list.taskCount)").font(.orbitMeta).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
-    }
-
-    private func taskScopeRow(scope: TaskScope, title: String, count: Int,
-                              systemImage: String) -> some View {
-        Button { openTaskScope(scope) } label: {
-            pill(selected: taskScopeSelected(scope)) {
-                HStack(spacing: 12) {
-                    Image(systemName: systemImage).frame(width: 24)
-                    Text(title).foregroundStyle(.primary)
-                    Spacer(minLength: 6)
-                    Text("\(count)").font(.orbitMeta).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
-    }
-
-    private func taskScopeSelected(_ scope: TaskScope) -> Bool {
-        model.selectedSection == .tasks && model.tasks?.scope == scope
-    }
-
-    private func openTaskScope(_ scope: TaskScope) {
-        model.selectedTaskID = nil
-        model.taskListsDirectoryPresented = false
-        model.tasks?.selectScope(scope)
-        model.selectedSection = .tasks
-        close()
-    }
-
-    private func openTaskListsDirectory() {
-        model.selectedTaskID = nil
-        model.selectedSection = .tasks
-        model.taskListsDirectoryPresented = true
-        close()
-    }
-
-    // MARK: Recents
-
-    /// The "Recents" header + rows: the most-recently-active sessions across every agent, tapping
-    /// straight into that session's console. Hidden until the cross-agent Open list has loaded.
-    ///
-    /// Scroll-loaded a page at a time: only `recentsShown` rows are handed to the `ForEach`, and
-    /// reaching the last one extends the window (see `RecentsLogic.nextWindow`). The rows are all
-    /// already in memory — Recents is derived from the Open snapshot, not fetched — so this is a
-    /// render window, not a fetch: no spinner, no latency, just a first layout and a per-snapshot
-    /// diff bounded to one page instead of every open session.
-    @ViewBuilder
-    private var recentsRows: some View {
-        let recents = model.recentSessions
-        let shown = recents.prefix(recentsShown)
-        if !recents.isEmpty {
-            Text("Recents")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, DrawerMetrics.textLeading)
-                .padding(.top, 18)
-                .padding(.bottom, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-            ForEach(shown) { session in
-                recentRow(session)
-                    .onAppear {
-                        guard session.id == shown.last?.id,
-                              let next = RecentsLogic.nextWindow(shown: recentsShown,
-                                                                 total: recents.count)
-                        else { return }
-                        recentsShown = next
-                    }
-            }
-        }
-    }
-
-    /// One Recents row: the session title on a single lightweight line with a slim trailing live cue —
-    /// the same `SessionLiveIndicator` the compact session list uses (spinner while working / amber dot
-    /// when it needs you / red dot on failure). Calm states (dormant / done / queued) stay quiet so the
-    /// jump-back list stays light. Tapping opens the session in its agent.
-    private func recentRow(_ s: Session) -> some View {
-        let selected = model.selectedSection == .agents && model.selectedAgentSessionID == s.id
-        return Button {
-            model.openRecentSession(s)
-            close()
-        } label: {
-            pill(selected: selected) {
-                HStack(spacing: 8) {
-                    Text(s.title ?? "Untitled session")
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-                        .layoutPriority(1)
-                    if s.projectId != nil { SessionCoordinatorBadge(session: s) }
-                    Spacer(minLength: 8)
-                    if live { SessionLiveIndicator(session: s) }
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
     }
 
     // MARK: First-level Workspaces
@@ -1026,10 +947,7 @@ private struct NavigationDrawer: View {
     /// A compact Workspace row: folder/offline state leads; Workspace · Runner carries identity; one
     /// trailing slot shows attention or running state. Tapping jumps straight to its sessions.
     private func agentRow(_ agent: Agent, agents: AgentsModel) -> some View {
-        // Yield the pill to the Recents row when the open session is listed there, so the same session
-        // isn't highlighted twice (agent row + Recents). Without a Recents row the agent row keeps it.
         let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
-            && !model.selectedSessionInRecents
         let offline = agents.runnerIsOffline(agent.runnerId)
         return Button {
             openAgent(agent.id)

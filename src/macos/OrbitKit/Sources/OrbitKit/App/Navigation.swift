@@ -45,6 +45,8 @@ public enum NavNode: Hashable, Sendable {
     /// what tells the two apart is the stack a frame rides, not the frame.
     case settingsRunners
     case userDetail(userID: String)
+    /// One project's page, pushed from the Projects list or from the drawer's project rows.
+    case projectDetail(projectID: String)
 }
 
 /// Which section is showing, and every section's stack.
@@ -115,6 +117,12 @@ public struct NavState: Equatable, Sendable {
     /// `AppModel.selectedRunnerID` — the runner record the Runners pane shows.
     public var selectedRunnerID: String? {
         guard case .runnerDetail(let id) = path.last else { return nil }
+        return id
+    }
+
+    /// `AppModel.selectedProjectID` — the project the Projects pane shows.
+    public var selectedProjectID: String? {
+        guard case .projectDetail(let id) = path.last else { return nil }
         return id
     }
 

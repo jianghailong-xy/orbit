@@ -145,6 +145,18 @@ final class AppModel {
             }
         }
     }
+    /// The project whose page fills the Projects pane — the row the three-column list draws as
+    /// selected, and the page the compact stack pushes. A read of the section's stack.
+    var selectedProjectID: String? {
+        get { nav.selectedProjectID }
+        set {
+            if let id = newValue {
+                nav.replaceTop(with: .projectDetail(projectID: id))
+            } else if case .projectDetail = nav.path.last {
+                nav.pop()
+            }
+        }
+    }
     /// iOS only: whether Tasks has pushed the searchable directory of every named task list.
     /// The drawer shows only a compact preview; the directory is the second page this section
     /// pushes, and pushing it is what leaves the leading edge to the system back-swipe while it is
@@ -225,22 +237,9 @@ final class AppModel {
         sessionDetails.resolve(id, preferring: sessions, agents?.agentSessions ?? [])
     }
 
-    /// The drawer's **Recents** feed: every jump-back session across all agents, newest first, derived
-    /// from the already-fresh cross-agent Open list (`sessions`) — which the server returns in full,
-    /// unpaginated. Uncapped on purpose, but the cut belongs to the drawer, not here: it renders one
-    /// page of rows and extends the window as you scroll (`RecentsLogic.pageSize`), which needs the
-    /// complete ordering to page through. Empty until the first `loadSessions` lands; kept live by
-    /// the same control-plane stream that drives the list.
-    ///
-    /// Derived ONCE per applied snapshot (see `applySessionSnapshot`) rather than on every read: the
-    /// drawer stays mounted behind the content card, so it reads this on every body pass — and it is
-    /// a full recency sort of every open session, which as a computed property ran again for each of
-    /// those passes (and once more for `selectedSessionInRecents`).
-    private(set) var recentSessions: [Session] = []
-
     /// The Open sessions blocked on an approval, and agentID → how many of them each agent holds —
-    /// what the "needs you" banner and the drawer's per-agent badge read. Derived from the same
-    /// applied snapshot as `recentSessions`, and for the same reason: the drawer stays mounted behind
+    /// what the "needs you" banner and the drawer's per-agent badge read. Derived ONCE per applied
+    /// snapshot (see `applySessionSnapshot`) rather than on every read: the drawer stays mounted behind
     /// the content card and re-reads its rows on every body pass, so a computed property would
     /// re-scan the whole Open list once per row per pass. `needsYouSessions` holds whole records (not
     /// ids) because the banner needs the target's agent name and id to navigate; it is the handful of
@@ -255,16 +254,6 @@ final class AppModel {
     /// glyph, so the two marks can never disagree about one row. Drawn quieter than the spinner.
     private(set) var jobWorkspaceIDs: Set<String> = []
     #endif
-
-    /// The compact drawer lists the open session twice when its runner group is expanded — once as the
-    /// owning agent's row (`selectedAgentID`) and once as its Recents row (`selectedAgentSessionID`) —
-    /// which lit both pills. This flags when the session is genuinely a Recents row, so the agent row can
-    /// yield to the more specific Recents pill and only one row highlights. It stays false for a session
-    /// with no Recents row (e.g. a deep-linked non-active session), so that agent row keeps its pill.
-    var selectedSessionInRecents: Bool {
-        guard let id = selectedAgentSessionID else { return false }
-        return recentSessions.contains { $0.id == id }
-    }
 
     let tokenStore: TokenStore
     let notifications = NotificationManager()
@@ -357,6 +346,8 @@ final class AppModel {
     private(set) var admin: AdminModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
+    /// The account's projects: the Projects section and the drawer's project rows.
+    private(set) var projects: ProjectsModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
     #if os(macOS)
@@ -406,6 +397,7 @@ final class AppModel {
         }
         #endif
         watches = watchesModel
+        projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
@@ -545,7 +537,6 @@ final class AppModel {
         }
         signedIn = false
         sessions = []
-        recentSessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
         #if os(iOS)
@@ -771,6 +762,14 @@ final class AppModel {
         // A watch's target may have moved with this row, and no event names watches: refetch soon.
         case .sessionCreated, .sessionUpdated, .sessionEnded, .approvalRequested, .approvalResolved, .taskChanged:
             watches?.nudge()
+        default:
+            break
+        }
+        // A project's lanes move when one of its tasks does, and an owner item rides the approval
+        // count; no event names projects, so a loaded index refetches shortly after either.
+        switch ev.type {
+        case .taskChanged, .taskListChanged, .approvalRequested, .approvalResolved:
+            projects?.nudge()
         default:
             break
         }
@@ -1116,7 +1115,6 @@ final class AppModel {
         // still has to reconcile whatever a silent push left on the icon.
         if list != sessions {
             sessions = list
-            recentSessions = RecentsLogic.recent(list, limit: list.count)
             needsYouSessions = SessionGrouping.group(list).needsYou
             agentNeedsYou = NeedsYouLogic.byAgent(list)
             #if os(iOS)
@@ -1364,6 +1362,8 @@ final class AppModel {
         // pushes a user's record now, which is what replaced the unconditional `true` this used to
         // answer with; Settings pushes two (its runners list, then a runner's record).
         case .skills, .runners, .following, .admin, .settings: return nav.sectionAtRoot
+        // A project's page over the index: the same one read.
+        case .projects: return nav.sectionAtRoot
         }
     }
 
@@ -1715,6 +1715,28 @@ final class AppModel {
         // store is read off the stack *on screen*: syncing while another section is up would name
         // nil and drop the detail the still-pushed task page is about to read.
         if nav.section == .tasks { syncTaskDetailStore() }
+    }
+
+    /// Open one project's page from outside the Projects list — the drawer's project rows: the
+    /// section's list at the root and the project on top, whatever was showing there before.
+    func openProject(_ id: String) {
+        selectedSection = .projects
+        nav.path = [.projectDetail(projectID: id)]
+    }
+
+    /// Open a project's coordinator conversation, and — when a press named one of the owner's items
+    /// — land on that item's card there: the same entry the needs-you banner takes, so a card is
+    /// answered in one place.
+    func openProjectCoordinator(sessionID: String, agentID: String?, focus item: SessionOwnerItem? = nil) {
+        let id = PublicID.toPublic(sessionID)
+        let agent = agentID.map(PublicID.toPublic) ?? self.agentID(for: id)
+        if let item { consoleRegistry?.model(for: id, agentID: agent).focus(ownerItem: item) }
+        show(.console(sessionID: id, origin: .list), agent: agent)
+    }
+
+    /// The project's page on the web, for the share sheet.
+    func projectWebURL(_ projectID: String) -> URL? {
+        baseURL?.appendingPathComponent("projects").appendingPathComponent(PublicID.toPublic(projectID))
     }
 
     /// Put `node` on screen in the Agents section — the one transition every Agents entry point

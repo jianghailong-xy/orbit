@@ -17,6 +17,7 @@ final class FailureReasonTests: XCTestCase {
     private static let bannerFiles = [
         "src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift",
         "src/macos/OrbitApp/Sources/OrbitApp/RunnerControl.swift",
+        "src/macos/OrbitApp/Sources/OrbitApp/ProjectsModel.swift",
     ]
 
     func testARefusalIsSaidInTheServersOwnWords() {

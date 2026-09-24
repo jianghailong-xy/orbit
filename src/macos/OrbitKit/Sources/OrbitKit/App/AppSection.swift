@@ -4,12 +4,13 @@ import Foundation
 /// Symbol names are just strings — so it lives in OrbitKit and is unit-tested; the SwiftUI
 /// sidebar renders `visible(isAdmin:)`. Admin is role-gated like the web's route guard.
 public enum AppSection: String, CaseIterable, Sendable, Identifiable {
-    case tasks, following, agents, skills, runners, settings, admin
+    case tasks, following, agents, skills, runners, settings, admin, projects
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
+        case .projects: return "Projects"
         case .tasks:    return "Tasks"
         case .following: return "Following"
         case .agents:   return "Workspaces"
@@ -23,6 +24,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     /// SF Symbol for the sidebar row.
     public var systemImage: String {
         switch self {
+        case .projects: return "square.grid.2x2"
         case .tasks:    return "checklist"
         case .following: return "eye"
         case .agents:   return "person.2"
@@ -37,18 +39,23 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     public var adminOnly: Bool { self == .admin }
 
     /// Sections to show in the nav, in display order. Runners leads; Skills is intentionally omitted
-    /// (its detail view still exists but is no longer a top-level destination). Following — the
-    /// watches kept on sessions and tasks — follows Tasks. Admin is gated by role.
+    /// (its detail view still exists but is no longer a top-level destination). Projects sits just
+    /// before Tasks — a project is what its tasks are for — and Following, the watches kept on
+    /// sessions and tasks, follows Tasks. Admin is gated by role.
     public static func visible(isAdmin: Bool) -> [AppSection] {
-        let order: [AppSection] = [.runners, .agents, .tasks, .following, .settings, .admin]
+        let order: [AppSection] = [.runners, .agents, .projects, .tasks, .following, .settings, .admin]
         return order.filter { !$0.adminOnly || isAdmin }
     }
+
+    /// What the iPhone drawer and the regular-width iPad sidebar lead with, ABOVE the Workspaces and
+    /// set apart from them: the work itself — its projects, its tasks, and what is being followed.
+    public static let workSections: [AppSection] = [.projects, .tasks, .following]
 
     /// Destinations shown below the regular-width iPad sidebar's first-class Workspace group.
     /// Keep this derived from ``visible(isAdmin:)`` so role gating and the cross-client navigation
     /// order stay authoritative in one place while the iPad renderer supplies the group boundary.
     public static func managementSections(isAdmin: Bool) -> [AppSection] {
-        visible(isAdmin: isAdmin).filter { $0 != .agents }
+        visible(isAdmin: isAdmin).filter { $0 != .agents && !workSections.contains($0) }
     }
 
     /// The section a deep-link / notification `Route` lands in. There's no aggregate Open view
