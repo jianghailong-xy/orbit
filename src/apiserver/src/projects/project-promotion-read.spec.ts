@@ -196,6 +196,19 @@ test('a candidate whose merge conflicted says so, and still names the paths', as
   assert.deepEqual(view?.conflicts, ['src/runner-go/session_pool.go']);
 });
 
+test('a candidate a check blocked carries the instant it was blocked, which is where a conversation draws it', async () => {
+  // A block is a fact about a moment, and the conversation draws the card at it rather than at the
+  // tail of the pane (`promotionRecordMoment`): without the instant on the wire, the client can only
+  // pin it under every later message, which is what the owner reported on 2026-09-24.
+  const blockedAt = new Date('2026-09-24T02:41:42.218Z');
+  const view = await current({ promotion: { state: 'BLOCKED', decidedAt: blockedAt } });
+  assert.deepEqual(view?.decidedAt, blockedAt);
+
+  // A candidate still asking has no such moment, and neither has one nothing stamped: the reader is
+  // told "no moment" rather than an instant it would have to invent.
+  assert.equal((await current())?.decidedAt, null);
+});
+
 test('a re-check carries how far main moved and how long one usually takes', async () => {
   const startedAt = new Date('2026-09-13T11:58:00.000Z');
   const view = await current({

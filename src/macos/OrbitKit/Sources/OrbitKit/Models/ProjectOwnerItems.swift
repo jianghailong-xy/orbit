@@ -484,6 +484,16 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     public let landsAs: String?
     public let askedAt: String?
     public let recheckedAt: String?
+    /// When this candidate stopped being live: the instant a check blocked it (state D), the owner's
+    /// decline, the cancel or the supersede that ended it — and, on a row that merged, the merge's
+    /// own instant, which is also in `merged.at` (mirrors `@orbit/shared`'s field of the same name,
+    /// contract §3.6).
+    ///
+    /// The conversation draws a candidate that has one at that moment rather than at the tail
+    /// (`DeliveryAnchor.promotion`): a card that says what already happened, pinned under every later
+    /// message, reads as though it happened now. Nil while it is still asking, and nil from a server
+    /// older than the rule — both are "no moment", never an error.
+    public let decidedAt: String?
     public let merged: Merged?
 
     public struct Merged: Codable, Equatable, Sendable {
@@ -502,7 +512,8 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
                 upstreamRef: String, commitsAhead: Int? = nil, filesChanged: Int? = nil,
                 taskIds: [String] = [], checks: [IntegrationCheckResult] = [],
                 conflicts: [String] = [], landsAs: String? = "MERGE_COMMIT",
-                askedAt: String? = nil, recheckedAt: String? = nil, merged: Merged? = nil) {
+                askedAt: String? = nil, recheckedAt: String? = nil, decidedAt: String? = nil,
+                merged: Merged? = nil) {
         self.promotionId = promotionId
         self.state = state
         self.sourceRef = sourceRef
@@ -516,6 +527,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         self.landsAs = landsAs
         self.askedAt = askedAt
         self.recheckedAt = recheckedAt
+        self.decidedAt = decidedAt
         self.merged = merged
     }
 
@@ -534,6 +546,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         landsAs = try c.decodeIfPresent(String.self, forKey: .landsAs)
         askedAt = try c.decodeIfPresent(String.self, forKey: .askedAt)
         recheckedAt = try c.decodeIfPresent(String.self, forKey: .recheckedAt)
+        decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt)
         merged = try c.decodeIfPresent(Merged.self, forKey: .merged)
     }
 }

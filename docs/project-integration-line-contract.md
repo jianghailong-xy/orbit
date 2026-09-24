@@ -609,7 +609,7 @@ interface ProjectPromotionView {
 
 `src/web/src/components/ProjectPromotionCard.test.tsx`：`renders READY with tasks, checks and the merge button`、`renders RECHECKING with the merge button disabled and a cancel`、`renders MERGED as a receipt`、`renders BLOCKED with the merge button disabled and the handler`。
 
-`src/web/src/components/WorkspaceView.promotionAtMerge.test.tsx`：合入的记录画在它发生的那一刻而不是卡片区、`current` 前进后它仍说自己那次合入、没有合入过的项目一张都不画、卡片区不再为已合入的晋升留一张卡。
+`src/web/src/components/WorkspaceView.promotionPlacement.test.tsx`：合入的记录画在它发生的那一刻而不是卡片区、`current` 前进后它仍说自己那次合入、没有合入过的项目一张都不画、卡片区不再为已合入的晋升留一张卡；被检查拦下的晋升同样画在它被拦下的那一刻（`decided_at`）、过后消息进来它不动、它仍读待办行说谁在处理、分支重新被呈上时它退场换成卡片区的问句、时间戳读不出来时留在卡片区而不是消失。
 
 `src/apiserver/src/projects/project-promotion-read.spec.ts`：`merged` 只读 `MERGED` 行且最近在前、一次合入带回它自己的提交与任务、二十条历史只各问一次表、没有合入过就不读任务表。
 
@@ -1127,7 +1127,7 @@ interface ProjectListAttention {
 
 会话页卡片区（`WorkspaceView` 的 `<Transcript>` 之后）按既有模式挂 `Session*Card({ projectId })`，React key 带前缀，查询 `['project', id, …]`，每 20 秒轮询，只在项目协调会话里渲染。项目页 Open items 的 `Review` / `Answer` 展开同一组件。
 
-**卡片区只放"现在为真"的东西**（2026-09-21）：已经发生的合入是**记录**，画在它发生的那一刻（§3.6 的 `merged` + `ProjectPromotionReceipt`），卡片区那一张传 `drawMergedRecord={false}` 不再画它——留在卡片区的记录会压在之后每条消息下面直到项目结束，而下一个候选出现时，同一张卡会改口说另一次合入。另外四条回执（criteria / evidence / owner / settlement）已经按同一条规则落位。
+**卡片区只放"现在为真"的东西**（2026-09-21，2026-09-24 扩到被拦下的候选）：已经发生的合入是**记录**，画在它发生的那一刻（§3.6 的 `merged` + `ProjectPromotionReceipt`）；被检查拦下的候选（`decided_at`）同样是既成事实，那张卡自己画在那一刻（web `promotionRecordMoment`、原生 `DeliveryAnchor.promotion`）。卡片区那一张传 `drawRecords={false}` 不再画这两者——留在卡片区的记录会压在之后每条消息下面直到项目结束，而下一个候选出现时，同一张卡会改口说另一次合入。另外四条回执（criteria / evidence / owner / settlement）已经按同一条规则落位。
 
 | 组件 | 负责任务 | 状态与文案（英文，取自效果图） |
 |---|---|---|

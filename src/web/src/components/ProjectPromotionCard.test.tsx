@@ -99,6 +99,7 @@ function promotion(over: Partial<ProjectPromotionView> = {}): ProjectPromotionVi
     askedAt: at(2 * HOUR + 10 * MINUTE),
     recheckedAt: null,
     recheck: null,
+    decidedAt: null,
     merged: null,
     ...over,
   };
@@ -462,7 +463,7 @@ describe('state C, merged by the Automatic setting — the receipt says so and h
 
 /**
  * The same state C as a record, drawn in the conversation at the moment it happened
- * (`WorkspaceView.promotionAtMerge.test.tsx`): what it says is the merge's OWN, and the two rows
+ * (`WorkspaceView.promotionPlacement.test.tsx`): what it says is the merge's OWN, and the two rows
  * about where the branch stands now are the live card's business rather than the record's.
  */
 describe('the record a merge leaves', () => {

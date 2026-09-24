@@ -72,6 +72,31 @@ export const CRITERIA_TAIL = 'merging does not close the project';
 /** B5: what merging does to a blocker somebody was still going to decide. */
 export const BLOCKERS_DECIDED_TOO = 'merging decides them too';
 
+/**
+ * The moment a candidate is drawn at in a conversation, or null while it is drawn at the tail.
+ *
+ * The pane's card strip is where the questions that are open NOW live, and two of the four states
+ * are not questions: a merge has happened (its receipt is drawn at `merged.at`), and a BLOCKED
+ * candidate has already failed to be offered (drawn at `decidedAt`). Held in the strip as well, both
+ * sat at the bottom of the pane under every later message for as long as they stood — reading as
+ * though they had just happened, which is what the owner reported for the merge on 2026-09-21 and
+ * for the exceptions on 2026-09-22 — where a conversation is a record of what happened in an order.
+ *
+ * A stamp nothing can parse is NOT a moment: both callers fall back to the strip, so a candidate is
+ * never dropped for a clock this build cannot read (the same fallback `DeliveryAnchor.exception`
+ * keeps on the native ends). Exported because the HOST places the row — the anchor is a fact about
+ * a transcript only the view holds.
+ */
+export function promotionRecordMoment(promotion: ProjectPromotionView): string | null {
+  const at =
+    promotion.state === 'MERGED'
+      ? promotion.merged?.at ?? null
+      : promotion.state === 'BLOCKED'
+        ? promotion.decidedAt
+        : null;
+  return at !== null && !Number.isNaN(Date.parse(at)) ? at : null;
+}
+
 /** The part of the project document this card reads (M8): how far the criteria have got, and how
  *  much work the branch still has after this merge. Structural, so `ProjectDetail` satisfies it. */
 export interface PromotionProjectView {
@@ -561,23 +586,25 @@ export function ProjectPromotionCard({
  * Reads nothing without a project — an ordinary session coordinates none — and draws nothing while
  * no candidate is asking or telling anything, so neither host has to know whether there is one.
  *
- * `drawMergedRecord` is the one thing the two hosts disagree about. A merge that has already
- * happened is a RECORD, and the conversation draws it where it happened instead
- * (`ProjectPromotionReceipt`, anchored by `decisionReceiptAnchor`): held here as well it sat at the
- * bottom of the pane for the life of the project, under every later message and in conversations
- * started long afterwards, and once the branch was offered again this same strip described a
- * different merge in the same place. The project page has no transcript to draw a moment into, so it
- * keeps the record where it always was — beside the branch it is about.
+ * `drawRecords` is the one thing the two hosts disagree about. What a candidate that already has a
+ * moment is — a merge that happened, a candidate a check blocked — is a RECORD, and the
+ * conversation draws each where it happened instead, anchored by `decisionReceiptAnchor`
+ * (`ProjectPromotionReceipt`, and the card itself for a blocked one): held here as well they sat at
+ * the bottom of the pane for the life of the project, under every later message and in
+ * conversations started long afterwards, and once the branch was offered again this same strip
+ * described a different merge in the same place. The project page has no transcript to draw a
+ * moment into, so it keeps them where they always were — beside the branch they are about.
  */
 export function ProjectPromotion({
   projectId,
   now = Date.now(),
-  drawMergedRecord = true,
+  drawRecords = true,
 }: {
   projectId: string | null | undefined;
   now?: number;
-  /** Whether a merge this project already made is drawn HERE. See this function's own note. */
-  drawMergedRecord?: boolean;
+  /** Whether a candidate this project already has a moment for is drawn HERE. See this function's
+   *  own note. */
+  drawRecords?: boolean;
 }): JSX.Element | null {
   const promotion = useQuery({
     ...projectPromotionQuery(projectId ?? ''),
@@ -596,7 +623,9 @@ export function ProjectPromotion({
   });
   const current = promotion.data;
   if (!projectId || !current) return null;
-  if (!drawMergedRecord && current.state === 'MERGED') return null;
+  // A candidate with a moment is drawn by the transcript, and one whose stamp nothing can read
+  // stays here rather than going nowhere (`promotionRecordMoment`).
+  if (!drawRecords && promotionRecordMoment(current) !== null) return null;
   const rows = [...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])];
   return (
     <ProjectPromotionCard

@@ -93,6 +93,7 @@ import {
   pendingDecisionsQuery,
   projectMergedPromotionsQuery,
   projectOpenItemsQuery,
+  projectPromotionQuery,
   watchesQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
@@ -210,7 +211,12 @@ import {
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
 import { ItemAsCard, exceptionCardRows } from './ProjectProgressStatus';
-import { ProjectPromotion, ProjectPromotionReceipt } from './ProjectPromotionCard';
+import {
+  ProjectPromotion,
+  ProjectPromotionCard,
+  ProjectPromotionReceipt,
+  promotionRecordMoment,
+} from './ProjectPromotionCard';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
 import {
@@ -3659,6 +3665,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     refetchInterval: 20_000,
   });
 
+  // The candidate on offer, read HERE as well as inside the strip's card below, for the one state
+  // the strip does not keep: a candidate a check blocked has a moment, and where that moment falls
+  // is a fact about this conversation's own events (`transcriptEvents`), which only this view
+  // holds. Same query key as the card's own read, so the two share one request. Polled, because a
+  // blocked candidate is still moving — somebody is resolving it — and the card drawn from it says
+  // who and for how long.
+  const currentPromotion = useQuery({
+    ...projectPromotionQuery(coordinatedProjectId ?? ''),
+    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+    refetchInterval: 20_000,
+  });
+
   // What this project still owes somebody, for the exceptions drawn into the transcript at the
   // moment each happened (`exceptionCardRows` below, `ItemAsCard`). The same read the project page
   // and the coordinator's other cards use, and polled with the merges above: a conversation that is
@@ -3784,7 +3802,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             }];
       }),
       // And the merges this project has made, each at the moment it made it. The strip draws only
-      // the candidate that is asking NOW (`drawMergedRecord={false}` below): held there as well,
+      // the candidate that is asking NOW (`drawRecords={false}` below): held there as well,
       // this record sat under every later message for the life of the project — in conversations
       // started long afterwards, and after the project was done — which is where the questions that
       // are open NOW belong. Anchored by `mergedAt`, which is the terminal edge's own clock on a row
@@ -3792,8 +3810,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // other record here (`decisionReceiptAnchor`).
       ...(mergedPromotions.data ?? []).flatMap((promotion) => {
         // A candidate with no `merged` is not a record: no moment, so nothing to place.
-        const mergedAt = promotion.merged?.at;
-        if (!mergedAt) return [];
+        const mergedAt = promotionRecordMoment(promotion);
+        if (mergedAt === null) return [];
         const anchor = decisionReceiptAnchor(transcriptEvents, mergedAt);
         return anchor === null
           ? []
@@ -3843,11 +3861,52 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     [coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
   );
 
+  // The candidate a check blocked, drawn at the moment it was blocked instead of at the bottom of
+  // this pane — where it sat, under every later message, for as long as the block stood, and in a
+  // conversation started long afterwards; the owner's report, 2026-09-24 (`promotionRecordMoment`
+  // is the rule, and the strip that used to hold it now draws only what is asking or under way).
+  //
+  // A BLOCKED candidate is still LIVE — the row says who is on it and for how long — so unlike the
+  // records above this element is rebuilt on every poll, which is why `dataUpdatedAt` is in the
+  // deps (`exceptionCards` carries the same note). Its `project` is null because the blocked card
+  // draws no row off the project document: what it says is read from the candidate and the item.
+  const blockedPromotionCard = useMemo(() => {
+    const current = currentPromotion.data;
+    if (!coordinatedProjectId || !current || current.state !== 'BLOCKED') return [];
+    // Null for a stamp this build cannot read, which the strip then keeps drawing (the rule and the
+    // fallback are both `promotionRecordMoment`'s).
+    const blockedAt = promotionRecordMoment(current);
+    if (blockedAt === null) return [];
+    const anchor = decisionReceiptAnchor(transcriptEvents, blockedAt);
+    if (anchor === null) return [];
+    const rows = [...(openItems.data?.needsYou ?? []), ...(openItems.data?.withCoordinator ?? [])];
+    return [{
+      anchor,
+      moment: blockedAt,
+      key: `promotion-blocked:${current.promotionId}`,
+      element: (
+        <ProjectPromotionCard
+          projectId={coordinatedProjectId}
+          promotion={current}
+          item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
+          project={null}
+          now={Date.now()}
+        />
+      ),
+    }];
+  }, [
+    coordinatedProjectId,
+    currentPromotion.data,
+    currentPromotion.dataUpdatedAt,
+    openItems.data,
+    transcriptEvents,
+  ]);
+
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...exceptionCards],
-    [decisionReceipts, exceptionCards],
+    () => [...decisionReceipts, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, blockedPromotionCard, exceptionCards],
   );
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
@@ -6804,18 +6863,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               )}
               {/* The merge this project is asking its owner to make, drawn in the conversation that
                   is coordinating it (mock 4, §3.3): what would land on main, what the checks came
-                  to, and — while it is under way or blocked — why nobody is being asked to press
-                  anything yet. Read from the candidate itself rather than from any turn, so it is
-                  the same card the project page shows.
-                  ASKING, NOT RECORDING: once this merge has happened it is a fact about a moment,
-                  and the conversation draws it at that moment (`mergedPromotions` above) rather than
-                  keeping it here under everything that came afterwards. Keyed apart from its
-                  siblings for the reason the evidence card's note gives below. */}
+                  to, and — while it is under way — why nobody is being asked to press anything yet.
+                  Read from the candidate itself rather than from any turn, so it is the same card
+                  the project page shows.
+                  ASKING, NOT RECORDING: what already has a moment is drawn at that moment instead —
+                  a merge as its receipt (`mergedPromotions` above), a candidate a check blocked as
+                  the card itself (`blockedPromotionCard` above) — rather than kept here under
+                  everything that came afterwards. Keyed apart from its siblings for the reason the
+                  evidence card's note gives below. */}
               {selected && selectedId && !selectedTrashed && (
                 <ProjectPromotion
                   key={`promotion:${selectedId}`}
                   projectId={coordinatedProjectId}
-                  drawMergedRecord={false}
+                  drawRecords={false}
                 />
               )}
               {/* A question THIS conversation put to the account owner, drawn where it was asked
