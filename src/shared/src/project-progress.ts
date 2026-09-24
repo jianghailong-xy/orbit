@@ -509,6 +509,18 @@ export interface ProjectPromotionView<Instant = string> {
     automatic: boolean;
     revert: string | null;
   } | null;
+  /**
+   * When this candidate stopped being live: the instant a check blocked it (state D), the owner's
+   * decline, the cancel or the supersede that ended it — and, on a row that merged, the merge's own
+   * instant, which is also in `merged.at`.
+   *
+   * Null while it is still asking (CHECKING, READY, CONFIRMED, RECHECKING), and every reader treats
+   * the absence as "no moment" rather than as an error. The conversation draws a candidate that has
+   * one at that moment in its transcript instead of at the tail of the pane
+   * (`promotionRecordMoment`): a card that says what already happened, pinned under every later
+   * message, reads as though it happened now — the owner's report of 2026-09-24.
+   */
+  decidedAt: Instant | null;
 }
 
 /**

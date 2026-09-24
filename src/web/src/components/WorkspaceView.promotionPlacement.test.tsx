@@ -7,26 +7,31 @@ import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-
 import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectPromotionView } from '@orbit/shared';
+import type { ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
 import type { Runner } from './TasksSidePanel';
 import { MERGED_HEADING } from './ProjectPromotionCard';
 
 /**
- * THE RECORD A MERGE LEAVES, IN THE CONVERSATION IT HAPPENED IN.
+ * WHERE A PROMOTION'S CARD IS DRAWN IN THE CONVERSATION, WHICH IS A QUESTION ABOUT A MOMENT.
  *
- * "✓ Merged into main" was drawn by the pane's card strip, from `/promotions/current`, and that
- * strip is where the cards that ask something NOW live. So the receipt for a merge was pinned to
- * the bottom of the conversation for as long as nothing superseded it — under every later message,
- * in a conversation started afterwards, days after the merge — and when the next candidate appeared
- * the SAME strip drew a different merge in the same place. The owner's report, 2026-09-21: the card
- * "is fixed at the bottom of the conversation" and belongs where the merge happened.
+ * Two of §3.3's four states are not questions, and both were drawn by the pane's card strip, from
+ * `/promotions/current` — the slot where the cards that ask something NOW live. Pinned there they
+ * sat at the bottom of the conversation for as long as they stood: under every later message, in a
+ * conversation started afterwards, days later. The owner reported it twice — of the merge receipt on
+ * 2026-09-21 ("fixed at the bottom of the conversation": it belongs where the merge happened) and of
+ * the blocked candidate on 2026-09-24. Once the branch was offered again the same strip described a
+ * different merge in the same place, which is the second half of the same defect.
  *
- * Where it happened is a moment, and a promotion that reached MERGED is a record of one: the row is
- * terminal and guarded (`project_promotion_terminal_guard`), it carries its own `merged_sha` and
- * `merged_at`, and the conversation draws it with `decisionReceiptAnchor` — the same rule the
- * criteria, evidence, owner and settlement receipts beside it are drawn by. Only the view can hold
- * this: it is a fact about where a row lands in a transcript that moves, off a read that is not the
- * one the live candidate comes from.
+ * Each is a fact about a moment, and each is drawn at it with `decisionReceiptAnchor` — the rule the
+ * criteria, evidence, owner and settlement receipts beside them are drawn by (`promotionRecordMoment`
+ * is where the moment comes from): a merge from `merged_at` on a row that is terminal and guarded
+ * (`project_promotion_terminal_guard`), a blocked candidate from `decided_at`, the instant a check
+ * refused it. Only the view can place either: where a moment falls among the events is a fact about
+ * a transcript that moves, and off a read that is not the one the live candidate comes from.
+ *
+ * A blocked candidate is the one that is still LIVE there — the row says who is on it and for how
+ * long — so it is the card itself, rebuilt on every poll, where the merge leaves a read-only
+ * receipt. The strip keeps what is asking (READY) and what is under way (CONFIRMED, RECHECKING).
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -59,6 +64,9 @@ const NEXT_SOURCE_SHA = 'a286c7a060e3a836ac2b6159cf138b54f584093b';
  *  fact about the transcript rather than about which poll happened to land first. */
 const OPENING_AT = '2026-09-11T03:10:00Z';
 const MERGED_AT = '2026-09-11T03:10:30Z';
+/** Between the opening event and the notes below, so a blocked candidate has an event to land
+ *  after — the moment is what places it, not the poll that happened to bring the read back. */
+const BLOCKED_AT = '2026-09-11T03:10:45Z';
 const LATER_AT = '2026-09-11T03:12:00Z';
 
 const RUNNER = {
@@ -117,6 +125,7 @@ function merged(over: Partial<ProjectPromotionView> = {}): ProjectPromotionView 
     askedAt: '2026-09-11T03:00:00Z',
     recheckedAt: null,
     recheck: null,
+    decidedAt: MERGED_AT,
     merged: { sha: MERGED_SHA, byUserId: 'user-1', at: MERGED_AT },
     ...over,
   };
@@ -130,7 +139,22 @@ function candidate(over: Partial<ProjectPromotionView> = {}): ProjectPromotionVi
     sourceSha: NEXT_SOURCE_SHA,
     commitsAhead: 7,
     askedAt: '2026-09-11T03:20:00Z',
+    decidedAt: null,
     merged: null,
+    ...over,
+  });
+}
+
+/** And the candidate a check refused at `BLOCKED_AT`: state D, which is what the conversation draws
+ *  at that moment. Its checks came back empty with nothing in `conflicts`, which is the shape a
+ *  landing job that never got as far as a merge leaves (`blockPromotion`) — the real one, 2026-09-24. */
+function blocked(over: Partial<ProjectPromotionView> = {}): ProjectPromotionView {
+  return candidate({
+    state: 'BLOCKED',
+    sourceKind: 'TASK_BRANCH',
+    sourceRef: 'orbit/runner-web-714027',
+    askedAt: BLOCKED_AT,
+    decidedAt: BLOCKED_AT,
     ...over,
   });
 }
@@ -148,12 +172,40 @@ class FakeEventSource {
   }
 }
 
+/** What a blocked candidate's item says, for the row the card draws its `Who` line from. */
+function blockedItem(over: Partial<ProjectOpenItemRow> = {}): ProjectOpenItemRow {
+  return {
+    itemId: '4BLRNxGq7TOI1lIiOh4g1j',
+    kind: 'INTEGRATION_ERROR',
+    title: 'Integration error: merging the project branch into main',
+    detailLine: 'the job ended with SOURCE_BRANCH_MISSING',
+    assignee: 'COORDINATOR',
+    assigneeReason: 'DEFAULT',
+    waitingSince: BLOCKED_AT,
+    escalateAt: null,
+    escalatedAt: null,
+    taskId: null,
+    sessionId: null,
+    promotionId: NEXT_PROMOTION_ID,
+    fuseEpisodeId: null,
+    delivery: { state: 'DELIVERED', sessionId: COORDINATOR_PUBLIC, at: BLOCKED_AT },
+    actions: ['OPEN_COORDINATOR'],
+    question: null,
+    facts: null,
+    ...over,
+  };
+}
+
 /** Every path the page asked the api for, in order, and the ones nothing answered for. */
 const requested: string[] = [];
 const unstubbed: string[] = [];
 /** What the two promotion doors serve. Reset per case like every other stub. */
 let currentPromotion: ProjectPromotionView | null = null;
 let mergesOnRecord: ProjectPromotionView[] = [];
+let openItemRows: { needsYou: ProjectOpenItemRow[]; withCoordinator: ProjectOpenItemRow[] } = {
+  needsYou: [],
+  withCoordinator: [],
+};
 let mergedReads = 0;
 let currentReads = 0;
 let container: HTMLDivElement | null = null;
@@ -167,6 +219,9 @@ const mounted = (): HTMLDivElement => {
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
 const record = (): HTMLElement | null =>
   mounted().querySelector<HTMLElement>('.project-promotion-receipt');
+/** The blocked card, wherever it was drawn — the transcript's, or the strip's. */
+const blockedCard = (): HTMLElement | null =>
+  mounted().querySelector<HTMLElement>('.project-promotion[data-state="BLOCKED"]');
 /** Every promotion card drawn anywhere, by state: the strip's question and the transcript's record. */
 const cardsOfState = (state: string): number =>
   mounted().querySelectorAll(`.project-promotion[data-state="${state}"]`).length;
@@ -184,6 +239,7 @@ beforeEach(() => {
   unstubbed.length = 0;
   currentPromotion = null;
   mergesOnRecord = [];
+  openItemRows = { needsYou: [], withCoordinator: [] };
   mergedReads = 0;
   currentReads = 0;
   container = null;
@@ -223,7 +279,7 @@ beforeEach(() => {
       return reply({ id: PROJECT_PUBLIC, title: 'the merge card', status: 'OPEN', coordinatorEnabled: true, _count: { tasks: 1 }, acceptanceCriteriaItems: [], tasksByStatus: {} });
     }
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
-      return reply({ needsYou: [], withCoordinator: [] });
+      return reply(openItemRows);
     }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       return reply({ readAt: OPENING_AT, projectId: PROJECT_PUBLIC, count: 0, oldestAgeSeconds: null, decidableCount: 0, pending: [], settled: [] });
@@ -422,6 +478,78 @@ describe('the record a merge leaves, in the conversation it happened in', { time
       requested.filter((path) => path.endsWith('/promotions/merged')),
       'a conversation with no project read the merges of one',
     ).toEqual([]);
+    expect(
+      requested.filter((path) => path.endsWith('/promotions/current')),
+      'a conversation with no project read the candidate of one',
+    ).toEqual([]);
+  });
+});
+
+describe('the card a blocked candidate leaves, in the conversation it happened in', { timeout: 60_000 }, () => {
+  it('is drawn among the events, at the moment it was blocked, and not in the pane’s card strip', async () => {
+    currentPromotion = blocked();
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(cardsOfState('BLOCKED'), 'no blocked candidate is drawn').toBe(1);
+    });
+    await note(COORDINATOR_PUBLIC, 2);
+
+    const card = blockedCard()!;
+    expect(card.textContent, 'the card does not name the branch it could not merge').toContain(
+      'orbit/runner-web-714027',
+    );
+    // It is IN the flow: the thing after it is an event of the conversation, and the message
+    // published after the block is below it — a moment, not the tail of the pane.
+    expect(card.nextElementSibling?.hasAttribute('data-seq')).toBe(true);
+    const later = mounted().querySelector<HTMLElement>('[data-seq="3"]');
+    expect(later, 'the message published after the block is not in the conversation').toBeTruthy();
+    expect(
+      card.compareDocumentPosition(later!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the blocked card is drawn below a message that came after the block — a tail, not its moment',
+    ).toBeTruthy();
+  });
+
+  it('keeps saying who is on it, from the item read, rather than only what was true when it was blocked', async () => {
+    currentPromotion = blocked();
+    openItemRows = { needsYou: [], withCoordinator: [blockedItem()] };
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    // The card is a RECORD of the block and still a LIVE reading of it: the row it reads names who
+    // is resolving the candidate, which is nowhere on the candidate itself.
+    await waitForUi(() => {
+      expect(blockedCard()?.textContent).toContain('The coordinator is resolving it on the project branch');
+    });
+  });
+
+  it('goes once the branch is offered again, which the strip draws as the question it is', async () => {
+    currentPromotion = blocked();
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(cardsOfState('BLOCKED')).toBe(1);
+    });
+
+    currentPromotion = candidate();
+    await rereadProject([() => currentReads]);
+    await waitForUi(() => {
+      expect(cardsOfState('READY'), 'the next candidate is not being asked about').toBe(1);
+    });
+    expect(cardsOfState('BLOCKED'), 'the block is still drawn after the branch was offered again').toBe(0);
+  });
+
+  it('keeps the strip’s card when the stamp is one nothing can parse', async () => {
+    currentPromotion = blocked({ decidedAt: 'some time last Tuesday' });
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(cardsOfState('BLOCKED')).toBe(1);
+    });
+    await note(COORDINATOR_PUBLIC, 2);
+    // Drawn at the tail rather than dropped: a candidate is not taken off the screen for a clock
+    // this build cannot read (the fallback `DeliveryAnchor.exception` keeps on the native ends).
+    const card = blockedCard()!;
+    const later = mounted().querySelector<HTMLElement>('[data-seq="3"]')!;
+    expect(
+      later.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'a card with an unreadable stamp is not drawn at all',
+    ).toBeTruthy();
   });
 });
 
@@ -501,7 +629,15 @@ describe('where the record comes from', () => {
       'decisionReceiptAnchor(transcriptEvents,',
     );
     expect(view, 'the strip was not told that the record is drawn in the transcript').toContain(
-      'drawMergedRecord={false}',
+      'drawRecords={false}',
+    );
+  });
+
+  it('reads the candidate on offer, and places a blocked one at the moment a check refused it', () => {
+    const view = source();
+    expect(view, 'the pane never reads the candidate on offer').toContain('projectPromotionQuery');
+    expect(view, 'the blocked card is not placed by its own moment').toContain(
+      'promotionRecordMoment(current)',
     );
   });
 });

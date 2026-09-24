@@ -358,6 +358,31 @@ public enum DeliveryAnchor {
         }
         return .at(moment)
     }
+
+    /// Where the merge card belongs — at the moment a check blocked the candidate, or wherever a
+    /// question delivered right now goes (`onArrival`), which is the fallback this shares with
+    /// `exception`.
+    ///
+    /// ONE OF THE FOUR STATES IS NOT A QUESTION. A candidate a check blocked is state D: nothing on
+    /// the card is pressable, and what it says is what already happened and what happens next.
+    /// Anchored by arrival it landed wherever the reader happened to be when the read came back —
+    /// which, on a conversation opened afterwards, is the tail. The owner read
+    /// `orbit/runner-web-714027 can’t merge into main yet` under the newest message of a
+    /// conversation whose block had happened nine hours earlier and eleven messages before
+    /// (2026-09-24), which is the same report the merge's record was fixed for on 2026-09-21 and the
+    /// exceptions' on 2026-09-22.
+    ///
+    /// The moment is the row's own (`decided_at`), the instant the check refused it, and a candidate
+    /// with no stamp this build can read trails the tail rather than being dropped — `blockedAt` is
+    /// nil for every other state, so a candidate still asking is delivered the ordinary way.
+    public static func promotion(_ view: ProjectPromotionView,
+                                 items: [TranscriptItem]) -> DeliveredDecisionCard.Placement {
+        guard let moment = PromotionCards.blockedAt(view),
+              ThinkingSummary.date(moment) != nil else {
+            return .onArrival(afterItemID: items.last?.id)
+        }
+        return .at(moment)
+    }
 }
 
 /// One rendered transcript row, whatever it was assembled from.

@@ -154,6 +154,16 @@ public enum PromotionCards {
         }
     }
 
+    /// When a check blocked this candidate, or nil for one in any other state.
+    ///
+    /// State D's own moment, `project_promotion.decided_at` on the wire, and the half of web's
+    /// `promotionRecordMoment` this client reads: a merge's moment is `merged.at`, which `Receipt`
+    /// carries. The conversation draws the card at it instead of at the tail
+    /// (`DeliveryAnchor.promotion`), so both ends put the same card in the same place.
+    public static func blockedAt(_ view: ProjectPromotionView) -> String? {
+        stage(view) == .blocked ? view.decidedAt : nil
+    }
+
     /// Only a READY candidate may be confirmed (§3.3): a blocked one's checks did not pass, and a
     /// confirmed one is already landing.
     public static func confirmable(_ view: ProjectPromotionView?) -> Bool {

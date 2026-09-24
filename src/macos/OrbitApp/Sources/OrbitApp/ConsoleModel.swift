@@ -2421,11 +2421,18 @@ final class ConsoleModel {
                 // below) rather than at the tail. Left here it sat under every later message for the
                 // life of the project — the account owner's report, 2026-09-21. The project page,
                 // which has no transcript to draw a moment into, keeps its card (web's
-                // `drawMergedRecord`).
+                // `drawRecords`).
                 if stage == .merged {
                     close(.promotionApproval(promotionID: current.promotionId))
                 } else {
-                    deliver(.promotionApproval(promotionID: current.promotionId))
+                    // And the candidate a check BLOCKED carries a moment of its own, which the card
+                    // is delivered at rather than at wherever this device read it
+                    // (`DeliveryAnchor.promotion`): held at the tail it sat under every later
+                    // message for as long as the block stood — the same report as the merge's, nine
+                    // hours and eleven messages later, 2026-09-24. A candidate still asking has no
+                    // moment, and that rule hands it back the ordinary arrival anchor.
+                    deliver(.promotionApproval(promotionID: current.promotionId),
+                            placement: DeliveryAnchor.promotion(current, items: state.items))
                 }
             }
         } catch {
