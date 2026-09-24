@@ -604,75 +604,10 @@ final class OrbitLinkTests: XCTestCase {
 
     // MARK: where a tap goes
 
-    func testEveryKindAndWhereItGoes() throws {
-        let task = try preview("""
-        {"kind":"task","id":"\(taskID)","state":"ok","task":{"title":"t","status":"DONE"}}
-        """)
-        let session = try preview("""
-        {"kind":"session","id":"\(sessionID)","state":"ok","session":{"id":"\(sessionID)","title":"t"}}
-        """)
-        let list = try preview("""
-        {"kind":"list","id":"\(listID)","state":"ok","list":{"title":"l","counts":{"total":1}}}
-        """)
-        let project = try preview("""
-        {"kind":"project","id":"\(projectID)","state":"ok","project":{"title":"p","total":1,
-          "buckets":{"running":0,"ready":0,"blocked":0,"awaitingVerification":0,"done":1,"failed":0,"cancelled":0},
-          "coordinatorSessionId":"\(sessionID)"}}
-        """)
-
-        let cases: [(OrbitLinkRef, LinkPreview, OrbitLinkDestination)] = [
-            (ref(.task, taskUUID, .pageURL("https://orbitd.io/tasks/\(taskID)")), task,
-             .task(id: taskID)),
-            (ref(.session, sessionUUID, .pageURL("https://orbitd.io/sessions/\(sessionID)")), session,
-             .session(id: sessionID)),
-            (ref(.list, listUUID, .pageURL("https://orbitd.io/lists/\(listID)")), list,
-             .list(id: listID)),
-            // A project goes to the conversation that coordinates it — the id the read handed back.
-            (ref(.project, projectUUID, .pageURL("https://orbitd.io/projects/\(projectID)")), project,
-             .session(id: sessionID)),
-            // …and with no coordinator, out to the page: this app has no project screen to open.
-            (ref(.project, projectUUID, .pageURL("https://orbitd.io/projects/\(projectID)")),
-             try preview("""
-             {"kind":"project","id":"\(projectID)","state":"ok","project":{"title":"p","total":1,
-               "coordinatorSessionId":null,"coordinator":null}}
-             """),
-             .web(URL(string: "https://orbitd.io/projects/\(projectID)")!)),
-            // Anything the server would not describe leaves the app rather than opening a page
-            // that has nothing to show.
-            (ref(.task, taskUUID, .pageURL("https://orbitd.io/tasks/\(taskID)")),
-             try preview("""
-             {"kind":"task","id":"\(taskID)","state":"unavailable"}
-             """),
-             .web(URL(string: "https://orbitd.io/tasks/\(taskID)")!)),
-        ]
-        for (link, answer, expected) in cases {
-            XCTAssertEqual(OrbitLinkDestination.tap(for: link, preview: answer, baseURL: baseURL),
-                           expected, "\(link.kind) \(link.id)")
-        }
-
-        // A loading card's tap is the same as an unavailable one's: nothing has answered yet.
-        XCTAssertEqual(OrbitLinkDestination.tap(for: ref(.task, taskUUID, .pageURL("https://orbitd.io/tasks/\(taskID)")),
-                                                preview: nil, baseURL: baseURL),
-                       .web(URL(string: "https://orbitd.io/tasks/\(taskID)")!))
-        // An id written as a UUID is spelled as the public id in the address, which is what the
-        // deployment's own routes carry.
-        XCTAssertEqual(OrbitLinkParser.pageURL(for: OrbitLinkTarget(kind: .task, id: taskUUID),
-                                               baseURL: URL(string: "https://orbitd.io/")!),
-                       URL(string: "https://orbitd.io/tasks/\(taskID)"))
-    }
-
-    /// Where a link somebody wrote or pasted goes, with nothing read yet: three kinds are a page in
-    /// this app whatever the object turns out to be. A project is not one of them — its destination
-    /// is the conversation that coordinates it, which only a read can name.
-    func testALinkGoesInAppWithoutReadingAnything() {
-        XCTAssertEqual(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .task, id: taskUUID)),
-                       .task(id: taskID))
-        XCTAssertEqual(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .session, id: sessionUUID)),
-                       .session(id: sessionID))
-        XCTAssertEqual(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .list, id: listUUID)),
-                       .list(id: listID))
-        XCTAssertNil(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .project, id: projectUUID)))
-    }
+    // `OrbitLinkDestination` — the four kinds, what a project with no coordinator does, and the task
+    // start card's project name going through the same rule — is asserted in
+    // `OrbitLinkDestinationTests`. It moved there because it is the one home for where a tap goes;
+    // this file is about which links become cards and what those cards say.
 
     // MARK: the wire
 
