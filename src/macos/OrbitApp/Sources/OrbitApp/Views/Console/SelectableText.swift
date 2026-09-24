@@ -118,7 +118,12 @@ struct SelectableText: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> UITextView {
-        let tv = SelectableTextView()
+        // TextKit 1, as the composer's `GrowingTextEditor` opts into and for the same reason: its
+        // `sizeThatFits` lays the whole text out and gives the same height every time it is asked.
+        // TextKit 2 lays out lazily and estimates the rest, so a tall reply measured differently from
+        // one pass to the next — and inside the transcript's self-sizing `List` that never settled:
+        // opening the session froze the main thread until the watchdog killed the app.
+        let tv = SelectableTextView(usingTextLayoutManager: false)
         tv.isEditable = false
         tv.isSelectable = true
         tv.isScrollEnabled = false            // self-sizes; the transcript List does the scrolling
