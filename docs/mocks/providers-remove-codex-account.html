@@ -1,0 +1,199 @@
+<!doctype html>
+<!-- Design mock: removing a Codex account from a runner, on the Providers page.
+     Geometry copied from src/web/src/components/RunnerEngines.tsx (.re-row/.re-acct/.re-act/
+     .re-dup/.re-panel); palette from src/web/src/index.css. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Providers · Remove a Codex account from a runner</title>
+<link rel="stylesheet" href="../../src/web/src/index.css">
+<link rel="stylesheet" href="project-progress/mock.css">
+<style>
+  .m-sheet { width: 1960px; }
+  .re-acct .re-id { padding-left: 38px; position: relative; }
+  .re-rail { position: absolute; left: 13px; top: -26px; height: 36px; width: 12px;
+             border-left: 1px solid var(--border); border-bottom: 1px solid var(--border);
+             border-bottom-left-radius: 7px; }
+  .re-chip { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px;
+             background: var(--fill-muted); color: var(--text-3); font-size: 10.5px;
+             font-weight: 600; line-height: 16px; vertical-align: 1px; }
+  /* the two shapes this change adds */
+  .re-act { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+  .a-btn.dangert { color: var(--error); border-color: transparent; background: transparent; }
+  .a-spin { display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+            border: 1.5px solid var(--error-border); border-top-color: var(--error);
+            animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .re-panel { grid-column: 1 / -1; }
+  .m-mark { outline-offset: 6px; }
+  .stage-body { width: 900px; }
+  .m-col .m-stage { padding: 14px 16px 18px; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1">Providers · removing a Codex account from a runner</h1>
+  <p class="m-sub zh">前一个项目让一台机器能有多个 Codex 账户；这张图是「把它们删掉」的界面：行上的 <b>Remove</b>、重复提示里的 <b>Remove</b>，以及机器拒绝时的说法。所有色值都来自 <code>src/web/src/index.css</code> 的真实 token。</p>
+
+  <div class="m-grid2">
+    <!-- ─────────────── 改前 ─────────────── -->
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k">改前</span><span class="zh">页面只能告诉你「去那台机器上删目录」</span></div>
+        <div class="stage-body">
+          <div class="re-card">
+            <div class="re-head">
+              <div class="re-toggle"><span class="re-chev open">▸</span><span class="re-dot on"></span>
+                <span class="re-runner">wikova</span><span class="re-runner-meta">vmi3129740 · runner 0.1.177</span></div>
+            </div>
+
+            <div class="re-row re-grp">
+              <div class="re-id">
+                <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226)"></div>
+                <div style="min-width:0"><div class="re-name">Codex</div>
+                  <div class="re-meta">codex 0.156.0 · <b>2 accounts</b></div></div>
+              </div>
+              <div></div><div class="re-quota"></div>
+              <div class="re-act"><span class="a-btn sm">+ Account</span></div>
+            </div>
+
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">Default<span class="re-chip">DEFAULT</span></div>
+                  <div class="re-meta">~/.codex · account cxa1_9f3a…</div></div>
+              </div>
+              <div><span class="a-tag green">Signed in</span></div>
+              <div class="re-quota"><div class="re-quota-head"><b>5h limit</b><span>62%</span></div>
+                <div class="runner-util"><span class="runner-util-fill" style="width:62%"></span></div></div>
+              <div class="re-act"><span class="a-btn link sm">Re-sign in</span></div>
+            </div>
+
+            <div class="re-row re-acct last">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">Work</div>
+                  <div class="re-meta">~/.orbit/codex-accounts/3fa91c2e · account cxa1_9f3a…</div></div>
+              </div>
+              <div><span class="a-tag green">Signed in</span></div>
+              <div class="re-quota"><div class="re-quota-head"><b>5h limit</b><span>62%</span></div>
+                <div class="runner-util"><span class="runner-util-fill" style="width:62%"></span></div></div>
+              <div class="re-act"><span class="a-btn link sm">Re-sign in</span></div>
+              <div class="re-dup"><span>This is the same account as <b>Default</b> — signing in twice does not double the quota.</span>
+                <span class="re-link">Remove</span></div>
+              <div class="re-panel">
+                <div class="re-panel-row">Removing this account means deleting its CODEX_HOME on wikova:</div>
+                <code class="re-cmd">~/.orbit/codex-accounts/3fa91c2e</code>
+                <div class="re-panel-hint">Orbit doesn’t remove accounts from a runner yet. Delete that directory there and this row goes away on the machine’s next check-in.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="m-cap zh">Default 行永远没有 Remove；而 Work 这一行、以及「同一账户签了两次」的提示，都只能展开一段说明——删除要人登录那台机器自己做。签入失败留下的空槽，页面上也看不见、删不掉。</p>
+      </div>
+    </div>
+
+    <!-- ─────────────── 改后 ─────────────── -->
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k new">改后</span><span class="zh">每个非 Default 账户都有 Remove</span></div>
+        <div class="stage-body">
+          <div class="re-card">
+            <div class="re-head">
+              <div class="re-toggle"><span class="re-chev open">▸</span><span class="re-dot on"></span>
+                <span class="re-runner">wikova</span><span class="re-runner-meta">vmi3129740 · runner 0.1.178</span></div>
+            </div>
+
+            <div class="re-row re-grp">
+              <div class="re-id">
+                <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226)"></div>
+                <div style="min-width:0"><div class="re-name">Codex</div>
+                  <div class="re-meta">codex 0.156.0 · <b>3 accounts</b></div></div>
+              </div>
+              <div></div><div class="re-quota"></div>
+              <div class="re-act"><span class="a-btn sm">+ Account</span></div>
+            </div>
+
+            <!-- Default: untouched -->
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">Default<span class="re-chip">DEFAULT</span></div>
+                  <div class="re-meta">~/.codex · account cxa1_9f3a…</div></div>
+              </div>
+              <div><span class="a-tag green">Signed in</span></div>
+              <div class="re-quota"><div class="re-quota-head"><b>5h limit</b><span>62%</span></div>
+                <div class="runner-util"><span class="runner-util-fill" style="width:62%"></span></div></div>
+              <div class="re-act"><span class="a-btn link sm">Re-sign in</span></div>
+            </div>
+
+            <!-- an added account, waiting for the machine -->
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">Work</div>
+                  <div class="re-meta">~/.orbit/codex-accounts/3fa91c2e · account cxa1_2b7e…</div></div>
+              </div>
+              <div><span class="a-tag green">Signed in</span></div>
+              <div class="re-quota"><div class="re-quota-head"><b>5h limit</b><span>8%</span></div>
+                <div class="runner-util"><span class="runner-util-fill" style="width:8%"></span></div></div>
+              <div class="re-act"><span class="a-btn link sm">Re-sign in</span>
+                <span class="a-btn dangert sm m-mark">Remove<span class="m-n">1</span></span></div>
+            </div>
+
+            <!-- the account that was asked to go: the machine has not answered yet -->
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">Personal</div>
+                  <div class="re-meta">~/.orbit/codex-accounts/7c21de40 · account cxa1_4d5c…</div></div>
+              </div>
+              <div><span class="a-tag green">Signed in</span></div>
+              <div class="re-quota"><div class="re-quota-head"><b>5h limit</b><span>3%</span></div>
+                <div class="runner-util"><span class="runner-util-fill" style="width:3%"></span></div></div>
+              <div class="re-act"><span class="a-btn link sm">Re-sign in</span>
+                <span class="a-btn dangert sm m-mark"><span class="a-spin"></span>Remove<span class="m-n">2</span></span></div>
+            </div>
+
+            <!-- the machine refused -->
+            <div class="re-row re-acct last">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">Clients</div>
+                  <div class="re-meta">~/.orbit/codex-accounts/9b04ff12 · account cxa1_9f3a…</div></div>
+              </div>
+              <div><span class="a-tag green">Signed in</span></div>
+              <div class="re-quota"><div class="re-quota-head"><b>5h limit</b><span>62%</span></div>
+                <div class="runner-util"><span class="runner-util-fill" style="width:62%"></span></div></div>
+              <div class="re-act"><span class="a-btn link sm">Re-sign in</span>
+                <span class="a-btn dangert sm m-mark">Remove<span class="m-n">3</span></span></div>
+              <div class="re-dup"><span>This is the same account as <b>Default</b> — signing in twice does not double the quota.</span>
+                <span class="re-link">Remove</span></div>
+              <div class="re-panel bad m-mark">
+                <div class="re-panel-row">codex account 9b04ff12 is in use by a session running on this machine — end that session, then remove it</div>
+                <div class="re-panel-hint">~/.orbit/codex-accounts/9b04ff12 on wikova is untouched.</div>
+                <span class="m-n">4</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k state">状态</span><span class="zh">按下之后发生什么</span></div>
+    <div class="m-grid2" style="gap:20px">
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t">按下的那一刻</span><span class="a-hint zh">① / ②</span></div>
+        <div class="a-hint zh">请求发给控制面，由它在下次心跳交给那台机器；按钮就地转圈。行<b>不会立刻消失</b>——它要等机器回话，页面上那行仍是「这台机器上这个账户的现状」。</div>
+      </div>
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t">机器拒绝</span><span class="a-hint zh">③ / ④</span></div>
+        <div class="a-hint zh">用机器自己的话，落在它说的那一行下面：账户正被一个活着的会话占着，或这台 runner 太旧、根本不会删账户（那就先更新它）。</div>
+      </div>
+    </div>
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>账户子行多一个 Remove</b>（红色文字按钮，和 Sign in / Re-sign in 同一格，间距 8px）。<b>Default 行没有</b>：它是这台机器自己的 <code>~/.codex</code>，终端里手敲 <code>codex</code> 用的是同一个登录，删掉等于删用户的登录。</span></li>
+      <li><span class="m-n">2</span><span><b>请求发出后按钮转圈、不可再点</b>，直到机器回话。成功时那一行在机器下一次上报里自然消失（runner 删完立刻重探一次引擎，通常是几十秒）。</span></li>
+      <li><span class="m-n">3</span><span><b>重复提示里的 Remove 从「展开说明」改成真的删</b>——这本来就是想起它的场合。两个入口是同一个动作，删的都是这一行自己的槽。</span></li>
+      <li><span class="m-n">4</span><span><b>拒绝就写在那一行下面</b>，原文照抄机器的话；另起一行说明那个 <code>CODEX_HOME</code> 原样没动。页面上不再有任何「去那台机器上删目录」的说明。</span></li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
