@@ -197,26 +197,31 @@ describe('one Codex account signed into two slots', () => {
     expect(button(workRow, 'Re-sign in')).toBeTruthy();
   });
 
-  it("offers removal where the account actually lives — its CODEX_HOME on that machine", async () => {
+  it('takes the slot off the machine, which is what the note is offering', async () => {
     const page = mount([runner([DEFAULT, { ...WORK, fingerprintPrefix: DEFAULT.fingerprintPrefix }])]);
     const [, workRow] = accountsOf(page);
-    expect(workRow.querySelector('.re-cmd')).toBeNull();
 
     await click(button(workRow, 'Remove'));
-    // An account slot is a directory on the runner: the page can only say which one, and that the
-    // row goes once the machine reports it gone.
-    expect(workRow.querySelector('.re-cmd')?.textContent).toBe('~/.orbit/codex-accounts/3fa91c2e');
-    expect(workRow.querySelector('.re-panel-hint')?.textContent).toContain('next check-in');
+
+    // One request, for this slot and no other: the note is about THIS account being the second copy
+    // of one already signed in, so it is this slot that goes (RunnerEngines.removeAccount.test.tsx).
+    expect(
+      apiMock.mock.calls
+        .filter(([, options]) => (options?.method ?? 'GET') === 'DELETE')
+        .map(([path]) => path),
+    ).toEqual([`/runners/${RUNNER_ID}/codex-accounts/3fa91c2e`]);
   });
 });
 
 describe('two slots that are two accounts', () => {
-  it('says nothing about a repeat', () => {
+  it('says nothing about a repeat, and still offers each added one a way off the machine', () => {
     const page = mount([runner([DEFAULT, WORK])]);
+    const [defaultRow, workRow] = accountsOf(page);
 
     expect(rows(page, '.re-dup')).toHaveLength(0);
     expect(accountsOf(page)).toHaveLength(2);
-    for (const row of accountsOf(page)) expect(labels(row)).not.toContain('Remove');
+    expect(labels(defaultRow)).not.toContain('Remove');
+    expect(labels(workRow)).toContain('Remove');
   });
 });
 
@@ -233,9 +238,11 @@ describe('a fingerprint nobody has read', () => {
   ] as [string, RunnerEngineAccount[]][]) {
     it(`is not a repeat: ${what}`, () => {
       const page = mount([runner(accounts)]);
+      const [defaultRow, addedRow] = accountsOf(page);
 
       expect(rows(page, '.re-dup')).toHaveLength(0);
-      for (const row of accountsOf(page)) expect(labels(row)).not.toContain('Remove');
+      expect(labels(defaultRow)).not.toContain('Remove');
+      expect(labels(addedRow)).toContain('Remove');
     });
   }
 });
