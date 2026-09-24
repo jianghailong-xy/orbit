@@ -25,6 +25,9 @@ struct UserBubbleView: View {
     @ScaledMetric(relativeTo: .caption2) private var metaHeight: CGFloat = 16
 
     @Environment(AttachmentImageStore.self) private var store
+    /// The app's one card store: what a link in this message stands for, and where the bubble
+    /// stretches to hold it.
+    @Environment(AppModel.self) private var appModel: AppModel?
     @Namespace private var previewNS
     // Tapped image → full-screen pager (iOS): the console's, over the whole session, or this bubble's
     // own where there's no console. Unused on macOS, where thumbnails aren't tappable.
@@ -44,8 +47,13 @@ struct UserBubbleView: View {
     var body: some View {
         let long = bubble.text.count > truncateAt
         let shown = long && !expanded ? String(bubble.text.prefix(truncateAt)) : bubble.text
-        HStack {
-            Spacer(minLength: 60)
+        let showsCard = self.showsCard(shown)
+        HStack(spacing: 0) {
+            // web's `.chat-user-wrap` margin-left: 60 — the gutter the person's turn never crosses.
+            // A message holding a card asks for the whole row (below), and two flexible children
+            // would divide the row between them; the gutter is then a fixed 60, which is exactly
+            // what the mock measures (a 361pt column and a 301pt bubble).
+            if showsCard { Spacer().frame(width: 60) } else { Spacer(minLength: 60) }
             VStack(alignment: .trailing, spacing: 3) {
                 if !images.isEmpty {
                     imageBlock
@@ -61,7 +69,7 @@ struct UserBubbleView: View {
                     // is named, and opens to exactly what the model read.
                     Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
                         if !bubble.text.isEmpty {
-                            GridRow { typedText(shown) }
+                            GridRow { typedText(shown, showsCard: showsCard) }
                             // Unsized across: the rule runs as wide as the words and the entry need,
                             // where a bare Divider would stretch a bubble that hugs its text to the row.
                             Divider()
@@ -70,12 +78,18 @@ struct UserBubbleView: View {
                         }
                         GridRow { AttachedNoteEntry(attached: attached) }
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .padding(.horizontal, bubbleInset(showsCard))
+                    .padding(.vertical, showsCard ? 5 : 8)
                     .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                 } else if !bubble.text.isEmpty {
-                    typedText(shown)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
+                    typedText(shown, showsCard: showsCard)
+                        .padding(.horizontal, bubbleInset(showsCard))
+                        .padding(.vertical, showsCard ? 5 : 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                        // A card takes the bubble's whole width (the owner's mock ②: the card sits in
+                        // the bubble where the address was), so the bubble grows to the row for it —
+                        // where every other message still sizes to its own words.
+                        .frame(maxWidth: showsCard ? .infinity : nil, alignment: .leading)
                 }
                 if long {
                     Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
@@ -101,12 +115,25 @@ struct UserBubbleView: View {
     // row; `.body`/`.primary` are the bubble's own prose token and ink (the reply's reading size,
     // system label). Partial selection still works: iOS selects inside the renderer's own text views,
     // macOS through `.textSelection`.
-    private func typedText(_ shown: String) -> some View {
-        MarkdownView(source: shown, base: .body, ink: .primary, fillWidth: false)
+    private func typedText(_ shown: String, showsCard: Bool = false) -> some View {
+        MarkdownView(source: shown, base: .body, ink: .primary,
+                     fillWidth: showsCard, inBubble: showsCard)
             .font(.orbitProse)
             .textSelection(.enabled)
             .environment(\.previewOwnerID, bubble.id)
     }
+
+    /// Whether this message draws an Orbit link as a card. The renderer decides that itself
+    /// (`orbitRenderBlocks`) and the bubble has to know the same answer twice over: a card is the
+    /// width of the bubble, so the bubble stops hugging and takes the row.
+    private func showsCard(_ shown: String) -> Bool {
+        guard let cards = appModel?.linkCards else { return false }
+        return orbitRenderBlocks(shown, cards: cards).hasOrbitCard
+    }
+
+    /// The bubble's own horizontal inset. Holding a card it is 5pt — that is the card's inset, and
+    /// the words take the rest of theirs back inside the renderer — and 12pt otherwise, as always.
+    private func bubbleInset(_ showsCard: Bool) -> CGFloat { showsCard ? 5 : 12 }
 
     // Wrapping row of attachment chips (web's flex-wrap `.chat-files`): flows onto multiple lines so
     // several chips never overflow the bubble column off the edge of a narrow screen.

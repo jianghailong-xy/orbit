@@ -1,0 +1,266 @@
+{
+  "about": [
+    "Which links in a conversation become Orbit cards, and where the card goes — one set of cases",
+    "both clients are proved against. OrbitKit's `OrbitLinkTests` reads it on Linux; the web's",
+    "vitest reads the same file, so the two ends cannot drift into two sets of rules.",
+    "",
+    "Each case: `text` (the message, as markdown), an optional `host` (the server the reader is",
+    "signed in to; the file's own `host` when absent), and `blocks` — the rendered blocks the text",
+    "must become, in order. A block is either a card or a markdown block:",
+    "",
+    "  {\"card\": {\"kind\": \"task|session|project|list\", \"id\": \"<canonical uuid>\",",
+    "             \"url\": \"<the page URL as written>\"}}      — from a pasted page URL",
+    "  {\"card\": {\"kind\": \"...\", \"id\": \"<canonical uuid>\", \"ref\": \"orbit-task:<publicId>\"}}",
+    "                                                        — from an agent's reference",
+    "  {\"markdown\": {\"type\": \"paragraph\", \"text\": \"...\"}}",
+    "  {\"markdown\": {\"type\": \"heading\", \"level\": 2, \"text\": \"...\"}}",
+    "  {\"markdown\": {\"type\": \"list\", \"items\": [{\"indent\": 0, \"ordered\": false,",
+    "      \"number\": null, \"text\": \"...\", \"checkbox\": null}]}}",
+    "  {\"markdown\": {\"type\": \"quote\", \"text\": \"...\"}}",
+    "  {\"markdown\": {\"type\": \"code\", \"language\": \"bash\", \"code\": \"...\"}}",
+    "  {\"markdown\": {\"type\": \"table\", \"headers\": [...], \"rows\": [[...]],",
+    "      \"alignments\": [\"none|left|center|right\"]}}",
+    "  {\"markdown\": {\"type\": \"image\", \"source\": \"...\", \"alt\": \"...\"}}",
+    "  {\"markdown\": {\"type\": \"rule\"}}",
+    "",
+    "A card's `id` is the CANONICAL spelling — a lowercase UUID — whichever spelling the link used:",
+    "comparing what was written instead of the object it names is the silent miss this whole rule",
+    "exists to prevent. `url` / `ref` keeps what was written verbatim, because that is what the card",
+    "replaced and what Copy link hands back.",
+    "",
+    "The ids are production rows from 2026-09-23 (the same conversation the iOS mock is drawn from)."
+  ],
+  "host": "orbitd.io",
+  "cases": [
+    {
+      "name": "url at the start of a line, words after it",
+      "text": "https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ 看这个",
+      "blocks": [
+        {"card": {"kind": "task", "id": "01a0cca7-8609-70ed-a0e2-d4b55b832b60", "url": "https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ"}},
+        {"markdown": {"type": "paragraph", "text": "看这个"}}
+      ]
+    },
+    {
+      "name": "url alone on its line",
+      "text": "https://orbitd.io/projects/34Tcl0kralZrY8opuLJU4",
+      "blocks": [
+        {"card": {"kind": "project", "id": "01a0cca0-aeaa-7618-bd5a-caccc089108c", "url": "https://orbitd.io/projects/34Tcl0kralZrY8opuLJU4"}}
+      ]
+    },
+    {
+      "name": "url at the end of a line, words before it",
+      "text": "看看这个 https://orbitd.io/sessions/34TYUP5wb87XfuYCInJRY",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "看看这个"}},
+        {"card": {"kind": "session", "id": "01a0cc01-771c-767d-846b-8fddfa669490", "url": "https://orbitd.io/sessions/34TYUP5wb87XfuYCInJRY"}}
+      ]
+    },
+    {
+      "name": "url in the middle of a sentence",
+      "text": "先看 https://orbitd.io/lists/347en66xizlGSG9a6Nej5 再决定",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "先看"}},
+        {"card": {"kind": "list", "id": "01a00627-1ce2-7302-8e73-89516a879df3", "url": "https://orbitd.io/lists/347en66xizlGSG9a6Nej5"}},
+        {"markdown": {"type": "paragraph", "text": "再决定"}}
+      ]
+    },
+    {
+      "name": "the same object written as a UUID, upper case — one object, one id",
+      "text": "<https://orbitd.io/tasks/01A0CCA7-8609-70ED-A0E2-D4B55B832B60>",
+      "blocks": [
+        {"card": {"kind": "task", "id": "01a0cca7-8609-70ed-a0e2-d4b55b832b60", "url": "https://orbitd.io/tasks/01A0CCA7-8609-70ED-A0E2-D4B55B832B60"}}
+      ]
+    },
+    {
+      "name": "two links in one message, two cards",
+      "text": "https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ 和 https://orbitd.io/projects/34Tcl0kralZrY8opuLJU4",
+      "blocks": [
+        {"card": {"kind": "task", "id": "01a0cca7-8609-70ed-a0e2-d4b55b832b60", "url": "https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ"}},
+        {"markdown": {"type": "paragraph", "text": "和"}},
+        {"card": {"kind": "project", "id": "01a0cca0-aeaa-7618-bd5a-caccc089108c", "url": "https://orbitd.io/projects/34Tcl0kralZrY8opuLJU4"}}
+      ]
+    },
+    {
+      "name": "a query string and a fragment are not part of which object it names",
+      "text": "https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ?list=347en66xizlGSG9a6Nej5#done",
+      "blocks": [
+        {"card": {"kind": "task", "id": "01a0cca7-8609-70ed-a0e2-d4b55b832b60", "url": "https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ?list=347en66xizlGSG9a6Nej5#done"}}
+      ]
+    },
+    {
+      "name": "a sentence's full stop after a url is not part of it",
+      "text": "见 https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ。",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "见"}},
+        {"card": {"kind": "task", "id": "01a0cca7-8609-70ed-a0e2-d4b55b832b60", "url": "https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ"}}
+      ]
+    },
+    {
+      "name": "the pre-1.0 session paths, which are sessions too",
+      "text": "https://orbitd.io/workspaces/orbit/sessions/34TYUP5wb87XfuYCInJRY",
+      "blocks": [
+        {"card": {"kind": "session", "id": "01a0cc01-771c-767d-846b-8fddfa669490", "url": "https://orbitd.io/workspaces/orbit/sessions/34TYUP5wb87XfuYCInJRY"}}
+      ]
+    },
+    {
+      "name": "…and the agent-scoped spelling of the same path",
+      "text": "https://orbitd.io/agents/orbit/sessions/34TYUP5wb87XfuYCInJRY",
+      "blocks": [
+        {"card": {"kind": "session", "id": "01a0cc01-771c-767d-846b-8fddfa669490", "url": "https://orbitd.io/agents/orbit/sessions/34TYUP5wb87XfuYCInJRY"}}
+      ]
+    },
+    {
+      "name": "a host with a port, which is how a local deployment is reached",
+      "host": "localhost:3000",
+      "text": "http://localhost:3000/projects/34Tcl0kralZrY8opuLJU4",
+      "blocks": [
+        {"card": {"kind": "project", "id": "01a0cca0-aeaa-7618-bd5a-caccc089108c", "url": "http://localhost:3000/projects/34Tcl0kralZrY8opuLJU4"}}
+      ]
+    },
+    {
+      "name": "another port on the same host is another server",
+      "host": "localhost:3000",
+      "text": "http://localhost:8123/projects/34Tcl0kralZrY8opuLJU4",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "http://localhost:8123/projects/34Tcl0kralZrY8opuLJU4"}}
+      ]
+    },
+    {
+      "name": "another site's link, whatever its path says",
+      "text": "https://other.example/tasks/34TcwNgAIo6tGUiIKjqnQ",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "https://other.example/tasks/34TcwNgAIo6tGUiIKjqnQ"}}
+      ]
+    },
+    {
+      "name": "excluded: an api path — the shape of a pasted error log",
+      "text": "https://orbitd.io/api/runner/tasks/34TcwNgAIo6tGUiIKjqnQ",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "https://orbitd.io/api/runner/tasks/34TcwNgAIo6tGUiIKjqnQ"}}
+      ]
+    },
+    {
+      "name": "excluded: a download path",
+      "text": "https://orbitd.io/dl/34TcwNgAIo6tGUiIKjqnQ",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "https://orbitd.io/dl/34TcwNgAIo6tGUiIKjqnQ"}}
+      ]
+    },
+    {
+      "name": "excluded: the install page",
+      "text": "https://orbitd.io/install",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "https://orbitd.io/install"}}
+      ]
+    },
+    {
+      "name": "excluded: a share link, which is somebody else's session by design",
+      "text": "https://orbitd.io/s/9f3c1a7b",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "https://orbitd.io/s/9f3c1a7b"}}
+      ]
+    },
+    {
+      "name": "excluded: /lists/none names no list",
+      "text": "https://orbitd.io/lists/none",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "https://orbitd.io/lists/none"}}
+      ]
+    },
+    {
+      "name": "excluded: any other page of the deployment",
+      "text": "https://orbitd.io/settings/tokens",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "https://orbitd.io/settings/tokens"}}
+      ]
+    },
+    {
+      "name": "a markdown link with a label keeps its label, even to this deployment",
+      "text": "[这个任务](https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ)",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "[这个任务](https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ)"}}
+      ]
+    },
+    {
+      "name": "a url inside a code span is code, not a link",
+      "text": "`https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ`",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "`https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ`"}}
+      ]
+    },
+    {
+      "name": "a url in a list item stays where it is",
+      "text": "- https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ\n- 另一条",
+      "blocks": [
+        {"markdown": {"type": "list", "items": [
+          {"indent": 0, "ordered": false, "number": null, "text": "https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ", "checkbox": null},
+          {"indent": 0, "ordered": false, "number": null, "text": "另一条", "checkbox": null}
+        ]}}
+      ]
+    },
+    {
+      "name": "a url in a quote stays where it is",
+      "text": "> https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ",
+      "blocks": [
+        {"markdown": {"type": "quote", "text": "https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ"}}
+      ]
+    },
+    {
+      "name": "a url in a heading stays where it is",
+      "text": "## 部署 https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ",
+      "blocks": [
+        {"markdown": {"type": "heading", "level": 2, "text": "部署 https://orbitd.io/tasks/34TcwNgAIo6tGUiIKjqnQ"}}
+      ]
+    },
+    {
+      "name": "an agent's reference alone in a paragraph is a card",
+      "text": "[runner + web：配额按账户归属](orbit-task:34TcwNgAIo6tGUiIKjqnQ)",
+      "blocks": [
+        {"card": {"kind": "task", "id": "01a0cca7-8609-70ed-a0e2-d4b55b832b60", "ref": "orbit-task:34TcwNgAIo6tGUiIKjqnQ"}}
+      ]
+    },
+    {
+      "name": "…and a project reference, and a list reference, and a session one",
+      "text": "[项目](orbit-project:34Tcl0kralZrY8opuLJU4)\n\n[列表](orbit-list:347en66xizlGSG9a6Nej5)\n\n[会话](orbit-session:34TYUP5wb87XfuYCInJRY)",
+      "blocks": [
+        {"card": {"kind": "project", "id": "01a0cca0-aeaa-7618-bd5a-caccc089108c", "ref": "orbit-project:34Tcl0kralZrY8opuLJU4"}},
+        {"card": {"kind": "list", "id": "01a00627-1ce2-7302-8e73-89516a879df3", "ref": "orbit-list:347en66xizlGSG9a6Nej5"}},
+        {"card": {"kind": "session", "id": "01a0cc01-771c-767d-846b-8fddfa669490", "ref": "orbit-session:34TYUP5wb87XfuYCInJRY"}}
+      ]
+    },
+    {
+      "name": "a reference written into a sentence stays the name link it is today",
+      "text": "这个已经合了：[runner + web：配额按账户归属](orbit-task:34TcwNgAIo6tGUiIKjqnQ)，看下一个。",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "这个已经合了：[runner + web：配额按账户归属](orbit-task:34TcwNgAIo6tGUiIKjqnQ)，看下一个。"}}
+      ]
+    },
+    {
+      "name": "a reference in a list item stays a name link",
+      "text": "- [runner + web：配额按账户归属](orbit-task:34TcwNgAIo6tGUiIKjqnQ)\n- 另一条",
+      "blocks": [
+        {"markdown": {"type": "list", "items": [
+          {"indent": 0, "ordered": false, "number": null, "text": "[runner + web：配额按账户归属](orbit-task:34TcwNgAIo6tGUiIKjqnQ)", "checkbox": null},
+          {"indent": 0, "ordered": false, "number": null, "text": "另一条", "checkbox": null}
+        ]}}
+      ]
+    },
+    {
+      "name": "a reference in a table cell stays a name link",
+      "text": "| 单 | 链接 |\n| --- | --- |\n| 已合 | [runner + web：配额按账户归属](orbit-task:34TcwNgAIo6tGUiIKjqnQ) |",
+      "blocks": [
+        {"markdown": {"type": "table",
+          "headers": ["单", "链接"],
+          "rows": [["已合", "[runner + web：配额按账户归属](orbit-task:34TcwNgAIo6tGUiIKjqnQ)"]],
+          "alignments": ["none", "none"]}}
+      ]
+    },
+    {
+      "name": "a reference this deployment does not know is left as it was written",
+      "text": "[一个别的东西](orbit-attachment:34TcwNgAIo6tGUiIKjqnQ)",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "[一个别的东西](orbit-attachment:34TcwNgAIo6tGUiIKjqnQ)"}}
+      ]
+    }
+  ]
+}

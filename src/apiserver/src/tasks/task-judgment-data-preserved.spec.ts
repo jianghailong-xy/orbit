@@ -1120,7 +1120,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // not another writer of the DONE fence and names none of the six preserved objects — carries
       // no `ALTER TYPE` and no `DROP TYPE`, and has no INSERT, UPDATE or DELETE. The set only grows,
       // so no stored event is refused by it and it needs no backfill.
-      '0299_dependent_ready_wake'],
+      '0299_dependent_ready_wake',
+      // 0281's state CHECK again, statement for statement, with one more spelling —
+      // `NOTHING_TO_LAND`, the line answering that the branch it was handed carried nothing of the
+      // task's own (contract §2.4 J-S3). Read against every claim above: one `ALTER TABLE
+      // "project_integration_job" DROP CONSTRAINT / ADD CONSTRAINT` over a table this file does not
+      // preserve and cannot reach one from; the state names a task in its own column, but the string
+      // appears only inside the CHECK's list of permitted values, so no `task` row, neither 0177
+      // relation, `task_executable_acceptance_pair` and no `project_acceptance_*` object is read,
+      // written or constrained. It creates no table, column, index, enum, type, function or trigger
+      // — so it is not another writer of the DONE fence and names none of the six preserved objects
+      // — carries no `ALTER TYPE` and no `DROP TYPE`, and has no INSERT, UPDATE or DELETE. The set
+      // only grows, so no stored state is refused by it and it needs no backfill.
+      '0300_integration_job_nothing_to_land'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

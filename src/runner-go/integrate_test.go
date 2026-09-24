@@ -348,6 +348,64 @@ func TestIntegrationAlreadyLandedPushesNothing(t *testing.T) {
 	}
 }
 
+// TestIntegrationNothingToLandForAnEmptyBranch: a branch whose tip is the commit its session
+// started at carries nothing of the task's own — and J-S3's "already contained" is trivially true
+// of it, because a fork point is in the target it forked from. That answer is NOTHING_TO_LAND
+// (0300), and it is not ALREADY_LANDED: on 2026-09-23 the landing for a retry session that had died
+// on a 429 was answered the positive way here, and the receipt written from it said a delivery was
+// on the line that no branch held (project 34Tq39ByZ0rV4c6pJkfw7).
+func TestIntegrationNothingToLandForAnEmptyBranch(t *testing.T) {
+	r := newIntegrationRepo(t)
+	// The line, at the commit the retry session will fork at and never move off.
+	r.checkoutNew("project/line", "main")
+	r.write("line.txt", "on the line\n")
+	r.commit("project branch")
+	r.push("project/line")
+	before := r.originRev("refs/heads/project/line")
+
+	fork := r.rev("main")
+	r.checkoutNew("orbit/empty", "main")
+	r.push("orbit/empty")
+	r.checkout("main")
+
+	command := r.command("orbit/empty", "project/line")
+	command.SessionBaseSha = fork
+	result := runIntegrationJob(command, silent)
+	if result.State != "NOTHING_TO_LAND" {
+		t.Fatalf("state = %s (%s), want NOTHING_TO_LAND", result.State, result.ErrorCode)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Fatalf("the target moved: %s -> %s", before, got)
+	}
+}
+
+// TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits is the control for the case
+// above: the same J-S3 path, the same claim naming a base, and a branch whose tip is a DESCENDANT
+// of that base. There is a commit of the task's on it and the target already contains it, so the
+// answer stays the positive one.
+func TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits(t *testing.T) {
+	r := newIntegrationRepo(t)
+	fork := r.rev("main")
+	r.checkoutNew("task/i", "main")
+	r.write("i.txt", "from i\n")
+	r.commit("task i")
+	r.push("task/i")
+	r.checkoutNew("project/line", "task/i")
+	r.push("project/line")
+	before := r.originRev("refs/heads/project/line")
+	r.checkout("main")
+
+	command := r.command("task/i", "project/line")
+	command.SessionBaseSha = fork
+	result := runIntegrationJob(command, silent)
+	if result.State != "ALREADY_LANDED" {
+		t.Fatalf("state = %s (%s), want ALREADY_LANDED", result.State, result.ErrorCode)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Fatalf("the target moved: %s -> %s", before, got)
+	}
+}
+
 // TestIntegrationLeavesNoWorktreeBehind: the scratch worktree is removed on every exit path,
 // including the failing ones, because a leftover is what the NEXT attempt trips over.
 func TestIntegrationLeavesNoWorktreeBehind(t *testing.T) {

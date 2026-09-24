@@ -21,6 +21,24 @@ struct MarkdownView: View, Equatable {
     /// bubble hugs: its tinted background sizes to the text, so a prose column pinned to
     /// `maxWidth: .infinity` would stretch that background across the entire row.
     var fillWidth: Bool = true
+    /// Inside the person's own bubble, where a link to this deployment's objects is drawn as a card
+    /// in the bubble. The bubble is then padded 5pt for the card's sake — a card fills its width —
+    /// so this renderer gives the words back the rest of their own inset, and the gap between a card
+    /// and the words beside it is the bubble's usual block gap.
+    var inBubble: Bool = false
+
+    /// `@Environment` can't take part in the synthesized `Equatable` (SwiftUI's `Environment` isn't
+    /// one), and `StreamingProse` compares this view to skip a re-parse — so the two are written out:
+    /// everything that changes what is drawn, and nothing that merely lets it be drawn.
+    static func == (lhs: MarkdownView, rhs: MarkdownView) -> Bool {
+        lhs.source == rhs.source && lhs.base == rhs.base && lhs.ink == rhs.ink
+            && lhs.fillWidth == rhs.fillWidth && lhs.inBubble == rhs.inBubble
+    }
+
+    /// The links a message is showing as cards, from the app's one card store. Nil outside the app's
+    /// signed-in screens (a preview, a test), where a link stays the link it is.
+    @Environment(AppModel.self) private var app: AppModel?
+    private var cards: OrbitLinkCards? { app?.linkCards }
 
     var body: some View {
         // No length cap (capping only dropped formatting on long messages — the historic freezes
@@ -32,31 +50,48 @@ struct MarkdownView: View, Equatable {
         // A streaming row reaches here only with its *completed-block* prefix (StreamingProse feeds
         // the growing tail to a plain Text), and that prefix changes only when a block completes — a
         // few times a second, not every publish — so the cache still holds a handful of entries.
-        let blocks = cachedMarkdownBlocks(source)
+        let blocks = orbitRenderBlocks(source, cards: cards)
+        let hasCards = blocks.hasOrbitCard
+        // A card is the width of the column, so a bubble holding one hands the extra width back to
+        // the words: their own inset (below) plus this gap is the block gap the rest of the renderer
+        // uses, and a card then stands closer to the bubble's edge than the text beside it.
+        let spacing: CGFloat = inBubble && hasCards ? 5 : 8
+        // The inset the words take back in that bubble, and nothing at all outside one.
+        let inset = inBubble && hasCards
         #if os(iOS)
         // Coalesce each run of flowable prose (headings, paragraphs, lists) into ONE SelectableText
         // so a long-press can drag a selection across those blocks — a UITextView is a single
         // selection domain, so a view-per-block capped selection at one block (the reported bug).
         // Code blocks, tables and quotes stay their own views (a scrollable snippet / a grid / a
-        // barred quote can't live inside a shared text run), so they're selection "islands" between
-        // the prose runs; the 8pt block gaps within a run are baked into the text (see ProseSegment).
+        // barred quote can't live inside a shared text run), and so does a card, for the same reason:
+        // they're selection "islands" between the prose runs; the block gaps within a run are baked
+        // into the text (see ProseSegment).
         let groups = proseGroups(blocks, base: base)
-        VStack(alignment: .leading, spacing: 8) {
+        let content = VStack(alignment: .leading, spacing: spacing) {
             ForEach(groups.indices, id: \.self) { i in
                 switch groups[i] {
                 case .prose(let segments):
                     SelectableText(segments: segments, ink: ink)
                         .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
+                        .modifier(BubbleProseInset(active: inset))
                 case .block(let block):
                     MarkdownBlockView(block: block, base: base, ink: ink)
+                        .modifier(BubbleProseInset(active: inset))
+                case .card(let ref):
+                    OrbitLinkCardView(ref: ref, inBubble: inBubble)
                 }
             }
         }
-        .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
         #else
-        VStack(alignment: .leading, spacing: 8) {
+        let content = VStack(alignment: .leading, spacing: spacing) {
             ForEach(blocks.indices, id: \.self) { i in
-                MarkdownBlockView(block: blocks[i], base: base, ink: ink)
+                switch blocks[i] {
+                case .markdown(let block):
+                    MarkdownBlockView(block: block, base: base, ink: ink)
+                        .modifier(BubbleProseInset(active: inset))
+                case .card(let ref):
+                    OrbitLinkCardView(ref: ref, inBubble: inBubble)
+                }
             }
         }
         // Opens the lines up toward web's `.md { line-height: 1.6 }` (SF's default leading is a
@@ -64,31 +99,88 @@ struct MarkdownView: View, Equatable {
         // leading than Latin, so it runs looser than macOS's 14pt. Propagates to all prose Text;
         // code blocks tighten it back down to stay dense.
         .lineSpacing(ProseLayout.lineSpacing)
-        .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
         #endif
+        content
+            .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
+            // The links this message is showing, told to the one store that reads them: everything
+            // new goes out in a single batch for the whole transcript, and a link already answered
+            // costs nothing. Rows are lazy, so this is the links actually on screen.
+            .task(id: blocks.orbitCardKeys) { cards?.note(blocks.orbitCards) }
+    }
+}
+
+/// A message's blocks, with every Orbit link that stands for itself replaced by the card drawn in
+/// its place (`OrbitLinkPlacement`). Shared by the two things that have to agree about it: this
+/// renderer, and the person's bubble, which stretches to the row only when a card is in it.
+@MainActor func orbitRenderBlocks(_ source: String, cards: OrbitLinkCards?) -> [OrbitRenderBlock] {
+    let blocks = cachedMarkdownBlocks(source)
+    guard let cards else { return blocks.map { .markdown($0) } }
+    return OrbitLinkPlacement.place(blocks, host: cards.host)
+}
+
+extension Array where Element == OrbitRenderBlock {
+    /// Whether this message is showing any card at all — which is what stretches the bubble it is in.
+    var hasOrbitCard: Bool {
+        contains { block in
+            if case .card = block { return true }
+            return false
+        }
+    }
+
+    var orbitCards: [OrbitLinkRef] {
+        compactMap { block in
+            if case .card(let ref) = block { return ref }
+            return nil
+        }
+    }
+
+    /// What a re-render keys on: which links the message shows, not the words around them.
+    var orbitCardKeys: [String] { orbitCards.map(\.target.key) }
+}
+
+/// The inset the words keep inside the person's bubble. The bubble is padded 5pt for the card's sake
+/// — a card fills its width, where the words hug theirs — so the words take back the difference:
+/// 12pt from the sides and 8pt from the top and bottom, exactly what they had before.
+private struct BubbleProseInset: ViewModifier {
+    let active: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, active ? 7 : 0)
+            .padding(.vertical, active ? 3 : 0)
     }
 }
 
 #if os(iOS)
 /// A render unit for the iOS transcript: either a `.prose` run of flowable blocks merged into one
-/// selectable text view, or a standalone `.block` (code/table/quote/image/rule) that renders on its own.
+/// selectable text view, or a standalone `.block` (code/table/quote/image/rule) that renders on its
+/// own — or a `.card`, an Orbit link that became the object it named.
 private enum ProseGroup {
     case prose([ProseSegment])
     case block(MarkdownBlock)
+    case card(OrbitLinkRef)
 }
 
 /// Fold a block list into render groups: maximal runs of flowable prose (headings, paragraphs,
 /// lists) collapse into one `.prose` — a single `SelectableText`, hence one selection domain — while
-/// code/table/quote/image/rule each stay a standalone `.block`. Inter-block spacing (8pt, and 6pt between
-/// list items) is carried on each segment's `spacingBefore` so the merged view reproduces the gaps
-/// the old block `VStack` drew. See `MarkdownView.body`.
-private func proseGroups(_ blocks: [MarkdownBlock], base: ProseRole) -> [ProseGroup] {
+/// code/table/quote/image/rule each stay a standalone `.block`, and a card an island of its own.
+/// Inter-block spacing (8pt, and 6pt between list items) is carried on each segment's `spacingBefore`
+/// so the merged view reproduces the gaps the old block `VStack` drew. See `MarkdownView.body`.
+private func proseGroups(_ blocks: [OrbitRenderBlock], base: ProseRole) -> [ProseGroup] {
     var groups: [ProseGroup] = []
     var pending: [ProseSegment] = []
     func flush() {
         if !pending.isEmpty { groups.append(.prose(pending)); pending = [] }
     }
-    for block in blocks {
+    for rendered in blocks {
+        // A card ends the run of prose it interrupted — the words either side of it are two runs,
+        // not one: a card can't be merged into a text view's own selection domain.
+        if case .card(let ref) = rendered {
+            flush()
+            groups.append(.card(ref))
+            continue
+        }
+        guard case .markdown(let block) = rendered else { continue }
         switch block {
         case .heading(let level, let text):
             pending.append(ProseSegment(text: text, role: .heading(level), markdown: true,

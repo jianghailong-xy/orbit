@@ -27,6 +27,9 @@ struct TaskStartCardView: View {
     var attached: (kind: String, text: String)?
 
     @Environment(\.openURL) private var openURL
+    /// Where the project row goes: the app's own link door, which reads for the conversation that
+    /// coordinates the project and falls back to the deployment's page when there is none.
+    @Environment(AppModel.self) private var app: AppModel?
     @State private var showingDetails = false
     @State private var wholeCommand = false
     @State private var showingRaw = false
@@ -112,13 +115,17 @@ struct TaskStartCardView: View {
     }
 
     /// The project the task is filed under. Its title is the link — the app's own `orbit-project:`
-    /// door, the one a `#`-reference in prose is written as.
+    /// door, the one a `#`-reference in prose is written as — and it opens where every other project
+    /// link opens: the conversation that coordinates the project, or the deployment's own page. The
+    /// door needs a read to answer that, which is why it is the model's and not the system's.
     private func projectRow(_ project: TaskStartProject) -> some View {
         HStack(spacing: 4) {
             Text(TaskStartCard.projectLabel).font(.orbitLabel).foregroundStyle(.secondary)
             if let url = TaskStartCard.projectLink(card) {
                 Button {
-                    openURL(url)
+                    // The app's own door; the system action is only for a card drawn with no app
+                    // around it (a preview), where nothing else could open an `orbit-project:` URL.
+                    if app?.openOrbitLink(url) != true { openURL(url) }
                 } label: {
                     Text(project.title)
                         .font(.orbitLabel)

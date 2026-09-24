@@ -585,7 +585,13 @@ export class MergeReceiptService {
       taskId: string | null;
       projectId: string | null;
       jobId: string;
-      state: 'LANDED' | 'ALREADY_LANDED';
+      /**
+       * `NOTHING_TO_LAND` is the line's answer that the branch it was handed carried nothing of the
+       * task's (0300). It is recorded as `ALREADY_MERGED` — nothing moved, and a `target_sha_after`
+       * here would claim it did — and it is written by the caller only when the task has no branch
+       * with reported work of its own: the receipt is what §2.5 J9 releases dependents on.
+       */
+      state: 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND';
       sourceBranch: string;
       targetBranch: string;
       sourceSha: string | null;

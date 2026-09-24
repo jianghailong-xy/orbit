@@ -270,6 +270,10 @@ final class AppModel {
     let notifications = NotificationManager()
     private(set) var baseURL: URL?
     private var api: APIClient?
+    /// The cards for the Orbit links the open conversations are showing — read through one store for
+    /// the whole app, so two conversations showing the same object ask for it once. Built where the
+    /// API client is (see `configure`), and nil before that or after a sign-out.
+    private(set) var linkCards: OrbitLinkCards?
     /// Invalidates async detail reads when logout or an instance switch replaces their scope.
     private var apiGeneration = 0
     private var pollTask: Task<Void, Never>?
@@ -375,7 +379,13 @@ final class AppModel {
         apiGeneration &+= 1
         sessionDetails.removeAll()
         baseURL = url
-        api = APIClient(baseURL: url, tokenStore: tokenStore)
+        let client = APIClient(baseURL: url, tokenStore: tokenStore)
+        api = client
+        // One link-preview store for the app, with an age on its answers: a screen that stays open
+        // asks for its cards again as it redraws, and only what has gone stale costs a request.
+        linkCards = OrbitLinkCards(baseURL: url,
+                                   store: OrbitLinkPreviewStore(client: client,
+                                                                maxAge: OrbitLinkCards.maxAge))
         let tasksModel = TasksModel(baseURL: url, tokenStore: tokenStore)
         tasksModel.onSelectedDetailMissing = { [weak self] id in
             guard self?.selectedTaskID == id else { return }
@@ -520,6 +530,10 @@ final class AppModel {
         libraryRefreshQueue = CoalescedRefreshQueue()
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
+        // Cards read from this account are not ones to draw against the next: the store behind them
+        // holds its answers, and a new sign-in builds a new one anyway.
+        linkCards?.removeAll()
+        linkCards = nil
         // Best-effort server-side revoke of the refresh token before we drop it locally. Capture the
         // token by value and hand it to the async call so clearing the store below can't race the read.
         if let baseURL, let api, let refreshToken = tokenStore.refreshToken(for: baseURL) {
@@ -1741,6 +1755,15 @@ final class AppModel {
             tasks?.filter = .all
             tasks?.searchText = ""
             selectedTaskID = id
+        case .list(let id):
+            // A named list is a scope of the Tasks page, not a page of its own: the scope follows the
+            // link, and any task page that was open comes off so the list is what is showing. The
+            // filter is opened up the way a task route opens it — somebody following a link to a list
+            // wants the list, not just the part of it that happens to be runnable.
+            taskListsDirectoryPresented = false
+            tasks?.selectScope(.list(id))
+            tasks?.filter = .all
+            selectedTaskID = nil
         case .runner(let id):  selectedRunnerID = id
         case .watch(let id):   openWatch(id)
         }

@@ -1945,9 +1945,12 @@ export interface EventSearchResponse {
 /** What a job is putting where. Only LAND_TASK has a producer today; promotions are §3. */
 export type IntegrationJobKind = 'LAND_TASK' | 'CHECK_PROMOTION' | 'LAND_PROMOTION';
 
-/** Where a job is, or stopped. The three failures differ because they need different people. */
+/** Where a job is, or stopped. The three failures differ because they need different people.
+ *  `NOTHING_TO_LAND` is neither: the branch the line was handed carried nothing of the task's, so
+ *  there was no landing to make (0300). It is not `ALREADY_LANDED`, which an empty branch reaches
+ *  trivially — every branch's fork point is in the target it forked from. */
 export type IntegrationJobState =
-  | 'QUEUED' | 'RUNNING' | 'LANDED' | 'ALREADY_LANDED' | 'READY'
+  | 'QUEUED' | 'RUNNING' | 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND' | 'READY'
   | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED';
 
 /** The step the runner is on, or the one it stopped at. */

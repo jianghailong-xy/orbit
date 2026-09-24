@@ -62,6 +62,7 @@ import {
   type OpenProjectView,
 } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
+import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainText } from '../lib/markdownText';
 import { firstOpenableWorkspace, workspaceRunnerId } from '../lib/workspaceOrder';
 // The one relative-time spelling this app already exports. A row that says "3h ago" and a runner
@@ -659,10 +660,16 @@ function Field({ label, text, empty }: { label: string; text?: string | null; em
       {/* Instructions are written the way task descriptions are — headings, lists, fenced
           commands — and are handed to a coordinator as a prompt, so read them as Markdown rather
           than source. `remarkHardBreaks` preserves the hand-laid-out lines. react-markdown is used
-          directly because the transcript's `MD` carries session attachment/link resolution. */}
+          directly because the transcript's `MD` carries session attachment resolution; only its
+          `#`-reference links are shared (lib/markdownLinks). */}
       {body ? (
         <div className="md">
-          <Markdown remarkPlugins={[remarkGfm, remarkHardBreaks]} rehypePlugins={[rehypeHighlight]}>
+          <Markdown
+            remarkPlugins={[remarkGfm, remarkHardBreaks]}
+            rehypePlugins={[rehypeHighlight]}
+            urlTransform={referenceUrlTransform}
+            components={{ a: ReferenceLink }}
+          >
             {body}
           </Markdown>
         </div>

@@ -1,6 +1,8 @@
 import { queryOptions } from '@tanstack/react-query';
 import type {
   EventSearchResponse,
+  LinkPreviewRef,
+  LinkPreviewsResponse,
   ProjectIntegrationView,
   ProjectPromotionView,
   SessionSearchResponse,
@@ -715,4 +717,24 @@ export const taskRowQuery = (taskId: string) =>
         `/tasks/${encodeURIComponent(taskId)}/row`,
       ),
     staleTime: 5 * 60_000,
+  });
+
+/**
+ * `POST /api/link-previews` — the cards for a conversation's links, one request per batch of refs.
+ *
+ * Keyed by the links it carries and nothing else, so two conversations showing the same task, or the
+ * same conversation re-read, cost no second request. It has no clock of its own: the view that mounts
+ * it re-reads it when its own data refreshes (`OrbitLinkCardsProvider`'s `refreshKey`), which is what
+ * keeps a page nobody is looking at from asking the server anything. A POST because the refs are a
+ * body, not because anything is written — it answers 200, so nothing here invalidates.
+ */
+export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
+  queryOptions({
+    queryKey: [
+      'link-previews',
+      refs.map((ref) => `${ref.kind}:${ref.id}`).sort(),
+    ] as const,
+    queryFn: () =>
+      api<LinkPreviewsResponse>('/link-previews', { method: 'POST', body: { refs: [...refs] } }),
+    enabled: refs.length > 0,
   });

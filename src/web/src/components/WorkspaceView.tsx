@@ -152,8 +152,9 @@ import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeCard } from './WatchWakeCard';
 import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
+import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
-import { parseWatchWake, watchingWord } from '../lib/watches';
+import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import type { BgShell } from '../lib/backgroundShells';
 import {
@@ -1039,6 +1040,19 @@ export function statusLabel(session: any, watching?: string | null): string {
   if (state === 'ENDED') return 'Ended';
   return queuedLabel(session); // PENDING
 }
+
+/**
+ * The word an Orbit link card says for the session it links to: the header's own, with the watching
+ * word a session list row would give it. A preview carries the counts rather than the watch rows, so
+ * `watchingCountWord` says what the strip says from what the card was handed.
+ *
+ * Module-level and not a closure: it is handed to every card of the conversation through the cards
+ * context, and a fresh function on every render would re-render every one of them.
+ */
+function orbitLinkStateWord(row: any): string {
+  return statusLabel(row, watchingCountWord(row?.watching));
+}
+
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = the run reported success, red = real failure,
 // grey = neutral terminal (ended / interrupted / disconnected). A runner that
@@ -6744,14 +6758,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
                         <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
                           <StreamingDraftsCtx.Provider value={streamingDrafts}>
-                            <Transcript
-                              events={transcriptEvents}
-                              live={live}
-                              turnImages={turnImages}
-                              artifactSessionId={selectedId}
-                              streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
-                              inserts={transcriptInserts}
-                            />
+                            {/* The links in this conversation, drawn as cards. The provider is
+                                what makes a card possible at all — the shared page and the export
+                                mount none — and it re-reads the links when the detail above is
+                                re-read, which is the only clock this view has. */}
+                            <OrbitLinkCardsProvider
+                              stateWord={orbitLinkStateWord}
+                              refreshKey={sessionDetailQ.dataUpdatedAt}
+                            >
+                              <Transcript
+                                events={transcriptEvents}
+                                live={live}
+                                turnImages={turnImages}
+                                artifactSessionId={selectedId}
+                                streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
+                                inserts={transcriptInserts}
+                              />
+                            </OrbitLinkCardsProvider>
                           </StreamingDraftsCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
                       </UndeliveredCtx.Provider>

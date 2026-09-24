@@ -5938,6 +5938,194 @@ button.chat-jump-start:hover {
 .md-reference:hover {
   background: color-mix(in srgb, var(--brand) 18%, transparent);
 }
+
+/* ── An Orbit link in a message, drawn as a card ──────────────────────────────────────────────
+   A link that names an object of this deployment (a pasted page URL, or an agent's own
+   `[名字](orbit-task:…)` on a line of its own) is drawn as the object rather than the address: the
+   type's tile and name, the title as the link, then one or two lines of live status. One skeleton,
+   four contents — components/OrbitLinkCard.tsx is what fills it in. */
+.orbit-link-card {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+}
+/* Embedded in a user bubble rather than raised on top of it: tighter corners, and the bubble's own
+   tint as the border, so the card reads as part of the message it was written in. */
+.chat-user .orbit-link-card {
+  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--brand) 20%, transparent);
+}
+.olc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.olc-head > :not(.olc-kind) {
+  margin-left: auto;
+}
+.olc-kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.olc-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
+  font-size: 12px;
+}
+.olc-state {
+  padding: 1px 7px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.olc-state.is-live {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.olc-state.is-attention {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.olc-state.is-done {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.olc-state.is-failed {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.olc-state.is-idle {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-2);
+}
+.olc-title {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+/* Named through the card so it wins over `.chat-user a`, which underlines every link in a bubble:
+   the title is the row's link, not a word in a sentence. */
+.orbit-link-card .olc-title a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.orbit-link-card .olc-title a:hover {
+  text-decoration: underline;
+}
+.olc-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.olc-line-text {
+  overflow-wrap: anywhere;
+}
+.olc-line-glyph {
+  flex: none;
+  color: var(--text-3);
+}
+.olc-line.is-warning,
+.olc-line.is-warning .olc-line-glyph {
+  color: var(--warning);
+}
+.olc-badge {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+  font-size: 11px;
+}
+.olc-meter {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 4px;
+  background: var(--fill-muted);
+  overflow: hidden;
+}
+.olc-meter-seg {
+  height: 6px;
+}
+.olc-meter-seg.is-done {
+  background: var(--success);
+}
+.olc-meter-seg.is-ready {
+  background: var(--warning-solid);
+}
+.olc-meter-seg.is-failed {
+  background: var(--error);
+}
+.olc-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.olc-foot-arrow {
+  margin-left: auto;
+  color: var(--text-3);
+}
+/* The address the card replaced, under the two states that have nothing else to show. */
+.olc-path {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+/* Still reading: two bars where the title and the status line will be. */
+.olc-skeleton {
+  display: grid;
+  gap: 5px;
+  margin-top: 6px;
+}
+.olc-skeleton span {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+}
+.olc-skeleton span:last-child {
+  width: 55%;
+}
+/* Nothing to show: a grey tile and a title that says so rather than a card that looks half-drawn. */
+.orbit-link-card.is-unavailable .olc-tile {
+  background: var(--fill-inset);
+  color: var(--text-3);
+}
+.orbit-link-card.is-unavailable .olc-title {
+  color: var(--text-2);
+}
 /* A non-image attachment the user sent: a downloadable chip (paperclip + filename) that
    fetches the blob on click. */
 .chat-files {

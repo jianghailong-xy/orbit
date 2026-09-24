@@ -267,9 +267,20 @@ public enum TaskListLogic {
         }
     }
 
+    /// The live half of ``pill(_:)``, for a caller that holds the two facts rather than a whole row
+    /// — an Orbit link card reads them off `LinkPreviewTask`. Nil when neither overlay applies, so
+    /// the caller falls through to the lifecycle pill it already has. Kept here rather than written
+    /// out again there: the words are this row's, and a card is a second place they are said.
+    public static func overlayPill(running: Bool, queued: Bool) -> TaskPill? {
+        if running { return TaskPill(kind: .running, label: "Running") }
+        if queued { return TaskPill(kind: .queued, label: "Queued") }
+        return nil
+    }
+
     public static func pill(_ task: TaskItem) -> TaskPill {
-        if isRunning(task) { return TaskPill(kind: .running, label: "Running") }
-        if isQueued(task) { return TaskPill(kind: .queued, label: "Queued") }
+        if let overlay = overlayPill(running: isRunning(task), queued: isQueued(task)) {
+            return overlay
+        }
         switch task.status {
         case .done:       return TaskPill(kind: .done, label: "Done")
         case .inProgress: return TaskPill(kind: .inProgress, label: "In progress")

@@ -28,11 +28,10 @@ import {
   WarningFilled,
 } from '@ant-design/icons';
 import { Image } from 'antd';
-import { Link } from 'react-router-dom';
-import { encodeId } from '../lib/idCodec';
+import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import {
   apiErrorRetryAt,
   isApiErrorText,
@@ -84,11 +83,17 @@ export const AttachmentResolverContext =
 
 export const ArtifactResolverContext =
   createContext<((artifactPath: string) => Promise<string>) | null>(null);
-import Markdown, { defaultUrlTransform } from 'react-markdown';
+import Markdown from 'react-markdown';
+import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
+import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
+
+/** What `Markdown` accepts as `remarkPlugins`: the array `MD` builds is annotated with it so that
+ *  the plugins written into its literal cannot narrow its element type and refuse the next one. */
+type RemarkPlugins = NonNullable<ComponentProps<typeof Markdown>['remarkPlugins']>;
 
 // One normalized run event (subset the transcript cares about). Mirrors the SSE
 // payload the runner emits; see src/runner-go/claude.go + @orbit/shared enums.
@@ -1940,11 +1945,6 @@ function CodeBlock({ children }: any) {
 }
 
 const ORBIT_ATTACHMENT_PREFIX = 'orbit-attachment:';
-/** `#`-references the composer materialises, and the same links agents are told to write when they
- *  name a task, session, project or list to the user (runner-go agent_instructions.go), so a reply
- *  reads as titles rather than bare ids. Both spellings of the id are accepted, since what a client
- *  holds is the base62 public id and older messages may carry the raw uuid. */
-const ORBIT_REFERENCE_RE = /^orbit-(list|task|session|project):([0-9a-zA-Z-]+)$/;
 
 function attachmentIdFromSrc(src: unknown): string | null {
   if (typeof src !== 'string') return null;
@@ -1958,12 +1958,13 @@ function attachmentIdFromSrc(src: unknown): string | null {
 // on its allow-list (http, https, mailto, …). The runner rewrites transcript
 // images and file links to our custom `orbit-attachment:<id>` scheme, so that
 // would strip them to '' before MarkdownImage/MarkdownLink ever see the id. Let
-// those through untouched and defer every other URL to the default (XSS-safe)
+// those through untouched and defer every other URL to referenceUrlTransform,
+// which keeps `#`-references and hands the rest to the default (XSS-safe)
 // transform so javascript:/data: links stay neutralized.
 function transcriptUrlTransform(url: string): string {
   const trimmed = url.trim();
-  if (trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX) || ORBIT_REFERENCE_RE.test(trimmed)) return trimmed;
-  return defaultUrlTransform(url);
+  if (trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX)) return trimmed;
+  return referenceUrlTransform(url);
 }
 
 function isLocalImageSrc(src: string): boolean {
@@ -2127,46 +2128,11 @@ function nodeText(node: ReactNode): string {
   return '';
 }
 
-const REFERENCE_ROUTES = {
-  list: { base: '/lists', label: 'Task list' },
-  task: { base: '/tasks', label: 'Task' },
-  session: { base: '/sessions', label: 'Session' },
-  project: { base: '/projects', label: 'Project' },
-} as const;
-
-/**
- * The route a `#`-reference points at, or null when the href is not one — including when the id
- * is unparseable, which prose is entitled to contain. A bad reference falls through to a plain
- * inert link rather than throwing inside the renderer and blanking the whole message.
- */
-function referenceRoute(href: unknown): { path: string; label: string } | null {
-  if (typeof href !== 'string') return null;
-  const m = ORBIT_REFERENCE_RE.exec(href.trim());
-  if (!m) return null;
-  try {
-    const id = encodeId(m[2]);
-    const { base, label } = REFERENCE_ROUTES[m[1] as keyof typeof REFERENCE_ROUTES];
-    return { path: `${base}/${id}`, label };
-  } catch {
-    return null;
-  }
-}
-
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
     return <AttachmentFile id={id} name={name} />;
-  }
-  // A `#`-reference: route to the thing rather than leaving an <a> the transform blanked to
-  // href="" — which in an SPA reloads the page on click.
-  const to = referenceRoute(href);
-  if (to) {
-    return (
-      <Link className="md-reference" to={to.path} title={to.label}>
-        {children}
-      </Link>
-    );
   }
   if (typeof href === 'string' && isLegacyArtifactSrc(href)) {
     return (
@@ -2185,10 +2151,11 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
       </span>
     );
   }
+  // A `#`-reference routes to the thing it names; anything else is an ordinary link.
   return (
-    <SameOriginLink {...rest} href={href} title={title}>
+    <ReferenceLink {...rest} href={href} title={title}>
       {children}
-    </SameOriginLink>
+    </ReferenceLink>
   );
 }
 
@@ -2224,13 +2191,26 @@ export const MD = memo(function MD({
   highlight?: boolean;
   breaks?: boolean;
 }) {
+  // Links that name an object of this deployment become cards — but only where a conversation view
+  // has asked for them, which is what `OrbitLinkCardsProvider` says. The shared page and the
+  // exported file mount no provider, and an export is a file with no JS behind it, so a link there
+  // stays the link it is today; nothing here asks the server for card data it could not draw.
+  const cards = useContext(OrbitLinkCardsCtx);
+  const exporting = useContext(ExportCtx) != null;
+  const plugins: RemarkPlugins = breaks
+    ? [remarkGfm, remarkHardBreaks, remarkHtmlBlocks]
+    : [remarkGfm, remarkHtmlBlocks];
+  // The plugin and its options, as unified's own tuple: an entry here is an *attacher*, and a card
+  // plugin handed over already called would be installed as one and asked to read a tree it was
+  // never given.
+  if (cards && !exporting) plugins.push([orbitLinkRemarkPlugin, { host: cards.host }]);
   return (
     <div className="md">
       <Markdown
-        remarkPlugins={breaks ? [remarkGfm, remarkHardBreaks, remarkHtmlBlocks] : [remarkGfm, remarkHtmlBlocks]}
+        remarkPlugins={plugins}
         rehypePlugins={highlight ? [rehypeHighlight] : []}
         urlTransform={transcriptUrlTransform}
-        components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink }}
+        components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink, ...orbitLinkCardComponents }}
       >
         {children}
       </Markdown>
