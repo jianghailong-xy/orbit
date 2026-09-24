@@ -66,9 +66,10 @@ import { WakeDispositionService } from './wake-disposition.service';
  * `d6b55d2d853f8b2410977674e3ec54c39f52a34e` — authored as `789a8fffc0bf0223efe8d8286ed5fcae2cb6c414`
  * and rebased onto `project/34ODoUKJGEsfbgcJDGS4q`, one commit ahead of main — sitting on that
  * branch, and nothing in the system said so. The landing job that would have carried it had already
- * gone terminal `ALREADY_LANDED`, nine minutes before the session wrote that commit; the promotion
- * that would have followed never had a tip to be about; and settlement closed the last edge that
- * re-read the line. It reached main only when a person replayed it by hand.
+ * gone terminal `ALREADY_LANDED` (15:39:18Z), two and a half minutes before that commit was written
+ * onto the line (15:41:51Z); the promotion that would have followed never had a tip to be about;
+ * and settlement closed the last edge that re-read the line. It reached main only when a person
+ * replayed it by hand.
  *
  * WHAT IS ASSERTED, AND HOW
  * =========================
@@ -90,7 +91,10 @@ import { WakeDispositionService } from './wake-disposition.service';
  *   (3) a project that has not settled wakes nobody either — work on the line is the ordinary state
  *       of a project being integrated, and the landing that put it there is what makes the next
  *       candidate;
- *   (4) under a switched-off coordinator the fact is still written down and nobody is woken.
+ *   (4) under a switched-off coordinator the fact is still written down and nobody is woken;
+ *   (5) the incident's own order: the receipt put `d6b55d2d8` on the line while the project was still
+ *       open (15:44:50Z) and the project settled afterwards (17:00:12Z), so the edge that has to
+ *       speak is the task completion that settles it — told once, naming the commit.
  *
  * The settled state is this spec's PREMISE rather than its subject, and the fixture proves its own
  * premise instead of asserting it: every criterion is satisfied and on main, the owner has confirmed
@@ -665,6 +669,70 @@ test('(4) a settled project whose coordinator is switched off produces the fact 
       );
       assert.equal((await turns(stack.db, w.coordinatorSessionId)).length, 1,
         'and nothing was written on its conversation');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// (5) — the incident's own order: the commit reached the line while the project was open, and the
+//       write that settled the project came after it ───────────────────────────────────────────────
+test('(5) the completion that settles a project whose line already carries d6b55d2d8 tells its coordinator',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await settledProject(stack, 'settled-after-the-line', {
+        settle: false,
+        work: { title: 'the work whose commit reached the line before the project settled' },
+      });
+
+      // 15:44:50Z in the incident: the receipt that put d6b55d2d8 on the line, while the project was
+      // still open — on its own the ordinary state of a project being integrated, as (3) says.
+      await recordMerge(stack, w.ownerId, w.work!.sessionId, {
+        result: 'MERGED',
+        sourceSha: LATE_SOURCE_SHA,
+        targetBranch: w.line.replace('refs/heads/', ''),
+        targetShaBefore: sha('3'),
+        targetShaAfter: LATE_TIP_SHA,
+        rebaseBaseSha: sha('3'),
+      });
+      assert.deepEqual(await settledUnmergedWakes(stack.db, w.projectId), [],
+        'the project had not settled when the commit reached its line');
+
+      // 17:00:12Z in the incident: the last task's DONE settled the project. Here the input the
+      // projection is still waiting for is the owner's confirmation, which goes in with no edge of its
+      // own; what re-reads the project is the completion edge a DONE comes back through.
+      const definitions = await stack.db.projectAcceptanceCriterionDefinition.findMany({
+        where: { projectId: w.projectId },
+      });
+      const standing = standardSetVersion(criteriaFromDefinitions(definitions));
+      await stack.db.projectStandardSetConfirmation.create({
+        data: {
+          projectId: w.projectId,
+          ownerId: w.ownerId,
+          criteriaDigest: standing.digest,
+          criteriaMaterial: standing.material as unknown as Prisma.InputJsonValue,
+          confirmedById: w.ownerId,
+        },
+      });
+      await stack.tasks.dispatchDependentsAfterCompletion(w.ownerId, w.work!.taskId);
+      assert.equal(
+        (await stack.db.project.findUniqueOrThrow({ where: { id: w.projectId } })).status,
+        ProjectStatus.DONE,
+        'the completion edge settled the project',
+      );
+
+      const wakes = await settledUnmergedWakes(stack.db, w.projectId);
+      assert.equal(wakes.length, 1,
+        'the project settled with a commit on its line that main does not have, and nobody was told');
+      assert.equal(wakes[0]!.status, 'DELIVERED',
+        `the fact reached the project's coordinator; it answered `
+        + `${wakes[0]!.status} ${wakes[0]!.refusalCode ?? ''}`);
+      assert.deepEqual(commitsOf(wakes[0]!.detail), [LATE_TIP_SHA],
+        'the fact names the commit that is sitting on the line — d6b55d2d8');
+      assert.equal(
+        (await turnsAbout(stack.db, w.coordinatorSessionId, LATE_TIP_SHA)).length, 1,
+        'and exactly one message on the coordinator\'s conversation names it',
+      );
     } finally {
       await stack.db.$disconnect();
     }
