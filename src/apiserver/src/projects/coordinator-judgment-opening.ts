@@ -366,8 +366,9 @@ export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: st
       + `下一步：${dispatchRefusalNextStep({
         fixAction: detail.fixAction ?? '未记录', ref: detail.ref ?? null,
       })}\n\n`
-      + `这次拒绝记在任务上：task_get（taskId 传 ${taskId}）的 dispatchRefusal 是码、时间、钉住的提交和缺的`
-      + '提交，任务评论里有 runner 的原话。任务再开工之后这一栏会清空；再被拒会重新记一次、再通知你一次。\n\n'
+      + `这次拒绝记在任务上：task_get（taskId 传 ${taskId}）的 dispatchRefusal 是码、fixAction、时间、哪次`
+      + '运行、起跑用的 ref、它钉住的提交（解析期就被拒的没有）和缺的提交，任务评论里有 runner 的原话。'
+      + '任务再开工之后这一栏会清空；再被拒会重新记一次、再通知你一次。\n\n'
       + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
       + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
       + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
