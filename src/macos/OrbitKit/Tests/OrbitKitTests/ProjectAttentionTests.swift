@@ -443,9 +443,19 @@ final class ProjectAttentionTests: XCTestCase {
         let drawer = ProjectAttention.drawerProjects([stale, closed, recent, quietNeedsYou, olderNeedsYou])
         XCTAssertEqual(drawer.map(\.title), ["Merge", "Question", "Recent", "Stale"])
         XCTAssertEqual(ProjectAttention.needsYouCount([stale, closed, recent, quietNeedsYou, olderNeedsYou]), 2)
-        XCTAssertEqual(ProjectAttention.drawerMark(olderNeedsYou), .needsYou)
+        XCTAssertEqual(ProjectAttention.drawerMark(olderNeedsYou), .needsYou(1))
         XCTAssertEqual(ProjectAttention.drawerMark(recent), .running)
         XCTAssertEqual(ProjectAttention.drawerMark(stale), .idle)
+    }
+
+    func testDrawerMarkCountsTheItemsWaitingOnYouAcrossKinds() {
+        let busy = project(running: 2, attention: ProjectListAttention(ownerItems: [
+            ownerItem(.promotionApproval, 1, waited: Self.hour),
+            ownerItem(.coordinatorQuestion, 2, waited: Self.minute),
+            ProjectListOwnerItem(kind: .unknown, count: 4, oldestWaitingSince: at(Self.hour)),
+        ]))
+        XCTAssertEqual(ProjectAttention.drawerMark(busy), .needsYou(3),
+                       "the count is the items waiting on you, not their kinds, and it outranks running")
     }
 
     func testDrawerCountIgnoresQuietProjectsAndUnknownKinds() {

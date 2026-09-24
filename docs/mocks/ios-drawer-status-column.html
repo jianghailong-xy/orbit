@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 抽屉 — 状态统一到右侧一列（效果图）</title>
+<style>
+  :root {
+    --tint: #3E69F6;
+    --amber: #FF9500;
+    --label: #000;
+    --label-2: rgba(0, 0, 0, .5);          /* SwiftUI .secondary 实测 = 主色 × 50% */
+    --drawer: #F9F9F9;                     /* drawerSurface: white 0.976 */
+    --mark: rgba(255, 59, 48, .9);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 44px 48px; background: #e4e4e9; color: #16161a; width: 960px;
+    font: 15px/1.55 "Nimbus Sans", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 6px; }
+  .lede { color: #55555e; margin: 0 0 26px; font-size: 15.5px; }
+  .lede code, figcaption code, td code { font: 12.5px "DejaVu Sans Mono", monospace; background: #d9d9e0; border-radius: 4px; padding: 1px 5px; }
+  .row { display: flex; gap: 42px; align-items: flex-start; justify-content: center; }
+  figure { margin: 0; width: 393px; }
+  figcaption { margin-top: 16px; font-size: 14px; line-height: 1.6; color: #4a4a52; }
+  figcaption > b { color: #16161a; display: block; font-size: 15px; margin-bottom: 4px; }
+  figcaption ol { margin: 6px 0 0; padding-left: 0; list-style: none; }
+  figcaption li { margin: 5px 0; padding-left: 26px; position: relative; }
+  figcaption li .num { position: absolute; left: 0; top: 2px; }
+  figcaption li b { color: #16161a; }
+  .tag { display: inline-block; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 2px 10px; margin-bottom: 10px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+  .num { display: inline-flex; width: 19px; height: 19px; border-radius: 50%; background: var(--mark); color: #fff;
+         font-size: 11.5px; font-weight: 700; align-items: center; justify-content: center; vertical-align: 1px; }
+
+  /* ── 手机 ─────────────────────────────────────────────── */
+  .phone { width: 393px; height: 852px; position: relative; overflow: hidden; border-radius: 48px;
+           background: var(--drawer); color: var(--label);
+           box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08);
+           font: 17px/20.33px "Nimbus Sans", "Noto Sans CJK SC", sans-serif; }
+  .abs { position: absolute; }
+  .drawer { position: absolute; left: 0; top: 0; width: 298.67px; height: 852px; background: var(--drawer); }
+  .clip { position: absolute; left: 0; top: 125px; width: 298.67px; bottom: 0; overflow: hidden; }
+  .content { position: absolute; left: 0; top: -125px; width: 298.67px; height: 900px; }
+  .drow { position: absolute; left: 10px; width: 278.67px; height: 42.33px; border-radius: 10px;
+          display: flex; align-items: center; padding: 0 12px; white-space: nowrap; }
+  .drow.sel { background: rgba(62, 105, 246, .14); }
+  .drow .icon { width: 24px; flex: none; display: flex; justify-content: center; position: relative; }
+  .drow .name { flex: none; }
+  .drow .meta { color: var(--label-2); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .drow .title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  /* SwiftUI 的 HStack(spacing: 12) 对 Spacer 两侧也加间距：文字到行尾至少 12+6，到状态记号至少 12+6+12 */
+  .drow .sp { flex: 1 1 auto; min-width: 18px; }
+  .drow.pj-before .sp { min-width: 10px; }   /* 现状：HStack(spacing: 10) + Spacer(minLength: 0) */
+  .drow .spin, .drow .cap { margin-left: 12px; }
+  .glabel { position: absolute; left: 22px; font-size: 15px; line-height: 20px; font-weight: 600; color: var(--label-2); }
+  .glabel .n { font-size: 11px; font-weight: 400; margin-left: 8px; }
+  .glabel.proj { color: rgba(60, 60, 67, .6); }
+
+  .spin { width: 13px; height: 13px; flex: none; overflow: visible; }
+  .cap { flex: none; font-size: 11px; line-height: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+         color: var(--amber); background: rgba(255, 149, 0, .15); border-radius: 999px; padding: 2px 7px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+  .peek { position: absolute; left: 298.67px; top: 0; width: 393px; height: 852px; background: #fff;
+          border-radius: 55px 0 0 55px; box-shadow: -4px 0 22px rgba(0,0,0,.13), -1px 0 0 rgba(0,0,0,.04); overflow: hidden; }
+  .peek .t { position: absolute; left: 17px; font-size: 17px; line-height: 22px; white-space: nowrap; }
+  .peek .chips { position: absolute; left: 17px; display: flex; gap: 6px; white-space: nowrap; }
+  .chip { font-size: 12.5px; line-height: 18px; height: 18px; padding: 0 5px; border-radius: 6px; }
+  .c-or { background: rgb(253,242,224); color: rgb(153,98,32); }
+  .c-bl { background: rgb(225,237,253); color: rgb(42,100,206); }
+  .c-rd { background: rgb(251,230,229); color: rgb(183,60,47); }
+  .c-gy { background: rgb(237,237,237); color: #000; font-weight: 600; }
+  .hair { position: absolute; left: 17px; right: 0; height: .5px; background: rgb(214,214,216); }
+
+  .mk { position: absolute; border: 1.6px dashed var(--mark); border-radius: 8px; pointer-events: none; z-index: 5; }
+  .mk .num { position: absolute; top: -11px; right: -11px; }
+  .mk .num.l { right: auto; left: -11px; }
+
+  /* ── 词表 ─────────────────────────────────────────────── */
+  .legend { margin: 34px auto 0; width: 828px; background: #fff; border-radius: 16px; padding: 18px 22px 16px;
+            box-shadow: 0 0 0 1px rgba(0,0,0,.06); }
+  .legend h2 { font-size: 16px; margin: 0 0 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-top: 1px solid #ececf0; vertical-align: middle; }
+  th { font-weight: 600; color: #6a6a72; font-size: 13px; border-top: none; }
+  td.k { color: #16161a; font-weight: 600; width: 190px; }
+  td.k small { display: block; font-weight: 400; color: #8a8a92; font-size: 12px; }
+  .cell { display: inline-flex; align-items: center; gap: 8px; }
+  .side { font-size: 12px; font-weight: 700; border-radius: 5px; padding: 0 6px; line-height: 18px; }
+  .side.l { background: #ffe1dc; color: #a3261a; }
+  .side.r { background: #dce8ff; color: #1d4aa8; }
+  .none { color: #9a9aa2; }
+  tr.after td { background: #f3f7ff; }
+  tr.after td:first-child { border-radius: 8px 0 0 8px; }
+  tr.after td:last-child { border-radius: 0 8px 8px 0; }
+  .foot { margin-top: 10px; font-size: 13px; color: #6a6a72; }
+</style>
+
+<h1>iOS 抽屉 — 状态统一放到右侧一列</h1>
+<p class="lede">
+  现在 Project 行把状态画在<b>左边</b>，Workspace 行画在<b>右边</b>，两处的转圈还不是同一个。改后整个抽屉只有右边一列表示状态，
+  Project 直接用 Workspace 的记号。Workspace 行、顶部导航和底栏都不动。行的数据和顺序照抄截图。
+</p>
+
+<div class="row">
+  <figure>
+    <span class="tag now">① 现在</span>
+    <div class="phone" id="before"></div>
+    <figcaption>
+      <b>两组行，状态各在一边</b>
+      <ol>
+        <li><span class="num">1</span>Project 的状态在<b>左边</b>：运行中用蓝色系统菊花（<code>ProgressView</code>），空闲每行一颗灰点，24 行就有 24 颗。菊花比圆点宽，FineWeb 这一行的标题被挤右 7pt，和下面几行对不齐。</li>
+        <li><span class="num">2</span>Workspace 的状态在<b>右边</b>：灰色弧形转圈（<code>SpinnerGlyph</code>），空闲什么都不画。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">② 改后</span>
+    <div class="phone" id="after"></div>
+    <figcaption>
+      <b>整个抽屉只有右边一列状态</b>
+      <ol>
+        <li><span class="num">1</span>Project 的状态挪到<b>右边</b>，用 Workspace 同一套记号：运行中是同一个灰色弧形转圈，等你处理是同样的琥珀数字胶囊，空闲不画。</li>
+        <li><span class="num">2</span>去掉圆点后，项目标题左对齐「Projects」组标题（原来 Recents 行就是这样）。空闲的行能多显示约 20pt 标题。</li>
+      </ol>
+    </figcaption>
+  </figure>
+</div>
+
+<div class="legend">
+  <h2>同一状态 = 同一个记号，放在同一个位置</h2>
+  <table>
+    <tr><th></th><th>等你处理</th><th>运行中</th><th>空闲</th></tr>
+    <tr>
+      <td class="k">Workspace 行<small>现在 = 改后，不动</small></td>
+      <td><span class="cell"><span class="side r">右</span><span id="lg-cap1"></span></span></td>
+      <td><span class="cell"><span class="side r">右</span><span id="lg-spin1"></span>灰色弧形转圈</span></td>
+      <td><span class="none">不画</span></td>
+    </tr>
+    <tr>
+      <td class="k">Project 行 · 现在</td>
+      <td><span class="cell"><span class="side l">左</span><span class="dot" style="background:var(--amber)"></span>橙点</span></td>
+      <td><span class="cell"><span class="side l">左</span><span id="lg-pv"></span>蓝色系统菊花</span></td>
+      <td><span class="cell"><span class="side l">左</span><span class="dot" style="background:#C4C4C5"></span>灰点</span></td>
+    </tr>
+    <tr class="after">
+      <td class="k">Project 行 · 改后</td>
+      <td><span class="cell"><span class="side r">右</span><span id="lg-cap2"></span></span></td>
+      <td><span class="cell"><span class="side r">右</span><span id="lg-spin2"></span>灰色弧形转圈</span></td>
+      <td><span class="none">不画</span></td>
+    </tr>
+  </table>
+  <div class="foot">Project 胶囊里的数字 = 这个项目里等你处理的条数（合并确认、提问、升级、暂停四类加起来）。顶部 Projects 行的琥珀数字（有几个项目在等你）不变。</div>
+</div>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const C = 2 * Math.PI * 6.5;
+const spinner = (rot = -60) => `<svg class="spin" viewBox="0 0 13 13"><circle cx="6.5" cy="6.5" r="6.5" fill="none" stroke="rgba(0,0,0,.5)" stroke-width="2" stroke-linecap="round" stroke-dasharray="${(0.7 * C).toFixed(2)} ${C.toFixed(2)}" transform="rotate(${rot} 6.5 6.5)"/></svg>`;
+// UIActivityIndicatorView（mini）：8 根辐条，按顺时针渐隐
+const progressView = () => {
+  let s = `<svg viewBox="-7.65 -7.65 15.3 15.3" style="width:15.3px;height:15.3px;flex:none">`;
+  const ops = [1, .88, .76, .64, .52, .4, .3, .22];
+  for (let i = 0; i < 8; i++) {
+    const a = (i * 45 - 90) * Math.PI / 180;
+    const x1 = Math.cos(a) * 3.3, y1 = Math.sin(a) * 3.3, x2 = Math.cos(a) * 6.4, y2 = Math.sin(a) * 6.4;
+    s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#007AFF" stroke-opacity="${ops[(8 - i) % 8]}" stroke-width="1.9" stroke-linecap="round"/>`;
+  }
+  return s + `</svg>`;
+};
+const capsule = n => `<span class="cap">${n}</span>`;
+const folder = (offline, sel) => `<span class="icon"><svg viewBox="0 0 20 16" style="width:18.6px;height:14.9px"><path d="M1 3.2a2 2 0 0 1 2-2h4.1c.5 0 .9.2 1.3.5l1.3 1.2h7.3a2 2 0 0 1 2 2v8.9a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z M1 5.6h18" fill="none" stroke="${sel ? 'var(--tint)' : '#000'}" stroke-width="1.45" stroke-linejoin="round"/></svg>${offline ? `<span class="abs" style="right:-2px;bottom:-5px;width:13px;height:13px;border-radius:50%;background:var(--drawer);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 12 12" style="width:10px;height:10px"><path d="M1.5 4.6a6.6 6.6 0 0 1 9 0M3.2 6.4a4.2 4.2 0 0 1 5.6 0M4.9 8.2a1.8 1.8 0 0 1 2.2 0M2 1.6l8 8.8" fill="none" stroke="rgba(0,0,0,.5)" stroke-width="1.5" stroke-linecap="round"/></svg></span>` : ''}</span>`;
+const eye = `<span class="icon"><svg viewBox="0 0 24 16" style="width:22.3px;height:15px"><path d="M1.5 8C4 3.6 7.7 1.4 12 1.4S20 3.6 22.5 8C20 12.4 16.3 14.6 12 14.6S4 12.4 1.5 8z" fill="none" stroke="#000" stroke-width="1.8"/><circle cx="12" cy="8" r="3.4" fill="#000"/><circle cx="13.2" cy="6.9" r="1" fill="#fff"/></svg></span>`;
+
+const WS = [
+  { name: 'orbit', runner: 'wikova', sel: true, spin: true },
+  { name: 'wikova-develop', runner: 'wikova' },
+  { name: 'wikova-prod', runner: 'wikova' },
+  { name: 'wikova-data', runner: 'workst…', spin: true },
+  { name: 'lfs', runner: 'workstation' },
+  { name: 'wikids', runner: 'workstation' },
+  { name: 'orbit', runner: 'longdeMac-mini.l…', offline: true },
+  { name: 'rocm', runner: 'workstation-gpu', offline: true },
+];
+const PJ = [
+  { t: 'FineWeb × Common Crawl → RocksDB 语料库', run: true },
+  { t: 'Wikids AI 游戏模块：狼人杀 MVP' },
+  { t: '试点：集成线线上端到端（判据 14 的验证载体）' },
+  { t: 'New Task 并入 Coordinator 会话' },
+  { t: 'Postgres 性能与容量治理' },
+  { t: '把「什么算完成」从项目末尾搬到开工前' },
+];
+const PEEK = [
+  ['Code review 的回执卡', [['c-or', '代码审查'], ['', 'You']]],
+  ['UX 设计评审', [['c-or', '代码审查'], ['c-or', '交互']]],
+  ['iOS 项目页面缺失', [['c-or', '前端问题'], ['c-bl', '功能']]],
+  ['分片错位项目', [['c-rd', '会话调试'], ['c-or', '项目']]],
+  ['落地可靠性', [['c-gy', 'Coordinator']]],
+  ['卡片定位问题', [['c-or', '前端问题'], ['c-or', '样式']]],
+  ['项目取消与删除', [['c-or', '项目架构'], ['c-or', '交互']]],
+  ['Opus 5.5 模型', [['c-bl', '功能缺陷'], ['c-rd', '模型']]],
+  ['卡片快捷链接', [['c-or', '前端问题'], ['c-bl', '功能']]],
+];
+
+const WS_TOP = 194.67, PJ_TOP = 587.33, PITCH = 44.33;
+
+function build(el, after) {
+  let d = '';
+  // 内容卡（右侧露出的一截）
+  let pk = `<div class="peek">`;
+  pk += `<div class="abs" style="left:17px;top:59px;width:44px;height:44px;border-radius:50%;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.1),inset 0 0 0 .5px rgba(0,0,0,.06);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 20 14" style="width:19px;height:13px"><path d="M1 1.2h18M1 7h18M1 12.8h18" stroke="#000" stroke-width="2" stroke-linecap="round"/></svg></div>`;
+  pk += `<div class="abs" style="left:73px;top:70px;font-size:17px;line-height:22px;font-weight:700">orbit</div>`;
+  pk += `<div class="abs" style="left:17px;top:113px;width:400px;height:45px;border-radius:23px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.09),inset 0 0 0 .5px rgba(0,0,0,.07);display:flex;align-items:center;gap:7px;padding-left:15px;color:rgba(60,60,67,.6)"><svg viewBox="0 0 20 20" style="width:19px;height:19px"><circle cx="8.3" cy="8.3" r="6.3" fill="none" stroke="#000" stroke-width="2.2"/><path d="M13 13l5 5" stroke="#000" stroke-width="2.4" stroke-linecap="round"/></svg><span style="font-size:17px">Search</span></div>`;
+  PEEK.forEach(([t, chips], k) => {
+    const sep = 241.33 + k * 75.33;
+    pk += `<div class="t" style="top:${sep - 57.7}px">${t}</div>`;
+    pk += `<div class="chips" style="top:${sep - 33.1}px">${chips.map(([c, s]) => `<span class="chip ${c}" ${c ? '' : 'style="color:rgba(0,0,0,.5);padding:0"'}>${s}</span>`).join('')}</div>`;
+    pk += `<div class="hair" style="top:${sep}px"></div>`;
+  });
+  pk += `</div>`;
+
+  // 抽屉：可滚动的列表（在 125pt 处被标题区裁掉）
+  let c = `<div class="clip"><div class="content">`;
+  c += `<div class="drow" style="top:${104.1 + 1}px">${eye}<span style="margin-left:12px">Following</span></div>`;
+  c += `<div class="abs" style="left:22px;top:156.4px;width:266.67px;height:.5px;background:rgba(60,60,67,.29)"></div>`;
+  c += `<div class="glabel" style="top:170.7px">Workspaces</div>`;
+  WS.forEach((w, i) => {
+    c += `<div class="drow${w.sel ? ' sel' : ''}" style="top:${WS_TOP + i * PITCH + 1}px">${folder(w.offline, w.sel)}<span class="name" style="margin-left:12px">${w.name}</span><span class="meta">&nbsp;· ${w.runner}</span><span class="sp"></span>${w.spin ? spinner(-40 + i * 50) : ''}</div>`;
+  });
+  c += `<div class="glabel proj" style="top:563.3px">Projects<span class="n">24</span></div>`;
+  PJ.forEach((p, j) => {
+    const top = PJ_TOP + j * PITCH + 1;
+    if (after) {
+      c += `<div class="drow" style="top:${top}px"><span class="title">${p.t}</span><span class="sp"></span>${p.run ? spinner(20) : ''}</div>`;
+    } else {
+      const lead = p.run ? progressView() : `<span class="dot" style="background:#C4C4C5"></span>`;
+      c += `<div class="drow pj-before" style="top:${top}px;padding-left:24px">${lead}<span class="title" style="margin-left:10px">${p.t}</span><span class="sp"></span></div>`;
+    }
+  });
+  c += `</div></div>`;
+
+  // 抽屉标题区 + 状态栏 + 浮动底栏
+  let h = `<div class="abs" style="left:23px;top:81.5px;font-size:22px;line-height:26px;font-weight:700;letter-spacing:.2px">Orbit</div>`;
+  h += `<div class="abs" style="left:244.67px;top:73px;width:44px;height:44px;border-radius:50%;background:#E5E5EA;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 20 20" style="width:19px;height:19px"><circle cx="8.3" cy="8.3" r="6.3" fill="none" stroke="#000" stroke-width="2"/><path d="M13 13l5 5" stroke="#000" stroke-width="2.2" stroke-linecap="round"/></svg></div>`;
+  h += `<div class="abs" style="left:39.3px;top:17px;font-size:17px;line-height:22px;font-weight:600;display:flex;align-items:center;gap:4px">10:37<svg viewBox="0 0 16 16" style="width:15px;height:15px"><path d="M8 1.6a4.3 4.3 0 0 1 4.3 4.3v3l1.3 2.3H3.5M3.9 8.9V5.9A4.2 4.2 0 0 1 5 3M6.3 13.2a1.8 1.8 0 0 0 3.4 0M1.5 1.5l13 13" fill="none" stroke="#000" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`;
+  h += `<div class="abs" style="left:279px;top:23.5px;display:flex;align-items:flex-end;gap:1.6px;height:12px;z-index:3">${[4, 6.5, 9, 11.5].map((hh, i) => `<i style="display:block;width:3.2px;height:${hh}px;border-radius:1px;background:${i < 3 ? '#000' : 'rgba(0,0,0,.25)'}"></i>`).join('')}</div>`;
+  h += `<div class="abs" style="left:309px;top:22px;z-index:3"><svg viewBox="0 0 18 13" style="width:17px;height:12.5px"><path d="M9 12.2 6.6 9.6a3.4 3.4 0 0 1 4.8 0zM3.8 6.9a7.4 7.4 0 0 1 10.4 0l-1.5 1.6a5.2 5.2 0 0 0-7.4 0zM1 4.1a11.4 11.4 0 0 1 16 0l-1.5 1.6a9.2 9.2 0 0 0-13 0z" fill="#000"/></svg></div>`;
+  h += `<div class="abs" style="left:334.5px;top:21.5px;width:26px;height:13px;border-radius:4.2px;background:rgba(0,0,0,.28);overflow:hidden;z-index:3"><div style="width:52%;height:100%;background:#000"></div><div class="abs" style="inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10.5px;font-weight:700">52</div></div>`;
+  h += `<div class="abs" style="left:361.5px;top:25.5px;width:1.8px;height:5px;border-radius:0 1px 1px 0;background:rgba(0,0,0,.28);z-index:3"></div>`;
+  h += `<div class="abs" style="left:10px;top:766.67px;height:42.67px;width:164.67px;border-radius:999px;background:var(--tint);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.12)"><svg viewBox="0 0 20 20" style="width:19px;height:19px"><path d="M9 3.2H4.6A2 2 0 0 0 2.6 5.2v10.2a2 2 0 0 0 2 2h10.2a2 2 0 0 0 2-2V11" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M15.4 2.2l2.4 2.4-7.6 7.6-3.1.7.7-3.1z" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>New session</div>`;
+  h += `<div class="abs" style="left:244.67px;top:766px;width:44px;height:44px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" style="width:21px;height:21px"><circle cx="12" cy="12" r="3.2" fill="none" stroke="#000" stroke-width="1.9"/><path d="M10.3 2.5h3.4l.5 2.6 1.9.8 2.2-1.5 2.4 2.4-1.5 2.2.8 1.9 2.6.5v3.4l-2.6.5-.8 1.9 1.5 2.2-2.4 2.4-2.2-1.5-1.9.8-.5 2.6h-3.4l-.5-2.6-1.9-.8-2.2 1.5-2.4-2.4 1.5-2.2-.8-1.9-2.6-.5v-3.4l2.6-.5.8-1.9-1.5-2.2 2.4-2.4 2.2 1.5 1.9-.8z" fill="none" stroke="#000" stroke-width="1.8" stroke-linejoin="round"/></svg></div>`;
+
+  // 标注
+  let m = '';
+  if (after) {
+    m += `<div class="mk" style="left:13px;top:587px;width:274px;height:176px"><span class="num">1</span><span class="num l">2</span></div>`;
+  } else {
+    m += `<div class="mk" style="left:29px;top:587px;width:21.5px;height:176px"><span class="num l">1</span></div>`;
+    m += `<div class="mk" style="left:257px;top:192px;width:27px;height:356px"><span class="num">2</span></div>`;
+  }
+
+  el.innerHTML = `<div class="drawer">${c}${h}</div>${pk}${m}`;
+}
+build(document.getElementById('before'), false);
+build(document.getElementById('after'), true);
+document.getElementById('lg-cap1').innerHTML = capsule(2);
+document.getElementById('lg-cap2').innerHTML = capsule(3);
+document.getElementById('lg-spin1').innerHTML = spinner(-20);
+document.getElementById('lg-spin2').innerHTML = spinner(-20);
+document.getElementById('lg-pv').innerHTML = progressView();
+
+// 量宽度（校准字体替身用）：写进 title，--dump-dom 读回
+if (location.hash === '#measure') {
+  const out = [];
+  document.querySelectorAll('#before .drow').forEach(r => {
+    const rr = r.getBoundingClientRect();
+    const ph = document.getElementById('before').getBoundingClientRect();
+    const spans = [...r.querySelectorAll('.name,.meta,.title,span')].filter(s => s.textContent.trim());
+    if (!spans.length) return;
+    const a = spans[0].getBoundingClientRect(), b = spans[spans.length - 1].getBoundingClientRect();
+    out.push(`${r.textContent.trim().slice(0, 14)}:${(a.left - ph.left).toFixed(1)}-${(b.right - ph.left).toFixed(1)}`);
+  });
+  document.querySelectorAll('#before .glabel').forEach(g => {
+    const ph = document.getElementById('before').getBoundingClientRect();
+    const rr = g.getBoundingClientRect();
+    out.push(`${g.textContent}:${(rr.left - ph.left).toFixed(1)}-${(rr.right - ph.left).toFixed(1)}`);
+  });
+  document.title = out.join(' | ');
+}
+</script>
+</html>

@@ -130,8 +130,9 @@ public struct ProjectAttentionGroup: Equatable, Sendable, Identifiable {
 
 /// How a project reads as one line of the navigation drawer.
 public enum ProjectDrawerMark: Equatable, Sendable {
-    /// One of the four owner items is waiting on the reader.
-    case needsYou
+    /// One of the four owner items is waiting on the reader, with how many items wait — the four
+    /// kinds together. The row's amber count, as a Workspace row counts its sessions waiting on you.
+    case needsYou(Int)
     /// Tasks are running.
     case running
     case idle
@@ -479,7 +480,10 @@ public enum ProjectAttention {
     }
 
     public static func drawerMark(_ project: ProjectSummary) -> ProjectDrawerMark {
-        if needsYou(project) { return .needsYou }
+        if needsYou(project) {
+            let items = (project.attention?.ownerItems ?? []).filter { $0.kind != .unknown }
+            return .needsYou(items.reduce(0) { $0 + $1.count })
+        }
         if project.buckets.running > 0 { return .running }
         return .idle
     }

@@ -93,14 +93,7 @@ struct WorkspaceNavigationRow: View {
             }
             Spacer(minLength: 6)
             if case .needsYou(let count) = status {
-                Text("\(count)")
-                    .font(.orbitMeta.weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Color.orange.opacity(0.15), in: Capsule())
-                    .accessibilityLabel("\(count) waiting for you")
+                NeedsYouCountCapsule(count: count)
             } else if status == .running {
                 // Same reading as the session row's cue: background work stays neutral so the
                 // amber count above is the only thing in this column asking for you.
@@ -134,6 +127,23 @@ struct WorkspaceNavigationRow: View {
                 .padding(.leading, 6)
                 .fixedSize()
         }
+    }
+}
+
+/// The amber count in a drawer row's trailing slot: how many things under the row wait on you — a
+/// Workspace's sessions, a project's owner items. One view, so the two lists draw it alike.
+struct NeedsYouCountCapsule: View {
+    let count: Int
+
+    var body: some View {
+        Text("\(count)")
+            .font(.orbitMeta.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(Color.orange.opacity(0.15), in: Capsule())
+            .accessibilityLabel("\(count) waiting for you")
     }
 }
 #endif

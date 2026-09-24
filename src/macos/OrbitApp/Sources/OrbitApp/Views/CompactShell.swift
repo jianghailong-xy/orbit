@@ -744,13 +744,11 @@ private struct NavigationDrawer: View {
 
     /// Shared chrome for a tappable drawer row: a consistent height and an inset, rounded selection
     /// "pill" (rather than an edge-to-edge tint) so the active row reads as a floating highlight — the
-    /// modern sidebar look the web nav and ChatGPT share. `indent` nudges nested content (an agent
-    /// under its machine) rightward without moving the pill; every row shares one height.
+    /// modern sidebar look the web nav and ChatGPT share. Every row shares one height.
     @ViewBuilder
-    private func pill(selected: Bool, indent: CGFloat = 0,
-                      @ViewBuilder _ content: () -> some View) -> some View {
+    private func pill(selected: Bool, @ViewBuilder _ content: () -> some View) -> some View {
         content()
-            .padding(.leading, DrawerMetrics.padH + indent)
+            .padding(.leading, DrawerMetrics.padH)
             .padding(.trailing, DrawerMetrics.padH)
             .padding(.vertical, DrawerMetrics.padV)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -843,7 +841,10 @@ private struct NavigationDrawer: View {
     }
 
     /// The open projects, closing the rail: those waiting on the reader first, then by the most
-    /// recent task activity. Tapping one opens its page. Hidden until the index has loaded.
+    /// recent task activity. Tapping one opens its page. Hidden until the index has loaded. A row is
+    /// drawn in the Workspace rows' grammar — the title leads, flush with the group label as the
+    /// Recents rows were, and state takes the one trailing slot with the Workspace rows' own marks —
+    /// so the rail keeps a single column for state instead of one on each side.
     @ViewBuilder
     private var projectRows: some View {
         let open = model.projects?.drawerProjects ?? []
@@ -862,24 +863,23 @@ private struct NavigationDrawer: View {
             model.openProject(project.id)
             close()
         } label: {
-            pill(selected: selected, indent: 12) {
-                HStack(spacing: 10) {
-                    switch ProjectAttention.drawerMark(project) {
-                    case .needsYou:
-                        Circle().fill(Color.orange).frame(width: 8, height: 8)
-                    case .running:
-                        if live {
-                            ProgressView().controlSize(.mini).tint(.blue)
-                        } else {
-                            Circle().fill(Color.accentColor).frame(width: 8, height: 8)
-                        }
-                    case .idle:
-                        Circle().fill(Color.secondary.opacity(0.45)).frame(width: 8, height: 8)
-                    }
+            pill(selected: selected) {
+                HStack(spacing: 12) {
                     Text(project.title)
                         .lineLimit(1)
                         .foregroundStyle(.primary)
-                    Spacer(minLength: 0)
+                    Spacer(minLength: 6)
+                    switch ProjectAttention.drawerMark(project) {
+                    case .needsYou(let count):
+                        NeedsYouCountCapsule(count: count)
+                    case .running:
+                        if live {
+                            SpinnerGlyph(color: .secondary)
+                                .accessibilityLabel("Tasks running")
+                        }
+                    case .idle:
+                        EmptyView()
+                    }
                 }
             }
         }
