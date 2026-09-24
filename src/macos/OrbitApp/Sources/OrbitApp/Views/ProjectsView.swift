@@ -906,13 +906,16 @@ struct ProjectDetailView: View {
             let criteria = store.document?.acceptanceCriteriaItems ?? []
             let settled = criteria.filter { $0.satisfied == true }.count
             let noReceipt = criteria.filter { $0.landing == "UNKNOWN" }.count
-            return "\(criteria.count) stated \(criteria.count == 1 ? "criterion" : "criteria") · "
-                + "\(settled) settled by the work filed under them · \(noReceipt) with no merge receipt"
+            let noun = criteria.count == 1 ? "criterion" : "criteria"
+            return "\(criteria.count) stated \(noun) · \(settled) settled by the work filed under them · \(noReceipt) with no merge receipt"
         case .cancelled?:
-            let unfinished = (store.panorama?.buckets).map {
-                $0.running + $0.ready + $0.blocked + $0.awaitingVerification + $0.failed
-            } ?? 0
-            return "\(unfinished) unfinished \(unfinished == 1 ? "task stays" : "tasks stay") filed under it."
+            var unfinished = 0
+            if let b = store.panorama?.buckets {
+                unfinished = b.running + b.ready + b.blocked
+                unfinished += b.awaitingVerification + b.failed
+            }
+            let stays = unfinished == 1 ? "task stays" : "tasks stay"
+            return "\(unfinished) unfinished \(stays) filed under it."
         default:
             return "Reopening puts this project back to Open and changes nothing else: its tasks, its stated criteria and its history stay as they are."
         }
