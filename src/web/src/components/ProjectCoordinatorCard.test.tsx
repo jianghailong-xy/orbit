@@ -340,6 +340,14 @@ describe('ProjectCoordinatorCard — LIVE', () => {
     expect(body).toContain('3rd coordinator of this project');
   });
 
+  it('reads "last active" off the newest turn, not off when the conversation started', () => {
+    // Started three days before READ_AT, took its last turn twelve minutes before it. Read off
+    // `startedAt` alone, this card called a coordinator that had just talked "3d" idle.
+    const body = text(paint(liveStatus({ startedAt: '2026-08-21T07:00:00.000Z', lastTurnAt: TWELVE_MIN_AGO })));
+    expect(body).toContain('last active 12m ago');
+    expect(body).not.toContain('3d ago');
+  });
+
   it('names the conversation and shows its workspace without repeating the coordinator agent', () => {
     const body = text(paint(liveStatus()));
     expect(body).toContain('实施 Project 公平调度域改造');

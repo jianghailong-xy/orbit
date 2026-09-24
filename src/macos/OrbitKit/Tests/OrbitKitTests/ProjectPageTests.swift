@@ -129,6 +129,9 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertNil(ProjectPage.selfStartedFraction(.init(selfStartedToday: 3)))
         XCTAssertEqual(ProjectPage.lastActive(.init(id: "s", startedAt: iso(3_600), finishedAt: iso(720)),
                                               readAt: iso(0)), "last active 12m ago")
+        // Started a month ago, talked twelve minutes ago: the newest turn is what it was last active at.
+        XCTAssertEqual(ProjectPage.lastActive(.init(id: "s", startedAt: iso(2_592_000), lastTurnAt: iso(720)),
+                                              readAt: iso(0)), "last active 12m ago")
     }
 
     // MARK: Open items

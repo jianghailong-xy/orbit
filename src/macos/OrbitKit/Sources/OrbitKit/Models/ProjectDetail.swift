@@ -377,11 +377,14 @@ public struct ProjectCoordinatorStatus: Codable, Equatable, Sendable {
         public let startedAt: String?
         public let finishedAt: String?
         public let completedAt: String?
+        /// The conversation's newest turn — what "last active" reads. Nil from a server that
+        /// predates it, or for a conversation that never took one.
+        public let lastTurnAt: String?
 
         public init(id: String, title: String? = nil, runState: SessionRunState? = nil,
                     lifecycleState: SessionLifecycleState? = nil, engineTurnActive: Bool = false,
                     pendingApprovals: Int = 0, startedAt: String? = nil, finishedAt: String? = nil,
-                    completedAt: String? = nil) {
+                    completedAt: String? = nil, lastTurnAt: String? = nil) {
             self.id = id
             self.title = title
             self.runState = runState
@@ -391,6 +394,7 @@ public struct ProjectCoordinatorStatus: Codable, Equatable, Sendable {
             self.startedAt = startedAt
             self.finishedAt = finishedAt
             self.completedAt = completedAt
+            self.lastTurnAt = lastTurnAt
         }
 
         public init(from decoder: Decoder) throws {
@@ -404,6 +408,7 @@ public struct ProjectCoordinatorStatus: Codable, Equatable, Sendable {
             startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
             finishedAt = try c.decodeIfPresent(String.self, forKey: .finishedAt)
             completedAt = try c.decodeIfPresent(String.self, forKey: .completedAt)
+            lastTurnAt = try c.decodeIfPresent(String.self, forKey: .lastTurnAt)
         }
     }
 

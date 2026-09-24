@@ -658,6 +658,9 @@ const COORDINATOR_STATUS_SESSION_SELECT = {
   completedAt: true,
   archivedAt: true,
   deletedAt: true,
+  // The card's "last active": moved by every turn the conversation takes, which none of the three
+  // lifecycle stamps above are — a coordinator that has been talking all week started once.
+  lastTurnAt: true,
   engineTurnActive: true,
   // Read by the approval count below: the live set a card's `background_job_id` has to be in to
   // still be a question on a conversation that is not generating (migration 0291).
@@ -700,6 +703,8 @@ export interface ProjectCoordinatorStatus {
       completedAtAbsentReason: 'SESSION_NOT_COMPLETED' | null;
       deletedAt: Date | null;
       deletedAtAbsentReason: 'SESSION_NOT_TRASHED' | null;
+      lastTurnAt: Date | null;
+      lastTurnAtAbsentReason: 'SESSION_NEVER_TOOK_A_TURN' | null;
       engineTurnActive: boolean;
       pendingApprovals: number;
     } | null;
@@ -4540,6 +4545,8 @@ export class ProjectsService {
       completedAtAbsentReason: derived.completedAt == null ? 'SESSION_NOT_COMPLETED' : null,
       deletedAt: session.deletedAt,
       deletedAtAbsentReason: session.deletedAt == null ? 'SESSION_NOT_TRASHED' : null,
+      lastTurnAt: session.lastTurnAt,
+      lastTurnAtAbsentReason: session.lastTurnAt == null ? 'SESSION_NEVER_TOOK_A_TURN' : null,
       engineTurnActive: session.engineTurnActive,
       pendingApprovals,
     };

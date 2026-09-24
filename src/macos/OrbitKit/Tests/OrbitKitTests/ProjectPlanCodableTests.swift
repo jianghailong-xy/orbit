@@ -70,6 +70,18 @@ final class ProjectPlanCodableTests: XCTestCase {
         XCTAssertEqual(graph.maxTasks, 500)
     }
 
+    func testTheCoordinatorsSessionCarriesItsNewestTurn() throws {
+        let status = try decode(ProjectCoordinatorStatus.self, """
+        {"projectId":"p","readAt":"2026-09-24T14:41:12.000Z","state":"LIVE",
+         "coordination":{"sessionId":"s","session":{"id":"s","title":"iOS本地数据库性能分析",
+           "startedAt":"2026-08-21T15:09:13.391Z","finishedAt":null,"completedAt":null,
+           "lastTurnAt":"2026-08-24T04:06:15.883Z","lastTurnAtAbsentReason":null}}}
+        """)
+        let session = try XCTUnwrap(status.coordination.session)
+        XCTAssertEqual(session.lastTurnAt, "2026-08-24T04:06:15.883Z")
+        XCTAssertEqual(ProjectPage.lastActive(session, readAt: status.readAt), "last active 31d ago")
+    }
+
     func testTheResumeWriteLiftsThePauseAndSaysWhere() throws {
         let body = try JSONEncoder().encode(ResumeTaskListRequest(note: ProjectPage.resumeListNote))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])

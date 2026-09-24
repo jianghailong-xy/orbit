@@ -25,6 +25,8 @@ function sessionRow(overrides: Record<string, unknown> = {}) {
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
+    // Two days after it started: a coordinator that talks all week started once.
+    lastTurnAt: new Date('2026-08-26T09:30:00.000Z'),
     engineTurnActive: false,
     // NOT NULL DEFAULT '{}' on the column, and the count the card carries reads it: a conversation
     // that is not generating can still be holding a card a live runner-hosted job is reading.
@@ -245,6 +247,9 @@ test('LIVE: the conversation is alive, so nothing refuses and nothing would be c
   assert.equal(session.completedAtAbsentReason, 'SESSION_NOT_COMPLETED');
   assert.equal(session.deletedAt, null);
   assert.equal(session.deletedAtAbsentReason, 'SESSION_NOT_TRASHED');
+  // The card's "last active" reads this, not `startedAt`: the conversation's newest turn.
+  assert.deepEqual(session.lastTurnAt, new Date('2026-08-26T09:30:00.000Z'));
+  assert.equal(session.lastTurnAtAbsentReason, null);
 
   assert.equal(status.openability.canOpen, true);
   // The reuse branch: pressing the button hands this same conversation back.
@@ -254,6 +259,22 @@ test('LIVE: the conversation is alive, so nothing refuses and nothing would be c
   assert.equal(status.openability.landing.workspaceIdAbsentReason, 'COORDINATOR_ALREADY_LIVE');
   assert.equal(status.openability.landing.workspaceNameAbsentReason, 'COORDINATOR_ALREADY_LIVE');
   assert.equal(status.openability.landing.fixed, true);
+});
+
+test('LIVE: a conversation that never took a turn says so, rather than serving a bare null', async () => {
+  const { service } = serviceWith({
+    project: projectRow({
+      coordinatorSessionId: SESSION_ID,
+      coordinatorWorkspaceId: WORKSPACE_ID,
+      coordinatorSession: sessionRow({ status: RunStatus.PENDING, startedAt: null, lastTurnAt: null }),
+      coordinatorWorkspace: workspaceRow(),
+      members: COORDINATOR_MEMBER,
+    }),
+  });
+  const session = (await service.coordinatorStatus(OWNER_ID, PROJECT_ID)).coordination.session;
+  assert.ok(session);
+  assert.equal(session.lastTurnAt, null);
+  assert.equal(session.lastTurnAtAbsentReason, 'SESSION_NEVER_TOOK_A_TURN');
 });
 
 test('TRASHED: the conversation is in Trash, and the replacement already has a home', async () => {

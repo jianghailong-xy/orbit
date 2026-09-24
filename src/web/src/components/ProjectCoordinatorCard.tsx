@@ -55,6 +55,9 @@ export interface CoordinatorSession {
   finishedAt: string | null;
   completedAt: string | null;
   deletedAt: string | null;
+  /** The conversation's newest turn. Optional for one rolling deploy: a server from before it
+   *  sends none, and "last active" then falls back to the lifecycle stamps. */
+  lastTurnAt?: string | null;
   engineTurnActive: boolean;
   pendingApprovals: number;
 }
@@ -191,13 +194,14 @@ function nth(generation: string, offset = 1): string {
 /**
  * "last active 12m ago", measured against the payload's own `readAt`.
  *
- * The contract's session carries no `updatedAt`, so the newest of the three timestamps it does
- * carry is what "last active" can honestly mean. Null when none of them is set — a queued
+ * The newest of the session's stamps, and `lastTurnAt` is the one that moves: every turn the
+ * conversation takes writes it, while `startedAt` is written once — read alone, it called a
+ * coordinator that talked an hour ago a month idle. Null when none of them is set — a queued
  * coordinator that has never started has no activity to report, and inventing one would be this
  * card asserting a fact.
  */
 function lastActive(session: CoordinatorSession, readAt: string): string | null {
-  const stamps = [session.startedAt, session.finishedAt, session.completedAt]
+  const stamps = [session.lastTurnAt, session.startedAt, session.finishedAt, session.completedAt]
     .map((iso) => (iso ? new Date(iso).getTime() : Number.NaN))
     .filter((t) => Number.isFinite(t));
   const now = new Date(readAt).getTime();

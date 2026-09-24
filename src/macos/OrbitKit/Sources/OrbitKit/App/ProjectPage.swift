@@ -247,9 +247,10 @@ public enum ProjectPage {
     }
 
     /// "last active 12m ago", measured against the status read's own `readAt` from the newest of
-    /// the conversation's timestamps; nil when it has none.
+    /// the conversation's timestamps — `lastTurnAt` being the one that moves with every turn, where
+    /// `startedAt` is written once; nil when it has none.
     public static func lastActive(_ session: ProjectCoordinatorStatus.Session, readAt: String?) -> String? {
-        let stamps = [session.startedAt, session.finishedAt, session.completedAt]
+        let stamps = [session.lastTurnAt, session.startedAt, session.finishedAt, session.completedAt]
             .compactMap { $0.flatMap(RelativeTime.parse) }
         guard let newest = stamps.max(), let now = readAt.flatMap(RelativeTime.parse) else { return nil }
         let diff = now.timeIntervalSince(newest)
