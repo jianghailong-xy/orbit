@@ -63,7 +63,14 @@ function services(source) {
   return blocks;
 }
 
-const currentServices = services(current);
+// Log rotation is the one line every service gained after the baseline, on purpose: an uncapped
+// json-file log is how orbit-gateway's access log reached 1GB. It sets a driver option, not a mount
+// or a process, so it is set aside before any comparison below rather than moving the pin.
+const LOGGING = '    logging: *logging';
+const withoutLogging = (block) => block.split('\n').filter((line) => line !== LOGGING).join('\n');
+
+const currentServices = new Map(
+  [...services(current)].map(([name, block]) => [name, withoutLogging(block)]));
 const baselineServices = services(baseline);
 
 test('the baseline commit really is the nine-service stack this change removes from', () => {

@@ -1,8 +1,20 @@
+# Docker's json-file driver keeps a container's output forever unless told otherwise: the
+# gateway's access log reached 1GB in six days. Rotate at 100MB and keep five files, the older
+# ones gzipped — a few days of gateway history, which reading real client traffic out of the
+# access log depends on. Takes effect when a container is next recreated.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "5"
+    compress: "true"
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: orbit-postgres
     restart: unless-stopped
+    logging: *logging
     # The image's entrypoint only fixes up PGDATA's ownership, so create and chown the
     # archive here — still as root — before it drops to the postgres user. Without this
     # archive_command cannot write into the bind mount and WAL archiving stalls.
@@ -66,6 +78,7 @@ services:
     image: postgres:16-alpine
     container_name: orbit-pgbackup
     restart: unless-stopped
+    logging: *logging
     entrypoint: ["/bin/sh", "/usr/local/bin/pg-backup.sh"]
     environment:
       # The bootstrap superuser initdb created (POSTGRES_USER above); no `postgres`
@@ -102,6 +115,7 @@ services:
       dockerfile: src/apiserver/Dockerfile
     container_name: orbit-apiserver
     restart: unless-stopped
+    logging: *logging
     environment:
       DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET (generate: openssl rand -base64 32)}"
@@ -166,6 +180,7 @@ services:
         ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"
     container_name: orbit-web
     restart: unless-stopped
+    logging: *logging
     depends_on:
       apiserver:
         condition: service_healthy
@@ -182,6 +197,7 @@ services:
     image: nginx:alpine
     container_name: orbit-gateway
     restart: unless-stopped
+    logging: *logging
     depends_on:
       web:
         condition: service_healthy
