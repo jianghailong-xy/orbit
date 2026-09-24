@@ -17,6 +17,7 @@ final class OwnerItemCardsTests: XCTestCase {
 
     private static let webQuestionCard = "src/web/src/components/CoordinatorQuestionCard.tsx"
     private static let webConsole = "src/web/src/components/WorkspaceView.tsx"
+    private static let webPromotionCard = "src/web/src/components/ProjectPromotionCard.tsx"
 
     private enum ParityError: Error, CustomStringConvertible {
         case noRepo
@@ -283,7 +284,8 @@ final class OwnerItemCardsTests: XCTestCase {
     }
 
     /// B and D say the two things their states exist to say: that the reader may walk away, and
-    /// who has it while they cannot merge.
+    /// who has it while they cannot merge — D's on its press rather than in a row of its own
+    /// (owner decision 2026-09-24), which is why the press carries the wait.
     func testTheMergingAndBlockedCardsSayWhoHasIt() {
         XCTAssertEqual(PromotionCards.mergingStatusLine(candidate(.rechecking)),
                        "main moved since the check — re-checking the combined tree")
@@ -295,7 +297,39 @@ final class OwnerItemCardsTests: XCTestCase {
         XCTAssertEqual(PromotionCards.blockedLine(blocked),
                        "2 files conflict with main: src/runner-go/session_pool.go, "
                            + "src/apiserver/prisma/schema.prisma")
-        XCTAssertEqual(PromotionCards.blockedWho, "The coordinator is resolving it on the project branch")
+
+        let now = RelativeTime.parse("2026-09-13T12:12:00Z")!
+        let theirs = ProjectOpenItemRow(itemId: "item-1", kind: .integrationConflict,
+                                        title: "Merge conflict", waitingSince: "2026-09-13T12:00:00Z",
+                                        assignee: .coordinator)
+        XCTAssertEqual(PromotionCards.resolvingLine(theirs, now: now),
+                       "Coordinator is resolving it · 12m")
+        XCTAssertTrue(PromotionCards.resolvingSpins(theirs))
+        // The clock handed it over: the same press, the other holder, and nothing turning over
+        // work that is waiting on the reader.
+        let mine = ProjectOpenItemRow(itemId: "item-1", kind: .integrationConflict,
+                                      title: "Merge conflict", waitingSince: "2026-09-13T12:00:00Z",
+                                      assignee: .owner, escalatedAt: "2026-09-13T12:10:00Z")
+        XCTAssertEqual(PromotionCards.resolvingLine(mine, now: now), "It is yours · waiting 12m")
+        XCTAssertFalse(PromotionCards.resolvingSpins(mine))
+        // No item read, or no readable instant on it: the sentence, and no clock under it.
+        XCTAssertEqual(PromotionCards.resolvingLine(nil, now: now), "Coordinator is resolving it")
+        let unreadable = ProjectOpenItemRow(itemId: "item-1", kind: .integrationConflict,
+                                            title: "Merge conflict", waitingSince: "",
+                                            assignee: .coordinator)
+        XCTAssertEqual(PromotionCards.resolvingLine(unreadable, now: now),
+                       "Coordinator is resolving it")
+    }
+
+    /// D's press is word for word the browser's, by the constants it exports — the same parity the
+    /// question card's words are held to, because a person reads this card on a phone and in a
+    /// browser, often about the same branch.
+    func testTheMergePressWordingIsTheBrowsersDeclarations() throws {
+        let web = try webSource(Self.webPromotionCard)
+        XCTAssertEqual(PromotionCards.resolving, try declaration(web, "RESOLVING"),
+                       "RESOLVING drifted — first is this client's, second is the browser's.")
+        XCTAssertEqual(PromotionCards.itIsYours, try declaration(web, "IT_IS_YOURS"),
+                       "IT_IS_YOURS drifted — first is this client's, second is the browser's.")
     }
 
     /// C is a receipt: the commit that landed, and when.

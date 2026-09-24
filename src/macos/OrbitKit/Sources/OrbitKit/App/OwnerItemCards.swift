@@ -254,8 +254,32 @@ public enum PromotionCards {
         return "\(n) file\(n == 1 ? "" : "s") conflict with \(shortRef(view.upstreamRef)): \(files)\(more)"
     }
 
-    /// D's second row: who has it. The coordinator, until the clock hands it over.
-    public static let blockedWho = "The coordinator is resolving it on the project branch"
+    /// D's press, which reads rather than acts: who has the branch, and for how long. It moved onto
+    /// the button from the body's `Who` row (owner decision 2026-09-24) because the grey
+    /// `Merge to main` it used to say reads as "you cannot press this" — the opposite of what state
+    /// D means, which is that the reader does not have to. Web's `RESOLVING`.
+    public static let resolving = "Coordinator is resolving it"
+    /// The same press when the clock has handed the item to the reader: the `Who` row's other
+    /// holder, carried so that moving the sentence onto the button loses nothing. Web's
+    /// `IT_IS_YOURS`.
+    public static let itIsYours = "It is yours"
+
+    /// D's press, as one line: `Coordinator is resolving it · 2h` — or, once the item is the
+    /// reader's own, `It is yours · waiting 2h`. A row that has not been read, or whose instant
+    /// cannot be read, says who state D means and stops, exactly as the row did without one.
+    public static func resolvingLine(_ row: ProjectOpenItemRow?, now: Date = Date()) -> String {
+        let waited = row.flatMap { RelativeTime.parse($0.waitingSince) }
+            .map { RelativeTime.span(now.timeIntervalSince($0)) }
+        guard row?.assignee == .owner else { return resolving + (waited.map { " · \($0)" } ?? "") }
+        return itIsYours + (waited.map { " · waiting \($0)" } ?? "")
+    }
+
+    /// Whether the mark over that press turns. It is the card's one moving part, and it says
+    /// somebody else is working on the branch — so it has no business turning over work that is
+    /// waiting on the reader.
+    public static func resolvingSpins(_ row: ProjectOpenItemRow?) -> Bool {
+        row?.assignee != .owner
+    }
 
     /// `asked 2h 10m ago`, A's footnote.
     public static func askedLine(_ view: ProjectPromotionView, now: Date = Date()) -> String? {

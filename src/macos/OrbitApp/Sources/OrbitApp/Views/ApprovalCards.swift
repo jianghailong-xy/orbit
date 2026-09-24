@@ -2210,6 +2210,14 @@ private struct PromotionApprovalCardView: View {
 
     private var view: ProjectPromotionView? { console.promotionStanding(promotionID) }
 
+    /// The open item filed for this candidate, when the project's read carries one: whose problem
+    /// the block is, and since when. Nil before that read lands — the card then says who state D
+    /// means and stops, which is what it did before the press carried the sentence at all.
+    private var item: ProjectOpenItemRow? {
+        let rows = (console.openItems?.needsYou ?? []) + (console.openItems?.withCoordinator ?? [])
+        return rows.first { $0.promotionId == promotionID }
+    }
+
     var body: some View {
         let view = self.view
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
@@ -2286,11 +2294,12 @@ private struct PromotionApprovalCardView: View {
         }
     }
 
-    /// D: it cannot land yet, and who has it.
+    /// D: it cannot land yet. Who has it is NOT a row here any more: it is on the press
+    /// (`PromotionCards.resolvingLine`), which is the thing the reader looks at, and saying it
+    /// twice was the whole of what this card got wrong (owner decision 2026-09-24).
     private func blocked(_ view: ProjectPromotionView) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CardRow(label: "Why", value: PromotionCards.blockedLine(view))
-            CardRow(label: "Who", value: PromotionCards.blockedWho)
         }
     }
 
@@ -2298,20 +2307,36 @@ private struct PromotionApprovalCardView: View {
     /// and nothing at all once it has.
     @ViewBuilder private func actions(_ view: ProjectPromotionView) -> some View {
         switch PromotionCards.stage(view) {
-        case .askingYou, .blocked:
+        case .askingYou:
             ApprovalActions {
                 Button { act { await console.confirmMergeToMain(view) } } label: {
                     Text(PromotionCards.mergeToMain).approvalActionLabel()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(acting || !PromotionCards.confirmable(view))
-                if PromotionCards.stage(view) == .askingYou {
-                    Button(role: .cancel) { act { await console.declineMergeToMain(view) } } label: {
-                        Text(PromotionCards.notNow).approvalActionLabel()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(acting)
+                Button(role: .cancel) { act { await console.declineMergeToMain(view) } } label: {
+                    Text(PromotionCards.notNow).approvalActionLabel()
                 }
+                .buttonStyle(.bordered)
+                .disabled(acting)
+            }
+        case .blocked:
+            // The press reads rather than acts: who has the branch and how long they have had it,
+            // over the same mark the merging card's own button carries. It stays disabled — the
+            // door would refuse a confirm on a blocked candidate — so it is a state, not a press
+            // the reader is being told they may not make.
+            ApprovalActions {
+                Button {} label: {
+                    HStack(spacing: 6) {
+                        if PromotionCards.resolvingSpins(item) {
+                            ProgressView().controlSize(.mini)
+                        }
+                        Text(PromotionCards.resolvingLine(item))
+                    }
+                    .approvalActionLabel()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(true)
             }
         case .merging:
             ApprovalActions {

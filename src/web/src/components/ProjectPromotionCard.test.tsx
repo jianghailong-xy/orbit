@@ -9,12 +9,14 @@ import type { ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
 import {
   BLOCKERS_DECIDED_TOO,
   CANCEL_MERGE,
+  IT_IS_YOURS,
   MERGED_AUTOMATICALLY_HEADING,
   MERGE_TO_MAIN,
   MERGING,
   NOTHING_TO_DO,
   NOT_NOW,
   OPEN_COORDINATOR,
+  RESOLVING,
   ProjectPromotion,
   ProjectPromotionCard,
   ProjectPromotionReceipt,
@@ -359,6 +361,10 @@ describe('state B — you confirmed it and main moved since the check', () => {
     expect(html).toContain(CANCEL_MERGE);
     // The one that says "it is happening" is the one that cannot be pressed.
     expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Merging/);
+    // State B is untouched by state D's readout: the press is still `Merging…`, and the mark is
+    // still on the Status row rather than over the button.
+    expect(html).toContain('promotion-spin');
+    expect(html).not.toContain(RESOLVING);
   });
 
   it('draws a confirmed merge that has not had to re-check as the same card', () => {
@@ -523,18 +529,34 @@ describe('state D — it cannot merge yet, and somebody is on it', () => {
     expect(html).toContain('src/apiserver/prisma/schema.prisma');
   });
 
-  it('says who has it, how long, and what happens next', () => {
+  it('carries who has it and how long on the press, and does not say it twice', () => {
     const html = card(blocked, { item: blockedItem() });
-    expect(html).toContain('The coordinator is resolving it');
-    expect(html).toContain('12m');
+    expect(html).toContain(`${RESOLVING} · 12m`);
+    // The `Who` row that used to repeat the press is gone — and the rows that were not it stay.
+    expect(html).not.toContain('The coordinator is resolving it on the project branch');
+    expect(html).toContain('2 files conflict');
     expect(html).toContain('goes to you');
     expect(html).toContain('Merge project/bg-jobs into main?');
   });
 
-  it('cannot be merged: the press that would fail is disabled, not lit', () => {
+  it('marks the press as work somebody else is doing, with the merging card’s own mark', () => {
     const html = card(blocked, { item: blockedItem() });
-    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Merge to main/);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*promotion-spin/);
+    expect(html).toMatch(
+      /<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Coordinator is resolving it/,
+    );
+    // The press that would fail is still disabled — it just says a state rather than refusing.
+    expect(html).not.toContain(MERGE_TO_MAIN);
     expect(html).toContain(OPEN_COORDINATOR);
+  });
+
+  it('says it is yours, and turns no mark over work nobody is doing, once the clock hands it over', () => {
+    const html = card(blocked, {
+      item: blockedItem({ assignee: 'OWNER', escalatedAt: at(2 * MINUTE) }),
+    });
+    expect(html).toContain(`${IT_IS_YOURS} · waiting 12m`);
+    expect(html).not.toContain('promotion-spin');
+    expect(html).not.toContain(MERGE_TO_MAIN);
   });
 
   it('says the checks failed when that is why, rather than inventing a conflict', () => {
@@ -561,10 +583,14 @@ describe('state D — it cannot merge yet, and somebody is on it', () => {
     expect(html).not.toContain('files conflict');
   });
 
-  it('still says it cannot merge when no item has been filed for it yet', () => {
+  it('still says who is on it when no item has been filed for it yet, and names no wait', () => {
     const html = card(blocked, { item: null });
     expect(html).toContain('project/bg-jobs can’t merge into main yet');
-    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Merge to main/);
+    expect(html).toMatch(
+      /<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Coordinator is resolving it/,
+    );
+    // How long it has waited is the item's to know: without one the press does not invent a clock.
+    expect(html).not.toContain(`${RESOLVING} · `);
   });
 });
 
