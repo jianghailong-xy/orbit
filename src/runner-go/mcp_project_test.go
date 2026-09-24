@@ -138,19 +138,29 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 // project_status joined in unit 20 (contract AC10) and is a READ. The manual trigger that shipped
 // beside it deliberately did not: enqueuing a signal attributed to USER is how a person drives a
 // MANUAL project, so an agent able to do it would be driving its own coordinator.
+//
+// project_ensure_coordinator is the one exception to "no agent door opens a coordinator", and a
+// narrow one: it opens a replacement ONLY where the standing conversation can no longer be handed a
+// message, and hands anything that can receive straight back untouched. It rides the orchestration
+// gate rather than sitting with the tools above, because the route behind it spends a live session
+// credential — a replacement this caller may not open is a conversation it was never allowed to
+// open — so it is offered exactly where the session_* tools are.
 func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
-	for _, tools := range [][]map[string]interface{}{
-		toolDescriptors(false, false),
-		toolDescriptors(true, true),
+	for _, tc := range []struct {
+		tools         []map[string]interface{}
+		orchestration bool
+	}{
+		{toolDescriptors(false, false), false},
+		{toolDescriptors(true, true), true},
 	} {
 		seen := map[string]bool{}
-		for _, tool := range tools {
+		for _, tool := range tc.tools {
 			name, _ := tool["name"].(string)
 			if strings.HasPrefix(name, "project_") {
 				seen[name] = true
 			}
 		}
-		for _, want := range []string{
+		want := []string{
 			"project_get", "project_create",
 			"project_update", "project_delete",
 			// What a target branch was observed to contain. Migration 0229 removed the project
@@ -171,14 +181,18 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 			// waiting on is the account owner — who answers `blockerResolveApprovalToolName` before
 			// anything is written, which is what keeps this a proposal rather than a self-release.
 			"project_blocker_resolve",
-		} {
-			if !seen[want] {
-				t.Fatalf("%s missing from the tools", want)
+		}
+		if tc.orchestration {
+			want = append(want, "project_ensure_coordinator")
+		}
+		for _, name := range want {
+			if !seen[name] {
+				t.Fatalf("%s missing from the tools (orchestration=%v)", name, tc.orchestration)
 			}
-			delete(seen, want)
+			delete(seen, name)
 		}
 		if len(seen) != 0 {
-			t.Fatalf("unexpected project tools exposed: %#v", seen)
+			t.Fatalf("unexpected project tools exposed (orchestration=%v): %#v", tc.orchestration, seen)
 		}
 	}
 }
@@ -1185,6 +1199,125 @@ func TestMCPAskOwnerRequiresAProjectAndAQuestion(t *testing.T) {
 	} {
 		if res := mcp.callTool("ask_owner", args); res["isError"] != true {
 			t.Fatalf("ask_owner accepted %#v", args)
+		}
+	}
+}
+
+// ensure_coordinator is the one project door that can OPEN a conversation, so it rides the
+// orchestration gate the session tools ride rather than sitting with the other project_* reads and
+// writes — and a caller without the grant gets no tool rather than one whose every call is refused.
+func TestProjectEnsureCoordinatorToolRidesTheOrchestrationGate(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, true), "project_ensure_coordinator") {
+		t.Fatal("project_ensure_coordinator is missing from the orchestration tools")
+	}
+	if hasMCPTool(toolDescriptors(false, false), "project_ensure_coordinator") {
+		t.Fatal("project_ensure_coordinator is offered with no orchestration grant")
+	}
+
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(ensureCoordinatorReuseJSON))
+	}))
+	defer srv.Close()
+
+	// A caller that reaches it anyway is told the same thing the missing tool would have said.
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	res := mcp.callTool("project_ensure_coordinator", map[string]interface{}{"projectId": "proj-1"})
+	if res["isError"] != true {
+		t.Fatalf("project_ensure_coordinator answered without the grant: %#v", res)
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	if len(content) == 0 || !strings.Contains(content[0]["text"].(string), orchestrationOffMsg) {
+		t.Fatalf("project_ensure_coordinator result = %#v", res)
+	}
+	if hit {
+		t.Fatal("a project_ensure_coordinator call without the grant reached the server")
+	}
+}
+
+// One POST to the ensure route, as the calling session: the header is the authority that makes the
+// replacement the caller's own, and a project id that could escape the route never leaves here.
+func TestProjectEnsureCoordinatorToolPostsAsTheCallingSession(t *testing.T) {
+	var method, path, session, token, body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		token = r.Header.Get("X-Orbit-Session-Token")
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
+		_, _ = w.Write([]byte(ensureCoordinatorRotatedJSON))
+	}))
+	defer srv.Close()
+
+	// The credential lookup is confined to a temp home; the token the runner injected is what
+	// travels, exactly as it does in a real session.
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	mcp := &mcpServer{
+		t:                  NewTransport(srv.URL, "tok"),
+		sessionID:          "343dlzsYWKo5z8l2M8tsD",
+		orchestrationToken: "session-token",
+		allowOrchestration: true,
+	}
+	res := mcp.callTool("project_ensure_coordinator", map[string]interface{}{"projectId": "343dlzsYWKo5z8l2M8tsA"})
+	if res["isError"] == true {
+		t.Fatalf("project_ensure_coordinator returned an error: %#v", res["content"])
+	}
+	if method != http.MethodPost || path != "/api/runner/projects/343dlzsYWKo5z8l2M8tsA/coordinator/ensure" {
+		t.Fatalf("project_ensure_coordinator hit %s %s", method, path)
+	}
+	if session != "343dlzsYWKo5z8l2M8tsD" {
+		t.Fatalf("project_ensure_coordinator session header = %q", session)
+	}
+	if token != "session-token" {
+		t.Fatalf("project_ensure_coordinator credential header = %q", token)
+	}
+	// No body: what a rotation takes and what it lands on is §7.5's fixed strategy, decided by the
+	// server's delegation rather than requested here.
+	if strings.TrimSpace(body) != "" {
+		t.Fatalf("project_ensure_coordinator sent a body: %q", body)
+	}
+	// The result is the server's document, so a model reads created / replacedSessionId /
+	// replaceReason without the tool having an opinion about them.
+	content, _ := res["content"].([]map[string]interface{})
+	text, _ := content[0]["text"].(string)
+	var got map[string]interface{}
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatalf("project_ensure_coordinator result is not JSON: %v\n%s", err, text)
+	}
+	if got["created"] != true || got["replacedSessionId"] != "343dlzsYWKo5z8l2M8tsB" ||
+		got["replaceReason"] != "RUNNER_OFFLINE" {
+		t.Fatalf("project_ensure_coordinator result = %#v", got)
+	}
+}
+
+// The refusal that asks for a person travels whole, action included: an agent that read only
+// "409" would retry the one thing this door exists to stop it retrying.
+func TestProjectEnsureCoordinatorToolCarriesTheOwnerActionOfARefusal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"statusCode":409,"error":"Conflict","code":"COORDINATOR_UNAVAILABLE",` +
+			`"message":"its coordination workspace is disabled — its coordinator cannot be opened anywhere else",` +
+			`"owner":"USER","requiredAction":"` + ensureCoordinatorRequiredAction + `"}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	mcp := &mcpServer{
+		t:                  NewTransport(srv.URL, "tok"),
+		sessionID:          "343dlzsYWKo5z8l2M8tsD",
+		orchestrationToken: "session-token",
+		allowOrchestration: true,
+	}
+	res := mcp.callTool("project_ensure_coordinator", map[string]interface{}{"projectId": "proj-1"})
+	if res["isError"] != true {
+		t.Fatalf("a 409 COORDINATOR_UNAVAILABLE reported success: %#v", res)
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	text, _ := content[0]["text"].(string)
+	for _, want := range []string{"COORDINATOR_UNAVAILABLE", ensureCoordinatorRequiredAction, "USER"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("project_ensure_coordinator's refusal does not carry %q: %q", want, text)
 		}
 	}
 }

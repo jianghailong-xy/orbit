@@ -526,6 +526,25 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_ensure_coordinator":
+		// The door spends a live orchestration credential, so the gate is the same one the session_*
+		// tools ride rather than the ungated read/create path the other project tools take.
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		// The acting session IS the authority: the replacement is opened for the conversation that
+		// asks, and a session this project points at authenticating the call answers exactly as one
+		// that can receive a message does — reused, not rotated away mid-request.
+		raw, err := s.t.ensureProjectCoordinator(s.sessionID, s.orchestrationToken, id)
+		if err != nil {
+			return toolResult("ensure project coordinator failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "ask_owner":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -3061,6 +3080,37 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"env":                envProp,
 					"defaultMergeTarget": mergeTargetProp,
 				}, "agentId"),
+			},
+			// A project tool on the orchestration gate rather than beside the other project_* ones:
+			// this is the one project door that can OPEN a conversation, and it spends a live
+			// session credential exactly as `session_create` does. A caller without the grant gets
+			// no tool rather than a tool whose every call is refused.
+			map[string]interface{}{
+				"name": "project_ensure_coordinator",
+				"description": "The session that coordinates a project, opening the next " +
+					"conversation only when the standing one can no longer be handed a message. " +
+					"A replacement is opened ONLY when the conversation the project points at " +
+					"cannot receive — no runner, an offline runner, a run that never started, a " +
+					"row in Trash, or a run that was replaced (§13.6 SU6) — so a conversation " +
+					"somebody is still in, or an ended one its runner can still revive, is never " +
+					"displaced: that case comes back `created: false` with the same `sessionId` " +
+					"and not one row written, and reads as \"that session is the one to send to\" " +
+					"(`session send` with `resumeIfEnded`). `created: true` carries " +
+					"`replacedSessionId` and `replaceReason`, saying what the replacement left " +
+					"behind. This is not a way to end a conversation: that press is the account " +
+					"owner's and stays behind their confirmation card. The acting session is never " +
+					"the one replaced, and a project with no coordinator at all gets its FIRST " +
+					"one, freely landed where its work already runs. The refusal that stays is " +
+					"COORDINATOR_UNAVAILABLE (409, owner: USER), left exactly as the server raised " +
+					"it: it names the account owner's `requiredAction` (rebind), because where a " +
+					"project's coordination lives is their decision — so that refusal is theirs to " +
+					"act on, and a retry answers the same thing.",
+				"inputSchema": obj(map[string]interface{}{
+					"projectId": map[string]interface{}{
+						"type":        "string",
+						"description": "The project whose coordinator to take, as shown in its web UI URL (/projects/<id>).",
+					},
+				}, "projectId"),
 			},
 		)
 	}

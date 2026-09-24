@@ -2664,6 +2664,11 @@ type cliCapabilitySpec struct {
 	// The reverse: commands that act for the Session they run in and have nothing to act for at a
 	// terminal outside one, like the watch commands, whose watches wake that Session.
 	SessionOnly bool
+	// And the one that spends the orchestration credential rather than the machine's own: the door
+	// that OPENS a conversation, whose tool rides the orchestration gate. It is advertised where
+	// that grant exists, so the two doors appear together — a capability the engine has no tool for
+	// would be one no reader could act on, and the descriptor set is what gives it its schema.
+	RequiresOrchestration bool
 }
 
 var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
@@ -2829,6 +2834,11 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 			continue
 		}
 		if spec.HeadlessOnly && ctx.SessionID != "" {
+			continue
+		}
+		// The grant, not the session: includeOrchestration already requires a session, so this
+		// covers the headless half too — a terminal outside one has no conversation to replace.
+		if spec.RequiresOrchestration && !includeOrchestration {
 			continue
 		}
 		if spec.Tool == "session_await" && !watches {
