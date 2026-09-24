@@ -25,14 +25,19 @@
  *    project branch (`d6b55d2d8`) and another onto the upstream (`c125e11c6`).
  *
  * THE RULES (`projects/project-integration-job.ts`, read `landingWorkHasSettled`, `workBranchEndedOn`,
- * `landingJudgedTooEarly`, `landingLeftWorkBehind`)
+ * `landingJudgedTooEarly`, `landingLeftWorkBehind`, `landingBehindTheWorkKey`)
  * -------------------------------------------------------------------------------------------------
  *  1. a landing is not CLAIMED while any work session of its task has no `finished_at` — the branch
  *     can still move, so there is nothing to ask the line about yet (`claimOne`);
  *  2. an `ALREADY_LANDED` is not written as final if it was taken before the task's work settled: the
  *     row goes back to the queue instead, which the first rule then holds until the work stops;
  *  3. a final `ALREADY_LANDED` about a branch the work did NOT end on leaves the work with no route,
- *     so the task is owed the next generation of its landing, bound to the branch the work ended on.
+ *     so the task is owed the next generation of its landing, bound to the branch the work ended on;
+ *  4. and owed it ONCE per generation of the work: that landing's idempotency key is the task, the
+ *     session whose finish ended the work and that finish, so the same work asked about again queues
+ *     nothing, and work that moved (a session that finished again, or a later one) is owed again —
+ *     and the answer that pulls the trigger does not close the task's integration items, because it
+ *     is about a branch the work did not end on (`integration-job-relay.ts`).
  *
  * THE CASES
  * ---------
@@ -58,6 +63,18 @@
  *  (6) the same generation, triggered again: the result resent (a response lost on its way back) and
  *      the queue asked twice more add nothing at all. This is the negative half of "one generation is
  *      owed at most one landing" — the half that says NO generation is owed here.
+ *  (7) the guard on the TRIGGER rather than on the answer (rule 4): a DONE written again over work
+ *      that has not moved queues a landing of its own about the same started branch, and the line
+ *      answers the same thing about it (the same `source_sha`). The first such answer is owed one
+ *      landing; the second is owed nothing — no job, no item, no wake — though J3's index is empty by
+ *      then and the next generation's number is free.
+ *  (8) the other half: the session is reopened and finishes again, and the very same trigger is owed
+ *      one landing more — keyed by the new finish — and then, asked about again, nothing. The guard
+ *      is per generation of the work, not a seal on the task.
+ *  (9) the guard does not trade a repeat for a silence: the owed landing CONFLICTs and opens its
+ *      item, and the same generation triggered again neither queues a second landing nor closes that
+ *      item — an answer about a branch the work did not end on is not the landing J-T5 resolves
+ *      items on, so the one record that the work has not reached the line stays on the list.
  *
  * Everything is produced the way the product produces it: the landing through `enqueueForDoneTask`
  * (J-T1a), the claim off the heartbeat (J-T2), the answer through the result the runner posts (J-T5),
@@ -88,7 +105,13 @@ import {
   jobSawTipOnUpstream,
   type LandingJobFacts,
 } from '../projects/project-criterion-landing';
-import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from '../projects/project-integration-job';
+import {
+  INTEGRATION_JOB_CLAIM,
+  enqueueForDoneTask,
+  landingBehindTheWorkKey,
+  landingLeftWorkBehind,
+  type LandingWorkSessionFacts,
+} from '../projects/project-integration-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -362,6 +385,30 @@ test('a landing is not judged before the work it is about has stopped moving', {
       session: row.session,
     };
     return { row, facts };
+  }
+
+  /** A task's landings in generation order: the branch each was handed, and where it stands. */
+  function landingsOf(taskId: string) {
+    return prisma.projectIntegrationJob.findMany({
+      where: { taskId },
+      orderBy: { generation: 'asc' },
+      select: { id: true, generation: true, sourceRef: true, state: true, idempotencyKey: true },
+    });
+  }
+
+  /** A task's work sessions, in the shape the landing rules read them (`readLandingWorkSessions`). */
+  async function workOf(taskId: string): Promise<LandingWorkSessionFacts[]> {
+    const rows = await prisma.session.findMany({
+      where: { taskId, startsTaskWork: true, deletedAt: null },
+      select: { id: true, branch: true, worktreeBranch: true, finishedAt: true, assignedRunnerId: true },
+    });
+    return rows.map((row) => ({
+      sessionId: row.id,
+      branch: row.branch,
+      worktreeBranch: row.worktreeBranch,
+      finishedAt: row.finishedAt,
+      runnerId: row.assignedRunnerId,
+    }));
   }
 
   // ═══ (1) the work is still running ═══════════════════════════════════════════════════════════
@@ -720,5 +767,199 @@ test('a landing is not judged before the work it is about has stopped moving', {
       'one generation, one landing, and the answer was the work\'s own: no second generation, no '
         + 'item and no wake — asking again what the line has answered is not a new fact about this '
         + 'task');
+  });
+
+  // ═══ (7)(8) the guard, keyed: a generation of the work is owed at most one landing ═══════════
+  // (4) and (6) repeat the same ANSWER, and a job that has answered turns the copy away. These repeat
+  // the TRIGGER: a later landing of the same task, handed the same branch the work did not end on and
+  // answered the same way. A DONE written again over work that has not moved produces exactly that —
+  // J-T1a queues a landing of its own for every DONE, freezing the same session's STARTED branch — and
+  // neither identity (4) leans on can see it: J3's index holds a landing only while it is in flight,
+  // and the next generation's number is free by construction. What the rule owes is keyed by the
+  // WORK instead: the session whose finish ended it, at that finish. Asked about again, the same work
+  // is owed nothing; work that moved — the session reopened and finished again — is a new generation
+  // of it, and is owed one landing more.
+  const guarded = await doneTask('the work a DONE is written about more than once');
+  const guardStartedOn = `orbit/guard-started-${guarded.slice(0, 6)}`;
+  const guardEndedOn = `orbit/guard-ended-${guarded.slice(0, 6)}`;
+  const guardSession = await workSession(guarded, guardStartedOn, { worktreeBranch: guardEndedOn });
+
+  /**
+   * The rule's trigger, pulled the way the product pulls it: a DONE written over this work, the
+   * landing it queues handed to the line, and the line's answer that the branch it was handed has
+   * nothing of the task's own on it — the same answer about the same branch every time (the same
+   * `source_sha`), because nothing moves that branch. Answers what that ANSWER added to the project.
+   */
+  async function triggerTheRule(taskId: string, startedOn: string, lease: string) {
+    const jobId = await enqueue(taskId);
+    const job = await handOut(jobId, lease);
+    assert.ok(job, 'every session of the task has finished, so the landing is handed over');
+    assert.equal(job.sourceRef, `refs/heads/${startedOn}`,
+      'J-T1a freezes the branch the session STARTED on, whatever the work did after that');
+    assert.ok(landingLeftWorkBehind(job, await workOf(taskId)),
+      'and that is not the branch the work ended on: an ALREADY_LANDED about it is the rule\'s '
+        + 'trigger, read here with the rule\'s own predicate rather than restated');
+    const before = await projectLedger();
+    const { answer: taken } = await answer(job, { ...NOTHING_OF_ITS_OWN, sourceSha: sha('d') });
+    assert.ok(taken.accepted, `the answer was refused: ${JSON.stringify(taken)}`);
+    assert.equal((await jobRow(jobId)).state, 'ALREADY_LANDED', 'the answer is written down as final');
+    assert.equal(taken.openItemId, null, 'and it opens no item, whatever it is owed');
+    const after = await projectLedger();
+    return {
+      jobs: after.jobs - before.jobs,
+      promotions: after.promotions - before.promotions,
+      openItems: after.openItems - before.openItems,
+      wakes: after.wakes - before.wakes,
+    };
+  }
+
+  /** Hand the owed landing to the line, which lands the work: the branch's tip is `tip`. */
+  async function landTheOwedLanding(owedId: string, lease: string, tip: string) {
+    const job = await handOut(owedId, lease);
+    assert.ok(job, 'the owed landing is handed over');
+    assert.equal(job.sourceRef, `refs/heads/${guardEndedOn}`, 'and it is about the branch the work ended on');
+    const { answer: landed } = await answer(job, {
+      state: 'LANDED',
+      phase: 'VERIFY',
+      sourceSha: tip,
+      targetShaBefore: PROJECT_TIP,
+      upstreamSha: PROJECT_TIP,
+      landedSha: tip,
+      testedSha: tip,
+      testedTreeSha: sha('0'),
+      landedTreeSha: sha('0'),
+    });
+    assert.ok(landed.accepted, `the owed landing was refused: ${JSON.stringify(landed)}`);
+  }
+
+  await t.test('(7) the same generation of the work, triggered again, is owed nothing further',
+    async () => {
+      assert.deepEqual(await triggerTheRule(guarded, guardStartedOn, 'lease-guard-1'),
+        { jobs: 1, promotions: 0, openItems: 0, wakes: 0 },
+        'the first trigger is owed exactly one landing and nothing else: no candidate, no item, no wake');
+      const owed = await landingsOf(guarded);
+      assert.deepEqual(owed.map((job) => [job.generation, job.sourceRef, job.state]), [
+        [1, `refs/heads/${guardStartedOn}`, 'ALREADY_LANDED'],
+        [2, `refs/heads/${guardEndedOn}`, 'QUEUED'],
+      ], 'what it is owed is the next generation, bound to the branch the work ended on');
+      const [work] = await workOf(guarded);
+      assert.equal(owed[1].idempotencyKey,
+        landingBehindTheWorkKey({ taskId: guarded, sessionId: guardSession, finishedAt: work.finishedAt! }),
+        'and it is keyed by the work it is owed for — the session whose finish ended it, at that '
+          + 'finish — not by its own generation number, which every DONE advances');
+      await landTheOwedLanding(owed[1].id, 'lease-guard-owed', sha('e'));
+
+      // Nothing about the work has moved since: the same session, the same finish, the same branch.
+      // The DONE is written again, and the line is handed the same branch and gives the same answer.
+      assert.deepEqual(await triggerTheRule(guarded, guardStartedOn, 'lease-guard-2'),
+        { jobs: 0, promotions: 0, openItems: 0, wakes: 0 },
+        'and the same trigger again is owed NOTHING: this generation of the work has had the one '
+          + 'landing it is owed — no second job, no item, no wake');
+      assert.deepEqual((await landingsOf(guarded)).map((job) => [job.generation, job.sourceRef, job.state]), [
+        [1, `refs/heads/${guardStartedOn}`, 'ALREADY_LANDED'],
+        [2, `refs/heads/${guardEndedOn}`, 'LANDED'],
+        [3, `refs/heads/${guardStartedOn}`, 'ALREADY_LANDED'],
+      ], 'three landings — two the DONEs queued and the one the rule owed — and none in flight: the '
+        + 'second look at the same work queued nothing behind it');
+    });
+
+  await t.test('(8) work that moved — its session reopened and finished again — is owed one landing '
+    + 'more, once', async () => {
+    const [settled] = await workOf(guarded);
+    // The session is reopened: a terminal revive puts it back to PENDING with no finish
+    // (`sessions.service.ts`), so while it runs its branch can move again…
+    await prisma.session.update({
+      where: { id: guardSession },
+      data: { status: RunStatus.PENDING, finishedAt: null },
+    });
+    // …and its finalize commits what it did onto the branch it ends on and records a NEW finish
+    // (SR13): the same branch, with more work on it.
+    await prisma.session.update({
+      where: { id: guardSession },
+      data: {
+        status: RunStatus.SUCCEEDED,
+        finishedAt: new Date(),
+        worktreeBranch: guardEndedOn,
+        worktreeDirty: false,
+      },
+    });
+    const [reopened] = await workOf(guarded);
+    assert.ok(reopened.finishedAt!.getTime() > settled.finishedAt!.getTime(),
+      'the same session with a later finish: a new generation of the same work');
+
+    assert.deepEqual(await triggerTheRule(guarded, guardStartedOn, 'lease-guard-3'),
+      { jobs: 1, promotions: 0, openItems: 0, wakes: 0 },
+      'the same trigger as (7) word for word — the same started branch, the same answer, the same '
+        + 'source_sha — and this time a landing IS owed: the work moved after the last one was queued, '
+        + 'so this is a new generation of it. The guard is per generation of the work, not a seal on '
+        + 'the task');
+    const landings = await landingsOf(guarded);
+    assert.deepEqual(landings.slice(3).map((job) => [job.generation, job.sourceRef, job.state]), [
+      [4, `refs/heads/${guardStartedOn}`, 'ALREADY_LANDED'],
+      [5, `refs/heads/${guardEndedOn}`, 'QUEUED'],
+    ], 'bound, as before, to the branch the work ended on');
+    assert.equal(landings[4].idempotencyKey,
+      landingBehindTheWorkKey({ taskId: guarded, sessionId: guardSession, finishedAt: reopened.finishedAt! }),
+      'keyed by the reopened session\'s NEW finish: the same session, a new generation of its work');
+    assert.notEqual(landings[4].idempotencyKey, landings[1].idempotencyKey,
+      'and so not the key the first generation\'s landing took, which is why it could be inserted');
+    await landTheOwedLanding(landings[4].id, 'lease-guard-owed-again', sha('1'));
+
+    assert.deepEqual(await triggerTheRule(guarded, guardStartedOn, 'lease-guard-4'),
+      { jobs: 0, promotions: 0, openItems: 0, wakes: 0 },
+      'and the new generation is owed at most one landing too: asked about again, it queues nothing');
+    assert.deepEqual(await owedFor(guarded), { jobs: 6, openItems: 0, wakes: 0 },
+      'six landings: four the DONEs queued, and one owed per generation of the work — two '
+        + 'generations, two — with no item and no wake anywhere along the way');
+  });
+
+  // ═══ (9) the guard does not trade a repeat for a silence ═══════════════════════════════════════
+  // The landing owed to the work can fail, and its item is then the one standing record that the work
+  // has not reached the line — J5: the platform does not retry it by itself. The same generation
+  // triggered again must add nothing, and must not take that item away either: the answer that pulls
+  // the trigger is about a branch the work did NOT end on, so it says nothing about the work and is
+  // not the landing that answers the item (J-T5). Closed there while the guard queues nothing, the
+  // work would sit on its branch with nothing on anybody's list.
+  await t.test('(9) an owed landing that conflicted keeps its one item: the same generation '
+    + 'triggered again neither retries it nor closes it', async () => {
+    const failing = await doneTask('the work whose owed landing conflicted');
+    const failStartedOn = `orbit/conflict-started-${failing.slice(0, 6)}`;
+    const failEndedOn = `orbit/conflict-ended-${failing.slice(0, 6)}`;
+    await workSession(failing, failStartedOn, { worktreeBranch: failEndedOn });
+
+    assert.deepEqual(await triggerTheRule(failing, failStartedOn, 'lease-conflict-1'),
+      { jobs: 1, promotions: 0, openItems: 0, wakes: 0 },
+      'the first trigger is owed one landing, as in (7)');
+    const [, owed] = await landingsOf(failing);
+    const handed = await handOut(owed.id, 'lease-conflict-owed');
+    assert.ok(handed, 'the owed landing is handed over');
+    assert.equal(handed.sourceRef, `refs/heads/${failEndedOn}`);
+    const { answer: conflicted } = await answer(handed, {
+      state: 'CONFLICT',
+      phase: 'REBASE',
+      sourceSha: sha('2'),
+      targetShaBefore: PROJECT_TIP,
+      upstreamSha: PROJECT_TIP,
+      conflicts: ['src/the-file-both-sides-changed.ts'],
+    });
+    assert.ok(conflicted.accepted, `the conflict was refused: ${JSON.stringify(conflicted)}`);
+    assert.ok(conflicted.openItemId, 'the conflict opens its item: somebody has to look at it (J5)');
+
+    assert.deepEqual(await triggerTheRule(failing, failStartedOn, 'lease-conflict-2'),
+      { jobs: 0, promotions: 0, openItems: 0, wakes: 0 },
+      'the same generation triggered again queues nothing — not a second job for the same commits, '
+        + 'and so not a second item about the same conflict');
+    assert.deepEqual(
+      await prisma.projectOpenItem.findMany({
+        where: { taskId: failing },
+        select: { id: true, kind: true, state: true },
+      }),
+      [{ id: conflicted.openItemId, kind: 'INTEGRATION_CONFLICT', state: 'OPEN' }],
+      'and the one item still stands: the answer that pulled the trigger is about a branch the work did '
+        + 'not end on, so it is not the landing that answers the conflict — closing it here, with '
+        + 'nothing queued, would leave the work on its branch and on nobody\'s list');
+    assert.deepEqual(await owedFor(failing), { jobs: 3, openItems: 1, wakes: 0 },
+      'three landings, one item, no wake: one generation of the work, one landing owed, one failure '
+        + 'to look at');
   });
 });

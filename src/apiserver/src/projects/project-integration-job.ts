@@ -190,6 +190,30 @@ export function integrationIdempotencyKey(input: {
   return `ij:v1:${input.kind}:${input.subjectId}:${input.generation}`;
 }
 
+/**
+ * The key of the landing `queueLandingBehindTheWork` owes: one per task per GENERATION OF ITS WORK —
+ * the session whose finish ended the work, at that finish (§2.3 J-T1e).
+ *
+ * Not the landing's own generation, which every DONE advances. The rule is pulled by an
+ * `ALREADY_LANDED` about a branch the work did not end on, and a DONE written again over work that
+ * has not moved pulls it again: J-T1a queues a landing of its own for every DONE, frozen to the same
+ * started branch, and the line answers the same thing about it. J3's index cannot tell — the landing
+ * owed the first time is out of flight by then — and a second one would be a second job for the same
+ * commits and, when it fails, a second item about the same failure, which J5 does not let the
+ * platform produce by itself. So the key names the fact that makes a landing owed: the work, as it
+ * ended. The same work asked about again inserts nothing, because the key is UNIQUE and the database
+ * refuses it whoever asks. Work that moved is a key of its own: a session reopened and finished again
+ * has a later finish, a later session is another id, and nothing else reaches a work branch — the
+ * runner commits a checkout when it finishes the session (SR13).
+ */
+export function landingBehindTheWorkKey(input: {
+  taskId: string;
+  sessionId: string;
+  finishedAt: Date;
+}): string {
+  return `ij:v1:LAND_TASK:${input.taskId}:behind:${input.sessionId}@${input.finishedAt.toISOString()}`;
+}
+
 /** `refs/heads/x` → `x`, which is how a receipt spells a branch (the runner reports short names). */
 export function shortBranchName(ref: string): string {
   return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
@@ -343,8 +367,9 @@ function endedOnBranch(session: LandingWorkSessionFacts): string | null {
 
 /**
  * The branch a task's work ENDED on: of the work sessions that have finished, the one that finished
- * LAST, spelled as the branch its checkout's HEAD ended on. Null when nothing has finished on a
- * branch, which is "cannot tell" rather than "nothing".
+ * LAST, spelled as the branch its checkout's HEAD ended on, with the finish that ended it — which is
+ * the generation of the work a landing for it is owed for (`landingBehindTheWorkKey`). Null when
+ * nothing has finished on a branch, which is "cannot tell" rather than "nothing".
  *
  * WHY THE LAST TO FINISH, AND NOT THE NEWEST SESSION
  * ==================================================
@@ -364,7 +389,7 @@ function endedOnBranch(session: LandingWorkSessionFacts): string | null {
  */
 export function workBranchEndedOn(
   sessions: ReadonlyArray<LandingWorkSessionFacts>,
-): { sessionId: string; branch: string } | null {
+): { sessionId: string; branch: string; finishedAt: Date } | null {
   let best: { sessionId: string; branch: string; finishedAt: Date } | null = null;
   for (const session of sessions) {
     if (session.finishedAt === null) continue;
@@ -377,7 +402,7 @@ export function workBranchEndedOn(
       || (session.finishedAt.getTime() === best.finishedAt.getTime() && session.sessionId > best.sessionId);
     if (better) best = { sessionId: session.sessionId, branch, finishedAt: session.finishedAt };
   }
-  return best === null ? null : { sessionId: best.sessionId, branch: best.branch };
+  return best;
 }
 
 /**
@@ -490,7 +515,9 @@ export function checkSawTheFinishedBranch(
  * serial key all already work this way.
  *
  * Answers null when there is nothing to offer: no finished session names a branch, the project's
- * binding is gone, or a landing of this task is already in flight for that branch (J3's index).
+ * binding is gone, a landing of this task is already in flight for that branch (J3's index), or this
+ * generation of the work has been owed its landing already — however many times it is asked about,
+ * and whoever asks (`landingBehindTheWorkKey`).
  */
 export async function queueLandingBehindTheWork(
   tx: Prisma.TransactionClient,
@@ -518,6 +545,11 @@ export async function queueLandingBehindTheWork(
     // The line's own two refs decide which of the two things a landing is (§2.3): a project that
     // integrates into its upstream has no branch of its own to land on, and gets a candidate.
     line: codebase.integrationRef === codebase.upstreamRef ? 'MAIN' : 'PROJECT_BRANCH',
+    idempotencyKey: landingBehindTheWorkKey({
+      taskId: input.taskId,
+      sessionId: ended.sessionId,
+      finishedAt: ended.finishedAt,
+    }),
   });
 }
 
@@ -701,6 +733,13 @@ async function queueLandingForWork(
     session: { id: string; branch: string; runnerId: string | null };
     /** Which line the project has: its integration ref is its upstream, or a branch of its own. */
     line: 'MAIN' | 'PROJECT_BRANCH';
+    /**
+     * What a `LAND_TASK` is idempotent on when it is not simply the next landing a DONE asks for:
+     * `landingBehindTheWorkKey`. A candidate takes none — its own index already makes one branch one
+     * question (§3.2) — and a `MAIN` line never has a `LAND_TASK` to be answered about, because a
+     * started line's refs cannot change (`INTEGRATION_LINE_LOCKED`).
+     */
+    idempotencyKey?: string;
   },
 ): Promise<LandingQueued | null> {
   if (input.line === 'MAIN') {
@@ -721,12 +760,15 @@ async function queueLandingForWork(
     taskId: input.taskId,
     codebase: input.codebase,
     session: input.session,
+    idempotencyKey: input.idempotencyKey,
   });
   return jobId === null ? null : { kind: 'LAND_TASK', jobId };
 }
 
 /**
- * Insert one LAND_TASK row, or answer null when this task already has a landing in flight.
+ * Insert one LAND_TASK row, or answer null when this task already has a landing in flight — or when
+ * the row's idempotency key is already taken, which for a landing owed to the work is that work's
+ * generation having been owed one (`landingBehindTheWorkKey`).
  *
  * The generation is read under the task row lock the DONE transaction already holds, so two writers
  * cannot both decide they are generation 2. Earlier QUEUED rows of the same task are superseded
@@ -740,6 +782,8 @@ async function queueLandTask(
     taskId: string;
     codebase: CodebaseForJob;
     session: { id: string; branch: string; runnerId: string | null };
+    /** Omitted for the landing a DONE asks for, whose key is its generation (§2.1). */
+    idempotencyKey?: string;
   },
 ): Promise<string | null> {
   const inflight = await tx.projectIntegrationJob.count({
@@ -773,7 +817,7 @@ async function queueLandTask(
       upstreamRef: input.codebase.upstreamRef,
       sourceRef: `refs/heads/${input.session.branch}`,
       runnerId: input.session.runnerId,
-      idempotencyKey: integrationIdempotencyKey({
+      idempotencyKey: input.idempotencyKey ?? integrationIdempotencyKey({
         kind: 'LAND_TASK',
         subjectId: input.taskId,
         generation,

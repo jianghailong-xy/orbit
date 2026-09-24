@@ -2193,7 +2193,9 @@ model ProjectIntegrationJob {
   /// as well as on the promotion because the job is the record of what was sent out to be pushed.
   confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
 
-  /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact.
+  /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact. The one
+  /// exception is the landing J-T1e owes the work, keyed by the work's generation instead
+  /// (`landingBehindTheWorkKey`).
   idempotencyKey String @unique(map: "project_integration_job_idempotency_key") @map("idempotency_key")
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
