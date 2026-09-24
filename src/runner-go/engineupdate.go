@@ -114,13 +114,19 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 // had anything to say — the summary a browser-requested update reports back (the per-engine
 // record it leaves behind is engineUpdateLog's job).
 //
-// onEngineUpdated, when not nil, is called once at the end of a pass in which some engine's version
-// really moved. A CLI that moved may have brought a model lineup with it, and the caller re-reads
-// the model catalog on that (see runLoop) rather than waiting for its own ticker — the version is
-// the one thing that changes the list between ticks, and installing it is this function's job.
-// Only `updated` counts: `checked` is a version that did not move, and `failed` is one that never
-// arrived. A pass that moved several engines still calls it once — the catalog refresh re-reads
-// every runtime, and its own TryLock drops a call that arrives during one.
+// onEngineUpdated, when not nil, is called the moment an engine's version really moves — inside the
+// pass, before the engine after it is even looked at. A CLI that moved may have brought a model
+// lineup with it, and the caller re-reads the model catalog on that (see runLoop) rather than
+// waiting for its own ticker — the version is the one thing that changes the list between ticks,
+// and installing it is this function's job. Only `updated` counts: `checked` is a version that did
+// not move, and `failed` is one that never arrived. A pass that moves several engines calls it once
+// per engine; calls landing during one catalog refresh are coalesced by the caller.
+//
+// Called from this pass's own goroutine, between engines — so it must return promptly. The engines
+// behind this one are each allowed engineUpdateTimeout (a wedged updater is stopped only by its own
+// ceiling), and a callback that took minutes would re-create the delay this exists to remove: live
+// on 2026-09-24, Claude Code moved at 09:38:50 and the catalog was not re-read until Kimi had
+// printed nothing at all for 5m0s. The runner's own callback hands the work to another goroutine.
 func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars []envVar, onEngineUpdated func()) []string {
 	// One budget for the pass, not one per engine — see engineUpdateBudget. Each engine's own
 	// ceiling is derived from this context, so it is really min(engineUpdateTimeout, what's left).
@@ -128,7 +134,6 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 	defer cancel()
 	servicePath := serviceLoginPath()
 	var lines []string
-	var updated bool
 	for _, spec := range engineSpecs {
 		if err := ctx.Err(); err != nil {
 			// Out of budget. Said out loud, and deliberately not recorded: these commands never
@@ -165,19 +170,20 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 		clearDeferredEngineUpdate(spec.bin)
 		rec, phrase := updateEngine(ctx, spec, servicePath, proxyVars)
 		if rec.Status == updateUpdated {
-			updated = true
 			if n > 0 {
 				// The one thing about this update the version numbers don't say: the sessions that were
 				// busy are still on whatever they started with, and only their next spawn moves.
 				phrase += " — native install, so what's already running (" + plural(n, "session") + ") keeps the version it started with"
 			}
+			// Now, not after the loop. This is the engine whose model list just changed, and the
+			// engines still to come in this pass are each allowed minutes of their own.
+			if onEngineUpdated != nil {
+				onEngineUpdated()
+			}
 		}
 		if phrase != "" {
 			lines = append(lines, phrase)
 		}
-	}
-	if updated && onEngineUpdated != nil {
-		onEngineUpdated()
 	}
 	return lines
 }
@@ -283,10 +289,10 @@ func deferredEngineUpdates() map[string]bool {
 // still busy is simply left filed — no log line, no drift probe, nothing recorded — because this
 // runs every few seconds, and the pass that deferred it already said all of that once.
 //
-// onEngineUpdated is updateEngines' contract, unchanged: an engine this retry installs really did
-// move a version, and the caller hears about it once per retry rather than not at all — the point
-// of this path is that the update did not wait for the loop's next tick, and neither should the
-// model list that came with it.
+// onEngineUpdated is updateEngines' contract, unchanged, down to where in the loop it is called: an
+// engine this retry installs really did move a version, and the caller hears about it there and then
+// rather than once the retry is done — the point of this path is that the update did not wait for
+// the loop's next tick, and neither should the model list that came with it.
 func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) int, proxyVars []envVar, onEngineUpdated func()) {
 	deferred := deferredEngineUpdates()
 	if len(deferred) == 0 {
@@ -297,7 +303,6 @@ func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) in
 	ctx, cancel := context.WithTimeout(ctx, engineUpdateBudget)
 	defer cancel()
 	servicePath := serviceLoginPath()
-	var updated bool
 	for _, spec := range engineSpecs {
 		if !deferred[spec.bin] {
 			continue
@@ -314,12 +319,9 @@ func retryDeferredEngineUpdates(ctx context.Context, activeCount func(string) in
 		// next pass is what tries again.
 		clearDeferredEngineUpdate(spec.bin)
 		logln("engine-update:", spec.name, "retrying — its sessions have finished")
-		if rec, _ := updateEngine(ctx, spec, servicePath, proxyVars); rec.Status == updateUpdated {
-			updated = true
+		if rec, _ := updateEngine(ctx, spec, servicePath, proxyVars); rec.Status == updateUpdated && onEngineUpdated != nil {
+			onEngineUpdated()
 		}
-	}
-	if updated && onEngineUpdated != nil {
-		onEngineUpdated()
 	}
 }
 

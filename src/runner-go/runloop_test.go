@@ -52,6 +52,103 @@ func TestHeartbeatResponseCarriesModelCatalogRefresh(t *testing.T) {
 	}
 }
 
+// The catalog refresh takes tens of seconds to two minutes, and the requests it serves arrive in
+// bursts — one per engine that moves in a pass (0.1.181), the hourly ticker, the Engines panel's
+// button. A request that arrives during one must be served by one more run after it: what it is
+// asking for is a list that reflects the CLI it just saw change, and the version of this test that
+// dropped it (a TryLock) left a second engine's new models invisible until the next hourly tick.
+//
+// Several arrivals still cost one extra run, which is the other half of the contract: re-reading
+// every runtime N times over would spend minutes producing the answer the last read already has.
+func TestCatalogRefreshCoalescesRequestsArrivingDuringOne(t *testing.T) {
+	var mu sync.Mutex
+	var runs int
+	started := make(chan int, 8) // the run number, announced by the body as it starts
+	release := make(chan struct{})
+	refresh := coalescingRefresh(func() {
+		mu.Lock()
+		runs++
+		n := runs
+		mu.Unlock()
+		started <- n
+		if n == 1 {
+			<-release // hold the first refresh open so the others land during it
+		}
+	})
+	next := func(t *testing.T, want string) int {
+		t.Helper()
+		select {
+		case n := <-started:
+			return n
+		case <-time.After(30 * time.Second):
+			t.Fatalf("no refresh started, want %s", want)
+			return 0
+		}
+	}
+
+	go refresh()
+	if n := next(t, "the first refresh"); n != 1 {
+		t.Fatalf("first refresh = run %d, want 1", n)
+	}
+
+	// Three requests while that one is still running. Each has to return without starting a refresh
+	// of its own — the body of run 1 is provably still in flight, so a call that is still inside
+	// refresh() when the request returns is one that tried to run beside it.
+	returned := make(chan struct{}, 3)
+	for i := 0; i < 3; i++ {
+		go func() {
+			refresh()
+			returned <- struct{}{}
+		}()
+	}
+	for i := 0; i < 3; i++ {
+		select {
+		case <-returned:
+		case <-time.After(30 * time.Second):
+			close(release)
+			t.Fatal("a request that arrived during a refresh did not return — it is running a second refresh beside the first")
+		}
+	}
+
+	close(release)
+	// The catch-up: exactly one, and it starts after the first has finished.
+	if n := next(t, "one catch-up refresh"); n != 2 {
+		t.Fatalf("second refresh = run %d, want the single catch-up for the three requests", n)
+	}
+	select {
+	case n := <-started:
+		t.Fatalf("run %d started — requests that arrive during one refresh must cost one extra run, not one each", n)
+	case <-time.After(500 * time.Millisecond):
+	}
+	mu.Lock()
+	ran := runs
+	mu.Unlock()
+	if ran != 2 {
+		t.Fatalf("ran %d refreshes, want 2", ran)
+	}
+
+	// And the trigger still works once nothing is in flight: leaving "running" set would make every
+	// later request — the hourly ticker, the button — a silent no-op forever.
+	done := make(chan int, 1)
+	go func() {
+		refresh()
+		mu.Lock()
+		done <- runs
+		mu.Unlock()
+	}()
+	if n := next(t, "a refresh that starts after the catch-up"); n != 3 {
+		t.Fatalf("third refresh = run %d, want 3 — a refresh asked for after one finished is its own run", n)
+	}
+	select {
+	case ran := <-done:
+		if ran != 3 {
+			t.Fatalf("ran %d refreshes, want the request after the catch-up to have started its own", ran)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the refresh that started after the catch-up never returned")
+	}
+}
+
 func TestWaitForRunLoopStopUpdate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

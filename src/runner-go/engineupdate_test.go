@@ -370,6 +370,37 @@ func engineUpdateRuns(t *testing.T, runs string) int {
 	return len(b)
 }
 
+// fakeFailingEngine is fakeUpdatableEngine's opposite: an updater that runs, marks that it ran, and
+// exits non-zero without moving the installed version — and, until the test creates the returned
+// release file, doesn't get that far at all. The hold is what the refresh tests need: an engine
+// wedged mid-update looks exactly like this for up to engineUpdateTimeout (Kimi printed nothing at
+// all for 5m0s on vmi3129740, 2026-09-24), and a test that waited that out could assert nothing
+// about what happened while it was stuck.
+//
+// The hold is capped at 1200 polls (~60s) so that a test binary which dies mid-test cannot leave a
+// spinner behind — and the ceiling cannot turn into a false pass either: expiry lets the pass end,
+// which the tests below fail on ("the pass ended before the wedged engine was released").
+func fakeFailingEngine(t *testing.T, dir, bin, installed, latest, latestURL string) (spec engineSpec, runs, release string) {
+	t.Helper()
+	version := filepath.Join(dir, bin+".version")
+	runs = filepath.Join(dir, bin+".runs")
+	release = filepath.Join(dir, bin+".release")
+	if err := os.WriteFile(version, []byte(installed+" (Fake Engine)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, bin), []byte("#!/bin/sh\ncat "+version+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A failed update is not a quiet one: it says why, which is where updateErrDetail looks.
+	return engineSpec{
+		name: bin,
+		bin:  bin,
+		updateCmd: "printf x >> " + runs + "; n=0; while [ ! -e " + release + " ] && [ $n -lt 1200 ]; do " +
+			"sleep 0.05; n=$((n+1)); done; echo 'boom: could not fetch' >&2; exit 1",
+		latestURL: latestURL,
+	}, runs, release
+}
+
 // The behaviour this whole file's skip exists to enable: an engine stepped over because sessions
 // were running on it is installed the moment they finish, not at the next tick.
 //
@@ -983,10 +1014,14 @@ func TestUpdatedEngineReReadsTheModelCatalog(t *testing.T) {
 		t.Fatalf("the pass moved %d + %d versions, want both engines updated",
 			engineUpdateRuns(t, aRuns), engineUpdateRuns(t, bRuns))
 	}
-	// Once for the pass, not once per engine: the refresh re-reads every runtime it can see, and a
-	// second request arriving during one is dropped by its own TryLock anyway.
-	if refreshes != 1 {
-		t.Fatalf("a pass that moved two versions re-read the catalog %d times, want 1", refreshes)
+	// Once per engine that really moved, not once for the pass. The engines behind it in the loop
+	// are each allowed engineUpdateTimeout, and the refresh used to wait for all of them: 5m0s of a
+	// picker still showing the old list on 2026-09-24, because Kimi's updater was stuck. Two
+	// requests in quick succession are the intended cost of that — the second is served by one more
+	// run once the first refresh finishes rather than dropped (see coalescingRefresh), and the
+	// catalog they leave behind reflects both engines either way.
+	if refreshes != 2 {
+		t.Fatalf("a pass that moved two versions asked for %d catalog refreshes, want one per engine", refreshes)
 	}
 }
 
@@ -1128,5 +1163,116 @@ func TestTheUpdateButtonReReadsTheModelCatalogAfterAVersionChange(t *testing.T) 
 	case <-refreshes:
 		t.Fatal("the catalog was re-read more than once for one run of the button")
 	default:
+	}
+}
+
+// The refresh is requested the moment an engine's version moves, not once the pass is over: the
+// engines behind it in the loop are each allowed engineUpdateTimeout, and a wedged updater is
+// stopped by nothing but its own ceiling. Live on vmi3129740, 2026-09-24: Claude Code moved at
+// 09:38:50 and the catalog was not re-read until Kimi's updater had printed nothing at all for
+// 5m0s — the models the new Claude had brought stayed out of the picker for those five minutes,
+// which is the whole reason this is a per-engine trigger now.
+//
+// The engine behind is a fake the test holds open, so "before it timed out" is proven rather than
+// waited out: it can only finish once this test lets it, and the refresh has to be requested before
+// that. Both schedulers are run over the same pair, because the trailing call was in two loops.
+func TestEngineUpdateRefreshesTheCatalogBeforeASlowEngineFinishes(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("needs a shell")
+	}
+	const latest = "2.1.281"
+	for _, tc := range []struct {
+		name string
+		// deferred runs the pair through the idle retry instead of a scheduled pass: the same
+		// engines, filed by the skip an earlier pass would have left, and its own loop.
+		deferred bool
+	}{
+		{name: "scheduled pass"},
+		{name: "idle retry", deferred: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ORBIT_HOME", t.TempDir())
+			dir := t.TempDir()
+			feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(latest))
+			}))
+			defer feed.Close()
+
+			fast, fastRuns := fakeUpdatableEngine(t, dir, "orbit-fake-fast", "2.1.278", latest, feed.URL)
+			slow, slowRuns, release := fakeFailingEngine(t, dir, "orbit-fake-slow", "2.1.226", latest, feed.URL)
+			saved := engineSpecs
+			engineSpecs = []engineSpec{fast, slow}
+			t.Cleanup(func() { engineSpecs = saved })
+			t.Cleanup(func() { clearDeferredEngineUpdate(fast.bin); clearDeferredEngineUpdate(slow.bin) })
+			t.Cleanup(func() { _ = os.WriteFile(release, nil, 0o644) })
+			// Keep the real PATH: the updaters run through `sh`, which has to find its own `sleep`.
+			t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+			refreshes := make(chan struct{}, 8)
+			trigger := func() { refreshes <- struct{}{} }
+			idle := func(string) int { return 0 }
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			pass := make(chan []string, 1)
+			go func() {
+				if tc.deferred {
+					deferEngineUpdate(fast.bin)
+					deferEngineUpdate(slow.bin)
+					retryDeferredEngineUpdates(ctx, idle, nil, trigger)
+					pass <- nil
+					return
+				}
+				pass <- updateEngines(ctx, idle, nil, trigger)
+			}()
+
+			select {
+			case <-refreshes:
+			case <-time.After(30 * time.Second):
+				cancel()
+				t.Fatal("no catalog refresh while the engine behind it was still updating — " +
+					"the refresh is still waiting for the whole pass")
+			}
+			if got := engineUpdateRuns(t, fastRuns); got != 1 {
+				t.Errorf("the updated engine's updater ran %d times, want 1", got)
+			}
+			// The load-bearing assertion: the pass has not ended, and cannot until the wedged
+			// engine is released, so a refresh requested above is one that did not wait for it. If
+			// the wedge expired on its own this fails loudly instead of passing for the wrong reason.
+			select {
+			case lines := <-pass:
+				cancel()
+				t.Fatalf("the pass ended before the wedged engine was released, so it proves nothing: %q", lines)
+			default:
+			}
+
+			// Let the wedge go. Its update fails, which must not be read as a reason to re-read.
+			if err := os.WriteFile(release, nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			var lines []string
+			select {
+			case lines = <-pass:
+			case <-time.After(30 * time.Second):
+				cancel()
+				t.Fatal("the pass never finished after the wedged engine was released")
+			}
+			if got := engineUpdateRuns(t, slowRuns); got != 1 {
+				t.Errorf("the wedged engine's updater ran %d times, want 1", got)
+			}
+			if !tc.deferred {
+				// A pass reports per engine; the retry reports nothing at all.
+				if len(lines) != 2 ||
+					!strings.Contains(lines[0], "orbit-fake-fast updated") ||
+					!strings.Contains(lines[1], "orbit-fake-slow — update failed") {
+					t.Fatalf("lines = %q, want the first engine updated and the wedged one failed", lines)
+				}
+			}
+			select {
+			case <-refreshes:
+				t.Error("an engine whose update failed asked for a catalog refresh")
+			default:
+			}
+		})
 	}
 }

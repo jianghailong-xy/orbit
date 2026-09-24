@@ -103,6 +103,54 @@ func restartForUpdate(updateRequested, drainTimedOut bool, signals <-chan os.Sig
 	}
 }
 
+// coalescingRefresh returns the trigger for a background refresh that never loses a request.
+//
+// Its one caller is the model catalog, where a refresh spawns a CLI per runtime and takes tens of
+// seconds to two minutes — longer than the gap between the events that ask for one. Triggers arrive
+// in bursts: two engines can move in the same pass a few seconds apart (a pass asks once per engine
+// that moved), the hourly ticker can land in the middle of one, and the Engines panel's buttons are
+// pressed by a person. Dropping those arrivals was what a TryLock did, and it lost exactly the
+// request carrying the newest models: the second engine's CLI was re-read only at the next hourly
+// tick, if at all.
+//
+// So a request arriving during a refresh is remembered and served by one more run of the same
+// refresh once the current one finishes. However many arrive, they cost one extra run: what all of
+// them want is a catalog that reflects the last of them, and re-reading the CLIs N times over would
+// spend minutes producing the answer the last read already has. A request arriving after the run
+// finished is an ordinary refresh, not a catch-up.
+//
+// Runs the refresh on the caller's own goroutine — callers want it off their own, so they say so
+// (see refreshCatalogAfterEngineUpdate).
+func coalescingRefresh(refresh func()) func() {
+	var mu sync.Mutex
+	// running is held across the whole cycle — the refresh and the decision that follows it — so a
+	// request arriving at any point in it is either seen by the pending check below or, if it lands
+	// after running is cleared, becomes the refresh itself. Neither is dropped.
+	var running, pending bool
+	return func() {
+		mu.Lock()
+		if running {
+			pending = true
+			mu.Unlock()
+			return
+		}
+		running = true
+		mu.Unlock()
+		for {
+			refresh()
+			mu.Lock()
+			again := pending
+			pending = false
+			if !again {
+				running = false
+				mu.Unlock()
+				return
+			}
+			mu.Unlock()
+		}
+	}
+}
+
 // carryOverModelCatalog keeps a provider's last good model list when this round's refresh produced
 // nothing for it. The heartbeat replaces the server's stored catalog wholesale, so a half-failed
 // round — `codex debug models` erroring mid-`codex update`, one CLI briefly off PATH — would
@@ -809,18 +857,18 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	var modelSnapshotMu sync.Mutex
 	var hbModelCatalog *ModelCatalog
 	var hbRuntimeDefaultModels map[string]string
-	var modelCatalogRefreshMu sync.Mutex
 	// Let the UI follow the runner's own CLIs (Codex `codex debug models`, Claude `claude -p
 	// "/model"`, which auto-track new releases) instead of a hardcoded web/mobile list. Refreshed
 	// hourly in the background: model lineups change rarely, and the Claude fetch spawns a
 	// few `claude -p` processes, so there's no reason to run it often — which is also why the one
 	// event that does change the lineup, an engine this runner just updated, refreshes it on the
 	// spot instead (see refreshCatalogAfterEngineUpdate below).
-	refreshModelCatalog := func() {
-		if !modelCatalogRefreshMu.TryLock() {
-			return
-		}
-		defer modelCatalogRefreshMu.Unlock()
+	//
+	// coalescingRefresh, because those two triggers now overlap by design: a pass that moves two
+	// engines asks at 09:38:50 and again at 09:38:58, and a refresh takes tens of seconds to two
+	// minutes. A request that arrives during one is served by one more run after it, so the second
+	// engine's new models are in the list seconds later rather than at the next hourly tick.
+	refreshModelCatalog := coalescingRefresh(func() {
 		catalog := &ModelCatalog{}
 		if codexCLIAvailable() {
 			if models, err := fetchCodexModelCatalog(loopCtx); err != nil {
@@ -866,7 +914,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// Same catalog the heartbeat reports, handed to the running sessions: it carries each
 		// model's context window, which is the denominator they ship with every occupancy reading.
 		publishModelCatalog(published)
-	}
+	})
 	// The other way the catalog goes stale: this runner installs a newer engine, whose point is
 	// often a model the old CLI did not have. Every path that updates one ends in updateEngine, so
 	// they all report a version that really moved — the periodic pass, the idle retry, and the Engines
@@ -874,10 +922,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// to an hour from now, which on 2026-09-24 left Opus 5.5 missing from a runner that had been
 	// running 2.1.280 since 16:20Z.
 	//
-	// Off the reporter's own goroutine: a pass spawns a dozen CLIs and takes seconds, and the
-	// updater that just finished — a loop that still has engines to walk, or a relay with a person
-	// waiting on it — has nothing to gain by waiting for it. Overlap is free: TryLock drops a
-	// refresh that arrives during one.
+	// Off the reporter's own goroutine, and that is a precondition now rather than a courtesy: the
+	// pass calls this between engines (see updateEngines), so it has to hand the refresh off and
+	// return — a pass spawns a dozen CLIs and takes seconds, and the updater that just finished, a
+	// loop that still has engines to walk or a relay with a person waiting on it, has nothing to
+	// gain by waiting for it. Overlap is no longer a loss either: a request arriving during one is
+	// served by one more run after it (see coalescingRefresh).
 	refreshCatalogAfterEngineUpdate := func() { go refreshModelCatalog() }
 	// Runtime defaults come from user-owned config/environment only, so refresh them more often
 	// without paying the catalog's process-spawn cost. Probe errors remain visible in logs, while
@@ -1312,8 +1362,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			// Re-read the runtime CLIs' model lists because someone asked from the UI. On its
 			// own goroutine: a pass spawns several CLIs and can take seconds, and nothing here
-			// waits for it — the refreshed catalog rides a later heartbeat. The refresher's own
-			// TryLock makes a request that lands mid-pass a no-op rather than a second spawn.
+			// waits for it — the refreshed catalog rides a later heartbeat. A request that lands
+			// mid-pass is served by one more run once that one ends, rather than dropped.
 			if resp.RefreshModelCatalog {
 				logln("model catalog refresh requested by the control plane")
 				go refreshModelCatalog()
