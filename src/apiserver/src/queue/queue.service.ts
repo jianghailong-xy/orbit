@@ -305,7 +305,8 @@ export class QueueService {
     //
     // And a seed needs a prompt to lay down: the opening turn IS the session's prompt, so a session
     // with none has nothing to put there. `importSession` is the only creator that writes an empty
-    // prompt — every other path rejects one — so for a transcript imported before `importedAt`
+    // prompt and leaves the seed to this — `create` writes one only for a session opened with
+    // attachments alone, and seeds that turn itself — so for a transcript imported before `importedAt`
     // existed to say so durably, that empty prompt is all that is left of what the row is, and
     // reading it here is what reaches those rows. Without that, the claim a first message arrives
     // on seeds a turn behind the person's own: a runner slot spent spawning an engine to read an

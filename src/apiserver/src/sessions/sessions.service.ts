@@ -117,6 +117,7 @@ import {
   enqueueBeautifySession,
   MAX_KNOWN_TAGS_PROMPTED,
   makeBranchName,
+  titleFromAttachments,
   titleFromPrompt,
 } from './naming';
 import {
@@ -649,7 +650,11 @@ export class SessionsService {
       titleManagedByProject?: boolean;
     },
   ) {
-    if (!dto.prompt) throw new BadRequestException('prompt is required');
+    // Attachments with no words are a whole opening message, as they are on any later turn: the
+    // runtime is handed the files either way. A shell command is nothing without its words.
+    const attachmentsAlone =
+      dto.prompt === '' && !dto.shell && (dto.attachmentIds?.length ?? 0) > 0;
+    if (!dto.prompt && !attachmentsAlone) throw new BadRequestException('prompt is required');
     assertPromptSize(dto.prompt, 'prompt');
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
@@ -853,7 +858,20 @@ export class SessionsService {
     // callers only see string | undefined. Empty string remains an explicit caller choice.
     const explicitTitle = dto.title ?? undefined;
     const hasExplicitTitle = explicitTitle !== undefined;
-    const title = explicitTitle ?? titleFromPrompt(dto.prompt);
+    const title =
+      explicitTitle ??
+      (attachmentsAlone
+        ? // No words to name it by: the session is named for the files it was opened with.
+          titleFromAttachments(
+            (
+              await this.prisma.attachment.findMany({
+                where: { id: { in: attachmentIds } },
+                orderBy: { createdAt: 'asc' },
+                select: { fileName: true },
+              })
+            ).map((a) => a.fileName),
+          )
+        : titleFromPrompt(dto.prompt));
     let branch = enableWorktree ? makeBranchName(title) : null;
     // provider is the identity stored on the row; runtime is which built-in CLI actually
     // drives it (a custom provider borrows Claude/Codex/Kimi), and decides the pre-generated
@@ -967,6 +985,10 @@ export class SessionsService {
         clientTurnId: SessionsService.initialTurnClientId(session.id),
       });
     }
+    // Opened with attachments alone: seed its first turn now too. The claim reads an empty prompt
+    // as an imported transcript's and lays no turn down, so without this the files would never
+    // reach the engine.
+    if (attachmentsAlone) await this.seedOpeningTurn(session);
     this.queue.notifySessionQueued();
     // Push the new session to the owner's control-plane stream (GET /api/events) so other
     // clients see it appear without polling.
@@ -984,8 +1006,11 @@ export class SessionsService {
       this.realtime.publishWorkspaceChanged(session.id, session.workspaceId, false);
     }
     // Only unnamed sessions need cosmetic naming. Task runs and user-supplied titles never call
-    // DeepSeek. The branch is deliberately left as-is when the display title is later improved.
-    if (!hasExplicitTitle) void this.beautifySessionLater(ownerId, session.id, dto.prompt, title);
+    // DeepSeek, and neither does a session with no words to read — its file names stand.
+    // The branch is deliberately left as-is when the display title is later improved.
+    if (!hasExplicitTitle && !attachmentsAlone) {
+      void this.beautifySessionLater(ownerId, session.id, dto.prompt, title);
+    }
     // Title ownership/provenance is an internal synchronization mechanism, not a public setting.
     const {
       titleManagedByProject: _titleManagedByProject,
@@ -3765,6 +3790,18 @@ export class SessionsService {
       },
       data: { turnId: turn.id },
     });
+  }
+
+  /**
+   * `ensurePromptSeeded` in a transaction of its own, for the one opening the claim will not seed:
+   * a session `create` opened with attachments alone. The uploads are linked in the same
+   * transaction as the turn, so no runner can take the turn without them.
+   */
+  private async seedOpeningTurn(session: { id: string; prompt: string; importedAt: Date | null }) {
+    await withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
+      await this.ensurePromptSeeded(tx, session);
+    }, loggedRetry(this.logger, 'sessions.seedOpeningTurn'));
   }
 
   /** The fixed clientTurnId of the seeded first turn (the prompt) — see ensurePromptSeeded

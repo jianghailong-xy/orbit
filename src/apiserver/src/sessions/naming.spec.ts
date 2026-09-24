@@ -5,6 +5,7 @@ import {
   enqueueBeautifySession,
   sanitizeTags,
   TITLE_BEAUTIFY_CONCURRENCY,
+  titleFromAttachments,
 } from './naming';
 
 const flush = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
@@ -40,6 +41,14 @@ test('tags from the model are trimmed, deduped case-insensitively and capped', (
   // A model that answers with a bare string, or omits tags entirely, must not throw.
   assert.deepEqual(sanitizeTags('bug'), []);
   assert.deepEqual(sanitizeTags(undefined), []);
+});
+
+test('a session opened with attachments alone is titled by their file names', () => {
+  assert.equal(titleFromAttachments(['testflight_feedback.zip']), 'testflight_feedback.zip');
+  assert.equal(titleFromAttachments(['a.png', null, 'b.log']), 'a.png, b.log');
+  assert.equal(titleFromAttachments([`${'x'.repeat(90)}.zip`]).length, 80);
+  // Nothing to name it by (legacy rows carry no file name) still yields a title, never ''.
+  assert.equal(titleFromAttachments([null]), 'Attachment');
 });
 
 test('beautifySession offers the owner tags for reuse and returns the parsed labels', async () => {

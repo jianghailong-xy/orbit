@@ -814,12 +814,12 @@ final class ConsoleModel {
 
     /// Whether what's staged can go out with no text at all — web parity (`!!text.trim() ||
     /// readyImages.length > 0`): a screenshot on its own is a perfectly good message, and the
-    /// runner builds an image-only user turn for it (no text block). Two cases keep the
-    /// text-is-required rule: a draft, because POST /sessions rejects an empty `prompt`, and a
-    /// question reply, whose deny+message channel carries text only. `send` also excludes a
-    /// bare `!`, which is a shell no-op rather than a message.
+    /// runner builds an image-only user turn for it (no text block). That holds for a draft too:
+    /// POST /sessions takes attachments alone as the opening message. A question reply keeps the
+    /// text-is-required rule, since its deny+message channel carries text only. `send` also
+    /// excludes a bare `!`, which is a shell no-op rather than a message.
     private var canSendAttachmentsAlone: Bool {
-        !isDraft && replyContext == nil && !pendingAttachments.isEmpty
+        replyContext == nil && !pendingAttachments.isEmpty
     }
 
     /// Whether to show a "working" row at the transcript tail: the agent owes a response it hasn't
@@ -1705,7 +1705,7 @@ final class ConsoleModel {
     private func createDraftSession() async {
         guard let agent = draftAgent else { return }
         let (text, shell) = ComposerLogic.parseShell(composerText)
-        guard !text.isEmpty else {
+        guard !text.isEmpty || (!shell && canSendAttachmentsAlone) else {
             if shell { composerText = "" }
             return
         }

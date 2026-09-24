@@ -37,6 +37,14 @@ export function titleFromPrompt(prompt: string): string {
   return line.slice(0, 80);
 }
 
+/**
+ * The same fallback for a session opened with attachments and no words: what was sent, by file
+ * name. An upload without one (a legacy row) leaves only the generic word. Capped like the above.
+ */
+export function titleFromAttachments(fileNames: readonly (string | null)[]): string {
+  return fileNames.filter(Boolean).join(', ').slice(0, 80) || 'Attachment';
+}
+
 const DEEPSEEK_SYSTEM_PROMPT =
   'You name and label a software-engineering session. Reply with ONLY a JSON object ' +
   '{"title": string, "tags": string[]}. "title": a concise summary, at most 6 words ' +

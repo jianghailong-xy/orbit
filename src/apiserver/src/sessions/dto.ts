@@ -7,7 +7,8 @@ const MERGE_RECEIPT_RESULT_VALUES = [...MERGE_RECEIPT_RESULTS];
 export interface CreateSessionDto {
   /** Optional display title; defaults to a slice of the prompt. */
   title?: string;
-  /** First user message — seeds the session's first turn. */
+  /** First user message — seeds the session's first turn. May be '' when `attachmentIds` carry
+   *  the message on their own (never for `shell`). */
   prompt: string;
   /** Compose the session from a `!cmd` draft: seed the first turn as a 'shell' turn
    *  (run `prompt` on the runner, bypassing the workspace runtime) instead of a normal message. The
