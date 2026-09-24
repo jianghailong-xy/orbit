@@ -35,13 +35,26 @@ import { hasResolvedSource } from '../projects/session-source';
  * timeline instead of the generic failure note, and, once committed, delivers it to the project's
  * standing coordinator conversation (`projects/task-dispatch-refusal.producer.ts`).
  *
- * WHY THE SESSION CANNOT SAY IT ITSELF
- * ====================================
+ * THE OTHER GATE, WHICH SAID NOTHING FOR LONGER
+ * =============================================
+ * Resolution is the gate BEFORE the checkout, and it can refuse the same way and just as quietly: a
+ * ref that does not exist stops the start at `git fetch` (BASE_REF_NOT_FOUND), before any pin, and
+ * the runner reports that refusal through the pin door rather than through a finalized run. Until
+ * this record covered it, such a start left the session at REFUSED and NOTHING ELSE — on
+ * 2026-09-23 (project 34TsjwkAMVVkeEUwi2IAJ) one kept a session idle for 5.5 hours with the task
+ * row untouched, no exception item and no wake row, and was found by a person who happened to look.
+ * `freezeSessionSourcePin` records it here now, in the same transaction that refuses the session.
+ *
+ * WHY THE CHECKOUT'S SESSION CANNOT SAY IT ITSELF
+ * ===============================================
  * The refusal is decided after the pin froze, and migration 0231's freeze guard lets a session's
  * `source_state` leave SELECTED only: a PINNED run does not become REFUSED. That is deliberate — the
- * pin is the fact every recovery path reads — and it means the one structured place a refusal could
- * live on the session is closed to this one. The error line is where the runner puts it, and this
- * is where it is read.
+ * pin is the fact every recovery path reads — and it means the one structured place a checkout
+ * refusal could live on the session is closed to it. The error line is where the runner puts it, and
+ * this is where it is read. A RESOLUTION refusal has no such problem (its session IS REFUSED, and
+ * carries the code), and it is recorded here anyway: the reader who has to see that a task could not
+ * start is a reader of the task, and two shapes of the same fact is one shape more than anybody
+ * needs.
  *
  * WHAT THIS DOES NOT DO
  * =====================
@@ -53,8 +66,8 @@ import { hasResolvedSource } from '../projects/session-source';
 /** The marker the refusal's comment opens with, so a reader of the raw timeline can find them. */
 export const DISPATCH_REFUSED_SIGNAL_CODE = 'TASK_DISPATCH_REFUSED';
 
-/** A finalized run, in the columns reading its refusal needs. */
-export interface FinalizedRunSource {
+/** A run whose start was refused, in the columns reading its refusal needs. */
+export interface RefusedRunSource {
   id: string;
   sourceState: string;
   sourceRef: string | null;
@@ -71,10 +84,14 @@ export interface FinalizedRunSource {
  * happens to begin with an upper-case word is not mistaken for one, and any §10.1 code counts: the
  * table is the one list of what a SOURCE refusal can be called, and a second, narrower list here
  * would be a copy of it free to fall behind.
+ *
+ * The checkout is the second of the two gates that can refuse and say nothing: the first is
+ * resolution, which stops BEFORE a pin exists and reaches this record through the pin door instead
+ * — see `recordDispatchRefusal`.
  */
 export function readDispatchRefusal(
   error: string | null | undefined,
-  run: Pick<FinalizedRunSource, 'sourceState'>,
+  run: Pick<RefusedRunSource, 'sourceState'>,
 ): { code: SourceRefusalCode; reason: string } | null {
   if (!error || !hasResolvedSource(run.sourceState)) return null;
   const said = /^([A-Z][A-Z_]+): ([\s\S]+)$/.exec(error.trim());
@@ -83,20 +100,34 @@ export function readDispatchRefusal(
 }
 
 /**
- * Record the refusal on the task, and on its timeline, inside the transaction that finalized the
- * run — so one refused run leaves exactly one of each, and a finalize that lost its race leaves
- * neither.
+ * Record the refusal on the task, and on its timeline, inside the transaction that decided it — so
+ * one refused start leaves exactly one of each, and a transaction that lost its race leaves neither.
+ *
+ * TWO DOORS, ONE RECORD
+ * =====================
+ * `runnerApi.finalize` calls this for a run the runner refused at its CHECKOUT, inside the
+ * transaction that settles that run (`readDispatchRefusal` read the code out of the run's last
+ * words). `runnerApi.pinSessionSource` calls it for a run the runner refused at RESOLUTION, inside
+ * the transaction that moves the session to REFUSED, with what that freeze reported — there the
+ * code arrives structured, in the refusal the runner posted, and the session's own column carries it
+ * too (SELECTED becomes REFUSED freely; it is the PINNED half of that transition migration 0231
+ * freezes).
+ *
+ * Both gates are the runner's, both end the start with no engine, and a reader of the task should
+ * not have to know which of them stopped it to see that it stopped: one column, one shape, one
+ * wake, whether the answer came from a checkout or from the fetch that precedes one.
  *
  * The missing commits are the required ones the runner NAMED, less the commit it stood on: a commit
  * is its own ancestor, so the pin is never missing, and it is named in every one of these messages.
  * Reading the list off `requiredContains` rather than parsing the sentence is what keeps this from
  * depending on how the runner phrases it — the only thing taken from the words is which of the
- * commits the session was frozen with they mention.
+ * commits the session was frozen with they mention. A resolution refusal has no pin at all, so
+ * `run.sourceBaseSha` is null and its message names none: the list is empty, not unread.
  */
 export async function recordDispatchRefusal(
   tx: Prisma.TransactionClient,
   taskId: string,
-  run: FinalizedRunSource,
+  run: RefusedRunSource,
   refused: { code: SourceRefusalCode; reason: string },
   at: Date,
 ): Promise<TaskDispatchRefusal> {
@@ -191,6 +222,17 @@ export function dispatchRefusalNextStep(
         + 'upstream 合进来、推回这条线，不 rebase、不 force push），再开工。'
         + '在那之前重新开工只会得到同一个拒绝：新的开工从同一个 tip 起跑，要求的是同一组提交。'
       );
+    case 'FIX_REF':
+      // §10.1's one code whose cause is the line itself: there is nothing to sync and nothing to
+      // restore, the ref the run was told to start from simply is not there. Said without naming a
+      // gate, because the answer is the same whether the runner found that out with `ls-remote`
+      // before a pin or with a checkout after one.
+      return (
+        `解析的时候仓库里没有 ${refusal.ref ? `\`${refusal.ref}\`` : '这次起跑要用的 ref'}：`
+        + '它还不存在、已经被删掉，或者和项目绑定里的名字对不上。先把它建出来'
+        + '（这个项目在这条线上的第一次落地会创建它），或者把绑定的 integrationRef 改成实际存在的那一条，'
+        + '再开工。' + again
+      );
     case 'RESTORE_COMMIT':
       return '执行它的 runner 的仓库里没有这次钉住的提交：把它取回或恢复到那个仓库里，再开工。' + again;
     case 'ENABLE_ISOLATION':
@@ -220,8 +262,9 @@ function dispatchRefusalComment(
   return (
     `<!-- orbit:${DISPATCH_REFUSED_SIGNAL_CODE} -->\n`
     + '**开工被拒（系统自动记录）**\n\n'
-    + '这次开工没有变成一次运行：runner 在检出时拒绝了它，没有启动引擎，任务状态没有被改动。'
-    + '拒绝记在任务的 dispatchRefusal 上，并已投递给项目的协调会话。\n\n'
+    + '这次开工没有变成一次运行：runner 在启动引擎之前拒绝了它，没有引擎被拉起，任务状态没有被改动。'
+    + '拒绝发生在哪一级看拒绝码——解析这次起跑的 ref 失败，或解析通过之后检出被拒。\n'
+    + '拒绝记在任务的 dispatchRefusal 上，并投递给项目的协调会话（协调开关关掉时投递会被拒，拒绝本身仍在）。\n\n'
     + `拒绝码：${refusal.code}（处置：${refusal.fixAction}）\n`
     + (base ? `钉住的提交：${base}\n` : '')
     + (missing.length > 0 ? `它不包含的前置落地提交：\n${missing.join('\n')}\n` : '')

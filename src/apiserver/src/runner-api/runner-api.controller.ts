@@ -2119,7 +2119,13 @@ export class RunnerApiController {
   /**
    * §6.3 step 3: the runner reports the commit it resolved (or the gate's refusal), and this freezes
    * it by compare-and-set. `freezeSessionSourcePin` holds the argument and the statements; this
-   * route is the door and the one side effect the door owes its clients.
+   * route is the door, the one side effect the door owes its clients, and — since a refusal used to
+   * leave the task untouched and say so nowhere — the record of a refused start on the task.
+   *
+   * The refusal is recorded INSIDE this transaction, on the door's own client, for the reason the
+   * checkout's refusal is recorded in the finalize's: a refusal committed without its record is the
+   * silent state this whole path exists to close, and the compare-and-set cannot be won twice, so
+   * nothing would ever come back to write the missing half.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/source/pin')
@@ -2129,15 +2135,41 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SourcePinRequest,
   ): Promise<SourcePinResponse> {
-    const result = await freezeSessionSourcePin(
+    const outcome = await withTransactionRetry(
       this.prisma,
-      { sessionId, runnerId: runner.id, ownerId: runner.ownerId },
-      dto,
+      async (tx) => {
+        const frozen = await freezeSessionSourcePin(
+          tx,
+          { sessionId, runnerId: runner.id, ownerId: runner.ownerId },
+          dto,
+        );
+        if (frozen.refused) {
+          await recordDispatchRefusal(
+            tx,
+            frozen.refused.taskId,
+            frozen.refused.run,
+            { code: frozen.refused.code, reason: frozen.refused.reason },
+            new Date(),
+          );
+        }
+        return frozen;
+      },
+      loggedRetry(this.logger, 'runnerApi.pinSessionSource'),
     );
     // Only the winner changed anything, so only the winner announces it. A loser publishing would
     // make the same freeze look like two events to every connected client.
-    if (result.wonRace) this.realtime.publishSessionUpdated(sessionId);
-    return result;
+    if (outcome.wonRace) this.realtime.publishSessionUpdated(sessionId);
+    // The bookkeeping leaves with the delivery rather than with the answer: what this route returns
+    // is §6.3 step 3's wire fact about the session, and which task was written because of it is the
+    // control plane's own business. And only the winner recorded one — the task row moved
+    // (publishTaskChanged) and the project's coordinator is told, because a start that never became
+    // a run is the one thing a project's timeline would otherwise never mention.
+    const { refused, ...response } = outcome;
+    if (refused) {
+      this.realtime.publishTaskChanged(sessionId, refused.taskId);
+      await this.tasks?.deliverDispatchRefusalAfterCommit(refused.taskId);
+    }
+    return response;
   }
 
   /** Hand inbox activation authority from the owner observed in claim/reclaim to this process. */

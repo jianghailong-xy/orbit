@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   SessionSourceSnapshot,
   SourceKind,
@@ -16,6 +17,10 @@ import {
   SOURCE_REFUSAL_CODES,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+// Type-only, so the two modules do not import each other at run time: the refusal this door freezes
+// onto the session is RECORDED on the task by the door's caller, in the same transaction, through
+// `recordDispatchRefusal` — and that module reads `hasResolvedSource` from this one.
+import type { RefusedRunSource } from '../tasks/task-dispatch-refusal';
 import { branchName, LANDED_RESULTS } from './project-criterion-landing';
 import { resolveSource, SourceReason, SourceResolution } from './source-selector';
 
@@ -386,6 +391,27 @@ export const SESSION_SOURCE_SELECT = {
 } as const;
 
 /**
+ * What §6.3 step 3 concluded: the wire answer, plus the one thing the door's caller owes AFTER it
+ * commits.
+ *
+ * `refused` is absent for anything but a refusal THIS call was the first to freeze, which is what
+ * makes recording it exactly once a matter of reading this field rather than of re-deciding
+ * anything: a loser of the compare-and-set did not move the row, and the winner of a retried
+ * request is the attempt whose record committed with its session.
+ */
+export interface SourcePinOutcome extends SourcePinResponse {
+  refused?: {
+    /** The task this run executes. A session that executes none records nothing anywhere else. */
+    taskId: string;
+    /** The run that was refused, in the columns `recordDispatchRefusal` reads. */
+    run: RefusedRunSource;
+    code: SourceRefusalCode;
+    /** The runner's own words, for the task's comment and the coordinator's message. */
+    reason: string;
+  };
+}
+
+/**
  * §6.3 step 3: freeze the commit this run starts from, by compare-and-set.
  *
  * The control plane has no checkout, so it cannot turn a ref into a SHA; the runner has one, so it
@@ -403,15 +429,29 @@ export const SESSION_SOURCE_SELECT = {
  * database as well: "that SHA turned out to be unreachable" may not become "use a different SHA"
  * through any door (SR12). Substituting would make the run's result be about code it never ran.
  *
- * Separate from the controller so a test can reach it with a Prisma client and nothing else: what
- * is worth proving here is what the STATEMENTS do under concurrency, and a Nest application around
- * them proves nothing extra.
+ * THE REFUSAL HALF, AND WHY IT ANSWERS A SECOND THING
+ * ==================================================
+ * The same compare-and-set freezes a REFUSAL: the machine that could not resolve the ref reports
+ * the code, and the winner moves `SELECTED` to `REFUSED`. Until 2026-09-24 that was the whole of
+ * it, and the answer was silent everywhere a person looks — the session said it, the TASK did not,
+ * so a start that never became a run left no exception item, no wake row and no comment, and on
+ * 2026-09-23 (project 34TsjwkAMVVkeEUwi2IAJ) it kept a session idle for 5.5 hours until somebody
+ * happened to look at it. So the winner also reports WHAT to record on the task (`refused` on the
+ * outcome), and its caller — `runnerApi.pinSessionSource`, in this same transaction — writes it
+ * there through `recordDispatchRefusal`. The transaction is what makes the pair atomic: a failure
+ * between the two would leave the session refused and the task silent, which is the state this
+ * closes, and a retry cannot win the race a second time to repair it.
+ *
+ * The client is the caller's, and that is the point of the signature: in production it is a
+ * transaction client owned by the pin door, and `source-freeze.pg.spec.ts` reaches the same
+ * statements with a plain one — a Nest application around them proves nothing extra about what
+ * the statements do under concurrency.
  */
 export async function freezeSessionSourcePin(
-  prisma: PrismaService,
+  tx: Prisma.TransactionClient,
   actor: { sessionId: string; runnerId: string; ownerId: string },
   request: SourcePinRequest,
-): Promise<SourcePinResponse> {
+): Promise<SourcePinOutcome> {
   const baseSha = request?.baseSha?.trim().toLowerCase();
   const refusal = request?.refusal;
   if ((baseSha ? 1 : 0) + (refusal ? 1 : 0) !== 1) {
@@ -436,9 +476,9 @@ export async function freezeSessionSourcePin(
       'SOURCE_PROTOCOL_UNSUPPORTED is decided at dispatch, not reported by a runner',
     );
   }
-  const before = await prisma.session.findFirst({
+  const before = await tx.session.findFirst({
     where: { id: actor.sessionId, assignedRunnerId: actor.runnerId, ownerId: actor.ownerId },
-    select: SESSION_SOURCE_SELECT,
+    select: { ...SESSION_SOURCE_SELECT, taskId: true },
   });
   if (!before) throw new ForbiddenException('session does not belong to this runner');
   if (before.sourceState === 'UNBOUND') {
@@ -449,8 +489,9 @@ export async function freezeSessionSourcePin(
     );
   }
   let wonRace = false;
+  let refused: SourcePinOutcome['refused'];
   if (baseSha !== undefined) {
-    const claimed = await prisma.session.updateMany({
+    const claimed = await tx.session.updateMany({
       where: {
         id: actor.sessionId,
         assignedRunnerId: actor.runnerId,
@@ -469,7 +510,7 @@ export async function freezeSessionSourcePin(
     });
     wonRace = claimed.count === 1;
   } else if (refusal) {
-    const claimed = await prisma.session.updateMany({
+    const claimed = await tx.session.updateMany({
       where: { id: actor.sessionId, assignedRunnerId: actor.runnerId, sourceState: 'SELECTED' },
       data: {
         sourceState: 'REFUSED',
@@ -483,8 +524,27 @@ export async function freezeSessionSourcePin(
       },
     });
     wonRace = claimed.count === 1;
+    // What the caller records on the task, for the winner only: a loser changed nothing, and the
+    // winner of a retried request is the first attempt, whose record is already committed with it.
+    if (wonRace && before.taskId) {
+      refused = {
+        taskId: before.taskId,
+        run: {
+          // The run that was refused, in the columns `recordDispatchRefusal` reads. They are the
+          // SELECTED row's — the selector frozen at create — and NOT the row read back below: this
+          // is what the run was told to start from, which is what it failed to resolve.
+          id: actor.sessionId,
+          sourceState: before.sourceState,
+          sourceRef: before.sourceRef,
+          sourceBaseSha: null,
+          sourceRequiredContains: before.sourceRequiredContains,
+        },
+        code: refusal.code as SourceRefusalCode,
+        reason: refusalReason(refusal.detail),
+      };
+    }
   }
-  const after = await prisma.session.findUniqueOrThrow({
+  const after = await tx.session.findUniqueOrThrow({
     where: { id: actor.sessionId },
     select: SESSION_SOURCE_SELECT,
   });
@@ -495,5 +555,22 @@ export async function freezeSessionSourcePin(
     resolvedByRunnerId: after.sourceResolvedByRunnerId ?? undefined,
     refusalCode: (after.sourceRefusalCode as SourceRefusalCode | null) ?? undefined,
     wonRace,
+    ...(refused ? { refused } : {}),
   };
+}
+
+/**
+ * The runner's own words for a refusal it reported, in the one field §10.1 calls its diagnosis.
+ *
+ * `detail` is display-only and its shape is the runner's to choose (SR48), so the two keys every
+ * resolution refusal is built with are the ones read, and a runner that sent neither is described
+ * by its code rather than by an invented sentence. The gate's own words matter here: the reader of
+ * the task is being told which ref is missing, and `stderr` is where git says it.
+ */
+function refusalReason(detail: Record<string, unknown> | undefined): string {
+  for (const key of ['stderr', 'reason']) {
+    const said = detail?.[key];
+    if (typeof said === 'string' && said.trim().length > 0) return said.trim();
+  }
+  return 'runner 没有给出原话（只报了拒绝码）。';
 }
