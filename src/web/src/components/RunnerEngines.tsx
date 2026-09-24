@@ -111,6 +111,40 @@ function accountKindOf(account: RunnerEngineAccount): RowKind {
   return 'unknown';
 }
 
+/** What a row calls an account: Default, what the user named the slot, or the slot's own id when
+ *  the name it was added under is gone. */
+function accountNameOf(account: RunnerEngineAccount): string {
+  if (account.id === 'default') return 'Default';
+  return account.name || `Account ${account.id}`;
+}
+
+/**
+ * The slots that turned out to hold an account already signed in above them: each such slot's id,
+ * against the account it repeats.
+ *
+ * One account signed into two slots is two sign-ins of one quota, and the page would otherwise show
+ * it as two rows of quota that have nothing to do with each other — so the repeat is worth saying,
+ * and it is said on the later row: the list is in the order the sign-ins were made (Default first,
+ * then each slot the runner added), so an account already seen above is the one this row repeats.
+ *
+ * A slot with no fingerprint is never a repeat. The runner reads fingerprints as it goes, an older
+ * runner reports none at all, and an unread account is not evidence of a second copy of a read one.
+ */
+function duplicateAccounts(
+  accounts: RunnerEngineAccount[],
+): Map<string, RunnerEngineAccount> {
+  const firstSeen = new Map<string, RunnerEngineAccount>();
+  const repeats = new Map<string, RunnerEngineAccount>();
+  for (const account of accounts) {
+    const fingerprint = account.fingerprintPrefix;
+    if (!fingerprint) continue;
+    const first = firstSeen.get(fingerprint);
+    if (first) repeats.set(account.id, first);
+    else firstSeen.set(fingerprint, account);
+  }
+  return repeats;
+}
+
 /**
  * A CODEX_HOME the way a terminal spells it, with the machine's home directory as `~`. The page
  * can't ask that machine where its home is, so this reads the places a home directory lives; any
@@ -393,17 +427,22 @@ function EngineRow({
 function AccountRow({
   runner,
   account,
+  duplicateOf,
   signIn,
   onSignIn,
 }: {
   runner: Runner;
   account: RunnerEngineAccount;
+  /** The account already signed in above that this slot turned out to hold too
+   *  (duplicateAccounts). Absent for the slot that made the sign-in. */
+  duplicateOf?: RunnerEngineAccount;
   signIn: string | null;
   onSignIn: (panel: string | null) => void;
 }) {
   const kind = accountKindOf(account);
   const isDefault = account.id === 'default';
   const panel = accountPanel(account.id);
+  const [removing, setRemoving] = useState(false);
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
   const snapshot = codexAccountPlanUsage(runner.planUsage, account.id);
@@ -416,7 +455,7 @@ function AccountRow({
         <span className="re-rail" aria-hidden="true" />
         <div style={{ minWidth: 0 }}>
           <div className="re-name">
-            {isDefault ? 'Default' : account.name || `Account ${account.id}`}
+            {accountNameOf(account)}
             {isDefault && <span className="re-chip">DEFAULT</span>}
           </div>
           {/* Where the account lives and which one it is — never who: the account's email and id
@@ -446,6 +485,33 @@ function AccountRow({
           </Button>
         )}
       </div>
+      {/* The same account, signed in twice. Two rows of quota for one account read as two quotas,
+          so the repeat is named on the row that made it — with the one way out: an account slot is
+          a directory on that machine, and whoever removes it removes that directory. */}
+      {duplicateOf && (
+        <div className="re-dup">
+          <span>
+            This is the same account as <b>{accountNameOf(duplicateOf)}</b> — signing in twice does
+            not double the quota.
+          </span>
+          <button className="re-link" type="button" onClick={() => setRemoving((open) => !open)}>
+            Remove
+          </button>
+        </div>
+      )}
+      {duplicateOf && removing && (
+        <div className="re-panel">
+          <div className="re-panel-row">
+            Removing this account means deleting its CODEX_HOME on{' '}
+            {runner.displayName || runner.name}:
+          </div>
+          <code className="re-cmd">{tildePath(account.codexHome)}</code>
+          <div className="re-panel-hint">
+            Orbit doesn’t remove accounts from a runner yet. Delete that directory there and this
+            row goes away on the machine’s next check-in.
+          </div>
+        </div>
+      )}
       {signIn === panel && (
         <div className="re-panel">
           <RunnerSignIn runnerId={runner.id} engine="codex" account={account.id} />
@@ -557,6 +623,8 @@ function RunnerEngineCard({
         ENGINES.map((engine) => {
           const health = engines.find((e) => e.engine === engine);
           const accounts = accountRowsOf(engine, health, runner.install);
+          // Read across the whole group, since a repeat is a fact about two of its rows.
+          const repeats = duplicateAccounts(accounts);
           return (
             <Fragment key={engine}>
               <EngineRow
@@ -573,6 +641,7 @@ function RunnerEngineCard({
                   key={account.id}
                   runner={runner}
                   account={account}
+                  duplicateOf={repeats.get(account.id)}
                   signIn={signIn}
                   onSignIn={setSignIn}
                 />

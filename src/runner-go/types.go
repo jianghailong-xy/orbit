@@ -365,10 +365,15 @@ type IntegrationJobCommand struct {
 	// LAND_PROMOTION: the upstream tip the last passing check ran against, and the tree it made.
 	// M-S2 and M-S3 compare both — an unmoved upstream must reproduce the same tree, and a moved one
 	// must be checked again before anything lands.
-	UpstreamShaChecked string                 `json:"upstreamShaChecked,omitempty"`
-	MergeTreeSha       string                 `json:"mergeTreeSha,omitempty"`
-	Checks             []IntegrationCheckSpec `json:"checks"`
-	CancelRequested    bool                   `json:"cancelRequested"`
+	UpstreamShaChecked string `json:"upstreamShaChecked,omitempty"`
+	MergeTreeSha       string `json:"mergeTreeSha,omitempty"`
+	// LAND_PROMOTION queued by the project's Automatic setting rather than the owner's press
+	// (§3.3 M-T11). It is authorized onto UpstreamShaChecked and nowhere else: if the upstream has
+	// moved, the job merges nothing, checks nothing and reports READY, and the owner is asked
+	// (M-T12). Only sent to a process that declared promotionAutomaticLandCapabilityV1.
+	Automatic       bool                   `json:"automatic,omitempty"`
+	Checks          []IntegrationCheckSpec `json:"checks"`
+	CancelRequested bool                   `json:"cancelRequested"`
 }
 
 // IntegrationCheckSpec is one command to run on the combined tree before anything is pushed.

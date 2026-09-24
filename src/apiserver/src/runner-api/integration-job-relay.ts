@@ -18,6 +18,7 @@ import {
   INTEGRATION_JOB_PHASES,
   INTEGRATION_JOB_STATES,
   MAX_CHECK_OUTPUT_TAIL,
+  PROMOTION_AUTOMATIC_LAND,
   integrationDedupeKey,
   integrationItemTitle,
   isTerminalJobState,
@@ -34,6 +35,7 @@ import { sessionReportedWork } from '../projects/landing-source-branch';
 import { promotionDedupeKey } from '../projects/project-promotion';
 import {
   applyPromotionJobResult,
+  automaticLandingRefusal,
   markPromotionRechecking,
 } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
@@ -140,6 +142,8 @@ interface ClaimedRow {
   promotionSourceKind: string | null;
   upstreamShaChecked: string | null;
   mergeTreeSha: string | null;
+  /** A landing the project's Automatic setting confirmed (M-T11), bound to the checked tip. */
+  confirmedAutomatically: boolean;
 }
 
 /**
@@ -166,8 +170,12 @@ export async function dispatchIntegrationJobs(
 
   const commands: IntegrationJobCommand[] = [];
   const taken: string[] = [];
+  // M-T12: whether this process lands an automatic merge only onto the checked tip. One that has not
+  // said so is never handed one — it would check a moved main again and merge it, which the
+  // Automatic setting does not authorize.
+  const landsAutomatically = heartbeat.capabilities?.includes(PROMOTION_AUTOMATIC_LAND) === true;
   for (let i = 0; i < INTEGRATION_JOBS_PER_HEARTBEAT; i += 1) {
-    const row = await claimOne(prisma, heartbeat.runnerId, heartbeat.leaseOwner, taken)
+    const row = await claimOne(prisma, heartbeat.runnerId, heartbeat.leaseOwner, taken, landsAutomatically)
       .catch((error) => {
         // A lost race against another runner's claim surfaces as the partial unique index. It is
         // the index doing its job, not an incident: the next beat looks again.
@@ -185,6 +193,22 @@ export async function dispatchIntegrationJobs(
         await openItems?.deliverForItems(after.openItemIds);
       }
       continue;
+    }
+    if (row.confirmedAutomatically && row.promotionId) {
+      // M-T11 read again at the last moment the platform decides anything: the owner may have
+      // taken the Automatic setting back since the check. A landing it no longer covers is ended
+      // here as the owner's card (M-T12) instead of going out on a yes that was withdrawn — and one
+      // whose authorization cannot be read at all is not sent either.
+      const refusal = await automaticLandingRefusal(prisma, row.promotionId, landsAutomatically)
+        .catch((error) => `the authorization could not be read: ${error?.message ?? error}`);
+      if (refusal) {
+        log.log(`automatic landing ${row.id} handed back to the owner: ${refusal}`);
+        const after = await finishHandedBack(prisma, row.id, heartbeat.leaseOwner, row.claimGeneration);
+        if (after && after.openItemIds.length > 0) {
+          await openItems?.deliverForItems(after.openItemIds);
+        }
+        continue;
+      }
     }
     commands.push({
       jobId: row.id,
@@ -207,6 +231,7 @@ export async function dispatchIntegrationJobs(
         : {}),
       ...(row.upstreamShaChecked ? { upstreamShaChecked: row.upstreamShaChecked } : {}),
       ...(row.mergeTreeSha ? { mergeTreeSha: row.mergeTreeSha } : {}),
+      ...(row.confirmedAutomatically ? { automatic: true } : {}),
       checks: checksFor(row),
       cancelRequested: row.cancelRequestedAt != null,
     });
@@ -266,6 +291,7 @@ async function claimOne(
   runnerId: string,
   leaseOwner: string,
   alreadyTaken: string[],
+  landsAutomatically: boolean,
 ): Promise<ClaimedRow | null> {
   const staleBefore = new Date(Date.now() - INTEGRATION_CLAIM_STALE_MS);
   const rows = await prisma.$queryRaw<ClaimedRow[]>(Prisma.sql`
@@ -277,6 +303,11 @@ async function claimOne(
        WHERE w."runner_id" = ${runnerId}::uuid
          AND c."cancel_requested_at" IS NULL
          AND NOT (c."serial_key" = ANY(${alreadyTaken}::text[]))
+         -- M-T12: a landing the Automatic setting confirmed goes only to a process that lands it
+         -- onto the checked tip or not at all. Left queued otherwise, where the owner's Cancel
+         -- still reaches it (M-T10), rather than handed to one that would re-check a moved main
+         -- and merge it.
+         AND (NOT c."confirmed_automatically" OR ${landsAutomatically}::boolean)
          -- M2: while the item about an unresolved absorb of the upstream is still open, no later
          -- landing on that same repository-and-ref is claimed. The conflict is not one task's — it
          -- is the branch's relationship with the upstream, so the NEXT landing would hit exactly the
@@ -340,6 +371,7 @@ async function claimOne(
       j."cancel_requested_at" AS "cancelRequestedAt",
       j."source_sha" AS "jobSourceSha",
       j."promotion_id" AS "promotionId",
+      j."confirmed_automatically" AS "confirmedAutomatically",
       -- Scalar subqueries rather than another join: the FROM list of an UPDATE cannot join ON a
       -- column of the table being updated -- 42P01, invalid reference to FROM-clause entry for
       -- table j -- and a claim that raises is a claim this relay swallows as a warning, which reads
@@ -377,6 +409,28 @@ async function finishUnworkable(
     },
   }).catch((error) => {
     logger.warn(`could not end an unworkable job: ${error?.message ?? error}`);
+    return null;
+  });
+  return applied?.after ?? null;
+}
+
+/**
+ * A claim of an automatic landing the owner's authorization no longer covers: ended as READY
+ * without going to a runner — the very result a runner reports when it finds main moved — so the
+ * promotion goes back to the owner as the card they were spared (M-T12). Answers with the aftermath,
+ * because that card is owed its delivery and this caller is the only one that knows it opened.
+ */
+async function finishHandedBack(
+  prisma: PrismaService,
+  jobId: string,
+  leaseOwner: string,
+  claimGeneration: bigint,
+): Promise<IntegrationResultAftermath | null> {
+  const applied = await applyIntegrationJobResult(prisma, {
+    jobId,
+    body: { claimGeneration: claimGeneration.toString(), leaseOwner, state: 'READY', phase: 'FETCH' },
+  }).catch((error) => {
+    logger.warn(`could not hand an automatic landing back to the owner: ${error?.message ?? error}`);
     return null;
   });
   return applied?.after ?? null;
@@ -603,6 +657,7 @@ export async function applyIntegrationJobResult(
         promotionId: job.promotionId,
         jobId: job.id,
         jobKind: job.kind,
+        runnerId: job.runnerId,
         state,
         upstreamSha: body.upstreamSha ?? null,
         // M-S1: what the job worked from. For a task-branch candidate the runner resolved it off the
@@ -653,7 +708,9 @@ export async function applyIntegrationJobResult(
     if (promotion?.openApproval) {
       // M-T2: the one card in this whole line that is the owner's rather than the coordinator's.
       // Producing it IS the push event §3.3 names; sending the push is the client task's (criterion
-      // 13), and nothing here reaches a device.
+      // 13), and nothing here reaches a device. Absent when the project's Automatic setting
+      // confirmed the merge instead (M-T11) — and opened after all, off a landing job, when that
+      // merge was handed back because main moved (M-T12).
       const opened = await recordPromotionApproval(tx, {
         projectId: job.projectId,
         ownerId: job.ownerId,
@@ -667,9 +724,9 @@ export async function applyIntegrationJobResult(
           promotionId: promotion.promotionId,
           sourceRef: job.sourceRef,
           upstreamRef: job.targetRef,
-          upstreamShaChecked: body.upstreamSha ?? null,
+          upstreamShaChecked: promotion.openApproval.upstreamShaChecked,
           taskIds: promotion.openApproval.taskIds,
-          checks,
+          checks: promotion.openApproval.checks,
           landsAs: 'MERGE_COMMIT',
         },
       });

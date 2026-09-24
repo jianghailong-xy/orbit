@@ -1881,6 +1881,17 @@ model Project {
   /// the two populations differ by a decision rather than by when they happened to be created, and
   /// the decision is a person's: a project nobody has answered "what is done" for coordinates
   /// nothing.
+  ///
+  /// IT IS ALSO THE AUTHORIZATION TO MERGE INTO MAIN BY ITSELF (owner decision 2026-09-23,
+  /// integration contract §3.3 M7/M-T11). On a project that integrates on a branch of its own
+  /// (`PROJECT_BRANCH`), this switch being on at the moment a promotion's check comes back clean is
+  /// what lets the platform merge that branch into the upstream without putting a card in front of
+  /// the owner — it leaves a receipt instead (`project_promotion.confirmed_automatically`). So the
+  /// one switch now answers two questions: "may the platform hand this project's exceptions to its
+  /// coordinator on its own" and "may the platform land this project's branch on main on its own".
+  /// A project turned on for the first reason gets the second with it; the owner chose that over a
+  /// second switch, and the Automatic control says so where it is flipped. A `MAIN`-line project is
+  /// unaffected: its merges into main always ask, whatever this says.
   coordinatorEnabled  Boolean                 @default(false) @map("coordinator_enabled")
   /// How many of this project's tasks may be in flight at once — the user's own number, and an
   /// ADMISSION limit rather than a statement about the present: lowering it is always allowed,
@@ -2162,6 +2173,11 @@ model ProjectIntegrationJob {
   errorDetail Json?    @map("error_detail")
   /// The receipts this job wrote, so a reader of the job can find them without guessing the key.
   receiptIds  String[] @default([]) @map("receipt_ids")
+  /// A LAND_PROMOTION queued by the project's Automatic setting instead of the owner's press
+  /// (migration 0301, contract §3.3 M-T11). It lands only onto the upstream tip its check ran
+  /// against; an upstream that moved is handed back to the owner untouched (M-T12). Kept on the job
+  /// as well as on the promotion because the job is the record of what was sent out to be pushed.
+  confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
 
   /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact.
   idempotencyKey String @unique(map: "project_integration_job_idempotency_key") @map("idempotency_key")
@@ -2188,7 +2204,8 @@ model ProjectIntegrationJob {
 /// Two constraints carry the contract and neither can be spelled here: the partial unique index over
 /// `(projectId, sourceRef)` WHERE the state is still live (one card per source, so a second landing
 /// supersedes the standing candidate rather than opening a second one), and the CHECKs that a
-/// confirmed promotion names who confirmed it and a merged one names the commit it became.
+/// confirmed promotion names who confirmed it — a person, or the project's Automatic setting
+/// (0301) — and a merged one names the commit it became.
 /// `sourceKind` and `state` are closed sets held by CHECKs and spelled in
 /// `projects/project-promotion.ts`; a terminal row is final (`project_promotion_terminal_guard`).
 ///
@@ -2235,6 +2252,10 @@ model ProjectPromotion {
   landJobId  String? @map("land_job_id") @db.Uuid
 
   confirmedByUserId String?   @map("confirmed_by_user_id") @db.Uuid
+  /// Nobody pressed Merge: the project's Automatic setting confirmed it, because the line is the
+  /// project's own branch and its check came back clean (migration 0301, contract §3.3 M-T11).
+  /// `confirmedByUserId` is null on such a row — the two are the two answers to "who merged this".
+  confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
   confirmedAt       DateTime? @map("confirmed_at") @db.Timestamptz(3)
   /// When the landing job found the upstream had moved and redid the merge and the checks on the
   /// new tip (M-T7). Durable, because `RECHECKING` is passed through in seconds and a reader asking

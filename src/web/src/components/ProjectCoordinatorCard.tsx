@@ -484,18 +484,28 @@ export interface CoordinatorIntegration {
  * The old sentence — "starts ready tasks on its own, and opens a judgment session when a criterion
  * needs a decision" — described a platform that no longer exists: judgment sessions are not opened
  * for a failed task any more (§8.4 C4), and what a ready task waits for is its prerequisites to
- * LAND rather than merely to be marked done. The new one says both halves of the deal, including
- * the half that is a promise: merging into main always asks.
+ * LAND rather than merely to be marked done. The new one says both halves of the deal.
+ *
+ * AND WHAT THE SWITCH NOW ALSO AUTHORIZES (owner decision 2026-09-23, contract §3.3 M-T11). On a
+ * project that integrates on a branch of its own, this same switch is what lets the platform merge
+ * that branch into main without asking, whenever its check comes back clean. It used to be the
+ * promise "merging into main always asks you"; for a PROJECT_BRANCH project that promise is gone,
+ * and a switch whose sentence still made it would be widening what the owner authorized without
+ * telling them. So the sentence says the merge happens by itself and that a receipt is left to undo
+ * it. A MAIN-line project keeps the promise, because for it the promise still holds.
  *
  * A project that has not decided a line keeps the old sentence, because for it the old sentence is
- * still true — nothing lands by itself until there is a line to land on.
+ * still true — nothing lands by itself until there is a line to land on — plus the one clause that
+ * will become true the moment its line turns out to be a branch of its own.
  */
 function automaticCopy(integration?: CoordinatorIntegration): ReactNode {
   if (integration?.line === 'PROJECT_BRANCH' && integration.ref) {
     return (
       <>
         Tasks land on <b style={{ color: 'var(--text-1)' }}>{integration.ref}</b> by themselves and
-        start once their prerequisites land. Merging into main always asks you.
+        start once their prerequisites land. It also merges{' '}
+        <b style={{ color: 'var(--text-1)' }}>{integration.ref}</b> into main by itself when the
+        checks pass cleanly, and leaves you a receipt with the commit to revert.
       </>
     );
   }
@@ -510,6 +520,8 @@ function automaticCopy(integration?: CoordinatorIntegration): ReactNode {
   return (
     <>
       Starts ready tasks on its own, and opens a judgment session when a criterion needs a decision.
+      If its work lands on a branch of its own, it also merges that branch into main by itself when
+      the checks pass cleanly.
     </>
   );
 }
@@ -517,10 +529,12 @@ function automaticCopy(integration?: CoordinatorIntegration): ReactNode {
 /**
  * The project's off switch — `coordinatorEnabled`, which until now had no control anywhere.
  *
- * Called *Automatic* and not *Auto-dispatch*, because the field gates two families and only one of
- * them is dispatch: turning it off also stops all six producers that wake a judgment session when
- * a criterion is ready, a task's attempt ends unsettled, or a budget runs out. A label naming only
- * the first would read as "it still asks me things", which is exactly what it stops doing.
+ * Called *Automatic* and not *Auto-dispatch*, because the field gates more than dispatch: turning it
+ * off also stops all six producers that wake a judgment session when a criterion is ready, a task's
+ * attempt ends unsettled, or a budget runs out — and, on a project with a branch of its own, it is
+ * the authorization to merge that branch into main without asking (M-T11), which `automaticCopy`
+ * says in so many words. A label naming only the first would read as "it still asks me things",
+ * which is exactly what it stops doing.
  *
  * Off states its consequence WITH the work standing behind it. "Nothing starts on its own" is a
  * setting; "nothing starts on its own and four tasks are waiting" is the reason twelve projects in

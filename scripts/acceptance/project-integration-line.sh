@@ -508,6 +508,11 @@ case_project_done_flips_on_merge() {
   local task; task="$(new_code_task "$project" 'doneflip task' "$ws" task/doneflip "$base")"
   declare_task_serves_criterion "$task" "$project"
   confirm_standard_set "$project"
+  # Confirming the standard set turns the project's Automatic setting on, and on a project branch
+  # Automatic now merges a clean branch into main by itself (§3.3 M-T11) — so there would be no
+  # moment at which the work is on the branch and not on main for this case to look at. This case
+  # is about the owner's press and the status flipping on it; the automatic merge has its own cases.
+  set_automatic "$project" false
 
   confirm_task_done "$task"
   wait_for_job_state "$task" LANDED 240
@@ -816,6 +821,118 @@ case_js_check_runs_on_the_prepared_tree() {
     "$(sql "SELECT count(*) FROM session_merge_receipt WHERE task_id = '$bad_task'" | tr -d '[:space:]')"
 }
 
+# ── case 13: Automatic on + a clean project branch → merged into main by itself (§3.3 M7, M-T11) ─
+#
+# The owner's rule of 2026-09-23: a project that integrates on a branch of its own AND has its
+# Automatic setting on is not asked about main when the branch is clean — the platform merges it and
+# leaves a receipt. Everything is real: the runner built from this tree declares
+# `promotion-automatic-land/v1`, so it is the one trusted with the landing, and the landing it does
+# is bound to the main the check ran against. The receipt's undo is run for real at the end.
+case_automatic_merges_a_clean_branch_by_itself() {
+  local work origin ws project
+  work="$(new_repo automerge)"
+  origin="$(repo_origin_of automerge)"
+  ws="$(new_workspace 'automerge' "$work" "$origin")"
+  project="$(new_project automerge "$ws" "$origin" 'test -f README.md')"
+  set_automatic "$project" true
+  local base; base="$(git -C "$work" rev-parse main)"
+
+  new_task_branch "$work" task/automerge a.txt 'from a' >/dev/null
+  local task; task="$(new_code_task "$project" 'automerge task' "$ws" task/automerge "$base")"
+  confirm_task_done "$task"
+  wait_for_job_state "$task" LANDED 240
+  wait_for_promotion_state "$project" MERGED 300
+
+  assert_eq 'nobody was asked: no merge card was ever opened' 0 \
+    "$(sql "SELECT count(*) FROM project_open_item
+             WHERE project_id = '$project' AND kind = 'PROMOTION_APPROVAL'" | tr -d '[:space:]')"
+  assert_eq 'the promotion says the Automatic setting confirmed it' 'true' \
+    "$(promotion_column_of "$project" confirmed_automatically)"
+  assert_eq 'and names no person' '' "$(promotion_column_of "$project" confirmed_by_user_id)"
+  assert_eq 'the landing job is marked as the setting'"'"'s too' 'true' \
+    "$(promotion_job_column_of "$project" LAND_PROMOTION confirmed_automatically)"
+
+  fetch_all "$work"
+  local merged checked main_after
+  merged="$(promotion_column_of "$project" merged_sha)"
+  checked="$(promotion_column_of "$project" upstream_sha_checked)"
+  main_after="$(origin_tip "$origin" refs/heads/main)"
+  assert_eq 'main is the merge commit the promotion names' "$merged" "$main_after"
+  assert_eq 'merged onto exactly the main the check ran against' "$checked" \
+    "$(git -C "$work" rev-parse "$merged^1")"
+  assert_eq 'the ledger says nobody pressed it' 'true' \
+    "$(sql "SELECT detail->>'confirmedAutomatically' FROM session_merge_receipt
+             WHERE task_id = '$task' AND target_branch = 'main'" | tr -d '[:space:]')"
+
+  # The receipt the conversation draws, from the door it is read through, and its undo — run.
+  local record revert
+  record="$(api GET "/projects/$project/promotions/merged")"
+  assert_eq 'the receipt says the setting merged it' 'True' \
+    "$(printf '%s' "$record" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["merged"]["automatic"])')"
+  revert="$(printf '%s' "$record" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["merged"]["revert"])')"
+  assert_eq 'and gives the command that undoes exactly this merge' "git revert -m 1 $merged" "$revert"
+  git -C "$work" checkout --quiet --detach "$merged"
+  ( cd "$work" && GIT_EDITOR=true $revert >/dev/null ) || fail "the receipt's undo did not run: $revert"
+  assert_eq 'which takes main back to the tree it had before the merge' \
+    "$(git -C "$work" rev-parse "$checked^{tree}")" "$(git -C "$work" rev-parse 'HEAD^{tree}')"
+  git -C "$work" checkout --quiet main
+}
+
+# ── case 14: Automatic on, but main moved after the check → handed back to the owner (M-T12) ────
+#
+# The half of "clean" only the runner can see. The merge check moves main itself — as its last act
+# it pushes one commit onto origin's main — so main has moved after the promotion's check and before
+# its landing, deterministically, with no race in the test. The commit it pushes changes no file, so
+# whatever would land would still be exactly the tree that was checked: it is handed back all the
+# same, because what the setting authorized is a landing onto the main the check ran against, and
+# that main is gone. (The same check also runs on the task's own landing and moves main then too,
+# which is harmless: that is before the promotion's check.)
+case_automatic_hands_back_when_main_moved() {
+  local work origin ws project
+  work="$(new_repo autoback)"
+  origin="$(repo_origin_of autoback)"
+  ws="$(new_workspace 'autoback' "$work" "$origin")"
+  project="$(new_project autoback "$ws" "$origin" \
+    'git fetch -q origin main && c=$(git -c user.name=orbit -c user.email=orbit@example.invalid commit-tree -p FETCH_HEAD -m moved FETCH_HEAD^{tree}) && git push -q origin $c:refs/heads/main')"
+  set_automatic "$project" true
+  local base; base="$(git -C "$work" rev-parse main)"
+
+  new_task_branch "$work" task/autoback a.txt 'from a' >/dev/null
+  local task; task="$(new_code_task "$project" 'autoback task' "$ws" task/autoback "$base")"
+  confirm_task_done "$task"
+  wait_for_job_state "$task" LANDED 240
+  wait_for_sql 'the owner to be asked after all' 300 \
+    "SELECT count(*) FROM project_open_item
+      WHERE project_id = '$project' AND kind = 'PROMOTION_APPROVAL' AND state = 'OPEN'" 1
+
+  assert_eq 'the candidate is a question again' 'READY' "$(promotion_column_of "$project" state)"
+  assert_eq 'and no longer says the setting confirmed it' 'false' \
+    "$(promotion_column_of "$project" confirmed_automatically)"
+  assert_eq 'nothing merged' '' "$(promotion_column_of "$project" merged_sha)"
+  assert_eq 'the automatic landing ended without landing' 'READY' \
+    "$(promotion_job_column_of "$project" LAND_PROMOTION state)"
+  assert_eq 'and its record keeps saying whose it was' 'true' \
+    "$(promotion_job_column_of "$project" LAND_PROMOTION confirmed_automatically)"
+  assert_eq 'it merged nothing to verify' '' "$(promotion_job_column_of "$project" LAND_PROMOTION landed_sha)"
+
+  fetch_all "$work"
+  local checked main_now source
+  checked="$(promotion_column_of "$project" upstream_sha_checked)"
+  source="$(promotion_column_of "$project" source_sha)"
+  main_now="$(origin_tip "$origin" refs/heads/main)"
+  [ "$main_now" != "$checked" ] || fail 'main did not move after the check'
+  assert_eq 'the landing saw the main that moved' "$main_now" \
+    "$(promotion_job_column_of "$project" LAND_PROMOTION upstream_sha)"
+  assert_eq 'main does not carry the project branch' 'no' "$(is_ancestor_in "$work" "$source" "$main_now")"
+  assert_eq 'even though the move changed no file' \
+    "$(git -C "$work" rev-parse "$checked^{tree}")" "$(git -C "$work" rev-parse "$main_now^{tree}")"
+  assert_eq 'a moved main is the owner'"'"'s question, not a failure for the coordinator' 0 \
+    "$(sql "SELECT count(*) FROM project_open_item
+             WHERE project_id = '$project' AND kind LIKE 'INTEGRATION_%'" | tr -d '[:space:]')"
+  assert_eq 'no receipt says the work is on main' 0 \
+    "$(sql "SELECT count(*) FROM session_merge_receipt WHERE task_id = '$task' AND target_branch = 'main'" | tr -d '[:space:]')"
+}
+
 # ── the register ───────────────────────────────────────────────────────────────────────────────
 # One function per case, listed here. Later tasks append their own (§9.2) and do not edit these.
 CASES=(
@@ -831,6 +948,8 @@ CASES=(
   case_main_line_task_branch_promotion
   case_main_sync_conflict_holds_the_queue
   case_js_check_runs_on_the_prepared_tree
+  case_automatic_merges_a_clean_branch_by_itself
+  case_automatic_hands_back_when_main_moved
 )
 
 main() {

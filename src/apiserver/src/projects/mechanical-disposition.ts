@@ -45,8 +45,10 @@ import type { MainTipAnswer } from './main-tip-probe';
  * returns it, and the session that acts on it is the one that already holds the merge protocol.
  * Merging is the coordinator's one irreversible outward action, and the account owner drew the line
  * on 2026-09-06 and narrowed it on 2026-09-13: landing on a project branch is the platform's,
- * performed by an integration job; landing on the upstream always goes through the owner's
- * confirmation card. `MERGE_AND_RELEASE_NEXT` remains a decision, never a merge performed from here.
+ * performed by an integration job; landing on the upstream goes through the owner's confirmation
+ * card, except — since 2026-09-23 — a clean project branch of a project whose Automatic setting is
+ * on, which the platform lands itself and leaves a receipt for (integration contract §3.3 M-T11).
+ * `MERGE_AND_RELEASE_NEXT` remains a decision, never a merge performed from here.
  * The other three actions are reversible and are the coordinator's own.
  */
 

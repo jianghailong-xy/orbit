@@ -489,6 +489,13 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     public struct Merged: Codable, Equatable, Sendable {
         public let sha: String
         public let at: String
+        /// True when nobody pressed Merge: the project's Automatic setting merged its own branch
+        /// because the check was clean (§3.3 M-T11). Nil from a server older than that rule, which
+        /// only ever merged on a press.
+        public var automatic: Bool?
+        /// The one command that takes the merge back out of main (`git revert -m 1 <sha>`); nil
+        /// for a fast-forward, which has no single commit that undoes it.
+        public var revert: String?
     }
 
     public init(promotionId: String, state: PromotionState, sourceRef: String, sourceSha: String,

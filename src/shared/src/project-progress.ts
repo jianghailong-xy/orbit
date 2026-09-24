@@ -495,7 +495,20 @@ export interface ProjectPromotionView<Instant = string> {
    * able to say "2m so far" when the platform has neither rather than print a zero it made up.
    */
   recheck: { upstreamMovedBy: number | null; startedAt: Instant; typicalMs: number | null } | null;
-  merged: { sha: string; byUserId: string | null; at: Instant } | null;
+  /**
+   * The merge, once it happened (state C). `byUserId` is who pressed Merge; `automatic` is true when
+   * nobody did — the project's Automatic setting merged its own branch because the check was clean
+   * (§3.3 M-T11), and `byUserId` is then null. `revert` is the one command that takes the merge
+   * back out of the upstream (`git revert -m 1 <sha>` for a merge commit), null for a fast-forward,
+   * which has no single commit that undoes it.
+   */
+  merged: {
+    sha: string;
+    byUserId: string | null;
+    at: Instant;
+    automatic: boolean;
+    revert: string | null;
+  } | null;
 }
 
 /**
