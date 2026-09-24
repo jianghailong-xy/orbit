@@ -404,7 +404,7 @@ function EngineRow({
               lives now, and telling someone to open a terminal for something the UI can do was
               only ever a symptom of the button being on the wrong page. */}
           <div className="re-panel-hint">
-            Orbit tries daily.{' '}
+            Orbit tries every 30 min.{' '}
             <Link to={`/runners/${encodeId(runner.id)}`}>Update this machine’s engines →</Link>
           </div>
         </div>
@@ -779,7 +779,7 @@ export function RunnerEngines() {
           Signed in on the machine itself — a session spends that subscription, nothing to paste.
           {/* Said once, here, because it is the answer to a question every row raises and none
               of them can answer alone: a version number can't tell you it's the current one. */}
-          {list.length > 0 && ' Orbit keeps these CLIs updated daily.'}
+          {list.length > 0 && ' Orbit keeps these CLIs updated every 30 min.'}
         </span>
         {list.length > 0 && (
           <span className="re-sec-count">

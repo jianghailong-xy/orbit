@@ -95,7 +95,7 @@ func TestUpdateRelayNamesEveryEngineItSkipped(t *testing.T) {
 			t.Errorf("outcome = %q, want it to contain %q", outcome.Message, want)
 		}
 	}
-	// Busy is not failure: the daily pass picks these up, so the run as a whole succeeded.
+	// Busy is not failure: the next pass picks these up, so the run as a whole succeeded.
 	if outcome.Status != installDone {
 		t.Errorf("status = %q, want %q — an engine skipped for being busy is not an error", outcome.Status, installDone)
 	}
@@ -203,8 +203,8 @@ func TestUpdateRunFailedReadsTheVerdictOffTheLines(t *testing.T) {
 			t.Errorf("a run containing %q should be reported as failed", line)
 		}
 	}
-	// The deliberate outcomes are not failures — retrying them changes nothing, and a daily
-	// warning about a choice Orbit made is how a real warning gets tuned out.
+	// The deliberate outcomes are not failures — retrying them changes nothing, and a warning
+	// every pass about a choice Orbit made is how a real warning gets tuned out.
 	for _, line := range []string{
 		"Kimi Code — package-managed install, left alone",
 		"OpenCode — owned by another user, left alone",

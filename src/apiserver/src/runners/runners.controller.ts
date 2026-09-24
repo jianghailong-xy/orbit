@@ -125,7 +125,7 @@ export class RunnersController {
     return this.runners.cancelInstall(user.userId, id);
   }
 
-  // Update every engine CLI on this machine now — the daily pass, on demand. Shares the relay
+  // Update every engine CLI on this machine now — the periodic pass, on demand. Shares the relay
   // slot (and so the DELETE above) with installs, since both run a package manager there.
   @Post(':id/engine-update')
   startEngineUpdate(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {

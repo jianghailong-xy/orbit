@@ -55,7 +55,7 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
     <section className="rd-section">
       <div className="rd-section-head">
         <div className="rd-section-title">Engines</div>
-        {/* Understated on purpose: Orbit updates these every day, so this is the escape hatch for
+        {/* Understated on purpose: Orbit updates these every 30 min, so this is the escape hatch for
             when that isn't soon enough — not the way the CLIs are meant to stay current. The
             models button sits here for the same reason it exists: what a CLI offers is a fact
             about this machine's engines, and updating one is exactly when the other goes stale. */}

@@ -12,7 +12,7 @@ import (
 //
 // It used to be only the three a user can sign into, on the reasoning that a row nobody could act
 // on is worse than no row. That reasoning belongs to the Providers page, and it silently became
-// the whole report: the daily pass updates four engines and its own summary names all four, so
+// the whole report: the periodic pass updates four engines and its own summary names all four, so
 // the machine's update report described software the control plane had never been told existed.
 // Which engines you can sign into is the reader's question to ask, not this probe's to decide.
 
@@ -39,7 +39,7 @@ func probeEngineHealth() []EngineHealthReport {
 }
 
 func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
-	// What the updater last managed to do here, read fresh each probe: the daily loop and
+	// What the updater last managed to do here, read fresh each probe: the update loop and
 	// `orbit engine-update` both write it, and neither can reach into this snapshot.
 	updates := loadEngineUpdateLog()
 	out := make([]EngineHealthReport, 0, len(specs))

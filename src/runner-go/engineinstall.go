@@ -96,9 +96,9 @@ func (r *installRelay) start(engine string, report func(InstallResultRequest), a
 // one slot as an install: both drive a package manager against this machine's single global
 // prefix, so they must not overlap — and the same redelivery guard applies.
 //
-// Unlike the daily loop this one has a person waiting, so what it skipped is reported rather than
-// only logged: an engine left alone because a session is mid-turn looks identical to one the
-// button silently missed.
+// Unlike the loop's scheduled pass, this one has a person waiting, so what it skipped is reported
+// rather than only logged: an engine left alone because a session is mid-turn looks identical to
+// one the button silently missed.
 //
 // onEngineUpdated is updateEngines' contract, passed straight through: the button is a third way an
 // engine's version moves on this machine, and the model list that came with the new version must
@@ -153,8 +153,8 @@ var updateEnginesFn = updateEngines
 // One engine's failure is the run's news: the per-engine detail lands on rows the card with the
 // button doesn't show, so a run reported "done" with a failure buried in its body goes silent
 // about an engine that has stopped being updated. The deliberate outcomes — busy, package-managed,
-// not ours, out of budget — are not failures; retrying them changes nothing, and a daily warning
-// about a choice Orbit made is how a real warning gets tuned out.
+// not ours, out of budget — are not failures; retrying them changes nothing, and a warning every
+// pass about a choice Orbit made is how a real warning gets tuned out.
 func updateRunFailed(lines []string) bool {
 	for _, l := range lines {
 		if strings.Contains(l, "update failed") || strings.Contains(l, "timed out") {

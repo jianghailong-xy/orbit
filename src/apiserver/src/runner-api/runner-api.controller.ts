@@ -1492,7 +1492,7 @@ export class RunnerApiController {
       return undefined;
     }
     if (r.installStatus !== 'pending') return undefined;
-    // An update names no engine — it does every CLI already on the machine, like the daily loop.
+    // An update names no engine — it does every CLI already on the machine, like the engine-update loop.
     if (update) return { attempt: r.installAt?.toISOString() ?? '', mode: 'update' };
     if (!isLoginEngine(r.installEngine)) return undefined;
     return { engine: r.installEngine, attempt: r.installAt?.toISOString() ?? '', mode: 'install' };

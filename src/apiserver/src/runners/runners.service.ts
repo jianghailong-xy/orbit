@@ -551,7 +551,7 @@ export class RunnersService {
   /**
    * Ask this runner to update every engine CLI on it, now.
    *
-   * The same work the runner already does daily on its own — this is the escape hatch for when
+   * The same work the runner already does on its own every 30 min — this is the escape hatch for when
    * that isn't soon enough, or when it has been failing and someone wants to watch it try. It
    * shares the install relay's one slot deliberately: both drive a package manager against that
    * machine's single global prefix.

@@ -249,13 +249,13 @@ func TestLoadEngineUpdateLogTolerates(t *testing.T) {
 	}
 }
 
-// Three paths can want this machine's one global package-manager prefix: the daily loop, a
+// Three paths can want this machine's one global package-manager prefix: the update loop, a
 // browser-requested update, and a session's on-demand install. The relay's own single-flight
-// covers only the second — it is not a lock the daily timer ever touches — so the update path
+// covers only the second — it is not a lock the loop's timer ever touches — so the update path
 // has to take the install lock like everything else.
 //
 // This was a real collision, not a hypothetical: a runner that came online at 10:11 fired its
-// first daily pass at 10:21:11.839 (engineUpdateInitialDelay), and a relay update landing
+// first pass at 10:21:11.839 (engineUpdateInitialDelay), and a relay update landing
 // 182ms later ran a second `codex update` beside it.
 func TestUpdateEngineSerializesWithInstalls(t *testing.T) {
 	engineInstall.mu.Lock()
@@ -371,9 +371,9 @@ func engineUpdateRuns(t *testing.T, runs string) int {
 }
 
 // The behaviour this whole file's skip exists to enable: an engine stepped over because sessions
-// were running on it is installed the moment they finish, not at the next 24h tick.
+// were running on it is installed the moment they finish, not at the next tick.
 //
-// Skipping a busy engine was only half an answer. The retry was the daily ticker, which samples
+// Skipping a busy engine was only half an answer. The retry was the ticker, which samples
 // the machine at one fixed instant — and a runner that always has work is busy at that instant
 // essentially always, so the machine doing the most work was the one that never updated. Live on
 // 2026-09-23: wikova sat on Claude Code behind 2.1.280 with behindSince climbing, and the models
@@ -767,7 +767,7 @@ func TestEngineSpecsUpdateCmd(t *testing.T) {
 	if got := specs[providerOpenCode].updateCmd; got != "opencode upgrade" {
 		t.Fatalf("opencode updateCmd = %q, want %q", got, "opencode upgrade")
 	}
-	// No other engine may rely on the installCmd fallback for its daily update.
+	// No other engine may rely on the installCmd fallback for its periodic update.
 	for _, s := range engineSpecs {
 		if s.updateCmd == "" && s.bin != providerKimi {
 			t.Errorf("%s has no updateCmd; the installCmd fallback can target a different install than PATH", s.name)
@@ -836,7 +836,7 @@ func TestSameVersionComparesTheNumbers(t *testing.T) {
 	}
 }
 
-// Knowing what is published turns the daily pass into a decision. When there is nothing to fetch,
+// Knowing what is published turns the pass into a decision. When there is nothing to fetch,
 // the right amount of package manager to run is none — it keeps the machine's one install slot
 // free and leaves the pass budget to the engines that do need it.
 func TestUpdateEngineSkipsTheCommandWhenAlreadyCurrent(t *testing.T) {

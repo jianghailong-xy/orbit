@@ -170,9 +170,9 @@ type EngineUpdateReport struct {
 	//
 	// "updated" and "checked" used to be one word, "ok", on the reasoning that a no-op proves the
 	// path works. It doesn't: finding nothing to fetch only proves the version check works, and a
-	// machine that cannot download anything answers exactly that on every day no release happens
-	// to ship. Workstation reported green for two days that way, and only turned red when 2.1.227
-	// shipped and forced a real download — long after it had actually stopped being updatable.
+	// machine that cannot download anything answers exactly that on every pass where no release
+	// happens to ship. Workstation reported green for two days that way, and only turned red when
+	// 2.1.227 shipped and forced a real download — long after it had actually stopped being updatable.
 	Status string `json:"status"`
 	// RFC3339 time of the attempt this describes.
 	At string `json:"at"`
@@ -485,7 +485,7 @@ type InstallCommand struct {
 	// "install" (or empty, from a control plane that only ever installed) or "update": the same
 	// one-slot relay drives both, because both run a package manager against this machine's one
 	// global prefix and must never overlap. An update names no engine — it does every installed
-	// one, like the daily loop.
+	// one, like the engine-update loop.
 	Mode string `json:"mode,omitempty"`
 }
 

@@ -63,7 +63,7 @@ Usage:
   orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
   orbit status                      Show this directory's runner and its control-plane status
   orbit doctor                      Check the coding-engine CLIs, sign-in, and service PATH
-  orbit engine-update               Update the coding-engine CLIs now (the daily check, on demand)
+  orbit engine-update               Update the coding-engine CLIs now (the periodic check, on demand)
   orbit resume [session-id]         Resume a session in its coding runtime
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
@@ -88,7 +88,7 @@ and sign-in guidance.
 Env:
   ORBIT_HOME               Override the runner's config/runs dir (default: ~/.orbit)
   ORBIT_NO_SELFUPDATE      Disable startup and periodic runner auto-updates
-  ORBIT_NO_ENGINE_UPDATE   Disable the daily coding-engine CLI update check
+  ORBIT_NO_ENGINE_UPDATE   Disable the periodic coding-engine CLI update check
 `
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
@@ -178,8 +178,8 @@ Usage:
 
 Runs each installed engine's updater once, against the
 binary the background service resolves on its PATH — the same check the runner runs ~10 min
-after startup and every 24h. Unlike the daily run it can't see live sessions, so prefer
-running it when the machine is idle. Disable the daily check with ORBIT_NO_ENGINE_UPDATE.
+after startup and every 30 min. Unlike the loop's own pass it can't see live sessions, so prefer
+running it when the machine is idle. Disable the periodic check with ORBIT_NO_ENGINE_UPDATE.
 `,
 	"task":      taskHelp,
 	"task-list": taskListHelp,

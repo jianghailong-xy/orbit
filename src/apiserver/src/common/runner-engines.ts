@@ -18,7 +18,7 @@ export function isLoginEngine(value: unknown): value is LoginEngine {
  * Every engine a runner reports health for, in the order they're shown.
  *
  * Wider than LOGIN_ENGINES on purpose: OpenCode can't be signed into from the browser, but it is
- * installed on the machine and updated by the same daily pass. Filtering it out here is what used
+ * installed on the machine and updated by the same periodic pass. Filtering it out here is what used
  * to make the runner's own update summary mention an engine the control plane had no record of.
  * Sign-in stays gated on isLoginEngine, where that question actually belongs.
  */

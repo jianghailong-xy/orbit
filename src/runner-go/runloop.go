@@ -869,7 +869,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	}
 	// The other way the catalog goes stale: this runner installs a newer engine, whose point is
 	// often a model the old CLI did not have. Every path that updates one ends in updateEngine, so
-	// they all report a version that really moved — the daily pass, the idle retry, and the Engines
+	// they all report a version that really moved — the periodic pass, the idle retry, and the Engines
 	// panel's Update button (see updateEngines) — and the picker re-reads the CLI now instead of up
 	// to an hour from now, which on 2026-09-24 left Opus 5.5 missing from a runner that had been
 	// running 2.1.280 since 16:20Z.
@@ -922,7 +922,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	// Keep the machine's coding-engine CLIs current: the runner execs whatever engine
 	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
-	// Daily, best-effort, skips any engine with a live session its update could disturb (see
+	// Every 30 min, best-effort, skips any engine with a live session its update could disturb (see
 	// engineUpdateLoop). An engine whose version really moved re-reads the model catalog on
 	// the spot — the CLI is what the list is made of, and its new release may be the reason
 	// the update happened.
@@ -1301,7 +1301,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						logln("install-result POST failed:", err)
 					}
 				}
-				// The same slot also carries "update every engine now" (the daily loop's work,
+				// The same slot also carries "update every engine now" (the engine loop's work,
 				// on demand). Live sessions are visible from here, so unlike `orbit
 				// engine-update` this one won't swap a binary mid-turn.
 				if ir.Mode == "update" {

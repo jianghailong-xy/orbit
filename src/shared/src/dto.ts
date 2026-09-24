@@ -887,7 +887,7 @@ export type LoginEngine = 'claude' | 'codex' | 'kimi';
 /**
  * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:
  * OpenCode authenticates per-provider with no relayable flow, so it is never a sign-in row — but
- * it is installed on the machine, it is updated by the same daily pass, and its version drifts
+ * it is installed on the machine, it is updated by the same periodic pass, and its version drifts
  * like any other. Which of these a given page offers to sign in is that page's question.
  */
 export type ReportedEngine = LoginEngine | 'opencode';
@@ -983,7 +983,7 @@ export interface RunnerEngineHealth {
   /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. */
   auth: 'yes' | 'no' | 'unknown';
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
-   *  the first daily pass — shown as "not reported yet", never as a problem. */
+   *  the first pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
   /** Codex only: every account signed into this machine's CLI, Default first, each with its own
    *  sign-in state. `auth` above stays Default's answer, which is what every reader older than
@@ -1018,7 +1018,7 @@ export interface RunnerEngineAccount {
 /**
  * The updater's last word on one engine, reported alongside its health.
  *
- * Orbit updates these CLIs itself, daily. That is invisible without this: a version string alone
+ * Orbit updates these CLIs itself, every 30 min. That is invisible without this: a version string alone
  * can't say whether it is the newest one, so the useful question is not "which version is this"
  * but "is this machine still being kept current" — which the runner answers by asking each
  * engine's release feed what is published and comparing it against the binary on disk.
@@ -1032,7 +1032,7 @@ export interface RunnerEngineUpdate {
    *
    *  `updated` and `checked` were one word until finding nothing to do was taken as proof the
    *  update path works. It isn't: a machine that can no longer download anything answers
-   *  "nothing to fetch" on every day no release ships, and reads healthy right up until one does. */
+   *  "nothing to fetch" on every pass where no release ships, and reads healthy right up until one does. */
   status: 'updated' | 'checked' | 'failed' | 'skipped' | 'ok';
   /** ISO time of the attempt this describes. */
   at: string;
