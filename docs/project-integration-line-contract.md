@@ -310,7 +310,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `error_code` / `error_detail` | text / jsonb NULL | 闭集见 J12 |
 | `receipt_ids` | uuid[] NOT NULL DEFAULT `'{}'` | 本作业写下的回执 |
 | `confirmed_automatically` | boolean NOT NULL DEFAULT false | 迁移 0301。只有 `LAND_PROMOTION` 可为真（CHECK）：这次落地由项目的 Automatic 授权确认，不是 owner 按的（§3.3 M-T11）；runner 收到的命令带 `automatic: true`，只落到 `upstream_sha_checked` 上（M-T12） |
-| `idempotency_key` | text NOT NULL UNIQUE | `ij:v1:<kind>:<taskId 或 promotionId>:<generation>` |
+| `idempotency_key` | text NOT NULL UNIQUE | `ij:v1:<kind>:<taskId 或 promotionId>:<generation>`；J-T1e 补排的那一条例外，是 `ij:v1:LAND_TASK:<taskId>:behind:<sessionId>@<finished_at>`（按**工作的代**去重，`landingBehindTheWorkKey`） |
 | `created_at` / `started_at` / `finished_at` / `updated_at` | timestamptz | |
 
 约束与触发器：
@@ -359,6 +359,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 - **判定（J-T5）**：回报的 `claimed_at` 早于某工作会话的 `finished_at`（或该会话尚未结束）时不落终态，该行退回 `QUEUED` 清空认领，由下一次领取重判。
 
 **补排**：终态 `ALREADY_LANDED` 的 `source_ref` 若**不是**该任务工作结束所在的分支（该任务最后结束的工作会话的 `worktree_branch`，缺省回落 `branch`；`workBranchEndedOn`），成果就没有任何路线——同一事务入队下一个 generation，`source_ref` 指向那条分支（`queueLandingBehindTheWork`，`landingLeftWorkBehind` 为判据）。2026-09-23 的事故：任务 `01a0ce5e…` 的 DONE 冻结了**已经失败的那轮 retry** 的分支 `orbit/autorun-false-830a9b`（tip 就是项目分支 tip，什么都没带），而 151 轮那条会话的 `789a8fffc` 在 `orbit/autorun-false-91f94d` 上；线答 ALREADY_LANDED 时那条会话还有 2 分 42 秒没跑完，成果最后靠两次人工 cherry-pick 才落地。用例见 `src/apiserver/src/tasks/task-landing-races-final-commit.pg.spec.ts`。
+- **守门：一代工作最多补一次**：补排那一条的幂等键不是它自己的 generation（每次 DONE 都会推进它），而是**工作的代**——该任务、工作结束所在的那条会话、那次 `finished_at`：`ij:v1:LAND_TASK:<taskId>:behind:<sessionId>@<finished_at>`（`landingBehindTheWorkKey`）。同一份工作被再次触发（例如任务在工作没动的情况下再次写成 DONE，J-T1a 又冻结同一条起始分支、线又答同一个 `ALREADY_LANDED`）时，J3 的在飞索引已经看不见上一次补排，但 UNIQUE 键会拒掉第二条：不产生第二个作业，也就不会有第二条待办/唤醒。工作动了——会话重开后再次结束（`finished_at` 变了），或更晚的会话结束（会话 id 变了）——就是新的一代，允许再补一次。runner 只在结束会话时提交（SR13），所以没有不经过一次新 `finished_at` 就落到工作分支上的提交。与之配套：对**不是**工作结束所在分支的 `ALREADY_LANDED`（即触发补排的那种回答）不算该任务落地，J-T5 不拿它去关该任务的集成类待办——补排那一条若失败（`CONFLICT` 等），它的待办就是「成果还没进线」的唯一记录，同一代再次触发时守门不再补，若再把卡关掉，成果就静默滞留了。用例见同一 spec 的 (7)(8)(9)。
 
 **J-T1e 的候选一侧（§3.4 M-F2）**：同一场竞态在晋升候选上重演——`CHECK_PROMOTION` 是唯一解析并冻结 source tip 的东西（`TASK_BRANCH` 候选的 `source_sha` 由它回写，0293），候选由结束任务的那次 DONE 入队，于是检查可能在收尾提交存在之前就把 tip 冻成「owner 被问的那个 commit」，owner 合下的是旧 commit，后面那个再没人问。同一个问题因此也问候选：候选 `session_id` 所属任务的工作会话仍有 `finished_at IS NULL`（或回报的 `claimed_at` 早于某条工作会话的 `finished_at`）时该检查退回 `QUEUED`（`landingJudgedTooEarly`），由**上面同一条**领取守卫按 `session_id` 找到那个任务压住——不冻结、不开卡；工作已停止移动、而检查看的分支不是该任务工作结束所在的分支时（`checkSawTheFinishedBranch`，即 `workBranchEndedOn` 那条分支 ≠ 候选的 `source_ref`），候选**不冻结**：它被取代（`SUPERSEDED`，那条 job 自己仍是它当时答案的记录），同一事务按那条分支补一个候选（`refileCandidateBehindTheWork`），即 DONE 在工作停止移动之后写才会产生的那个候选。候选没有 `task_id`（0293），所以「点名」落在候选/卡上而不是任务行：退回事小、补排的那个候选 `source_ref` 指着成果所在的分支，卡最终问的就是它。`PROJECT_BRANCH` 候选不受影响：它的 `source_sha` 由平台在检查之前写死（取自 LANDED 作业的 `landed_sha`），检查按具名提交合并，没有解析竞态。用例见 `src/apiserver/src/projects/promotion-candidate-freeze.pg.spec.ts`。
 

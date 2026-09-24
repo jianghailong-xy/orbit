@@ -869,8 +869,9 @@ export async function applyIntegrationJobResult(
     // branch the work ended on, and it is written here, after that state (J3's one-inflight-landing
     // index only has room for it once this row has stopped being the live one) and in the same
     // transaction (a landing owed and not recorded is the bug this whole rule is about).
-    if (job.kind === 'LAND_TASK' && job.taskId
-        && state === 'ALREADY_LANDED' && landingLeftWorkBehind(job, work)) {
+    const leftWorkBehind = job.kind === 'LAND_TASK' && state === 'ALREADY_LANDED'
+      && landingLeftWorkBehind(job, work);
+    if (leftWorkBehind && job.taskId) {
       await queueLandingBehindTheWork(tx, {
         ownerId: job.ownerId,
         projectId: job.projectId,
@@ -942,8 +943,11 @@ export async function applyIntegrationJobResult(
     // §2.2 J-T5: the task's landing answers what was open about landing it, in this same
     // transaction — beside the receipt that says the work is there, which is the fact the item was
     // waiting for. Read by TASK rather than by this job: what is still open is an older
-    // generation's item, and this landing is what closes it.
-    if (jobLanded(effectiveState) && job.taskId) {
+    // generation's item, and this landing is what closes it. An answer about a branch the work did
+    // NOT end on is not that landing: it says nothing about the work, and the item it would close can
+    // be the only record that the work has not reached the line — the landing owed for it failed, and
+    // a generation of the work is owed only one (§2.3 J-T1e, `landingBehindTheWorkKey`).
+    if (jobLanded(effectiveState) && job.taskId && !leftWorkBehind) {
       await resolveIntegrationItemsOnLanding(tx, job.taskId);
     }
 
