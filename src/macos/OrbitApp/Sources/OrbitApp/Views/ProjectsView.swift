@@ -17,6 +17,9 @@ enum ProjectPalette {
     static let done = Color.green
     static let failed = Color.red
     static let cancelled = Color.secondary.opacity(0.5)
+    /// A warning chip's words: the effect mock's amber ink (#B35A00) on light, where system orange
+    /// on its own 14% wash reads at about 2:1; system orange on dark, where the ink would sink.
+    static let warningInk = Color(light: Color(red: 0.702, green: 0.353, blue: 0), dark: .orange)
 
     static func color(_ glyph: ProjectPage.Glyph) -> Color {
         switch glyph {
@@ -146,13 +149,28 @@ struct ProjectsListView: View {
                     }
                 }
                 .orbitRevealSurface()
+                #if os(iOS)
+                // Plain, like the sessions list: light section headers over full-width rows, not
+                // boxed inset-grouped cards.
+                .listStyle(.plain)
+                #endif
             }
+            #if os(iOS)
+            // The sessions list's arrangement too: the field held under an inline title, where the
+            // system lays it out, rather than floating at the bottom of the phone.
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Search projects")
+            #else
             .searchable(text: $query, prompt: "Search projects")
+            #endif
             .overlay {
                 ProjectsPlaceholder(store: store,
                                     noMatch: !query.isEmpty && filtered(store.projects).isEmpty)
             }
             .navigationTitle("Projects")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .task { await store.load() }
         } else {
             ProgressView()
@@ -169,13 +187,18 @@ struct ProjectsListView: View {
     }
 
     private func header(_ group: ProjectAttentionGroup) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            // `Color`s rather than the hierarchical styles, for the same reason as the rows below.
             Text(group.section.title)
-            Text("\(group.projects.count)").foregroundStyle(.secondary)
+                .font(.orbitSubtext.weight(.bold))
+                .foregroundStyle(Color.primary)
+            Text("\(group.projects.count)")
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(Color.secondary)
             Spacer(minLength: 0)
             if group.section.defaultCollapsed, query.isEmpty {
                 Button(showsCompleted ? "Hide" : "Show") { showsCompleted.toggle() }
-                    .font(.orbitLabel)
+                    .font(.orbitSubtext)
                     .buttonStyle(.borderless)
             }
         }
@@ -188,9 +211,12 @@ struct ProjectsListView: View {
         case .selection:
             row.tag(project.id)
         case .push:
-            // A `Button`, not a `NavigationLink(value:)` — see `AppModel.push`.
+            // A `Button`, not a `NavigationLink(value:)` — see `AppModel.push`. `Color.primary`, not
+            // the hierarchical `.primary`: inside a button that resolves against the button's tint,
+            // which drew every title in the accent colour (and its grey words at half of it) on a
+            // phone.
             Button { model.push(.projectDetail(projectID: project.id)) } label: {
-                row.foregroundStyle(.primary)
+                row.foregroundStyle(Color.primary)
             }
         }
     }
@@ -214,14 +240,15 @@ struct ProjectRow: View {
                 }
             }
             if let chip = ProjectAttention.chip(of: project, now: now) {
+                let warning = chip.tone == .warning
                 Text(chip.text)
                     .font(.orbitLabel.weight(.semibold))
                     .lineLimit(1)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .foregroundStyle(chip.tone == .warning ? Color.orange : Color.accentColor)
-                    .background((chip.tone == .warning ? Color.orange : Color.accentColor).opacity(0.13),
-                                in: RoundedRectangle(cornerRadius: 6))
+                    .foregroundStyle(warning ? ProjectPalette.warningInk : Color.accentColor)
+                    .background((warning ? Color.orange : Color.accentColor).opacity(warning ? 0.14 : 0.12),
+                                in: RoundedRectangle(cornerRadius: 7))
             }
             HStack(spacing: 10) {
                 ProjectMeter(segments: meterSegments).frame(maxWidth: 110)
@@ -230,11 +257,12 @@ struct ProjectRow: View {
                 if let line = ProjectAttention.integrationChip(of: project) {
                     Label(line.text, systemImage: line.isBranch ? "arrow.triangle.branch" : "arrow.down.to.line")
                         .labelStyle(.titleAndIcon)
-                        .font(.orbitMeta)
+                        .font(.orbitLabel)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
+            .padding(.top, 2)
         }
         .padding(.vertical, 3)
     }
@@ -259,13 +287,13 @@ struct ProjectRow: View {
             ForEach(Array(lanes.enumerated()), id: \.offset) { _, lane in
                 if lane.1 > 0 {
                     HStack(spacing: 3) {
-                        ProjectGlyphMark(glyph: lane.0, size: 7)
+                        ProjectGlyphMark(glyph: lane.0, size: 8)
                         Text(lane.1.formatted()).monospacedDigit()
                     }
                 }
             }
         }
-        .font(.orbitMeta)
+        .font(.orbitLabel)
         .foregroundStyle(.secondary)
         .lineLimit(1)
     }
