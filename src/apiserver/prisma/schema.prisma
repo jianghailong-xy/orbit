@@ -2174,7 +2174,7 @@ model ProjectIntegrationJob {
   /// The receipts this job wrote, so a reader of the job can find them without guessing the key.
   receiptIds  String[] @default([]) @map("receipt_ids")
   /// A LAND_PROMOTION queued by the project's Automatic setting instead of the owner's press
-  /// (migration 0300, contract §3.3 M-T11). It lands only onto the upstream tip its check ran
+  /// (migration 0301, contract §3.3 M-T11). It lands only onto the upstream tip its check ran
   /// against; an upstream that moved is handed back to the owner untouched (M-T12). Kept on the job
   /// as well as on the promotion because the job is the record of what was sent out to be pushed.
   confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
@@ -2205,7 +2205,7 @@ model ProjectIntegrationJob {
 /// `(projectId, sourceRef)` WHERE the state is still live (one card per source, so a second landing
 /// supersedes the standing candidate rather than opening a second one), and the CHECKs that a
 /// confirmed promotion names who confirmed it — a person, or the project's Automatic setting
-/// (0300) — and a merged one names the commit it became.
+/// (0301) — and a merged one names the commit it became.
 /// `sourceKind` and `state` are closed sets held by CHECKs and spelled in
 /// `projects/project-promotion.ts`; a terminal row is final (`project_promotion_terminal_guard`).
 ///
@@ -2253,7 +2253,7 @@ model ProjectPromotion {
 
   confirmedByUserId String?   @map("confirmed_by_user_id") @db.Uuid
   /// Nobody pressed Merge: the project's Automatic setting confirmed it, because the line is the
-  /// project's own branch and its check came back clean (migration 0300, contract §3.3 M-T11).
+  /// project's own branch and its check came back clean (migration 0301, contract §3.3 M-T11).
   /// `confirmedByUserId` is null on such a row — the two are the two answers to "who merged this".
   confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
   confirmedAt       DateTime? @map("confirmed_at") @db.Timestamptz(3)

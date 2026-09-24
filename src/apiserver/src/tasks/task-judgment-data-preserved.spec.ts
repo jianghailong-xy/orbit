@@ -1144,7 +1144,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
       // UPDATE or DELETE: no stored row is read beyond the scans that validate the CHECKs, and
       // none is locked for longer, backfilled or rewritten.
-      '0300_project_promotion_automatic_merge'],
+      '0301_project_promotion_automatic_merge'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

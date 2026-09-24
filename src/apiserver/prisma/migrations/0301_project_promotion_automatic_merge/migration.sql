@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 0300 — a merge into main the platform makes by itself, under the project's Automatic setting
+-- 0301 — a merge into main the platform makes by itself, under the project's Automatic setting
 -- (docs/project-integration-line-contract.md §3.3 M7, M-T11, M-T12; the owner's decision of
 -- 2026-09-23: "有自己的项目集成分支 + automatic 就可以合并；如果是 main 或非 automatic，就需要人来点").
 --
