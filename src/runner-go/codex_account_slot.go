@@ -29,6 +29,12 @@ import (
 // codexAccountDefaultSlot is the id of the slot every runner has.
 const codexAccountDefaultSlot = "default"
 
+// codexAccountRemoveCapabilityV1 declares that this runner removes an account slot the control
+// plane names — its CODEX_HOME and its record, and no other account's. A runner that does not
+// declare it has no such operation at all, so the control plane hands a removal only to a process
+// that declares this; one that ignored the request would leave a slot the page says it removed.
+const codexAccountRemoveCapabilityV1 = "codex-account-remove/v1"
+
 // An added slot's id is 4 random bytes in lowercase hex: short, one spelling even on a
 // case-insensitive disk, never derived from the account's name (which the user may change), and
 // never equal to the default slot's id.
@@ -207,4 +213,46 @@ func createCodexAccountSlot(name string) (codexAccountSlot, error) {
 	}
 	ok = true
 	return slot, nil
+}
+
+// removeCodexAccountSlot removes added slot id from this machine: its own CODEX_HOME with everything
+// Codex keeps in it, and the record beside it. Nothing else is touched — Default least of all, which
+// is the CODEX_HOME the runner's own environment selects and the one `codex` typed in a terminal
+// shares.
+//
+// liveHomes is the CODEX_HOME every session this runner is running is stuck to
+// (codexSessionAccountHomes). A slot one of them has is refused: the session's thread lives in that
+// directory and its engine is running out of it, so removing it would pull the ground out from under
+// a turn in flight. The caller stops the slot's usage probe with it (codexAccountUsage.forget): a
+// read that outlived the directory would open an app-server in a CODEX_HOME nothing else is left in,
+// and would go on reporting an account the runner no longer has.
+func removeCodexAccountSlot(id string, liveHomes map[string]bool) error {
+	if id == codexAccountDefaultSlot {
+		return errors.New("Default is this machine's own CODEX_HOME and cannot be removed")
+	}
+	if !codexAccountSlotIDPattern.MatchString(id) {
+		return fmt.Errorf("invalid codex account slot %q", id)
+	}
+	root, err := codexAccountsDir()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(root, id)
+	if err := existingCodexAccountDir(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("codex account slot %q: %w", id, err)
+	}
+	if liveHomes[dir] {
+		return fmt.Errorf("codex account %s is in use by a session running on this machine — end that session, then remove it", id)
+	}
+	// Idempotent on purpose: the removal is redelivered until this runner reports an outcome, so a
+	// slot already gone is the state that was asked for, not an error.
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("could not remove codex account %s: %w", id, err)
+	}
+	// The record is the runner's own, kept beside the account's directory: gone with it, or a later
+	// slot drawing the same id would inherit a name it was never given.
+	if err := os.Remove(codexAccountSlotMetaPath(root, id)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("could not remove codex account %s: %w", id, err)
+	}
+	return nil
 }

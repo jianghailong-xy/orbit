@@ -160,7 +160,7 @@ func TestCodexAccountQuotaSessionRateLimitsFeedOnlyTheirOwnSlot(t *testing.T) {
 	if defaultRead.RateLimitReset == nil || defaultRead.Primary == nil || defaultRead.Primary.Utilization != 100 {
 		t.Fatalf("Default's read produced %+v", defaultRead)
 	}
-	workRead, err := fetchCodexAccountPlanUsage(context.Background(), work.CodexHome)
+	workRead, _, err := fetchCodexAccountPlanUsage(context.Background(), work.CodexHome)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,8 +279,8 @@ func TestCodexAccountQuotaEachSlotIsReadInItsOwnHomeAndPartition(t *testing.T) {
 	}
 	var beat struct {
 		PlanUsage struct {
-			Primary        PlanUsageWindow `json:"primary"`
-			RateLimitReset json.RawMessage `json:"rateLimitReset"`
+			Primary        PlanUsageWindow                       `json:"primary"`
+			RateLimitReset json.RawMessage                       `json:"rateLimitReset"`
 			Accounts       map[string]map[string]json.RawMessage `json:"accounts"`
 		} `json:"planUsage"`
 	}
@@ -347,7 +347,7 @@ func TestCodexAccountQuotaSlotReadHoldsItsOwnPartitionsHandshakeLock(t *testing.
 	answerInCodexHome(t, work.CodexHome, "rateLimits.json", codexAccountQuotaRead(8))
 	ctx := context.Background()
 	// The first read bootstraps the slot's partition; later ones take only the handshake lock.
-	if _, err := fetchCodexAccountPlanUsage(ctx, work.CodexHome); err != nil {
+	if _, _, err := fetchCodexAccountPlanUsage(ctx, work.CodexHome); err != nil {
 		t.Fatal(err)
 	}
 	workSpawns := func() int {
@@ -374,7 +374,7 @@ func TestCodexAccountQuotaSlotReadHoldsItsOwnPartitionsHandshakeLock(t *testing.
 	read := func() chan error {
 		done := make(chan error, 1)
 		go func() {
-			usage, err := fetchCodexAccountPlanUsage(ctx, work.CodexHome)
+			usage, _, err := fetchCodexAccountPlanUsage(ctx, work.CodexHome)
 			if err == nil && (usage.Primary == nil || usage.Primary.Utilization != 8) {
 				err = fmt.Errorf("Work's read came back as %+v, not its own 8%%", usage)
 			}

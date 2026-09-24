@@ -210,6 +210,19 @@ func newSessionPoolWithClock(max int, clock poolClock) *sessionPool {
 	}
 }
 
+// sessionIDs is every session this process supervises right now, in whatever state: a cold
+// supervisor holds no engine, but it is still this runner's session and the next claim resumes it in
+// the account its state was opened under.
+func (p *sessionPool) sessionIDs() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	ids := make([]string, 0, len(p.sessions))
+	for id := range p.sessions {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 	state := p.worktreeOps[id]
 	if state == nil {
