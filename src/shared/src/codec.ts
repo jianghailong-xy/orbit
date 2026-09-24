@@ -186,6 +186,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // no session at all.
   'authoredBySessionId',
   'actingSessionId',
+  // The conversation a coordinator rotation left behind, served beside the one it opened. Not a
+  // column: it is a computed response field, and it is an address all the same — the `ensure` door
+  // answers with it so a client can go and read what the replaced conversation decided. Left
+  // unencoded it would be the one raw uuid in a payload whose other two ends are base62.
+  'replacedSessionId',
   // Unit L2's provenance columns on `task` (migration 0150): where a piece of work was NOTICED, as
   // distinct from `projectId`, which says whose goal it counts towards. Addresses a reader follows
   // — "show me the project that filed this", "open the session it came out of" — so they are

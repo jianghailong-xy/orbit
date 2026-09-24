@@ -457,6 +457,22 @@ export interface SessionResumeAnswer {
   routedToSessionId?: string;
 }
 
+/**
+ * Why a conversation cannot be handed a message: the closed set `receiveBlockedReasonFor` answers
+ * with, and the word the agent's `ensure` door reports as its reason for opening a replacement.
+ *
+ * Most of it IS resumability — what a revive would refuse, a message cannot be delivered through —
+ * which is why it borrows `SessionResumeBlockedReason` rather than restating it. The two additions
+ * are the cases a resume's vocabulary has no name for: one where the row it describes is gone, and
+ * one where the row is perfectly healthy.
+ */
+export type SessionReceiveBlockedReason =
+  | SessionResumeBlockedReason
+  /** The row the pointer names is not there at all — purged, or never this owner's. */
+  | 'SESSION_GONE'
+  /** §13.6 SU6: the run this conversation belongs to was replaced or abandoned. */
+  | 'RUN_RETIRED';
+
 /** What SessionsService.resolveProviderSwitch answers — see its doc comment. */
 interface ResolvedProviderSwitch {
   /** The identity the session should dispatch under: the requested one, or the current one when
@@ -6593,6 +6609,59 @@ export class SessionsService {
       // and the revive it is replaying was reported to whoever won the race.
       revived: revived.wasRevived,
     };
+  }
+
+  /**
+   * Why this conversation cannot be handed a message — or `null` when it can.
+   *
+   * The answer two doors need and neither may write for itself. `resume` is the door that
+   * DELIVERS a message; this is the same question asked without delivering anything, which is
+   * what a door that may only open a REPLACEMENT when the conversation a project names can no
+   * longer receive has to ask first (contract §7.5, the agent's `ensure`).
+   *
+   * Two authorities, in the order the delivering door reaches them:
+   *
+   *   1. `deriveSessionCapabilities().canSend` — alive, or ended in a way that can still be
+   *      revived. One predicate for trashed, ending, never-started, lost-context, no-runner and
+   *      runner-offline, and the same one every Session payload publishes as `canSend`, so a
+   *      card's affordance and this door cannot come to opposite answers about one row;
+   *   2. §13.6 SU6 — a run whose task was replaced or abandoned may not be resumed, whoever
+   *      asks, and `canSend` cannot see it: that row is healthy and its runner is up. Read
+   *      through `taskWorkRefusalFor`, the same predicate the revive is fenced by, and applied
+   *      to the same shape of turn the message is: a message, never the task's own work.
+   *
+   * The caller's own standing — a live session, orchestration enabled — is the DOOR's gate and
+   * deliberately not read here: this is about the conversation being written to.
+   */
+  async receiveBlockedReasonFor(
+    ownerId: string,
+    sessionId: string,
+  ): Promise<SessionReceiveBlockedReason | null> {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, ownerId },
+      include: { assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } } },
+    });
+    if (!session) return 'SESSION_GONE';
+    const capabilities = deriveSessionCapabilities(session);
+    if (!capabilities.canSend) {
+      // `canSend` is false on exactly three paths — in Trash, ending, or ended with no revival —
+      // and each of them names its reason in that same derivation. `SESSION_GONE` is unreachable
+      // here; it is what keeps this door from ever reading "no reason given" as "deliverable" if
+      // that derivation grows a path that does not.
+      return capabilities.resumeBlockedReason ?? 'SESSION_GONE';
+    }
+    // A live conversation ABOUT a task is not the task's work, and 0130's guard deliberately lets
+    // it keep going — refusing a message here would leave a salvage somebody can reply to once and
+    // never again. The same carve-out `resume` makes, spelled the same way.
+    const continuesSalvage =
+      SessionsService.LIVE.includes(session.status) && !session.startsTaskWork;
+    if (session.taskId && !continuesSalvage) {
+      const refusal = await this.taskWorkRefusalFor(
+        this.prisma, session.taskId, false, session.startsTaskWork,
+      );
+      if (refusal) return 'RUN_RETIRED';
+    }
+    return null;
   }
 
   /**

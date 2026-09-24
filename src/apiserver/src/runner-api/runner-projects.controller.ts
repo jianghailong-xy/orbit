@@ -141,6 +141,46 @@ export class RunnerProjectsController {
         );
   }
 
+  /**
+   * Open a coordinator for a project whose own conversation cannot take a message — the agent
+   * side of `POST /projects/:id/coordinator/replace`, and the only door here that may rotate one.
+   *
+   * The owner's `replace` ends a conversation; this one opens a replacement ONLY when the
+   * conversation the project points at can no longer be handed a message, which the service
+   * decides through the one authority for that question (`SessionsService`,
+   * `receiveBlockedReasonFor`). A conversation that is alive, or ended and still revivable, is
+   * handed straight back and nothing is written. So the asymmetry is the point: an agent cannot
+   * end a conversation somebody is still in — that press stays on the owner's card — but it does
+   * not have to ask a person to open the next one when the last one is unreachable, which is the
+   * state it cannot leave by retrying.
+   *
+   * `X-Orbit-Session-Id` plus a live orchestration credential is what makes this askable, exactly
+   * as it is for naming a workspace at the create door: the caller has to be a session this runner
+   * is running, for this owner, in a workspace that still has orchestration on. The header is not
+   * a field and grants nothing — `RunnerAuthGuard` already says which tenant the write lands in,
+   * and the service spends the acting session only on the one case where rotating would end the
+   * caller itself.
+   *
+   * No body. §7.5 freezes a rotation as "the SESSION is replaced; the agent and the workspace are
+   * not", so there is nothing to name here that the delegation does not already decide.
+   */
+  @Post('projects/:id/coordinator/ensure')
+  async ensureCoordinator(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
+  ) {
+    // The gate BEFORE the write, as at the create door: a refusal that arrived with a replacement
+    // already opened would be a conversation this session was never allowed to open.
+    const actingSessionId = await this.orchestration.assert(
+      runner,
+      sessionId?.trim(),
+      orchestrationToken,
+    );
+    return this.projects.ensureCoordinator(runner.ownerId, id, actingSessionId);
+  }
+
   @Get('projects/:id')
   getProject(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(runner.ownerId, id);
