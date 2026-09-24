@@ -307,10 +307,14 @@ Web 端没有对应的通知，一个 `NOTIFY_USER` 的 Watch 只在 Following �
   把它们从队列里收掉不改变任何交付。
 - **`watch:` 是保留前缀，客户端入口一律拒绝。** 既然 `clientTurnId` 由调用方自选，占住唤醒的键这件事首先要在门口挡住：
   所有能让调用方指定 turn key 的入口，对以 `watch:` 开头的 `clientTurnId` 返回 `400`，错误信息点名这是保留前缀。
-  公开 API 四个：`POST /api/sessions/:id/turns`、`POST :id/turns/current-work-routing`、`POST :id/resume`，
-  以及带 follow-up 的 `POST :id/interrupt`；runner 门两个：`POST /runner/sessions/:id/turns`（按 trim 之后的值判断，
-  因为那才是会被写入的键）和带 message 的 `POST /runner/sessions/:id/interrupt`。MCP 的 `session_send` /
-  `session_interrupt` 和 CLI 的 `--client-turn-id` 都经由 runner 门，因此同样被拒，400 的原文透传到工具结果里。
+  公开 API 四个：`POST /api/sessions/:id/turns`、`POST /api/sessions/:id/turns/current-work-routing`、
+  `POST /api/sessions/:id/resume`，以及带 follow-up 的 `POST /api/sessions/:id/interrupt`；runner 门三个：
+  `POST /runner/sessions/:id/turns`（按 trim 之后的值判断，因为那才是会被写入的键）、带 message 的
+  `POST /runner/sessions/:id/interrupt`，以及 `POST /runner/projects/:id/coordinator/messages`（同样按 trim 之后的值判断）。
+  MCP 的 `session_send` / `session_interrupt` 和 CLI `session send` / `session interrupt` 的 `--client-turn-id` 经由前两个
+  runner 门，MCP `project_send` 的 `clientTurnId` 和 CLI `project send` 的 `--client-turn-id` 经由第三个，因此同样被拒，
+  400 的原文透传到工具结果里。这张清单与 JSON 里的那句由 `src/apiserver/src/common/watch-reserved-prefix-doors.spec.ts`
+  对着代码里调用校验的入口双向核对：调用了校验却没列出的门、列出了却没有 handler 调用校验的门，都会让它变红。
   **不静默改写**：调用方拿回一个被改过的幂等键，就再也无法用自己选的键重试。校验只能放在入口——worker 自己正是经由
   `SessionsService.createTurn` 写这些键的，下沉到 service 就会把唤醒本身也拒掉（`src/apiserver/src/sessions/watch-turn-key.ts`）。
 - `sendIntent = NEXT_TURN`。唤醒是新工作，不是插进正在跑的那个 turn。用 `CURRENT_WORK` 会在
