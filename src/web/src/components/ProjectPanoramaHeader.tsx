@@ -673,6 +673,7 @@ export function ProjectPanoramaHeader({
       panorama={panorama.data}
       projectStatus={projectStatus}
       integrationLine={integrationLine}
+      landing={integration.data ? landingLine(integration.data, now) : null}
     />
   );
 }
@@ -688,11 +689,15 @@ export function ProjectPanoramaCard({
   projectStatus,
   integrationLine,
   banners = true,
+  landing = null,
 }: {
   panorama: ProjectPanorama;
   projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED';
   integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
   banners?: boolean;
+  /** The landing in flight, from the header's own integration read. A public project page has no
+   *  such read, so it draws the card without the row. */
+  landing?: LandingLine | null;
 }) {
   const { shape } = panorama;
   const loaded = panorama.buckets;
@@ -723,7 +728,6 @@ export function ProjectPanoramaCard({
     failed: 'coordinated continuation',
     cancelled: 'closed without completion',
   };
-  const landing = integration.data ? landingLine(integration.data, now) : null;
 
   return (
     <Card
