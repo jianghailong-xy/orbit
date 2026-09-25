@@ -91,10 +91,12 @@ export function WikiSourceList({ sources }: { sources: readonly WikiSource[] }) 
 /**
  * A source that has an Orbit page, as the conversation's own link card.
  *
- * IT REGISTERS ITSELF. `OrbitLinkCard` draws whatever its provider has been asked for — the markdown
- * node registers as it mounts, and a card drawn by hand has to do the same or the view never asks the
- * server about it and the card sits at its loading skeleton forever. That is what the effect below
- * is: the same one line `OrbitLinkCardNode` does.
+ * IT DOES WHAT `OrbitLinkCardNode` DOES, in the two halves that matter — and both are needed, which
+ * is what the first two attempts here got wrong in turn. `OrbitLinkCard` takes its answer as a PROP
+ * and never reads the context itself, so a card drawn by hand has to ask for it (`previewFor`); and
+ * the provider only reads what has been REGISTERED with it, so the same card has to register. Do one
+ * without the other and the view asks the server about nothing, or asks and draws the answer to
+ * nobody: either way the card sits at its loading skeleton forever.
  */
 function WikiSourceCard({ kind, id }: { kind: 'task' | 'session'; id: string }) {
   const cards = useContext(OrbitLinkCardsCtx);
@@ -105,7 +107,14 @@ function WikiSourceCard({ kind, id }: { kind: 'task' | 'session'; id: string }) 
   useEffect(() => {
     cards?.register(link);
   }, [cards, link]);
-  return <OrbitLinkCard link={link} host={wikiLinkHost()} stateWord={statusLabel} />;
+  return (
+    <OrbitLinkCard
+      link={link}
+      preview={cards?.previewFor(link)}
+      host={wikiLinkHost()}
+      stateWord={statusLabel}
+    />
+  );
 }
 
 /** A source with no Orbit page: its kind, its record, and the words it was cited for. */
