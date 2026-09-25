@@ -11331,7 +11331,10 @@ button.chat-jump-start:hover {
 
 .re-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 108px 190px 110px;
+  /* The last column is sized for two small buttons side by side: `+ Account` beside `Re-sign in` on
+     a one-account Codex row, `Re-sign in` beside `Remove` on an added account's. At 110px the pair
+     ran left over the quota's percentage. */
+  grid-template-columns: minmax(0, 1fr) 108px 190px 172px;
   align-items: center;
   gap: 14px;
   padding: 11px 14px;
