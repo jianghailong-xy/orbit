@@ -1764,6 +1764,11 @@ final class AppModel {
         baseURL?.appendingPathComponent("projects").appendingPathComponent(PublicID.toPublic(projectID))
     }
 
+    /// The task's page on the web — a signed-in address, for the task menu's Copy Link.
+    func taskWebURL(_ taskID: String) -> URL? {
+        baseURL?.appendingPathComponent("tasks").appendingPathComponent(PublicID.toPublic(taskID))
+    }
+
     /// Put `node` on screen in the Agents section — the one transition every Agents entry point
     /// lands on, which is why each of them is now a single line naming the page it opens.
     ///
