@@ -98,13 +98,13 @@ It cannot see sessions on other runners, create arbitrary sessions, or use destr
 ## Service tokens
 
 Use a service token when a long-lived integration must create or access sessions without borrowing the broad
-runner credential. A token has explicit scopes, an expiry, and—when it can create sessions—an agent pin.
+runner credential. A token has explicit scopes, an expiry, and—when it can create sessions—a workspace pin.
 The destructive lifecycle verbs are not service-token scopes.
 
 ```bash
 orbit token mint \
   --scope session:create,session:get \
-  --agent-id <agent-id> \
+  --workspace-id <workspace-id> \
   --ttl 24h \
   --label "automation bridge"
 
