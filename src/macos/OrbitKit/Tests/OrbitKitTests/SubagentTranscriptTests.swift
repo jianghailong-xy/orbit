@@ -271,3 +271,33 @@ final class RunningSubagentStatusTests: XCTestCase {
         XCTAssertEqual(SessionLine.make(for: session(.running, subagents: 1), live: true).text, "Running Agent…")
     }
 }
+
+/// How an Agent or Workflow card is drawn from the fold above: its display, the folding of its
+/// nested transcript, and that neither kind of card folds into a run of calls itself.
+final class BackgroundTaskCardTests: XCTestCase {
+    private func card(_ id: String, _ name: String, _ input: [String: JSONValue] = [:], ok: Bool = true) -> TranscriptItem {
+        .toolCall(ToolCard(id: id, name: name, input: .object(input), result: ok ? "done" : nil,
+                           status: ok ? .ok : .running, inputSeq: 1))
+    }
+
+    func testAWorkflowIsAnAgentToneCardNamedByItsScript() {
+        let d = ToolDisplay.describe(name: "Workflow", input: .object([
+            "script": .string("export const meta = {\n  name: 'x',\n  description: 'Review the idea: two designs',\n}")]),
+                                     status: .ok, id: "toolu_wf")
+        XCTAssertEqual(d.label, "Workflow")
+        XCTAssertEqual(d.tone, .agent)
+        XCTAssertEqual(d.summary, "Review the idea: two designs")
+        // A resumed run has no script: nothing to name it by until the receipt lands.
+        XCTAssertNil(ToolDisplay.describe(name: "Workflow", input: .object(["resumeFromRunId": .string("wf_1")]),
+                                          status: .ok, id: "toolu_wf").summary)
+    }
+
+    func testAgentAndWorkflowCardsNeverFoldIntoARun() {
+        let rows = TranscriptRows.nested([card("a", "Agent"), card("b", "Agent"), card("c", "Agent"),
+                                          card("w", "Workflow"),
+                                          card("r1", "Read"), card("r2", "Read"), card("r3", "Read")])
+        XCTAssertEqual(rows.map(\.id), ["a", "b", "c", "w", "r1"], "the three Reads fold, the rest stand alone")
+        guard case .toolGroup(let reads) = rows[4] else { return XCTFail("\(rows)") }
+        XCTAssertEqual(reads.map(\.id), ["r1", "r2", "r3"])
+    }
+}

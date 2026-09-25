@@ -55,6 +55,16 @@ struct ConsoleView: View {
 
     /// Gathers the session's pages when a thumbnail is tapped — never while the transcript renders or
     /// streams — and opens the viewer on the tapped one.
+    /// Read through the observed model, so an Agent or Workflow card re-renders when the progress,
+    /// the tray or a sub-agent's list moves — and no other row does.
+    private func taskActivity(_ console: ConsoleModel) -> TaskActivityLookup {
+        TaskActivityLookup(
+            consoleID: ObjectIdentifier(console),
+            progress: { console.state.taskProgress[$0] },
+            isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
+            subagentItems: { console.state.subagentItems[$0] ?? [] })
+    }
+
     private func sessionImagePreview(_ console: ConsoleModel) -> SessionImagePreview {
         let fetched = fetchedToolImages
         return SessionImagePreview(
@@ -138,7 +148,7 @@ struct ConsoleView: View {
                         }
                         // What this session waits on — a watch, not a process — above the real shells.
                         WatchingCardStack(sessionID: console.sessionID)
-                        BackgroundTrayView(procs: console.state.background)
+                        BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
                         // The tasks this session's agent created, beside the code the bar below
                         // carries — the session's two kinds of output, together.
                         CreatedTasksCard(console: console)
@@ -159,6 +169,8 @@ struct ConsoleView: View {
                 // One full-screen viewer for the whole transcript: a thumbnail anywhere in it opens here
                 // and pages across every image in the session, in transcript order (web parity).
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
+                // The workspace's background agents and workflows, for the cards that draw them.
+                .environment(\.taskActivity, taskActivity(console))
                 .imagePreview($imagePreviewTarget, images: imagePreviewPages, ns: imagePreviewNS,
                               store: registry.attachments)
             } else {

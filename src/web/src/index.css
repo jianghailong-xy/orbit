@@ -29735,3 +29735,88 @@ button.chat-jump-start:hover {
   .rv-head { flex-direction: column; align-items: flex-start; }
   .wk-seg { margin-left: 0; }
 }
+
+/* Background agent / workflow progress (TaskProgressBlock): the agents by phase, then the totals.
+   Opens under a Workflow card in the conversation and under its row in the tray. */
+.task-progress {
+  border-top: 1px dashed var(--border-subtle);
+  padding: 4px 12px 8px 38px;
+  background: var(--bg-subtle);
+}
+.task-progress-head {
+  display: flex;
+  gap: 4px;
+  margin: 8px 0 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.task-progress-count {
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.task-progress-agent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.task-progress-label {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-1);
+}
+.task-progress-now {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-3);
+}
+.task-progress-detail {
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+.task-progress-queued {
+  flex: none;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-4);
+}
+.task-progress-foot {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.bg-shell-detail .task-progress {
+  border-top: none;
+  padding: 2px 2px 4px;
+  background: transparent;
+}
+.bg-shell-kind {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  color: var(--text-2);
+  background: var(--bg-hover);
+}
+.bg-shell-sub {
+  padding: 0 10px 6px 34px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}

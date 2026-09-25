@@ -38,6 +38,9 @@ struct ToolCardView: View {
     /// card's own where there's no console. Unused on macOS, where thumbnails aren't tappable.
     @State private var previewTarget: ImagePreviewTarget?
     @Environment(\.sessionImagePreview) private var sessionPreview
+    /// The console's background agents and workflows — read only by an Agent or Workflow card, so a
+    /// progress frame re-renders those and no other row.
+    @Environment(\.taskActivity) private var taskActivity
 
     init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
         self.card = card
@@ -62,7 +65,33 @@ struct ToolCardView: View {
         }
     }
     private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty || card.resultHasImage }
-    private var hasDetail: Bool { d.hasBody || hasResult }
+    private var hasDetail: Bool { d.hasBody || hasResult || !nestedItems.isEmpty || taskProgress != nil }
+
+    // MARK: background agents and workflows
+
+    /// The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow.
+    private var isBackgroundTask: Bool { ["Agent", "Task", "Workflow"].contains(card.name) }
+    private var taskProgress: TaskProgress? { isBackgroundTask ? taskActivity?.progress(card.id) : nil }
+    /// The call returned the moment its work started, so its own ✓ would sit on work just begun.
+    private var taskRunning: Bool { isBackgroundTask && (taskActivity?.isRunning(card.id) ?? false) }
+    /// A sub-agent's own transcript, nested under this call (TranscriptState.subagentItems).
+    private var nestedItems: [TranscriptItem] {
+        card.name == "Agent" || card.name == "Task" ? (taskActivity?.subagentItems(card.id) ?? []) : []
+    }
+    /// A result that only says the work STARTED: an async agent's ack (internal metadata it is told
+    /// never to quote) or a workflow's receipt. What the work did is drawn instead.
+    private var isLaunchReceipt: Bool {
+        guard let result, card.status == .ok else { return false }
+        if card.name == "Workflow" { return BackgroundSummary.workflow(result) != nil }
+        return isBackgroundTask && BackgroundSummary.agentID(result) != nil
+    }
+    /// A workflow is named by its receipt once that lands (a resumed run carries no script).
+    private var summaryText: String? {
+        guard card.name == "Workflow" else { return d.summary }
+        return TaskProgressCopy.workflowTitle(input: card.input, result: result, progress: taskProgress) ?? d.summary
+    }
+    /// A workflow's agents done out of all, an agent's tool calls; otherwise the display's own badge.
+    private var badgeText: String? { taskProgress.flatMap(TaskProgressCopy.badge) ?? d.meta }
     /// A result carrying an image (a screenshot the workspace produced for the user) opens so the
     /// picture shows without a click — web parity, where `hasResultImage` joins `defaultOpen`.
     /// Keyed on the block, not the decoded bytes: a clipped image has none until the open card
@@ -177,7 +206,7 @@ struct ToolCardView: View {
                 .font(.orbitMono.weight(.semibold))
                 .foregroundStyle(.primary)
             summary
-            if let meta = d.meta {
+            if let meta = badgeText {
                 Text(meta)
                     .font(.orbitMonoFine).foregroundStyle(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 1)
@@ -209,7 +238,7 @@ struct ToolCardView: View {
                 }
             }
             .font(.orbitMono)
-        } else if let s = d.summary, !s.isEmpty {
+        } else if let s = summaryText, !s.isEmpty {
             Text(s)
                 .font(d.summaryMono ? .orbitMono : .orbitLabel)
                 .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
@@ -217,7 +246,7 @@ struct ToolCardView: View {
     }
 
     @ViewBuilder private var status: some View {
-        ToolStatusGlyph(status: card.status)
+        ToolStatusGlyph(status: taskRunning ? .running : card.status)
     }
 
     private var detail: some View {
@@ -225,7 +254,9 @@ struct ToolCardView: View {
         // pager below, and a screenshot is expensive enough that decoding it twice a body pass shows.
         let previews = previewImages
         return VStack(alignment: .leading, spacing: 8) {
+            if let taskProgress { TaskProgressView(progress: taskProgress) }
             ToolBodyView(kind: d.body)
+            if !nestedItems.isEmpty { SubagentTranscriptView(items: nestedItems, fullPayload: fullPayload) }
             // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,
             // mirroring web's `ToolResult`, which renders images before the monospace panel.
             if !previews.isEmpty {
@@ -248,7 +279,10 @@ struct ToolCardView: View {
                 // deferred picture.
                 ToolResultImagePlaceholder()
             }
-            if let result, !result.isEmpty {
+            // A launch receipt says only that the work started: hidden once the progress speaks for
+            // the work, and always for an agent's ack. A workflow before any progress keeps it.
+            if let result, !result.isEmpty,
+               !(isLaunchReceipt && (taskProgress != nil || card.name != "Workflow")) {
                 let isErr = card.status == .error
                 // Mirrors web `.chat-result`: a tinted panel (red on error, neutral otherwise) with a
                 // small uppercase label. The output text itself stays muted even on error (only the

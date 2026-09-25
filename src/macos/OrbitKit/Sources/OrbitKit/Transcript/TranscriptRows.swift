@@ -567,11 +567,30 @@ public enum TranscriptRows {
     /// never reverses: an image block that has arrived stays arrived, unlike the running/failed
     /// states the folded row deliberately reports instead of opening on. Web parity:
     /// `isGroupableTool`.
+    /// A sub-agent's own transcript (`TranscriptState.subagentItems`), as the rows its Agent card
+    /// draws: the conversation's folding — runs of calls into one row — and nothing else, since a
+    /// nested list has no approvals, queue or scroll target of its own (web parity: the
+    /// `.chat-subagent` NodeList).
+    public static func nested(_ items: [TranscriptItem]) -> [TranscriptRow] {
+        var state = TranscriptState()
+        state.items = items
+        return build(state: state, statusCards: [], canPageOlder: false, showWorkingIndicator: false)
+            .filter {
+                switch $0 {
+                case .item, .toolGroup: return true
+                default: return false
+                }
+            }
+    }
+
     private static func isGroupable(_ card: ToolCard) -> Bool {
         if card.id.hasPrefix("shell-") { return false }
         if card.resultHasImage { return false }
         switch card.name {
-        case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Workspace":
+        // Task/Agent/Workflow: Claude Code's names for a sub-agent and a team of them (the 08-14
+        // Agent→Workspace rename had rewritten "Agent" here). Their cards carry work of their own —
+        // a nested transcript, progress — and must never fold into a run.
+        case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow":
             return false
         default:
             return true

@@ -41,6 +41,11 @@ import {
   isUsageLimitErrorText,
   MAX_API_ERROR_RETRIES,
   parseQuotaResetAt,
+  isAsyncAgentLaunchAck,
+  progressBadge,
+  workflowLaunchReceipt,
+  workflowTitle,
+  type TaskProgress,
 } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
@@ -63,6 +68,8 @@ import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
+import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } from '../lib/liveTaskProgress';
+import { TaskProgressBlock } from './TaskProgressBlock';
 import { parseWatchWake } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
@@ -773,6 +780,18 @@ export const StreamingDraftsCtx = createContext<{
  */
 export const LiveToolOutputsCtx = createContext<LiveToolOutputs>(EMPTY_LIVE_TOOL_OUTPUTS);
 
+/**
+ * The workspace's background sub-agents and workflows as the console sees them: the live progress
+ * frames (broadcast-only `task_progress`) and which launching calls are still running (the tray's
+ * list). The share page and the export mount none, and draw the ended progress alone.
+ */
+export type TaskActivity = { live: LiveTaskProgress; running: ReadonlySet<string> };
+export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TASK_PROGRESS, running: new Set() });
+
+/** One call's progress — live while it runs, then what its end carried — and whether it runs. */
+type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
+const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
+
 function StreamingDrafts() {
   const drafts = useContext(StreamingDraftsCtx);
   if (!drafts) return null;
@@ -867,6 +886,17 @@ export const Transcript = memo(function Transcript({
   inserts?: readonly TranscriptInsert[];
 }) {
   const nodes = useMemo(() => buildNodes(events, turnImages), [events, turnImages]);
+  // Only the Agent and Workflow cards read this (TaskBadgeAndStatus, TaskProgressDetail), so a
+  // progress frame re-renders those and nothing else.
+  const activity = useContext(TaskActivityCtx);
+  const ended = useMemo(() => endedTaskProgress(events), [events]);
+  const taskLookup = useMemo<TaskLookup>(
+    () => ({
+      progress: (id) => activity.live.get(id) ?? ended.get(id) ?? null,
+      running: (id) => activity.running.has(id),
+    }),
+    [activity, ended],
+  );
   // Where each insert goes: after the last top-level card at or before its seq, keyed by that
   // card's seq. Whichever half of the split holds the card draws it, so nothing is drawn twice,
   // and an insert older than every loaded card is not drawn at all — UNLESS it says `head`, which
@@ -910,14 +940,16 @@ export const Transcript = memo(function Transcript({
     return at < 0 || at >= nodes.length ? [nodes, [] as Node[]] : [nodes.slice(0, at), nodes.slice(at)];
   }, [nodes, streamingAfterSeq]);
   const body = (
-    <ImagePreviewProvider>
-      {head.map((insert) => (
-        <Fragment key={insert.key}>{insert.element}</Fragment>
-      ))}
-      <NodeList nodes={before} live={live} placed={placed} />
-      <StreamingDrafts />
-      {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
-    </ImagePreviewProvider>
+    <TaskLookupCtx.Provider value={taskLookup}>
+      <ImagePreviewProvider>
+        {head.map((insert) => (
+          <Fragment key={insert.key}>{insert.element}</Fragment>
+        ))}
+        <NodeList nodes={before} live={live} placed={placed} />
+        <StreamingDrafts />
+        {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
+      </ImagePreviewProvider>
+    </TaskLookupCtx.Provider>
   );
   return artifactResolve ? (
     <ArtifactResolverContext.Provider value={artifactResolve}>{body}</ArtifactResolverContext.Provider>
@@ -1024,8 +1056,7 @@ function isGroupableTool(node: Node): node is ToolNode {
     node.name !== 'mcp__orbit__task_create_batch' &&
     node.name !== 'mcp__orbit__task_create' &&
     node.name !== 'mcp__orbit__project_create' &&
-    node.name !== 'Task' &&
-    node.name !== 'Workspace'
+    !isBackgroundTaskCall(node.name)
   );
 }
 
@@ -2386,6 +2417,24 @@ function resultRepeatsBody(node: ToolNode): boolean {
   return !!batchTasks(node);
 }
 
+/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow. */
+function isBackgroundTaskCall(name: string): boolean {
+  return name === 'Agent' || name === 'Task' || name === 'Workflow';
+}
+
+/**
+ * A result that only says the work STARTED — the async agent's "Async agent launched successfully
+ * … agentId" (internal metadata the agent is told never to quote) or a workflow's "Workflow
+ * launched in background. Task ID …". The card shows what the work did instead: its progress, and a
+ * sub-agent's own transcript.
+ */
+function isLaunchReceipt(node: ToolNode): boolean {
+  const content = node.result?.content;
+  if (!content || node.result?.isError) return false;
+  if (node.name === 'Workflow') return !!workflowLaunchReceipt(content);
+  return (node.name === 'Agent' || node.name === 'Task') && isAsyncAgentLaunchAck(content);
+}
+
 // ── tool calls ──────────────────────────────────────────────────────────────
 // Each tool renders as a single folded row (icon · name · summary · status);
 // clicking expands to show the call body, any sub-workspace transcript, and the
@@ -2445,7 +2494,11 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     () => describeTool(node.name, input, isShell, answer),
     [node.name, input, isShell, answer],
   );
-  const isSubWorkspace = node.name === 'Task' || node.name === 'Workspace';
+  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent';
+  const isBackgroundTask = isBackgroundTaskCall(node.name);
+  const launchReceipt = isLaunchReceipt(node);
+  // A workflow is named by its launch receipt once that lands — see describeTool.
+  const title = node.name === 'Workflow' ? workflowTitle(input, resultContent) ?? summary : summary;
   const p = path ? splitPath(path) : null;
   const hasDetail = !!body || node.children.length > 0 || !!node.result;
   // While an AskUserQuestion or ExitPlanMode is still awaiting the user, the
@@ -2485,10 +2538,16 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             {p.dir && <span className="chat-path-dir">{p.dir}</span>}
           </span>
         ) : (
-          summary && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{summary}</span>
+          title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
         )}
-        {meta && <span className="chat-tool-meta">{meta}</span>}
-        <ToolStatus node={node} live={live} />
+        {isBackgroundTask ? (
+          <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+        ) : (
+          <>
+            {meta && <span className="chat-tool-meta">{meta}</span>}
+            <ToolStatus node={node} live={live} />
+          </>
+        )}
       </div>
       {hasDetail && open && (
         <div className="chat-tool-detail">
@@ -2499,13 +2558,25 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           {node.result?.isError && (
             <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
           )}
+          {isBackgroundTask && (
+            <TaskProgressDetail
+              id={node.id}
+              // Before a runner that reports progress, a workflow's receipt is still all there is.
+              // An agent's ack is internal metadata; its own transcript below says what it did.
+              fallback={
+                launchReceipt && node.name === 'Workflow' ? (
+                  <ToolResult seq={node.seq} content={resultContent} compact />
+                ) : null
+              }
+            />
+          )}
           {body && <div className="chat-tool-body">{body}</div>}
           {node.children.length > 0 && (
             <div className="chat-subagent">
               <NodeList nodes={node.children} live={live} />
             </div>
           )}
-          {node.result && !node.result.isError && !hideResult && (
+          {node.result && !node.result.isError && !hideResult && !launchReceipt && (
             <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
           )}
           {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
@@ -2642,6 +2713,33 @@ function ToolGroupStatus({ status }: { status: ToolGroupSummary['status'] }) {
 // Folded-row status: spinner while a result is still pending on a live session,
 // a neutral dot for an unfinished call on an ended session (e.g. cancelled),
 // otherwise success / error.
+/**
+ * The badge and status of a background agent's or workflow's card: agents done out of all (a
+ * workflow) or tool calls made (an agent), and a spinner for as long as the work runs — the call
+ * itself returned the moment it launched, so its own result would put a check on work just begun.
+ */
+function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boolean; meta?: string }) {
+  const lookup = useContext(TaskLookupCtx);
+  const progress = lookup.progress(node.id);
+  const badge = (progress && progressBadge(progress)) ?? meta;
+  return (
+    <>
+      {badge && <span className="chat-tool-meta">{badge}</span>}
+      {lookup.running(node.id) ? (
+        <LoadingOutlined className="chat-tool-status running" spin />
+      ) : (
+        <ToolStatus node={node} live={live} />
+      )}
+    </>
+  );
+}
+
+/** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */
+function TaskProgressDetail({ id, fallback }: { id: string; fallback?: ReactNode }) {
+  const progress = useContext(TaskLookupCtx).progress(id);
+  return progress ? <TaskProgressBlock progress={progress} /> : <>{fallback}</>;
+}
+
 function ToolStatus({ node, live }: { node: ToolNode; live?: boolean }) {
   if (!node.result) {
     return live ? (
@@ -2759,8 +2857,10 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
       return { label: 'WebSearch', icon: <SearchOutlined />, tone: 'read', summary: i.query };
     case 'ToolSearch':
       return { label: 'ToolSearch', icon: <ApiOutlined />, tone: 'read', summary: i.query, summaryMono: true, body: hasKeys(i) ? <KeyVals obj={i} /> : undefined };
+    // Claude Code's own names — Agent (Task before 2.x). The 08-14 Agent→Workspace rename rewrote
+    // this case too, and from then on every Agent call fell through to the generic row.
     case 'Task':
-    case 'Workspace':
+    case 'Agent':
       return {
         label: `${name}${i.subagent_type ? ` · ${i.subagent_type}` : ''}`,
         icon: <PartitionOutlined />,
@@ -2771,6 +2871,18 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
             <MD>{String(i.prompt)}</MD>
           </div>
         ) : undefined,
+      };
+    case 'Workflow':
+      // A team of agents the runtime runs in the background. Named by the script's own meta
+      // here; ToolView prefers the launch receipt's summary once it lands (a resumed run carries
+      // no script at all). Its progress, not its script, is what the card opens to — the script
+      // is kept below it, folded.
+      return {
+        label: 'Workflow',
+        icon: <ApartmentOutlined />,
+        tone: 'agent',
+        summary: workflowTitle(i, null),
+        body: typeof i.script === 'string' ? <Pre text={i.script} threshold={6} muted /> : undefined,
       };
     case 'ExitPlanMode':
       // The plan is Markdown meant to be read — render it like Task's prompt,
