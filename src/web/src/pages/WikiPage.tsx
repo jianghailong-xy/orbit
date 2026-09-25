@@ -132,21 +132,27 @@ function EntryRoute({ space, entryParam }: { space: SpaceRow; entryParam: string
   const back = topic ? `/wiki/${space.slug}/t/${topic}` : wikiSpacePath(space.slug);
 
   return (
-    <div className="wk-with-drawer">
-      <div className="wk-drawer-bg" aria-hidden="true">
-        {topic ? (
-          <WikiFrame space={space}>
-            <WikiTopicPage spaceId={space.id} spaceSlug={space.slug} topicSlug={topic} />
-          </WikiFrame>
-        ) : (
-          <WikiFrame space={space}>
-            <HomeBody spaceId={space.id} />
-          </WikiFrame>
-        )}
+    // The drawer draws its sources with the conversation's own link cards, and those ask a provider
+    // for what has been registered with it — so the drawer needs one of its own here, because
+    // `WikiFrame` mounts its provider inside the page it draws and the drawer is a SIBLING of that
+    // page rather than a child of it.
+    <OrbitLinkCardsProvider stateWord={statusLabel} host={wikiLinkHost()}>
+      <div className="wk-with-drawer">
+        <div className="wk-drawer-bg" aria-hidden="true">
+          {topic ? (
+            <WikiFrame space={space}>
+              <WikiTopicPage spaceId={space.id} spaceSlug={space.slug} topicSlug={topic} />
+            </WikiFrame>
+          ) : (
+            <WikiFrame space={space}>
+              <HomeBody spaceId={space.id} />
+            </WikiFrame>
+          )}
+        </div>
+        <button type="button" className="wk-scrim" aria-label="Close" onClick={() => navigate(back)} />
+        <WikiEntryDrawer entryId={entryId} spaceSlug={space.slug} onClose={() => navigate(back)} />
       </div>
-      <button type="button" className="wk-scrim" aria-label="Close" onClick={() => navigate(back)} />
-      <WikiEntryDrawer entryId={entryId} spaceSlug={space.slug} onClose={() => navigate(back)} />
-    </div>
+    </OrbitLinkCardsProvider>
   );
 }
 
