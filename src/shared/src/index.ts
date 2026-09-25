@@ -34,3 +34,4 @@ export const MAX_PROMPT_CHARS = 50_000;
  *  the two never disagree. */
 export const TRASH_RETENTION_DAYS = 30;
 export * from './taskProgress';
+export * from './taskProgressCopy';

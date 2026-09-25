@@ -69,8 +69,7 @@ struct ProjectGlyphMark: View {
             case .hourglass:
                 Image(systemName: "hourglass").resizable().scaledToFit().foregroundStyle(color)
             case .spinner:
-                Image(systemName: "arrow.triangle.2.circlepath").resizable().scaledToFit()
-                    .foregroundStyle(color)
+                ProjectSpinnerRing(size: size, color: color)
             case .branch:
                 Image(systemName: "arrow.triangle.branch").resizable().scaledToFit().foregroundStyle(color)
             }
@@ -371,6 +370,10 @@ struct ProjectDetailView: View {
     /// The page's own header carries the whole title; the bar takes it once that header scrolls
     /// away, so one title is never drawn twice.
     @State private var headerOnScreen = true
+    /// The Share panel, and whether the project has a public link open — what the menu's Share…
+    /// says under itself. Read when the page opens; the panel hands back every change made in it.
+    @State private var sharing = false
+    @State private var shareRead: ShareLinkRead?
 
     /// A phone's width: two columns of lanes, four criteria before "View all" — the web's narrow page.
     private var compact: Bool {
@@ -431,8 +434,16 @@ struct ProjectDetailView: View {
         .task {
             store.isVisible = true
             await store.load()
+            shareRead = await readShareLink()
         }
         .onDisappear { store.isVisible = false }
+        .sheet(isPresented: $sharing) {
+            if let baseURL = model.baseURL {
+                ShareSheet(kind: .project, rootID: projectID, baseURL: baseURL, tokenStore: model.tokenStore) {
+                    shareRead = $0
+                }
+            }
+        }
         .refreshable { await store.load() }
         .alert("Couldn't do that", isPresented: Binding(get: { notice != nil },
                                                           set: { if !$0 { notice = nil } })) {
@@ -671,6 +682,25 @@ struct ProjectDetailView: View {
 
     // MARK: work overview
 
+    /// The card's one moving part, drawn only while the platform is landing work — exactly the
+    /// minutes its counts stand still and the page reads as stopped. The row is the section's own
+    /// first row rather than part of the grid, so the list's separator under it is the hairline the
+    /// cells below are separated by.
+    ///
+    /// `TimelineView`, not a timer of our own: the clock counts in SECONDS while the read behind it
+    /// is as slow as it is, because a number that stepped a whole poll at a time would read as the
+    /// stalled page this row exists to disprove.
+    @ViewBuilder
+    private func landingRow(_ store: ProjectDetailModel) -> some View {
+        if let integration = store.integration, integration.inFlight != nil {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                if let line = ProjectPage.landingLine(integration, now: context.date) {
+                    ProjectLandingRow(line: line)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func overviewSection(_ store: ProjectDetailModel, _ document: ProjectDocument) -> some View {
         if let panorama = store.panorama {
@@ -679,6 +709,7 @@ struct ProjectDetailView: View {
                                                   line: document.integration?.line)
             let stalled = ProjectPage.stalledOnReady(buckets)
             Section {
+                landingRow(store)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .topLeading),
                                          count: compact ? 2 : 3),
                           alignment: .leading, spacing: 16) {
@@ -1315,14 +1346,35 @@ struct ProjectDetailView: View {
                     Label("Reopen project", systemImage: "arrow.uturn.backward.circle")
                 }
             }
-            // The signed-in address, for yourself: copied, not handed to the share sheet. `Share`
-            // is the public read-only link's word, and this is not that link.
+            Divider()
+            // Two words for two links (docs/share-links-design.md §8). Copy Link is the signed-in
+            // address, for yourself: copied, not handed to the share sheet. Share… is the public
+            // read-only link, and says under itself whether one is open. Copy as Markdown needs
+            // neither.
             if let url = model.projectWebURL(document.id) {
                 Button {
                     PlatformPasteboard.copyString(url.absoluteString)
                     PlatformHaptics.success()
+                    model.showToast(SharePanelCopy.linkCopied)
                 } label: {
-                    Label("Copy Link", systemImage: "link")
+                    Label(SharePanelCopy.copyLink, systemImage: "link")
+                }
+            }
+            Button { sharing = true } label: {
+                Label(SharePanelCopy.share, systemImage: "globe")
+                if let status = SharePanel.menuStatus(shareRead) { Text(status) }
+            }
+            if let url = model.projectWebURL(document.id) {
+                Button {
+                    // What the page's Work overview and Tasks blocks have already read: nothing is
+                    // fetched for the copy.
+                    PlatformPasteboard.copyString(ShareMarkdown.project(document, link: url.absoluteString,
+                                                                       buckets: store.panorama?.buckets,
+                                                                       tasks: store.tasks))
+                    PlatformHaptics.success()
+                    model.showToast(SharePanelCopy.markdownCopied)
+                } label: {
+                    Label(SharePanelCopy.copyAsMarkdown, systemImage: "doc.plaintext")
                 }
             }
             Divider()
@@ -1334,6 +1386,13 @@ struct ProjectDetailView: View {
             Image(systemName: "ellipsis.circle")
         }
         .disabled(store.busy)
+    }
+
+    /// Whether the project has a public link open; nil when that could not be read, so the menu
+    /// says nothing rather than guessing.
+    private func readShareLink() async -> ShareLinkRead? {
+        guard let baseURL = model.baseURL else { return nil }
+        return try? await APIClient(baseURL: baseURL, tokenStore: model.tokenStore).shareLink(.project, projectID)
     }
 
     private var confirmTitle: String {

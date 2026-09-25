@@ -162,6 +162,12 @@ import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import type { BgShell } from '../lib/backgroundShells';
+import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
+import {
+  EMPTY_LIVE_TASK_PROGRESS,
+  reduceLiveTaskProgress,
+  type SessionLiveTaskProgress,
+} from '../lib/liveTaskProgress';
 import {
   api,
   ApiError,
@@ -200,7 +206,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
   SessionDecisionStrip,
@@ -1587,6 +1593,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     sessionId: selectedId,
     outputs: EMPTY_LIVE_TOOL_OUTPUTS,
   });
+  // Broadcast-only progress of the workspace's background agents and workflows — the same kind of
+  // side channel as the shell snapshots above, and scoped to its session the same way.
+  const [liveTaskProgressState, setLiveTaskProgressState] = useState<SessionLiveTaskProgress>({
+    sessionId: selectedId,
+    progress: EMPTY_LIVE_TASK_PROGRESS,
+  });
   // The seq the stream was at when the current stretch of generation began, so the transcript can
   // render the drafts where they started rather than always last. A ref, not state: it only ever
   // moves alongside a draft update, so the render that shows the new text already reads the new
@@ -2825,6 +2837,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     liveToolOutputState.sessionId === selectedId
       ? liveToolOutputState.outputs
       : EMPTY_LIVE_TOOL_OUTPUTS;
+  const scopedLiveTaskProgress =
+    liveTaskProgressState.sessionId === selectedId
+      ? liveTaskProgressState.progress
+      : EMPTY_LIVE_TASK_PROGRESS;
+  // Which of the workspace's Agent/Workflow calls are still at work — the tray's own list, read the
+  // same way, so a card's spinner and its tray row always agree.
+  const runningTasks = useMemo(() => {
+    const running = new Set<string>();
+    const shells = mergeBackgroundShells(serverBgShells, deriveBackgroundShells(events, { sessionLive: live }));
+    for (const s of shells) {
+      if ((s.kind === 'agent' || s.kind === 'workflow') && s.status === 'running') running.add(s.toolUseId);
+    }
+    return running;
+  }, [events, live, serverBgShells]);
+  const taskActivity = useMemo<TaskActivity>(
+    () => ({ live: scopedLiveTaskProgress, running: runningTasks }),
+    [scopedLiveTaskProgress, runningTasks],
+  );
   const visibleAcceptedUserTurns = useMemo(
     () =>
       acceptedUserTurns.filter(
@@ -2938,6 +2968,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       current.sessionId === selectedId && current.outputs.size === 0
         ? current
         : { sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS },
+    );
+    setLiveTaskProgressState((current) =>
+      current.sessionId === selectedId && current.progress.size === 0
+        ? current
+        : { sessionId: selectedId, progress: EMPTY_LIVE_TASK_PROGRESS },
     );
     streamAnchorRef.current = null;
     setApprovals([]);
@@ -3106,6 +3141,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       writeCache();
       setEvents(accRef.current);
     };
+    const applyLiveTaskEvent = (ev: RunEvent): void => {
+      setLiveTaskProgressState((current) => {
+        const base = current.sessionId === selectedId ? current.progress : EMPTY_LIVE_TASK_PROGRESS;
+        const progress = reduceLiveTaskProgress(base, ev);
+        return current.sessionId === selectedId && progress === current.progress
+          ? current
+          : { sessionId: selectedId, progress };
+      });
+    };
     const applyLiveToolEvent = (ev: RunEvent): void => {
       setLiveToolOutputState((current) => {
         const base =
@@ -3132,6 +3176,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       accRef.current = [];
       seen.current = new Set();
       setLiveToolOutputState({ sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS });
+      setLiveTaskProgressState({ sessionId: selectedId, progress: EMPTY_LIVE_TASK_PROGRESS });
       oldestSeqRef.current = null;
       hasMoreOlderRef.current = false;
       lastSeq = 0;
@@ -3193,6 +3238,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         if (ev.type === 'tool_output') {
           applyLiveToolEvent(ev);
           return;
+        }
+        // How far a background agent or workflow has got: animation like the snapshot above — the
+        // task's end (a durable background_task) carries the last of it into the transcript.
+        if (ev.type === 'task_progress') {
+          applyLiveTaskEvent(ev);
+          return;
+        }
+        if (ev.type === 'background_task' || (ev.type === 'system' && ev.payload?.subtype === 'resumed')) {
+          applyLiveTaskEvent(ev);
         }
         // The durable result wins in the same render that appends it. Clearing here also releases
         // the potentially large snapshot once the result has entered the ordinary transcript.
@@ -7194,6 +7248,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     <AutoRetryCtx.Provider value={autoRetryHelp}>
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
                         <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
+                          <TaskActivityCtx.Provider value={taskActivity}>
                           <StreamingDraftsCtx.Provider value={streamingDrafts}>
                             {/* The links in this conversation, drawn as cards. The provider is
                                 what makes a card possible at all — the shared page and the export
@@ -7213,6 +7268,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                               />
                             </OrbitLinkCardsProvider>
                           </StreamingDraftsCtx.Provider>
+                          </TaskActivityCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
                       </UndeliveredCtx.Provider>
                     </AutoRetryCtx.Provider>
@@ -7592,7 +7648,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         {/* Background processes the workspace launched (Bash run_in_background) — invisible
             otherwise. Derived from this session's events; hidden when there are none. */}
         {selectedId && !selectedTrashed && (
-          <BackgroundShellsTray events={events} live={live} serverShells={serverBgShells} />
+          <BackgroundShellsTray
+            events={events}
+            live={live}
+            serverShells={serverBgShells}
+            liveProgress={scopedLiveTaskProgress}
+          />
         )}
         {/* The tasks this session's agent created, beside the branch below: the conversation's two
             kinds of output next to each other. Hidden until it has created one. */}

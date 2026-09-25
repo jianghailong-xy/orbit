@@ -42,6 +42,32 @@ export function taskLinkResolver(
   };
 }
 
+/**
+ * The resolver of a project link's pages (the project page, its task pages and its conversations):
+ * the project goes to the link's root page, each of its tasks the link opens (Task pages) to its
+ * task page, and each conversation it opens (Conversations: its tasks' runs and its coordinator) to
+ * its conversation page. Everything else — another project, a task or conversation outside it, a
+ * layer that is off — is words. The two lists are the link's `scope`, which every page of it
+ * carries; ids in either spelling.
+ */
+export function projectLinkResolver(
+  token: string,
+  scope: { projectId: string; taskIds: readonly string[]; sessionIds: readonly string[] },
+): PublicLinkResolver {
+  const projectId = routeId(scope.projectId);
+  const tasks = new Set(scope.taskIds.map((id) => routeId(id)));
+  const sessions = new Set(scope.sessionIds.map((id) => routeId(id)));
+  const root = `/s/${encodeURIComponent(token)}`;
+  return ({ kind, id }) => {
+    const target = routeId(id);
+    if (!target) return null;
+    if (kind === 'project' && target === projectId) return root;
+    if (kind === 'task' && tasks.has(target)) return `${root}/t/${target}`;
+    if (kind === 'session' && sessions.has(target)) return `${root}/c/${target}`;
+    return null;
+  };
+}
+
 const OBJECT_ROUTE = /^\/(tasks|projects|sessions)\/([^/?#]+)\/?(?:[?#].*)?$/;
 const OBJECT_KIND: Record<string, PublicLinkKind> = { tasks: 'task', projects: 'project', sessions: 'session' };
 

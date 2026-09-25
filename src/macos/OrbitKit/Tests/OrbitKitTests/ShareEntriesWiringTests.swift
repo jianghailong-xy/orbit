@@ -70,7 +70,7 @@ final class ShareEntriesWiringTests: XCTestCase {
         let view = code(try appSource("Views/ProjectsView.swift"))
         let menu = try slice(view, from: "private func menu(", to: "Image(systemName: \"ellipsis.circle\")")
         let item = try slice(menu, from: "if let url = model.projectWebURL(document.id) {",
-                             to: "Label(\"Copy Link\", systemImage: \"link\")")
+                             to: "Label(SharePanelCopy.copyLink, systemImage: \"link\")")
         XCTAssertTrue(item.contains("Button {"), "Copy Link is a plain menu button")
         XCTAssertTrue(item.contains("PlatformPasteboard.copyString(url.absoluteString)"),
                       "Copy Link puts the project's app address on the pasteboard")
@@ -88,9 +88,10 @@ final class ShareEntriesWiringTests: XCTestCase {
         let sheet = code(try appSource("Views/ShareSheet.swift"))
         XCTAssertEqual(try branches(of: "struct ShareSheet: View", in: sheet), [],
                        "the sheet is built for every platform, not for iOS only")
-        // Create / Copy / Share / Revoke — the same four on both platforms, none behind a branch.
-        for action in ["api.enableShare(sessionID)", "PlatformPasteboard.copyString(url.absoluteString)",
-                       "ShareLink(item: url)", "api.disableShare(sessionID)"] {
+        // Open or change / Copy / Share / Turn off — the same four on both platforms, none behind a
+        // branch.
+        for action in ["api.putShareLink(kind, rootID, request)", "PlatformPasteboard.copyString(url.absoluteString)",
+                       "ShareLink(item: url)", "api.turnOffShareLink(kind, rootID)"] {
             XCTAssertEqual(try branches(of: action, in: sheet), [], "`\(action)` is on both platforms")
         }
         // Only the chrome differs: the phone's inline title and nav-bar Done, the Mac's Done button.
@@ -124,7 +125,7 @@ final class ShareEntriesWiringTests: XCTestCase {
         // ShareSheet: nothing else is presented between the flag's sheet and the ShareSheet it builds.
         XCTAssertEqual(try branches(of: ".sheet(isPresented: $showShare)", in: console), [])
         let presented = try slice(body, from: ".sheet(isPresented: $showShare)",
-                                  to: "ShareSheet(sessionID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)")
+                                  to: "ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)")
         XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "one sheet, the flag's own")
         XCTAssertFalse(presented.contains("#"), "the sheet's content isn't gated either")
         XCTAssertEqual(console.components(separatedBy: "ShareSheet(").count, 2, "one place builds the sheet")

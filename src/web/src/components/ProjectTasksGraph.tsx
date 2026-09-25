@@ -1,5 +1,6 @@
 import { Typography } from 'antd';
 import { Suspense, lazy } from 'react';
+import type { ProjectDependencyGraphResponse } from '../lib/projectDependencyGraph';
 
 /**
  * The project's dependency picture, as a section of its page.
@@ -33,8 +34,17 @@ const LazyProjectDependencyGraph = lazy(async () => {
   return { default: module.ProjectDependencyGraph };
 });
 
-/** The section: a heading, and the graph under it. */
-export function ProjectTasksGraph({ projectId }: { projectId: string }) {
+/** The section: a heading, and the graph under it. `data` draws a graph already in hand (a public
+ *  project page's) rather than reading the project's; `footnote` is a line under it. */
+export function ProjectTasksGraph({
+  projectId,
+  data,
+  footnote,
+}: {
+  projectId: string;
+  data?: ProjectDependencyGraphResponse;
+  footnote?: string;
+}) {
   return (
     <div style={{ marginBottom: 24 }}>
       {/* The legend belongs here, at a size a reader can read. It used to be a 10.5px chip pinned
@@ -56,8 +66,9 @@ export function ProjectTasksGraph({ projectId }: { projectId: string }) {
           <div style={{ padding: 48, textAlign: 'center' }} data-testid="project-graph-loading" />
         }
       >
-        <LazyProjectDependencyGraph projectId={projectId} />
+        <LazyProjectDependencyGraph projectId={projectId} data={data} />
       </Suspense>
+      {footnote ? <div className="pdg-footnote">{footnote}</div> : null}
     </div>
   );
 }

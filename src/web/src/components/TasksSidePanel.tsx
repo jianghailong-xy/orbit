@@ -135,6 +135,39 @@ export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): 
   return isMac ? `⌘${index + 1}` : `Ctrl ${index + 1}`;
 }
 
+type WorkspaceStepEvent = Pick<
+  KeyboardEvent,
+  'altKey' | 'ctrlKey' | 'defaultPrevented' | 'isComposing' | 'key' | 'metaKey' | 'shiftKey'
+>;
+
+/** Which way a keypress steps the open Workspace — Cmd/Ctrl + Down one row down, Cmd/Ctrl + Up one
+ * row up — or null when it is not that chord, or not the sidebar's to take.
+ *
+ * In a text field the same chord moves the caret (to the field's start or end on a Mac, a paragraph
+ * with Ctrl), so the field keeps it until the caret has nowhere further to go that way, the same wait
+ * the composer's own Up recall makes for the first line. An empty field is at both ends. */
+export function workspaceStepDirection(
+  event: WorkspaceStepEvent,
+  focused: Element | null,
+): 1 | -1 | null {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return null;
+  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return null;
+  // Already taken: the composer's slash/mention/reference menus and the search inputs move their
+  // own highlight on any Up/Down, the chord included.
+  if (event.defaultPrevented || event.isComposing) return null;
+  const dir = event.key === 'ArrowDown' ? 1 : -1;
+  if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) {
+    const edge = dir === 1 ? focused.value.length : 0;
+    // selectionStart is null on inputs without a caret (checkboxes and the like).
+    if (
+      focused.selectionStart !== null &&
+      (focused.selectionStart !== edge || focused.selectionEnd !== edge)
+    )
+      return null;
+  }
+  return dir;
+}
+
 export interface Runner {
   id: string;
   name: string;
@@ -276,7 +309,20 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // route. keepPreviousData (above) keeps the last session's data around to avoid
   // flicker between sessions, but that stale data would otherwise keep a workspace
   // row highlighted after navigating away to a list or top-nav route.
-  const activeWorkspaceId = openWorkspaceId ?? (sessionId ? sessionQ.data?.workspace?.id : null) ?? null;
+  //
+  // Nor is the placeholder's workspace read: a workspace switch lands on one of the new
+  // workspace's sessions, so the placeholder is a session of the workspace just left, and the row
+  // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
+  // While the placeholder stands, the row already active holds.
+  const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
+  const activeWorkspaceId =
+    openWorkspaceId ??
+    (sessionId
+      ? sessionQ.isPlaceholderData
+        ? heldWorkspaceId
+        : (sessionQ.data?.workspace?.id ?? null)
+      : null);
+  useEffect(() => setHeldWorkspaceId(activeWorkspaceId), [activeWorkspaceId]);
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
   // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
@@ -502,6 +548,28 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [orderedWorkspaces, openWorkspace]);
+
+  // ⌘/Ctrl + Up/Down steps to the Workspace above/below the open one in the list's order — the
+  // session list's own Up/Down, one level up, stopping at the ends the same way. With no Workspace
+  // open there is nothing to step from, so the chord stays the browser's: a long page's jump to its
+  // top or bottom.
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    const onKey = (e: KeyboardEvent) => {
+      const dir = workspaceStepDirection(e, document.activeElement);
+      if (dir === null) return;
+      // Taken even at the first or last row: the browser's own use of the chord would jump the
+      // conversation to its top or bottom, which is not what "the Workspace above" asked for.
+      e.preventDefault();
+      const from = orderedWorkspaces.findIndex((a) => a.id === activeWorkspaceId);
+      const next = from === -1 ? undefined : orderedWorkspaces[from + dir];
+      // A row with no runner has no console, so openWorkspace ignores it; such rows sort last (the
+      // Shared group), so landing on one is the end of the list.
+      if (next) openWorkspace(next);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeWorkspaceId, orderedWorkspaces, openWorkspace]);
 
   const renderListRow = (l: TaskList) => {
     const key = encodeId(l.id);
