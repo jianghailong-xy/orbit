@@ -60,6 +60,7 @@ import {
   collectAggregationScope,
 } from '../projects/task-aggregation-writer';
 import { recordTaskFailure } from '../projects/project-open-item';
+import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12224,6 +12225,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     requestToken?: string,
     /** The Session making an agent-side request; used only for canonical remediation evidence. */
     actingSessionId?: string,
+    /**
+     * The runner's door — `task_start` and `orbit task start` — rather than the owner's own Run.
+     * Only this door waits for the owner to start the task's project (`projectAwaitingStart`).
+     */
+    runnerDoor = false,
   ) {
     // THE RECEIPT, BEFORE EVERYTHING.
     //
@@ -12241,7 +12247,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
     if (!lease.held) return recordAnswer(lease.result as TaskRunAnswer);
     try {
-      return recordAnswer(await this.executeLeased(ownerId, id, auto, runRequestToken, lease));
+      return recordAnswer(
+        await this.executeLeased(ownerId, id, auto, runRequestToken, lease, runnerDoor),
+      );
     } catch (e) {
       // A refused request is not a frozen one. Nothing about "prerequisites are not complete" or
       // "this list is paused" is an answer the caller should be given again after they have fixed
@@ -12332,6 +12340,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     auto: AutoDispatch | undefined,
     runRequestToken: string,
     lease: Extract<TaskRunLease, { held: true }>,
+    runnerDoor: boolean,
   ): Promise<TaskRunAnswer> {
     // ALREADY DECIDED. Not one mutable check below this line may run again: the holder that passed
     // them wrote down what it decided with, and re-reading a world that has moved is how a repeat
@@ -12482,6 +12491,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `task ${uuidToBase62(id)}: this task is completed by ${completionOwner}, `
         + 'so it has no work of its own to run',
       );
+    }
+    // An agent does not start a project its owner has not started (`projectAwaitingStart`). Ahead
+    // of the prerequisites, because it holds every task in the project and outlasts them all.
+    if (runnerDoor && task.projectId) {
+      const awaiting = await projectAwaitingStart(this.prisma, ownerId, task.projectId);
+      if (awaiting) throw new ConflictException(projectNotStartedRefusal(id, awaiting));
     }
     const depFacts = (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [];
     const depState = computeDependencyState(depFacts);

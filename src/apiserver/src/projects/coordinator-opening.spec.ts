@@ -35,3 +35,15 @@ test('every form of the coordinator role files new work as tasks, and prices ope
     assert.match(form, /另开一条自己的协调会话/);
   }
 });
+
+// `task_start` is refused until the owner starts the project, and a coordinator that learns it
+// only from the refusal has already told the owner its tasks are running.
+test('every form of the coordinator role says the start is the owner’s', () => {
+  for (const form of [
+    buildCoordinatorInstructions('Crawl the corpus', PROJECT_ID),
+    buildCoordinatorDeliveryInstructions(PROJECT_ID),
+  ]) {
+    assert.match(form, /「Start the project」账号所有者还没按下时，task_start 会被拒/);
+    assert.match(form, /等 Orbit 告诉你项目已开工再启动/);
+  }
+});
