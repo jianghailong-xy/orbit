@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>07 phone home</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="phone-mock.css">
+<style>
+  .menu-stage-web { position: relative; height: 250px; }
+  .menu-stage-ios { position: relative; height: 262px; background: #fff; }
+</style>
+</head>
+<body class="m">
+<script src="phone-mock-antd.js"></script>
+<script src="phone-mock.js"></script>
+<div class="m-sheet pb-sheet">
+  <h1 class="m-h1 zh">07 · Wiki 首页（web 手机 ｜ iOS ｜ 说明）</h1>
+  <p class="pb-lede zh">从上到下两端同一顺序：<b>页头（Wiki + space + 新建）→ 状态行 → 搜索 → 琥珀横幅 → Principles → Topics → Recent decisions → Recently changed → Agents used the wiki</b>。
+    桌面右栏的三块（Review 卡、时间线、用量）在手机上按「要你做的放最上、其余接在主列后面」排：Review 卡变成横幅，另两块接在最后。列表全是 plain 行（第一行 标题 · 状态点 · 时间，第二行 摘要）；数据是 §4 的真实条目。
+    红虚线 = 首屏底边（iOS 874pt / web 844px）。</p>
+  <div class="pb-legend zh"><span class="pb-tag sys">iOS 系统</span>系统控件与习惯 <span class="pb-tag con">Orbit 一致性</span>沿用现成组件 / 用词 <span class="pb-tag co">协调性</span>同一个词、同一个数在各处口径一致 <span class="pb-tag new">新词</span>要你拍板 <span class="pb-tag ref">借鉴</span>参考产品 <span class="pb-tag done">已定</span>owner 已拍板 <span class="pb-tag later">另议</span>不在这次范围 <span class="pb-tag guess">假设</span>规格没给，图上先这么画</div>
+
+  <div class="pb-grid">
+    <div class="pb-colhead">web 手机 <span>· 390 CSS px · /wiki</span></div>
+    <div class="pb-colhead">iOS <span>· 402×874pt · Wiki 分区根页</span></div>
+    <div class="pb-colhead zh">说明</div>
+
+    <!-- ① header … Principles -->
+    <div class="pb-band zh"><span class="pb-bn">1</span>页头 · 状态行 · 搜索 · 横幅 · Principles</div>
+
+    <div class="pb-web" data-name="web-top" data-flow="web" data-fold="844" data-fold-label="首屏<br>844">
+      <div class="wp-topbar"><span class="wp-toggle"><i data-ant="menu"></i></span><span class="wp-topname">Orbit</span></div>
+      <div class="wp-page">
+        <div class="wp-titlerow"><h1 class="page-title">Wiki</h1><span class="wp-btn">orbit<i data-ant="down caret"></i></span><span class="wp-btn primary i40"><i data-ant="plus"></i></span></div>
+        <div class="wp-meta">96 entries · Anchors verified at <code>4db4f9f</code> 2h ago · Maintenance: last run 3h ago <span class="ok">✓</span></div>
+        <div class="wp-input"><i data-ant="search"></i>Search the wiki</div>
+        <div class="wp-banner"><span class="d"></span>3 proposals to review<i data-ant="right"></i></div>
+        <div class="wp-sec first">
+          <div class="wp-sech"><h3>Principles</h3><span class="wp-count">4</span><span class="tdp-badge tone-owner">Owner</span></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">A clock never starts agent work</span><span class="sp"></span><span class="when">9/23</span></div>
+            <div class="wp-l2">Work starts from a committed fact (evidence revised, a receipt written, a turn ended); elapsed time may only reassign an open item to a person.</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Agent-writable data never becomes a system instruction</span><span class="sp"></span><span class="when">9/19</span></div>
+            <div class="wp-l2">Compiled or agent-written text reaches agents as user-level context only.</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Completion is adjudicated, not claimed</span><span class="sp"></span><span class="when">9/20</span></div>
+            <div class="wp-l2">A task is DONE when its declared criterion says so, not when the agent says so.</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Delete means forget</span><span class="pb-new">新词</span><span class="sp"></span><span class="when">1d ago</span></div>
+            <div class="wp-l2">When the owner deletes a session or task, everything compiled from it is withdrawn.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios top" data-name="ios-top" data-flow="ios" data-fold="874" data-fold-label="首屏<br>874">
+      <div data-ios="status"></div>
+      <div class="io-nav"><span class="io-glass l"><i data-sf="menu"></i></span><span class="io-glass r"><i data-sf="plus"></i></span></div>
+      <div class="io-lt"><h1>Wiki</h1><span class="io-chip">orbit<i data-sf="chev-ud"></i></span></div>
+      <div class="io-subt">96 entries · Anchors verified at 4db4f9f 2h ago · Maintenance: last run 3h ago <span class="ok">✓</span></div>
+      <div class="io-search"><i data-sf="search"></i>Search the wiki</div>
+      <div class="io-banner"><span class="d"></span>3 proposals to review<i data-sf="chev-r"></i></div>
+      <div class="io-sech"><b>Principles</b><span class="n">4</span><span class="io-pill owner" style="height:20px;font-size:12px;padding:0 7px;align-self:center">Owner</span></div>
+      <div class="io-row"><div class="io-l1"><span class="t">A clock never starts agent work</span><span class="sp"></span><span class="when">9/23</span></div>
+        <div class="io-l2">Work starts from a committed fact (evidence revised, a receipt written, a turn ended); elapsed time may only reassign an open item to a person.</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Agent-writable data never becomes a system instruction</span><span class="sp"></span><span class="when">9/19</span></div>
+        <div class="io-l2">Compiled or agent-written text reaches agents as user-level context only.</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Completion is adjudicated, not claimed</span><span class="sp"></span><span class="when">9/20</span></div>
+        <div class="io-l2">A task is DONE when its declared criterion says so, not when the agent says so.</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Delete means forget</span><span class="pb-new">新词</span><span class="sp"></span><span class="when">1d ago</span></div>
+        <div class="io-l2">When the owner deletes a session or task, everything compiled from it is withdrawn.</div></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span><b>页头三件事、同一顺序</b>：标题 Wiki → space（<span class="en">orbit</span>）→ 新建。桌面的 <span class="en">orbit · github.com/jianghailong-xy/orbit ▾</span> 在手机上只留名字，仓库地址进菜单（见 ⑥）；桌面的 <span class="en">New entry</span> 在手机上只留「+」，无障碍名仍是 <span class="en">New entry</span>。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>web 页头照抄 Projects 的手机页头：<code>.page-title</code> + 40px 的 primary 图标按钮（手机上去掉文字，<code>projects-new-button</code> 同一规则）；搜索是整宽 Input，手机上 16px 字防缩放，<span class="en">⌘K</span> 提示不画。</p>
+      <p><span class="pb-tag sys">iOS 系统</span>大标题 34pt，往上滑收进导航栏（系统行为，项目详情页的标题也是这么走的）；space 是标题旁的 <code>Picker(.menu)</code> 胶囊，字形 <code>chevron.up.chevron.down</code> 表示「从几项里选一个」；「+」在右上玻璃圆钮。Projects 列表用的是 inline 小标题；这里用大标题，是因为页头这一行要同时放标题和 space 胶囊，和 web 的页头一行对应。</p>
+      <p><span class="pb-tag done">已定（owner 09-25）</span><b>搜索放在标题下，不放底部。</b>iOS 26 默认把 <code>.searchable</code> 放到屏幕底部（规格里也这么写），但 web 手机的搜索在页头下；Orbit 的 Sessions、Projects 两个 iOS 列表都用 <code>.navigationBarDrawer(.always)</code> 把搜索钉在栏下（Projects 是 09-24 按效果图 ③ 定的）。跟 web 与兄弟页，顺序一一对应。</p>
+      <p><span class="pb-tag co">协调性</span>状态行 = 桌面那条状态行去掉 <span class="en">“3 to review”</span>（横幅已经说了），字不改；iOS 放在大标题下面两行小字。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span><b>横幅</b>：iOS 用 <code>NeedsYouBannerView</code> 的样子（琥珀 12% 底、7pt 琥珀点、主色字、灰 chevron、整条可点），web 用页内琥珀横幅的 token（<code>--warning-bg / --warning-border / --warning-solid</code>，项目页 “Dispatch needs attention” 同一套）。点它进 Review（图 09）。</p>
+      <p><span class="pb-tag co">协调性</span>横幅里的 3 = 抽屉 Wiki 行的 3 = Review 页头的 3。它只在 Wiki 首页出现，不进全局 Needs you 条：那条只为「停住的工作」亮。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span><b>Principles</b>：段头照 web <code>ProjectSections</code>（12.5px/650 + 计数胶囊）与 iOS <code>ProjectsListView</code>（15pt 粗黑 + 13pt 灰计数）；行照 web Projects 行（14px/600 标题、12.5px 灰摘要）与 iOS 会话列表的 compact 行（17pt 标题、11pt 时间；15pt 摘要）。时间用 Orbit 的 <code>relTime</code> 格式（2h ago / 1d ago / 9/23）。</p>
+      <p><span class="pb-tag co">协调性</span>桌面每行一个 <span class="en">Owner</span> 标签；手机上 4 行全是 Owner，说一次放在段头，同一个黑底标签。状态点只在「要你留意」时出现（琥珀 / 红，下一段），这里四条都健康，所以没有点。</p>
+      <p><span class="pb-tag ref">借鉴</span>Notion verified pages：owner 写的原则 = 已验证、置顶；<span class="en">Delete means forget</span> 是新原则<span class="pb-new">新词</span>。</p>
+    </div>
+
+    <!-- ② Topics -->
+    <div class="pb-band zh"><span class="pb-bn">2</span>Topics <small>· 桌面的 2×3 卡片在手机上成为 6 行</small></div>
+
+    <div class="pb-web" data-name="web-topics" data-flow="web">
+      <div class="wp-page cont">
+        <div class="wp-sec first">
+          <div class="wp-sech"><h3>Topics</h3><span class="wp-count">6</span></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Runner &amp; engines</span><span class="n">21</span><span class="sp"></span><span class="when">9/13</span></div>
+            <div class="wp-l2">Decision · Wakeups are held by the server</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Tasks &amp; dispatch</span><span class="n">17</span><span class="sp"></span><span class="wk-dot amber"></span><span class="when">2h ago</span></div>
+            <div class="wp-l2 warn">1 to re-check · its anchor changed on main</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Projects &amp; criteria</span><span class="n">14</span><span class="sp"></span><span class="when">9/4</span></div>
+            <div class="wp-l2">Decision · EXECUTABLE judges by exit code and records nothing</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Clients (web · iOS · macOS)</span><span class="n">19</span><span class="sp"></span><span class="when">1d ago</span></div>
+            <div class="wp-l2">Confirmed · Web mobile and iOS mirror each other section by section</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Deploy &amp; ops</span><span class="n">12</span><span class="sp"></span><span class="when">2d ago</span></div>
+            <div class="wp-l2">Confirmed · Cut betas from main, never from a session branch</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Testing &amp; CI</span><span class="n">13</span><span class="sp"></span><span class="when">5h ago</span></div>
+            <div class="wp-l2">Retired · Headless Chromium needs --window-size=393</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios" data-name="ios-topics" data-flow="ios">
+      <div class="io-sech" style="padding-top:12px"><b>Topics</b><span class="n">6</span></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Runner &amp; engines</span><span class="n">21</span><span class="sp"></span><span class="when">9/13</span></div>
+        <div class="io-l2">Decision · Wakeups are held by the server</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Tasks &amp; dispatch</span><span class="n">17</span><span class="sp"></span><span class="d" style="background:#FF8C27"></span><span class="when">2h ago</span></div>
+        <div class="io-l2 warn">1 to re-check · its anchor changed on main</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Projects &amp; criteria</span><span class="n">14</span><span class="sp"></span><span class="when">9/4</span></div>
+        <div class="io-l2">Decision · EXECUTABLE judges by exit code and records nothing</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Clients (web · iOS · macOS)</span><span class="n">19</span><span class="sp"></span><span class="when">1d ago</span></div>
+        <div class="io-l2">Confirmed · Web mobile and iOS mirror each other section by section</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Deploy &amp; ops</span><span class="n">12</span><span class="sp"></span><span class="when">2d ago</span></div>
+        <div class="io-l2">Confirmed · Cut betas from main, never from a session branch</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Testing &amp; CI</span><span class="n">13</span><span class="sp"></span><span class="when">5h ago</span></div>
+        <div class="io-l2">Retired · Headless Chromium needs --window-size=393</div></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag sys">iOS 系统</span>iOS 列表不用卡片网格；两列 170pt 的小卡在手机上装不下「最近变化」那一行，所以两端都改成 plain 行：第一行 <b>名称 · 条目数 · 最近变化时间</b>，第二行 <b>最近一次变化</b>（桌面卡片底下那行）。点一行进主题页（桌面图 02 的手机版）。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span><b>状态点只在要你留意时出现</b>，规则照会话列表的 <code>SessionLiveIndicator</code>：琥珀 = 有东西停着等处理，红 = 坏了（锚点 <span class="en">Missing</span>），平静的行不画点。点亮时第二行把「最近变化」换成状态句（会话行 <span class="en">“Waiting for you · 8m”</span> 的做法），不在一行里放两个标签。</p>
+      <p><span class="pb-tag co">协调性</span><span class="en">“1 to re-check · its anchor changed on main”</span> 用的就是桌面主题页的两个词：锚点标签 <span class="en">Changed</span>、行尾动作 <span class="en">Re-check</span>；点进主题页正好落在那一行。这一条已经暂停推给 agent。</p>
+      <p><span class="pb-tag co">协调性</span>六个主题的条目数加起来 = 96，和状态行的 <span class="en">96 entries</span> 对得上；动词（<span class="en">Confirmed / Retired / Decision</span>）和 ④ Recently changed、条目 History 同一套。</p>
+      <p><span class="pb-tag ref">借鉴</span>Confluence / Notion 的 space home（主题入口 + 最近变化），在手机上收成列表。</p>
+    </div>
+
+    <!-- ③ Recent decisions -->
+    <div class="pb-band zh"><span class="pb-bn">3</span>Recent decisions <small>· ADR 风格：日期、标题、状态</small></div>
+
+    <div class="pb-web" data-name="web-decisions" data-flow="web">
+      <div class="wp-page cont">
+        <div class="wp-sec first">
+          <div class="wp-sech"><h3>Recent decisions</h3><span class="wp-count">3</span><span class="more">Decision log ›</span></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Task priority is a field on the task, not a dispatcher session</span><span class="sp"></span><span class="when">9/25</span></div>
+            <div class="wp-l2"><span class="act">Active</span> · Add <code>priority</code> to tasks; the dispatcher reads it.</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Wakeups are held by the server</span><span class="sp"></span><span class="when">9/13</span></div>
+            <div class="wp-l2"><span class="act">Active</span> · <code>session_scheduled_wakeup</code> · commit <code>1125c445a</code></div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">EXECUTABLE judges by exit code and records nothing</span><span class="sp"></span><span class="when">9/4</span></div>
+            <div class="wp-l2"><span class="act">Active</span> · migration <code>0230</code> · “根据 exit code 来简单判断，不需要实际记录数据”</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios" data-name="ios-decisions" data-flow="ios">
+      <div class="io-sech" style="padding-top:12px"><b>Recent decisions</b><span class="n">3</span><span class="more">Decision log</span></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Task priority is a field on the task, not a dispatcher session</span><span class="sp"></span><span class="when">9/25</span></div>
+        <div class="io-l2"><span class="act">Active</span> · Add <span class="io-code-in">priority</span> to tasks; the dispatcher reads it.</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Wakeups are held by the server</span><span class="sp"></span><span class="when">9/13</span></div>
+        <div class="io-l2"><span class="act">Active</span> · <span class="io-code-in">session_scheduled_wakeup</span> · 1125c445a</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">EXECUTABLE judges by exit code and records nothing</span><span class="sp"></span><span class="when">9/4</span></div>
+        <div class="io-l2"><span class="act">Active</span> · migration 0230 · “根据 exit code 来简单判断，不需要实际记录数据”</div></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag ref">借鉴</span>ADR / Oxide RFD：决策有日期、有状态（<span class="en">Active / Superseded</span>）。第一行右边写的是<b>决定的日期</b>（9/25），不是编辑时间——决策日志按它排。</p>
+      <p><span class="pb-tag co">协调性</span>第二行 = 状态 + 决定本身：<span class="en">Active</span> 用成功绿（桌面状态标签同色），被取代的决策标题划线、第二行写 <span class="en">“Superseded by …”</span>，与主题页、决策日志同一个写法。这三条都 Active，所以这里没有划线行。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>段头右侧的 <span class="en">Decision log</span> 是这组的「全部」入口，位置与 Projects 列表段头右侧的 <span class="en">Show</span> 相同；web 写 <span class="en">Decision log ›</span>，iOS 只写字（系统段头按钮不带箭头）。<span class="en">Decision log</span><span class="pb-new">新词</span></p>
+      <p><span class="pb-tag co">协调性</span>引用 owner 原话时保留原文（中文），这是出处的一部分，不算 UI 文案；UI 字一律英文。</p>
+    </div>
+
+    <!-- ④ Recently changed -->
+    <div class="pb-band zh"><span class="pb-bn">4</span>Recently changed <small>· 桌面右栏的时间线，接在主列后面</small></div>
+
+    <div class="pb-web" data-name="web-changed" data-flow="web">
+      <div class="wp-page cont">
+        <div class="wp-sec first">
+          <div class="wp-sech"><h3>Recently changed</h3><span class="more">Timeline ›</span></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Task priority is a field on the task</span><span class="sp"></span><span class="when">2h ago</span></div>
+            <div class="wp-l2"><span class="who">Confirmed by you</span> · Decision</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t struck">Headless Chromium needs --window-size=393</span><span class="sp"></span><span class="when">5h ago</span></div>
+            <div class="wp-l2">Retired · anchor missing · replaced by “Headless Chromium clamps the window to 500px”</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">runner-go's full suite inside a session reaches production</span><span class="sp"></span><span class="when">1d ago</span></div>
+            <div class="wp-l2">Amended · fix now also unsets ORBIT_BG_SOCKET / ORBIT_BG_TOKEN</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Delete means forget</span><span class="sp"></span><span class="when">1d ago</span></div>
+            <div class="wp-l2"><span class="who">Added by you</span> · Principle</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">Cut betas from main, never from a session branch</span><span class="sp"></span><span class="when">2d ago</span></div>
+            <div class="wp-l2"><span class="who">Confirmed by you</span> · Convention</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios" data-name="ios-changed" data-flow="ios">
+      <div class="io-sech" style="padding-top:12px"><b>Recently changed</b><span class="more">Timeline</span></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Task priority is a field on the task</span><span class="sp"></span><span class="when">2h ago</span></div>
+        <div class="io-l2"><span class="who">Confirmed by you</span> · Decision</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t struck">Headless Chromium needs --window-size=393</span><span class="sp"></span><span class="when">5h ago</span></div>
+        <div class="io-l2">Retired · anchor missing · replaced by “Headless Chromium clamps the window to 500px”</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">runner-go's full suite inside a session reaches production</span><span class="sp"></span><span class="when">1d ago</span></div>
+        <div class="io-l2">Amended · fix now also unsets ORBIT_BG_SOCKET / ORBIT_BG_TOKEN</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Delete means forget</span><span class="sp"></span><span class="when">1d ago</span></div>
+        <div class="io-l2"><span class="who">Added by you</span> · Principle</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">Cut betas from main, never from a session branch</span><span class="sp"></span><span class="when">2d ago</span></div>
+        <div class="io-l2"><span class="who">Confirmed by you</span> · Convention</div></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag ref">借鉴</span>Linear Pulse：一条变化一行，谁、做了什么、什么时候。</p>
+      <p><span class="pb-tag co">协调性</span>第二行的动词（<span class="en">Proposed by … / Confirmed by you / Amended / Added by you / Retired</span>）与条目详情页 History（图 08 ⑦）逐字相同；<span class="en">“by you”</span> 加粗，因为这是你本人做过的事。</p>
+      <p><span class="pb-tag co">协调性</span>时间统一用 Orbit 的 <code>relTime</code>：规格 §4 写的 <span class="en">yesterday / 2 days ago</span> 在这里写成 <span class="en">1d ago / 2d ago</span>，与会话列表、Projects 列表同一种写法（桌面图也应统一）。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>被退役的条目标题划线（与被取代的决策同一处理），第二行说明原因与接替者；点进去是它的历史页，不再推给 agent。</p>
+    </div>
+
+    <!-- ⑤ Agents used the wiki -->
+    <div class="pb-band zh"><span class="pb-bn">5</span>Agents used the wiki <small>· 本周</small></div>
+
+    <div class="pb-web" data-name="web-usage" data-flow="web">
+      <div class="wp-page cont">
+        <div class="wp-sec first">
+          <div class="wp-sech"><h3>Agents used the wiki</h3><span class="aside">this week</span></div>
+          <div class="wp-stat"><span><b>214</b> sessions received wiki context</span><span><b>38</b> searches</span><span><b>11</b> proposals (7 accepted, 1 rejected, 3 pending)</span></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">runner-go's full suite inside a session reaches production</span><span class="sp"></span><span class="n">41×</span></div>
+            <div class="wp-l2">Pitfall · Fix: unset the ORBIT_* variables before go test ./...</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">UI copy is English; code comments may be Chinese</span><span class="sp"></span><span class="n">33×</span></div>
+            <div class="wp-l2">Convention</div></div>
+          <div class="wp-row"><div class="wp-l1"><span class="t">A clock never starts agent work</span><span class="sp"></span><span class="n">29×</span></div>
+            <div class="wp-l2">Principle</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios" data-name="ios-usage" data-flow="ios">
+      <div class="io-sech" style="padding-top:12px"><b>Agents used the wiki</b><span class="n">this week</span></div>
+      <div class="io-stat"><span><b>214</b> sessions received wiki context</span><span><b>38</b> searches</span><span><b>11</b> proposals (7 accepted, 1 rejected, 3 pending)</span></div>
+      <div class="io-row sep"><div class="io-l1"><span class="t">runner-go's full suite inside a session reaches production</span><span class="sp"></span><span class="n">41×</span></div>
+        <div class="io-l2">Pitfall · Fix: unset the ORBIT_* variables before go test ./...</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">UI copy is English; code comments may be Chinese</span><span class="sp"></span><span class="n">33×</span></div>
+        <div class="io-l2">Convention</div></div>
+      <div class="io-row"><div class="io-l1"><span class="t">A clock never starts agent work</span><span class="sp"></span><span class="n">29×</span></div>
+        <div class="io-l2">Principle</div></div>
+      <div style="height:14px"></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span><span class="en">41×</span> = 本周这条被推给了 41 个会话，与条目详情 <span class="en">“Pushed to 41 sessions this week”</span>（图 08 ⑥）、主题页 <span class="en">“Used 41× this week”</span> 是同一个数；另外被主动取用（<span class="en">fetched</span>）的 6 次只在详情里分开写。</p>
+      <p><span class="pb-tag co">协调性</span><span class="en">“3 pending”</span> = 横幅的 <span class="en">3 proposals to review</span> = 抽屉 Wiki 行的 3 = Review 页头的 3；<span class="en">7 accepted + 1 rejected + 3 pending = 11</span>。摘要行里 Fix 只写一句 <span class="en">“Fix: unset the ORBIT_* variables before go test ./...”</span>，整条命令在详情里。</p>
+      <p><span class="pb-tag ref">借鉴</span>Guru 的用量读数（卡片被看了几次）；这里数的是 agent，不是人。</p>
+    </div>
+
+    <!-- ⑥ space picker -->
+    <div class="pb-band zh"><span class="pb-bn">6</span>切换 space <small>· 一个代码库一份 wiki</small></div>
+
+    <div class="pb-web" data-name="web-space">
+      <div class="wp-page menu-stage-web">
+        <div class="wp-titlerow"><h1 class="page-title">Wiki</h1><span class="wp-btn" style="border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-tint)">orbit<i data-ant="down caret"></i></span><span class="wp-btn primary i40"><i data-ant="plus"></i></span></div>
+        <div class="wp-dropdown" style="left:124px;top:62px;width:250px">
+          <div class="sel"><span><b style="font-weight:600">orbit</b><span class="sub">github.com/jianghailong-xy/orbit</span></span><i data-ant="check" style="margin-left:auto;color:var(--brand)"></i></div>
+          <div><span>wikova<span class="sub">github.com/jianghailong-xy/wikova</span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios" data-name="ios-space">
+      <div class="menu-stage-ios">
+        <div class="io-lt" style="padding-top:14px"><h1>Wiki</h1><span class="io-chip">orbit<i data-sf="chev-ud"></i></span></div>
+        <div class="io-menu" style="right:16px;top:74px;width:300px">
+          <div class="io-mi"><i data-sf="check ck"></i><span>orbit<span class="sub">github.com/jianghailong-xy/orbit</span></span></div>
+          <div class="io-msep"></div>
+          <div class="io-mi" style="padding-left:41px"><span>wikova<span class="sub">github.com/jianghailong-xy/wikova</span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag sys">iOS 系统</span><code>Picker</code> 的菜单样式：当前项在前面打勾，每项两行（名字 + 仓库地址）；web 用 AntD 下拉，当前项浅蓝底 + 勾，同样两行。</p>
+      <p><span class="pb-tag co">协调性</span>space 的名字就是仓库名；桌面页头的 <span class="en">orbit · github.com/jianghailong-xy/orbit</span> 在手机上拆成「胶囊里的名字 + 菜单里的地址」，两端的字一样。</p>
+      <p><span class="pb-tag guess">假设</span><span class="en">wikova</span> 的仓库地址规格没给，图上按同一个 GitHub 账号写的，是假设。</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

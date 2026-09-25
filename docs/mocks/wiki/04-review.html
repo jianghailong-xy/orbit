@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>04 wiki review</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="wiki-desktop.css">
+<style>
+  .frame .app-nav { width: 280px; }
+  .rv-head { display: flex; align-items: flex-end; gap: 16px; margin-top: 8px; }
+  .rv-head .page-title { font-size: 20px; }
+  .rv-sub { margin-top: 4px; font-size: 13px; color: var(--text-2); }
+  .wk-seg { display: inline-flex; gap: 2px; margin-left: auto; padding: 2px; border-radius: 6px; background: var(--fill-muted); }
+  .wk-seg span { padding: 3px 12px; border-radius: 4px; font-size: 13px; line-height: 20px; color: var(--text-2); white-space: nowrap; }
+  .wk-seg span.on { background: var(--bg-raised); color: var(--text-1); font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+  .wk-seg span b { margin-left: 5px; font-weight: 600; color: var(--text-3); }
+  .rv-cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; margin-top: 16px; }
+  .rv-list { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  .wk-prop.approval-card { margin: 0; position: relative; overflow: visible; }
+  .wk-prop .approval-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-2); border-radius: 10px 10px 0 0; }
+  .wk-prop .approval-head .by { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wk-prop .approval-head a { color: var(--brand); text-decoration: none; font-weight: 600; }
+  .wk-prop .approval-head .kind { color: var(--text-1); font-weight: 600; }
+  .wk-prop .approval-head .age { margin-left: auto; color: var(--text-3); font-weight: 400; white-space: nowrap; }
+  .wk-prop .approval-body { background: var(--bg-raised); padding: 12px 16px 12px; max-height: none; overflow: visible; }
+  .wk-prop .approval-actions { background: var(--bg-raised); border-radius: 0 0 10px 10px; }
+  .wk-prop-t { font-size: 16px; font-weight: 650; line-height: 1.4; color: var(--text-1); }
+  .wk-prop-t .q { color: var(--text-3); font-weight: 500; }
+  .wk-pkv { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 5px 12px; margin-top: 10px; font-size: 13.5px; line-height: 1.6; }
+  .wk-pkv > .k { color: var(--text-3); font-size: 12.5px; padding-top: 1px; }
+  .wk-pkv > .v { color: var(--text-1); min-width: 0; }
+  .wk-pkv code, .wk-warn code { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 12px; background: var(--fill-muted); border-radius: 4px; padding: 0 4px; }
+  .wk-pkv .olc-quote { margin-top: 0; }
+  .wk-pkv .wk-anchors { margin-top: 1px; }
+  .wk-none { color: var(--text-2); }
+  .wk-none .dim { color: var(--text-3); }
+  .card-action .ic { font-size: 11px; margin-left: 4px; vertical-align: -1px; }
+  .card-actions .grow { flex: 1; }
+  .card-actions .note { font-size: 12px; color: var(--text-3); }
+  .wk-menu { position: absolute; z-index: 5; width: 208px; padding: 4px; border-radius: 8px; background: var(--bg-raised);
+             box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05); }
+  .wk-menu .it { display: flex; align-items: center; height: 32px; padding: 0 10px; border-radius: 4px; font-size: 14px; color: var(--text-1); }
+  .wk-menu .it.hover { background: var(--bg-hover); }
+  .wk-menu .foot { padding: 6px 10px 4px; border-top: 1px solid var(--border-subtle); margin-top: 4px; font-size: 12px; line-height: 1.45; color: var(--text-3); }
+  .wk-warn { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--warning-border); border-radius: 8px;
+             background: var(--warning-bg); font-size: 13px; line-height: 1.5; color: var(--text-1); }
+  .wk-warn .ic { color: var(--warning); font-size: 15px; margin-top: 2px; }
+  .wk-warn b { color: var(--warning); }
+  .wk-warn a { color: var(--brand); margin-left: 4px; white-space: nowrap; }
+  .wk-prop .chat-diff { margin-top: 10px; }
+  .wk-prop .chat-diff .diff-hunk { padding: 3px 10px; background: var(--bg-subtle); color: var(--text-3); font-size: 12px; border-bottom: 1px solid var(--border-subtle); }
+  .wk-src-mini { font-size: 12.5px; }
+  .rv-rail .project-open-items { margin: 0; }
+  .aa-row { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; }
+  .aa-row.first { border-top: 0; }
+  .aa-row .ic { color: var(--success); font-size: 14px; margin-top: 3px; }
+  .aa-row b { font-weight: 600; color: var(--text-1); }
+  .aa-row .d { color: var(--text-3); font-size: 12.5px; }
+  .aa-ask { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--fill-inset); font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+  .aa-ask b { color: var(--text-1); font-weight: 600; }
+  .m-mark.card { outline-offset: 5px; border-radius: 12px; }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');const h=Math.ceil(s.getBoundingClientRect().height);document.title='04 wiki review · H='+h;document.body.setAttribute('data-h',String(h))})</script>
+</head>
+<body class="m">
+<script src="wiki-desktop-icons.js"></script>
+<div class="m-sheet wide">
+  <h1 class="m-h1 zh">04 · Review：agent 只能提议，你逐条 Accept / Edit / Reject</h1>
+  <p class="m-sub zh">Web · /wiki/review。三张提议卡：新增一条 Pitfall（来自本会话）、退役一条（来自 Wiki maintenance）、修改一条 Recipe（来自会话「Upgrade deploy」，读过网页，琥珀警示）。右栏写明哪两类操作不用问你。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">新增</span>从侧栏 Wiki 的琥珀 3、01 的 Review 卡进入；每张卡 = Orbit 里「等你拍板」那一类卡的外壳</div>
+    <div class="frame">
+      <div class="app-shell">
+        <aside class="app-nav">
+          <div class="tp-brand">
+            <span class="tp-brand-logo"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="og-nav" x1="14" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse"><stop stop-color="#5b8bff"/><stop offset="1" stop-color="#3370ff"/></linearGradient></defs><g transform="rotate(-26 32 32)"><ellipse cx="32" cy="32" rx="28" ry="12.5" stroke="url(#og-nav)" stroke-width="3.4" opacity="0.6"/><circle cx="56" cy="25.6" r="5.4" fill="url(#og-nav)"/></g><rect x="19" y="20" width="26" height="24" rx="6" fill="url(#og-nav)"/><path d="M25 27.5 L30 32 L25 36.5" stroke="#fff" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/><line x1="33" y1="35.8" x2="39.5" y2="35.8" stroke="#fff" stroke-width="2.9" stroke-linecap="round"/></svg></span>
+            <span class="tp-brand-name">Orbit</span>
+            <span class="tp-collapse-btn"><svg class="ic"><use href="#i-menu-fold"/></svg></span>
+          </div>
+          <div class="tp-scroll">
+            <div class="tp-section">
+              <div class="tp-item"><span class="tp-ico"><svg class="ic"><use href="#i-project"/></svg></span><span class="tp-label">Projects</span><kbd class="tp-count tp-nav-shortcut">⌘P</kbd></div>
+              <div class="tp-item active"><span class="tp-ico"><svg class="ic"><use href="#i-book"/></svg></span><span class="tp-label">Wiki</span><span class="tp-count needs-you">3</span></div>
+              <div class="tp-item"><span class="tp-ico"><svg class="ic"><use href="#i-desktop"/></svg></span><span class="tp-label">Runners</span></div>
+              <div class="tp-item"><span class="tp-ico"><svg class="ic"><use href="#i-api"/></svg></span><span class="tp-label">Providers</span></div>
+            </div>
+            <div class="tp-divider"></div>
+            <div class="tp-group">
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><span class="tp-count needs-you">1</span></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-develop</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><kbd class="tp-count tp-workspace-shortcut">⌘2</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-prod</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><kbd class="tp-count tp-workspace-shortcut">⌘3</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg><span class="tp-workspace-icon-running"></span></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-data</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span><kbd class="tp-count tp-workspace-shortcut">⌘4</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">longdeMac-mini.local</span></span><kbd class="tp-count tp-workspace-shortcut">⌘5</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">lfs</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span><kbd class="tp-count tp-workspace-shortcut">⌘6</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikids</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span><kbd class="tp-count tp-workspace-shortcut">⌘7</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">rocm</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation-gpu</span></span><kbd class="tp-count tp-workspace-shortcut">⌘8</kbd></div>
+            </div>
+            <div class="tp-divider"></div>
+            <div class="tp-group">
+              <div class="tp-group-head"><span class="tp-group-name">Task List</span><span class="tp-count">10</span></div>
+              <div class="tp-group-head"><span class="tp-group-name">Completed</span><span class="tp-count">6</span></div>
+            </div>
+          </div>
+          <div class="tp-user"><div class="tp-user-trigger"><span class="wk-avatar"><svg class="ic"><use href="#i-user"/></svg></span><span class="tp-user-name">wikova</span></div></div>
+        </aside>
+        <main class="app-main"><div class="app-view app-view--doc"><div class="doc-col">
+          <div class="wk-crumb"><a>Wiki</a><svg class="ic"><use href="#i-right"/></svg><span>Review</span></div>
+          <div class="rv-head m-mark"><span class="m-n">1</span>
+            <div><h1 class="page-title">Review</h1><div class="rv-sub">3 proposals from 2 sessions · oldest 2h</div></div>
+            <div class="wk-seg"><span class="on">All<b>3</b></span><span>Add<b>1</b></span><span>Amend<b>1</b></span><span>Retire<b>1</b></span></div>
+          </div>
+
+          <div class="rv-cols">
+            <div class="rv-list">
+              <!-- 1 · ADD -->
+              <div class="approval-card wk-prop m-mark card" style="margin-bottom:178px"><span class="m-n">2</span>
+                <div class="approval-head"><span class="wk-op add">ADD</span><span class="kind">Pitfall</span><span class="by">· Proposed by <a>Orbit wiki review</a></span><span class="age">12m ago</span></div>
+                <div class="approval-body">
+                  <div class="wk-prop-t">Secret redaction lets ENV_VAR=value secrets through</div>
+                  <div class="wk-pkv">
+                    <span class="k">Trigger</span><span class="v">A watch delivery fails with an error that quotes an environment assignment such as <code>POSTGRES_PASSWORD=…</code></span>
+                    <span class="k">Symptom</span><span class="v">The value is stored in the delivery's <code>lastError</code> and shown on the watch and the dead-letter list unredacted.</span>
+                    <span class="k">Cause</span><span class="v">The key pattern starts with <code>\b</code>, and <code>_</code> is a word character, so <code>\bpassword</code> never matches inside <code>POSTGRES_PASSWORD</code>.</span>
+                    <span class="k">Fix</span><span class="v">Let the key follow <code>_</code> as well as a word boundary, and add <code>POSTGRES_PASSWORD=hunter2</code> to the redaction spec.</span>
+                    <span class="k">Sources</span><span class="v"><div class="olc-quote"><span class="wk-mono">POSTGRES_PASSWORD=hunter2 =&gt; POSTGRES_PASSWORD=hunter2</span><div class="who">Tool call output · <span class="wk-mono">redactErrorText()</span> in Orbit wiki review<span class="ver">quote verified ✓</span></div></div></span>
+                    <span class="k">Anchors</span><span class="v"><div class="wk-anchors"><div class="wk-anc"><svg class="ic aim"><use href="#i-aim"/></svg><span class="p">src/apiserver/src/watches/watch-redaction.ts:120</span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span></div></div></span>
+                    <span class="k">Similar entries</span><span class="v wk-none">None <span class="dim">· compared with 96 entries</span></span>
+                  </div>
+                </div>
+                <div class="card-actions approval-actions">
+                  <button class="card-action card-action--primary">Accept</button>
+                  <button class="card-action card-action--secondary">Edit</button>
+                  <button class="card-action card-action--secondary" style="background:var(--bg-hover)">Reject<svg class="ic"><use href="#i-down"/></svg></button>
+                  <span class="grow"></span><span class="note">Accepting makes it Confirmed</span>
+                </div>
+                <div class="wk-menu" style="left:150px;top:calc(100% - 7px)">
+                  <div class="it hover">Not true</div>
+                  <div class="it">Not useful</div>
+                  <div class="it">Duplicate</div>
+                  <div class="it">Too specific</div>
+                  <div class="foot">The reason goes back to the session that proposed it.</div>
+                </div>
+              </div>
+
+              <!-- 2 · RETIRE -->
+              <div class="approval-card wk-prop m-mark card"><span class="m-n">3</span>
+                <div class="approval-head"><span class="wk-op retire">RETIRE</span><span class="kind">Pitfall</span><span class="by">· Proposed by <a>Wiki maintenance</a></span><span class="age">2h ago</span></div>
+                <div class="approval-body">
+                  <div class="wk-prop-t">Retire <span class="q">“</span>Claude's ScheduleWakeup is lost when the engine is recycled<span class="q">”</span></div>
+                  <div class="wk-pkv">
+                    <span class="k">Reason</span><span class="v">Fix landed: wakeups are held by the server (<code>1125c445a</code> on main)</span>
+                    <span class="k">Evidence</span><span class="v">
+                      <div class="orbit-link-card" style="margin:0">
+                        <div class="olc-head"><span class="olc-kind"><span class="olc-tile"><svg class="ic"><use href="#i-merge"/></svg></span>Merge receipt</span><span class="olc-state is-done">On main</span></div>
+                        <div class="olc-title"><a>feat(wakeups): hold a session's scheduled wakeup on the server, and refuse Claude's ScheduleWakeup</a></div>
+                        <div class="olc-line"><span class="olc-line-text">1125c445a · main · 2026-09-13</span></div>
+                      </div></span>
+                    <span class="k">After</span><span class="v">Agents stop getting this entry. It stays in History, struck through, and points to “Wakeups are held by the server”.</span>
+                  </div>
+                </div>
+                <div class="card-actions approval-actions">
+                  <button class="card-action card-action--primary">Retire</button>
+                  <button class="card-action card-action--secondary">Keep</button>
+                </div>
+              </div>
+
+              <!-- 3 · AMEND -->
+              <div class="approval-card wk-prop m-mark card"><span class="m-n">4</span>
+                <div class="approval-head"><span class="wk-op amend">AMEND</span><span class="kind">Recipe</span><span class="by">· Proposed by <a>Upgrade deploy</a></span><span class="age">1h ago</span></div>
+                <div class="approval-body">
+                  <div class="wk-warn"><svg class="ic"><use href="#i-global"/></svg><span><b>Web-derived</b> · this session read 2 web pages before proposing. Accepting shows it to agents.<a>Show the pages</a></span></div>
+                  <div class="wk-prop-t">Deploy apiserver and web</div>
+                  <div class="chat-diff">
+                    <div class="diff-hunk">Steps · r3 → proposed r4</div>
+                    <div class="diff-line diff-ctx"><span class="diff-ln">1</span><span class="diff-sign"> </span><span class="diff-text">Run /upgrade from a clean checkout</span></div>
+                    <div class="diff-line diff-ctx"><span class="diff-ln">2</span><span class="diff-sign"> </span><span class="diff-text">Verify: curl -fsS https://orbitd.io/api/health → exit 0</span></div>
+                    <div class="diff-line diff-add"><span class="diff-ln">3</span><span class="diff-sign">+</span><span class="diff-text">Refreshing the Postgres image is opt-in: --pull-base</span></div>
+                  </div>
+                  <div class="wk-pkv">
+                    <span class="k">Sources</span><span class="v"><div class="olc-quote">“Refreshing the postgres/gateway base images is opt-in via --pull-base.”<div class="who">Tool output · <span class="wk-mono">.claude/skills/upgrade/SKILL.md</span> in Upgrade deploy<span class="ver">quote verified ✓</span></div></div></span>
+                    <span class="k">Anchors</span><span class="v"><div class="wk-anchors"><div class="wk-anc"><svg class="ic aim"><use href="#i-aim"/></svg><span class="p">.claude/skills/upgrade/SKILL.md</span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span></div></div></span>
+                  </div>
+                </div>
+                <div class="card-actions approval-actions">
+                  <button class="card-action card-action--primary">Accept</button>
+                  <button class="card-action card-action--secondary">Edit</button>
+                  <button class="card-action card-action--secondary">Reject<svg class="ic"><use href="#i-down"/></svg></button>
+                  <span class="grow"></span><span class="note">Web-derived is never auto-accepted</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="rv-rail">
+              <section class="project-open-items wk-card m-mark"><span class="m-n">5</span>
+                <div class="project-open-items-head"><span class="project-open-items-title">Auto-accept</span></div>
+                <div class="project-open-items-hint" style="margin:-2px 0 6px">These apply without asking you, and still show in Recently changed.</div>
+                <div class="aa-row first"><svg class="ic"><use href="#i-check"/></svg><div><b>Reinforce</b><div class="d">Adds a source to an existing entry</div></div></div>
+                <div class="aa-row"><svg class="ic"><use href="#i-check"/></svg><div><b>Challenge</b><div class="d">Flags an entry for re-check; changes nothing</div></div></div>
+                <div class="aa-ask"><b>Always asks you</b> · Add, Amend and Retire, and anything a session proposed after reading the web.</div>
+              </section>
+            </div>
+          </div>
+        </div></div></main>
+      </div>
+    </div>
+
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>标题与筛选</b>：副标题 3 proposals from 2 sessions · oldest 2h；筛选 All / Add / Amend / Retire，带各自数量。<span class="t coord">协调性</span>筛选用 <b>Amend</b>（包含 amend 与 supersede 两种卡），与卡片头的 AMEND、03 的 History 和 01 时间线里的 Amended 同一个词；<b>Change / Changed 只留给锚点状态</b>（02、03 的琥珀「锚点变了」），一个词不表达两件事。<span class="t orbit">Orbit 一致性</span>分段筛选照 Projects 页（标题下一行、带计数）。</span></li>
+      <li><span class="m-n">2</span><span><b>新增提议</b>：头部 = 操作（ADD）+ 类型 + 谁提的（会话链接）+ 多久前；正文 = 标题、四栏、Sources（工具调用输出原文 + quote verified ✓）、Anchors、Similar entries（和现有 96 条比过，没有重复）。按钮 Accept（主色）/ Edit / Reject ▾，Reject 必须选理由：Not true / Not useful / Duplicate / Too specific，理由回给提议的会话。<span class="t ref">借鉴</span>GitHub Copilot memory 的逐条批准。<span class="t orbit">Orbit 一致性</span>外壳就是会话里「等你拍板」的卡（<code>.approval-card</code>：蓝色头 + 白色正文 + <code>.card-action</code> 按钮行），按钮尺寸同一套。<span class="t xin">新词</span>Similar entries、Not true / Not useful / Duplicate / Too specific。</span></li>
+      <li><span class="m-n">3</span><span><b>退役提议</b>：来自 Wiki maintenance（维护任务在 main 上发现修复已落地）。写明理由、证据（合并回执卡）和接受后会怎样；按钮 Retire / Keep。<span class="t orbit">Orbit 一致性</span>证据卡用 Orbit 链接卡外壳，新增 Merge receipt 类型；merge receipt 是 Orbit 已有的词。</span></li>
+      <li><span class="m-n">4</span><span><b>修改提议 + 网页来源警示</b>：红绿 diff 只显示改动的那几行（这里只加了一行 <code>+ Refreshing the Postgres image is opt-in: --pull-base</code>），出处是仓库里的 upgrade skill 原文。顶部琥珀条：这个会话提议前读过 2 个网页，接受后 agent 会读到它——所以永远不会自动接受，按钮行右侧也写明。<span class="t ref">借鉴</span>GitHub PR review 的逐文件 diff。<span class="t orbit">Orbit 一致性</span>diff 直接用会话里 Edit 工具卡的 <code>.chat-diff</code>（行号 + 符号 + 绿底）；琥珀条与判据卡「缺什么」那一块同色（<code>--warning-bg</code> / <code>--warning-border</code>）。<span class="t xin">新词</span>Web-derived。</span></li>
+      <li><span class="m-n">5</span><span><b>Auto-accept</b>：只有两类操作不问你——Reinforce（给已有条目加一条出处）、Challenge（只标记待复核，不改内容），生效后照样出现在 01 的 Recently changed。其余（Add / Amend / Retire，以及任何读过网页的会话的提议）一律进这个队列。<span class="t xin">新词</span>Auto-accept、Reinforce、Challenge。</span></li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
