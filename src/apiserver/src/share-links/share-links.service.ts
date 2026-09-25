@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { withSessionState } from '../sessions/session-state';
 import type { PutShareLinkDto } from './dto';
@@ -62,6 +63,12 @@ const OPEN_ATTEMPTS = 3;
 export type ShareRootSummary =
   | { id: string; title: string; status: string; lifecycleState: string; completedAt: Date | string | null }
   | { id: string; title: string; status: string };
+
+/** How much a session link's two layers hold: Messages, and Tool calls and output. */
+export interface SessionShareCounts {
+  messages: number;
+  toolCalls: number;
+}
 
 /** One link as its owner sees it (contract §5). */
 export interface ShareLinkView {
@@ -125,11 +132,31 @@ export class ShareLinksService {
   // ── the owner's half ───────────────────────────────────────────────────────────────────────
 
   /** The root's link that has not ended — ACTIVE, PAUSED, or past its expiry and not yet settled —
-   *  or null when it has none. */
-  async current(ownerId: string, kind: ShareRootKind, rootId: string): Promise<{ link: ShareLinkView | null }> {
+   *  or null when it has none. A session root also says how much each of its layers holds, so the
+   *  dialog can show what a link exposes before anyone opens it (contract §1). */
+  async current(
+    ownerId: string,
+    kind: ShareRootKind,
+    rootId: string,
+  ): Promise<{ link: ShareLinkView | null; counts?: SessionShareCounts }> {
     await this.ownedRoot(ownerId, kind, rootId);
     const row = await this.openRow(ownerId, kind, rootId);
-    return { link: row ? this.view(row, new Date()) : null };
+    const link = row ? this.view(row, new Date()) : null;
+    if (kind !== 'SESSION') return { link };
+    return { link, counts: await this.sessionCounts(rootId) };
+  }
+
+  /** The session's Messages layer is what you and the agent wrote (its `user` and `assistant`
+   *  events), and its Tool output layer is one call per `tool_use` — counted in the database, over
+   *  the whole transcript, not over whatever page a client happens to hold. */
+  private async sessionCounts(sessionId: string): Promise<SessionShareCounts> {
+    const groups = await this.prisma.runEvent.groupBy({
+      by: ['type'],
+      where: { sessionId, type: { in: [RunEventType.USER, RunEventType.ASSISTANT, RunEventType.TOOL_USE] } },
+      _count: { _all: true },
+    });
+    const of = (type: RunEventType) => groups.find((group) => group.type === type)?._count._all ?? 0;
+    return { messages: of(RunEventType.USER) + of(RunEventType.ASSISTANT), toolCalls: of(RunEventType.TOOL_USE) };
   }
 
   /**

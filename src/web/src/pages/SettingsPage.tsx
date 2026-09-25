@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Popconfirm, Segmented, Select, Space, Switch } from 'antd';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { meQuery, workspacesQuery, type Me, type UserPreferences } from '../lib/queries';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
@@ -34,6 +35,7 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
 export function SettingsPage() {
   const message = useToast();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { mode, setMode } = useThemeMode();
   const me = useQuery(meQuery());
   const prefs: UserPreferences = me.data?.preferences ?? {};
@@ -123,6 +125,15 @@ export function SettingsPage() {
             onChange={(v) => save.mutate({ defaultPermissionMode: v })}
             loading={save.isPending}
           />
+        </Field>
+      </Card>
+
+      <Card title="Sharing" style={{ marginBottom: 16 }}>
+        <Field
+          label="Shared links"
+          hint="Everything you’ve made viewable by link: what each one includes, how often it was opened, and a way to turn it off."
+        >
+          <Button onClick={() => navigate('/settings/shared-links')}>Manage</Button>
         </Field>
       </Card>
 

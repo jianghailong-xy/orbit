@@ -2564,6 +2564,7 @@ export class SessionsService {
       lastUserText: string | null;
       mergeStatus: string | null;
       pinnedAt: Date | null;
+      shared: boolean;
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
       runningBgShells: string[];
@@ -2640,6 +2641,16 @@ export class SessionsService {
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
         s.merge_status    AS "mergeStatus",
         s.pinned_at       AS "pinnedAt",
+        -- Whether anyone with a link can open this session right now: a share_link (0306) that
+        -- was not turned off and has not run past its expiry, on a session that is not in the
+        -- trash (which pauses it). The list's globe (docs/share-links-design.md §8). At most one
+        -- such row per session, by share_link's partial unique index.
+        (s.deleted_at IS NULL AND EXISTS (
+          SELECT 1 FROM share_link sl
+           WHERE sl.session_id = s.id
+             AND sl.revoked_at IS NULL
+             AND (sl.expires_at IS NULL OR sl.expires_at > now())
+        )) AS "shared",
         COALESCE((
           SELECT json_agg(json_build_object(
                    'id', st.id, 'name', st.name, 'color', st.color,
@@ -2784,6 +2795,7 @@ export class SessionsService {
         lastUserText: r.lastUserText,
         mergeStatus: r.mergeStatus,
         pinnedAt: r.pinnedAt,
+        shared: r.shared === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,

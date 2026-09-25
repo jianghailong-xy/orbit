@@ -20,6 +20,7 @@ import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
+import { SharedLinksPage } from './pages/SharedLinksPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
 import { FollowingPage } from './pages/FollowingPage';
@@ -133,6 +134,15 @@ export function App() {
               element={
                 <DocView>
                   <SettingsPage />
+                </DocView>
+              }
+            />
+            {/* Every public link this account has made: Active / Paused / Ended. */}
+            <Route
+              path="settings/shared-links"
+              element={
+                <DocView>
+                  <SharedLinksPage />
                 </DocView>
               }
             />

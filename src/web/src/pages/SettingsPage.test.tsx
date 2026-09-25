@@ -44,3 +44,14 @@ describe('granting session orchestration across an account', () => {
     expect(off).not.toMatch(/disabled[^>]*>\s*<span>Turn on for all/);
   });
 });
+
+describe('the way into Settings → Shared links', () => {
+  it('is a Sharing section that names the page and offers to manage it', () => {
+    const html = render({}, []);
+    // Card title, then the row: what the page is, what it holds, and the button that opens it.
+    expect(html).toMatch(/ant-card-head-title">Sharing</);
+    expect(html).toContain('<div>Shared links</div>');
+    expect(html).toContain('Everything you’ve made viewable by link');
+    expect(html).toMatch(/<button[^>]*><span>Manage<\/span><\/button>/);
+  });
+});

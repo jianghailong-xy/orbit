@@ -11,9 +11,12 @@ import {
   CodeOutlined,
   DeleteOutlined,
   DisconnectOutlined,
+  DownloadOutlined,
   DownOutlined,
   EyeOutlined,
+  GlobalOutlined,
   InfoCircleOutlined,
+  LinkOutlined,
   LoadingOutlined,
   MessageOutlined,
   MinusCircleOutlined,
@@ -25,7 +28,6 @@ import {
   PushpinFilled,
   PushpinOutlined,
   SearchOutlined,
-  ShareAltOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
@@ -62,6 +64,7 @@ import {
   useState,
 } from 'react';
 import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
+import { copyText } from '../lib/clipboard';
 import { routeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -947,6 +950,9 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
   );
 }
 
+/** What the globe beside a row's time says: a public link opens this session right now. */
+export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
+
 /** The title is the only flexible item: time, merge state, and coordinator relation stay visible
  * while a long title ellipsizes into whatever width remains. */
 export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session: any; hoverTipOpen?: boolean }) {
@@ -961,6 +967,13 @@ export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session:
         >
           <span className="session-merge-badge">⚠</span>
         </Tooltip>
+      )}
+      {/* The list row's `shared` (docs/share-links-design.md §8). A native title rather than a
+          Tooltip: nothing to linger on a touch screen, where a tap opens the row. */}
+      {s.shared === true && (
+        <span className="session-shared" title={SESSION_SHARED_TIP} aria-label={SESSION_SHARED_TIP}>
+          <GlobalOutlined />
+        </span>
       )}
       <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
@@ -2055,6 +2068,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     : null;
   const selectedTrashed = selectedLifecycleState === 'TRASH';
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
+  // Whether a public link opens this conversation right now: the detail's open link once it has
+  // been read, the list row's flag until then. The Trash pauses a link, so a trashed one is not.
+  const selectedShared =
+    !selectedTrashed &&
+    (detailForSelected ? detailForSelected.shareToken != null : (selected as any)?.shared === true);
   // Keep an observer on every locally accepted Merge/Commit until its runner reports a terminal
   // result. Unlike the selected-detail-only observer this survives switching conversations, and
   // the operation token prevents a stale query result from finishing a newer retry for the same
@@ -4692,6 +4710,55 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         tone: 'error',
       }),
   });
+  // Trash pauses a public link rather than ending it (docs/share-links-design.md §3). That is worth
+  // saying before the move: whoever has the link loses it now, and has it again if the session is
+  // restored. A session nobody shared moves straight to Trash, with its Undo, as before.
+  const requestTrash = (session: any): void => {
+    const target = { id: session.id, title: session.title };
+    const shared = session.id === selectedId ? selectedShared : session.shared === true;
+    if (!shared) {
+      deleteMut.mutate(target);
+      return;
+    }
+    modal.confirm({
+      title: 'Move to Trash?',
+      content:
+        'Its public link is paused while the session is in Trash. Restoring the session turns the link back on.',
+      okText: 'Move to Trash',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: () => deleteMut.mutate(target),
+    });
+  };
+  // Download HTML, from the session's own menu: the whole transcript through the owner's routes
+  // (lib/sessionExport), fetched only when asked — the module carries the app's stylesheet.
+  const [downloadingHtml, setDownloadingHtml] = useState(false);
+  const downloadHtml = async (session: any): Promise<void> => {
+    if (downloadingHtml) return;
+    setDownloadingHtml(true);
+    try {
+      const { downloadSessionHtml } = await import('../lib/sessionExport');
+      await downloadSessionHtml({
+        id: session.id,
+        title: session.title,
+        status: sessionRunStateOf(session),
+        createdAt: session.createdAt,
+        startedAt: session.startedAt,
+        lastTurnAt: session.lastTurnAt,
+        workspace: { name: session.workspace?.name ?? null },
+      });
+    } catch (e) {
+      message.error(`Download failed: ${(e as Error).message}`);
+    } finally {
+      setDownloadingHtml(false);
+    }
+  };
+  // Copy link: the signed-in address, for the owner's own use — never the public one (§8).
+  const copySessionLink = (session: any): void => {
+    void copyText(`${window.location.origin}/sessions/${encodeId(session.id)}`).then((ok) =>
+      ok ? message.success('Link copied') : message.error('Could not copy'),
+    );
+  };
   // Permanent delete (from Trash): unlike deleteMut there's no undo — the row and all its
   // data are gone — so it's always gated behind confirmPurge's modal.
   const purgeMut = useMutation({
@@ -4765,7 +4832,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
     else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
-    else if (action === 'delete') deleteMut.mutate({ id: s.id, title: s.title });
+    else if (action === 'delete') requestTrash(s);
     else confirmPurge({ id: s.id, title: s.title });
   };
   // Apply the menu's complete selection in one write. Optimistically patch every list scope so the
@@ -6504,7 +6571,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   danger: true,
                   onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
                     domEvent.stopPropagation();
-                    deleteMut.mutate({ id: s.id, title: s.title });
+                    requestTrash(s);
                   },
                 };
                 const purgeItem = {
@@ -6828,6 +6895,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {!composing && (
                 <CoordinatorBadge projectId={selectedSession?.projectId} />
               )}
+              {!composing && selected && selectedShared && (
+                <button
+                  type="button"
+                  className="session-shared-pill"
+                  title="Anyone with the link can view this session — open its sharing settings"
+                  onClick={() => setShareOpen(true)}
+                >
+                  <GlobalOutlined /> Shared · Live
+                </button>
+              )}
               {!composing && selectedId && !selectedTrashed && !selectedMissing && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
@@ -6939,13 +7016,41 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 { type: 'divider' as const },
                               ]
                             : []),
+                        // Two words for two links (docs/share-links-design.md §8): Copy link is
+                        // the signed-in address, for yourself; Share… is the public one. Keeping a
+                        // copy needs neither: Download HTML reads the transcript as its owner.
+                        {
+                          key: 'copy-link',
+                          icon: <LinkOutlined />,
+                          label: 'Copy link',
+                          onClick: () => {
+                            setHeaderMenuOpen(false);
+                            copySessionLink(selected);
+                          },
+                        },
                         {
                           key: 'share',
-                          icon: <ShareAltOutlined />,
-                          label: detailForSelected?.shareToken ? 'Share · link active' : 'Share…',
+                          icon: <GlobalOutlined className={selectedShared ? 'session-share-icon-live' : undefined} />,
+                          label: selectedShared ? (
+                            <span className="scope-menu-row">
+                              Share…<span className="scope-menu-value">Live link</span>
+                            </span>
+                          ) : (
+                            'Share…'
+                          ),
                           onClick: () => {
                             setHeaderMenuOpen(false);
                             setShareOpen(true);
+                          },
+                        },
+                        {
+                          key: 'download-html',
+                          icon: <DownloadOutlined />,
+                          label: downloadingHtml ? 'Preparing HTML…' : 'Download HTML',
+                          disabled: downloadingHtml,
+                          onClick: () => {
+                            setHeaderMenuOpen(false);
+                            void downloadHtml(selectedSession ?? selected);
                           },
                         },
                         { type: 'divider' },
@@ -6956,7 +7061,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           label: 'Delete',
                           onClick: () => {
                             setHeaderMenuOpen(false);
-                            deleteMut.mutate({ id: selected.id, title: selected.title });
+                            requestTrash(selected);
                           },
                         },
                       ],
@@ -6972,8 +7077,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           <ShareModal
             open={shareOpen}
             onClose={() => setShareOpen(false)}
-            sessionId={selected.id}
-            initialToken={detailForSelected?.shareToken ?? null}
+            kind="SESSION"
+            rootId={selected.id}
           />
         )}
 
