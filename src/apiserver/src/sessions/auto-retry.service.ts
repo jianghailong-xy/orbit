@@ -4,6 +4,7 @@ import {
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import {
@@ -13,6 +14,7 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { QueueService } from '../queue/queue.service';
 import { postgresSqlState, taskRetirement } from '../tasks/task-supersession';
 import {
   TaskCompletionPolicyValue,
@@ -149,6 +151,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
     private readonly realtime: RealtimeService,
+    /**
+     * An account pool's quota (QueueService.accountPoolResumesAt): a pool's slug is in no runner's
+     * snapshot. `@Optional()` for the specs that build this service directly; QueueModule is global, so
+     * Nest always has one.
+     */
+    @Optional() private readonly queue?: QueueService,
   ) {}
 
   onModuleInit(): void {
@@ -359,17 +367,26 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // this is a free extra guard — re-sending into a quota known to be spent would waste
         // the attempt. Still blocked → re-arm for the time it now reports and spend no attempt;
         // this is a deferral, not a failure.
-        const blockedUntil = planUsageBlockedUntil(
-          session.assignedRunner?.planUsage as PlanUsage | null,
+        // An account pool is its members' quota, not the runner's (QueueService.accountPoolResumesAt):
+        // room on any of them re-sends now, and every one spent waits for the first to reset.
+        const poolResumesAt = await this.queue?.accountPoolResumesAt(
+          session.ownerId,
           session.provider,
           now,
-          runCodexAccount(
-            session.provider,
-            session.workspace?.env,
-            session.workspace?.codexAccount,
-            session.assignedRunner?.engines,
-          ),
         );
+        const blockedUntil = poolResumesAt
+          ? (poolResumesAt > now ? poolResumesAt : null)
+          : planUsageBlockedUntil(
+              session.assignedRunner?.planUsage as PlanUsage | null,
+              session.provider,
+              now,
+              runCodexAccount(
+                session.provider,
+                session.workspace?.env,
+                session.workspace?.codexAccount,
+                session.assignedRunner?.engines,
+              ),
+            );
         if (blockedUntil) {
           await this.rearm(session.id, session.status, blockedUntil, attempts, observed);
           continue;

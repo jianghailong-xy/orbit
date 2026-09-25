@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { PlanUsageSnapshot } from '@orbit/shared';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   TasksService,
 } from './tasks.service';
+import { QueueService } from '../queue/queue.service';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { recordingQueryRaw } from './query-raw-test-helper';
@@ -24,6 +26,8 @@ interface Options {
   provider?: string;
   /** `planUsage` the assignees' runner reports. */
   planUsage?: unknown;
+  /** The owner's account pool on POOL, one member per entry: the quota its cache reports, null for none. */
+  pool?: Array<PlanUsageSnapshot | null>;
   /** Free bytes the assignee workspace's filesystem last reported; null = never measured. */
   freeBytes?: bigint | null;
   /** The runner's free-space floor in MB; null = no disk gate. */
@@ -38,6 +42,26 @@ interface Options {
 
 /** Every task in these fixtures is assigned to the same workspace. */
 const AGENT_ID = 'workspace-1';
+
+const POOL = 'work-pool';
+
+/**
+ * The claim service over `owner-1`'s account pool on POOL, one member per snapshot (null: that member
+ * reports none). Only the pool's rows and the quota cache are stood in for.
+ */
+function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
+  const rows = members.map((usage, i) => ({ id: `member-${i}`, slug: `anthropic-${i}`, enabled: true, usage }));
+  const prisma = {
+    providerPool: {
+      findFirst: async ({ where }: { where: { slug: string; ownerId: string } }) =>
+        where.slug === POOL && where.ownerId === 'owner-1'
+          ? { members: rows.map((provider) => ({ provider })) }
+          : null,
+    },
+  };
+  const planUsage = { snapshot: (row: (typeof rows)[number]) => row.usage, refused: () => false };
+  return new QueueService(prisma as never, {} as never, planUsage as never);
+}
 
 type ErrorClause = Array<{ error: { contains: string } }>;
 type GroupByArgs = {
@@ -140,7 +164,17 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
       },
     },
   } as never;
-  const service = new TasksService(prisma, {} as never, {} as never);
+  const service = new TasksService(
+    prisma,
+    {} as never,
+    {} as never,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    options.pool ? poolQueue(options.pool) : undefined,
+  );
   (service as unknown as { execute: unknown }).execute = async (
     _ownerId: string,
     id: string,
@@ -428,6 +462,66 @@ test('a reported healthy quota dispatches at once — a snapshot is positive evi
   );
   await sweep(service);
   assert.deepEqual(executed, ['task-quota-recovered']);
+});
+
+// An account pool's slug is in no runner's snapshot. Read as one, it was blind: held a flat
+// QUOTA_BLIND_RETRY_BACKOFF_MS after any member ran out, and never blocked once all of them had.
+const quotaGate = (service: TasksService, id: string) =>
+  (service as unknown as {
+    quotaGate(tasks: unknown[]): Promise<{ blocked: Map<string, Date>; blind: Set<string> }>;
+  }).quotaGate([
+    { id, ownerId: 'owner-1', assignee: { provider: POOL, runnerId: 'runner-1', workspaceId: AGENT_ID } },
+  ]);
+
+test('an account pool with room on a member is neither blocked nor backed off after another ran out', async () => {
+  const { service, executed } = makeService(
+    [],
+    [{ taskId: 'task-pool-room', errors: [QUOTA_ERROR], lastFailedAt: agoMs(30_000) }],
+    {
+      provider: POOL,
+      pool: [
+        { fiveHour: { utilization: 100, resetsAt: inHours(3) } },
+        { fiveHour: { utilization: 20, resetsAt: inHours(4) } },
+      ],
+    },
+  );
+  const { blocked, blind } = await quotaGate(service, 'task-pool-room');
+  assert.deepEqual([...blocked], [], 'one spent member is not a spent pool');
+  assert.deepEqual([...blind], [], 'a member reporting room is something to go by');
+  await sweep(service);
+  assert.deepEqual(executed, ['task-pool-room'], 'dispatched at once; the claim takes it to the member with room');
+});
+
+test('an account pool with every member spent stays held, until the EARLIEST member reset', async () => {
+  const sooner = inHours(1);
+  const { service, executed } = makeService(['task-pool-spent'], [], {
+    provider: POOL,
+    pool: [
+      { fiveHour: { utilization: 100, resetsAt: inHours(3) } },
+      { fiveHour: { utilization: 100, resetsAt: sooner } },
+    ],
+  });
+  const { blocked } = await quotaGate(service, 'task-pool-spent');
+  assert.deepEqual(
+    [...blocked],
+    [['task-pool-spent', new Date(sooner)]],
+    'one account freeing up is enough to go on, unlike one account waiting for all its windows',
+  );
+  await sweep(service);
+  assert.deepEqual(executed, []);
+});
+
+test('an account pool no member reports on keeps the quota-blind backoff', async () => {
+  const { service, executed } = makeService(
+    [],
+    [{ taskId: 'task-pool-blind', errors: [QUOTA_ERROR], lastFailedAt: agoMs(30_000) }],
+    { provider: POOL, pool: [null, null] },
+  );
+  const { blocked, blind } = await quotaGate(service, 'task-pool-blind');
+  assert.deepEqual([...blocked], []);
+  assert.deepEqual([...blind], ['task-pool-blind'], 'no member reporting is not room');
+  await sweep(service);
+  assert.deepEqual(executed, [], 'held for QUOTA_BLIND_RETRY_BACKOFF_MS, as any quota nobody reports');
 });
 
 test('a ready task is held when its workspace filesystem is under the runner floor', async () => {

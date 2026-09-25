@@ -5109,7 +5109,7 @@ export class RunnerApiController {
             })
           : null;
       const quotaRetryAt = quotaSpent
-        ? await this.quotaRetryAt(tx, runner.id, current.provider, dto.error!, workspace)
+        ? await this.quotaRetryAt(tx, runner.id, current, dto.error!, workspace)
         : null;
 
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
@@ -5949,6 +5949,7 @@ export class RunnerApiController {
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {
+        ownerId: true,
         provider: true,
         taskId: true,
         retryAttempts: true,
@@ -5960,7 +5961,7 @@ export class RunnerApiController {
       if (session.taskId) return {};
       return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
     }
-    const at = await this.quotaRetryAt(tx, runnerId, session.provider, text, session.workspace);
+    const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
     return at ? { retryAt: at } : {};
@@ -5975,6 +5976,11 @@ export class RunnerApiController {
    * snapshot before it fires, so a wrong-but-early guess costs a deferral, never a wasted turn.
    * null when neither can name a moment.
    *
+   * An account pool comes before both (QueueService.accountPoolResumesAt): the limit this text names
+   * is one member's, and a pool's slug is in no runner's snapshot. Room on another member re-sends
+   * now, every member spent waits for the first of them to reset, and a pool that reports nothing to
+   * go by falls through to the two sources above like any other quota.
+   *
    * The jitter is not cosmetic: a quota is an *account*-wide fact, so every session that hit it
    * comes due at the same instant, and releasing them together would reproduce the outage against
    * the freshly reset window.
@@ -5987,7 +5993,7 @@ export class RunnerApiController {
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    provider: string,
+    session: { ownerId: string; provider: string },
     text: string,
     workspace: { env: unknown; codexAccount: string | null } | null | undefined,
   ): Promise<Date | null> {
@@ -5996,13 +6002,18 @@ export class RunnerApiController {
       where: { id: runnerId },
       select: { planUsage: true, engines: true },
     });
+    // Only a configured provider's slug can name a pool.
+    const pool = isBuiltinProvider(session.provider)
+      ? null
+      : await this.queue.accountPoolResumesAt(session.ownerId, session.provider, now);
     const at =
+      pool ??
       parseQuotaResetAt(text, now) ??
       planUsageBlockedUntil(
         runner?.planUsage as PlanUsage | null,
-        provider,
+        session.provider,
         now,
-        runCodexAccount(provider, workspace?.env, workspace?.codexAccount, runner?.engines),
+        runCodexAccount(session.provider, workspace?.env, workspace?.codexAccount, runner?.engines),
       );
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }
