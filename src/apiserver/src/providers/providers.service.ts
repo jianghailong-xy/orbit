@@ -7,8 +7,14 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
-import { subscriptionUsageRefusal, type SubscriptionUsageRefusal } from './plan-usage';
 import { ProviderPlanUsageService } from './plan-usage.service';
+import {
+  isPoolCandidate,
+  POOL_MEMBER_REFUSALS,
+  poolMemberRefusal,
+  type PoolAdmissionRow,
+  type PoolMemberRefusal,
+} from './pool-admission';
 import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
@@ -29,34 +35,20 @@ export interface UsableProvider {
   defaultModel?: string | null;
 }
 
-/** Why a provider may not join an account pool — see assertPoolMembers. */
-type PoolMemberRefusal = 'SHARED_PROVIDER' | 'KEY_UNREADABLE' | SubscriptionUsageRefusal;
-
-/** What each refusal tells the owner. */
-const POOL_MEMBER_REFUSALS: Record<PoolMemberRefusal, string> = {
-  SHARED_PROVIDER: 'Shared provider — only your own keys can join a pool',
-  KEY_UNREADABLE: "Stored key can't be read — add it again",
-  NOT_CLAUDE_RUNTIME: 'Not a Claude runtime — no 5-hour window',
-  NOT_SUBSCRIPTION_TOKEN: 'Metered API key — no 5-hour window',
-  NOT_ANTHROPIC_ENDPOINT: 'Endpoint is not api.anthropic.com',
-};
-
-/** Why this provider may not join an account pool, or null when it may. One test for both places that
- *  ask: the write that refuses a member (assertPoolMembers) and the list that warns before it is tried
- *  (listMine), so the form can never offer a row the write then turns away, or grey out one it takes. */
-function poolMemberRefusal(row: {
-  ownerId: string | null;
-  runtime: string;
-  baseUrl: string;
-  apiKeyEnc: string;
-}): PoolMemberRefusal | null {
-  if (row.ownerId === null) return 'SHARED_PROVIDER';
-  try {
-    return subscriptionUsageRefusal(row, decryptSecret(row.apiKeyEnc));
-  } catch {
-    return 'KEY_UNREADABLE';
-  }
+/** The refusal every write that puts a provider in a pool, or keeps it there, answers with: the same
+ *  reason, in the same words, whether it was joining the pool or an edit to one already in it. */
+function poolMemberRefused(row: { id: string; label: string }, reason: PoolMemberRefusal) {
+  return new BadRequestException({
+    code: 'PROVIDER_POOL_MEMBER_REFUSED',
+    kind: 'REFUSAL',
+    reason,
+    providerId: row.id,
+    message: `${row.label}: ${POOL_MEMBER_REFUSALS[reason]}`,
+  });
 }
+
+/** A provider row as refusing an edit to a pool member reads it, before and after the edit. */
+type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
 
 /** A pool as its owner reads it: the providers in it, keyless and endpointless, in the order the
  *  provider lists use. */
@@ -171,7 +163,8 @@ export class ProvidersService {
    * endpointless, like listPublic.
    *
    * The caller's own account pools are listed too, by name alone: which members a pool holds, and
-   * their keys, are nothing a caller needs to dispatch with it.
+   * their keys, are nothing a caller needs to dispatch with it. A pool none of whose accounts can run
+   * is still listed, and the doors refuse it with the reason (QueueService.accountPoolRefusal).
    */
   async listUsable(ownerId: string): Promise<UsableProvider[]> {
     const rows = await this.prisma.modelProvider.findMany({
@@ -328,7 +321,7 @@ export class ProvidersService {
   /** Update a provider within one ownership scope: admins pass null (shared rows),
    *  users pass their id (their personal rows). Cross-scope ids read as not-found. */
   async update(ownerId: string | null, id: string, dto: UpdateModelProviderDto) {
-    await this.getScoped(ownerId, id);
+    const current = await this.getScoped(ownerId, id);
     const data: Prisma.ModelProviderUpdateInput = {
       label: dto.label,
       runtime: dto.runtime,
@@ -341,7 +334,14 @@ export class ProvidersService {
     // again. The vendor identity isn't editable — it's what the provider was created from.
     if (dto.followsPreset !== undefined) data.followsPreset = dto.followsPreset;
     // Only re-encrypt when a new key is supplied; an omitted key keeps the stored one.
-    if (dto.apiKey) data.apiKeyEnc = encryptSecret(dto.apiKey);
+    const apiKeyEnc = dto.apiKey ? encryptSecret(dto.apiKey) : undefined;
+    if (apiKeyEnc) data.apiKeyEnc = apiKeyEnc;
+    await this.assertPoolMemberEdit(current, {
+      ...current,
+      runtime: dto.runtime ?? current.runtime,
+      baseUrl: dto.baseUrl ?? current.baseUrl,
+      apiKeyEnc: apiKeyEnc ?? current.apiKeyEnc,
+    });
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
     this.publishChanged(ownerId, row.id);
     return this.desensitize(row);
@@ -520,12 +520,14 @@ export class ProvidersService {
    * Pools as their owner reads them: each member keyless and endpointless, with its own quota and where
    * it stands (PoolMemberState), and the pool's answer to "what would a session starting now run on".
    *
-   * That answer is `selectPoolMember`'s, asked exactly as a claim asks it — the enabled members, their
-   * quota and refusals as the cache has them, no session to stay on — so the member marked `next` is the
-   * one the next claim picks, not an average of the members, which would read 50% for one spent account
-   * beside one untouched. `resetsAt` on the pool is set only when every member that can run is spent, and
-   * is the EARLIEST of their resets: one account freeing up is enough for work to continue. A spent
-   * member's own `resetsAt` is the latest of its windows, as for any single account.
+   * That answer is `selectPoolMember`'s, asked exactly as a claim asks it — the members it may choose
+   * (isPoolCandidate), their quota and refusals as the cache has them, no session to stay on — so the
+   * member marked `next` is the one the next claim picks, not an average of the members, which would read
+   * 50% for one spent account beside one untouched. `resetsAt` on the pool is set only when every member
+   * that can run is spent, and is the EARLIEST of their resets: one account freeing up is enough for work
+   * to continue. A spent member's own `resetsAt` is the latest of its windows, as for any single account.
+   * `unavailable` is set only when no member can run at all, no reset included — the pool every door that
+   * takes a provider refuses (QueueService.accountPoolRefusal), in the words a picker has room for.
    */
   private async poolViews(ownerId: string, pools: PoolRow[]) {
     const now = new Date();
@@ -540,13 +542,15 @@ export class ProvidersService {
         refused: this.planUsage.refused(row),
       }));
       const selection = selectPoolMember(
-        quota.filter((member) => member.row.enabled),
+        quota.filter((member) => isPoolCandidate(member.row)),
         null,
         now,
       );
       return {
         ...pool,
         resetsAt: selection.kind === 'EXHAUSTED' ? (selection.resetsAt?.toISOString() ?? null) : null,
+        unavailable:
+          selection.kind !== 'UNAVAILABLE' ? null : members.length > 0 ? 'No account can run' : 'No accounts',
         members: quota.map(({ row, usage, refused }) => {
           const spent = spentUntil(usage, now);
           const state: PoolMemberState = refused
@@ -635,16 +639,30 @@ export class ProvidersService {
       const row = rows.find((candidate) => candidate.id === providerId);
       if (!row) throw new NotFoundException('provider not found');
       const reason = poolMemberRefusal(row);
-      if (reason) {
-        throw new BadRequestException({
-          code: 'PROVIDER_POOL_MEMBER_REFUSED',
-          kind: 'REFUSAL',
-          reason,
-          providerId,
-          message: `${row.label}: ${POOL_MEMBER_REFUSALS[reason]}`,
-        });
-      }
+      if (reason) throw poolMemberRefused(row, reason);
     }
+  }
+
+  /**
+   * Refuse an edit that would turn a member of an account pool into one the pool would not admit: its
+   * key made a metered one, its endpoint moved off Anthropic's, its runtime off Claude — the same test,
+   * and the same answer, joining the pool gets (assertPoolMembers). Checked before the write, so a
+   * refused edit leaves the row exactly as it was, still in its pool. Rotating to another subscription
+   * token passes, and the next claim decrypts that one.
+   *
+   * `next` is the row as the edit would leave it. A provider in no pool, or a shared one (which none can
+   * hold), edits as it always has — and so does a member the pool would already turn away, which no
+   * claim chooses either way (isPoolCandidate): renaming or disabling it is not what made it so.
+   */
+  private async assertPoolMemberEdit(current: PoolEditRow, next: PoolEditRow): Promise<void> {
+    if (next.ownerId === null) return;
+    const reason = poolMemberRefusal(next);
+    if (!reason || poolMemberRefusal(current) !== null) return;
+    const pooled = await this.prisma.providerPoolMember.findFirst({
+      where: { providerId: next.id },
+      select: { poolId: true },
+    });
+    if (pooled) throw poolMemberRefused(next, reason);
   }
 
   /** The preset a write asks to follow — undefined for none, a 400 for one we don't ship. */

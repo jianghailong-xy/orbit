@@ -130,7 +130,10 @@ test('an unpinned task still resumes its last session whatever provider that ses
 
 /** update()'s three-state write: omitted keeps the pin, null clears it back to inheriting. */
 function serviceForUpdate(prisma: unknown): TasksService {
-  const service = new TasksService(prisma as never, {} as never, {
+  // Every pool here has an account that can run; refusing one that has none is
+  // pool-admission-closure.pg.spec.ts's.
+  const sessions = { accountPoolRefusal: async () => null };
+  const service = new TasksService(prisma as never, sessions as never, {
     publishForUser: () => undefined,
   } as never);
   (service as unknown as Record<string, unknown>).loadDetail = async () => ({

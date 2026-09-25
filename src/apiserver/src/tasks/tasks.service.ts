@@ -2164,7 +2164,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * A task may only pin a provider this caller can actually dispatch with: a built-in engine
-   * slug, one of the configured providers visible to them, or one of their own account pools.
+   * slug, one of the configured providers visible to them, or one of their own account pools —
+   * one with an account that can run (SessionsService.accountPoolRefusal).
    * Rejected here rather than at run time, so a typo surfaces on the edit instead of failing every
    * future run of the task. Mirrors the identical check SessionsService.create runs on an explicit
    * provider.
@@ -2176,9 +2177,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
       select: { slug: true },
     });
-    if (!configured && !(await accountPoolRuntime(this.prisma, ownerId, provider))) {
+    if (configured) return;
+    if (!(await accountPoolRuntime(this.prisma, ownerId, provider))) {
       throw new BadRequestException('provider not available');
     }
+    const refusal = await this.sessions.accountPoolRefusal(ownerId, provider);
+    if (refusal) throw new BadRequestException(refusal);
   }
 
   /** A task may only be filed under a list the same user owns (cf. assertOwnedWorkspace). */
@@ -11756,14 +11760,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     //
     // Availability, so the delivery budget is untouched: re-enabling the provider clears it.
     if (!Object.values(AgentProvider).includes(seed.provider as AgentProvider)) {
-      const usable =
-        (await this.prisma.modelProvider.findFirst({
-          where: {
-            slug: seed.provider, enabled: true,
-            OR: [{ ownerId: null }, { ownerId: delivery.ownerId }],
-          },
-          select: { slug: true },
-        })) ?? (await accountPoolRuntime(this.prisma, delivery.ownerId, seed.provider));
+      const configured = await this.prisma.modelProvider.findFirst({
+        where: {
+          slug: seed.provider, enabled: true,
+          OR: [{ ownerId: null }, { ownerId: delivery.ownerId }],
+        },
+        select: { slug: true },
+      });
+      const usable = configured ?? (await accountPoolRuntime(this.prisma, delivery.ownerId, seed.provider));
       if (!usable) {
         throw new MentionUndeliverable(
           'PROVIDER_UNAVAILABLE',
@@ -11771,6 +11775,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           true,
           `re-enable the "${seed.provider}" provider, or point this agent at one that is enabled; ` +
             'the mention then delivers itself',
+        );
+      }
+      // An account pool with no account that can run is held the same way: answered on it, the comment
+      // would be answered on the runner's own login. One of its accounts coming back clears it.
+      const poolRefusal = configured ? null : await this.sessions.accountPoolRefusal(delivery.ownerId, seed.provider);
+      if (poolRefusal) {
+        throw new MentionUndeliverable(
+          'PROVIDER_UNAVAILABLE',
+          `this agent runs on an account pool, and ${poolRefusal}`,
+          true,
+          'fix an account in that pool, or point this agent at another provider; the mention then delivers itself',
         );
       }
     }

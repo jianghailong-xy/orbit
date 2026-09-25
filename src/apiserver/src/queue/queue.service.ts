@@ -12,7 +12,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
-import { choosePoolMember, poolResumesAt, poolSwitchNotice } from '../providers/pool-select';
+import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
+import {
+  choosePoolMember,
+  poolFallbackNotice,
+  poolResumesAt,
+  poolSwitchNotice,
+  selectPoolMember,
+} from '../providers/pool-select';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForRuntimeModel,
@@ -582,13 +589,35 @@ export class QueueService {
   }
 
   /**
-   * `ownerId`'s account pool on `slug`: its member rows, and the enabled ones as candidates with their
-   * quota as the cache has it. Null when `slug` names no pool of theirs.
+   * Why `slug`, one of `ownerId`'s account pools, can take no session at all — it has no members, or
+   * none that can run (selectPoolMember's UNAVAILABLE: each disabled, turned away by the pool's
+   * admission, or refused by the endpoint) — or null when one can, or when `slug` names no pool of
+   * theirs. The doors that write a provider onto a session or a task refuse such a pool with this:
+   * taken, its claim could only run on the Claude default, the runner's own login.
+   *
+   * A pool whose members are all spent is not refused. It waits for the first of them to reset, as
+   * the claim and the brakes above already make it.
+   */
+  async accountPoolRefusal(
+    ownerId: string,
+    slug: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<string | null> {
+    const pool = await this.accountPool(ownerId, slug, db);
+    if (!pool || selectPoolMember(pool.candidates, null, new Date()).kind !== 'UNAVAILABLE') return null;
+    return poolUnavailableReason(pool.label, pool.rows);
+  }
+
+  /**
+   * `ownerId`'s account pool on `slug`: its name, its member rows, and the ones a claim may choose from
+   * (isPoolCandidate) as candidates with their quota as the cache has it. Null when `slug` names no pool
+   * of theirs.
    */
   private async accountPool(ownerId: string, slug: string, db: Prisma.TransactionClient = this.prisma) {
     const pool = await db.providerPool.findFirst({
       where: { slug, ownerId },
       select: {
+        label: true,
         members: {
           where: { ownerId },
           orderBy: { provider: { slug: 'asc' } },
@@ -598,15 +627,15 @@ export class QueueService {
     });
     if (!pool) return null;
     const rows = pool.members.map((member) => member.provider);
-    // A disabled member is no candidate, and nobody asks after its quota.
+    // A member no claim may choose is no candidate, and nobody asks after its quota.
     const candidates = rows
-      .filter((row) => row.enabled)
+      .filter(isPoolCandidate)
       .map((row) => ({
         row,
         usage: this.planUsage?.snapshot(row) ?? null,
         refused: this.planUsage?.refused(row) ?? false,
       }));
-    return { rows, candidates };
+    return { label: pool.label, rows, candidates };
   }
 
   /**
@@ -618,7 +647,10 @@ export class QueueService {
    * A pool is personal: only its owner's sessions resolve it, or naming its slug would spend another
    * user's keys. The member chosen is recorded on the session, which is what the next claim stays on,
    * and a move off another member records the line the transcript owes for it — carried by the next
-   * engine start event the runner reports (RunnerApiController.events).
+   * engine start event the runner reports (RunnerApiController.events). So does a claim that finds the
+   * pool with no member that can run: every one of those starts an engine on the runner's own login, and
+   * says so — naming the pool — rather than leave that to be discovered from a quota that never moved.
+   * It records no member, since the run is on none of them.
    *
    * Every door that builds a pool session's engine environment resolves it here — this claim, the
    * reclaim a restarted runner rebuilds the session from, and the reload a provider switch re-spawns it
@@ -635,7 +667,14 @@ export class QueueService {
     const now = new Date();
     const { rows, candidates } = pool;
     const chosen = choosePoolMember(candidates, session.poolMemberProviderId, now);
-    if (!chosen || chosen.id === session.poolMemberProviderId) return chosen;
+    if (!chosen) {
+      await db.session.update({
+        where: { id: session.id },
+        data: { poolMemberProviderId: null, poolSwitchNotice: poolFallbackNotice(pool) },
+      });
+      return null;
+    }
+    if (chosen.id === session.poolMemberProviderId) return chosen;
     const previous = rows.find((row) => row.id === session.poolMemberProviderId);
     const standing = candidates.find((candidate) => candidate.row.id === previous?.id);
     await db.session.update({

@@ -7887,7 +7887,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     const picked = providerSwitchChoices.find((c) => c.slug === v);
                     if (picked?.unavailable) {
                       navigate(
-                        `/providers?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
+                        picked.fixHref ??
+                          `/providers?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
                       );
                       return;
                     }
@@ -7957,7 +7958,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     return {
                       value: choice.slug,
                       label: blocked
-                        ? `${choice.label} — ${choice.unavailable}, sign in →`
+                        ? `${choice.label} — ${choice.unavailable}, ${choice.fixHref ? 'fix it' : 'sign in'} →`
                         : choice.label,
                       // Distinguishable at a glance from a provider that is ready to run, without
                       // being inert: the identity is dimmed, the call to action is not.

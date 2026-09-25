@@ -98,9 +98,11 @@ export function NewSessionProviderHero({
   // Naming the runner and the engine, so the Providers page can unfold that machine's card and
   // point at the row — where its Install and Sign in buttons are — instead of leaving the user to
   // find it among every runner they own. The engine named is the one that runs the choice, which
-  // for a configured provider is the CLI it borrows rather than its own slug.
+  // for a configured provider is the CLI it borrows rather than its own slug. A problem that is not
+  // this machine's (an account pool none of whose accounts can run) names its own page instead.
   const fixLink = (choice: ProviderChoice) =>
-    `/providers?runner=${encodeId(runnerId)}&engine=${choice.fixEngine ?? choice.slug}`;
+    choice.fixHref ?? `/providers?runner=${encodeId(runnerId)}&engine=${choice.fixEngine ?? choice.slug}`;
+  const onRunner = (choice: ProviderChoice) => (choice.fixHref ? '' : ' on this runner');
 
   // An engine this runner hasn't installed, or isn't signed into, can't run a session, so the row
   // doesn't pick it — it goes where the fix lives instead. The identity greys out (it isn't usable
@@ -112,7 +114,7 @@ export function NewSessionProviderHero({
         key={choice.slug}
         to={fixLink(choice)}
         className="np-row np-unavailable"
-        title={`${choice.label}: ${choice.unavailable} on this runner — fix it on the Providers page`}
+        title={`${choice.label}: ${choice.unavailable}${onRunner(choice)} — fix it on the Providers page`}
         onClick={() => setOpen(false)}
       >
         <ProviderMark choice={choice} size={20} />
@@ -217,7 +219,8 @@ export function NewSessionProviderHero({
         <span className="np-dot">·</span>
         {current.unavailable ? (
           <>
-            {current.unavailable} on this runner
+            {current.unavailable}
+            {onRunner(current)}
             <span className="np-dot">·</span>
             <Link to={fixLink(current)}>Fix it</Link>
           </>

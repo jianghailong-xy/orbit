@@ -6,6 +6,7 @@ import {
   parseQuotaResetAt,
   type PlanUsageSnapshot,
 } from '@orbit/shared';
+import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
 import { RetryPlanTransaction, RunnerApiController } from './runner-api.controller';
 import { transactionDouble } from '../test-support/prisma-transaction-double';
@@ -25,6 +26,9 @@ const RATE_LIMITED =
 type RetryPlan = { retryAt?: Date | null; retryAttempts?: number };
 
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
+// The pool members' keys are encrypted here and read by the claim's admission test; both only need
+// the same secret.
+process.env.PROVIDER_SECRET_KEY ??= 'retry-arming-spec';
 const POOL = 'work-pool';
 
 const inHours = (h: number): Date => new Date(Date.now() + h * 3_600_000);
@@ -39,7 +43,17 @@ const spentUntil = (resetsAt: Date): PlanUsageSnapshot => ({
  * reports none). Only the pool's rows and the quota cache are stood in for.
  */
 function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
-  const rows = members.map((usage, i) => ({ id: `member-${i}`, slug: `anthropic-${i}`, enabled: true, usage }));
+  // Each one a subscription the pool admits: a claim chooses from no other kind (isPoolCandidate).
+  const rows = members.map((usage, i) => ({
+    id: `member-${i}`,
+    slug: `anthropic-${i}`,
+    enabled: true,
+    ownerId: OWNER_ID,
+    runtime: 'claude',
+    baseUrl: 'https://api.anthropic.com',
+    apiKeyEnc: encryptSecret(`sk-ant-oat01-member-${i}`),
+    usage,
+  }));
   const prisma = {
     providerPool: {
       findFirst: async ({ where }: { where: { slug: string; ownerId: string } }) =>

@@ -772,11 +772,13 @@ export class SessionsService {
           ? configured.runtime
           : await accountPoolRuntime(this.prisma, ownerId, dto.provider);
         if (!configured && !borrowedRuntime) throw new BadRequestException('provider not available');
+        if (!configured) await this.assertUsablePool(ownerId, dto.provider);
       }
     } else if (!providerBuiltin) {
       // Inherited from the workspace, so it hasn't been looked up yet. A row that has since been
       // deleted or disabled leaves this null: dispatch falls back to Claude, and so does the
-      // runtime below.
+      // runtime below. A pool is not let off that way: one with no account that can run is refused
+      // here as it is when named, or the new session would start on the runner's own login.
       const configured = await this.prisma.modelProvider.findFirst({
         where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
         select: { runtime: true },
@@ -784,6 +786,7 @@ export class SessionsService {
       borrowedRuntime = configured
         ? configured.runtime
         : await accountPoolRuntime(this.prisma, ownerId, provider);
+      if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, provider);
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
     // A mode the target machine cannot run at all: Bypass on a runner deployed as root, which
@@ -6735,6 +6738,22 @@ export class SessionsService {
   }
 
   /**
+   * Why `slug`, one of `ownerId`'s account pools, may not be written as anything's provider — it has no
+   * account that can run — or null when it may, or names no pool of theirs (QueueService's answer; the
+   * claim chooses from the same members). Every door that takes a provider asks it: opening a session
+   * and switching one here, and TasksService's pin and mention delivery through this.
+   */
+  accountPoolRefusal(ownerId: string, slug: string, db?: Prisma.TransactionClient): Promise<string | null> {
+    return this.queue.accountPoolRefusal(ownerId, slug, db);
+  }
+
+  /** accountPoolRefusal, as the 400 this service's own doors answer with. */
+  private async assertUsablePool(ownerId: string, slug: string, db?: Prisma.TransactionClient): Promise<void> {
+    const refusal = await this.accountPoolRefusal(ownerId, slug, db);
+    if (refusal) throw new BadRequestException(refusal);
+  }
+
+  /**
    * Resolve a requested provider change against the one a session is already on.
    *
    * A switch re-points the session at another identity — a second account with the same vendor,
@@ -6797,6 +6816,7 @@ export class SessionsService {
     if (!providerBuiltin && !targetRow && !poolRuntime) {
       throw new BadRequestException('provider not available');
     }
+    if (poolRuntime) await this.assertUsablePool(session.ownerId, requested, tx);
     const from = execRuntime({
       declaredProvider: declared,
       declaredProviderBuiltin: session.providerBuiltin,

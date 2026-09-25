@@ -56,7 +56,12 @@ function makeService(
       updateMany: async () => ({ count: 1 }),
     },
   } as never;
-  const queue = { notifySessionQueued: () => undefined } as never;
+  const queue = {
+    notifySessionQueued: () => undefined,
+    // Every pool here has an account that can run; refusing one that has none is
+    // pool-admission-closure.pg.spec.ts's.
+    accountPoolRefusal: async () => null,
+  } as never;
   const realtime = {
     publishSessionCreated: () => undefined,
     publishSessionUpdated: () => undefined,

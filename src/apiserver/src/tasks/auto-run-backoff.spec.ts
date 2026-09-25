@@ -7,6 +7,7 @@ import {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   TasksService,
 } from './tasks.service';
+import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
@@ -44,13 +45,26 @@ interface Options {
 const AGENT_ID = 'workspace-1';
 
 const POOL = 'work-pool';
+// The pool members' keys are encrypted here and read by the claim's admission test; both only need
+// the same secret.
+process.env.PROVIDER_SECRET_KEY ??= 'auto-run-backoff-spec';
 
 /**
  * The claim service over `owner-1`'s account pool on POOL, one member per snapshot (null: that member
  * reports none). Only the pool's rows and the quota cache are stood in for.
  */
 function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
-  const rows = members.map((usage, i) => ({ id: `member-${i}`, slug: `anthropic-${i}`, enabled: true, usage }));
+  // Each one a subscription the pool admits: a claim chooses from no other kind (isPoolCandidate).
+  const rows = members.map((usage, i) => ({
+    id: `member-${i}`,
+    slug: `anthropic-${i}`,
+    enabled: true,
+    ownerId: 'owner-1',
+    runtime: 'claude',
+    baseUrl: 'https://api.anthropic.com',
+    apiKeyEnc: encryptSecret(`sk-ant-oat01-member-${i}`),
+    usage,
+  }));
   const prisma = {
     providerPool: {
       findFirst: async ({ where }: { where: { slug: string; ownerId: string } }) =>

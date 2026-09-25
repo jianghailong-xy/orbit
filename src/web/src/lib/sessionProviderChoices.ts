@@ -1,5 +1,6 @@
 import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
 import type { RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
+import { encodeId } from './idCodec';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
@@ -25,11 +26,14 @@ export const ENGINE_SLUGS = [
 
 export type ProviderChoiceKind = 'engine' | 'byok' | 'pool';
 
-/** An account pool as the picker needs it: its slug, its name, and which providers it holds. */
+/** An account pool as the picker needs it: its slug, its name, and which providers it holds — and,
+ *  when none of them can run, why (ProviderPool.unavailable) and the pool's id, whose page fixes it. */
 export interface PoolChoiceSource {
+  id: string;
   slug: string;
   label: string;
   members: { slug: string }[];
+  unavailable?: string | null;
 }
 
 export interface ProviderChoice {
@@ -49,8 +53,11 @@ export interface ProviderChoice {
   unavailable?: string;
   /** Which engine row on the Providers page answers `unavailable`. That is the CLI this choice
    *  runs on, which for a BYOK provider is not its own slug — a Moonshot row is fixed on the Kimi
-   *  engine row. Set whenever `unavailable` is. */
+   *  engine row. Set whenever `unavailable` is about this runner. */
   fixEngine?: string;
+  /** Where `unavailable` is fixed when it is not about this runner at all: an account pool none of
+   *  whose accounts can run is fixed on the pool's own page. */
+  fixHref?: string;
   /** An account pool: how many accounts it holds, counted on its tile. */
   poolSize?: number;
   /** A configured provider that is also an account in one of the user's pools. Still pickable on
@@ -178,7 +185,8 @@ export function providerChoices(
     };
   });
   // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
-  // carries one of its accounts' keys.
+  // carries one of its accounts' keys. And it needs one of those accounts to be able to run at all,
+  // which the server says (`unavailable`) and refuses the pool without.
   const claudeBlocker = byokBlocker(engineHealth?.find((e) => e.engine === AgentProvider.CLAUDE));
   const accountPools: ProviderChoice[] = pools.map((pool) => ({
     slug: pool.slug,
@@ -187,7 +195,11 @@ export function providerChoices(
     ...brandForProvider(pool.slug, pool.label, 'anthropic'),
     modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
     poolSize: pool.members.length,
-    ...(claudeBlocker ? { unavailable: claudeBlocker, fixEngine: AgentProvider.CLAUDE } : {}),
+    ...(claudeBlocker
+      ? { unavailable: claudeBlocker, fixEngine: AgentProvider.CLAUDE }
+      : pool.unavailable
+        ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
+        : {}),
   }));
   const poolSlugs = new Set(pools.map((pool) => pool.slug));
   const pooled = new Set(pools.flatMap((pool) => pool.members.map((member) => member.slug)));

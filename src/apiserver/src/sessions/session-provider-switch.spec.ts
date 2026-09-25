@@ -101,7 +101,9 @@ function harness(
   } as never;
   const service = new SessionsService(
     prisma,
-    {} as never,
+    // Every pool here has an account that can run; refusing one that has none is
+    // pool-admission-closure.pg.spec.ts's.
+    { accountPoolRefusal: async () => null } as never,
     { notifyInbox: () => undefined } as never,
   );
   return { service, updated: () => updated, reloads: () => reloads };
