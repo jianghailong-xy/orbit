@@ -1,0 +1,79 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #e9e9ee; font-family: "Nimbus Sans", "Noto Sans CJK SC", sans-serif; padding: 28px 32px; width: 980px; color: #1f2329; }
+h2 { font-size: 22px; margin: 0 0 12px 4px; } h2 small { font-size: 15px; font-weight: 400; color: #6b6b70; margin-left: 8px; }
+.win { background: #fff; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.18); padding: 18px 26px 16px; width: 900px; }
+.mono { font-family: "DejaVu Sans Mono", monospace; }
+.card { margin: 6px 0; border-left: 3px solid var(--tone); --tone: #d6d9de; --tone-bg: #f2f3f5; }
+.card.agent { --tone: #7c3aed; --tone-bg: #f1ebfd; }
+.card.exec { --tone: #0d9488; --tone-bg: #e2f6f3; }
+.card.open { border: 1px solid #dee0e3; border-left: 3px solid var(--tone); border-radius: 8px; }
+.r { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12.5px; }
+.caret { width: 1em; color: #bbbfc4; font-size: 10px; }
+.ico { width: 22px; height: 22px; border-radius: 6px; background: var(--tone-bg); color: var(--tone); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.nm { font-family: "DejaVu Sans Mono", monospace; font-weight: 700; }
+.sm { color: #8f959e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.meta { font-family: "DejaVu Sans Mono", monospace; font-size: 11px; color: #646a73; background: #f2f3f5; border-radius: 4px; padding: 0 5px; }
+.ok { width: 14px; height: 14px; border-radius: 7px; background: #34c759; color: #fff; font-size: 9px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex: none; }
+.spin { width: 13px; height: 13px; border-radius: 7px; border: 2px solid #d6e2ff; border-top-color: #3370ff; border-right-color: #3370ff; flex: none; }
+.hollow { width: 13px; height: 13px; border-radius: 7px; border: 1.5px solid #bbbfc4; flex: none; }
+.prog { border-top: 1px dashed #e5e6eb; padding: 6px 12px 10px 38px; background: #fafbfc; }
+.sec { font-size: 10.5px; font-weight: 700; letter-spacing: .5px; color: #8f959e; margin: 8px 0 3px; }
+.sec span { font-weight: 400; letter-spacing: 0; margin-left: 4px; }
+.ag { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
+.ag .n { font-family: "DejaVu Sans Mono", monospace; width: 210px; flex: none; }
+.ag .now { font-family: "DejaVu Sans Mono", monospace; color: #8f959e; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag .d { color: #8f959e; margin-left: auto; }
+.foot { font-size: 11.5px; color: #8f959e; border-top: 1px solid #eff0f1; margin-top: 6px; padding-top: 5px; }
+.p { font-size: 14px; line-height: 22px; margin: 10px 0; }
+.tray { margin-top: 14px; border: 1px solid #eff0f1; border-radius: 8px; background: #fafbfc; }
+.th { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; }
+.th b { font-weight: 600; } .th .c { color: #8f959e; font-family: "DejaVu Sans Mono", monospace; }
+.tl { border-top: 1px solid #eff0f1; padding: 4px 8px 6px; display: flex; flex-direction: column; gap: 3px; }
+.sh { border: 1px solid #eff0f1; border-radius: 6px; background: #fff; }
+.sh .r { font-size: 12px; }
+.tag { font-size: 10.5px; color: #646a73; background: #f2f3f5; border-radius: 4px; padding: 0 5px; }
+.age { color: #8f959e; font-size: 11.5px; }
+.sub { padding: 0 10px 6px 34px; font-size: 11.5px; color: #8f959e; }
+.mark { outline: 2px dashed #ff5a1f; outline-offset: 3px; border-radius: 8px; position: relative; }
+.num { position: absolute; top: -12px; right: -12px; width: 22px; height: 22px; border-radius: 11px; background: #ff5a1f; color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.legend { margin-top: 22px; background: #fff; border-radius: 14px; padding: 14px 20px; font-size: 15.5px; line-height: 26px; width: 900px; }
+.legend b.n { display: inline-flex; width: 21px; height: 21px; border-radius: 11px; background: #ff5a1f; color: #fff; font-size: 12.5px; align-items: center; justify-content: center; margin-right: 6px; }
+</style></head><body>
+<h2>Web<small>同一结构、同样的词（桌面宽度）</small></h2>
+<div class="win">
+  <div class="card exec"><div class="r"><span class="caret">▸</span><span class="ico mono">&gt;_</span><span class="nm">Bash</span><span class="sm">Extract completed ground reports to /var/tmp/wikireview2</span><span class="ok">✓</span></div></div>
+  <div class="mark"><span class="num">7</span>
+  <div class="card agent open">
+    <div class="r"><span class="caret">▾</span><span class="ico">▦</span><span class="nm">Workflow</span><span class="sm">First-principles + web research on the right artifact form for Orbit knowledge (wiki vs records vs graph)…</span><span class="meta">6/9</span><span class="spin"></span></div>
+    <div class="prog">
+      <div class="sec">GROUND<span>4/4</span></div>
+      <div class="ag"><span class="ok">✓</span><span class="n">ground:first-principles</span><span class="d">cached</span></div>
+      <div class="ag"><span class="ok">✓</span><span class="n">ground:web-forms</span><span class="d">cached</span></div>
+      <div class="ag"><span class="ok">✓</span><span class="n">ground:web-api</span><span class="d">cached</span></div>
+      <div class="ag"><span class="ok">✓</span><span class="n">ground:code-api</span><span class="d">cached</span></div>
+      <div class="sec">DESIGN<span>2/3</span></div>
+      <div class="ag"><span class="ok">✓</span><span class="n">design:page-wiki</span><span class="d">34 tools</span></div>
+      <div class="ag"><span class="ok">✓</span><span class="n">design:typed-records</span><span class="d">33 tools</span></div>
+      <div class="ag"><span class="spin"></span><span class="n">design:entity-graph</span><span class="now">Bash grep -rn "entity" src/apiserver/src</span><span class="d">46 tools</span></div>
+      <div class="sec">JUDGE<span>0/2</span></div>
+      <div class="ag"><span class="hollow"></span><span class="n">judge:product</span><span class="d">queued</span></div>
+      <div class="ag"><span class="hollow"></span><span class="n">judge:engineering</span><span class="d">queued</span></div>
+      <div class="foot">113 tool calls · 17m</div>
+    </div>
+  </div></div>
+  <div class="p">四份地基报告都读完了，三版方案和两位评审正在续跑。已经看得出的几条走向：</div>
+  <div class="tray mark"><span class="num">8</span>
+    <div class="th"><span>▭</span><b>Background processes</b><span class="c">1 running · 6 total</span><span style="margin-left:auto;color:#8f959e">▾</span></div>
+    <div class="tl">
+      <div class="sh"><div class="r"><span class="ok">✓</span><span class="tag">Workflow</span><span class="sm" style="color:#1f2329">Review the idea of compiling Orbit activity into a tech wiki + internet change watch…</span><span class="age">2h ago</span></div></div>
+      <div class="sh"><div class="r"><span class="ok">✓</span><span class="tag">Agent</span><span class="sm" style="color:#1f2329">Deep-read wikova for reusable design</span><span class="age">2h ago</span></div></div>
+      <div class="sh"><div class="r"><span class="spin"></span><span class="tag">Workflow</span><span class="sm" style="color:#1f2329">First-principles + web research on the right artifact form for Orbit knowledge…</span><span class="age">17m ago</span></div><div class="sub">Design 2/3 · design:entity-graph running · 113 tool calls</div></div>
+    </div>
+  </div>
+</div>
+<div class="legend">
+<b class="n">7</b>Workflow 卡展开后的进度块和 iOS 同样三段：阶段、每个 agent 的状态和工具数、底部合计。web 的 Agent 卡本来就把子 agent 嵌在卡里，这次不动。<br>
+<b class="n">8</b>web 托盘现在只列 Bash 后台进程；改后也列 Agent / Workflow，每行标类型，在跑的工作流多一行进度。iOS 与 web 共用服务端 <span class="mono">/background</span> 这一份清单。
+</div>
+</body></html>
