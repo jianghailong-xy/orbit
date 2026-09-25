@@ -4628,22 +4628,33 @@ html[data-theme='dark'] .session-tag-chip {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+/* The composer is one card: staged attachments, then the text across the whole width, then a
+   row of controls pinned to its foot (`.composer-toolbar`), so the text grows upward and never
+   moves the `+` or Send. 24px corners, because the two round controls at the foot have their
+   centres 24px from both edges — on the corner's own centre. Focus deepens
+   the rim instead of turning it blue: the only coloured rim a composer has is shell mode's. */
 .composer-box {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 6px;
+  border-radius: 24px;
+  background: var(--bg-raised);
+  box-shadow:
+    0 2px 10px rgba(31, 35, 41, 0.05),
+    0 10px 30px rgba(31, 35, 41, 0.04);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 .composer-box:focus-within {
-  border-color: var(--brand);
+  border-color: color-mix(in srgb, var(--text-1) 28%, var(--border));
+  box-shadow:
+    0 3px 14px rgba(31, 35, 41, 0.08),
+    0 12px 34px rgba(31, 35, 41, 0.05);
 }
 /* `!cmd` shell mode: the whole box reads as a command line, not a message box. Unlike the
-   focus ring above this holds whether or not the composer is focused — the mode is a property
+   focus rim above this holds whether or not the composer is focused — the mode is a property
    of the draft, so clicking away and back must not make it look like an ordinary message
-   again. Listed after :focus-within (equal specificity) so it wins over the brand border. */
+   again. Listed after :focus-within (equal specificity) so it wins over the focused rim. */
 .composer-box-shell,
 .composer-box-shell:focus-within {
   border-color: var(--error);
@@ -4707,12 +4718,28 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-1);
   background: var(--bg-hover);
 }
-/* Attach (+) button: keep the full 32px line height so its icon aligns with the
-   send button, but narrow the width so the icon sits close to the text. */
-.composer-box .composer-attach-btn.ant-btn {
-  width: 24px;
+/* The `+` and Send are the toolbar's two ends: 32px circles whose centres sit 24px in from the
+   card's outer edges (1px of border + 7px of toolbar padding + half of 32). */
+.composer-box .composer-attach-btn.ant-btn,
+.composer-box .composer-send.ant-btn {
+  flex: none;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 50%;
 }
-/* The `+` becomes a shell prompt while the draft is a `!cmd` — same 24px slot, so the
+.composer-box .composer-attach-btn.ant-btn {
+  color: var(--text-1);
+  font-size: 16px;
+}
+/* A Send with nothing to send is a quiet grey disc, not antd's outlined ghost: the circle keeps
+   its place and shape, and only the colour says it is waiting for text. */
+.composer-box .composer-send.ant-btn:disabled {
+  border-color: transparent;
+  background: var(--border);
+  color: var(--bg-raised);
+}
+/* The `+` becomes a shell prompt while the draft is a `!cmd` — same 32px slot, so the
    composer doesn't reflow on the mode switch. Clicking it leaves shell mode (see exitShell);
    antd tints a text button's label on hover, so the colour is pinned through :hover too. */
 .composer-box .composer-shell-btn.ant-btn,
@@ -4732,16 +4759,15 @@ html[data-theme='dark'] .session-tag-chip {
    caret away from the text the user sees — invisibly, because the real text is transparent. */
 .composer-field {
   position: relative;
-  flex: 1;
   min-width: 0;
 }
 .composer-field .composer-mirror,
 .composer-field textarea.ant-input {
   font: inherit;
-  font-size: 14px;
-  line-height: 1.5715;
+  font-size: 15px;
+  line-height: 1.6;
   letter-spacing: normal;
-  padding: 4px 11px 4px 2px;
+  padding: 12px 16px 2px;
   border: 0;
   margin: 0;
   white-space: pre-wrap;
@@ -4763,6 +4789,12 @@ html[data-theme='dark'] .session-tag-chip {
   color: transparent;
   -webkit-text-fill-color: transparent;
   caret-color: var(--text-1);
+}
+/* The glyphs above are transparent so the mirror can draw them — and a placeholder inherits that
+   too, with no mirror behind it to draw it instead. Give it back its own colour (antd's placeholder
+   grey, which it carries as `color`), or an empty composer is a blank card with no prompt in it. */
+.composer-field textarea.ant-input::placeholder {
+  -webkit-text-fill-color: currentColor;
 }
 .composer-field textarea.ant-input::selection {
   background: rgba(22, 119, 255, 0.25);
@@ -4804,11 +4836,10 @@ html[data-theme='dark'] .session-tag-chip {
   -webkit-text-fill-color: var(--error);
 }
 
-/* Trim the textarea's default ~11px left padding so the text hugs the + icon.
-   `resize: none` because the composer has its own top drag handle (native corner grip
-   would fight autoSize). */
+/* `resize: none` because the composer has its own top drag handle (native corner grip would
+   fight autoSize). Padding is NOT set here: it lives in the shared `.composer-field` block, where
+   the mirror behind the textarea takes the same value. */
 .composer-box textarea.ant-input {
-  padding-inline-start: 2px;
   resize: none;
 }
 /* `!cmd` shell mode: the draft runs raw on the runner instead of going to the agent, so the
@@ -4901,24 +4932,76 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
   color: var(--text-3);
 }
-.composer-pills {
+/* The card's foot: `+`, workspace (a draft's only), mode — then, right-aligned, the model
+   control, the usage gauges and Send. One line, always: on a phone the gauges drop their
+   numbers and the model's name gives way before anything else does (see the 600px block). */
+.composer-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 7px 7px;
 }
-/* One quiet metadata strip: every footer control shares the same 12px secondary text.
-   AntD's borderless Selects otherwise render their value at 14px / colorText — a size
-   and a shade heavier than the static agent label and usage percent beside them — so
-   pull the selected value down to match. The disabled (non-editable) shade is left to
-   AntD so a read-only control still reads as read-only. */
-.composer-pills .ant-select-content-has-value,
-.composer-pills .ant-select-placeholder {
-  font-size: 12px;
+/* One quiet text size for the toolbar's words. AntD's borderless Selects otherwise render
+   their value at 14px / colorText — a size and a shade heavier than the model's effort and the
+   usage percents beside them — so pull the selected value down to match. The disabled
+   (non-editable) shade is left to AntD so a read-only control still reads as read-only. */
+.composer-toolbar .ant-select-content-has-value,
+.composer-toolbar .ant-select-placeholder {
+  font-size: 13px;
 }
-.composer-pills .ant-select:not(.ant-select-disabled) .ant-select-content-has-value {
+.composer-toolbar .ant-select:not(.ant-select-disabled) .ant-select-content-has-value {
   color: var(--text-2);
+}
+/* The model control: "Opus 5.5 Max" — the model in the text colour, the effort after it in the
+   secondary one, one button. Its menu (`.composer-model-menu`) holds provider, model, effort and
+   speed. */
+.composer-toolbar .composer-model-pill {
+  min-width: 0;
+  padding-left: 0;
+}
+.composer-model-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.composer-model-chip.ant-dropdown-open {
+  background: var(--bg-hover);
+}
+.composer-model-chip:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.composer-model-chip:disabled {
+  cursor: not-allowed;
+}
+.composer-model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+  font-weight: 600;
+}
+.composer-model-effort {
+  flex: none;
+  color: var(--text-2);
+}
+.composer-model-chip:disabled .composer-model-name,
+.composer-model-chip:disabled .composer-model-effort {
+  color: var(--text-3);
+}
+.composer-model-menu.ant-dropdown-menu {
+  min-width: 200px;
 }
 /* Lightweight, borderless controls (Claude-style): text-only label, with a faint
    rounded background surfacing only on hover. The pill category is named via Tooltip. */
@@ -4933,7 +5016,8 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-pill:hover {
   background: var(--bg-hover);
 }
-/* Pushes Model + Effort to the right edge of the pill row, leaving Mode on the left. */
+/* Pushes the model control, the gauges and Send to the right edge, leaving `+` and Mode on the
+   left. */
 .composer-pill-spacer {
   flex: 1 1 auto;
 }
@@ -4986,47 +5070,47 @@ html[data-theme='dark'] .session-tag-chip {
 .context-ring-danger .context-ring-fill {
   stroke: var(--error-solid);
 }
-/* Phone footer: the five controls are wider than one line, so the base `flex-wrap:
-   wrap` above drops the plan-usage pill onto a lonely second row. Keep the row on a
-   single line and let only the (widest) agent label give up width — it truncates
-   with an ellipsis — so Mode / Model / Effort / Usage all stay put. This block must
-   live AFTER the base .composer-pills rules: media queries add no specificity, so a
-   later same-specificity rule would otherwise override these. */
+/* Phone composer: bigger round ends for a thumb, the gauges as shapes only, and one rule for
+   what gives way when the toolbar runs out of room. This block must live AFTER the base
+   .composer-toolbar rules: media queries add no specificity, so a later same-specificity rule
+   would otherwise override these. */
 @media (max-width: 600px) {
-  /* Enlarge the + and send buttons to a comfortable 40px square tap target on touch
-     (desktop keeps the tight 24px +). flex:none is essential: the box is a flex row
-     whose textarea is width:100%, so without it the flex algorithm shrinks these
-     buttons back into narrow rectangles (width collapses, height doesn't). */
+  /* Bigger round ends for a thumb: 36px circles instead of the pointer's 32. */
   .composer-box .composer-attach-btn.ant-btn,
-  .composer-box .ant-btn-icon-only {
-    flex: none;
-    width: 40px;
-    height: 40px;
+  .composer-box .composer-send.ant-btn {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
   }
-  /* The 40px buttons make the row taller than a single line of text; the box aligns
-     items to flex-end (so buttons stay pinned to the bottom as the textarea grows), so
-     a resting one-line input would otherwise sit low against the bottom. Centre just
-     the textarea: single-line text is vertically centred, and once it grows multiline
-     the textarea is the tallest item, making this a no-op. */
-  .composer-box textarea.ant-input {
-    align-self: center;
+  /* 1px of border + 5px of padding + half of 36 keeps both ends' centres 24px from the card's
+     outer edges. */
+  .composer-toolbar {
+    gap: 2px;
+    padding: 2px 5px 5px;
   }
-  .composer-pills {
-    flex-wrap: nowrap;
-    gap: 4px;
-  }
-  .composer-pill-spacer {
-    display: none;
-  }
-  .composer-pills .composer-pill {
+  .composer-toolbar .composer-pill:not(.composer-model-pill) {
     padding-left: 3px;
   }
-  /* Every control keeps its natural width except the agent label. */
-  .composer-pills > .composer-pill:not(.composer-pill-workspace),
-  .composer-usage {
+  /* A phone's toolbar holds the gauges as shapes only: the ring and the bar still say how full
+     they are, and the number is one tap away in their popovers (and read out by their labels).
+     Desktop has the room and keeps it. */
+  .composer-toolbar .composer-usage-pct {
+    display: none;
+  }
+  .composer-toolbar .composer-usage {
+    padding-right: 3px;
+  }
+  /* Everything keeps its natural width but the names: the model's name, a pool's account and a
+     draft's workspace give way (with an ellipsis) — the effort, the mode, the gauges and Send
+     never do. */
+  .composer-toolbar > .composer-pill,
+  .composer-toolbar > .composer-usage,
+  .composer-toolbar > .ant-btn {
     flex: none;
   }
-  .composer-pill-workspace {
+  .composer-toolbar > .composer-model-pill,
+  .composer-toolbar > .composer-account,
+  .composer-toolbar > .composer-pill-workspace {
     min-width: 0;
     flex-shrink: 1;
   }
@@ -5292,13 +5376,14 @@ button.composer-usage:focus-visible {
   color: var(--text-3);
 }
 
-/* Staged image attachments — a row of thumbnail chips above the composer box. Each chip
-   reuses the .composer-pill shape (rounded, bordered) sized to a small thumbnail. */
+/* Staged attachments — a row of thumbnail chips at the top of the composer card, above the text
+   they go out with. Each chip reuses the .composer-pill shape (rounded, bordered) sized to a small
+   thumbnail. */
 .composer-attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
+  padding: 12px 14px 0;
 }
 .composer-attach {
   position: relative;
@@ -12313,10 +12398,10 @@ button.chat-jump-start:hover {
 .np-row-model.np-fix {
   color: var(--brand);
 }
-/* The same row in the composer's Provider pill, where the option is one string rather than three
-   elements: dim it as unavailable, but leave it selectable — choosing it opens the sign-in it
+/* The same row in the composer model menu's Provider submenu, where the row is one string rather
+   than three elements: dim it as unavailable, but leave it pickable — choosing it opens the sign-in it
    names, so greying it out would take away the only thing it is there to offer. */
-.ant-select-item-option.composer-provider-fix .ant-select-item-option-content {
+.ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {
   color: var(--text-3);
 }
 .np-row.on {

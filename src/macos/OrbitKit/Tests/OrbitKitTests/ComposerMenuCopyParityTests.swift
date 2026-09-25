@@ -120,8 +120,9 @@ final class ComposerMenuCopyParityTests: XCTestCase {
     }
 
     /// Each web menu item's own source, keyed by the item's key. An item is read from its `key:`
-    /// line to its closing `},`; an item that no longer ends that way fails the parse rather than
-    /// quietly matching nothing.
+    /// line to its closing `},` — the one two spaces left of the `key:`, wherever the JSX around
+    /// the menu happens to indent it; an item that no longer ends that way fails the parse rather
+    /// than quietly matching nothing.
     private func webItems() throws -> [String: Substring] {
         let source = try source(Self.webComposer)
         var items: [String: Substring] = [:]
@@ -132,7 +133,13 @@ final class ComposerMenuCopyParityTests: XCTestCase {
                 throw ParityError.unparsed(
                     "the web composer has \(hits) `menu.items` entries keyed '\(key)'")
             }
-            let closer = "\n                },"
+            let lineStart = source[..<start.lowerBound].lastIndex(of: "\n")
+                .map { source.index(after: $0) } ?? source.startIndex
+            let indent = source[lineStart..<start.lowerBound]
+            guard indent.count >= 2, indent.allSatisfy({ $0 == " " }) else {
+                throw ParityError.unparsed("the web item '\(key)' does not open its own line")
+            }
+            let closer = "\n" + String(repeating: " ", count: indent.count - 2) + "},"
             guard let end = source.range(of: closer, range: start.upperBound..<source.endIndex)
             else {
                 throw ParityError.unparsed("the web item '\(key)' has no `\(closer.debugDescription)`")
