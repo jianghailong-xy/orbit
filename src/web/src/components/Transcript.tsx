@@ -2271,14 +2271,16 @@ export function AssistantBubble({
   const exp = useContext(ExportCtx);
   const el = useRef<HTMLDivElement>(null);
   return (
-    <div className="wk-msg-wrap">
-      <div
-        ref={el}
-        className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
-        data-seq={seq}
-      >
-        <MD highlight={!streaming}>{text}</MD>
-      </div>
+    <div
+      ref={el}
+      className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
+      data-seq={seq}
+    >
+      <MD highlight={!streaming}>{text}</MD>
+      {/* Inside the message, not beside it: the transcript's other readers walk a node's SIBLINGS
+          by `data-seq` (the receipt insert, the jump-to-seq lookup), and a wrapper around the reply
+          would put a stamp-less div between them. The assistant's own box is a plain block with no
+          bubble, so a row under its text is drawn exactly where the mock draws one. */}
       {!streaming && !exp && text.trim() !== '' && (
         <AddToWikiRow
           text={text}

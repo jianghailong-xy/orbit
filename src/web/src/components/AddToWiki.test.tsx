@@ -111,10 +111,8 @@ async function click(el: Element) {
 function Reply({ text = 'Got it. A runner update never evicts a turn in flight.' } = {}) {
   const messageRef = { current: null as HTMLElement | null };
   return (
-    <div className="wk-msg-wrap" ref={(el) => { messageRef.current = el; }}>
-      <div className="chat-msg chat-assistant">
-        <span>{text}</span>
-      </div>
+    <div className="chat-msg chat-assistant" ref={(el) => { messageRef.current = el; }}>
+      <span>{text}</span>
       <AddToWikiRow text={text} turnId={TURN} messageRef={messageRef} time="2h ago" />
     </div>
   );
