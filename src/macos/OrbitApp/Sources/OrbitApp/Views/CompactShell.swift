@@ -287,13 +287,19 @@ private struct CompactSections: View {
                     .navigationDestination(for: NavNode.self) { node in
                         switch node {
                         case .compose(let agentID):      AgentComposePage(agentID: agentID)
-                        case .console(let sessionID, _): AgentConsolePage(sessionID: sessionID)
-                        // What a console opens over itself — its "Tasks created here" card's task,
-                        // project and View all — so the back swipe returns to the conversation
-                        // instead of to another section's list (`CreatedTasksCard.openPage`).
+                        // The one place the phone's console is told that what it opens goes on
+                        // this stack (`opensPagesOverConsole`): its links, its Watching card, its
+                        // Tasks created here card — so the back swipe returns to the conversation
+                        // instead of to another section's list. The wide shells never set it.
+                        case .console(let sessionID, _):
+                            AgentConsolePage(sessionID: sessionID)
+                                .environment(\.opensPagesOverConsole, true)
+                        // What a console opens over itself.
                         case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
                         case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)
                         case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
+                        case .watches:                      FollowingListView(rowNavigation: .push)
+                        case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
                         // The other sections' pages ride their own stacks, not this one.
                         default:                         EmptyView()
                         }

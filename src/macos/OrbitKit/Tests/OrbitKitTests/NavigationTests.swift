@@ -38,10 +38,11 @@ final class NavigationTests: XCTestCase {
         nav.push(.console(sessionID: "s1", origin: .list))
 
         for page in [NavNode.taskDetail(taskID: "t1"), .projectDetail(projectID: "p1"),
-                     .createdTasks(sessionID: "s1")] {
+                     .createdTasks(sessionID: "s1"), .watches, .watchDetail(watchID: "w1"),
+                     .console(sessionID: "s2", origin: .conversation)] {
             nav.push(page)
             XCTAssertEqual(nav.path, [.console(sessionID: "s1", origin: .list), page])
-            XCTAssertNil(nav.focusedConsoleSessionID, "the console is under the page, not on screen")
+            XCTAssertNotEqual(nav.focusedConsoleSessionID, "s1", "the console is under the page, not on screen")
             XCTAssertFalse(nav.consoleFromRecents, "the left edge on the page is a plain back")
 
             nav.pop()

@@ -29,6 +29,9 @@ public enum NavOrigin: Hashable, Sendable {
     case deepLink
     /// The needs-you banner.
     case banner
+    /// A link in the conversation underneath, on a phone: pushed over that console, so the back
+    /// swipe returns to it (`AppModel.pushConsole`).
+    case conversation
 }
 
 /// One pushed page. A section's whole navigation state is `[NavNode]`, so what is on screen and how
@@ -51,6 +54,9 @@ public enum NavNode: Hashable, Sendable {
     /// over that console — with the card's task and project pages — so the back swipe returns to the
     /// conversation instead of to another section's list.
     case createdTasks(sessionID: String)
+    /// The Following page's list of watches: a console's Watching card's `Manage in Watches ›` on a
+    /// phone, pushed over that console for the same reason — a row opens its watch on this stack.
+    case watches
 }
 
 /// Which section is showing, and every section's stack.

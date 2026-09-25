@@ -148,15 +148,21 @@ final class CreatedTasksWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("openPage(.projectDetail(projectID: project.id)) { app.openProject(project.id) }"))
         XCTAssertTrue(card.contains("openPage(.createdTasks(sessionID: console.sessionID))"))
         let open = try slice(card, from: "private func openPage(", to: "\n    }")
-        XCTAssertTrue(open.contains("if hSize == .compact"), "the width decides, as it picks the shell")
-        XCTAssertTrue(open.contains("app.push(page)"), "a push on the stack on screen: the console's")
+        XCTAssertTrue(open.contains("if overConsole { app.push(page) } else { elsewhere() }"),
+                      "a push on the stack on screen — the console's — where the console says so")
+        XCTAssertTrue(card.contains("@Environment(\\.opensPagesOverConsole) private var overConsole"),
+                      "and the console's environment is what says so, not a width read of the card's own")
 
         // The Agents stack renders what a console opens over itself; otherwise the push is a blank page.
         let agents = code(try slice(try source("Views/CompactShell.swift"),
                                     from: "case .agents:", to: "// PROJECTS"))
+        XCTAssertTrue(agents.contains(".environment(\\.opensPagesOverConsole, true)"),
+                      "the phone's stack is the one place that tells its console to push")
         XCTAssertTrue(agents.contains("case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)"))
         XCTAssertTrue(agents.contains("case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)"))
         XCTAssertTrue(agents.contains("case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)"))
+        XCTAssertTrue(agents.contains("case .watches:                      FollowingListView(rowNavigation: .push)"))
+        XCTAssertTrue(agents.contains("case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)"))
 
         // The View all page reads every task the session created, fifty at a time, and a row opens
         // its task on the same stack.
@@ -166,5 +172,54 @@ final class CreatedTasksWiringTests: XCTestCase {
         let read = code(try slice(try source("AppModel.swift"),
                                   from: "func tasksCreated(inSession sessionID: String", to: "\n    }"))
         XCTAssertTrue(read.contains("creatorSessionId: sessionID"))
+    }
+
+    /// The same rule for every other door out of a conversation (the owner, 2026-09-25: "change them
+    /// to the same behaviour"): a link in the transcript — as prose or as a card — and the Watching
+    /// card's target rows and `Manage in Watches ›` all hand the console's answer to the model, which
+    /// pushes a task, another session or the Following page over the console on a phone.
+    func testEveryDoorOutOfAConversationPushesOverItOnAPhone() throws {
+        let app = code(try source("AppModel.swift"))
+        let opener = try slice(app, from: "func openFromConversation(_ route: Route, overConsole: Bool) {",
+                               to: "\n    }")
+        XCTAssertTrue(opener.contains("guard overConsole else { return self.route(to: route) }"),
+                      "off a phone's conversation nothing changes: it is a route")
+        XCTAssertTrue(opener.contains("case .task(let id):    push(.taskDetail(taskID: id))"))
+        XCTAssertTrue(opener.contains("case .session(let id): pushConsole(id)"))
+        let pushConsole = try slice(app, from: "func pushConsole(_ id: String) {", to: "\n    }")
+        XCTAssertTrue(pushConsole.contains("push(.console(sessionID: id, origin: .conversation))"),
+                      "another conversation goes on top of this one, not in its place")
+        XCTAssertTrue(pushConsole.contains("refreshUnlistedSession(id, adoptingAgent: false)"),
+                      "and the list under both conversations keeps its agent")
+
+        let prose = code(try source("Views/Console/SelectableText.swift"))
+        XCTAssertTrue(prose.contains("context.coordinator.opensOverConsole = context.environment.opensPagesOverConsole"))
+        XCTAssertTrue(prose.contains("self.app?.openFromConversation(route, overConsole: self.opensOverConsole)"))
+        XCTAssertTrue(prose.contains("self.app?.openOrbitLink(url, overConsole: self.opensOverConsole)"))
+        XCTAssertTrue(code(try source("Views/OrbitLinkCardView.swift"))
+            .contains("app.open(cards.destination(for: ref), overConsole: overConsole)"))
+
+        let watching = code(try source("Views/WatchingCard.swift"))
+        XCTAssertTrue(watching.contains("model.openFromConversation(destination, overConsole: overConsole)"),
+                      "a watch's target opens over the conversation")
+        XCTAssertTrue(watching.contains("if overConsole { model.push(.watches) } else { model.selectedSection = .following }"),
+                      "and so does the Following page its strip leads to")
+    }
+
+    /// An open card in the band never draws as a header and a footer with nothing between them (the
+    /// owner's report, 2026-09-25: the Watching strip opened above an open Tasks created here card
+    /// took the band's whole share and left the card's rows at no height). The strip's facts are
+    /// capped and scroll inside; each list keeps two rows however little room is left.
+    func testAnOpenCardKeepsItsRowsWhenAnotherOpensAboveIt() throws {
+        let card = code(try source("Views/CreatedTasksCard.swift"))
+        XCTAssertEqual(card.components(separatedBy: ".frame(minHeight: Self.listFloor(items), maxHeight: Self.listCap)")
+            .count - 1, 2, "both of the list's scrolling shapes keep the floor")
+        XCTAssertFalse(card.contains(".frame(maxHeight: Self.listCap)"), "no scrolling shape without one")
+        let watching = code(try source("Views/WatchingCard.swift"))
+        XCTAssertTrue(watching.contains(".frame(minHeight: Self.factsFloor, maxHeight: Self.factsCap)"),
+                      "the strip's facts scroll inside past a cap, above a floor")
+        XCTAssertTrue(code(try source("Views/WorktreeBar.swift"))
+            .contains(".frame(minHeight: CGFloat(min(procs.count, 2)) * 30, maxHeight: 320)"),
+                      "and the Background processes list keeps its floor too")
     }
 }

@@ -679,9 +679,13 @@ struct BackgroundTrayView: View {
                     // no lineLimit, so an expanded process showed only its first few lines. The
                     // plain branch keeps a short list at its natural height (a bare ScrollView is
                     // greedy: capped at 320 it would pad a two-row list out to 320 of empty chrome).
+                    // And never below two rows' worth: with another card open above it, the band's
+                    // share can run out first, and a scroll area with no floor is squeezed to nothing
+                    // under its own header (`CreatedTasksCard.listFloor`, the same rule).
                     ViewThatFits(in: .vertical) {
                         rows
-                        ScrollView { rows }.frame(maxHeight: 320)
+                        ScrollView { rows }
+                            .frame(minHeight: CGFloat(min(procs.count, 2)) * 30, maxHeight: 320)
                     }
                 }
             }

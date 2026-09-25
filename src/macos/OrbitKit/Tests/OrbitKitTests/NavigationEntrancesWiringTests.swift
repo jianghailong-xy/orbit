@@ -83,7 +83,9 @@ final class NavigationEntrancesWiringTests: XCTestCase {
              "show(.console(sessionID: s.id, origin: .drawer), agent: s.agent?.id ?? s.agentId)"),
             ("func openNeedsYouSession(_ s: Session) {", "\n    }",
              "show(.console(sessionID: s.id, origin: .banner), agent: s.agent?.id ?? s.agentId)"),
-            ("func openSession(_ id: String) {", "guard !sessions.contains(where:",
+            // Its cold fetch is a function of its own now (`refreshUnlistedSession`, shared with a
+            // console a phone's conversation pushes over itself), so the entry ends where it does.
+            ("func openSession(_ id: String) {", "\n    }",
              "show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id))"),
         ]
         for (entry, end, frame) in entries {
@@ -101,7 +103,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
     /// origin is a tap that silently hands the edge to the wrong gesture.
     func testTheConsoleEntrancesKeepTheirOriginsApart() throws {
         let app = try appSource("AppModel.swift")
-        let origins = ["origin: .drawer", "origin: .banner", "origin: .deepLink"]
+        let origins = ["origin: .drawer", "origin: .banner", "origin: .deepLink", "origin: .conversation"]
         for origin in origins {
             let hits = code(app).components(separatedBy: origin).count - 1
             XCTAssertEqual(hits, 1,

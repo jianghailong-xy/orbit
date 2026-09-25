@@ -65,6 +65,22 @@ struct ComposerBand<Content: View>: View {
     }
 }
 
+/// Whether a page this conversation opens — a link in it, a row of its Watching or Tasks created here
+/// card — is pushed over it. True only on the console the phone's Agents stack pushes (`CompactShell`),
+/// so the back swipe returns to the conversation; the wide shells leave it false and those pages go to
+/// the section they belong to, whose sidebar is the way back. The view knows its shell; the model is
+/// handed the answer (`AppModel.openFromConversation(_:overConsole:)`), never told which shell it is in.
+private struct OpensPagesOverConsoleKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var opensPagesOverConsole: Bool {
+        get { self[OpensPagesOverConsoleKey.self] }
+        set { self[OpensPagesOverConsoleKey.self] = newValue }
+    }
+}
+
 extension CGFloat {
     /// The one vertical gap between `ComposerBand` members. Read it, don't retype it — the drift it
     /// replaces was four hand-written literals that stopped agreeing.

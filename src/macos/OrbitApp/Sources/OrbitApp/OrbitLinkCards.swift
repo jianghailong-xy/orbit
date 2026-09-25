@@ -175,10 +175,14 @@ extension AppModel {
     /// Open a link this app understands, and answer whether it did. The one door both shells'
     /// `OpenURLAction` and the iOS transcript's own link handler come through, so a reference in
     /// prose, a pasted page URL and a card's tap all land in the same place.
+    ///
+    /// `overConsole`: the link is in a phone's conversation, so what it opens is pushed over that
+    /// console and the back swipe returns to it (`openFromConversation`). Everything outside a
+    /// conversation — a URL, a notification, the wide shells — leaves it false and routes.
     @discardableResult
-    func openOrbitLink(_ url: URL) -> Bool {
+    func openOrbitLink(_ url: URL, overConsole: Bool = false) -> Bool {
         guard let ref = orbitRef(for: url) else { return false }
-        openOrbitLink(ref)
+        openOrbitLink(ref, overConsole: overConsole)
         return true
     }
 
@@ -186,20 +190,25 @@ extension AppModel {
     /// leads to the conversation that coordinates it — an id only a read can give — and to the
     /// deployment's own page when there is no coordinator session, or no card store to read through,
     /// which is the same answer: this client cannot show that project.
-    func openOrbitLink(_ ref: OrbitLinkRef) {
-        if let destination = OrbitLinkDestination.inApp(for: ref.target) { return open(destination) }
+    func openOrbitLink(_ ref: OrbitLinkRef, overConsole: Bool = false) {
+        if let destination = OrbitLinkDestination.inApp(for: ref.target) {
+            return open(destination, overConsole: overConsole)
+        }
         guard let linkCards else { return openPage(for: ref) }
         Task { @MainActor in
             let preview = await linkCards.preview(for: ref)
-            open(OrbitLinkDestination.tap(for: ref, preview: preview, baseURL: linkCards.baseURL))
+            open(OrbitLinkDestination.tap(for: ref, preview: preview, baseURL: linkCards.baseURL),
+                 overConsole: overConsole)
         }
     }
 
-    /// Every destination an Orbit link can have, applied in one place.
-    func open(_ destination: OrbitLinkDestination) {
+    /// Every destination an Orbit link can have, applied in one place. A task or a session opened
+    /// from a phone's conversation is pushed over it (`openFromConversation`); a task list is a scope
+    /// of the Tasks page rather than a page of its own, so it routes there wherever the link is.
+    func open(_ destination: OrbitLinkDestination, overConsole: Bool = false) {
         switch destination {
-        case .task(let id):    route(to: .task(id))
-        case .session(let id): route(to: .session(id))
+        case .task(let id):    openFromConversation(.task(id), overConsole: overConsole)
+        case .session(let id): openFromConversation(.session(id), overConsole: overConsole)
         case .list(let id):    route(to: .list(id))
         case .web(let url):    openExternal(url)
         }

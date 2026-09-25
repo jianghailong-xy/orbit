@@ -144,6 +144,7 @@ struct SelectableText: UIViewRepresentable {
         // any single render, so it must be refreshed even when the text itself hasn't changed.
         context.coordinator.attachments = attachments
         context.coordinator.app = app
+        context.coordinator.opensOverConsole = context.environment.opensPagesOverConsole
         context.coordinator.sessionID = sessionPreview?.sessionID
         let key = renderKey
         guard context.coordinator.key != key else { return }   // nothing changed — keep any live selection
@@ -332,6 +333,8 @@ extension SelectableText {
         var key: Int?
         var attachments: AttachmentImageStore?
         var app: AppModel?
+        /// A phone's conversation: what a link in it opens is pushed over it (`opensPagesOverConsole`).
+        var opensOverConsole = false
         /// The session whose runner answers for a file named by path; nil outside a console, where
         /// such a link is drawn as prose and never reaches this handler.
         var sessionID: String?
@@ -341,13 +344,19 @@ extension SelectableText {
                       defaultAction: UIAction) -> UIAction? {
             guard case .link(let url) = textItem.content else { return defaultAction }
             if let route = ReferenceLink.route(url) {
-                return UIAction(title: "Open") { [weak self] _ in self?.app?.route(to: route) }
+                return UIAction(title: "Open") { [weak self] _ in
+                    guard let self else { return }
+                    self.app?.openFromConversation(route, overConsole: self.opensOverConsole)
+                }
             }
             // Everything else this app can open — a project or task list reference, whose destination
             // may need a read first, and a page URL of this deployment written as a markdown link —
             // goes through the app's own link door, the same one a card's tap uses.
             if app?.orbitRef(for: url) != nil {
-                return UIAction(title: "Open") { [weak self] _ in _ = self?.app?.openOrbitLink(url) }
+                return UIAction(title: "Open") { [weak self] _ in
+                    guard let self else { return }
+                    _ = self.app?.openOrbitLink(url, overConsole: self.opensOverConsole)
+                }
             }
             if let id = AttachmentLink.attachmentID(url) {
                 return UIAction(title: "Download") { [weak self, weak textView] _ in
