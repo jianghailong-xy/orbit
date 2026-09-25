@@ -13,7 +13,8 @@
  * header, a compare-and-set conflict that answers with the current revision, sources that do not
  * resolve and quotes that are not in the record they cite, an idempotency key replayed, an agent's
  * proposal that waits for the owner while the owner's own writes, reinforces and challenges apply at
- * once, a probe refused, and a service token refused on both doors.
+ * once, a probe refused, a service token refused on both doors, and which of those writes announce a
+ * `wiki.changed` to the owner's other clients.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-api.pg.spec.ts
  *
@@ -41,6 +42,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { ServiceTokenAuthorizer } from '../runner-api/service-token.authorizer';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
+import { RealtimeService } from '../realtime/realtime.service';
 import { WikiController } from './wiki.controller';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
@@ -59,6 +61,17 @@ const CONTRACT = JSON.parse(
   rejectReasons: Record<string, string>;
 };
 
+/**
+ * One announcement the service made on the control plane — `RealtimeService.publishWikiChanged`,
+ * stood in for here so a case can read what a browser would receive without a hub, a socket or a
+ * second replica. The real publish's wire shape is `realtime/stream-for-user.spec.ts`'s subject;
+ * what this file witnesses is WHICH writes make one and what it names.
+ */
+interface Announcement {
+  ownerId: string;
+  spaceId: string;
+}
+
 interface Harness {
   base: string;
   sql: Client;
@@ -66,6 +79,8 @@ interface Harness {
   app: INestApplication;
   /** bearer → the account it was issued to */
   bearers: Map<string, string>;
+  /** Every `wiki.changed` this process published, in order, across every case in the file. */
+  announced: Announcement[];
 }
 
 let harness: Promise<Harness> | undefined;
@@ -78,11 +93,17 @@ function boot(): Promise<Harness> {
     await verifyCoordinatorPgIdentity(sql);
     const prisma = prismaClientFor(URL);
     const bearers = new Map<string, string>();
+    const announced: Announcement[] = [];
+    const hub = {
+      publishWikiChanged: (ownerId: string, spaceId: string) => {
+        announced.push({ ownerId, spaceId });
+      },
+    } as unknown as RealtimeService;
 
     @Module({
       controllers: [WikiController, RunnerWikiController],
       providers: [
-        { provide: WikiService, useValue: new WikiService(prisma as unknown as PrismaService) },
+        { provide: WikiService, useValue: new WikiService(prisma as unknown as PrismaService, hub) },
         // The two controllers also answer the search route, which is T4's read; this spec exercises
         // the write path, so it only has to construct.
         { provide: WikiRetrieval, useValue: new WikiRetrieval(prisma as unknown as PrismaService) },
@@ -109,7 +130,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, bearers };
+    return { base: await app.getUrl(), sql, prisma, app, bearers, announced };
   })();
   return harness;
 }
@@ -880,6 +901,82 @@ test('0307 · the wiki write path', { skip, concurrency: 1, timeout: 300_000 }, 
     );
     assert.equal(refusalOf(answer).code, 'WIKI_QUOTA');
   });
+});
+
+// ── what the write paths announce ───────────────────────────────────────────────────────────────
+
+/**
+ * `wiki.changed`: the nudge that says one of the owner's spaces moved, so the wiki pages and the
+ * Review queue re-read instead of waiting out their poll. Owner-scoped, carrying the SPACE's id and
+ * nothing else, and published by the two write paths alone (contract `realtime`).
+ *
+ * A nudge and nothing more: every assertion below would still hold of a wiki whose announcements
+ * were all dropped — nothing about a write is decided by one (contract `realtime.correctness`).
+ * What is under test is only that the two write paths make it, once, and stay quiet for the three
+ * things that changed nothing.
+ *
+ * WHERE the call sits — after the write's transaction commits, and never inside the retry closure —
+ * is not witnessed here, and cannot be from this side of the hub: a stand-in learns only that it was
+ * called, and a read on another connection loses the race against the commit either way (tried;
+ * moving the publish inside the transaction leaves every assertion below green). It is a property of
+ * the call site in `wiki.service.ts`, which is why that site is the one place the predicate lives.
+ */
+test('0307 · a recorded write announces its space, and only a recorded write does', { skip, concurrency: 1, timeout: 300_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'announced');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id, { repoUrl: 'github.com/orbit/announced.git' });
+  const mine = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id });
+  const tool = await toolCall(h, mine, 'Bash', 'the announcement names the space, and nothing else');
+  // The hub is this process's, and every case in the file publishes into it: only this account's.
+  const announced = () => h.announced.filter((one) => one.ownerId === owner.id);
+  const send = (payload: Record<string, unknown>) =>
+    call(h, { runner: machine.token, headers: { 'x-orbit-session-id': mine } }, 'POST', '/runner/wiki/changesets', payload);
+
+  const body = {
+    rationale: 'the first thing this space records',
+    idempotencyKey: `key-${randomUUID()}`,
+    ops: [addOp({ title: 'An announcement names its space' }, [{ kind: 'tool_call', ref: tool, quote: 'names the space' }])],
+  };
+  const first = await send(body);
+  expectStatus(first, 200, 'the proposal is recorded');
+  const spaceId = (await h.prisma.wikiChangeset.findFirstOrThrow({ where: { id: toUuid(first.body.changesetId) } })).spaceId;
+  assert.deepEqual(
+    announced().map((one) => one.spaceId),
+    [spaceId],
+    'exactly one announcement, naming the space the changeset landed in — not its entry or op',
+  );
+
+  // An idempotent replay changed nothing, so it announces nothing: a client that re-read on it would
+  // be re-reading a write that already happened and was already announced.
+  const replay = await send(body);
+  expectStatus(replay, 200, 'the same request under the same key');
+  assert.equal(replay.body.replayed, true);
+  assert.equal(announced().length, 1, 'a replay announces nothing');
+
+  // A dry run records nothing by construction.
+  expectStatus(await send({ ...body, dryRun: true, idempotencyKey: undefined }), 200, 'a rehearsal');
+  assert.equal(announced().length, 1, 'a dry run announces nothing');
+
+  // A request none of whose ops was recorded left no changeset behind.
+  const refused = await send({
+    rationale: 'nothing here was recorded',
+    ops: [addOp({ title: 'TEST_WRITE_CHECK' }, [{ kind: 'tool_call', ref: tool, quote: 'names the space' }])],
+  });
+  expectStatus(refused, 422, 'every op is refused');
+  assert.equal(refusalOf(refused).code, 'WIKI_PROBE_REFUSED');
+  assert.equal(announced().length, 1, 'a request that recorded nothing announces nothing');
+
+  // The owner's own answer moves the space's review queue and its entries, and names the same space.
+  const decided = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/changesets/${first.body.changesetId}/decide`, {
+    decisions: [{ opId: first.body.ops[0].opId, action: 'accept' }],
+  });
+  expectStatus(decided, 200, 'the owner accepts');
+  assert.deepEqual(
+    announced().map((one) => one.spaceId),
+    [spaceId, spaceId],
+    'a decision announces the same space, and one decision is one announcement',
+  );
 });
 
 // ── tenancy, the owner channel, and the credentials each door takes ─────────────────────────────

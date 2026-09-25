@@ -65,6 +65,13 @@ export enum ControlEventType {
    *  what changed, and Watch's correctness never depends on it arriving at all
    *  (docs/watch-contract.md §8.1). */
   WATCH_CHANGED = 'watch.changed',
+  /** One of the owner's wiki spaces changed — a changeset recorded something, the owner decided ops
+   *  in Review, or the space's settings or bindings moved. USER-SCOPED (see above). `data` is a
+   *  `ControlResourceChanged` naming the SPACE and NOTHING else: no entry, title, status, op or count
+   *  (contract `realtime.redaction`). A nudge to re-read what the client shows — the wiki pages and
+   *  the Review queue — and only that; a client may not conclude from its arrival what changed, and
+   *  nothing depends on it arriving at all (contract `realtime.correctness`). */
+  WIKI_CHANGED = 'wiki.changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
 }
@@ -74,8 +81,8 @@ export enum ControlEventType {
 export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
-   *  `tag.changed` / `provider.changed` / `project.criteria_decisions.changed` / `watch.changed`),
-   *  which belong to the owner, not to any one session. Clients must dispatch on `type`, not on the presence of a
+   *  `tag.changed` / `provider.changed` / `project.criteria_decisions.changed` / `watch.changed` /
+   *  `wiki.changed`), which belong to the owner, not to any one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
   sessionId: string;
   agentId: string | null;
@@ -244,9 +251,10 @@ export interface ControlAgentChanged {
 }
 
 /** `data` for the user-scoped events (`task.list.changed` / `tag.changed` / `provider.changed` /
- *  `project.criteria_decisions.changed` / `watch.changed`). Same contract as the two above: refetch
- *  the matching read; the id is for future fine-grained updates and logging, except on the last two,
- *  where it names the project whose pending decisions to re-read, and the watch to re-read. */
+ *  `project.criteria_decisions.changed` / `watch.changed` / `wiki.changed`). Same contract as the two
+ *  above: refetch the matching read; the id is for future fine-grained updates and logging, except on
+ *  the last three, where it names the project whose pending decisions to re-read, the watch to
+ *  re-read, and the wiki space whose pages and review queue to re-read. */
 export interface ControlResourceChanged {
   id: string;
 }
