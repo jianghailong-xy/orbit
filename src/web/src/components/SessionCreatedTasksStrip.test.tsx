@@ -176,6 +176,40 @@ describe('the collapsed row', () => {
     expect(one('.bg-tray-count')?.textContent).toBe(text);
     expect(one('.ct-failed')).toBeNull();
   });
+
+  it('never wraps the title: it truncates beside the sentence, stays whole beside one task', async () => {
+    // What the stylesheet gives the elements drawn; how wide they come out is a browser's to say.
+    const sheet = document.createElement('style');
+    sheet.textContent = css;
+    document.head.append(sheet);
+    const style = (el: Element | null | undefined, ...props: (keyof CSSStyleDeclaration)[]) =>
+      Object.fromEntries(props.map((prop) => [prop, getComputedStyle(el!)[prop]]));
+    const title = () => all('span').find((el) => el.textContent === fixture.copy.title);
+    try {
+      // The longest sentence seen: a pipeline session's 109,874 tasks, on a phone.
+      await mount(created({ total: 109_874, running: 1, failed: 2, done: 281, items: [row(1), row(2)] }));
+      expect(style(title(), 'whiteSpace', 'minWidth', 'overflow', 'textOverflow')).toEqual({
+        whiteSpace: 'nowrap',
+        minWidth: '0px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      });
+      // The sentence never shrinks below its words.
+      expect(style(one('.ct-count'), 'whiteSpace', 'minWidth')).toEqual({
+        whiteSpace: 'nowrap',
+        minWidth: 'auto',
+      });
+
+      await mount(created({ total: 1, items: [row(1, { title: 'A task named at length '.repeat(8) })] }));
+      expect(style(title(), 'whiteSpace', 'flexShrink')).toEqual({ whiteSpace: 'nowrap', flexShrink: '0' });
+      expect(style(one('.ct-one'), 'minWidth', 'textOverflow')).toEqual({
+        minWidth: '0px',
+        textOverflow: 'ellipsis',
+      });
+    } finally {
+      sheet.remove();
+    }
+  });
 });
 
 describe('the opened list', () => {

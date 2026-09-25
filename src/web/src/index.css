@@ -3219,9 +3219,19 @@ html[data-theme='dark'] .session-tag-chip {
   white-space: nowrap;
 }
 /* "Tasks created here" (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
-   only what a task list adds to it. Collapsed, the sentence never gives way — a lone task's name
-   truncates instead — and its failed count is red. Opened, one row per task: a fixed status column,
-   the title (with what it replaces, in grey), its age; then the links to the rest. */
+   only what a task list adds to it. Collapsed, the title never wraps and the sentence never gives
+   way: beside the sentence the title is what truncates, beside a lone task's name the name does;
+   the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
+   replaces, in grey), its age; then the links to the rest. */
+.ct-head {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-head:has(+ .ct-one) {
+  flex: none;
+}
 .ct-count {
   white-space: nowrap;
 }
