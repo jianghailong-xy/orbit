@@ -814,6 +814,16 @@ export interface SessionShareCounts {
   toolCalls: number;
 }
 
+/** How much a task link's layers hold: its comments and input files, and its runs' transcripts. */
+export interface TaskShareCounts {
+  comments: number;
+  files: number;
+  transcripts: number;
+}
+
+/** A root's layer counts, whichever kind of root it is. */
+export type ShareCounts = Partial<SessionShareCounts & TaskShareCounts>;
+
 const SHARE_ROOT_PATH: Record<ShareRootKind, string> = {
   SESSION: 'sessions',
   TASK: 'tasks',
@@ -822,7 +832,7 @@ const SHARE_ROOT_PATH: Record<ShareRootKind, string> = {
 
 /** A root's link that has not ended (null when it has none), with its layers' counts. */
 export const getShareLink = (kind: ShareRootKind, id: string) =>
-  api<{ link: ShareLink | null; counts?: SessionShareCounts }>(`/${SHARE_ROOT_PATH[kind]}/${id}/share`);
+  api<{ link: ShareLink | null; counts?: ShareCounts }>(`/${SHARE_ROOT_PATH[kind]}/${id}/share`);
 
 /** Open the root's link, or change the open one: a field left out is left as it is, and
  *  `expiresAt: null` is Never. Idempotent. */
@@ -872,7 +882,59 @@ export interface SharedSession {
   /** Older events remain before `events` (getSharedEventPage). Absent from a server that still
    *  sends the whole transcript at once. */
   hasMore?: boolean;
+  /** What the link is — `SESSION` here; a task link's root page is a SharedTaskPage instead. */
+  kind?: ShareRootKind;
+  /** A conversation opened under a task link (`/s/<token>/c/<id>`): the task it is a run of, and the
+   *  task's runs the link opens — the page's breadcrumb and the links it may follow. */
+  task?: { id: string; title: string; runs: { sessionId: string }[] };
 }
+
+/** A task as its public link shows it (docs/share-links-design.md §1, §7). Comments and input files
+ *  only with Comments & files; a run's `sessionId` only with Conversations. */
+export interface SharedTask {
+  id: string;
+  title: string;
+  status: string;
+  /** `status`, with a replaced attempt and a dropped one told apart. */
+  outcome: string;
+  /** What replaced it, by title — and by id only when the link shares it. */
+  supersededBy: { id?: string; title: string } | null;
+  completionCriterion: string;
+  createdAt: string;
+  project: { title: string } | null;
+  description: string | null;
+  acceptanceCriteria: string | null;
+  acceptanceCommand: string | null;
+  acceptanceExpectedExitCode: number | null;
+  dependencies: {
+    prerequisites: SharedTaskEdge[];
+    dependents: SharedTaskEdge[];
+    prerequisitesInOtherProjects: number;
+    dependentsInOtherProjects: number;
+  };
+  runs: SharedTaskRun[];
+  comments?: { author: string; body: string; createdAt: string }[];
+  inputs?: { id: string; fileName: string | null; mimeType: string; sizeBytes: number; createdAt: string }[];
+}
+
+export interface SharedTaskEdge {
+  id: string;
+  title: string;
+  status: string;
+}
+
+export interface SharedTaskRun {
+  state: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  sessionId?: string;
+}
+
+/** What `/s/<token>` opens: a session link's transcript page, or another root's page. */
+export type SharedRoot =
+  | (SharedSession & { kind?: 'SESSION' })
+  | { kind: 'TASK'; include: ShareInclude; sharedAt: string; root: SharedTask };
 
 /** GET a public share route. No auth — the token is the capability; a revoked/unknown token
  *  404s. Bypasses the bearer `api()` helper so a logged-out viewer isn't bounced to /login. */
@@ -885,28 +947,40 @@ const sharedGet = async <T>(token: string, path: string): Promise<T> => {
   return (await res.json()) as T;
 };
 
+/** Where one conversation of a link is served: the link's own session at its root, or a session the
+ *  link opens besides it (a task link's run) under `/sessions/<id>`. */
+const sharedConversation = (sessionId?: string): string =>
+  sessionId ? `/sessions/${encodeURIComponent(sessionId)}` : '';
+
 /** A shared session by its public token: its header fields and the newest `limit` events,
- *  clipped the way the owner's pages are. */
-export const getSharedSession = (token: string, opts: { limit: number }): Promise<SharedSession> =>
-  sharedGet<SharedSession>(token, `?limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
+ *  clipped the way the owner's pages are. `sessionId` names a conversation the link opens besides
+ *  its root; `preview` is the owner's Preview, which the link does not count as a view. */
+export const getSharedSession = (
+  token: string,
+  opts: { limit: number; sessionId?: string; preview?: boolean },
+): Promise<SharedSession> =>
+  sharedGet<SharedSession>(
+    token,
+    `${sharedConversation(opts.sessionId)}?limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}${opts.preview ? '&preview=1' : ''}`,
+  );
 
 /** A page of a shared transcript: the `limit` events just older than `before` (or the newest
  *  when it is absent). Clipped like the rest unless `whole`, which the Download HTML walk asks
  *  for — a saved file has no way to fetch a card's full payload when it is opened. */
 export const getSharedEventPage = (
   token: string,
-  opts: { before?: number; limit: number; whole?: boolean },
+  opts: { before?: number; limit: number; whole?: boolean; sessionId?: string },
 ): Promise<{ events: SharedEvent[]; hasMore: boolean }> => {
   const qs = new URLSearchParams();
   if (opts.before != null) qs.set('before', String(opts.before));
   qs.set('limit', String(opts.limit));
   if (!opts.whole) qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
-  return sharedGet(token, `/events?${qs.toString()}`);
+  return sharedGet(token, `${sharedConversation(opts.sessionId)}/events?${qs.toString()}`);
 };
 
 /** One shared event's untrimmed payload, for a card that arrived `truncated` and was opened. */
-export const getSharedEventFull = (token: string, seq: number): Promise<SharedEvent> =>
-  sharedGet<SharedEvent>(token, `/events/${seq}`);
+export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
+  sharedGet<SharedEvent>(token, `${sharedConversation(sessionId)}/events/${seq}`);
 
 /** Object URL for an inline image in a shared transcript, via the public attachment route
  *  (no bearer). Caller revokes it. Mirrors fetchAttachmentObjectUrl for the shared page. */

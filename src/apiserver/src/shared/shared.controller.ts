@@ -40,14 +40,18 @@ export class SharedController {
   /**
    * The link's root page: `kind`, `include` and `sharedAt`, then the root. A session root keeps the
    * shape its page has always read — title, workspace, status, the tail page of its events and
-   * `hasMore` (`limit` / `maxPayload` as on the events page below). A task or a project root is
-   * `root: {id, title, status}` for now. The one request that counts as a view.
+   * `hasMore` (`limit` / `maxPayload` as on the events page below). A task root is the task as its
+   * layers show it (share-links/public-task.ts); a project root is `root: {id, title, status}` for
+   * now. The one request that counts as a view — unless it is the owner's Preview (`preview=1`),
+   * which is them looking, not a visitor. The count is information, not a boundary, so the flag is
+   * taken at its word.
    */
   @Get(':token')
   async get(
     @Param('token') token: string,
     @Query('limit') limit?: string,
     @Query('maxPayload') maxPayload?: string,
+    @Query('preview') preview?: string,
   ) {
     const link = await this.links.resolve(token);
     const head = { kind: link.kind, include: link.include, sharedAt: link.sharedAt };
@@ -55,8 +59,10 @@ export class SharedController {
       ? await this.sessions
           .getSharedTranscript(link.sessionId, { limit: num(limit), maxPayload: parseMaxPayload(maxPayload) })
           .then((transcript) => ({ ...head, ...transcript, events: shown(link, transcript.events) }))
-      : { ...head, root: link.root };
-    await this.links.recordView(link.id);
+      : link.kind === 'TASK'
+        ? { ...head, root: await this.links.taskPage(link) }
+        : { ...head, root: link.root };
+    if (preview !== '1') await this.links.recordView(link.id);
     return body;
   }
 
@@ -88,14 +94,73 @@ export class SharedController {
     return event;
   }
 
-  /** Bytes of an inline image/file in the shared transcript (scoped to the shared session). */
+  /**
+   * One conversation the link shares besides its root: for a task link with Conversations, one of
+   * the task's runs. The shape of a session root's page, plus `task` — the task it is a run of, and
+   * that task's runs a visitor may open — for the page's breadcrumb and links. Anything else,
+   * including a run in the Trash, is the one 404.
+   */
+  @Get(':token/sessions/:sessionId')
+  async conversation(
+    @Param('token') token: string,
+    @Param('sessionId', PublicIdPipe) sessionId: string,
+    @Query('limit') limit?: string,
+    @Query('maxPayload') maxPayload?: string,
+  ) {
+    const link = await this.links.resolve(token);
+    const task = await this.links.taskRun(link, sessionId);
+    const transcript = await this.sessions.getSharedTranscript(sessionId, {
+      limit: num(limit),
+      maxPayload: parseMaxPayload(maxPayload),
+    });
+    return { ...transcript, events: shown(link, transcript.events), task };
+  }
+
+  /** A page of one of those conversations, as `:token/events` pages the root's. */
+  @Get(':token/sessions/:sessionId/events')
+  async conversationEvents(
+    @Param('token') token: string,
+    @Param('sessionId', PublicIdPipe) sessionId: string,
+    @Query('before') before?: string,
+    @Query('limit') limit?: string,
+    @Query('maxPayload') maxPayload?: string,
+  ) {
+    const link = await this.links.resolve(token);
+    await this.links.taskRun(link, sessionId);
+    const page = await this.sessions.getSharedEventPage(sessionId, {
+      before: num(before),
+      limit: num(limit),
+      maxPayload: parseMaxPayload(maxPayload),
+    });
+    return { ...page, events: shown(link, page.events) };
+  }
+
+  /** One event of one of those conversations, whole. */
+  @Get(':token/sessions/:sessionId/events/:seq')
+  async conversationEvent(
+    @Param('token') token: string,
+    @Param('sessionId', PublicIdPipe) sessionId: string,
+    @Param('seq') seq: string,
+  ) {
+    const n = Number(seq);
+    if (!Number.isFinite(n)) throw new BadRequestException('seq must be a number');
+    const link = await this.links.resolve(token);
+    await this.links.taskRun(link, sessionId);
+    const [event] = shown(link, [await this.sessions.getSharedEventFull(sessionId, Math.trunc(n))]);
+    return event;
+  }
+
+  /** Bytes of an inline image/file the link shares: one in the shared session's transcript, or — on a
+   *  task link — one of the task's input files or of its runs, as its layers allow. */
   @Get(':token/attachments/:id')
   async attachment(
     @Param('token') token: string,
     @Param('id', PublicIdPipe) id: string,
   ): Promise<StreamableFile> {
-    const link = await this.sessionLink(token);
-    const { data, mimeType } = await this.attachments.getForSharedSession(link.sessionId, id);
+    const link = await this.links.resolve(token);
+    const { data, mimeType } = link.sessionId
+      ? await this.attachments.getForSharedSession(link.sessionId, id)
+      : await this.links.taskAttachment(link, id);
     return new StreamableFile(data, { type: mimeType, disposition: 'inline', length: data.length });
   }
 

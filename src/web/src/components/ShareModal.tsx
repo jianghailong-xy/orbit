@@ -6,23 +6,28 @@ import {
   getShareLink,
   putShareLink,
   turnOffShareLink,
-  type SessionShareCounts,
+  type ShareCounts,
   type ShareLayer,
   type ShareLink,
   type ShareRootKind,
 } from '../api';
 import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
-import { countOf, EXPIRY_CHOICES, publicLinkUrl, shortDate, viewsLine } from '../lib/shareLinks';
+import { countOf, EXPIRY_CHOICES, previewUrl, publicLinkUrl, shortDate, viewsLine } from '../lib/shareLinks';
 import { useToast } from '../lib/toast';
 
-/** One row of Includes. `layer: null` is the root's own content, which a link always includes. */
+/** One row of Includes. `layer: null` is the root's own content, which a link always includes.
+ *  `warn` marks the row whose detail is a risk, said in amber once the layer is on. */
 interface LayerRow {
   layer: ShareLayer | null;
   name: string;
   detail: string;
-  count: (counts: SessionShareCounts) => string;
+  count: (counts: ShareCounts) => string;
+  warn?: true;
 }
+
+/** The Conversations layer's risk, in the contract's fixed words (§8). */
+export const CONVERSATIONS_RISK = 'Can include command output and file contents.';
 
 /** What the dialog says and does for one kind of root (docs/share-links-design.md §1, §8). */
 interface RootKindSpec {
@@ -46,18 +51,47 @@ const ROOT_KINDS: { readonly [K in ShareRootKind]?: RootKindSpec } = {
         layer: null,
         name: 'Messages',
         detail: 'What you and the agent wrote',
-        count: (counts) => countOf(counts.messages, 'message'),
+        count: (counts) => countOf(counts.messages ?? 0, 'message'),
       },
       {
         layer: 'toolOutput',
         name: 'Tool calls and output',
         detail: 'Commands, file reads and what they returned. Off shows only which tools ran.',
-        count: (counts) => countOf(counts.toolCalls, 'call'),
+        count: (counts) => countOf(counts.toolCalls ?? 0, 'call'),
       },
     ],
     appPath: (id) => `/sessions/${encodeId(id)}`,
     // The session's detail (header pill, menu) and every list it is a row of (the globe).
     shows: [['session'], ['sessions']],
+  },
+  TASK: {
+    title: 'Share task',
+    publicDetail: 'Anyone with the link can view — no sign-in. They can’t change anything.',
+    layers: [
+      {
+        layer: null,
+        name: 'Overview',
+        detail: 'Description, acceptance, dependencies and runs',
+        count: () => 'Always',
+      },
+      {
+        layer: 'commentsAndFiles',
+        name: 'Comments & files',
+        detail: 'Written by agents and people',
+        count: (counts) =>
+          [countOf(counts.comments ?? 0, 'comment'), ...(counts.files ? [countOf(counts.files, 'file')] : [])].join(' · '),
+      },
+      {
+        layer: 'conversations',
+        name: 'Conversations',
+        detail: CONVERSATIONS_RISK,
+        count: (counts) => countOf(counts.transcripts ?? 0, 'transcript'),
+        warn: true,
+      },
+    ],
+    appPath: (id) => `/tasks/${encodeId(id)}`,
+    // The task panel's ⋯ reads the link under this dialog's own key, which every write here updates.
+    shows: [],
   },
 };
 
@@ -281,7 +315,7 @@ export function ShareModal({
                     }}
                   >
                     <span className="share-layer-name">{row.name}</span>
-                    <span className="share-layer-detail">{row.detail}</span>
+                    <span className={`share-layer-detail${row.warn && on ? ' is-warn' : ''}`}>{row.detail}</span>
                   </Checkbox>
                   <span className="share-layer-count">{counts ? row.count(counts) : ''}</span>
                 </div>
@@ -323,7 +357,8 @@ export function ShareModal({
 
           <div className="share-dialog-foot">
             <span className="share-dialog-stat">{viewsLine(link, Date.now())}</span>
-            <Button href={publicLinkUrl(link.token)} target="_blank" rel="noopener noreferrer">
+            {/* The owner looking at their own link before handing it out is not a visit (?preview=1). */}
+            <Button href={previewUrl(link.token)} target="_blank" rel="noopener noreferrer">
               Preview ↗
             </Button>
             <Button type="primary" onClick={onClose}>

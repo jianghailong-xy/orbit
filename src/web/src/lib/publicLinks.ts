@@ -20,6 +20,28 @@ export type PublicLinkResolver = (target: { kind: PublicLinkKind; id: string }) 
  */
 export const PublicLinkResolverCtx = createContext<PublicLinkResolver | null>(null);
 
+/**
+ * The resolver of a task link's pages (the task page and the conversations under it): the task
+ * itself goes to the link's root page, and each of its runs the link opens goes to its conversation
+ * page. Nothing else a task names is shared — not its project, not the tasks it depends on, not
+ * another task's runs — so everything else is words. Ids in either spelling; `runSessionIds` holds
+ * only the runs the link opens, so with Conversations off it is empty.
+ */
+export function taskLinkResolver(
+  token: string,
+  scope: { taskId: string; runSessionIds: readonly string[] },
+): PublicLinkResolver {
+  const taskId = routeId(scope.taskId);
+  const runs = new Set(scope.runSessionIds.map((id) => routeId(id)));
+  const root = `/s/${encodeURIComponent(token)}`;
+  return ({ kind, id }) => {
+    const target = routeId(id);
+    if (kind === 'task' && target === taskId) return root;
+    if (kind === 'session' && target && runs.has(target)) return `${root}/c/${target}`;
+    return null;
+  };
+}
+
 const OBJECT_ROUTE = /^\/(tasks|projects|sessions)\/([^/?#]+)\/?(?:[?#].*)?$/;
 const OBJECT_KIND: Record<string, PublicLinkKind> = { tasks: 'task', projects: 'project', sessions: 'session' };
 

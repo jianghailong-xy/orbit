@@ -9123,7 +9123,7 @@ button.chat-jump-start:hover {
 /* Phone: four presses beside the title do not fit. The title is the flex remainder (flex:1;
    min-width:0), so it was squeezed to one CJK character per line while the actions kept their
    width. Below 600px the actions take a row of their own — each growing into the space, and
-   wrapping when a label is long — while the panel's two window buttons (🗑 ✕) stay up beside the
+   wrapping when a label is long — while the panel's own window buttons (🗑 ⋯ ✕) stay up beside the
    title, at 40px: the touch target the composer's buttons take at this width. */
 @media (max-width: 600px) {
   .tdp-head {
@@ -9132,7 +9132,7 @@ button.chat-jump-start:hover {
   }
   .tdp-head > .ant-btn-icon-only {
     /* Ordered ahead of the actions, which come after them in the markup: with wrap, order is what
-       decides which line each lands on, and these two have to stay on the title's. */
+       decides which line each lands on, and these have to stay on the title's. */
     order: 1;
     width: 40px;
     height: 40px;
@@ -11177,6 +11177,229 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   padding: 40px;
 }
+
+/* ── Public task page (SharedTaskPage) ──────────────────────────────────────────
+   docs/mocks/share-links/05, left half: the task's header, then one card per block in the app task
+   panel's order — Dependencies, Description, Acceptance, (Inputs), Runs, (Comments). */
+.share-task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.share-task-head {
+  margin-bottom: 4px;
+}
+.share-task-title {
+  margin: 0 0 8px;
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  word-break: break-word;
+}
+.share-task-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.share-task-judged {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.share-task-superseded {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.share-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.share-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+.share-card-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.share-card-hint {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.share-card-note {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.share-muted {
+  color: var(--text-3);
+  font-size: 13px;
+}
+.share-dep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-top: 1px solid var(--border-subtle);
+}
+.share-dep:first-child {
+  border-top: 0;
+}
+.share-dep-relation {
+  flex: none;
+  width: 78px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.share-dep-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-dep.is-elsewhere .share-dep-title {
+  color: var(--text-3);
+}
+.share-prose {
+  min-width: 0;
+}
+/* A long description, folded to its first lines until "Show more"; the fade only where it cuts. */
+.share-prose.is-folded {
+  position: relative;
+  max-height: 150px;
+  overflow: hidden;
+}
+.share-prose.is-fading::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48px;
+  background: linear-gradient(rgba(255, 255, 255, 0), var(--bg-raised));
+}
+.share-more {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12.5px;
+  color: var(--brand);
+  cursor: pointer;
+}
+.share-acceptance-pair {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.share-acceptance-command {
+  font: 12px ui-monospace, SFMono-Regular, Menlo, 'DejaVu Sans Mono', monospace;
+  background: var(--fill-inset);
+  padding: 1px 5px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+.share-inputs,
+.share-runs {
+  display: grid;
+  gap: 6px;
+}
+.share-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-1);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.share-input-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-run {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.share-run-when {
+  min-width: 0;
+  color: var(--text-1);
+}
+.share-run-open {
+  margin-left: auto;
+  flex: none;
+  color: var(--brand);
+  text-decoration: none;
+}
+.share-run-open.share-muted {
+  color: var(--text-3);
+}
+.share-comment {
+  border-top: 1px solid var(--border-subtle);
+  padding: 10px 0 2px;
+}
+.share-comment:first-of-type {
+  border-top: 0;
+  padding-top: 2px;
+}
+.share-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+}
+.share-comment-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 700;
+}
+.share-comment-author {
+  font-weight: 600;
+  color: var(--text-1);
+}
 .share-state-title {
   font-size: 16px;
   font-weight: 600;
@@ -11333,6 +11556,10 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 12px;
   line-height: 1.5;
+}
+/* A layer's risk, said in amber once the layer is on (Conversations: command output, file contents). */
+.share-layer-detail.is-warn {
+  color: var(--warning);
 }
 .share-layer-count {
   flex: none;
