@@ -1,5 +1,6 @@
+import { useContext, useEffect, useMemo } from 'react';
 import { BranchesOutlined, FileTextOutlined } from '@ant-design/icons';
-import { OrbitLinkCard } from './OrbitLinkCard';
+import { OrbitLinkCard, OrbitLinkCardsCtx } from './OrbitLinkCard';
 import { statusLabel } from './WorkspaceView';
 import { decodeId } from '../lib/idCodec';
 import { WIKI_QUOTE_UNVERIFIED, WIKI_QUOTE_VERIFIED, shortSha, type WikiSource } from '../lib/wiki';
@@ -76,11 +77,7 @@ export function WikiSourceList({ sources }: { sources: readonly WikiSource[] }) 
         if (link) {
           return (
             <div className="wk-src-card" key={source.id}>
-              <OrbitLinkCard
-                link={{ target: { kind: link.kind, id: decodeId(link.id) ?? link.id }, source: { kind: 'ref', ref: link.id } }}
-                host={wikiLinkHost()}
-                stateWord={statusLabel}
-              />
+              <WikiSourceCard kind={link.kind} id={link.id} />
               <WikiSourceQuote source={source} />
             </div>
           );
@@ -89,6 +86,26 @@ export function WikiSourceList({ sources }: { sources: readonly WikiSource[] }) 
       })}
     </div>
   );
+}
+
+/**
+ * A source that has an Orbit page, as the conversation's own link card.
+ *
+ * IT REGISTERS ITSELF. `OrbitLinkCard` draws whatever its provider has been asked for — the markdown
+ * node registers as it mounts, and a card drawn by hand has to do the same or the view never asks the
+ * server about it and the card sits at its loading skeleton forever. That is what the effect below
+ * is: the same one line `OrbitLinkCardNode` does.
+ */
+function WikiSourceCard({ kind, id }: { kind: 'task' | 'session'; id: string }) {
+  const cards = useContext(OrbitLinkCardsCtx);
+  const link = useMemo(
+    () => ({ target: { kind, id: decodeId(id) ?? id }, source: { kind: 'ref' as const, ref: id } }),
+    [kind, id],
+  );
+  useEffect(() => {
+    cards?.register(link);
+  }, [cards, link]);
+  return <OrbitLinkCard link={link} host={wikiLinkHost()} stateWord={statusLabel} />;
 }
 
 /** A source with no Orbit page: its kind, its record, and the words it was cited for. */
