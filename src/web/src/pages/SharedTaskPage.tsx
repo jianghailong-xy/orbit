@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import {
   fetchSharedAttachmentObjectUrl,
   type ShareInclude,
+  type SharedScope,
   type SharedTask,
   type SharedTaskEdge,
   type SharedTaskRun,
@@ -15,7 +16,7 @@ import { TaskStatusPill } from '../components/TaskStatusPill';
 import { AttachmentResolverContext, MD, PublicLinkResolverCtx } from '../components/Transcript';
 import { checkDuration } from '../lib/checkDuration';
 import { encodeId } from '../lib/idCodec';
-import { taskLinkResolver } from '../lib/publicLinks';
+import { projectLinkResolver, taskLinkResolver } from '../lib/publicLinks';
 import { countOf, shortDate } from '../lib/shareLinks';
 import { taskOutcomeChip } from '../lib/taskOutcome';
 import { titleFirstLine } from '../lib/title';
@@ -237,22 +238,34 @@ function Comments({ comments }: { comments: NonNullable<SharedTask['comments']> 
  * the input files under Acceptance and the comments last. Nothing on it links into the app: the
  * task's own name and its runs resolve to this link's pages, everything else is words
  * (lib/publicLinks taskLinkResolver). Images in its text come through the link's attachment route.
+ *
+ * Under a project link (`/s/<token>/t/<id>`, `scope` given) it is one of the project's tasks: the
+ * breadcrumb leads back to the project's page, and its links go where the project link sends them
+ * — the project's other tasks and conversations it opens to their pages (projectLinkResolver).
  */
 export function SharedTaskPage({
   token,
   data,
+  scope,
 }: {
   token: string;
   data: { include: ShareInclude; root: SharedTask };
+  scope?: SharedScope;
 }) {
   const task = data.root;
   const resolve = useMemo(
     () =>
-      taskLinkResolver(token, {
-        taskId: task.id,
-        runSessionIds: task.runs.flatMap((run) => (run.sessionId ? [run.sessionId] : [])),
-      }),
-    [token, task],
+      scope
+        ? projectLinkResolver(token, {
+            projectId: scope.projectId,
+            taskIds: scope.tasks.map((t) => t.id),
+            sessionIds: scope.conversations.map((c) => c.id),
+          })
+        : taskLinkResolver(token, {
+            taskId: task.id,
+            runSessionIds: task.runs.flatMap((run) => (run.sessionId ? [run.sessionId] : [])),
+          }),
+    [token, task, scope],
   );
   const attachment = useMemo(() => (id: string) => fetchSharedAttachmentObjectUrl(token, id), [token]);
 
@@ -269,8 +282,11 @@ export function SharedTaskPage({
   return (
     <PublicShell
       crumbs={[
-        // The project it is filed under, by name: a task link does not share it, so it is words.
-        ...(task.project ? [{ label: task.project.title }] : []),
+        // The project it is filed under, by name: a task link does not share it, so it is words;
+        // a project link's task page leads back to the project's.
+        ...(task.project
+          ? [{ label: titleFirstLine(task.project.title), ...(scope ? { to: `/s/${encodeURIComponent(token)}` } : {}) }]
+          : []),
         { label: titleFirstLine(task.title) },
       ]}
     >

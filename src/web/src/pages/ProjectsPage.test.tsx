@@ -162,6 +162,9 @@ const attributionKeys = (projectUuid: string) => [['project', encodeId(projectUu
 const headerKeys = (projectUuid: string) => {
   const id = encodeId(projectUuid);
   return [
+    // Whether a public link opens this project, read by the header's Share pill beside the status —
+    // under the Share dialog's own key, so the dialog opens on it (docs/share-links-design.md §8).
+    ['share-links', 'PROJECT', id],
     // Where this project's finished work goes (§1.6), read by the row under the title and again by
     // the task list, which names the branch a landed row landed on. ONE entry for the two of them:
     // two `useQuery` calls on one key share a request and a cache line, which is the whole reason

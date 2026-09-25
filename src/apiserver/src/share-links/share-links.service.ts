@@ -11,6 +11,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { withSessionState } from '../sessions/session-state';
 import type { PutShareLinkDto } from './dto';
 import {
+  effectiveProjectInclude,
+  projectShareCounts,
+  type ProjectConversation,
+  type ProjectScope,
+  type ProjectShareCounts,
+  type PublicProject,
+  readProjectScope,
+  readPublicProject,
+  readPublicProjectAttachment,
+  readPublicProjectConversation,
+  readPublicProjectTask,
+} from './public-project';
+import {
   type PublicTask,
   readPublicTask,
   readPublicTaskAttachment,
@@ -39,6 +52,8 @@ function rootColumn(kind: ShareRootKind, id: string): { sessionId: string } | { 
 /** Every read of a link takes the row and its root's minimal projection, in one query. */
 const LINK_SELECT = {
   id: true,
+  // Read to scope what a link opens to its owner's rows, never written out.
+  ownerId: true,
   token: true,
   sessionId: true,
   taskId: true,
@@ -98,14 +113,25 @@ export interface ShareLinkView {
 /** What a token opens, once the public door has decided it opens anything. */
 export interface OpenLink {
   id: string;
+  /** Whose link it is — what the reads behind it are scoped to. Never part of an answer. */
+  ownerId: string;
   kind: ShareRootKind;
+  /** The layers in effect: on a project link, Comments & files and Conversations only under Task
+   *  pages (public-project.ts effectiveProjectInclude). */
   include: Required<ShareInclude>;
   sharedAt: Date;
   /** Set for a session root: the transcript the link serves. */
   sessionId: string | null;
-  /** Set for a task or a project root (T6/T7 project it further). */
+  /** Set for a task or a project root (public-task.ts / public-project.ts project it further). */
   root: { id: string; title: string; status: string } | null;
 }
+
+/** What a conversation's page carries besides its transcript: under a task link, the task it is a
+ *  run of (T6); under a project link, the project, the task (null for the coordinator) and the
+ *  link's scope, for the page's breadcrumb and links. */
+export type ConversationContext =
+  | { task: { id: string; title: string; runs: { sessionId: string }[] } }
+  | (ProjectConversation & { scope: ProjectScope });
 
 function kindOf(row: { sessionId: string | null; taskId: string | null }): ShareRootKind {
   if (row.sessionId) return 'SESSION';
@@ -140,19 +166,19 @@ export class ShareLinksService {
   // ── the owner's half ───────────────────────────────────────────────────────────────────────
 
   /** The root's link that has not ended — ACTIVE, PAUSED, or past its expiry and not yet settled —
-   *  or null when it has none. A session or task root also says how much each of its layers holds,
-   *  so the dialog can show what a link exposes before anyone opens it (contract §1). */
+   *  or null when it has none, with how much each of the root's layers holds, so the dialog can show
+   *  what a link exposes before anyone opens it (contract §1). */
   async current(
     ownerId: string,
     kind: ShareRootKind,
     rootId: string,
-  ): Promise<{ link: ShareLinkView | null; counts?: SessionShareCounts | TaskShareCounts }> {
+  ): Promise<{ link: ShareLinkView | null; counts: SessionShareCounts | TaskShareCounts | ProjectShareCounts }> {
     await this.ownedRoot(ownerId, kind, rootId);
     const row = await this.openRow(ownerId, kind, rootId);
     const link = row ? this.view(row, new Date()) : null;
     if (kind === 'SESSION') return { link, counts: await this.sessionCounts(rootId) };
     if (kind === 'TASK') return { link, counts: await taskShareCounts(this.prisma, rootId) };
-    return { link };
+    return { link, counts: await projectShareCounts(this.prisma, rootId) };
   }
 
   /** The session's Messages layer is what you and the agent wrote (its `user` and `assistant`
@@ -257,10 +283,12 @@ export class ShareLinksService {
     if (linkState(row, row.session?.deletedAt != null, new Date()).state !== 'ACTIVE') throw linkNotFound();
     const kind = kindOf(row);
     const root = row.task ?? row.project;
+    const include = resolveInclude(kind, row.include);
     return {
       id: row.id,
+      ownerId: row.ownerId,
       kind,
-      include: resolveInclude(kind, row.include),
+      include: kind === 'PROJECT' ? effectiveProjectInclude(include) : include,
       sharedAt: row.createdAt,
       sessionId: row.sessionId,
       root: kind === 'SESSION' || !root ? null : { id: root.id, title: root.title, status: root.status },
@@ -270,25 +298,70 @@ export class ShareLinksService {
   /** A task link's root page: the task, with the layers the link includes (public-task.ts). The
    *  link shares the task itself and nothing else a task can name. */
   taskPage(link: OpenLink): Promise<PublicTask> {
-    const taskId = this.taskRootOf(link);
-    return readPublicTask(this.prisma, taskId, link.include, (id) => id === taskId);
+    const taskId = this.rootOf(link, 'TASK');
+    return readPublicTask(this.prisma, taskId, link.include, (other) => other.id === taskId);
   }
 
-  /** The run `sessionId` of a task link's task, when the link includes Conversations — with the
-   *  task it is a run of, for its page — or the one 404. */
-  taskRun(link: OpenLink, sessionId: string): Promise<{ id: string; title: string; runs: { sessionId: string }[] }> {
-    const taskId = this.taskRootOf(link);
-    if (!link.include.conversations) throw linkNotFound();
-    return readPublicTaskRun(this.prisma, taskId, sessionId);
+  /** A project link's root page: the project's seven blocks (public-project.ts), and what the link
+   *  opens besides it. */
+  async projectPage(link: OpenLink): Promise<{ root: PublicProject; scope: ProjectScope }> {
+    const projectId = this.rootOf(link, 'PROJECT');
+    const [root, scope] = await Promise.all([
+      readPublicProject(this.prisma, link.ownerId, projectId, link.include),
+      readProjectScope(this.prisma, projectId, link.include),
+    ]);
+    return { root, scope };
   }
 
-  /** An attachment a task link's layers include (its input files, its runs' images), or the one 404. */
-  taskAttachment(link: OpenLink, id: string): Promise<{ data: Buffer; mimeType: string }> {
-    return readPublicTaskAttachment(this.prisma, this.taskRootOf(link), link.include, id);
+  /** One of a project link's tasks, as a task link shows its task — with Task pages, and only a task
+   *  filed under the project — or the one 404. */
+  async projectTask(
+    link: OpenLink,
+    taskId: string,
+  ): Promise<{ include: Required<ShareInclude>; root: PublicTask; scope: ProjectScope }> {
+    const projectId = this.rootOf(link, 'PROJECT');
+    const root = await readPublicProjectTask(this.prisma, projectId, link.include, taskId);
+    return { include: link.include, root, scope: await readProjectScope(this.prisma, projectId, link.include) };
   }
 
-  private taskRootOf(link: OpenLink): string {
-    if (link.kind !== 'TASK' || !link.root) throw linkNotFound();
+  /**
+   * A conversation the link opens besides its root, when it includes Conversations — under a task
+   * link one of the task's runs, under a project link one of its tasks' runs or its coordinator —
+   * with what its page needs around the transcript; anything else is the one 404.
+   */
+  async conversation(link: OpenLink, sessionId: string): Promise<ConversationContext> {
+    const context = await this.openConversation(link, sessionId);
+    if ('project' in context) {
+      return { ...context, scope: await readProjectScope(this.prisma, this.rootOf(link, 'PROJECT'), link.include) };
+    }
+    return context;
+  }
+
+  /** Whether the link opens conversation `sessionId` (the one 404 if not), and what it is a part
+   *  of — without the scope a page of its events has no use for. */
+  async openConversation(
+    link: OpenLink,
+    sessionId: string,
+  ): Promise<{ task: { id: string; title: string; runs: { sessionId: string }[] } } | ProjectConversation> {
+    if (link.kind === 'TASK') {
+      const taskId = this.rootOf(link, 'TASK');
+      if (!link.include.conversations) throw linkNotFound();
+      return { task: await readPublicTaskRun(this.prisma, taskId, sessionId) };
+    }
+    return readPublicProjectConversation(this.prisma, this.rootOf(link, 'PROJECT'), link.include, sessionId);
+  }
+
+  /** An attachment a task or project link's layers include (input files, their runs' images), or
+   *  the one 404. */
+  rootAttachment(link: OpenLink, id: string): Promise<{ data: Buffer; mimeType: string }> {
+    if (link.kind === 'PROJECT') {
+      return readPublicProjectAttachment(this.prisma, this.rootOf(link, 'PROJECT'), link.include, id);
+    }
+    return readPublicTaskAttachment(this.prisma, this.rootOf(link, 'TASK'), link.include, id);
+  }
+
+  private rootOf(link: OpenLink, kind: 'TASK' | 'PROJECT'): string {
+    if (link.kind !== kind || !link.root) throw linkNotFound();
     return link.root.id;
   }
 

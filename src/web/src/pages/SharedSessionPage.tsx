@@ -22,7 +22,7 @@ import {
 } from '../components/Transcript';
 import { memoizeEventFull } from '../lib/eventFull';
 import { routeId } from '../lib/idCodec';
-import { taskLinkResolver } from '../lib/publicLinks';
+import { projectLinkResolver, taskLinkResolver } from '../lib/publicLinks';
 import {
   sessionLifecycleStateOf,
   sessionRunStateOf,
@@ -149,14 +149,23 @@ function SharedConversation() {
     () => memoizeEventFull((seq: number) => getSharedEventFull(token, seq, sessionId)),
     [token, sessionId],
   );
-  // Where the conversation's links go: a run's task and the task's other runs, under a task link.
-  const task = data?.task;
+  // Where the conversation's links go: under a project link, wherever its scope sends them; under a
+  // task link, to the run's task and the task's other runs; under a session link, nowhere.
+  const task = data?.task ?? null;
+  const project = data?.project;
+  const linkScope = data?.scope;
   const scope = useMemo(
     () =>
-      task
-        ? taskLinkResolver(token, { taskId: task.id, runSessionIds: task.runs.map((run) => run.sessionId) })
-        : NOTHING_ELSE_SHARED,
-    [token, task],
+      linkScope
+        ? projectLinkResolver(token, {
+            projectId: linkScope.projectId,
+            taskIds: linkScope.tasks.map((t) => t.id),
+            sessionIds: linkScope.conversations.map((c) => c.id),
+          })
+        : task
+          ? taskLinkResolver(token, { taskId: task.id, runSessionIds: task.runs.map((run) => run.sessionId) })
+          : NOTHING_ELSE_SHARED,
+    [token, task, linkScope],
   );
   const [downloading, setDownloading] = useState(false);
 
@@ -273,12 +282,26 @@ function SharedConversation() {
   return (
     <PublicShell
       crumbs={
-        task
-          ? [
-              { label: titleFirstLine(task.title), to: `/s/${encodeURIComponent(token)}` },
-              { label: `Run · ${shortDate(data.createdAt)}` },
+        project
+          ? // Project › Task › Run, or Project › Coordinator: the project's page, then the task's.
+            [
+              { label: titleFirstLine(project.title), to: `/s/${encodeURIComponent(token)}` },
+              ...(task
+                ? [
+                    {
+                      label: titleFirstLine(task.title),
+                      to: scope({ kind: 'task', id: task.id }) ?? undefined,
+                    },
+                    { label: `Run · ${shortDate(data.createdAt)}` },
+                  ]
+                : [{ label: 'Coordinator' }]),
             ]
-          : [{ label: titleFirstLine(data.title) }]
+          : task
+            ? [
+                { label: titleFirstLine(task.title), to: `/s/${encodeURIComponent(token)}` },
+                { label: `Run · ${shortDate(data.createdAt)}` },
+              ]
+            : [{ label: titleFirstLine(data.title) }]
       }
       status={
         <span className={`status-pill ${tone}`}>
