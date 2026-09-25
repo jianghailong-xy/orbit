@@ -73,7 +73,9 @@ test('account pools against PostgreSQL', { skip, concurrency: 1, timeout: 300_00
   // What every stored credential is encrypted under; any value does in a throwaway database.
   process.env.PROVIDER_SECRET_KEY ??= 'provider-pool-pg-spec';
   const realtime = { publishForUser: () => undefined, publishForAllUsers: () => undefined };
-  const service = new ProvidersService(prisma as unknown as PrismaService, realtime as never, {} as never);
+  // A pool reads back with each member's quota; nothing here is about quota, so every member has none.
+  const planUsage = { snapshot: () => null, refused: () => false };
+  const service = new ProvidersService(prisma as unknown as PrismaService, realtime as never, planUsage as never);
 
   const newUser = async (name: string) =>
     (await prisma.user.create({

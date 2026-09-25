@@ -157,6 +157,17 @@ function isSpent(w: PlanUsageWindow | undefined, now: Date): w is PlanUsageWindo
   return w !== undefined && w.utilization >= SPENT_UTILIZATION && !(Date.parse(w.resetsAt ?? '') <= now.getTime());
 }
 
+/**
+ * Whether one member is spent right now, for what shows the pool rather than choosing from it: undefined
+ * when none of its windows is, else when it can take work again — the latest reset of its spent windows,
+ * as for one account, and null when one of them named no reset. The same test `selectPoolMember` rules a
+ * member out by, so what the page calls spent is what the claim passes over.
+ */
+export function spentUntil(usage: PlanUsageSnapshot | null, now: Date): Date | null | undefined {
+  const resets = spentResets(usage, now);
+  return resets.length === 0 ? undefined : latestReset(resets);
+}
+
 /** The resets of a member's spent windows, NaN for one with no reset time. */
 function spentResets(usage: PlanUsageSnapshot | null, now: Date): number[] {
   if (!usage) return [];
