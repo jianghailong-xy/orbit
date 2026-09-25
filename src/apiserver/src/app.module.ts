@@ -22,6 +22,7 @@ import { RunnersModule } from './runners/runners.module';
 import { RunnerApiModule } from './runner-api/runner-api.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { SharedModule } from './shared/shared.module';
+import { ShareLinksModule } from './share-links/share-links.module';
 import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
 import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconciler-http.module';
@@ -52,6 +53,7 @@ import { ScheduledWakeupModule } from './runner-api/scheduled-wakeup.module';
     RunnerApiModule,
     AttachmentsModule,
     SharedModule,
+    ShareLinksModule,
     PushModule,
     ProvidersModule,
     OutcomeReconcilerHttpModule,

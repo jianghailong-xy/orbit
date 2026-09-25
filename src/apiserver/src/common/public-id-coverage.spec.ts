@@ -24,6 +24,7 @@ import { RunnersController } from '../runners/runners.controller';
 import { SessionTagsController } from '../session-tags/session-tags.controller';
 import { SessionsController } from '../sessions/sessions.controller';
 import { SharedController } from '../shared/shared.controller';
+import { ShareLinksController } from '../share-links/share-links.controller';
 import { ProjectsController } from '../projects/projects.controller';
 import { TaskListsController } from '../task-lists/task-lists.controller';
 import { TasksController } from '../tasks/tasks.controller';
@@ -76,6 +77,7 @@ const CONTROLLERS = [
   SessionTagsController,
   SessionsController,
   SharedController,
+  ShareLinksController,
   ProjectsController,
   TaskListsController,
   TasksController,

@@ -555,17 +555,8 @@ export class SessionsController {
     return this.sessions.adoptWorktreeBranch(user.userId, id);
   }
 
-  /** Enable a public read-only share link for this session (mints/returns its shareToken). */
-  @Post(':id/share')
-  share(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.sessions.enableShare(user.userId, id);
-  }
-
-  /** Revoke the public share link (the token stops resolving). */
-  @Delete(':id/share')
-  unshare(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.sessions.disableShare(user.userId, id);
-  }
+  // A session's public link — `GET | PUT | POST | DELETE /sessions/:id/share` — is served by
+  // ShareLinksController, beside the task's and the project's.
 
   /** What this session's Retry button would re-send, chosen by the sweep's own chooser — so the
    *  card can offer the button on a run whose message is thousands of events behind the loaded
