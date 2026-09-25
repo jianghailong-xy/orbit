@@ -252,6 +252,16 @@ export function isAsyncAgentLaunchAck(content: unknown): boolean {
 }
 
 /**
+ * The agent id an async-agent launch ack names ("… agentId: a05fc3596d22b3d3e …") — the id its
+ * <task-notification> later reports as `<task-id>`. Null for anything that is not that ack.
+ */
+export function asyncAgentLaunchId(content: unknown): string | null {
+  const text = toolResultText(content);
+  if (!text.includes('Async agent launched')) return null;
+  return /agentId:\s*([A-Za-z0-9_-]+)/.exec(text)?.[1] ?? null;
+}
+
+/**
  * The receipt Claude Code's Workflow tool returns the instant a workflow starts: "Workflow
  * launched in background. Task ID: <id>\nSummary: <text>\n…". A workflow always runs in the
  * background — this is the only top-level tool_result it ever gets — and it reports its end later

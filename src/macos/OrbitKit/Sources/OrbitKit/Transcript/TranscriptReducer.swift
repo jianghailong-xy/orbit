@@ -1218,13 +1218,18 @@ public struct TranscriptReducer: Sendable, Codable {
     /// the server's terminal state but never resurrects one the live stream already settled (the
     /// snapshot may predate that). Unknown shells are appended. Reordered chronologically by launch.
     /// This is the native half of web's server-list ∪ live-overlay merge (`mergeBackgroundShells`).
-    public mutating func seedBackground(_ incoming: [BackgroundProc]) {
+    public mutating func seedBackground(_ incoming: [BackgroundProc], progress: [TaskProgress] = []) {
+        // What an agent or workflow ended with — kept only where the live stream has nothing
+        // newer, like the rest of this merge.
+        for p in progress where state.taskProgress[p.toolUseId] == nil { state.taskProgress[p.toolUseId] = p }
         for proc in incoming {
             if let i = state.background.firstIndex(where: { $0.id == proc.id }) {
                 if state.background[i].command == nil { state.background[i].command = proc.command }
                 if state.background[i].description == nil { state.background[i].description = proc.description }
                 if state.background[i].outputTail.isEmpty { state.background[i].outputTail = proc.outputTail }
                 if state.background[i].startedAt == nil { state.background[i].startedAt = proc.startedAt }
+                if state.background[i].kind == nil { state.background[i].kind = proc.kind }
+                if state.background[i].taskId == nil { state.background[i].taskId = proc.taskId }
                 if state.background[i].status == "running" { state.background[i].status = proc.status }
             } else {
                 state.background.append(proc)

@@ -1,5 +1,6 @@
 import { RunEventType } from './enums';
-import { toolResultText } from './events';
+import { asyncAgentLaunchId, toolResultText, workflowLaunchReceipt } from './events';
+import { parseTaskProgress, type TaskProgress } from './taskProgress';
 
 // Derives the set of background shell processes (and their latest output) from a session's
 // event stream — the data behind the "Background processes" tray. Shared by the web client
@@ -11,6 +12,11 @@ import { toolResultText } from './events';
 // file. We reconstruct each process from the events the runner forwards:
 //   • start          → a `Bash` tool_use with input.run_in_background === true; its result
 //                       text carries "…running in background with ID: <id>… written to: <path>".
+//                       The workspace's own background sub-agents and workflows start the same
+//                       way: an `Agent` call whose result is the "Async agent launched … agentId"
+//                       ack, a `Workflow` call whose result is its "Workflow launched in background.
+//                       Task ID" receipt. Only the workspace's own calls count — an agent a
+//                       sub-agent starts reports its end to that sub-agent, never to this stream.
 //   • interim output → the agent's own `Read` polls of that file, AND the runner's live tail
 //                       (background_output events — independent of the agent's polling).
 //   • completion     → a background_task event parsed from Claude's <task-notification>
@@ -25,8 +31,10 @@ export type BgShellStatus = 'running' | 'done' | 'failed' | 'killed' | 'unknown'
 type TerminalStatus = Exclude<BgShellStatus, 'running' | 'unknown'>;
 
 export interface BgShell {
-  /** Claude-assigned background shell id, e.g. "bei75180m". */
+  /** Claude-assigned background task id — a shell's "bei75180m", an agent's id, a workflow's task id. */
   shellId: string;
+  /** What launched it: a background Bash (`shell`), an async Agent (`agent`) or a Workflow. */
+  kind: 'shell' | 'agent' | 'workflow';
   /** tool_use id of the launching Bash call — correlates output/completion events. */
   toolUseId: string;
   /** The command that was launched. */
@@ -47,6 +55,8 @@ export interface BgShell {
   latestOutputTs?: string;
   /** Terminal state reported by a background_task event, if any (reliable). */
   terminal?: TerminalStatus;
+  /** An agent's or workflow's last progress, carried by the background_task that ended it. */
+  progress?: TaskProgress;
   /** Resolved lifecycle state — see classifyShellStatus. */
   status: BgShellStatus;
 }
@@ -113,13 +123,18 @@ export function selectBackgroundDerivationEvents<T extends BgDeriveEvent>(events
   });
 }
 
-/** The two `tool_use` shapes the derivation reads — see the numbered branches below. */
+/** The `tool_use` shapes the derivation reads — see the numbered branches below. */
 function isBackgroundToolUse(payload: unknown): boolean {
   const p = obj(payload);
   const input = obj(p.input);
   if (p.name === 'Bash') return input.run_in_background === true;
   if (p.name === 'Read') return String(input.file_path ?? '').endsWith('.output');
-  return false;
+  return isTaskLaunchCall(p);
+}
+
+/** The workspace's own Agent (Task before Claude Code 2.x) or Workflow call. */
+function isTaskLaunchCall(p: Record<string, unknown>): boolean {
+  return (p.name === 'Agent' || p.name === 'Task' || p.name === 'Workflow') && !p.parentToolUseId;
 }
 
 export function deriveBackgroundShells(
@@ -158,6 +173,7 @@ export function deriveBackgroundShells(
       const outputPath = pathM ? pathM[1] : '';
       const shell: BgShell = {
         shellId,
+        kind: 'shell',
         toolUseId: String(p.id ?? ''),
         command: String(input.command ?? ''),
         description: input.description ? String(input.description) : undefined,
@@ -169,6 +185,32 @@ export function deriveBackgroundShells(
       byId.set(shellId, shell);
       if (shell.toolUseId) byToolUseId.set(shell.toolUseId, shell);
       if (outputPath) byPath.set(outputPath, shell);
+      continue;
+    }
+
+    // 1b) The workspace's own background sub-agent or workflow, confirmed by its launch receipt.
+    //     An Agent run inline answers in this same result, and has nothing running.
+    if (isTaskLaunchCall(p)) {
+      const res = resultByToolUseId.get(String(p.id));
+      if (!res) continue;
+      const workflow = p.name === 'Workflow' ? workflowLaunchReceipt(res.content) : null;
+      const agentId = p.name === 'Workflow' ? null : asyncAgentLaunchId(res.content);
+      const shellId = workflow?.taskId ?? agentId;
+      if (!shellId || byId.has(shellId)) continue;
+      const description = workflow ? workflow.summary : input.description ? String(input.description) : undefined;
+      const shell: BgShell = {
+        shellId,
+        kind: workflow ? 'workflow' : 'agent',
+        toolUseId: String(p.id ?? ''),
+        command: '',
+        description,
+        outputPath: '',
+        startedSeq: ev.seq,
+        startedTs: ev.ts ?? undefined,
+        status: 'running',
+      };
+      byId.set(shellId, shell);
+      if (shell.toolUseId) byToolUseId.set(shell.toolUseId, shell);
       continue;
     }
 
@@ -201,6 +243,8 @@ export function deriveBackgroundShells(
     } else {
       const t = terminalFromStatus(String(p.status ?? ''));
       if (t) shell.terminal = t;
+      const progress = parseTaskProgress(p.progress);
+      if (progress) shell.progress = progress;
       // User `!`-shells carry their final output on the (persisted) background_task, since the
       // live background_output tail is broadcast-only. Agent shells omit it (their Read
       // snapshots persist instead).

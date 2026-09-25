@@ -716,17 +716,26 @@ public struct BgShellDTO: Decodable, Sendable {
     public let status: String
     public let latestOutput: String?
     public let startedTs: String?
+    /// `shell`, `agent` or `workflow` — what launched it. Absent from older servers, which list shells only.
+    public let kind: String?
+    /// An agent's or workflow's last progress, carried by the notification that ended it.
+    public let progress: JSONValue?
 
     /// Map to the reducer's `BackgroundProc`: key by `toolUseId`, translate the web status vocab to
     /// the native one, and default a missing output to empty (the tray shows "No output captured yet").
     public func asBackgroundProc() -> BackgroundProc {
         BackgroundProc(id: toolUseId,
-                       command: command,
+                       command: command?.isEmpty == false ? command : nil,
                        description: description,
                        status: status == "done" ? "completed" : status,
                        outputTail: latestOutput ?? "",
-                       startedAt: startedTs)
+                       startedAt: startedTs,
+                       kind: kind,
+                       taskId: shellId)
     }
+
+    /// The progress this row ended with, for `seedBackground`.
+    public var taskProgress: TaskProgress? { TaskProgress.from(progress) }
 }
 
 public enum ApprovalBehavior: String, Codable, Sendable {
