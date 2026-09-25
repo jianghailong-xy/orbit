@@ -10,19 +10,23 @@ import Foundation
 // is the shape of one preview: a preview that does not decode is dropped by the caller's catch and
 // drawn as a card that never arrived — never as a wrong card.
 
-/// The four kinds of object a link can name, and the one enum both the link parser and this wire
-/// type are written against (`OrbitLinkKind` in `App/OrbitLink.swift` is the same type on purpose:
-/// a link's kind and a card's kind are the same fact).
+/// The kinds of object a link can name, and the one enum both the link parser and this wire type
+/// are written against (`OrbitLinkKind` in `App/OrbitLink.swift` is the same type on purpose: a
+/// link's kind and a card's kind are the same fact). `wiki` arrived after the first four and is
+/// listed last, as `LINK_PREVIEW_KINDS` lists it.
 public enum OrbitLinkKind: String, Codable, Sendable, CaseIterable, Hashable {
-    case project, task, session, list
+    case project, task, session, list, wiki
 
-    /// The page path this kind's objects live under: `/tasks/<id>`, `/sessions/<id>`, …
+    /// The page path this kind's objects live under: `/tasks/<id>`, `/sessions/<id>`, … A wiki
+    /// entry's page takes its space as well as its id (`/wiki/<space>/e/<id>`), so `wiki` names the
+    /// section rather than a page on its own — see `OrbitLinkParser.pageURL(for:baseURL:wikiSpaceSlug:)`.
     public var pathSegment: String {
         switch self {
         case .project: return "projects"
         case .task:    return "tasks"
         case .session: return "sessions"
         case .list:    return "lists"
+        case .wiki:    return "wiki"
         }
     }
 }
@@ -213,6 +217,29 @@ public struct LinkPreviewList: Codable, Equatable, Sendable {
     public let counts: LinkPreviewListCounts?
 }
 
+/// A wiki entry's card, read from the entry's own columns.
+///
+/// `spaceSlug` is what gives the card a page: an entry is addressed by its space's slug and its own
+/// id (`/wiki/<slug>/e/<id>`), and the id alone — which is all a reference carries — names none.
+/// `anchor` is the entry's FIRST anchor as the record it is, not a sentence: which words it gets is
+/// `WikiLogic.anchorLabel`'s, the same way a task's status is the card's word rather than the wire's.
+/// Nil on an entry with no anchors, which is an ordinary state rather than a warning.
+public struct LinkPreviewWiki: Codable, Equatable, Sendable {
+    /// The space the entry is filed in, and the slug its page is reached under.
+    public let spaceId: String?
+    public let spaceSlug: String?
+    public let kind: WikiEntryKind?
+    public let title: String?
+    public let summary: String?
+    public let trust: WikiTrust?
+    /// `retired` and `superseded` are drawn: the entry outlives them, and a card that hid them would
+    /// keep claiming a note agents are no longer handed.
+    public let status: WikiEntryStatus?
+    public let anchorState: WikiAnchorState?
+    public let anchorCheckedRef: String?
+    public let anchor: WikiAnchor?
+}
+
 public enum LinkPreviewState: String, Codable, Sendable {
     case ok, unavailable
 }
@@ -229,6 +256,20 @@ public struct LinkPreview: Codable, Equatable, Sendable {
     public let task: LinkPreviewTask?
     public let project: LinkPreviewProject?
     public let list: LinkPreviewList?
+    public let wiki: LinkPreviewWiki?
+
+    public init(kind: OrbitLinkKind, id: String, state: LinkPreviewState,
+                session: LinkPreviewSession?, task: LinkPreviewTask?, project: LinkPreviewProject?,
+                list: LinkPreviewList?, wiki: LinkPreviewWiki? = nil) {
+        self.kind = kind
+        self.id = id
+        self.state = state
+        self.session = session
+        self.task = task
+        self.project = project
+        self.list = list
+        self.wiki = wiki
+    }
 
     /// The ref the server answered about, spelled the way it answered.
     public var ref: LinkPreviewRef { LinkPreviewRef(kind: kind, id: id) }

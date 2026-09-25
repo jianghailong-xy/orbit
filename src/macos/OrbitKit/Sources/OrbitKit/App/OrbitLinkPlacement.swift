@@ -13,7 +13,7 @@ import Foundation
 //     and the words either side become paragraphs of their own. Empty fragments are dropped, so a
 //     paragraph that was nothing but the URL is nothing but the card.
 //   * a paragraph that is nothing but `[名字](orbit-task:<id>)` — the way an agent is instructed to
-//     reference work. In a sentence, a list item or a table cell the same reference stays the name
+//     reference work, and the only way a wiki entry is referenced (`orbit-wiki:<id>`). In a sentence, a list item or a table cell the same reference stays the name
 //     link it is today: 69% of them are written mid-sentence, and a paragraph of them would be a
 //     wall of cards.
 //
@@ -29,7 +29,7 @@ public enum OrbitRenderBlock: Equatable, Sendable {
 
 public enum OrbitLinkPlacement {
     /// The paragraph that is nothing but a reference link, and the destination it points at.
-    private static let loneReference = Pattern("^\\[([^\\]]*)\\]\\((orbit-(?:task|session|project|list):[^)\\s]+)\\)$")
+    private static let loneReference = Pattern("^\\[([^\\]]*)\\]\\((orbit-(?:task|session|project|list|wiki):[^)\\s]+)\\)$")
 
     /// Rewrite a parsed conversation so every link a card can stand for is one.
     ///

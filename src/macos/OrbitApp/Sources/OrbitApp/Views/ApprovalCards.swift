@@ -72,7 +72,9 @@ private extension View {
             }
             .opacity(dimmed ? 0.72 : 1)
     }
+}
 
+extension View {
     /// The *label* of a card action, stretched to the card's width on iOS. It has to be the label:
     /// a bordered button draws its capsule around the label, so `.frame(maxWidth: .infinity)` applied
     /// outside `.buttonStyle` widens only the layout frame and leaves the capsule hugging its text,
@@ -126,8 +128,8 @@ private struct ApprovalHeader: View {
 /// The card's decisions. Stacked full-width on iOS: three buttons can't share a phone row without
 /// the long "remember …" label crushing the others (web's ApprovalPanel does the same under 600px),
 /// and stacking keeps a destructive Deny from sitting a thumb-width from Allow. macOS keeps them in
-/// a natural row.
-private struct ApprovalActions<Content: View>: View {
+/// a natural row. Wiki Review's cards answer through this same stack (`WikiReviewCard`).
+struct ApprovalActions<Content: View>: View {
     private let content: () -> Content
 
     init(@ViewBuilder content: @escaping () -> Content) { self.content = content }

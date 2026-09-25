@@ -16,20 +16,29 @@ final class AppSectionTests: XCTestCase {
 
     func testNavOrder() {
         // Runners first, then Agents, then Projects just before the Tasks they are for (where Skills
-        // used to sit), then Following (watches), then Settings; Admin last for admins.
+        // used to sit), then the Wiki — what the work learned — then Following (watches), then
+        // Settings; Admin last for admins.
         XCTAssertEqual(AppSection.visible(isAdmin: false),
-                       [.runners, .agents, .projects, .tasks, .following, .settings])
+                       [.runners, .agents, .projects, .tasks, .wiki, .following, .settings])
         XCTAssertEqual(AppSection.visible(isAdmin: true),
-                       [.runners, .agents, .projects, .tasks, .following, .settings, .admin])
+                       [.runners, .agents, .projects, .tasks, .wiki, .following, .settings, .admin])
     }
 
-    /// The drawer and the iPad sidebar lead with the work — projects and tasks — set apart from, and
-    /// above, the Workspaces; what is left is the Manage group, still role-gated. Following is not
-    /// work you open: it has no drawer row, and on iPad it sits in Manage.
+    /// The drawer and the iPad sidebar lead with the work — projects and tasks — and the Wiki, set
+    /// apart from, and above, the Workspaces; what is left is the Manage group, still role-gated.
+    /// Following is not work you open: it has no drawer row, and on iPad it sits in Manage.
     func testWorkSectionsLeadAndManagementGroupKeepsTheRest() {
-        XCTAssertEqual(AppSection.workSections, [.projects, .tasks])
+        XCTAssertEqual(AppSection.workSections, [.projects, .tasks, .wiki])
         XCTAssertEqual(AppSection.managementSections(isAdmin: false), [.runners, .following, .settings])
         XCTAssertEqual(AppSection.managementSections(isAdmin: true), [.runners, .following, .settings, .admin])
+    }
+
+    /// The Wiki's row says the web sidebar's word and draws SF Symbols' book, the glyph AntD's
+    /// `BookOutlined` stands for on the web (mock 06).
+    func testTheWikiSectionsTitleAndGlyph() {
+        XCTAssertEqual(AppSection.wiki.title, "Wiki")
+        XCTAssertEqual(AppSection.wiki.systemImage, "book.closed")
+        XCTAssertFalse(AppSection.wiki.adminOnly)
     }
 
     func testEverySectionHasTitleAndIcon() {
