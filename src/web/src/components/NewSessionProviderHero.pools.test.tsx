@@ -3,7 +3,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { currentProviderChoice, providerChoices } from '../lib/sessionProviderChoices';
+import { encodeId } from '../lib/idCodec';
+import { currentProviderChoice, providerChoices, type PoolChoiceSource } from '../lib/sessionProviderChoices';
 import type { ConfiguredProvider } from '../lib/workspaceDefaults';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 
@@ -22,7 +23,20 @@ const deepseek: ConfiguredProvider = {
   defaultModel: 'deepseek-v4-pro',
   presetSlug: 'deepseek',
 };
-const pool = { slug: 'claude-accounts', label: 'Claude accounts', members: [{ slug: 'anthropic' }, { slug: 'anthropic-2' }] };
+const pool: PoolChoiceSource = {
+  id: '019fc086-c7c7-7c92-8215-778ad8a62801',
+  slug: 'claude-accounts',
+  label: 'Claude accounts',
+  members: [{ slug: 'anthropic' }, { slug: 'anthropic-2' }],
+};
+/** A pool none of whose accounts can run, as GET /providers/pools says it (`unavailable`). */
+const deadPool: PoolChoiceSource = {
+  id: '019fc086-c7c7-7c92-8215-778ad8a62802',
+  slug: 'old-accounts',
+  label: 'Old accounts',
+  members: [{ slug: 'anthropic-3' }],
+  unavailable: 'No account can run',
+};
 const configured: ConfiguredProvider[] = [
   work,
   home,
@@ -36,8 +50,8 @@ describe('an account pool in the New Session picker', () => {
   let root: Root;
   let picked: string[];
 
-  const mount = async (current: string) => {
-    const choices = providerChoices(configured, catalog, undefined, undefined, [pool]);
+  const mount = async (current: string, pools: PoolChoiceSource[] = [pool]) => {
+    const choices = providerChoices(configured, catalog, undefined, undefined, pools);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -119,5 +133,35 @@ describe('an account pool in the New Session picker', () => {
     await click(container.querySelector('.np-card'));
     expect(rowNamed('Pin a specific account')?.getAttribute('aria-expanded')).toBe('true');
     expect(rowNamed('Work')?.classList.contains('on')).toBe(true);
+  });
+
+  it("greys out a pool none of whose accounts can run, says why, and sends the pick to the pool's page instead", async () => {
+    await mount('claude-accounts', [pool, deadPool]);
+    await click(container.querySelector('.np-card'));
+
+    // A pool that can run stays a pick.
+    const live = rowNamed('Claude accounts')!;
+    expect(live.tagName).toBe('BUTTON');
+    expect(live.classList.contains('np-unavailable')).toBe(false);
+
+    // The one that cannot is listed — its account count and all — but greyed, with the server's reason
+    // where its model would be, and a link to the pool's own page where the fix is.
+    const dead = rowNamed('Old accounts')!;
+    expect(dead.tagName).toBe('A');
+    expect(dead.classList.contains('np-unavailable')).toBe(true);
+    expect(dead.querySelector('.np-pool-badge')?.textContent).toBe('1');
+    expect(dead.querySelector('.np-row-model.np-fix')?.textContent).toBe('No account can run');
+    expect(dead.getAttribute('href')).toBe(`/providers/pools/${encodeId(deadPool.id)}`);
+    // Nothing about this runner: the problem is the pool's accounts, not the machine.
+    expect(dead.getAttribute('title')).toBe('Old accounts: No account can run — fix it on the Providers page');
+    await click(dead);
+    expect(picked).toEqual([]);
+  });
+
+  it('says why under the card when the sticky pick is a pool that can run nothing', async () => {
+    await mount('old-accounts', [pool, deadPool]);
+    const summary = container.querySelector('.np-summary')!;
+    expect(summary.textContent).toBe('Old accounts·No account can run·Fix it');
+    expect(summary.querySelector('a')?.getAttribute('href')).toBe(`/providers/pools/${encodeId(deadPool.id)}`);
   });
 });

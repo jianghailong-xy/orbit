@@ -4,6 +4,7 @@ import type { PlanUsageSnapshot } from '@orbit/shared';
 import { parseSubscriptionUsage } from './plan-usage';
 import {
   choosePoolMember,
+  poolFallbackNotice,
   poolResumesAt,
   poolSwitchNotice,
   selectPoolMember,
@@ -204,6 +205,13 @@ test('the switch line says why the session left its member', () => {
   );
   assert.equal(poolSwitchNotice(to, { ...from, usage: null, enabled: false }, NOW), 'Switched to Work — Personal is disabled');
   assert.equal(poolSwitchNotice(to, null, NOW), 'Switched to Work — the previous account is no longer in this pool');
+});
+
+test('the fallback line names the pool and where the run went instead', () => {
+  assert.equal(
+    poolFallbackNotice({ label: 'Claude accounts' }),
+    'Fell back to the Claude default (this runner\'s own login) — no account in the pool "Claude accounts" can run',
+  );
 });
 
 test('a pool takes work now while a member has room, and at the earliest reset once every member is spent', () => {

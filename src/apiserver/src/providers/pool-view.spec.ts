@@ -1,7 +1,11 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { AgentProvider, type PlanUsageSnapshot } from '@orbit/shared';
+import { encryptSecret } from './provider-crypto';
 import { ProvidersService } from './providers.service';
+
+// Each member's key is encrypted here and read by the pool's admission test; both only need the same secret.
+process.env.PROVIDER_SECRET_KEY ??= 'pool-view-spec';
 
 /**
  * What GET /providers/pools says about a pool: each member's own quota and where it stands, the member a
@@ -16,7 +20,7 @@ const fiveHour = (utilization: number, resetsAt = at(2 * HOUR)): PlanUsageSnapsh
   fiveHour: { utilization, resetsAt },
 });
 
-const member = (id: string, over: { enabled?: boolean } = {}) => ({
+const member = (id: string, over: { enabled?: boolean; key?: string; baseUrl?: string } = {}) => ({
   provider: {
     id,
     slug: `slug-${id}`,
@@ -25,8 +29,8 @@ const member = (id: string, over: { enabled?: boolean } = {}) => ({
     enabled: over.enabled ?? true,
     ownerId: 'user-1',
     runtime: 'claude',
-    baseUrl: 'https://api.anthropic.com',
-    apiKeyEnc: `ciphertext-of-${id}`,
+    baseUrl: over.baseUrl ?? 'https://api.anthropic.com',
+    apiKeyEnc: encryptSecret(over.key ?? `sk-ant-oat01-${id}`),
   },
 });
 
@@ -123,9 +127,41 @@ test('a member some session is generating on right now is Running now', async ()
 });
 
 test('a member view carries neither the key nor the endpoint', async () => {
-  const pools = await listPools([member('a')], { a: fiveHour(10) });
+  const a = member('a');
+  const pools = await listPools([a], { a: fiveHour(10) });
   const text = JSON.stringify(pools);
-  for (const leak of ['apiKeyEnc', 'ciphertext-of-a', 'baseUrl', 'api.anthropic.com', 'ownerId']) {
+  for (const leak of ['apiKeyEnc', a.provider.apiKeyEnc, 'sk-ant', 'baseUrl', 'api.anthropic.com', 'ownerId']) {
     assert.equal(text.includes(leak), false, `${leak} must not reach the browser`);
   }
+});
+
+test('a member the pool would turn away is never next: not taken for an idle account because it reports nothing', async () => {
+  // Pointed at another endpoint before edits were held to the pool's admission. The usage probe never
+  // asks it, so it reports nothing — which, for a member the claim may choose, means last in line.
+  const resets = at(HOUR);
+  const [pool] = await listPools([member('elsewhere', { baseUrl: 'https://gateway.example.com' }), member('spent')], {
+    spent: fiveHour(100, resets),
+  });
+  assert.deepEqual(next(pool), []);
+  // What the pool waits for is the spent account's reset, not the account that can never be chosen.
+  assert.equal(pool.resetsAt, resets);
+  assert.equal(pool.unavailable, null, 'a spent account frees up; the pool is waiting, not unavailable');
+});
+
+test('a pool none of whose members can run says so, in the words a picker has room for; a spent one does not', async () => {
+  const [none] = await listPools(
+    [member('refused'), member('off', { enabled: false }), member('metered', { key: 'sk-ant-api03-metered' })],
+    { refused: fiveHour(0), off: fiveHour(0) },
+    { refused: ['refused'] },
+  );
+  assert.equal(none.unavailable, 'No account can run');
+  assert.deepEqual(next(none), []);
+
+  const [empty] = await listPools([], {});
+  assert.equal(empty.unavailable, 'No accounts');
+
+  const [spent] = await listPools([member('spent')], { spent: fiveHour(100) });
+  assert.equal(spent.unavailable, null);
+  const [open] = await listPools([member('open')], { open: fiveHour(10) });
+  assert.equal(open.unavailable, null);
 });

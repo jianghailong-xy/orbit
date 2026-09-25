@@ -134,6 +134,15 @@ export function poolSwitchNotice(to: { label: string }, from: PoolSwitchFrom | n
   return `Switched to ${to.label} — ${from ? whyLeft(from, now) : 'the previous account is no longer in this pool'}`;
 }
 
+/**
+ * The transcript line for a claim on a pool none of whose members can run (choosePoolMember's null): the
+ * run goes to the Claude default, the runner's own login, as it always has — and without this line it
+ * would spend that login in silence, on a session that was started on the pool's accounts.
+ */
+export function poolFallbackNotice(pool: { label: string }): string {
+  return `Fell back to the Claude default (this runner's own login) — no account in the pool "${pool.label}" can run`;
+}
+
 function whyLeft(from: PoolSwitchFrom, now: Date): string {
   if (from.refused) return `${from.label}'s key was refused`;
   if (!from.enabled) return `${from.label} is disabled`;

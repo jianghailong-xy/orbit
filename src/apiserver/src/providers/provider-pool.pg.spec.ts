@@ -135,7 +135,7 @@ test('account pools against PostgreSQL', { skip, concurrency: 1, timeout: 300_00
     assert.deepEqual(memberIds(pool), sorted([work.id, home.id]));
     // The list says more than the write — where each member stands (provider-pool-usage.pg.spec.ts) — and
     // everything the write returned it says the same.
-    const listed = (await service.listPools(alice)).map(({ resetsAt: _resetsAt, members, ...rest }) => ({
+    const listed = (await service.listPools(alice)).map(({ resetsAt: _resetsAt, unavailable: _unavailable, members, ...rest }) => ({
       ...rest,
       members: members.map(({ id, slug, label }) => ({ id, slug, label })),
     }));

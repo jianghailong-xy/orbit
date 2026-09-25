@@ -40,6 +40,10 @@ export interface ProviderPool {
   /** Set only while every member that can run is spent: the EARLIEST of their resets, since one
    *  account freeing up is enough for work to continue. */
   resetsAt: string | null;
+  /** Set only when no member can run at all, and no reset will change that — none in it, or each one
+   *  disabled, refused by the endpoint, or one the pool would not admit today: why, in a few words.
+   *  The server refuses to start or switch a session onto such a pool, or to pin a task to it. */
+  unavailable?: string | null;
   members: PoolMember[];
 }
 
