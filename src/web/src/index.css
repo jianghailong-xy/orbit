@@ -11243,6 +11243,9 @@ button.chat-jump-start:hover {
   border-radius: 12px;
   background: var(--bg-raised);
   overflow: hidden;
+  /* Its rows fit the card, not the viewport: the sidebar beside the page is user-resizable, so one
+     window width is many card widths. */
+  container: re-card / inline-size;
 }
 .re-card + .re-card {
   margin-top: 10px;
@@ -11333,8 +11336,11 @@ button.chat-jump-start:hover {
   display: grid;
   /* The last column is sized for two small buttons side by side: `+ Account` beside `Re-sign in` on
      a one-account Codex row, `Re-sign in` beside `Remove` on an added account's. At 110px the pair
-     ran left over the quota's percentage. */
-  grid-template-columns: minmax(0, 1fr) 108px 190px 172px;
+     ran left over the quota's percentage.
+     On a narrow card the quota's bar gives way before the name does. The name keeps 137px, what it
+     had at 110px on a 617px card (a 961px window beside the default sidebar): an engine's name on
+     one line, DEFAULT clear of the status beside it. The bar pays for the wider buttons instead. */
+  grid-template-columns: minmax(137px, 1fr) 108px minmax(128px, 190px) 172px;
   align-items: center;
   gap: 14px;
   padding: 11px 14px;
@@ -11347,6 +11353,24 @@ button.chat-jump-start:hover {
 .re-row.focused {
   background: var(--brand-tint);
   box-shadow: inset 3px 0 0 var(--brand);
+}
+/* A card too narrow for those floors (617px, 615 inside its border: the sidebar dragged wider, or a
+   scrollbar that takes up room) takes each row on two lines rather than cut its buttons off at the
+   card's edge: name and status, then quota and actions. The phone layout below is its own. */
+@media (min-width: 701px) {
+  @container re-card (max-width: 614px) {
+    .re-row {
+      grid-template-columns: minmax(0, 1fr) 172px;
+    }
+    /* The status over the actions, both against the card's right edge. */
+    .re-row > :nth-child(2) {
+      justify-self: end;
+    }
+    /* Under the name it belongs to, clear of the tile and of an account's rail. */
+    .re-quota {
+      margin-left: 38px;
+    }
+  }
 }
 @media (max-width: 700px) {
   /* Status and action stay together on the second line; the quota gauge is the one part
