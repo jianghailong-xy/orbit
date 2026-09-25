@@ -19,6 +19,8 @@ struct ProviderMark: View {
     /// Display name, used only for the neutral monogram — web takes the same first letter of the
     /// label when a provider has no preset. Falls back to the slug, then "?".
     var label: String? = nil
+    /// An account pool's number of accounts, worn in the mark's corner. Nil for anything else.
+    var poolSize: Int? = nil
 
     /// What the mark and gradient resolve from — the preset when one is known, else the raw slug.
     private var identity: String? { brandKey ?? provider }
@@ -37,6 +39,12 @@ struct ProviderMark: View {
             // gets none, since at 20–28pt it only muddies the edge.
             .shadow(color: size >= 40 ? stops.to.opacity(0.34) : .clear,
                     radius: size * 0.16, y: size * 0.10)
+            // After the shadow, which belongs to the tile: web's badge is the tile's sibling.
+            .overlay(alignment: .topTrailing) {
+                if let poolSize {
+                    PoolCountBadge(count: poolSize, markSize: size).offset(x: 5, y: -4)
+                }
+            }
     }
 
     /// The official mark knocked out in white, or the neutral monogram.
@@ -59,11 +67,35 @@ struct ProviderMark: View {
     }
 }
 
+/// How many accounts an account pool holds, in the corner of its brand mark — web's
+/// `.np-pool-badge`: the count in bold, in the label colour inverted, ringed in the background so it
+/// stands off the mark.
+private struct PoolCountBadge: View {
+    let count: Int
+    let markSize: CGFloat
+
+    var body: some View {
+        let em = max(9, (markSize * 0.2).rounded())
+        Text("\(count)")
+            .font(.orbitMarkBadge(markSize))
+            .monospacedDigit()
+            .foregroundStyle(.background)
+            .padding(.horizontal, em * 0.35 + 1.5)
+            .padding(.vertical, em * 0.125 + 1.5)
+            .frame(minWidth: em * 1.6 + 3)
+            .background(Capsule().fill(.primary))
+            .overlay(Capsule().strokeBorder(.background, lineWidth: 1.5))
+            .accessibilityLabel(count == 1 ? "1 account" : "\(count) accounts")
+    }
+}
+
 /// Provider picker opened from the new-session hero — who runs this session, as opposed to the
-/// agent switcher below (where it runs). Two sections, because engines and configured providers
-/// differ in the one way a user cares about: an engine spends the subscription signed into on that
-/// machine, a configured provider spends the API key you pasted. Each row previews the model it
-/// would switch to, so the consequence is visible before the tap.
+/// agent switcher below (where it runs). Sectioned by whose money a row spends: an engine spends the
+/// subscription signed into on that machine, an account pool whichever of its subscriptions has the
+/// most room, a configured provider the API key you pasted. Each row previews the model it would
+/// switch to, so the consequence is visible before the tap. The order is web's one flat list —
+/// engines, pools, keys — and a pool's own accounts fold away at the end of the keys, behind "Pin a
+/// specific account", as web's `NewSessionProviderHero` folds them.
 struct ProviderSwitchSheet: View {
     let choices: [ProviderChoice]
     let currentSlug: String
@@ -73,16 +105,46 @@ struct ProviderSwitchSheet: View {
     /// install / Sign in. Nil leaves such a row inert, which is all an unknown runner allows.
     var onFixRunner: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    /// Open from the start when the pick already is one of the folded accounts, so its tick is in
+    /// view (web parity).
+    @State private var pinOpen: Bool
+
+    init(choices: [ProviderChoice], currentSlug: String, agentName: String,
+         onSelect: @escaping (String) -> Void, onFixRunner: (() -> Void)? = nil) {
+        self.choices = choices
+        self.currentSlug = currentSlug
+        self.agentName = agentName
+        self.onSelect = onSelect
+        self.onFixRunner = onFixRunner
+        _pinOpen = State(initialValue: choices.contains { $0.inPool && $0.slug == currentSlug })
+    }
 
     private var engines: [ProviderChoice] { choices.filter { $0.kind == .engine } }
-    private var byok: [ProviderChoice] { choices.filter { $0.kind == .byok } }
+    private var pools: [ProviderChoice] { choices.filter { $0.kind == .pool } }
+    private var byok: [ProviderChoice] { choices.filter { $0.kind == .byok && !$0.inPool } }
+    /// The accounts a pool above already runs on: pinning one is the exception, so it waits a tap
+    /// further away than the pool.
+    private var pinnable: [ProviderChoice] { choices.filter(\.inPool) }
 
     var body: some View {
         NavigationStack {
             List {
                 section("Engines", engines, footer: "Signed in on this runner.")
-                if !byok.isEmpty {
-                    section("Your keys", byok, footer: "Billed to the API key you configured.")
+                if !pools.isEmpty {
+                    section(ProviderPools.sectionTitle, pools, footer: ProviderPools.sectionFooter)
+                }
+                if !byok.isEmpty || !pinnable.isEmpty {
+                    Section {
+                        ForEach(byok) { row($0) }
+                        if !pinnable.isEmpty {
+                            pinToggle
+                            if pinOpen { ForEach(pinnable) { row($0, indented: true) } }
+                        }
+                    } header: {
+                        Text("Your keys")
+                    } footer: {
+                        Text("Billed to the API key you configured.")
+                    }
                 }
                 Section {
                     Text("Switching is remembered as \(agentName)'s default.")
@@ -107,47 +169,87 @@ struct ProviderSwitchSheet: View {
     @ViewBuilder
     private func section(_ title: String, _ rows: [ProviderChoice], footer: String) -> some View {
         Section {
-            ForEach(rows) { choice in
-                Button {
-                    // Dismiss first, then switch — same ordering as AgentSwitchSheet, so the sheet
-                    // never tears down through a view the switch has already rebuilt.
-                    dismiss()
-                    // A row this machine can't run isn't a pick — it's a request for the sign-in
-                    // (or install) that would make it one, so go where that lives instead.
-                    if choice.unavailable != nil, choice.slug != currentSlug {
-                        onFixRunner?()
-                    } else if choice.slug != currentSlug {
-                        onSelect(choice.slug)
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        ProviderMark(provider: choice.slug, size: 28, brandKey: choice.brandKey,
-                                     label: choice.label)
-                        Text(choice.label).foregroundStyle(.primary).lineLimit(1)
-                        Spacer(minLength: 8)
-                        // The reason replaces the model on a row that can't run: which model it
-                        // would pick is moot until the CLI is installed or signed into. It also
-                        // doubles as the row's call to action, so it takes the accent the way
-                        // web's does rather than sitting in the model column's grey.
-                        Text(choice.unavailable.map { "\($0), sign in →" } ?? choice.modelLabel)
-                            .font(.orbitListSubtitle)
-                            .foregroundStyle(choice.unavailable == nil ? AnyShapeStyle(.secondary)
-                                                                       : AnyShapeStyle(Color.accentColor))
-                            .lineLimit(1)
-                        if choice.slug == currentSlug {
-                            Image(systemName: "checkmark")
-                                .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
+            ForEach(rows) { row($0) }
         } header: {
             Text(title)
         } footer: {
             Text(footer)
         }
+    }
+
+    @ViewBuilder
+    private func row(_ choice: ProviderChoice, indented: Bool = false) -> some View {
+        // A pool none of whose accounts can take work is greyed out: no machine gives its accounts
+        // room back, so unlike a row a runner can fix it goes nowhere, and says why instead.
+        let greyed = choice.unavailable != nil && choice.fixEngine == nil
+        Button {
+            // Dismiss first, then switch — same ordering as AgentSwitchSheet, so the sheet
+            // never tears down through a view the switch has already rebuilt.
+            dismiss()
+            // A row this machine can't run isn't a pick — it's a request for the sign-in
+            // (or install) that would make it one, so go where that lives instead.
+            if choice.unavailable != nil, choice.slug != currentSlug {
+                if !greyed { onFixRunner?() }
+            } else if choice.slug != currentSlug {
+                onSelect(choice.slug)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Group {
+                    ProviderMark(provider: choice.slug, size: 28, brandKey: choice.brandKey,
+                                 label: choice.label, poolSize: choice.poolSize)
+                    Text(choice.label).foregroundStyle(.primary).lineLimit(1)
+                }
+                .opacity(greyed ? 0.5 : 1)
+                Spacer(minLength: 8)
+                // The reason replaces the model on a row that can't run: which model it
+                // would pick is moot until the CLI is installed or signed into. It also
+                // doubles as the row's call to action, so it takes the accent the way
+                // web's does rather than sitting in the model column's grey — except on a greyed
+                // pool, where there is nothing to do and the reason stays grey.
+                Text(trailing(choice, greyed: greyed))
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(choice.unavailable == nil || greyed ? AnyShapeStyle(.secondary)
+                                                                         : AnyShapeStyle(Color.accentColor))
+                    .lineLimit(1)
+                if choice.slug == currentSlug {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
+                }
+            }
+            .padding(.leading, indented ? 20 : 0)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(greyed && choice.slug != currentSlug)
+    }
+
+    private func trailing(_ choice: ProviderChoice, greyed: Bool) -> String {
+        guard let reason = choice.unavailable else { return choice.modelLabel }
+        return greyed ? reason : "\(reason), sign in →"
+    }
+
+    /// The row the pools' own accounts fold under: a chevron in the marks' column that turns when
+    /// open, the words, and how many accounts wait behind it — grey, as web draws it, since it is a
+    /// way further in rather than a pick.
+    private var pinToggle: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { pinOpen.toggle() }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "chevron.right")
+                    .font(.orbitLabel.weight(.semibold))
+                    .rotationEffect(.degrees(pinOpen ? 90 : 0))
+                    .frame(width: 28)
+                Text(ProviderPools.pinAccountLabel).lineLimit(1)
+                Spacer(minLength: 8)
+                Text("\(pinnable.count)").font(.orbitListSubtitle)
+            }
+            .foregroundStyle(Color.secondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(pinOpen ? "Hides the accounts" : "Shows the accounts")
     }
 }
 

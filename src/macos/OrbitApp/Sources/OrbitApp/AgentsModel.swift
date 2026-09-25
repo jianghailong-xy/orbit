@@ -31,6 +31,11 @@ final class AgentsModel {
     /// Distinguishes an authoritative empty provider list from a request that has not succeeded.
     /// Unknown slugs must not be irreversibly treated as removed before this becomes true.
     private(set) var configuredProvidersLoaded = false
+    /// The user's account pools (GET /providers/pools), loaded with the providers. Kept out of
+    /// `configuredProviders`, whose other readers (the workspace rows, a task's provider menu) list
+    /// keys: a new-session draft is what offers pools, and the draft seed resolves a workspace that
+    /// runs on one through them.
+    private(set) var providerPools: [ProviderPool] = []
     /// How the workspace-list fetches have gone: tells a failed fetch from an empty list, and holds
     /// the launch landing open until one succeeds (`LoadFailureLogic`).
     private(set) var loadState = ListLoadState()
@@ -88,7 +93,8 @@ final class AgentsModel {
     func effectiveDefaultModel(for provider: String, runnerId: String?) -> String {
         let catalog = modelCatalog(for: runnerId)
         return AgentDefaults.effectiveDefaultModel(
-            for: provider, catalog: catalog, configured: configuredProviders,
+            for: provider, catalog: catalog,
+            configured: configuredProviders + ProviderPools.asProviders(providerPools),
             runtimeDefaults: runnerId.flatMap { runnerRuntimeDefaultModels[$0] })
     }
 
@@ -105,6 +111,7 @@ final class AgentsModel {
                 configuredProviders = providers
                 configuredProvidersLoaded = true
             }
+            if let pools = try? await api.providerPools() { providerPools = pools }
             loadState.succeed()
         } catch {
             errorText = friendly(error)

@@ -743,6 +743,14 @@ public final class APIClient: @unchecked Sendable {
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
 
+    /// The caller's account pools (GET /api/providers/pools), which the catalogue above doesn't
+    /// list: each with its members, their own quota and where each stands. A pool this build can't
+    /// read is left out rather than failing the list.
+    public func providerPools() async throws -> [ProviderPool] {
+        let pools: [LossyDecodable<ProviderPool>] = try await get("providers/pools")
+        return pools.compactMap(\.value)
+    }
+
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
     public func updateRunner(_ id: String, _ req: UpdateRunnerRequest) async throws -> Runner { try await patch("runners/\(id)", body: req) }

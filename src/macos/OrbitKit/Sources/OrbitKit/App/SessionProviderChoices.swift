@@ -1,13 +1,14 @@
 import Foundation
 
 /// What the new-session provider picker offers: the runner's own signed-in engines first, then
-/// this account's configured (BYOK) providers. Two groups, because they differ in the one way a
-/// user cares about — an engine spends the subscription signed into on that machine, a configured
-/// provider spends the API key you pasted.
+/// this account's account pools, then its configured (BYOK) providers. Grouped, because they differ
+/// in the one way a user cares about — an engine spends the subscription signed into on that
+/// machine, a configured provider spends the API key you pasted, and a pool spends whichever of
+/// its accounts has the most room.
 ///
 /// Mirrors web's `lib/sessionProviderChoices.ts`; keep the two in sync.
 public struct ProviderChoice: Equatable, Sendable, Identifiable {
-    public enum Kind: Equatable, Sendable { case engine, byok }
+    public enum Kind: Equatable, Sendable { case engine, byok, pool }
 
     public let slug: String
     public let label: String
@@ -22,16 +23,25 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// engine whose CLI that machine doesn't have, or has but says it isn't signed into. The row
     /// stays listed and carries the reason rather than disappearing: hiding it turns "not signed
     /// in on this runner" into "Orbit lost my provider", which is the one question the picker
-    /// exists to answer.
+    /// exists to answer. Set too for an account pool none of whose accounts can take work — a
+    /// reason no machine fixes, which is why `fixEngine` stays nil for it.
     public let unavailable: String?
     /// Which engine row on the Providers page fixes `unavailable`. That is the CLI this choice
     /// runs on, which for a BYOK provider is not its own slug — a Moonshot row is fixed on the
-    /// Kimi engine row. Set whenever `unavailable` is.
+    /// Kimi engine row. Set whenever a runner can fix `unavailable`; nil on a pool whose accounts
+    /// are what is missing, whose row is greyed out rather than sent anywhere.
     public let fixEngine: String?
+    /// An account pool: how many accounts it holds, counted on its mark. Nil for anything else.
+    public let poolSize: Int?
+    /// A configured provider that is also an account in one of the user's pools. Still pickable on
+    /// its own — pinning one account is a real need — but offered behind "Pin a specific account",
+    /// since the pool beside it already runs on it.
+    public let inPool: Bool
     public var id: String { slug }
 
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
-                unavailable: String? = nil, fixEngine: String? = nil) {
+                unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
+                inPool: Bool = false) {
         self.slug = slug
         self.label = label
         self.kind = kind
@@ -39,6 +49,8 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
         self.modelLabel = modelLabel
         self.unavailable = unavailable
         self.fixEngine = fixEngine
+        self.poolSize = poolSize
+        self.inPool = inPool
     }
 }
 
@@ -80,9 +92,17 @@ public enum SessionProviderChoices {
     /// `engines` is the health the runner last reported, because every choice here is a claim about
     /// someone else's machine. A runner that has reported nothing claims nothing, so all three stay
     /// runnable — as does any engine missing from a partial report.
+    ///
+    /// The user's account pools come after the engines, each one choice that runs on Claude with its
+    /// accounts' own keys. The providers in a pool stay pickable, marked `inPool` for the picker to
+    /// fold away. `configured` is expected to carry the pools too (`ProviderPools.asProviders`),
+    /// since that is where a pool's models and runtime are resolved from; `pools` says which of its
+    /// entries are pools.
     public static func choices(configured: [ConfiguredProvider],
                                catalog: RunnerModelCatalog? = nil,
-                               engines: [RunnerEngineHealth]? = nil) -> [ProviderChoice] {
+                               engines: [RunnerEngineHealth]? = nil,
+                               pools: [ProviderPool] = [],
+                               now: Date = Date()) -> [ProviderChoice] {
         let health = { (engine: String) in engines?.first { $0.engine == engine } }
         let engineChoices = engineSlugs.map { slug in
             let blocker = engineBlocker(health(slug))
@@ -95,10 +115,27 @@ public enum SessionProviderChoices {
                 unavailable: blocker,
                 fixEngine: blocker == nil ? nil : slug)
         }
+        // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
+        // carries one of its accounts' keys. A missing CLI outranks the accounts, because it is the
+        // one of the two a runner can fix.
+        let claudeBlocker = byokBlocker(health("claude"))
+        let poolChoices = pools.map { pool -> ProviderChoice in
+            ProviderChoice(
+                slug: pool.slug,
+                label: pool.label,
+                kind: .pool,
+                brandKey: "anthropic",
+                modelLabel: modelLabel(for: pool.slug, configured: configured, catalog: catalog),
+                unavailable: claudeBlocker ?? ProviderPools.unavailableReason(pool, now: now),
+                fixEngine: claudeBlocker == nil ? nil : "claude",
+                poolSize: pool.members.count)
+        }
+        let poolSlugs = Set(pools.map(\.slug))
+        let pooled = Set(pools.flatMap { $0.members.map(\.slug) })
         // A configured row shadowing a built-in slug would give two entries that dispatch the same
         // identity; the engine entry above already covers it.
         let byok = configured
-            .filter { !engineSlugs.contains($0.slug) }
+            .filter { !engineSlugs.contains($0.slug) && !poolSlugs.contains($0.slug) }
             .map { provider -> ProviderChoice in
                 // Judged through the engine it borrows, since that CLI is what actually runs it.
                 let runtime = executingRuntime(provider.slug, configured: configured)
@@ -110,9 +147,10 @@ public enum SessionProviderChoices {
                     brandKey: provider.presetSlug,
                     modelLabel: modelLabel(for: provider.slug, configured: configured, catalog: catalog),
                     unavailable: blocker,
-                    fixEngine: blocker == nil ? nil : runtime)
+                    fixEngine: blocker == nil ? nil : runtime,
+                    inPool: pooled.contains(provider.slug))
             }
-        return engineChoices + byok
+        return engineChoices + poolChoices + byok
     }
 
     /// The providers a session that already exists may be moved to: the ones that borrow the same
