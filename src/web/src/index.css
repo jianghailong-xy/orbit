@@ -10982,9 +10982,10 @@ button.chat-jump-start:hover {
   color: var(--text-1);
 }
 
-/* ── Public read-only share page (/s/<token>) ─────────────────────────────────
-   Standalone (no app shell): a branded header bar, a centered scrolling transcript
-   reusing the global .chat-* bubble styles, and a small footer. */
+/* ── Public read-only pages (/s/<token>, PublicShell) ───────────────────────────
+   Standalone (no app shell): a branded header bar — the breadcrumb that is the link's scope,
+   then the page's status, the Live mark, Read-only and the page's actions — a centered
+   scrolling body reusing the global .chat-* bubble styles, and a small footer. */
 .share-page {
   display: flex;
   flex-direction: column;
@@ -11007,12 +11008,52 @@ button.chat-jump-start:hover {
   color: var(--text-1);
   flex: none;
 }
-.share-titlebar {
+.share-crumbs {
   min-width: 0;
   flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.share-crumb {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.share-crumb.is-here {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.share-crumb-sep {
+  flex: none;
+  color: var(--text-4);
+}
+.share-right {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.share-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+.share-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success-solid);
+  box-shadow: 0 0 0 3px var(--success-bg);
 }
 .share-download {
   flex: none;
@@ -11049,20 +11090,6 @@ button.chat-jump-start:hover {
   border-top-color: var(--text-1);
   animation: runner-spin 0.7s linear infinite;
 }
-.share-title {
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.share-sub {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-3);
-}
 .share-badge {
   padding: 1px 8px;
   border-radius: 999px;
@@ -11090,11 +11117,18 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 /* Phone: the header runs out of room, so tighten it and collapse the download
-   button to a square icon — the title keeps the space instead of the action. */
+   button to a square icon — the title keeps the space instead of the action. Read-only
+   goes too: the footer says it. */
 @media (max-width: 600px) {
   .share-header {
     gap: 10px;
     padding: 10px 14px;
+  }
+  .share-right {
+    gap: 8px;
+  }
+  .share-right .share-badge {
+    display: none;
   }
   .share-download {
     width: 40px;

@@ -84,6 +84,10 @@ export const AttachmentResolverContext =
 
 export const ArtifactResolverContext =
   createContext<((artifactPath: string) => Promise<string>) | null>(null);
+
+// Where the transcript's links to tasks, projects and sessions go on a public page, which is read
+// signed out: the page's resolver answers for every AppLink and SameOriginLink in the tree.
+export { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
 import Markdown from 'react-markdown';
 import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
@@ -141,8 +145,8 @@ export const ExportCtx = createContext<ExportMode | null>(null);
 // renders non-clickable there (a logged-out or offline viewer can't open another session).
 export const SessionNavCtx = createContext<((rawId: string) => void) | null>(null);
 
-// Refetch one event's untrimmed payload by seq. WorkspaceView provides it; the shared/public page
-// leaves it null, since that endpoint never clips (nothing there is ever `truncated`).
+// Refetch one event's untrimmed payload by seq. WorkspaceView provides it, and so does the shared
+// page, over the share's own route (its pages are clipped the same way).
 export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null>(null);
 
 /**

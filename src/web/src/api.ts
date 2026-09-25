@@ -785,6 +785,9 @@ export interface SharedEvent {
   payload: any;
   turnId: string | null;
   ts: string;
+  /** Clipped to a preview, as the owner's pages are (MAX_EVENT_PAYLOAD): expanding the card
+   *  refetches it whole with getSharedEventFull. */
+  truncated?: boolean;
 }
 
 /** A session's sanitized, read-only transcript as served to a public share-link viewer. */
@@ -799,20 +802,46 @@ export interface SharedSession {
   runStatus?: string;
   status: string;
   createdAt: string;
+  /** The transcript's newest page, not all of it. */
   events: SharedEvent[];
+  /** Older events remain before `events` (getSharedEventPage). Absent from a server that still
+   *  sends the whole transcript at once. */
+  hasMore?: boolean;
 }
 
-/** Fetch a shared session by its public token. No auth — the token is the capability; a
- *  revoked/unknown token 404s. Bypasses the bearer `api()` helper so a logged-out viewer
- *  isn't bounced to /login. */
-export const getSharedSession = async (token: string): Promise<SharedSession> => {
-  const res = await fetch(`/api/shared/${encodeURIComponent(token)}`);
+/** GET a public share route. No auth — the token is the capability; a revoked/unknown token
+ *  404s. Bypasses the bearer `api()` helper so a logged-out viewer isn't bounced to /login. */
+const sharedGet = async <T>(token: string, path: string): Promise<T> => {
+  const res = await fetch(`/api/shared/${encodeURIComponent(token)}${path}`);
   if (!res.ok) {
     const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
     throw new Error(msg.message || res.statusText);
   }
-  return (await res.json()) as SharedSession;
+  return (await res.json()) as T;
 };
+
+/** A shared session by its public token: its header fields and the newest `limit` events,
+ *  clipped the way the owner's pages are. */
+export const getSharedSession = (token: string, opts: { limit: number }): Promise<SharedSession> =>
+  sharedGet<SharedSession>(token, `?limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
+
+/** A page of a shared transcript: the `limit` events just older than `before` (or the newest
+ *  when it is absent). Clipped like the rest unless `whole`, which the Download HTML walk asks
+ *  for — a saved file has no way to fetch a card's full payload when it is opened. */
+export const getSharedEventPage = (
+  token: string,
+  opts: { before?: number; limit: number; whole?: boolean },
+): Promise<{ events: SharedEvent[]; hasMore: boolean }> => {
+  const qs = new URLSearchParams();
+  if (opts.before != null) qs.set('before', String(opts.before));
+  qs.set('limit', String(opts.limit));
+  if (!opts.whole) qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
+  return sharedGet(token, `/events?${qs.toString()}`);
+};
+
+/** One shared event's untrimmed payload, for a card that arrived `truncated` and was opened. */
+export const getSharedEventFull = (token: string, seq: number): Promise<SharedEvent> =>
+  sharedGet<SharedEvent>(token, `/events/${seq}`);
 
 /** Object URL for an inline image in a shared transcript, via the public attachment route
  *  (no bearer). Caller revokes it. Mirrors fetchAttachmentObjectUrl for the shared page. */

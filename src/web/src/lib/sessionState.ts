@@ -173,6 +173,28 @@ export function sessionLifecycleStateOf(
 export const sessionLifecycleLabel = (state: SessionLifecycleState): string =>
   state === 'COMPLETED' ? 'Completed' : state === 'TRASH' ? 'Trash' : 'Open';
 
+/** How a run stands, in the words a run's badge uses for anyone's run (TaskDetailPanel) rather than
+ *  the owner's own header, which asks its reader for a reply. */
+const SESSION_RUN_WORD: Record<SessionRunState, string> = {
+  QUEUED: 'Queued',
+  RUNNING: 'Running',
+  AWAITING_INPUT: 'Awaiting reply',
+  SUCCEEDED: 'Succeeded',
+  FAILED: 'Failed',
+  INTERRUPTED: 'Interrupted',
+  ENDED: 'Ended',
+};
+
+/**
+ * A session's state in one word, for a reader who is not its owner (a shared session's header).
+ * A filed session says where it is filed, Completed, as the app's own header does; until then it
+ * says how its latest run stands.
+ */
+export function sessionStateWord(session: SessionStateSource): string {
+  if (sessionLifecycleStateOf(session) === 'COMPLETED') return sessionLifecycleLabel('COMPLETED');
+  return SESSION_RUN_WORD[sessionRunStateOf(session)];
+}
+
 /**
  * @deprecated New UI should use sessionRunStateOf and sessionLifecycleStateOf separately.
  * This compatibility helper now reflects only the run dimension.
