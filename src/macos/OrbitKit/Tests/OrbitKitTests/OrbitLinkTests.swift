@@ -564,6 +564,74 @@ final class OrbitLinkTests: XCTestCase {
         XCTAssertEqual(cleanContent.lines[0].text, "Done 2 / 3 · Open 2 · Running 1 · Queued 1")
     }
 
+    /// A wiki entry: its kind beside the type, its trust as the badge, its one sentence, what it
+    /// stands on and whether that still holds — and, once agents no longer get it, the line that says
+    /// so. The ids are the shared fixture's (`orbit-wiki:` cases), the entry the push block names.
+    func testTheWikiCard() throws {
+        let wikiID = "34UDFnrgM4q5oGQloG3uq"
+        let wikiUUID = "01a0d1f2-3a44-7c11-9b02-5f6e7d8c9a10"
+        let reference = ref(.wiki, wikiUUID, .reference("orbit-wiki:\(wikiID)"))
+        let json = """
+        {"kind":"wiki","id":"\(wikiID)","state":"ok","wiki":{
+          "spaceId":"34UAbCdEfGhIjKlMnOpQr","spaceSlug":"orbit","kind":"principle",
+          "title":"A clock never starts agent work",
+          "summary":"Work starts from a committed fact (evidence revised, a receipt), never from a timer.",
+          "trust":"owner","status":"active","anchorState":"verified",
+          "anchorCheckedRef":"4db4f9f0a1b2c3d4e5f60718293a4b5c6d7e8f90",
+          "anchor":{"type":"symbol","path":"src/runner-go/mcp.go","symbol":"askBeforeCreate"}}}
+        """
+        let answer = try preview(json)
+        XCTAssertEqual(answer.wiki?.spaceSlug, "orbit")
+        let content = OrbitLinkCardContent.preview(reference, answer, host: host, now: now)
+        XCTAssertEqual(content.state, .ready)
+        XCTAssertEqual(content.typeName, "Wiki · Principle")
+        XCTAssertEqual(content.wikiTrust, .owner)
+        XCTAssertEqual(content.title, "A clock never starts agent work")
+        XCTAssertEqual(content.lines.map(\.text), [
+            "Work starts from a committed fact (evidence revised, a receipt), never from a timer.",
+            "src/runner-go/mcp.go · askBeforeCreate",
+        ])
+        XCTAssertEqual(content.lines[1].anchorMark, WikiAnchorMark(word: "4db4f9f", tone: .green))
+        XCTAssertFalse(content.lines[1].isWarning)
+        // Its hint is the reference as written: the id alone names no page to imitate.
+        XCTAssertEqual(content.path, "orbit-wiki:\(wikiID)")
+
+        // Retired, anchored code gone, nothing on file: the card still reads, and says all three.
+        let retired = try preview("""
+        {"kind":"wiki","id":"\(wikiID)","state":"ok","wiki":{"spaceId":"s","spaceSlug":"orbit",
+          "kind":"pitfall","title":"t","summary":"","trust":"confirmed","status":"retired",
+          "anchorState":"missing","anchorCheckedRef":null,"anchor":null}}
+        """)
+        let retiredContent = OrbitLinkCardContent.preview(reference, retired, host: host, now: now)
+        XCTAssertEqual(retiredContent.typeName, "Wiki · Pitfall")
+        XCTAssertEqual(retiredContent.lines.map(\.text), ["No anchor", "no longer sent to agents"])
+        XCTAssertEqual(retiredContent.lines[0].anchorMark, WikiAnchorMark(word: "Missing", tone: .red))
+        XCTAssertTrue(retiredContent.lines[0].isWarning)
+        XCTAssertEqual(retiredContent.lines[1].glyph, .warning)
+
+        // Nothing has re-checked it yet: the anchor line says the anchor, and no mark either way.
+        let unchecked = try preview("""
+        {"kind":"wiki","id":"\(wikiID)","state":"ok","wiki":{"spaceSlug":"orbit","kind":"a-kind-from-later",
+          "title":"t","summary":"s","trust":"a-trust-from-later","status":"active","anchorState":"unchecked",
+          "anchor":{"type":"commit","sha":"1125c445a0000000000000000000000000000000"}}}
+        """)
+        let uncheckedContent = OrbitLinkCardContent.preview(reference, unchecked, host: host, now: now)
+        XCTAssertEqual(uncheckedContent.lines.map(\.text), ["s", "1125c44"])
+        XCTAssertNil(uncheckedContent.lines[1].anchorMark)
+        XCTAssertEqual(unchecked.wiki?.kind, .unknown, "a kind this build has never heard of")
+        XCTAssertEqual(uncheckedContent.typeName, "Wiki", "and the card says only what it knows")
+        XCTAssertEqual(unchecked.wiki?.trust, .unknown)
+
+        // Loading, and never coming: the reference is the hint, as it is while it reads.
+        XCTAssertEqual(OrbitLinkCardContent.loading(reference, host: host).path, "orbit-wiki:\(wikiID)")
+        let gone = try preview("""
+        {"kind":"wiki","id":"\(wikiID)","state":"unavailable"}
+        """)
+        let goneContent = OrbitLinkCardContent.preview(reference, gone, host: host, now: now)
+        XCTAssertEqual(goneContent.state, .unavailable)
+        XCTAssertEqual(goneContent.typeName, "Wiki")
+    }
+
     /// The two states a card can be in with nothing to show: still reading, and never coming.
     func testTheLoadingAndUnavailableCards() throws {
         let url = "https://orbitd.io/tasks/\(goneID)"

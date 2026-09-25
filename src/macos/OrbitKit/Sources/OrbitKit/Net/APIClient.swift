@@ -754,6 +754,48 @@ public final class APIClient: @unchecked Sendable {
     /// Stop: the contract's CANCELLED.
     public func cancelWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/cancel") }
 
+    // MARK: wiki (docs/wiki-contract.md) — the user door, `/api/wiki`
+
+    /// `GET /wiki/spaces`: every space, by slug, each with the proposals waiting in it (`pendingOps`)
+    /// — what the drawer's amber number sums.
+    public func wikiSpaces() async throws -> [WikiSpace] { try await get("wiki/spaces") }
+    /// `GET /wiki/spaces/:id?include=usage`: one space, with the rolling window its usage band reads.
+    public func wikiSpace(_ id: String) async throws -> WikiSpace {
+        try await get("wiki/spaces/\(id)", query: [URLQueryItem(name: "include", value: "usage")])
+    }
+    /// `GET /wiki/spaces/:id/entries`: a space's entries of every status, newest recorded first.
+    public func wikiEntries(spaceID: String, limit: Int = 200) async throws -> [WikiEntry] {
+        try await get("wiki/spaces/\(spaceID)/entries", query: [URLQueryItem(name: "limit", value: String(limit))])
+    }
+    /// `GET /wiki/spaces/:id/timeline`: what changed, newest first.
+    public func wikiTimeline(spaceID: String) async throws -> WikiTimeline {
+        try await get("wiki/spaces/\(spaceID)/timeline")
+    }
+    /// `GET /wiki/review`: the changesets with an op still waiting for the owner, across every space,
+    /// or one space's when `spaceID` is given. Their decided ops ride along; Review keeps the pending.
+    public func wikiReview(spaceID: String? = nil) async throws -> [WikiChangeset] {
+        try await get("wiki/review", query: spaceID.map { [URLQueryItem(name: "space", value: $0)] } ?? [])
+    }
+    /// `GET /wiki/entries/:id?include=sources,history,exposure`: one entry and what its page draws.
+    public func wikiEntry(_ id: String) async throws -> WikiEntryDetail {
+        try await get("wiki/entries/\(id)", query: [URLQueryItem(name: "include", value: "sources,history,exposure")])
+    }
+    /// `GET /wiki/search`: the active entries a query finds in a space, each with why it matched.
+    public func wikiSearch(_ query: String, spaceID: String?) async throws -> WikiSearchResponse {
+        var items = [URLQueryItem(name: "q", value: query), URLQueryItem(name: "include", value: "topics")]
+        if let spaceID { items.append(URLQueryItem(name: "space", value: spaceID)) }
+        return try await getCancellable("wiki/search", query: items)
+    }
+    /// `POST /wiki/changesets/:id/decide`: the owner's answers to pending ops, one transaction;
+    /// answers with the changeset as it now stands. Only this door decides — the runner door has none.
+    public func decideWikiChangeset(_ id: String, _ req: WikiDecideRequest) async throws -> WikiChangeset {
+        try await post("wiki/changesets/\(id)/decide", body: req)
+    }
+    /// `POST /wiki/spaces/:id/changesets`: the owner's own write, which applies at once.
+    public func submitWikiChangeset(spaceID: String, _ req: WikiChangesetRequest) async throws -> WikiChangeResult {
+        try await post("wiki/spaces/\(spaceID)/changesets", body: req)
+    }
+
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }

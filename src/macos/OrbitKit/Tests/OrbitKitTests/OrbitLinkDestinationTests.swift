@@ -179,6 +179,45 @@ final class OrbitLinkDestinationTests: XCTestCase {
         XCTAssertNil(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .project, id: projectUUID)))
     }
 
+    // MARK: a wiki entry
+
+    private let wikiID = "34UDFnrgM4q5oGQloG3uq"
+    private let wikiUUID = "01a0d1f2-3a44-7c11-9b02-5f6e7d8c9a10"
+
+    /// A wiki entry has a page in this app that reads by its id alone, and the deployment's page for
+    /// it takes the entry's space as well — which only a read names. So an `orbit-wiki:` link opens
+    /// the entry here whether or not anything has been read, and a card the server would not
+    /// describe opens it here too: the entry's own page is the one that can say it is gone, where a
+    /// browser has no page to open for an id alone.
+    func testAWikiEntryOpensItsOwnPageInTheApp() throws {
+        let target = OrbitLinkTarget(kind: .wiki, id: wikiUUID)
+        XCTAssertEqual(OrbitLinkDestination.inApp(for: target), .wikiEntry(id: wikiID))
+        let link = OrbitLinkRef(target: target, source: .reference("orbit-wiki:\(wikiID)"))
+        let answered = try preview("""
+        {"kind":"wiki","id":"\(wikiID)","state":"ok","wiki":{"spaceSlug":"orbit","title":"t"}}
+        """)
+        let unavailable = try preview("""
+        {"kind":"wiki","id":"\(wikiID)","state":"unavailable"}
+        """)
+        for answer in [answered, unavailable, nil] {
+            XCTAssertEqual(OrbitLinkDestination.tap(for: link, preview: answer, baseURL: baseURL),
+                           .wikiEntry(id: wikiID))
+        }
+    }
+
+    /// The deployment's page for an entry is its space's and its own together; with no space in hand
+    /// there is no page, rather than a `/wiki/<id>` that the deployment does not serve.
+    func testAWikiEntrysPageTakesItsSpace() {
+        let target = OrbitLinkTarget(kind: .wiki, id: wikiUUID)
+        XCTAssertNil(OrbitLinkParser.pageURL(for: target, baseURL: baseURL))
+        XCTAssertEqual(OrbitLinkParser.pageURL(for: target, baseURL: baseURL, wikiSpaceSlug: "orbit"),
+                       URL(string: "https://orbitd.io/wiki/orbit/e/\(wikiID)"))
+        // A slug means nothing to any other kind.
+        XCTAssertEqual(OrbitLinkParser.pageURL(for: OrbitLinkTarget(kind: .task, id: taskUUID),
+                                               baseURL: baseURL, wikiSpaceSlug: "orbit"),
+                       URL(string: "https://orbitd.io/tasks/\(taskID)"))
+    }
+
     // MARK: the task start card's project name
 
     /// The project name on a task's start card is a link to a project like any other, so it has to
@@ -254,6 +293,7 @@ final class OrbitLinkDestinationTests: XCTestCase {
         let landings = [("case .task(let id):", "openFromConversation(.task(id), overConsole: overConsole)"),
                         ("case .session(let id):", "openFromConversation(.session(id), overConsole: overConsole)"),
                         ("case .list(let id):", "route(to: .list(id))"),
+                        ("case .wikiEntry(let id):", "openWikiEntry(id, overConsole: overConsole)"),
                         ("case .web(let url):", "openExternal(url)")]
         for (arm, landing) in landings {
             XCTAssertTrue(open.contains(arm), "`open(_:)` still lands \(arm)")
