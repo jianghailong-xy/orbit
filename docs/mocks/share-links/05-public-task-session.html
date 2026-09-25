@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>05 public task and session</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+ .pv { overflow: visible; }
+ .m-mark { outline-offset: 4px; }
+ .pv-bar.m-mark { outline-offset: -3px; }
+ .two { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 22px; align-items: start; }
+ .pv-body { padding: 18px 20px 20px; }
+ .pv-title { font-size: 21px; }
+ .imgbox { position: relative; }
+ .imgbox img { display: block; width: 100%; }
+ .imgbox .b { position: absolute; border: 2px dashed var(--warning-solid); border-radius: 6px; }
+ .imgbox .b > .m-n { position: absolute; top: -11px; right: -11px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+ .tip { position: absolute; background: #1f2329; color: #fff; font-size: 11.5px; line-height: 1.45; border-radius: 6px; padding: 5px 8px; white-space: nowrap; }
+ .a-card { padding: 14px 16px; }
+ .a-card-t { font-size: 14.5px; }
+ .cm .md { font-size: 13px; }
+</style></head>
+<body class="m"><div class="m-sheet" id="sheet">
+<h1 class="m-h1">5 · 顺着项目链接往下走：任务页 → 一次 Run 的对话</h1>
+<p class="m-sub">这里演示项目链接三层都勾上的最满情况。左边是 /s/&lt;token&gt;/t/34JOHuHtpfWbiehcS4Mu3（真实任务 T6），右边是 /s/&lt;token&gt;/c/79xOqRomuRpDC1a0Kse8bS（T6 那次执行，下半截是真组件的截图）。两页用的都是同一个 token。</p>
+<div class="two">
+ <div class="m-stage">
+  <div class="m-stage-l"><span class="m-k new">新</span> 公开任务页 · 区块照 app 的任务面板排</div>
+  <div class="pv">
+   <div class="pv-bar m-mark"><span class="m-n">1</span><span class="pv-brand">Orbit</span>
+    <div class="pv-crumbs"><a href="#">Claude 账号池：按订阅配额均衡派发</a><span class="sep">›</span><span class="here">T6 安全边界</span></div>
+    <div class="pv-right"><span class="pv-live"><i></i>Live</span><span class="pv-badge">Read-only</span></div></div>
+   <div class="pv-body">
+    <h2 class="pv-title">T6 安全边界：跨 owner、准入与凭据不外泄的回归断言</h2>
+    <div class="pv-meta"><span class="status-pill done"><span class="status-dot"></span>Done</span><span class="judge">⛉ Judged by · submitted evidence</span><span>Created Sep 5 · Done Sep 25</span></div>
+    <div class="pv-grid" style="gap:12px">
+     <div class="a-card m-mark"><span class="m-n">2</span>
+      <div class="a-card-h"><span class="a-card-t">Dependencies</span><span class="a-hint">2 connected · 1 upstream · 1 downstream</span></div>
+      <div class="dep"><span class="muted tiny" style="width:78px">Needs</span><span class="t"><a class="lnk" href="#">T3b 放开池 slug 的写入口</a></span><span class="status-pill done"><span class="status-dot"></span>Done</span></div>
+      <div class="dep"><span class="muted tiny" style="width:78px">Unblocks</span><span class="t"><a class="lnk" href="#">T7 合并边界</a></span><span class="status-pill running"><span class="spin"></span>Running</span></div>
+     </div>
+     <div class="a-card">
+      <div class="a-card-h"><span class="a-card-t">Description</span></div>
+      <div class="md fade" style="max-height:150px"><p>本任务属于项目「Claude 账号池：按订阅配额均衡派发」。先 project_get 34JNIW4b31ujSVqEG784v 读目标、验收标准和作业指导。</p><p>做什么：把池引入后必须守住的安全边界写成<b>独立的回归断言</b>，而不是散落在 T1/T3 的实现 spec 里顺带覆盖。这些是「一旦回退就没有下游会再问一遍」的性质。</p><p>要断言的：</p><ul><li>个人 BYOK 池只对其 owner 的会话解析：跨 owner 解析拿不到 token，且不是靠错误信息推断，是断言解析结果本身。</li><li>非订阅 token（sk-ant-api 前缀）与非 api.anthropic.com 端点的行既不被 plan-usage 探测，也不能成为池成员。</li></ul></div>
+      <div class="more">Show more</div>
+     </div>
+     <div class="a-card">
+      <div class="a-card-h"><span class="a-card-t">Acceptance</span></div>
+      <div class="md">新增的安全边界断言全部为绿，覆盖：跨 owner 解析池拿不到 token；sk-ant-api 前缀与非 api.anthropic.com 端点的行入池被拒；providers 与池相关响应全文不含 sk-ant 前缀；凭据不出现在 agent.env。且每一条都附一次阴性对照的记录：去掉守卫时它确实失败。</div>
+      <div class="a-hint" style="margin-top:6px">Judged by submitted evidence — an independent session confirms it. <span class="lnk">Counts towards criterion 6 ›</span></div>
+     </div>
+     <div class="a-card m-mark"><span class="m-n">3</span>
+      <div class="a-card-h"><span class="a-card-t">Runs</span><span class="a-hint">1</span></div>
+      <div class="run"><span class="status-pill done"><span class="status-dot"></span>Succeeded</span><span>Sep 25, 02:12 · 1h 11m</span><span style="margin-left:auto" class="lnk">View conversation ›</span></div>
+     </div>
+     <div class="a-card m-mark"><span class="m-n">4</span>
+      <div class="a-card-h"><span class="a-card-t">Comments</span><span class="a-hint">3</span></div>
+      <div class="cm"><div class="cm-h"><span class="av">o</span><b>orbit</b><span>Sep 25, 03:17</span></div>
+       <div class="md"><p><b>T6 交付说明（给协调会话）</b></p><ul><li>提交 6214f88a5、4c342beda，只新增两个 spec 文件：pool-security-boundary.spec.ts（非 pg）和 pool-security-boundary.pg.spec.ts（真库）。</li><li>证据已提交（revision 1）。15 组阴性对照在最终提交的一次性 worktree 上逐一施加、跑红、还原。</li></ul></div></div>
+      <div class="more">Show 2 earlier comments</div>
+     </div>
+    </div>
+   </div>
+   <div class="pv-foot">Shared from Orbit · read-only</div>
+  </div>
+ </div>
+
+ <div class="m-stage">
+  <div class="m-stage-l"><span class="m-k new">新</span> 公开对话页 · 页头换新，正文是现在的 Transcript</div>
+  <div class="pv">
+   <div class="pv-bar m-mark"><span class="m-n">5</span><span class="pv-brand">Orbit</span>
+    <div class="pv-crumbs"><a href="#">Claude 账号池…</a><span class="sep">›</span><a href="#" style="flex:none">T6 安全边界</a><span class="sep">›</span><span class="here" style="flex:none">Run · Sep 25</span></div>
+    <div class="pv-right"><span class="status-pill done"><span class="status-dot"></span>Completed</span><span class="pv-dl" title="Download HTML">⤓</span></div></div>
+   <div class="imgbox" style="padding:0 6px">
+    <img src="now-transcript-crop.png" alt="">
+    <div class="b" style="left:24.2%;top:8.5%;width:33.4%;height:3.3%"><span class="m-n">6</span></div>
+    <div class="b" style="left:82.6%;top:28.8%;width:14%;height:3.4%"><span class="m-n">6</span></div>
+    <div class="tip" style="left:30%;top:36.5%">Open the task → /s/…/t/34JOHu…（本链接里的任务页）<br>Project → /s/…（本链接的项目页）<br>范围外的引用：只剩文字，不再指向登录页</div>
+   </div>
+   <div class="pv-foot">Shared from Orbit · read-only</div>
+  </div>
+ </div>
+</div>
+<ul class="m-notes">
+ <li><span class="m-n">1</span><span><b>面包屑就是范围。</b>从项目链接进来，面包屑是「项目 › 任务」；如果是单独分享的任务链接，就只有任务本身，所属项目的名字只显示文字、不能点。</span></li>
+ <li><span class="m-n">2</span><span><b>依赖只链本项目内的任务。</b>跨项目的前置只写「1 prerequisite in another project」，不显示标题。依赖边允许跨项目，但范围不能跟着它走出去。</span></li>
+ <li><span class="m-n">3</span><span><b>Runs 只列状态、时间和时长。</b>app 里这一行显示的工作区名去掉。勾了 Conversations 才出现「View conversation ›」，否则显示「Conversation not shared」。</span></li>
+ <li><span class="m-n">4</span><span><b>评论只在勾了「Comments &amp; files」时出现。</b>agent 写的评论署工作区名（orbit），人写的一律署「Owner」，不露出账号名。这条评论里其实有提交号和文件名：自由文本就是这样，所以默认关、并且要先 Preview 再发。</span></li>
+ <li><span class="m-n">5</span><span><b>对话页换成统一页头。</b>面包屑之外，右上角显示会话状态（Completed / Running…），不再只有工作区名。Download HTML 还在，但它不应该是唯一的导出口，见图 6 的菜单。</span></li>
+ <li><span class="m-n">6</span><span><b>Transcript 组件本身不改</b>，只是给它传入一个「按范围解析链接」的 resolver：Task started 卡片上的「Open the task ↗」和项目链接在范围内就跳公开页，范围外就只剩文字。这正是今天把访客带去登录页的那两处。</span></li>
+</ul>
+</div></body></html>

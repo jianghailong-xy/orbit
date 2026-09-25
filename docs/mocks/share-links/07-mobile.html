@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>07 mobile</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+ .phones { display:flex; gap: 34px; justify-content: center; zoom: .9; padding: 14px 0 6px; }
+ .phone .ph-cap { display:none; }
+ .capr { display:flex; gap: 34px; justify-content:center; zoom:.9; margin-top: 22px; }
+ .capr div { width: 393px; font-size: 13px; color: var(--text-2); text-align:center; }
+</style></head>
+<body class="m"><div class="m-sheet" id="sheet">
+<h1 class="m-h1">7 · 手机上：访客看网页，所有者在原生端设置</h1>
+<p class="m-sub">左边是公开项目页在 iPhone Safari 里的样子（web ≤640px 布局，区块顺序和桌面一样）；中间和右边是 iOS 原生端，几何按真机截图量（393×852pt，tint #2E6AFF，卡片圆角 26pt）。macOS 用同一份 SwiftUI 视图，补上它现在缺的会话分享入口。</p>
+<div class="m-stage">
+ <div class="m-stage-l"><span class="m-k new">新</span> 同一个项目，三块屏幕</div>
+ <div class="phones"><div class="phone web"><div class="ph-status"><span>9:41</span><span style="font-size:13px">●●● ▮</span></div>
+ <div class="pv" style="border:0;border-radius:0">
+  <div class="pv-bar" style="padding:10px 14px;gap:10px"><span class="pv-brand">Orbit</span>
+   <div class="pv-crumbs"><span class="pv-kind">Project</span></div>
+   <div class="pv-right"><span class="pv-live"><i></i>Live</span></div></div>
+  <div style="padding:14px 14px 0">
+   <div style="font-size:21px;font-weight:650;line-height:1.3">Claude 账号池：按订阅配额均衡派发</div>
+   <div class="pv-meta" style="margin-top:6px;font-size:12.5px"><span class="tag blue">Open</span><span>12 tasks</span><span class="dot">·</span><span>Last activity 1m ago</span></div>
+   <div class="a-card" style="margin-top:12px;padding:12px">
+    <div class="a-card-h" style="margin-bottom:8px"><span class="a-card-t" style="font-size:14.5px">Work overview</span></div>
+    <div class="wo-grid">
+     <div class="wo-cell" style="padding:7px 8px"><div class="wo-l" style="font-size:11.5px">● Running</div><div class="wo-n" style="font-size:20px">2</div></div>
+     <div class="wo-cell" style="padding:7px 8px"><div class="wo-l" style="font-size:11.5px">▲ Ready</div><div class="wo-n" style="font-size:20px">0</div></div>
+     <div class="wo-cell" style="padding:7px 8px"><div class="wo-l" style="font-size:11.5px">□ Waiting</div><div class="wo-n" style="font-size:20px">0</div></div>
+     <div class="wo-cell" style="padding:7px 8px"><div class="wo-l" style="font-size:11.5px;color:var(--brand)">⟳ Integrating</div><div class="wo-n" style="font-size:20px">0</div></div>
+     <div class="wo-cell" style="padding:7px 8px"><div class="wo-l" style="font-size:11.5px;color:var(--success)">⎇ Branch</div><div class="wo-n" style="font-size:20px">0</div></div>
+     <div class="wo-cell" style="padding:7px 8px"><div class="wo-l" style="font-size:11.5px;color:var(--success)">✓ On main</div><div class="wo-n" style="font-size:20px">10</div></div>
+    </div>
+    <div class="wo-bar" style="margin-top:10px"><i style="width:16.6%;background:var(--brand)"></i><i style="width:83.4%;background:var(--success-solid)"></i></div>
+   </div>
+   <div class="a-card" style="margin-top:10px;padding:12px">
+    <div class="a-card-h" style="margin-bottom:6px"><span class="a-card-t" style="font-size:14.5px">Goal</span></div>
+    <div class="md fade" style="max-height:74px;font-size:13px">把一组同厂商的 Claude 订阅凭据表达成一个可派发的池身份，在派发时按 5 小时窗口占用率选出额度最松的成员，使单个账号打满不再让工作停到窗口重置。</div><div class="more">Show more</div>
+   </div>
+   <div class="a-card" style="margin-top:10px;padding:12px">
+    <div class="a-card-h" style="margin-bottom:6px"><span class="a-card-t" style="font-size:14.5px">Task graph</span><span class="a-hint">Prerequisite ↓ dependent</span></div>
+    <div class="tg" style="height:150px">
+     <svg width="100%" height="150"><g stroke="#b8bec8" stroke-width="1.4" fill="none"><path d="M80,40 L80,58"/><path d="M80,92 L80,110"/><path d="M250,40 L250,58"/><path d="M250,92 L250,110"/></g></svg>
+     <div class="tg-n done" style="left:10px;top:8px;width:140px"><span class="g done">✓</span><b>T1</b><span class="t">池身份与迁移</span></div>
+     <div class="tg-n done" style="left:180px;top:8px;width:140px"><span class="g done">✓</span><b>T3b</b><span class="t">放开写入口</span></div>
+     <div class="tg-n done" style="left:10px;top:60px;width:140px"><span class="g done">✓</span><b>T2</b><span class="t">选择器纯函数</span></div>
+     <div class="tg-n done" style="left:180px;top:60px;width:140px"><span class="g done">✓</span><b>T5</b><span class="t">可见性</span></div>
+     <div class="tg-n done" style="left:10px;top:112px;width:140px"><span class="g done">✓</span><b>T3</b><span class="t">claim 接线</span></div>
+     <div class="tg-n run" style="left:180px;top:112px;width:140px"><span class="g run">◐</span><b>T7</b><span class="t">合并边界</span></div>
+    </div>
+   </div>
+   <div class="a-card" style="margin-top:10px;padding:12px">
+    <div class="a-card-h" style="margin-bottom:6px"><span class="a-card-t" style="font-size:14.5px">Acceptance criteria</span><span class="a-hint">5 of 7 met</span></div>
+    <div class="cr" style="grid-template-columns:24px minmax(0,1fr)"><span class="cr-n met">1</span><div><div class="cr-t" style="font-size:13px">同一 owner 的多行 Anthropic 订阅 provider 可以归入一个池…</div><div class="cr-s"><span class="ok">Met by its work</span><span>· on main</span></div></div></div>
+    <div class="cr" style="grid-template-columns:24px minmax(0,1fr)"><span class="cr-n unmet">5</span><div><div class="cr-t" style="font-size:13px">客户端能看到池内每个成员各自的窗口占用…</div><div class="cr-s"><span class="no">Not met</span><span>· waiting on <span class="lnk">T8 收尾</span></span></div></div></div>
+   </div>
+  </div>
+ </div>
+ <div style="position:absolute;left:14px;right:14px;bottom:26px;height:46px;border-radius:23px;background:rgba(246,246,248,.96);box-shadow:0 4px 18px rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center;font-size:15px;color:#333">orbitd.io</div>
+</div><div class="phone"><div class="ph-status"><span>9:41</span><span style="font-size:13px">●●● ▮</span></div>
+ <div class="ios-nav"><span class="dn" style="padding:10px 14px">‹</span><span></span><span class="dn" style="padding:10px 14px;background:#e9efff">⋯</span></div>
+ <div style="padding:4px 16px;opacity:.35">
+  <div style="font-size:30px;font-weight:700;line-height:1.15;margin:8px 0 8px">Claude 账号池：按订阅配额均衡派发</div>
+  <div style="display:flex;gap:8px;align-items:center;font-size:15px;color:#8a8a8e"><span style="background:#e6efff;color:#2e6aff;border-radius:999px;padding:2px 10px;font-weight:600">Open</span>12 tasks</div>
+  <div class="ios-card" style="margin-top:16px;height:190px"></div>
+  <div class="ios-card" style="margin-top:16px;height:260px"></div>
+ </div>
+ <div class="ios-menu" style="top:112px">
+  <div class="mi">Record as Done <span style="color:#333;display:inline-flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M8 12.5l3 3 5-6"/></svg></span></div>
+  <div class="mi">Record as Cancelled <span style="color:#333;display:inline-flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9 9l6 6M15 9l-6 6"/></svg></span></div>
+  <div class="gap"></div>
+  <div class="mi">Copy Link <span style="color:#333;display:inline-flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span></div>
+  <div class="mi"><span>Share…<span class="s">Anyone with the link · Live</span></span><span style="color:#35c759;display:inline-flex"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span></div>
+  <div class="mi">Copy as Markdown <span style="color:#333;display:inline-flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15V9l2.5 3L12 9v6M16 9v6M14 13l2 2 2-2"/></svg></span></div>
+  <div class="gap"></div>
+  <div class="mi dis"><span>Delete Project<span class="s">Only a project with no tasks</span></span><span style="display:inline-flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></span></div>
+ </div>
+</div><div class="phone"><div class="ph-status"><span>9:41</span><span style="font-size:13px">●●● ▮</span></div>
+ <div class="ios-nav"><span style="width:60px"></span><span class="ttl">Share project</span><span class="dn">Done</span></div>
+ <div class="ios-sec" style="margin-top:6px"><div class="ios-card">
+  <div class="ios-row"><span style="color:#35c759;display:inline-flex"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span><span class="lbl"><span>Access</span></span><span class="v">Anyone with the link <span style="font-size:12px">⌃⌄</span></span></div>
+ </div><div class="ft">Anyone with the link can view — no sign-in. They can’t change anything.</div></div>
+ <div class="ios-sec"><div class="ios-card">
+  <div class="ios-row" style="font:13px ui-monospace,'DejaVu Sans Mono',monospace;color:#8a8a8e;min-height:44px">orbitd.io/s/Qm4kT9vR2mT7wLp4sYb8nZ…</div>
+  <div class="ios-row"><span style="color:#2e6aff;display:inline-flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span><span class="lbl tint"><span>Copy Link</span></span></div>
+  <div class="ios-row"><span style="color:#2e6aff;display:inline-flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></span><span class="lbl tint"><span>Share Link…</span></span></div>
+ </div></div>
+ <div class="ios-sec"><div class="hd">Includes</div><div class="ios-card">
+  <div class="ios-row"><span class="lbl"><span>Overview</span><span class="sm">Goal, criteria, task graph</span></span><span class="tgl lockd"></span></div>
+  <div class="ios-row"><span class="lbl"><span>Task pages</span><span class="sm">12 tasks</span></span><span class="tgl"></span></div>
+  <div class="ios-row"><span class="lbl"><span>Comments &amp; files</span><span class="sm">29 comments</span></span><span class="tgl off"></span></div>
+  <div class="ios-row"><span class="lbl"><span>Conversations</span><span class="sm">14 transcripts</span></span><span class="tgl off"></span></div>
+ </div><div class="ft">Conversations can include command output and file contents.</div></div>
+ <div class="ios-sec"><div class="ios-card">
+  <div class="ios-row"><span class="lbl"><span>Updates</span></span><span class="v">Live <span style="font-size:12px">⌃⌄</span></span></div>
+  <div class="ios-row"><span class="lbl"><span>Expires</span></span><span class="v">Never <span style="font-size:12px">⌃⌄</span></span></div>
+ </div><div class="ft">Viewed 14 times · last 2h ago</div></div>
+</div></div>
+ <div class="capr"><div>① 访客 · Safari · /s/&lt;token&gt;</div><div>② 所有者 · 项目页 ⋯ 菜单</div><div>③ 所有者 · Share… 打开的面板</div></div>
+ <ul class="m-notes">
+  <li><span class="m-n">1</span><span><b>手机网页不另做一套。</b>和 app 的 web 手机布局一样：Work overview 缩成 3×2，判据只显示前 4 条加「View all 7 criteria」，任务图从上往下画。页头只留品牌、类型和 Live。</span></li>
+  <li><span class="m-n">2</span><span><b>iOS 菜单改名，并把公开拆出来。</b>现在的「Share link」分享的是要登录的地址，改名为「Copy Link」。新增「Share…」，副标题直接写出当前状态（Anyone with the link · Live）。「Copy as Markdown」和 web 用同一个词。</span></li>
+  <li><span class="m-n">3</span><span><b>面板是图 3 对话框的 Form 版本。</b>用系统的 Picker 和 Toggle，分组和顺序与 web 一致：Access、链接、Includes、Updates / Expires。「Share Link…」调起系统分享面板，iOS 上的「Preview」就是用 Safari 打开公开页。</span></li>
+  <li><span class="m-n">4</span><span><b>会话和任务用同一个面板。</b>会话的 Includes 是 Messages 和 Tool calls and output，任务是 Overview、Comments &amp; files、Conversations。今天的 ShareSheet.swift 只包在 <code>#if os(iOS)</code> 里，这次让 macOS 也用上。</span></li>
+ </ul>
+</div>
+</div></body></html>

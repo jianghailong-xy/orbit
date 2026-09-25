@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>01 now review</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+  .imgwrap { position: relative; }
+  .imgwrap img { display: block; width: 100%; }
+  .b { position: absolute; border: 2px dashed var(--warning-solid); border-radius: 8px; }
+  .b > .m-n { position: absolute; top: -11px; right: -11px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .legend { font-size: 13px; line-height: 1.7; color: #3f4652; }
+  .legend li { display: flex; gap: 8px; margin-top: 8px; }
+  .legend li:first-child { margin-top: 0; }
+  .legend b { color: var(--text-1); }
+  .src { font-size: 11.5px; color: var(--text-3); }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet" id="sheet">
+  <h1 class="m-h1">1 · 现状评审：会话分享今天的样子</h1>
+  <p class="m-sub">Web · 真组件 + 真数据渲染（会话「执行任务：T6 安全边界…」前 70 条事件；链接里的 token 是示意）。编号 1–5 在图上，6–10 看不见，列在下面。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k">现在</span> 分享弹窗（web 会话菜单 ⋯ → Share…）与公开页 /s/:token</div>
+    <div class="row">
+      <div style="width:500px;flex:none">
+        <div class="imgwrap">
+          <img src="now-share-modal.png" alt="">
+          <div class="b" style="left:7%;top:25%;width:85%;height:22%"><span class="m-n">4</span></div>
+          <div class="b" style="left:7%;top:70%;width:85%;height:15%"><span class="m-n">5</span></div>
+        </div>
+        <p class="m-cap">ShareModal.tsx · 唯一的状态是「Sharing is on」，唯一的动作是 Copy / Revoke。</p>
+      </div>
+      <ul class="legend grow" style="list-style:none;margin:0;padding:0">
+        <li><span class="m-n">1</span><span><b>公开页不说自己的状态。</b>页头只有标题、工作区名和 Read-only；看不出会话还在不在跑、内容截至何时、之后会不会变。接口其实返回了 status，页面没用。</span></li>
+        <li><span class="m-n">2</span><span><b>链接把访客带去登录页。</b>Task started 卡片照样渲染 <code>Open the task ↗</code> 和项目链接（TaskStartCard.tsx:67–129），指向要登录的 app；卡片上还带着任务 id 和 <code>What the agent was told</code>（完整派活提示词）。</span></li>
+        <li><span class="m-n">3</span><span><b>导出被绑在公开上。</b><code>Download HTML</code> 是全站唯一的导出入口（7 月 1 日那次会话有意把它从菜单并进了分享页）。结果是所有者想存一份，得先把会话公开。</span></li>
+        <li><span class="m-n">4</span><span><b>「full transcript」其实是「以后的也算」。</b>链接是活的：分享之后发的每条消息、每段工具输出都自动公开。页面自己又不刷新，所以它既不是快照也不是直播。</span></li>
+        <li><span class="m-n">5</span><span><b>开关之外没有设置。</b>不能设过期，看不到被打开过几次。撤销后再开会得到一个新链接（这点是对的，应该保留）。</span></li>
+      </ul>
+    </div>
+    <div class="imgwrap shot" style="margin-top:18px">
+      <img src="now-shared-page.png" alt="">
+      <div class="b" style="left:5.2%;top:0.8%;width:34.6%;height:6.2%"><span class="m-n">1</span></div>
+      <div class="b" style="left:34.2%;top:10.6%;width:44.2%;height:34.8%"><span class="m-n">2</span></div>
+      <div class="b" style="left:86.6%;top:1.3%;width:12.4%;height:4.9%"><span class="m-n">3</span></div>
+    </div>
+    <p class="m-cap">SharedSessionPage.tsx at HEAD 4db4f9fdd · 1280 宽。</p>
+
+    <ul class="m-notes">
+      <li><span class="m-n">6</span><span><b>没有清单。</b>这台部署上现在有 25 个公开链接，最早是 07-01 建的，其中 21 个会话早已完成。全站只有会话菜单里的「Share · link active」一处提示，没有一个地方能列出它们、一次关掉。</span></li>
+      <li><span class="m-n">7</span><span><b>回收站只是「暂停」。</b>移入回收站时 token 不清，Restore 之后旧链接会悄悄复活，现在就有 1 个链接处在这种状态。在回收站里也还能「Create share link」，因为 enableShare 不查 deletedAt。</span></li>
+      <li><span class="m-n">8</span><span><b>匿名访客能让所有者的 runner 干活。</b><code>/api/shared/:token/artifacts?path=</code> 接受会话 worktree 和 uploads 下任何在记录里出现过的绝对路径（每次 Read/Edit 都会留下一个），然后往所有者的会话里插一个 <code>artifact</code> turn，并把这个请求最长挂 40s。判断「出现过」时，要把这段会话的全部事件读进内存。</span></li>
+      <li><span class="m-n">9</span><span><b>公开接口一次吐全量，而且不设防。</b>T6 这次执行是 736 条事件、约 0.92 MB，协调会话是 670 条、约 3.3 MB。所有者自己看的时候只取尾部 200 条，还做截断。公开接口不限流，也不带 <code>noindex</code> 或 <code>no-store</code>。链接预览永远只显示「Orbit」，因为标题是 JS 设的。</span></li>
+      <li><span class="m-n">10</span><span><b>几端说法不一致。</b>macOS 没有分享入口。iOS 项目菜单里的「Share link」分享的是要登录才能打开的 app 地址，和会话的「Share link…」是同一个词、两种意思。任务在任何一端都没有链接可复制。</span></li>
+    </ul>
+    <p class="src" style="margin:10px 2px 0">数据来源：run_event / session 表实测（2026-09-25 08:10）；代码行号对应 HEAD 4db4f9fdd。</p>
+  </div>
+</div>
+</body>
+</html>
