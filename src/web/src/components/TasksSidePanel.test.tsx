@@ -85,8 +85,9 @@ describe('TasksSidePanel nav', () => {
     // The judgment inbox stood first here until migration 0229 removed the project acceptance
     // judgment: the page it opened read an endpoint that is no longer served. Following (the
     // watches page, docs/watch-contract.md) stood after Projects until it left the sidebar: its
-    // watches are agents' waits, reached from the session that keeps them.
-    expect(keys).toEqual(['projects', 'runners', 'providers']);
+    // watches are agents' waits, reached from the session that keeps them. Wiki went in under
+    // Projects (design §12.1): a codebase has two faces, the work in it and what the work learned.
+    expect(keys).toEqual(['projects', 'wiki', 'runners', 'providers']);
     expect(source).not.toContain('tp-workspaces-head');
     expect(source).not.toContain('<span className="tp-group-name">Workspaces</span>');
   });

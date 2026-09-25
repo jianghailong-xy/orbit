@@ -493,6 +493,23 @@ export function changesetView(row: ChangesetRow): Record<string, unknown> {
   };
 }
 
+/** The window the home page's usage block counts over — the design's "this week" (§12.1). */
+const WIKI_USAGE_WINDOW_DAYS = 7;
+
+/**
+ * A topic's name when the space has never declared one: the slug read as words.
+ *
+ * The slug is the only name an entry carries (`topics` is a list of slugs), so a topic's page has to
+ * be able to title itself from it — `tasks-dispatch` reads back as "Tasks dispatch". Only the first
+ * word is capitalised: a slug cannot say which of its words the owner would have capitalised, and
+ * title-casing every one of them invents an emphasis nobody wrote.
+ */
+export function topicTitleFromSlug(slug: string): string {
+  const words = slug.split('-').filter((word) => word.length > 0);
+  if (words.length === 0) return slug;
+  return [words[0][0].toUpperCase() + words[0].slice(1), ...words.slice(1)].join(' ');
+}
+
 // ── The service ─────────────────────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -1964,6 +1981,181 @@ export class WikiService {
       select: CHANGESET_SELECT,
     });
     return rows.map(changesetView);
+  }
+
+  // ── The three reads the pages ask for (contract `agentSurface.doors.user.routes`) ─────────────
+
+  /**
+   * One topic's page: the entries that carry the slug, and the topic's own name when the space has one.
+   *
+   * THE TOPIC'S NAME IS DERIVED FROM THE SLUG, because nothing in phase 1 writes `wiki_topic`: an
+   * entry names its topics by slug alone (`topicsMax` of them), so the slugs in use are the topics
+   * that exist, and a row in `wiki_topic` — when phase 2's maintenance run writes one — is what a
+   * space has SAID about one of them. `title` therefore prefers the row and falls back to the slug
+   * read as words, and `declared` says which of the two the caller got, so a page can show the name
+   * it has without pretending the owner chose it.
+   *
+   * A topic nothing carries is a 404 rather than an empty page: `/wiki/orbit/t/typo` is a link
+   * somebody followed, and an empty topic page reads as "this topic has no entries" instead.
+   */
+  async getTopicView(ownerId: string, spaceId: string, slug: string): Promise<Record<string, unknown>> {
+    await this.requireSpace(ownerId, spaceId);
+    const entries = await this.prisma.wikiEntry.findMany({
+      where: { ownerId, spaceId, topics: { has: slug } },
+      orderBy: [{ validFrom: 'desc' }, { id: 'desc' }],
+      take: 200,
+      select: ENTRY_SELECT,
+    });
+    const declared = await this.prisma.wikiTopic.findFirst({
+      where: { ownerId, spaceId, slug },
+      select: { title: true, description: true, pathPrefixes: true },
+    });
+    if (entries.length === 0 && !declared) throw new NotFoundException('no such wiki topic');
+    return {
+      slug,
+      title: declared?.title ?? topicTitleFromSlug(slug),
+      description: declared?.description ?? null,
+      declared: declared !== null,
+      entryCount: entries.length,
+      entries: entries.map(entryView),
+    };
+  }
+
+  /**
+   * What changed in this space lately, newest first — the home page's timeline.
+   *
+   * ONE ROW PER RECORDED OP, which is the only ledger of a change this store keeps: `applyOp` writes
+   * a revision for an add or an amend and nothing at all for a retire, a supersede, a reinforce or a
+   * challenge, so a feed built from `wiki_entry_revision` would silently omit every retirement in the
+   * space. The op row is written for every recorded change whatever its kind, and `decided_at` is
+   * when it took effect.
+   *
+   * NOT `submitChangeset`'s `created_at`: an op that waited in Review for a day changed the wiki when
+   * the owner answered it, not when a session proposed it.
+   *
+   * What is left out is what changed nothing: a pending op (Review shows it, and it may never apply),
+   * a rejected one, an expired one, and one withdrawn behind an entry that left active.
+   */
+  async getTimeline(ownerId: string, spaceId: string, limit = 20): Promise<Record<string, unknown>> {
+    await this.requireSpace(ownerId, spaceId);
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        opId: string;
+        op: string;
+        decision: string;
+        origin: string;
+        at: Date;
+        entryId: string | null;
+        title: string | null;
+        kind: string | null;
+        status: string | null;
+        trust: string | null;
+        supersededById: string | null;
+        supersededByTitle: string | null;
+        reason: string | null;
+      }>
+    >(Prisma.sql`
+      SELECT o."id" AS "opId",
+             o."op" AS "op",
+             o."decision" AS "decision",
+             c."origin" AS "origin",
+             o."decided_at" AS "at",
+             e."id" AS "entryId",
+             e."title" AS "title",
+             e."kind" AS "kind",
+             e."status" AS "status",
+             e."trust" AS "trust",
+             e."superseded_by_id" AS "supersededById",
+             successor."title" AS "supersededByTitle",
+             o."payload"->>'reason' AS "reason"
+        FROM "wiki_changeset_op" o
+        JOIN "wiki_changeset" c ON c."id" = o."changeset_id" AND c."owner_id" = o."owner_id"
+        LEFT JOIN "wiki_entry" e
+          ON e."id" = COALESCE(o."result_entry_id", o."entry_id") AND e."owner_id" = o."owner_id"
+        LEFT JOIN "wiki_entry" successor
+          ON successor."id" = e."superseded_by_id" AND successor."owner_id" = e."owner_id"
+       WHERE o."owner_id" = ${ownerId}::uuid
+         AND c."space_id" = ${spaceId}::uuid
+         AND o."decision" IN ('accepted', 'edited', 'auto_applied')
+         AND o."decided_at" IS NOT NULL
+       ORDER BY o."decided_at" DESC, o."id" DESC
+       LIMIT ${Math.min(Math.max(limit, 1), 100)}::int
+    `);
+    return {
+      items: rows.map((row) => ({
+        opId: row.opId,
+        op: row.op,
+        decision: row.decision,
+        origin: row.origin,
+        at: row.at.toISOString(),
+        entryId: row.entryId,
+        title: row.title,
+        kind: row.kind,
+        status: row.status,
+        trust: row.trust,
+        supersededById: row.supersededById,
+        supersededByTitle: row.supersededByTitle,
+        reason: row.reason,
+      })),
+    };
+  }
+
+  /**
+   * One space, with what the home page reads about its use when it asks for it.
+   *
+   * A QUERY PARAMETER ON THE ROUTE THAT ALREADY EXISTS rather than a route of its own: `usage` is
+   * four aggregates over `wiki_exposure`, which the space document itself never pays for, and
+   * `include` is the idiom `GET /wiki/entries/:id` already spells its optional reads with.
+   *
+   * THE WINDOW IS WHAT MAKES THE NUMBER SAY "this week" — the design's read is a rolling one, and the
+   * exposure table is append-only, so an unwindowed count would be a lifetime total wearing a weekly
+   * label.
+   */
+  async getSpaceView(ownerId: string, spaceId: string, include: { usage: boolean }): Promise<Record<string, unknown>> {
+    const space = await this.requireSpace(ownerId, spaceId);
+    if (!include.usage) return space;
+    return { ...space, usage: await this.spaceUsage(ownerId, spaceId, WIKI_USAGE_WINDOW_DAYS) };
+  }
+
+  /** What the space's entries were read for in the last `days`. See {@link getSpaceView}. */
+  private async spaceUsage(ownerId: string, spaceId: string, days: number): Promise<Record<string, unknown>> {
+    const since = new Date(Date.now() - days * 86_400_000);
+    const rows = await this.prisma.wikiExposure.findMany({
+      where: { ownerId, at: { gte: since }, entry: { spaceId } },
+      select: { entryId: true, sessionId: true, channel: true },
+    });
+    const sessions = new Set<string>();
+    const byEntry = new Map<string, { total: number; pushed: number; searched: number; fetched: number }>();
+    let searches = 0;
+    let gets = 0;
+    for (const row of rows) {
+      if (row.channel === 'search') searches += 1;
+      if (row.channel === 'get') gets += 1;
+      if (row.channel === 'push' && row.sessionId) sessions.add(row.sessionId);
+      const entry = byEntry.get(row.entryId) ?? { total: 0, pushed: 0, searched: 0, fetched: 0 };
+      entry.total += 1;
+      if (row.channel === 'push') entry.pushed += 1;
+      if (row.channel === 'search') entry.searched += 1;
+      if (row.channel === 'get') entry.fetched += 1;
+      byEntry.set(row.entryId, entry);
+    }
+    const ranked = [...byEntry].sort((a, b) => b[1].total - a[1].total || (a[0] < b[0] ? -1 : 1)).slice(0, 50);
+    const titles = await this.prisma.wikiEntry.findMany({
+      where: { ownerId, id: { in: ranked.map(([id]) => id) } },
+      select: { id: true, title: true },
+    });
+    const titleById = new Map(titles.map((entry) => [entry.id, entry.title]));
+    return {
+      days,
+      sessionsPushed: sessions.size,
+      searches,
+      gets,
+      entries: ranked.map(([entryId, counts]) => ({
+        entryId,
+        title: titleById.get(entryId) ?? null,
+        ...counts,
+      })),
+    };
   }
 }
 

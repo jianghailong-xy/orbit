@@ -31,6 +31,15 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
+import type {
+  WikiChangeset,
+  WikiEntry,
+  WikiEntryDetail,
+  WikiSpaceRow,
+  WikiSpaceWithUsage,
+  WikiTimeline,
+  WikiTopicView,
+} from './wiki';
 import {
   activeTasksPath,
   labelSummaryPath,
@@ -762,6 +771,96 @@ export const taskRowQuery = (taskId: string) =>
  * keeps a page nobody is looking at from asking the server anything. A POST because the refs are a
  * body, not because anything is written — it answers 200, so nothing here invalidates.
  */
+// ── The Wiki ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Orbit Wiki's reads, every one of them under the `['wiki']` key root.
+ *
+ * ONE PREFIX FOR THE WHOLE FEATURE, because `wiki.changed` is the only thing that announces a wiki
+ * write and it names nothing but the space that moved (`contracts/wiki.contract.json`
+ * `realtime.redaction`): the control plane invalidates `['wiki']` and this page re-reads whatever it
+ * is showing, which is what decides what it may see. A key outside the prefix is a view the event
+ * cannot reach, and one under a foreign root is a re-read of something the event said nothing about
+ * — the default `groupsFor` branch is `['sessions']`, so an unmapped wiki key would refresh the
+ * session list on every wiki write.
+ *
+ * The space is addressed by its SLUG in the URL and by its id on the wire, so the two helpers below
+ * are the only places that spelling changes.
+ */
+
+/** Every space this owner has, each with the count of proposals waiting — the sidebar's number. */
+export const wikiSpacesQuery = () =>
+  queryOptions({
+    queryKey: ['wiki', 'spaces'] as const,
+    queryFn: () => api<WikiSpaceRow[]>('/wiki/spaces'),
+    staleTime: 30_000,
+  });
+
+/**
+ * One space, with the rolling usage window the home page's right rail reads.
+ *
+ * `include=usage` costs four aggregates over `wiki_exposure` that no other reader of the space
+ * document pays for, which is why it is asked for here and nowhere else.
+ */
+export const wikiSpaceQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId] as const,
+    queryFn: () => api<WikiSpaceWithUsage>(`/wiki/spaces/${encodeURIComponent(spaceId!)}?include=usage`),
+    enabled: spaceId !== null,
+  });
+
+/** A space's entries, newest record first. The home page and the topic grid are both drawn from it. */
+export const wikiEntriesQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'entries'] as const,
+    queryFn: () => api<WikiEntry[]>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/entries?limit=200`),
+    enabled: spaceId !== null,
+  });
+
+/** One topic's page: the entries carrying its slug, and the name the space has for it. */
+export const wikiTopicQuery = (spaceId: string | null, slug: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'topic', slug] as const,
+    queryFn: () =>
+      api<WikiTopicView>(
+        `/wiki/spaces/${encodeURIComponent(spaceId!)}/topics/${encodeURIComponent(slug!)}`,
+      ),
+    enabled: spaceId !== null && slug !== null,
+  });
+
+/** What changed in this space lately — the home page's timeline. */
+export const wikiTimelineQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'timeline'] as const,
+    queryFn: () => api<WikiTimeline>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/timeline`),
+    enabled: spaceId !== null,
+  });
+
+/** One entry with everything the drawer draws: its sources, its history and who was shown it. */
+export const wikiEntryQuery = (entryId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'entry', entryId] as const,
+    queryFn: () =>
+      api<WikiEntryDetail>(`/wiki/entries/${encodeURIComponent(entryId!)}?include=sources,history,exposure`),
+    enabled: entryId !== null,
+  });
+
+/**
+ * What waits for the owner, newest first, across every space or one of them.
+ *
+ * The key carries the space so switching spaces is a cache hit rather than a refetch, and `null`
+ * stays a key of its own — Review's own page asks across every space, which is not the same question
+ * as asking about the one whose page happens to be open.
+ */
+export const wikiReviewQuery = (spaceId?: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'review', spaceId ?? null] as const,
+    queryFn: () =>
+      api<WikiChangeset[]>(
+        spaceId ? `/wiki/review?space=${encodeURIComponent(spaceId)}` : '/wiki/review',
+      ),
+  });
+
 export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
   queryOptions({
     queryKey: [
