@@ -254,9 +254,11 @@ struct ToolCardView: View {
         // pager below, and a screenshot is expensive enough that decoding it twice a body pass shows.
         let previews = previewImages
         return VStack(alignment: .leading, spacing: 8) {
-            if let taskProgress { TaskProgressView(progress: taskProgress) }
+            // A workflow opens to its progress; a sub-agent's totals close its transcript instead.
+            if card.name == "Workflow", let taskProgress { TaskProgressView(progress: taskProgress) }
             ToolBodyView(kind: d.body)
             if !nestedItems.isEmpty { SubagentTranscriptView(items: nestedItems, fullPayload: fullPayload) }
+            if card.name != "Workflow", let taskProgress { TaskProgressView(progress: taskProgress) }
             // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,
             // mirroring web's `ToolResult`, which renders images before the monospace panel.
             if !previews.isEmpty {

@@ -2558,7 +2558,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           {node.result?.isError && (
             <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
           )}
-          {isBackgroundTask && (
+          {node.name === 'Workflow' && (
             <TaskProgressDetail
               id={node.id}
               // Before a runner that reports progress, a workflow's receipt is still all there is.
@@ -2576,6 +2576,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
               <NodeList nodes={node.children} live={live} />
             </div>
           )}
+          {/* A sub-agent's totals close its transcript rather than open it. */}
+          {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
           {node.result && !node.result.isError && !hideResult && !launchReceipt && (
             <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
           )}

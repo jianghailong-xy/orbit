@@ -20,13 +20,13 @@ export function TaskProgressBlock({ progress }: { progress: TaskProgress }) {
   const footer = progressFooter(progress);
   if (groups.length === 0 && !footer) return null;
   return (
-    <div className="task-progress">
+    <div className="agent-progress">
       {groups.map((g, i) => (
-        <div className="task-progress-phase" key={`${i}-${g.title}`}>
+        <div className="agent-progress-phase" key={`${i}-${g.title}`}>
           {(g.title || groups.length > 1) && (
-            <div className="task-progress-head">
+            <div className="agent-progress-head">
               {g.title}
-              <span className="task-progress-count">
+              <span className="agent-progress-count">
                 {g.done}/{g.total}
               </span>
             </div>
@@ -36,7 +36,7 @@ export function TaskProgressBlock({ progress }: { progress: TaskProgress }) {
           ))}
         </div>
       ))}
-      {footer && <div className="task-progress-foot">{footer}</div>}
+      {footer && <div className="agent-progress-foot">{footer}</div>}
     </div>
   );
 }
@@ -46,11 +46,11 @@ function AgentRow({ agent }: { agent: TaskProgressAgent }) {
   const now = agentNow(agent);
   const detail = agentDetail(agent);
   return (
-    <div className={`task-progress-agent is-${lane}`} title={agent.error || undefined}>
+    <div className={`agent-progress-agent is-${lane}`} title={agent.error || undefined}>
       <AgentLaneIcon lane={lane} />
-      <span className="task-progress-label">{agent.label}</span>
-      {now && <span className="task-progress-now">{now}</span>}
-      {detail && <span className="task-progress-detail">{detail}</span>}
+      <span className="agent-progress-label">{agent.label}</span>
+      {now && <span className="agent-progress-now">{now}</span>}
+      {detail && <span className="agent-progress-detail">{detail}</span>}
     </div>
   );
 }
@@ -59,5 +59,5 @@ function AgentLaneIcon({ lane }: { lane: ReturnType<typeof agentLane> }) {
   if (lane === 'done') return <CheckCircleFilled className="chat-tool-status ok" />;
   if (lane === 'failed') return <CloseCircleFilled className="chat-tool-status err" />;
   if (lane === 'running') return <LoadingOutlined spin className="chat-tool-status running" />;
-  return <span className="task-progress-queued" aria-label="queued" />;
+  return <span className="agent-progress-queued" aria-label="queued" />;
 }
