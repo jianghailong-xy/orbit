@@ -25,6 +25,7 @@ import { SharedLinkPage } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
 import { FollowingPage } from './pages/FollowingPage';
+import { WikiPage } from './pages/WikiPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
 // (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
@@ -225,6 +226,58 @@ export function App() {
               element={
                 <DocView>
                   <ProjectDetailPage />
+                </DocView>
+              }
+            />
+            {/* The Wiki: one page component, five routes. `/wiki/review` is declared before
+                `/wiki/:space` for the reader's sake rather than the router's — a static segment
+                already outranks a dynamic one, but the two together are what the design's URL
+                scheme means (a space is a codebase; Review is the account's queue). */}
+            <Route
+              path="wiki"
+              element={
+                <DocView>
+                  <WikiPage route="home" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/review"
+              element={
+                <DocView>
+                  <WikiPage route="review" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/review"
+              element={
+                <DocView>
+                  <WikiPage route="review" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space"
+              element={
+                <DocView>
+                  <WikiPage route="home" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/t/:topic"
+              element={
+                <DocView>
+                  <WikiPage route="topic" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/e/:entry"
+              element={
+                <DocView>
+                  <WikiPage route="entry" />
                 </DocView>
               }
             />
