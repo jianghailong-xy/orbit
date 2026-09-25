@@ -45,13 +45,27 @@ export interface UsageProbeRow {
  * both (the connect form asks for "your API key", which is what all but one vendor issues).
  */
 export function probesSubscriptionUsage(row: UsageProbeRow, apiKey: string): boolean {
-  if (row.runtime === AgentProvider.CODEX || row.runtime === AgentProvider.KIMI) return false;
-  if (!apiKey.trim().startsWith(OAUTH_TOKEN_PREFIX)) return false;
+  return subscriptionUsageRefusal(row, apiKey) === null;
+}
+
+/** The part of probesSubscriptionUsage's test a row fails. */
+export type SubscriptionUsageRefusal = 'NOT_CLAUDE_RUNTIME' | 'NOT_SUBSCRIPTION_TOKEN' | 'NOT_ANTHROPIC_ENDPOINT';
+
+/**
+ * probesSubscriptionUsage's test, naming the part a row fails — null when it passes. Skipping in
+ * silence is right for the probe, but an account pool has to say why it turns a provider away: a
+ * member this test fails is never asked about its windows, so it could only ever sit in the pool
+ * without being chosen.
+ */
+export function subscriptionUsageRefusal(row: UsageProbeRow, apiKey: string): SubscriptionUsageRefusal | null {
+  if (row.runtime === AgentProvider.CODEX || row.runtime === AgentProvider.KIMI) return 'NOT_CLAUDE_RUNTIME';
+  if (!apiKey.trim().startsWith(OAUTH_TOKEN_PREFIX)) return 'NOT_SUBSCRIPTION_TOKEN';
   try {
-    return new URL(row.baseUrl).hostname.toLowerCase() === ANTHROPIC_HOST;
+    if (new URL(row.baseUrl).hostname.toLowerCase() === ANTHROPIC_HOST) return null;
   } catch {
-    return false;
+    /* not a URL, so not Anthropic's */
   }
+  return 'NOT_ANTHROPIC_ENDPOINT';
 }
 
 /**

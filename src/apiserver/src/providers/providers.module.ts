@@ -11,8 +11,10 @@ import { ProvidersService } from './providers.service';
   // AdminRoleGuard depends only on the global PrismaService, so provide it here too (it is
   // not exported from UsersModule) for the admin controller's @UseGuards.
   providers: [ProvidersService, ModelCatalogService, ProviderPlanUsageService, AdminRoleGuard],
-  // For RunnerApiModule's provider list. Exported rather than re-provided there: a second
-  // provider entry would be a second instance, which is how the auto-run sweep once ran twice.
-  exports: [ProvidersService],
+  // For RunnerApiModule's provider list, and for QueueModule's claim, which reads an account pool's
+  // quota. Exported rather than re-provided there: a second provider entry would be a second
+  // instance — for the quota, a second cache that starts cold — which is how the auto-run sweep
+  // once ran twice.
+  exports: [ProvidersService, ProviderPlanUsageService],
 })
 export class ProvidersModule {}

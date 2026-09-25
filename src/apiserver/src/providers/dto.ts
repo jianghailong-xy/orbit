@@ -1,4 +1,5 @@
 import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsPublicId } from '../common/public-id';
 
 // Custom providers borrow one of the configurable runtimes: `claude` for Anthropic-compatible endpoints,
 // `codex` for endpoints that serve the OpenAI Responses API (OpenAI itself; codex dropped Chat
@@ -54,4 +55,17 @@ export class UpdateModelProviderDto {
    *  as it is. The vendor identity itself is fixed at creation. */
   @IsOptional() @IsBoolean() followsPreset?: boolean;
   @IsOptional() @IsBoolean() enabled?: boolean;
+}
+
+// An account pool: several of the caller's own subscription providers, dispatched under one slug of
+// the pool's own, which the server derives from the label the way it derives a provider's.
+export class CreateProviderPoolDto {
+  @IsString() @MinLength(1) label!: string;
+  /** The providers it starts with. Each must pass the admission a later add does; one that fails
+   *  refuses the whole create. */
+  @IsOptional() @IsArray() @IsPublicId({ each: true }) providerIds?: string[];
+}
+
+export class AddProviderPoolMemberDto {
+  @IsPublicId() providerId!: string;
 }

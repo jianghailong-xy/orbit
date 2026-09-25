@@ -3,9 +3,10 @@ import { Prisma } from '@prisma/client';
 import { AgentProvider, providerPreset, RunEventType, type ProviderPreset } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
+import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
+import { subscriptionUsageRefusal, type SubscriptionUsageRefusal } from './plan-usage';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
@@ -24,6 +25,40 @@ export interface UsableProvider {
   label?: string;
   models?: unknown;
   defaultModel?: string | null;
+}
+
+/** Why a provider may not join an account pool — see assertPoolMembers. */
+type PoolMemberRefusal = 'SHARED_PROVIDER' | 'KEY_UNREADABLE' | SubscriptionUsageRefusal;
+
+/** What each refusal tells the owner. */
+const POOL_MEMBER_REFUSALS: Record<PoolMemberRefusal, string> = {
+  SHARED_PROVIDER: 'Shared provider — only your own keys can join a pool',
+  KEY_UNREADABLE: "Stored key can't be read — add it again",
+  NOT_CLAUDE_RUNTIME: 'Not a Claude runtime — no 5-hour window',
+  NOT_SUBSCRIPTION_TOKEN: 'Metered API key — no 5-hour window',
+  NOT_ANTHROPIC_ENDPOINT: 'Endpoint is not api.anthropic.com',
+};
+
+/** A pool as its owner reads it: the providers in it, keyless and endpointless, in the order the
+ *  provider lists use. */
+const POOL_SELECT = {
+  id: true,
+  slug: true,
+  label: true,
+  createdAt: true,
+  updatedAt: true,
+  members: {
+    orderBy: [
+      { provider: { position: { sort: 'asc', nulls: 'last' } } },
+      { provider: { createdAt: 'asc' } },
+      { providerId: 'asc' },
+    ],
+    select: { provider: { select: { id: true, slug: true, label: true } } },
+  },
+} satisfies Prisma.ProviderPoolSelect;
+
+function poolView({ members, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
+  return { ...pool, members: members.map((member) => member.provider) };
 }
 
 @Injectable()
@@ -182,16 +217,23 @@ export class ProvidersService {
       enabled: dto.enabled ?? true,
       ownerId,
     };
-    // Two people connecting the same vendor at once would pick the same free slug, so a lost race
-    // just re-picks against what's now taken rather than surfacing as an error about an identifier
-    // nobody chose.
+    const row = await this.withFreeSlug(base, (slug) =>
+      this.prisma.modelProvider.create({ data: { ...data, slug } }),
+    );
+    this.publishChanged(ownerId, row.id);
+    return this.desensitize(row);
+  }
+
+  /**
+   * Write a row under the first free slug for this base. Two people connecting the same vendor at once
+   * would pick the same free slug, so a lost race just re-picks against what's now taken rather than
+   * surfacing as an error about an identifier nobody chose. A pool and a provider racing for one slug
+   * end the same way: migration 0265's guard refuses the loser with the same unique violation.
+   */
+  private async withFreeSlug<T>(base: string, write: (slug: string) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
-        const row = await this.prisma.modelProvider.create({
-          data: { ...data, slug: await this.freeSlug(base) },
-        });
-        this.publishChanged(ownerId, row.id);
-        return this.desensitize(row);
+        return await write(await this.freeSlug(base));
       } catch (e) {
         const raced = e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
         if (!raced || attempt >= 4) throw e;
@@ -199,15 +241,17 @@ export class ProvidersService {
     }
   }
 
-  /** An unused slug for this base — see pickFreeSlug for why a collision is routine. */
+  /** An unused slug for this base — see pickFreeSlug for why a collision is routine. A pool dispatches
+   *  under the same field a provider does, so what's taken is both tables' slugs. */
   private async freeSlug(base: string) {
-    const rows = await this.prisma.modelProvider.findMany({
-      where: { slug: { startsWith: base } },
-      select: { slug: true },
-    });
+    const where = { slug: { startsWith: base } };
+    const [providers, pools] = await Promise.all([
+      this.prisma.modelProvider.findMany({ where, select: { slug: true } }),
+      this.prisma.providerPool.findMany({ where, select: { slug: true } }),
+    ]);
     return pickFreeSlug(
       base,
-      rows.map((r) => r.slug),
+      [...providers, ...pools].map((r) => r.slug),
     );
   }
 
@@ -236,6 +280,64 @@ export class ProvidersService {
   async remove(ownerId: string | null, id: string) {
     await this.getScoped(ownerId, id);
     await this.prisma.modelProvider.delete({ where: { id } });
+    this.publishChanged(ownerId, id);
+    return { ok: true };
+  }
+
+  /** The caller's account pools, each with the providers in it. */
+  async listPools(ownerId: string) {
+    const rows = await this.prisma.providerPool.findMany({
+      where: { ownerId },
+      orderBy: { createdAt: 'asc' },
+      select: POOL_SELECT,
+    });
+    return rows.map(poolView);
+  }
+
+  /** An account pool of the caller's own providers: one more slug to dispatch with, taken from the
+   *  namespace the providers' slugs come from. Its members keep theirs. */
+  async createPool(ownerId: string, dto: CreateProviderPoolDto) {
+    const providerIds = [...new Set(dto.providerIds ?? [])];
+    await this.assertPoolMembers(ownerId, providerIds);
+    const pool = await this.withFreeSlug(slugBase(dto.label), (slug) =>
+      this.prisma.providerPool.create({
+        data: {
+          slug,
+          label: dto.label,
+          ownerId,
+          members: { createMany: { data: providerIds.map((providerId) => ({ providerId })) } },
+        },
+        select: POOL_SELECT,
+      }),
+    );
+    this.publishChanged(ownerId, pool.id);
+    return poolView(pool);
+  }
+
+  /** Put one of the caller's providers into one of their pools. Adding a member again changes nothing. */
+  async addPoolMember(ownerId: string, poolId: string, providerId: string) {
+    await this.getScopedPool(ownerId, poolId);
+    await this.assertPoolMembers(ownerId, [providerId]);
+    await this.prisma.providerPoolMember.createMany({
+      data: [{ poolId, providerId, ownerId }],
+      skipDuplicates: true,
+    });
+    this.publishChanged(ownerId, poolId);
+    return this.getScopedPool(ownerId, poolId);
+  }
+
+  /** Take a provider out of a pool; the provider itself is untouched. */
+  async removePoolMember(ownerId: string, poolId: string, providerId: string) {
+    await this.getScopedPool(ownerId, poolId);
+    await this.prisma.providerPoolMember.deleteMany({ where: { poolId, providerId, ownerId } });
+    this.publishChanged(ownerId, poolId);
+    return this.getScopedPool(ownerId, poolId);
+  }
+
+  /** Delete a pool. Its members are providers in their own right and stay as they are. */
+  async removePool(ownerId: string, id: string) {
+    await this.getScopedPool(ownerId, id);
+    await this.prisma.providerPool.delete({ where: { id } });
     this.publishChanged(ownerId, id);
     return { ok: true };
   }
@@ -335,6 +437,53 @@ export class ProvidersService {
     });
     if (!row) throw new NotFoundException('provider not found');
     return row;
+  }
+
+  private async getScopedPool(ownerId: string, id: string) {
+    const pool = await this.prisma.providerPool.findFirst({ where: { id, ownerId }, select: POOL_SELECT });
+    if (!pool) throw new NotFoundException('pool not found');
+    return poolView(pool);
+  }
+
+  /**
+   * Refuse, with the reason, a provider that could never be chosen from a pool. Another owner's reads
+   * as not-found, as it does on every owner-scoped write here. A shared one is refused outright: a
+   * pool spends its owner's own quota, and nothing could show whose a shared key's was. One whose
+   * credential has no 5-hour window is refused by the very test the usage probe skips it with
+   * (subscriptionUsageRefusal) — accepted, it would sit in the pool and never be picked. The member
+   * row's foreign keys refuse the first two again in the database.
+   */
+  private async assertPoolMembers(ownerId: string, providerIds: string[]): Promise<void> {
+    if (!providerIds.length) return;
+    const rows = await this.prisma.modelProvider.findMany({
+      where: {
+        id: { in: providerIds },
+        slug: { not: AgentProvider.OPENCODE },
+        OR: [{ ownerId: null }, { ownerId }],
+      },
+      select: { id: true, label: true, ownerId: true, runtime: true, baseUrl: true, apiKeyEnc: true },
+    });
+    for (const providerId of providerIds) {
+      const row = rows.find((candidate) => candidate.id === providerId);
+      if (!row) throw new NotFoundException('provider not found');
+      let reason: PoolMemberRefusal | null = row.ownerId === null ? 'SHARED_PROVIDER' : null;
+      if (!reason) {
+        try {
+          reason = subscriptionUsageRefusal(row, decryptSecret(row.apiKeyEnc));
+        } catch {
+          reason = 'KEY_UNREADABLE';
+        }
+      }
+      if (reason) {
+        throw new BadRequestException({
+          code: 'PROVIDER_POOL_MEMBER_REFUSED',
+          kind: 'REFUSAL',
+          reason,
+          providerId,
+          message: `${row.label}: ${POOL_MEMBER_REFUSALS[reason]}`,
+        });
+      }
+    }
   }
 
   /** The preset a write asks to follow — undefined for none, a 400 for one we don't ship. */

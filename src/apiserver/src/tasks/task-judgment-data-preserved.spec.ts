@@ -558,6 +558,35 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `task_completion_criterion` labels survive. It has no INSERT, no row UPDATE and no DELETE —
   //        the key's `ON DELETE CASCADE` is a referential action on the new table's rows. Nothing reads a
   //        wakeup to allow or refuse a status: a wakeup says when a turn is filed, not what is decided.
+  //   0265 added account pools: the `provider_pool` and `provider_pool_member` tables, a unique index
+  //        on `model_provider` ("id", "owner_id") for the member's composite foreign key, and one
+  //        function, `provider_dispatch_slug_guard`, fired BEFORE INSERT OR UPDATE OF "slug" by one
+  //        trigger on `model_provider` and one on `provider_pool`. Read against every claim above: its
+  //        only `ALTER TABLE` statements add foreign keys to the two tables it creates, so `task`,
+  //        `project` and `project_acceptance_criterion_definition` are untouched — the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions. The function
+  //        and triggers it does create fire only on `model_provider` and `provider_pool` and read only
+  //        those two, so neither is another writer of the DONE fence. It has no `ALTER TYPE` and no
+  //        `DROP TYPE`, so all three `task_completion_criterion` labels survive, and no INSERT, UPDATE
+  //        or DELETE: both tables start empty. It REFERENCES `user`("id") and
+  //        `model_provider`("id", "owner_id"), which writes neither. Nothing reads a pool to allow or
+  //        refuse a status: a pool names credentials a session may be dispatched with, and decides
+  //        nothing about any task.
+  //   0268 adds two nullable columns to `session`, `pool_member_provider_id` and `pool_switch_notice`:
+  //        the account-pool member a session last ran on, and the transcript line owed for a move
+  //        between members. Read against every claim above: its one statement is that
+  //        `ALTER TABLE "session"`, with no default, index, CHECK or foreign key, so no stored row is
+  //        rewritten or constrained. It does not touch `task`, `project` or
+  //        `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it creates
+  //        no table, enum, type, function or trigger, and carries no `ALTER TYPE` and no `DROP TYPE`,
+  //        so all three `task_completion_criterion` labels survive. It has no INSERT, UPDATE or
+  //        DELETE. Nothing reads either column to allow or refuse a status: they say which credential
+  //        a session runs on, and decide nothing about any task.
   //   0266 resolved, once, the `COORDINATOR_NO_PROGRESS` blockers the retired coordinator breaker
   //        left open: nothing raises that kind any more, so no condition and no code could clear
   //        one. Read against every claim above: it is one `UPDATE "project_blocker"`, a relation
@@ -1018,8 +1047,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0262_background_job_wake',
       '0263_watch_revoked_unresolvable_delivery',
       '0264_session_scheduled_wakeup',
+      '0265_provider_pool',
       '0266_coordinator_no_progress_retirement',
       '0267_task_owner_confirmation',
+      '0268_session_pool_member',
       '0269_project_blocker_resolution_note',
       '0270_project_integration_line',
       '0271_watch_progress_continuous',
