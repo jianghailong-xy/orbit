@@ -4,6 +4,7 @@ import type { PlanUsageSnapshot } from '@orbit/shared';
 import { parseSubscriptionUsage } from './plan-usage';
 import {
   choosePoolMember,
+  poolResumesAt,
   poolSwitchNotice,
   selectPoolMember,
   type PoolCandidate,
@@ -203,4 +204,24 @@ test('the switch line says why the session left its member', () => {
   );
   assert.equal(poolSwitchNotice(to, { ...from, usage: null, enabled: false }, NOW), 'Switched to Work — Personal is disabled');
   assert.equal(poolSwitchNotice(to, null, NOW), 'Switched to Work — the previous account is no longer in this pool');
+});
+
+test('a pool takes work now while a member has room, and at the earliest reset once every member is spent', () => {
+  const spent = member('anthropic', fiveHour(100));
+  assert.deepEqual(poolResumesAt([spent, member('anthropic-2', fiveHour(60))], NOW), NOW);
+  // Beside a spent member an unreported one still takes the run, as selectPoolMember sends it there.
+  assert.deepEqual(poolResumesAt([spent, member('anthropic-2', null)], NOW), NOW);
+  // Across accounts the first to free up is enough: the opposite direction from one account's windows.
+  const spentForAnHour = member('anthropic-2', reported({ five_hour: { utilization: 100, resets_at: IN_AN_HOUR } }));
+  assert.deepEqual(poolResumesAt([spent, spentForAnHour], NOW), new Date(IN_AN_HOUR));
+});
+
+test('a pool that reports nothing to go by has no time of its own', () => {
+  // Nobody has reported, which is not room.
+  assert.equal(poolResumesAt([member('anthropic', null), member('anthropic-2', null)], NOW), null);
+  // Nor is a refused key's leftover snapshot a report.
+  assert.equal(poolResumesAt([member('anthropic', fiveHour(10), true), member('anthropic-2', null)], NOW), null);
+  // Spent, with no member saying when it resets.
+  assert.equal(poolResumesAt([member('anthropic', reported({ five_hour: { utilization: 100 } }))], NOW), null);
+  assert.equal(poolResumesAt([], NOW), null);
 });

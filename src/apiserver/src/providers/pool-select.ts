@@ -98,6 +98,25 @@ export function choosePoolMember<Row extends PoolMemberRow>(
   return (spent.find((m) => m.row.id === stickyId) ?? firstToReset ?? spent[0]).row;
 }
 
+/**
+ * When work held back on an account pool's quota can go, for what holds work rather than choosing a
+ * member: `now` while `selectPoolMember` still finds one, and EXHAUSTED's earliest reset once every
+ * member that can run is spent.
+ *
+ * Null when the pool gives nothing to go by, and the caller holds the work as it would for any quota it
+ * cannot see: no member that can run reports its quota at all — a pool nobody has reported on is not one
+ * with room — or every member is spent and none named its reset.
+ */
+export function poolResumesAt<Row extends PoolMemberRow>(
+  candidates: readonly PoolCandidate<Row>[],
+  now: Date,
+): Date | null {
+  if (candidates.every((c) => c.refused || c.usage === null)) return null;
+  const selection = selectPoolMember(candidates, null, now);
+  if (selection.kind === 'SELECTED') return now;
+  return selection.kind === 'EXHAUSTED' ? selection.resetsAt : null;
+}
+
 /** What saying why a session left a member needs to know about that member. */
 export interface PoolSwitchFrom {
   label: string;

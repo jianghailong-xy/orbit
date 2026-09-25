@@ -7,6 +7,7 @@ import {
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import {
   CreatorType,
@@ -62,6 +63,7 @@ import { recordTaskFailure } from '../projects/project-open-item';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { isEngineSignedOut } from '../sessions/engine-signin-preflight';
@@ -1655,12 +1657,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * committed a replacement, which is a retry. Optional for the same reason as the three above.
      */
     fuse?: ProjectFuseService,
+    /**
+     * An account pool's quota for the quota gate (QueueService.accountPoolResumesAt): a pool's slug is
+     * in no runner's snapshot. `@Optional()` and last for the places that build this service directly;
+     * QueueModule is global, so Nest always has one.
+     */
+    @Optional() queue?: QueueService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.completionInputs = completionInputs;
     this.pauseProjector = pauseProjector;
     this.openItems = openItems;
     this.fuse = fuse;
+    this.queue = queue;
   }
 
   private readonly handoffs: ProjectHandoffService;
@@ -1668,6 +1677,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private readonly pauseProjector?: TaskListPauseProjectorService;
   private readonly openItems?: ProjectOpenItemService;
   private readonly fuse?: ProjectFuseService;
+  private readonly queue?: QueueService;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -9757,6 +9767,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * hold several accounts and only some of theirs may be spent. A task whose quota reports no
    * exhausted window, or an exhausted one with no reset time, is absent from `blocked`.
    *
+   * An account pool's slug is in no runner's snapshot: its quota is its members', read the way the
+   * claim reads them (QueueService.accountPoolResumesAt). Room on any member keeps the task out of
+   * both, every member spent blocks it until the first of them resets, and a pool that reports
+   * nothing to go by is blind like any other quota nobody reports.
+   *
    * `blind` names the tasks this gate has *no quota data for at all*, which is a different
    * thing from "not blocked" and must not be confused with it: for a reported-and-healthy
    * quota, dispatching immediately after a usage-limit failure is right (the window reset),
@@ -9766,6 +9781,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async quotaGate(
     tasks: Array<{
       id: string;
+      ownerId: string;
       assignee: { provider: string; runnerId: string | null; workspaceId: string } | null;
     }>,
   ): Promise<{ blocked: Map<string, Date>; blind: Set<string> }> {
@@ -9801,9 +9817,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ).map((w) => [w.id, w]),
     );
     const now = this.now();
+    // One pool read per owner's slug per pass.
+    const pools = new Map<string, Date | null>();
     for (const t of tasks) {
       const assignee = t.assignee;
       if (!assignee?.runnerId) continue;
+      const poolKey = `${t.ownerId}:${assignee.provider}`;
+      if (this.queue && !pools.has(poolKey)) {
+        pools.set(poolKey, await this.queue.accountPoolResumesAt(t.ownerId, assignee.provider, now));
+      }
+      const poolResumesAt = pools.get(poolKey);
+      if (poolResumesAt) {
+        if (poolResumesAt > now) blocked.set(t.id, poolResumesAt);
+        continue;
+      }
       const runner = runnerById.get(assignee.runnerId);
       const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
       const workspace = workspaceById.get(assignee.workspaceId);
@@ -10017,6 +10044,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
     const assigned = retryable.map((moment) => ({
       id: moment.id,
+      ownerId: moment.ownerId,
       assignee: {
         provider: (seeds.get(moment.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider,
         runnerId: moment.runnerId,

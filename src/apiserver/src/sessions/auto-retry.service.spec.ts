@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import type { PlanUsageSnapshot } from '@orbit/shared';
+import { QueueService } from '../queue/queue.service';
 import { AutoRetryService } from './auto-retry.service';
 import type { SessionsService } from './sessions.service';
 
@@ -13,6 +15,29 @@ const stillBlocked = {
   provider: 'claude',
   fiveHour: { utilization: 100, resetsAt: FUTURE },
 };
+
+const POOL = 'work-pool';
+
+/** An account pool member whose 5-hour window is spent until `resetsAt`. */
+const spentUntil = (resetsAt: string): PlanUsageSnapshot => ({ fiveHour: { utilization: 100, resetsAt } });
+
+/**
+ * The claim service over `owner-1`'s account pool on POOL, one member per snapshot (null: that member
+ * reports none). Only the pool's rows and the quota cache are stood in for.
+ */
+function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
+  const rows = members.map((usage, i) => ({ id: `member-${i}`, slug: `anthropic-${i}`, enabled: true, usage }));
+  const prisma = {
+    providerPool: {
+      findFirst: async ({ where }: { where: { slug: string; ownerId: string } }) =>
+        where.slug === POOL && where.ownerId === 'owner-1'
+          ? { members: rows.map((provider) => ({ provider })) }
+          : null,
+    },
+  };
+  const planUsage = { snapshot: (row: (typeof rows)[number]) => row.usage, refused: () => false };
+  return new QueueService(prisma as never, {} as never, planUsage as never);
+}
 
 type SessionRow = Record<string, unknown>;
 
@@ -95,6 +120,8 @@ function makeService(
       subjectTerminalReason: string | null; subjectSupersededByTaskId: string | null;
       completionPolicy: string; hasDirectChildren: boolean; startsTaskWork: boolean;
     };
+    /** `owner-1`'s account pool on POOL, one member per snapshot (null: that member reports none). */
+    pool?: Array<PlanUsageSnapshot | null>;
   } = {},
 ) {
   const updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
@@ -328,7 +355,12 @@ function makeService(
   };
   const settled = () =>
     published.filter((p) => p.payload.final && !p.payload.retryAt).map((p) => p.id);
-  const service = new AutoRetryService(prisma as never, sessions, realtime as never);
+  const service = new AutoRetryService(
+    prisma as never,
+    sessions,
+    realtime as never,
+    opts.pool ? poolQueue(opts.pool) : undefined,
+  );
   return { service, updates, resumed, resumedAttachments, attachments, rows, published, settled };
 }
 
@@ -1054,4 +1086,29 @@ test('a paused task\'s salvage conversation still gets its answer re-sent', asyn
   ]);
   await service.sweep(NOW);
   assert.deepEqual(resumed.map((r) => r.id), ['session-salvage']);
+});
+
+// An account pool's slug is in no runner's snapshot: the sweep asks after the pool's members instead.
+test("an account pool session is re-sent at once while a member has room, whatever the runner's own login says", async () => {
+  const { service, resumed } = makeService(
+    [row({ provider: POOL, assignedRunner: { planUsage: stillBlocked, status: 'ONLINE', lastHeartbeatAt: NOW } })],
+    { pool: [spentUntil(FUTURE), { fiveHour: { utilization: 20, resetsAt: FUTURE } }] },
+  );
+  await service.sweep(NOW);
+  assert.deepEqual(
+    resumed,
+    [{ id: 'session-1', content: 'the original message' }],
+    'the claim takes it to the member with room',
+  );
+});
+
+test('an account pool session with every member spent is re-armed for the EARLIEST member reset', async () => {
+  const sooner = '2026-08-03T18:40:00Z';
+  const { service, resumed, rows } = makeService([row({ provider: POOL })], {
+    pool: [spentUntil(FUTURE), spentUntil(sooner)],
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'every member would refuse the re-send');
+  assert.deepEqual(rows[0].retryAt, new Date(sooner), 'the first member to reset, not the last');
+  assert.equal(rows[0].retryAttempts, 0, 'a deferral is not a failed attempt');
 });
