@@ -23,6 +23,7 @@ export function PublicShell({
   actions,
   scrollRef,
   onScroll,
+  wide = false,
   children,
 }: {
   crumbs: PublicCrumb[];
@@ -30,6 +31,8 @@ export function PublicShell({
   actions?: ReactNode;
   scrollRef?: Ref<HTMLElement>;
   onScroll?: UIEventHandler<HTMLElement>;
+  /** The app project page's reading width (1040) rather than a conversation's. */
+  wide?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -70,7 +73,7 @@ export function PublicShell({
         </div>
       </header>
       <main className="share-scroll" ref={scrollRef} onScroll={onScroll}>
-        <div className="share-inner">{children}</div>
+        <div className={`share-inner${wide ? ' is-wide' : ''}`}>{children}</div>
       </main>
       <footer className="share-footer">Shared from Orbit · read-only</footer>
     </div>

@@ -21,7 +21,7 @@ import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
-import { SharedLinkPage } from './pages/SharedLinkPage';
+import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
 import { FollowingPage } from './pages/FollowingPage';
@@ -90,9 +90,11 @@ export function App() {
     <Routes>
       {/* Public read-only share link — works signed-out, so it sits outside the auth gate. The root
           page is drawn for what the link opens; a conversation the link opens besides its root (a
-          task link's run) has a page of its own under it. */}
+          task or project link's run, a project's coordinator) and a project link's task have pages
+          of their own under it. */}
       <Route path="/s/:token" element={<SharedLinkPage />} />
       <Route path="/s/:token/c/:sessionId" element={<SharedSessionPage />} />
+      <Route path="/s/:token/t/:taskId" element={<SharedProjectTaskRoute />} />
       <Route path="/login" element={authed ? <Navigate to="/" /> : <LoginPage />} />
       {/* First-run setup. Signed-out only; once a user exists SetupPage itself bounces to
           login, and a signed-in visitor (so users exist) is sent to the app. */}
