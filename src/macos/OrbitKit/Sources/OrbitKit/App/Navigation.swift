@@ -47,6 +47,10 @@ public enum NavNode: Hashable, Sendable {
     case userDetail(userID: String)
     /// One project's page, pushed from the Projects list or from the drawer's project rows.
     case projectDetail(projectID: String)
+    /// Every task one session's agent created: its console's `View all in Tasks ›` on a phone, pushed
+    /// over that console — with the card's task and project pages — so the back swipe returns to the
+    /// conversation instead of to another section's list.
+    case createdTasks(sessionID: String)
 }
 
 /// Which section is showing, and every section's stack.

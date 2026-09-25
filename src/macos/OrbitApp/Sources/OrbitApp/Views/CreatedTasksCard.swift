@@ -14,6 +14,9 @@ import OrbitKit
 /// proved against the browser's in `SessionCreatedTasksCopyParityTests`.
 struct CreatedTasksCard: View {
     @Environment(AppModel.self) private var app
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var hSize
+    #endif
     let console: ConsoleModel
     @State private var open = false
 
@@ -133,9 +136,9 @@ struct CreatedTasksCard: View {
     }
 
     /// One task: its pill in a column of its own, its title (and the task it took over), when it was
-    /// created. A tap opens the task — where an Orbit link to it goes.
+    /// created. A tap opens the task (see `openPage`).
     private func taskRow(_ row: SessionCreatedTaskRow) -> some View {
-        Button { app.route(to: .task(row.id)) } label: {
+        Button { openPage(.taskDetail(taskID: row.id)) { app.route(to: .task(row.id)) } } label: {
             HStack(spacing: 8) {
                 TaskStatusPill(pill: row.pill)
                     .fixedSize()
@@ -177,12 +180,16 @@ struct CreatedTasksCard: View {
     private func footer(_ projects: [SessionCreatedTasks.Named]) -> some View {
         HStack(spacing: 18) {
             footerLink(SessionCreatedTasksCopy.viewAll) {
-                app.showTasksCreated(inSession: console.sessionID, title: sessionTitle)
+                openPage(.createdTasks(sessionID: console.sessionID)) {
+                    app.showTasksCreated(inSession: console.sessionID, title: sessionTitle)
+                }
             }
             ForEach(projects) { project in
-                footerLink(SessionCreatedTasksCopy.openProject) { app.openProject(project.id) }
-                    .help(project.title)
-                    .accessibilityLabel("Open project \(project.title)")
+                footerLink(SessionCreatedTasksCopy.openProject) {
+                    openPage(.projectDetail(projectID: project.id)) { app.openProject(project.id) }
+                }
+                .help(project.title)
+                .accessibilityLabel("Open project \(project.title)")
             }
             Spacer(minLength: 0)
         }
@@ -201,6 +208,21 @@ struct CreatedTasksCard: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Where a press on the card goes. On a phone the page opens over this console — pushed on the
+    /// console's own stack — so the back swipe comes straight back to the conversation; a move to the
+    /// section the page belongs to would leave the swipe that section's list. The three-column shells
+    /// keep that move: their sidebar is the way back, and the page belongs in the section's pane.
+    /// The view decides the shape, as every row does; the model is told only the page.
+    private func openPage(_ page: NavNode, elsewhere: () -> Void) {
+        #if os(iOS)
+        if hSize == .compact {
+            app.push(page)
+            return
+        }
+        #endif
+        elsewhere()
     }
 
     /// What the Tasks page's chip calls the session: its title, as the console's own header says it.

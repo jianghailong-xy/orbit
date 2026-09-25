@@ -136,4 +136,35 @@ final class CreatedTasksWiringTests: XCTestCase {
         XCTAssertTrue(viewAll.contains("selectedSection = .tasks"))
         XCTAssertTrue(viewAll.contains("tasks?.showCreated(in:"))
     }
+
+    /// On a phone the card's three ways out — a task row, `Open project ›`, `View all in Tasks ›` —
+    /// open over the console, on its own stack, so the back swipe returns to the conversation. A
+    /// move to the Tasks or Projects section left the swipe that section's list (the owner's report,
+    /// 2026-09-25). The wide shells keep the section move; the view decides which, not the model.
+    func testOnAPhoneTheCardsWaysOutOpenOverTheConsole() throws {
+        let card = code(try source("Views/CreatedTasksCard.swift"))
+        XCTAssertTrue(card.contains("openPage(.taskDetail(taskID: row.id)) { app.route(to: .task(row.id)) }"),
+                      "a row opens its task over the console on a phone, in the Tasks pane otherwise")
+        XCTAssertTrue(card.contains("openPage(.projectDetail(projectID: project.id)) { app.openProject(project.id) }"))
+        XCTAssertTrue(card.contains("openPage(.createdTasks(sessionID: console.sessionID))"))
+        let open = try slice(card, from: "private func openPage(", to: "\n    }")
+        XCTAssertTrue(open.contains("if hSize == .compact"), "the width decides, as it picks the shell")
+        XCTAssertTrue(open.contains("app.push(page)"), "a push on the stack on screen: the console's")
+
+        // The Agents stack renders what a console opens over itself; otherwise the push is a blank page.
+        let agents = code(try slice(try source("Views/CompactShell.swift"),
+                                    from: "case .agents:", to: "// PROJECTS"))
+        XCTAssertTrue(agents.contains("case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)"))
+        XCTAssertTrue(agents.contains("case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)"))
+        XCTAssertTrue(agents.contains("case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)"))
+
+        // The View all page reads every task the session created, fifty at a time, and a row opens
+        // its task on the same stack.
+        let page = code(try slice(try source("Views/CreatedTasksPage.swift"),
+                                  from: "struct CreatedTasksPage: View {", to: "\n}"))
+        XCTAssertTrue(page.contains("app.push(.taskDetail(taskID: task.id))"))
+        let read = code(try slice(try source("AppModel.swift"),
+                                  from: "func tasksCreated(inSession sessionID: String", to: "\n    }"))
+        XCTAssertTrue(read.contains("creatorSessionId: sessionID"))
+    }
 }

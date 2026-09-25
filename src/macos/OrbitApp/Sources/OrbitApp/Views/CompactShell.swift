@@ -288,6 +288,12 @@ private struct CompactSections: View {
                         switch node {
                         case .compose(let agentID):      AgentComposePage(agentID: agentID)
                         case .console(let sessionID, _): AgentConsolePage(sessionID: sessionID)
+                        // What a console opens over itself — its "Tasks created here" card's task,
+                        // project and View all — so the back swipe returns to the conversation
+                        // instead of to another section's list (`CreatedTasksCard.openPage`).
+                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
+                        case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)
+                        case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
                         // The other sections' pages ride their own stacks, not this one.
                         default:                         EmptyView()
                         }

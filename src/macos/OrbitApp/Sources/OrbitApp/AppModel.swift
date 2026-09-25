@@ -68,6 +68,11 @@ final class AppModel {
             // setter writes which section is showing and nothing else, and no push has to be
             // registered with it by hand.
             tasks?.setSectionActive(newValue == .tasks)   // the data layer's poll, not navigation
+            // The detail store names the task page on top of the stack on screen, and a switch
+            // changes which stack that is: a task page a console opened over itself (its card's
+            // rows), or the Tasks stack's own. Without this, coming back to a Tasks page left while
+            // a console's task page held the slot is that page refused its load — a spinner.
+            syncTaskDetailStore()
         }
     }
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
@@ -1722,10 +1727,19 @@ final class AppModel {
     func push(_ node: NavNode) {
         nav.push(node)
         // Every write to the Tasks stack keeps its detail store in step (see `taskStack`), and a
-        // frame a row pushed by hand is still a write to it. Guarded by the section because that
-        // store is read off the stack *on screen*: syncing while another section is up would name
-        // nil and drop the detail the still-pushed task page is about to read.
-        if nav.section == .tasks { syncTaskDetailStore() }
+        // frame a row pushed by hand is still a write to it — as is a task page a console pushes
+        // over itself on a phone (its "Tasks created here" rows), which reads the same store the
+        // moment it appears. Otherwise guarded, because that store is read off the stack *on
+        // screen*: syncing while another section's non-task page goes up would name nil and drop
+        // the detail a still-pushed Tasks page is about to read (the section switch re-syncs it).
+        if nav.section == .tasks || nav.taskDetailOnTop != nil { syncTaskDetailStore() }
+    }
+
+    /// One page of every task `sessionID`'s agent created — the list a console's `View all in
+    /// Tasks ›` pushes over itself on a phone. Nil before sign-in.
+    func tasksCreated(inSession sessionID: String, cursor: String?) async throws -> TaskPage? {
+        guard let api else { return nil }
+        return try await api.taskPage(cursor: cursor, limit: 50, counts: .none, creatorSessionId: sessionID)
     }
 
     /// Open one project's page from outside the Projects list — the drawer's project rows: the

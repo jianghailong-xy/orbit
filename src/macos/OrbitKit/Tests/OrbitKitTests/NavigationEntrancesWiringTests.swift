@@ -245,15 +245,22 @@ final class NavigationEntrancesWiringTests: XCTestCase {
             .dropFirst()
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && $0 != "{" && $0 != "}" }
+        // `syncTaskDetailStore()` is argued for, and it is the data layer's too: it moves no frame of
+        // any stack, it re-points the task detail store — a single slot `TasksModel.loadDetail`
+        // refuses any other task from — at the task page on top of the stack now on screen. A
+        // console on a phone opens its card's task over itself (the Agents stack), so which stack
+        // that is changes with the section; without it, coming back to a Tasks page left while the
+        // console's task held the slot is that page refused its load, a spinner.
         let known = ["get { nav.section }",
                      "set {",
                      "nav.section = newValue",
-                     "tasks?.setSectionActive(newValue == .tasks)"]
+                     "tasks?.setSectionActive(newValue == .tasks)",
+                     "syncTaskDetailStore()"]
         XCTAssertTrue(lines.contains("nav.section = newValue"), "the switch writes the section")
         XCTAssertTrue(lines.contains("tasks?.setSectionActive(newValue == .tasks)"),
                       "and toggles the Tasks poll — the data layer's, not navigation's")
         XCTAssertEqual(lines, known,
-                       "the section switch reads as the section, the poll, and nothing else — a line "
-                       + "beyond those is a push being registered by hand again")
+                       "the section switch reads as the section, the poll, the detail store's slot, "
+                       + "and nothing else — a line beyond those is a push being registered by hand again")
     }
 }
