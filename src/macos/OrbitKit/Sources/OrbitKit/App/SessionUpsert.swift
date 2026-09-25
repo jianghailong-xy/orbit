@@ -157,6 +157,7 @@ public extension Session {
                 createdAt: createdAt,
                 lastTurnAt: lastTurnAt ?? self.lastTurnAt,
                 tags: tags,
-                retryAt: retryAt ?? self.retryAt)
+                retryAt: retryAt ?? self.retryAt,
+                poolMemberProviderId: poolMemberProviderId)
     }
 }

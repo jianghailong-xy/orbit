@@ -395,7 +395,11 @@ struct ComposerView: View {
                 }
                 .footerMenuChrome()
 
-                Spacer()
+                // Lowest priority, so it is the first thing to give way when the row is full: an
+                // HStack offers every child an equal share of what is left, and a Spacer at the
+                // default priority took one of those shares while the labels beside it truncated.
+                // With room to spare it still takes everything left over, exactly as before.
+                Spacer().layoutPriority(-1)
 
                 // No agent name here (web parity): the agent can't be picked from the footer on any
                 // client, and it is already named where the choice is made — the navigation bar's
@@ -413,22 +417,26 @@ struct ComposerView: View {
                             // closed menu's own label, and a parenthetical would live in the
                             // footer of every turn.
                             let blocked = choice.unavailable != nil && choice.slug != console.provider
+                            // An account pool none of whose accounts can take work: no runner
+                            // fixes that, so it is greyed out with its reason instead.
+                            let fixable = blocked && choice.fixEngine != nil
+                            let reason = choice.unavailable ?? ""
+                            let fix = fixable ? ", sign in →" : ""
                             Button {
                                 // Picking a blocked row isn't a switch — it's a request for the
                                 // sign-in that would make it one, so go to that runner's Engines
                                 // section rather than doing nothing.
-                                if blocked {
+                                if fixable {
                                     if let rid = console.runnerID { app.route(to: .runner(rid)) }
-                                } else {
+                                } else if !blocked {
                                     Task { await console.selectProvider(choice.slug) }
                                 }
                             } label: {
                                 menuItemLabel(
-                                    blocked
-                                        ? "\(choice.label) — \(choice.unavailable ?? ""), sign in →"
-                                        : choice.label,
+                                    blocked ? "\(choice.label) — \(reason)\(fix)" : choice.label,
                                     selected: choice.slug == console.provider)
                             }
+                            .disabled(blocked && !fixable)
                         }
                     } label: {
                         menuLabel(AgentDefaults.providerName(console.provider,
@@ -487,6 +495,18 @@ struct ComposerView: View {
                 }
                 .footerMenuChrome()
 
+                // A session on an account pool spends one of its accounts at a time: name that
+                // account beside the quota, which is that account's own (web parity — the pool's
+                // name is the provider menu's, and says nothing about whose quota this is).
+                if let pool = console.currentPool, let account = console.poolAccount {
+                    let help = ProviderPools.accountHelp(pool: pool, account: account)
+                    Text(account.member.label)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 140)
+                        .help(help)
+                        .accessibilityLabel(help)
+                }
                 if let usage = console.planUsage {
                     PlanUsageIndicator(usage: usage)
                 }

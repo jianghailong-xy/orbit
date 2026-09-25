@@ -76,12 +76,14 @@ final class ConsoleRegistry {
     func draftModel(for agent: Agent, defaultModel: String,
                     configuredProviders: [ConfiguredProvider] = [],
                     configuredProvidersLoaded: Bool = false,
+                    providerPools: [ProviderPool] = [],
                     modelCatalog: RunnerModelCatalog? = nil,
                     accountDefaultEffort: String? = nil,
                     onCreated: @escaping (Session) -> Void) -> ConsoleModel {
         let model = ConsoleModel(draftFor: agent, defaultModel: defaultModel,
                                  configuredProviders: configuredProviders,
                                  configuredProvidersLoaded: configuredProvidersLoaded,
+                                 providerPools: providerPools,
                                  modelCatalog: modelCatalog, accountDefaultEffort: accountDefaultEffort,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
         model.onSessionCreated = onCreated

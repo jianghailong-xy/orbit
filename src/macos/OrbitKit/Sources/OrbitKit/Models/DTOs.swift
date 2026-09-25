@@ -200,6 +200,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let agentId: String?
     public let assignedRunnerId: String?
     public let provider: String?
+    /// On an account pool: the member its last claim dispatched on (nil before the first). Carried
+    /// by the detail payload only — the list leaves it out — so read it off `GET /sessions/:id`.
+    public let poolMemberProviderId: String?
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -349,6 +352,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         agentId = try values.decodeIfPresent(String.self, forKey: .agentId)
         assignedRunnerId = try values.decodeIfPresent(String.self, forKey: .assignedRunnerId)
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
+        poolMemberProviderId = try values.decodeIfPresent(String.self, forKey: .poolMemberProviderId)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -398,7 +402,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
-                tags: [SessionTag]? = nil, retryAt: String? = nil) {
+                tags: [SessionTag]? = nil, retryAt: String? = nil,
+                poolMemberProviderId: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -412,6 +417,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.agentId = agentId
         self.assignedRunnerId = assignedRunnerId
         self.provider = provider
+        self.poolMemberProviderId = poolMemberProviderId
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems

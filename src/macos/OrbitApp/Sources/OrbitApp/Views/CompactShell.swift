@@ -1043,6 +1043,7 @@ private struct AgentComposePage: View {
                            defaultModel: agents.effectiveDefaultModel(for: agent),
                            configuredProviders: agents.configuredProviders,
                            configuredProvidersLoaded: agents.configuredProvidersLoaded,
+                           providerPools: agents.providerPools,
                            modelCatalog: agents.modelCatalog(for: agent.runnerId),
                            defaultEffort: model.user?.preferences?.defaultEffort) { session in
                 model.openCreatedAgentSession(session)
