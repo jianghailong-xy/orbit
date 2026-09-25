@@ -151,6 +151,9 @@ type bgTailer struct {
 	live     map[string]liveShell // toolUseId → its running tail
 	seen     map[string]bool      // "<toolUseId>\x00<status>" already emitted (dedupe across sources)
 	terminal map[string]bool      // toolUseId already reported in a terminal state
+	// progress is the latest progress relayed for each background agent/workflow, keyed by its
+	// launching tool_use id (claude_task_progress.go) — kept for the durable event that ends it.
+	progress map[string]map[string]interface{}
 	// monitors are the Claude Monitors the engine is running, keyed by the launching tool_use id.
 	// A Monitor only watches, so it is no writer of the checkout: it holds nothing and nothing
 	// counts it. It is kept so the engine's stop can say the Monitor stopped with it, and so the
@@ -753,13 +756,21 @@ func bgTaskFromNotification(s string, emit emitFn, bg *bgTailer) bool {
 			return true
 		}
 	}
-	emit(evBackgroundTask, map[string]interface{}{
+	ended := map[string]interface{}{
 		"shellId":    get(bgNotifTaskID),
 		"toolUseId":  toolUseID,
 		"status":     status,
 		"summary":    get(bgNotifSummary),
 		"outputFile": get(bgNotifFile),
-	})
+	}
+	// A background agent or workflow ends with the last progress relayed for it, so what it did —
+	// which agents ran, how far each got — outlives the live-only frames that reported it.
+	if bg != nil && toolUseID != "" && terminal {
+		if p := bg.takeTaskProgress(toolUseID); p != nil {
+			ended["progress"] = p
+		}
+	}
+	emit(evBackgroundTask, ended)
 	if bg != nil && toolUseID != "" && terminal {
 		bg.stop(toolUseID)
 	}

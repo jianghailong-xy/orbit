@@ -87,6 +87,7 @@ export const NON_REPLAYABLE_EVENT_TYPES: readonly string[] = [
   RunEventType.APPROVAL_RESOLVED,
   RunEventType.QUEUED_TURNS_CHANGED,
   RunEventType.BACKGROUND_OUTPUT,
+  RunEventType.TASK_PROGRESS,
   RunEventType.RESYNC,
 ];
 

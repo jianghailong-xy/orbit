@@ -149,6 +149,8 @@ public extension Session {
                 // Read off this row like the fields above: the summary never carries it, so an
                 // event must not be able to stop the background glyph breathing mid-job.
                 runningBgJobCount: runningBgJobCount,
+                // The same: the list's count, which no event carries.
+                runningSubagentCount: runningSubagentCount,
                 engineTurnActive: engineTurnActive,
                 error: error,
                 endReason: endReason,
