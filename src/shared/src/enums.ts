@@ -314,6 +314,12 @@ export enum RunEventType {
   // the process's output file (broadcast-only animation, like *_DELTA — not persisted).
   BACKGROUND_TASK = 'background_task',
   BACKGROUND_OUTPUT = 'background_output',
+  // How far a background sub-agent or workflow has got, relayed from Claude Code's
+  // `task_started`/`task_progress` frames (runner-go claude_task_progress.go) and keyed by the
+  // launching Agent/Workflow call's tool_use id. Broadcast-only like BACKGROUND_OUTPUT: frequent,
+  // and each one restates the whole picture. The last one rides the durable BACKGROUND_TASK that
+  // ends the task, as its `progress`.
+  TASK_PROGRESS = 'task_progress',
   // Control-plane-internal lifecycle signals (a session entered / left the Open list).
   // They ride the same realtime hub as run events — buying the cross-replica NOTIFY bridge for
   // free — but are NEVER persisted to run_events (the `type` column is a plain String, so no

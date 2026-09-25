@@ -54,6 +54,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
              pendingApprovals: s.pendingApprovals,
              runningBgCount: s.runningBgCount,
              runningBgJobCount: s.runningBgJobCount,
+             runningSubagentCount: s.runningSubagentCount,
              engineTurnActive: s.engineTurnActive == true,
              error: s.error,
              retryPending: s.retryPending(now: now),
@@ -90,6 +91,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
                             runningBgJobCount: Int? = nil,
+                            runningSubagentCount: Int? = nil,
                             engineTurnActive: Bool = false,
                             error: String? = nil,
                             retryPending: Bool = false,
@@ -121,6 +123,11 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             // spinner a dispatched turn gets — and it outranks a background process left up
             // below, which is not the agent working at all.
             if engineTurnActive { return generating() }
+            // A sub-agent or workflow it started is the workspace itself still working, so it keeps
+            // the working spinner — unlike a process left up below (web `StatusIcon`).
+            if let n = runningSubagentCount, n > 0 {
+                return .init(shape: .spinner, tone: .brand, label: SessionLine.subagentRunningLabel(n))
+            }
             // Parked on a live watch (`watchingLabel` is its "Watching 7 targets"): a wake is coming,
             // so neither the reply bubble nor the background process's console glyph fits — unless
             // somebody is waiting on you, which a watch never hides.

@@ -132,7 +132,7 @@ function BgShellRow({
       {expanded && (
         <div className="bg-shell-detail">
           {/* When the title is the description, still show the actual command. */}
-          {shell.description && <Pre text={shell.command} prompt />}
+          {shell.description && shell.command && <Pre text={shell.command} prompt />}
           {shell.latestOutput ? (
             <Pre text={shell.latestOutput} threshold={16} muted />
           ) : (

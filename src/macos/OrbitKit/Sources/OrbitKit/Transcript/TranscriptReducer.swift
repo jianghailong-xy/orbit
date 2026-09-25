@@ -41,12 +41,24 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// id alone doesn't determine it (`opus` vs `opus[1m]`). nil for a runner too old to send one,
     /// which leaves the composer on AgentDefaults.contextWindow.
     public var contextWindow: Int?
+    /// What each sub-agent did, keyed by the tool_use id of the Agent call that started it — its
+    /// replies, reasoning and tool calls, every event of which carries that id as
+    /// `parentToolUseId`. Held beside `items`, not in it: interleaved into the conversation they
+    /// read as the workspace itself talking (one observed session drew 559 of its 630 rows that
+    /// way). A sub-agent's own Agent call is a card in its parent's list, and what IT started is
+    /// keyed by that card's id, so nesting goes as deep as the agents did. Web parity:
+    /// `ToolNode.children`.
+    public var subagentItems: [String: [TranscriptItem]] = [:]
+    /// The latest progress of each background sub-agent and workflow, keyed by the launching call's
+    /// tool_use id — live from `task_progress`, and the last word from the `background_task` that
+    /// ends it.
+    public var taskProgress: [String: TaskProgress] = [:]
     public init() {}
 
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -59,6 +71,8 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         hasMoreOlder = (try? c.decodeIfPresent(Bool.self, forKey: .hasMoreOlder)) ?? false
         contextTokens = (try? c.decodeIfPresent(Int.self, forKey: .contextTokens)) ?? nil
         contextWindow = (try? c.decodeIfPresent(Int.self, forKey: .contextWindow)) ?? nil
+        subagentItems = (try? c.decodeIfPresent([String: [TranscriptItem]].self, forKey: .subagentItems)) ?? [:]
+        taskProgress = (try? c.decodeIfPresent([String: TaskProgress].self, forKey: .taskProgress)) ?? [:]
     }
 }
 
@@ -98,6 +112,10 @@ public struct TranscriptReducer: Sendable, Codable {
     /// rebuilt from replayed tool_use events and excluded from the persisted keys below, so
     /// snapshots written before it existed still decode.
     private var bgLaunch: [String: (command: String, description: String?)] = [:]
+    /// The same for a call that starts a background sub-agent or workflow: its kind, and the
+    /// description an Agent call carries (a workflow's title comes on its launch receipt instead).
+    /// Transient like `bgLaunch`.
+    private var taskLaunch: [String: (kind: String, description: String?)] = [:]
     /// Engine stderr already given an error row, keyed on the line minus its leading timestamp (the
     /// runtimes that log at all stamp every line, so raw text is unique per occurrence and nothing
     /// would ever fold). A repeat bumps that row's count instead of taking a row of its own: codex
@@ -198,6 +216,13 @@ public struct TranscriptReducer: Sendable, Codable {
             if let cw = ev.payload["contextWindow"]?.intValue, cw > 0 { state.contextWindow = cw }
         }
 
+        // A sub-agent's own events fold into the list kept for the Agent call that started it, not
+        // into the conversation — see `TranscriptState.subagentItems`.
+        if Self.subagentEventTypes.contains(ev.type), let parent = str(ev, "parentToolUseId"), !parent.isEmpty {
+            applySubagent(ev, parent: parent)
+            return
+        }
+
         switch ev.type {
         case .textDelta:      appendAssistantDelta(str(ev, "delta") ?? str(ev, "text") ?? "", ts: ev.ts)
         case .assistant:      finalizeAssistant(str(ev, "text") ?? str(ev, "content") ?? "", seq: ev.seq,
@@ -218,6 +243,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .queuedTurnsChanged: break
         case .backgroundTask:   upsertBackground(ev)
         case .backgroundOutput: applyBackgroundOutput(ev)
+        case .taskProgress:     applyTaskProgress(ev)
         case .status, .result:  applyStatus(ev)
         case .system:
             if str(ev, "subtype") == "resumed" { clearLiveToolOutputsAtBoundary() }
@@ -251,7 +277,9 @@ public struct TranscriptReducer: Sendable, Codable {
         openAssistant = nil
         openThinking = nil
         bgLaunch.removeAll()
+        taskLaunch.removeAll()
         stderrSeen.removeAll()
+        state.subagentItems = [:]
     }
 
     /// Fold the tail-first initial page (the newest N persisted events) and record whether older
@@ -303,6 +331,16 @@ public struct TranscriptReducer: Sendable, Codable {
         for ev in fresh { sub.apply(ev) }
         sub.flushStreaming()   // close anything left open at the page's end (defensive; pages hold no deltas)
         state.items = sub.state.items + state.items
+        // A sub-agent's list grafts the same way, key by key — the page is older, so its part goes
+        // first. Keyed by the Agent call's id, a call and its work may straddle two pages and still
+        // meet. What an older page's ends said about a task is kept only where the live window has
+        // nothing newer.
+        for (parent, older) in sub.state.subagentItems {
+            state.subagentItems[parent] = older + (state.subagentItems[parent] ?? [])
+        }
+        for (id, progress) in sub.state.taskProgress where state.taskProgress[id] == nil {
+            state.taskProgress[id] = progress
+        }
         seen.formUnion(sub.seen)
         // The open-bubble cursors are item INDICES — shift them past the prepended rows, or the
         // next live delta would stream into an old bubble. (`maxSeq` keeps the parent's — the
@@ -367,7 +405,26 @@ public struct TranscriptReducer: Sendable, Codable {
         state.oldestSeq = newOldest
         state.hasMoreOlder = true
         seen = seen.filter { $0 >= newOldest }
+        trimSubagentItems(below: newOldest)
         return true
+    }
+
+    /// The same cut, applied to what sub-agents did: what is older than the window's new oldest seq
+    /// goes, and paging back brings it in again exactly like the conversation's own rows. Cut by seq,
+    /// not by whether the Agent call survived — a background agent works on long after its call, and
+    /// dropping the newer part of its work with the call would lose it for good (those seqs stay in
+    /// `seen`, so no page would bring them back).
+    private mutating func trimSubagentItems(below cut: Int) {
+        guard !state.subagentItems.isEmpty else { return }
+        for (parent, list) in state.subagentItems {
+            // Cut where the conversation is cut: at the first row whose own event is inside the
+            // window. A row with no seq of its own (an error line) goes with what came before it.
+            if let first = list.firstIndex(where: { (Self.durableSeq($0) ?? -1) >= cut }) {
+                if first > 0 { state.subagentItems[parent] = Array(list[first...]) }
+            } else {
+                state.subagentItems[parent] = nil
+            }
+        }
     }
 
     /// The seq a retained item can pin the history cursor to: the event that PRODUCED the row, so a
@@ -693,14 +750,7 @@ public struct TranscriptReducer: Sendable, Codable {
         let name = str(ev, "name") ?? str(ev, "toolName") ?? "tool"
         let input = ev.payload["input"] ?? .null
         let foregroundShell = id.hasPrefix("shell-") && input["run_in_background"]?.boolValue != true
-        // A background shell launch: remember its command AND human description so the (command-less)
-        // background_* events can title the tray row (description preferred, like web) while still
-        // surfacing the raw command in the expanded body.
-        if name == "Bash", input["run_in_background"]?.boolValue == true,
-           let command = input["command"]?.stringValue {
-            let desc = input["description"]?.stringValue
-            bgLaunch[id] = (command: command, description: desc?.isEmpty == false ? desc : nil)
-        }
+        noteLaunch(id: id, name: name, input: input)
         // A transient broadcast can cross replicas faster than the durable tool_use. Keep it
         // waiting until this card proves that the id belongs to a foreground shell. Conversely,
         // learning that it is a background shell permanently retires this side channel: its output
@@ -735,16 +785,7 @@ public struct TranscriptReducer: Sendable, Codable {
         // `data` and keeps the block: the card must still know a picture is here, or it folds and
         // never asks for it. Web parity: `hasResultImage`.
         let hasImage = ToolResultContent.hasImage(ev.payload["content"])
-        // A confirmed background-shell launch ("…running in background with ID…") must surface in the
-        // tray NOW, keyed by its tool_use id — not wait for a background_task that may never arrive
-        // (the shell is still running, or its completion notification was never recorded as an event).
-        // Mirrors web's deriveBackgroundShells, which builds the shell list from the launch, not the
-        // completion. background_task/output then update this same row (correlated by toolUseId).
-        if let id, !isError, let launch = bgLaunch[id], let result,
-           result.contains("running in background with ID"),
-           !state.background.contains(where: { $0.id == id }) {
-            state.background.append(BackgroundProc(id: id, command: launch.command, description: launch.description, status: "running", outputTail: "", startedAt: ev.ts))
-        }
+        if let id, !isError, let result { confirmLaunch(id: id, result: result, ts: ev.ts) }
         for idx in stride(from: state.items.count - 1, through: 0, by: -1) {
             // A live `tool_output` snapshot may already occupy `result` while this card is still
             // running. Match on status, not an empty result, so the durable tool_result always
@@ -1177,13 +1218,18 @@ public struct TranscriptReducer: Sendable, Codable {
     /// the server's terminal state but never resurrects one the live stream already settled (the
     /// snapshot may predate that). Unknown shells are appended. Reordered chronologically by launch.
     /// This is the native half of web's server-list ∪ live-overlay merge (`mergeBackgroundShells`).
-    public mutating func seedBackground(_ incoming: [BackgroundProc]) {
+    public mutating func seedBackground(_ incoming: [BackgroundProc], progress: [TaskProgress] = []) {
+        // What an agent or workflow ended with — kept only where the live stream has nothing
+        // newer, like the rest of this merge.
+        for p in progress where state.taskProgress[p.toolUseId] == nil { state.taskProgress[p.toolUseId] = p }
         for proc in incoming {
             if let i = state.background.firstIndex(where: { $0.id == proc.id }) {
                 if state.background[i].command == nil { state.background[i].command = proc.command }
                 if state.background[i].description == nil { state.background[i].description = proc.description }
                 if state.background[i].outputTail.isEmpty { state.background[i].outputTail = proc.outputTail }
                 if state.background[i].startedAt == nil { state.background[i].startedAt = proc.startedAt }
+                if state.background[i].kind == nil { state.background[i].kind = proc.kind }
+                if state.background[i].taskId == nil { state.background[i].taskId = proc.taskId }
                 if state.background[i].status == "running" { state.background[i].status = proc.status }
             } else {
                 state.background.append(proc)
@@ -1194,24 +1240,148 @@ public struct TranscriptReducer: Sendable, Codable {
         state.background.sort { ($0.startedAt ?? "~") < ($1.startedAt ?? "~") }
     }
 
-    // Correlate every background event to one process by `toolUseId` (the launching Bash call) — the
-    // one id present on the launch tool_use/result AND on every background_* event, so a shell
-    // surfaced from its launch (see closeTool) and its later completion are the SAME row. `shellId`
-    // and the older `id`/`taskId` are fallbacks. (Runner sends `shellId`/`toolUseId`, never `id`.)
+    // Correlate every background event to one row: by `toolUseId` (the launching call), else by the
+    // runtime's own task id (`shellId`), which is all a completion names when an agent resumed with
+    // SendMessage stops again — it is re-announced without its call's id. An empty string is no id:
+    // keying on "" made every such completion a row of its own, titled with nothing.
     private mutating func upsertBackground(_ ev: RunEvent) {
-        let toolUseID = str(ev, "toolUseId")
-        let id = toolUseID ?? str(ev, "shellId") ?? str(ev, "id") ?? str(ev, "taskId") ?? nextID()
+        let toolUseID = nonEmpty(str(ev, "toolUseId"))
+        let taskID = nonEmpty(str(ev, "shellId"))
         let status = str(ev, "status") ?? "running"
         // Neither the command nor the description is on this event; correlate them from the launching
         // Bash tool_use (bgLaunch).
         let launch = toolUseID.flatMap { bgLaunch[$0] }
         let command = str(ev, "command") ?? launch?.command
-        if let i = state.background.firstIndex(where: { $0.id == id }) {
+        // What a background agent or workflow got done: the last progress, carried by its end.
+        if let progress = TaskProgress.from(ev.payload["progress"]) {
+            state.taskProgress[progress.toolUseId] = progress
+        }
+        let index = toolUseID.flatMap { id in state.background.firstIndex { $0.id == id } }
+            ?? taskID.flatMap { tid in state.background.firstIndex { $0.taskId == tid || $0.id == tid } }
+        if let i = index {
             state.background[i].status = status
             if let command { state.background[i].command = command }
+            if state.background[i].taskId == nil { state.background[i].taskId = taskID }
         } else {
-            state.background.append(BackgroundProc(id: id, command: command, description: launch?.description, status: status, outputTail: "", startedAt: ev.ts))
+            // Known only from its end (its launch is outside the loaded window): the notification's
+            // own summary — 'Agent "Deep-read the repo" finished' — is still its name.
+            let named = BackgroundSummary.parse(str(ev, "summary"))
+            let id = toolUseID ?? taskID ?? str(ev, "id") ?? str(ev, "taskId") ?? nextID()
+            state.background.append(BackgroundProc(id: id, command: command,
+                                                   description: launch?.description ?? named?.title,
+                                                   status: status, outputTail: "", startedAt: ev.ts,
+                                                   kind: named?.kind, taskId: taskID))
         }
+    }
+
+    /// Remember what a call that may start background work was, so its receipt can title the tray
+    /// row: a background Bash's command AND human description (the command-less background_* events
+    /// title the row description-first, like web, and still show the command in the expanded body),
+    /// and an Agent's description. A workflow's title arrives on its receipt.
+    private mutating func noteLaunch(id: String, name: String, input: JSONValue) {
+        if name == "Bash", input["run_in_background"]?.boolValue == true,
+           let command = input["command"]?.stringValue {
+            let desc = input["description"]?.stringValue
+            bgLaunch[id] = (command: command, description: desc?.isEmpty == false ? desc : nil)
+        } else if name == "Agent" || name == "Task" {
+            taskLaunch[id] = (kind: "agent", description: nonEmpty(input["description"]?.stringValue))
+        } else if name == "Workflow" {
+            taskLaunch[id] = (kind: "workflow", description: nil)
+        }
+    }
+
+    /// A launch confirmed by its own receipt must surface in the tray NOW, keyed by its tool_use id —
+    /// not wait for a background_task that says it is over (the work is still running, or its end
+    /// was never recorded as an event). Each receipt is the runtime's own wording: "…running in
+    /// background with ID <id>…" for a shell, "Async agent launched successfully … agentId: <id>" for
+    /// an agent run in the background, "Workflow launched in background. Task ID: <id>" for a
+    /// workflow. An Agent run inline answers in this same result and so has nothing running. Mirrors
+    /// web's deriveBackgroundShells, which builds the list from the launch, not the completion;
+    /// background_task/output then update this same row (correlated by toolUseId).
+    private mutating func confirmLaunch(id: String, result: String, ts: String?) {
+        guard !state.background.contains(where: { $0.id == id }) else { return }
+        if let launch = bgLaunch[id], let shellID = BackgroundSummary.shellID(result) {
+            state.background.append(BackgroundProc(id: id, command: launch.command, description: launch.description,
+                                                   status: "running", outputTail: "", startedAt: ts,
+                                                   kind: "shell", taskId: shellID))
+        } else if let launch = taskLaunch[id], launch.kind == "agent", let agentID = BackgroundSummary.agentID(result) {
+            state.background.append(BackgroundProc(id: id, command: nil, description: launch.description,
+                                                   status: "running", outputTail: "", startedAt: ts,
+                                                   kind: "agent", taskId: agentID))
+        } else if let launch = taskLaunch[id], launch.kind == "workflow", let receipt = BackgroundSummary.workflow(result) {
+            state.background.append(BackgroundProc(id: id, command: nil, description: receipt.summary,
+                                                   status: "running", outputTail: "", startedAt: ts,
+                                                   kind: "workflow", taskId: receipt.taskID))
+        }
+    }
+
+    /// A live progress frame. Never reopens a task whose end already arrived: a frame buffered
+    /// before a reconnect must not replace the last word the end itself carried.
+    private mutating func applyTaskProgress(_ ev: RunEvent) {
+        guard let progress = TaskProgress.from(ev.payload) else { return }
+        if let row = state.background.first(where: { $0.id == progress.toolUseId }), row.status != "running" { return }
+        state.taskProgress[progress.toolUseId] = progress
+    }
+
+    /// The event kinds a sub-agent's own transcript is made of. Everything else it causes — its end,
+    /// its approvals — is session-level and folds as ever.
+    private static let subagentEventTypes: Set<RunEventType> = [.assistant, .thinking, .toolUse, .toolResult]
+    /// How much of one sub-agent's work is kept in memory. A long research agent makes hundreds of
+    /// calls; its opening ones scroll away like the conversation's own.
+    static let subagentItemCap = 600
+
+    /// Fold one of a sub-agent's own events into the list kept for the call that started it.
+    /// Simpler than the conversation's fold on purpose: a sub-agent's text reaches the stream only as
+    /// durable events (no deltas to animate), and a provider error inside one is part of what it did,
+    /// not a card that asks the reader to retry anything.
+    private mutating func applySubagent(_ ev: RunEvent, parent: String) {
+        var list = state.subagentItems[parent] ?? []
+        switch ev.type {
+        case .assistant:
+            let text = str(ev, "text") ?? str(ev, "content") ?? ""
+            guard !text.isEmpty else { return }
+            if EngineErrors.isApiErrorText(text) || EngineErrors.isUsageLimitErrorText(text) || EngineAuth.isAuthErrorText(text) {
+                list.append(.error(id: nextID(), message: text))
+            } else {
+                list.append(.assistant(AssistantBubble(id: nextID(), text: text, streamingText: "",
+                                                       seq: ev.seq, turnId: ev.turnId, ts: ev.ts)))
+            }
+        case .thinking:
+            // Claude Code sends a block's reasoning only as deltas, which never reach a sub-agent's
+            // stream: an empty block has nothing to show.
+            let text = str(ev, "text") ?? ""
+            guard !text.isEmpty else { return }
+            list.append(.thinking(ThinkingBlock(id: nextID(), text: text, streamingText: "", seq: ev.seq,
+                                                startedTs: ev.ts, finishedTs: ev.ts)))
+        case .toolUse:
+            let id = str(ev, "id") ?? str(ev, "toolUseId") ?? nextID()
+            let name = str(ev, "name") ?? "tool"
+            let input = ev.payload["input"] ?? .null
+            list.append(.toolCall(ToolCard(id: id, name: name, input: input, result: nil, status: .running,
+                                           inputSeq: ev.seq, inputTruncated: ev.truncated, ts: ev.ts)))
+        case .toolResult:
+            let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id") ?? str(ev, "id")
+            let isError = ev.payload["isError"]?.boolValue ?? ev.payload["is_error"]?.boolValue ?? false
+            let result = ToolResultContent.text(ev.payload["content"]) ?? str(ev, "result")
+            // An agent a sub-agent starts is not put in the tray: its end is reported to that
+            // sub-agent, never to this stream, so its row would read "running" for good. It is
+            // drawn where it happened, in its parent's list.
+            guard let idx = list.lastIndex(where: {
+                if case .toolCall(let c) = $0 { return c.status == .running && (id == nil || c.id == id) }
+                return false
+            }), case .toolCall(var card) = list[idx] else { return }
+            card.result = result
+            card.resultImages = ToolResultContent.images(ev.payload["content"])
+            card.resultHasImage = ToolResultContent.hasImage(ev.payload["content"])
+            card.status = isError ? .error : .ok
+            card.resultSeq = ev.seq
+            card.resultTruncated = ev.truncated
+            list[idx] = .toolCall(card)
+        default:
+            return
+        }
+        if list.count > Self.subagentItemCap { list.removeFirst(list.count - Self.subagentItemCap) }
+        state.subagentItems[parent] = list
     }
 
     // `background_output` carries the WHOLE current output tail (a capped file snapshot re-sent on
@@ -1238,6 +1408,7 @@ public struct TranscriptReducer: Sendable, Codable {
 
     private mutating func nextID() -> String { idSeq += 1; return "\(idPrefix)\(idSeq)" }
     private func str(_ ev: RunEvent, _ key: String) -> String? { ev.payload[key]?.stringValue }
+    private func nonEmpty(_ s: String?) -> String? { s?.isEmpty == false ? s : nil }
     /// Parse the `user` event's `attachments` array (`[{id, mime, name}]`) into refs, dropping any
     /// element without an `id`. Older runners may send `images` (id-only) instead — not handled
     /// here since current runners always emit `attachments`.

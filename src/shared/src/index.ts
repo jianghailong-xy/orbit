@@ -33,3 +33,4 @@ export const MAX_PROMPT_CHARS = 50_000;
  *  countdown from `deletedAt`; the apiserver reaper enforces the same window. Shared so
  *  the two never disagree. */
 export const TRASH_RETENTION_DAYS = 30;
+export * from './taskProgress';

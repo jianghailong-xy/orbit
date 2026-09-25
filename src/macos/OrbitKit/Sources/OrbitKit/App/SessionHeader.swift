@@ -38,6 +38,9 @@ public enum SessionHeader {
             if s.isGenerating {
                 return "Running"
             }
+            // A sub-agent or workflow is the workspace itself still working: it outranks the watch
+            // it is parked on and whatever it left running (web `statusLabel`).
+            if let n = s.runningSubagentCount, n > 0 { return SessionLine.subagentRunningLabel(n) }
             if let watching = parkedOnWatch(s, watching) { return watching.word }
             if (s.runningBgCount ?? 0) > 0 { return SessionLine.bgRunningLabel(s.runningBgCount ?? 0) }
             return "Waiting for your reply"

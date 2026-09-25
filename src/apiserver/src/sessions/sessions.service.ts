@@ -3439,7 +3439,8 @@ export class SessionsService {
 
   /**
    * The authoritative, complete list of background shells the session ever launched — every
-   * Bash(run_in_background), with output recovered from the workspace's persisted Read polls of the
+   * Bash(run_in_background), and the workspace's own background sub-agents and workflows (an async
+   * Agent call, a Workflow call) — with output recovered from the workspace's persisted Read polls of the
    * `.output` file. Derived server-side over ALL of the session's persisted events (not just the
    * client's loaded tail window), so the "Background processes" tray shows the same complete list
    * on every client regardless of how much transcript is loaded. Reuses the exact derivation the
@@ -3495,6 +3496,7 @@ export class SessionsService {
             AND (
               (payload->>'name' = 'Bash' AND payload->'input'->>'run_in_background' = 'true')
               OR (payload->>'name' = 'Read' AND payload->'input'->>'file_path' LIKE '%.output')
+              OR (payload->>'name' IN ('Agent', 'Task', 'Workflow') AND NOT (payload ? 'parentToolUseId'))
             )
           )
         )

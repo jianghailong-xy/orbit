@@ -1260,6 +1260,9 @@ const (
 	// Claude's <task-notification> user message, and the live tail of the output file.
 	evBackgroundTask   = "background_task"
 	evBackgroundOutput = "background_output"
+	// How far a background agent or workflow has got (claude_task_progress.go). Live-only, like
+	// background_output: the control plane broadcasts it and never stores it.
+	evTaskProgress = "task_progress"
 )
 
 // Run statuses — mirror RunStatus in @orbit/shared.
