@@ -23,8 +23,9 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// engine whose CLI that machine doesn't have, or has but says it isn't signed into. The row
     /// stays listed and carries the reason rather than disappearing: hiding it turns "not signed
     /// in on this runner" into "Orbit lost my provider", which is the one question the picker
-    /// exists to answer. Set too for an account pool none of whose accounts can take work — a
-    /// reason no machine fixes, which is why `fixEngine` stays nil for it.
+    /// exists to answer. Set too for an account pool the server says cannot run at all
+    /// (`ProviderPool.unavailable`) — a reason no machine fixes, which is why `fixEngine` stays nil
+    /// for it. Not for one whose accounts are only spent: that one waits for a reset (`note`).
     public let unavailable: String?
     /// Which engine row on the Providers page fixes `unavailable`. That is the CLI this choice
     /// runs on, which for a BYOK provider is not its own slug — a Moonshot row is fixed on the
@@ -37,11 +38,15 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// its own — pinning one account is a real need — but offered behind "Pin a specific account",
     /// since the pool beside it already runs on it.
     public let inPool: Bool
+    /// What the row says in place of its model while it still takes the pick: an account pool whose
+    /// accounts that can run are all spent, and when the first frees up (`ProviderPools.spentNote`).
+    /// Nil for anything else.
+    public let note: String?
     public var id: String { slug }
 
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
                 unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
-                inPool: Bool = false) {
+                inPool: Bool = false, note: String? = nil) {
         self.slug = slug
         self.label = label
         self.kind = kind
@@ -51,6 +56,7 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
         self.fixEngine = fixEngine
         self.poolSize = poolSize
         self.inPool = inPool
+        self.note = note
     }
 }
 
@@ -126,9 +132,10 @@ public enum SessionProviderChoices {
                 kind: .pool,
                 brandKey: "anthropic",
                 modelLabel: modelLabel(for: pool.slug, configured: configured, catalog: catalog),
-                unavailable: claudeBlocker ?? ProviderPools.unavailableReason(pool, now: now),
+                unavailable: claudeBlocker ?? ProviderPools.unavailableReason(pool),
                 fixEngine: claudeBlocker == nil ? nil : "claude",
-                poolSize: pool.members.count)
+                poolSize: pool.members.count,
+                note: ProviderPools.spentNote(pool, now: now))
         }
         let poolSlugs = Set(pools.map(\.slug))
         let pooled = Set(pools.flatMap { $0.members.map(\.slug) })

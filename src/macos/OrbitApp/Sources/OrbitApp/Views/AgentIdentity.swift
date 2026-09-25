@@ -179,8 +179,8 @@ struct ProviderSwitchSheet: View {
 
     @ViewBuilder
     private func row(_ choice: ProviderChoice, indented: Bool = false) -> some View {
-        // A pool none of whose accounts can take work is greyed out: no machine gives its accounts
-        // room back, so unlike a row a runner can fix it goes nowhere, and says why instead.
+        // A pool the server says cannot run at all is greyed out: no machine gives it an account that
+        // can, so unlike a row a runner can fix it goes nowhere, and says why instead.
         let greyed = choice.unavailable != nil && choice.fixEngine == nil
         Button {
             // Dismiss first, then switch — same ordering as AgentSwitchSheet, so the sheet
@@ -206,7 +206,8 @@ struct ProviderSwitchSheet: View {
                 // would pick is moot until the CLI is installed or signed into. It also
                 // doubles as the row's call to action, so it takes the accent the way
                 // web's does rather than sitting in the model column's grey — except on a greyed
-                // pool, where there is nothing to do and the reason stays grey.
+                // pool, where there is nothing to do and the reason stays grey. A spent pool's note
+                // takes the model's place too, in its grey: the pool still takes the pick, and waits.
                 Text(trailing(choice, greyed: greyed))
                     .font(.orbitListSubtitle)
                     .foregroundStyle(choice.unavailable == nil || greyed ? AnyShapeStyle(.secondary)
@@ -225,7 +226,7 @@ struct ProviderSwitchSheet: View {
     }
 
     private func trailing(_ choice: ProviderChoice, greyed: Bool) -> String {
-        guard let reason = choice.unavailable else { return choice.modelLabel }
+        guard let reason = choice.unavailable else { return choice.note ?? choice.modelLabel }
         return greyed ? reason : "\(reason), sign in →"
     }
 

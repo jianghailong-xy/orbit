@@ -16,9 +16,9 @@ public struct PoolAccount: Equatable, Sendable {
 
 /// Account pools as the new-session picker and the composer read them — the native port of web's
 /// `lib/providerPools.ts`; keep the two in sync. Which member a session starting now runs on
-/// (`PoolMember.next`) and when a spent pool frees up (`ProviderPool.resetsAt`) are the server's
-/// answers, the claim's own selector asked the way the claim asks it, so nothing here re-derives
-/// them.
+/// (`PoolMember.next`), when a spent pool frees up (`ProviderPool.resetsAt`) and whether a pool can
+/// run at all (`ProviderPool.unavailable`) are the server's answers, the claim's own selector asked
+/// the way the claim asks it, so nothing here re-derives them.
 public enum ProviderPools {
     /// The picker row the pools' own accounts fold away under (web's `NewSessionProviderHero`).
     public static let pinAccountLabel = "Pin a specific account"
@@ -27,15 +27,6 @@ public enum ProviderPools {
     public static let sectionTitle = "Account pools"
     public static let sectionFooter = "Several Claude subscriptions under one name — each session "
         + "starts on the account with the most room in its 5-hour window."
-
-    /// A member that can take work now — what "N of M accounts available" counts. One that reports
-    /// no quota counts: the claim still picks it, just last.
-    public static func canTakeWork(_ member: PoolMember) -> Bool {
-        switch member.state {
-        case .available, .running, .noQuota: return true
-        case .refused, .disabled, .spent, .unknown: return false
-        }
-    }
 
     /// The pools as providers the pickers and the composer resolve like any configured one: a pool
     /// runs on its members' Claude subscriptions, whose models are the Claude CLI's own — the model
@@ -67,14 +58,24 @@ public enum ProviderPools {
             : "A session on \(pool.label) starts on \(account.member.label) — the account with the most room right now"
     }
 
-    /// Why the new-session picker greys `pool` out, or nil while any of its accounts can take work.
-    /// With none that can ("0 of N available") the reason is the pool head's on web (`PoolGauge`):
-    /// when every account that can run is spent, when the first of them frees up — the earliest
-    /// reset, not the latest — and otherwise that no account can run at all.
-    public static func unavailableReason(_ pool: ProviderPool, now: Date = Date(),
-                                         timeZone: TimeZone = .current) -> String? {
-        guard !pool.members.contains(where: canTakeWork) else { return nil }
-        guard pool.members.contains(where: { $0.state == .spent }) else { return "No account can run" }
+    /// Why the new-session picker greys `pool` out, or nil while it can run: the server's own answer
+    /// (`ProviderPool.unavailable`) — none of its accounts can run, and no reset will change that. Read
+    /// rather than worked out from the members, since only the server knows which of them its
+    /// admission still takes. A pool whose accounts are only spent is not greyed: every door takes it
+    /// and it waits for a reset, which `spentNote` names.
+    public static func unavailableReason(_ pool: ProviderPool) -> String? {
+        pool.unavailable
+    }
+
+    /// What the picker's row says in place of its model while every account that can run is spent:
+    /// when the first of them frees up — the earliest reset, not the latest — in the words the pool's
+    /// head says it on /providers (web's `PoolGauge`). Nil while an account can take the next session,
+    /// and for a pool that cannot run at all, which `unavailableReason` speaks for. Read in the order
+    /// web's `poolHeadline` reads a pool: an account to run on, the server's refusal, then spent.
+    public static func spentNote(_ pool: ProviderPool, now: Date = Date(),
+                                 timeZone: TimeZone = .current) -> String? {
+        guard !pool.members.contains(where: \.next), unavailableReason(pool) == nil,
+              pool.members.contains(where: { $0.state == .spent }) else { return nil }
         guard let resetsAt = pool.resetsAt,
               let time = formatResetTime(resetsAt, now: now, timeZone: timeZone) else { return "All spent" }
         return "All spent · resets \(time)"

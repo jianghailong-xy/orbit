@@ -41,9 +41,11 @@ final class ProviderPoolsTests: XCTestCase {
                    state: state, resetsAt: resetsAt, next: next)
     }
 
-    private func pool(_ members: [PoolMember], resetsAt: String? = nil) -> ProviderPool {
+    private func pool(_ members: [PoolMember], resetsAt: String? = nil,
+                      unavailable: String? = nil) -> ProviderPool {
         ProviderPool(id: PublicID.toPublic("0195c0de-0000-7000-8000-000000000900"),
-                     slug: "claude-accounts", label: "Claude accounts", resetsAt: resetsAt, members: members)
+                     slug: "claude-accounts", label: "Claude accounts", resetsAt: resetsAt,
+                     unavailable: unavailable, members: members)
     }
 
     // MARK: - decoding
@@ -55,6 +57,7 @@ final class ProviderPoolsTests: XCTestCase {
         XCTAssertEqual(claude.slug, "claude-accounts")
         XCTAssertEqual(claude.label, "Claude accounts")
         XCTAssertNil(claude.resetsAt)
+        XCTAssertNil(claude.unavailable)
         XCTAssertEqual(claude.members.map(\.label), ["Work", "Home", "Spare"])
         XCTAssertEqual(claude.members.map(\.state), [.running, .available, .spent])
         XCTAssertEqual(claude.members.map(\.next), [false, true, false])
@@ -65,13 +68,27 @@ final class ProviderPoolsTests: XCTestCase {
     }
 
     /// A state added on the server is one this build can't name — it must not cost the user every
-    /// pool they have, and it must not read as a member that can take work either.
+    /// pool they have, and it must not read as a spent account either.
     func testAStateThisBuildDoesNotKnowReadsAsUnknownAndTheListSurvives() throws {
         let json = payload.replacingOccurrences(of: "\"AVAILABLE\"", with: "\"RESTING\"")
         let list = try pools(json)
         XCTAssertEqual(list.first?.members.count, 3)
         XCTAssertEqual(list.first?.members[1].state, .unknown)
-        XCTAssertFalse(ProviderPools.canTakeWork(try XCTUnwrap(list.first?.members[1])))
+        XCTAssertNil(ProviderPools.spentNote(pool([member(1, .unknown)])))
+    }
+
+    /// Why nothing in a pool can run, when the server says so — and only a readable reason counts.
+    func testThePoolCarriesTheServersReasonWhenNothingInItCanRun() throws {
+        let stuck = payload.replacingOccurrences(of: "\"resetsAt\": null,\n  \"members\"",
+                                                 with: "\"resetsAt\": null, \"unavailable\": \"No account can run\",\n  \"members\"")
+        XCTAssertEqual(try pools(stuck).first?.unavailable, "No account can run")
+        for odd in ["null", "\"\"", "{\"code\": \"NONE\"}", "3"] {
+            let json = payload.replacingOccurrences(of: "\"resetsAt\": null,\n  \"members\"",
+                                                    with: "\"resetsAt\": null, \"unavailable\": \(odd),\n  \"members\"")
+            let list = try pools(json)
+            XCTAssertEqual(list.map(\.slug), ["claude-accounts"], odd)
+            XCTAssertNil(list.first?.unavailable, odd)
+        }
     }
 
     func testFieldsThisBuildDoesNotKnowAreIgnored() throws {
@@ -108,6 +125,7 @@ final class ProviderPoolsTests: XCTestCase {
         let only = try XCTUnwrap(try pools(json).first)
         XCTAssertEqual(only.label, "pool-a")
         XCTAssertNil(only.resetsAt)
+        XCTAssertNil(only.unavailable)
         let m = try XCTUnwrap(only.members.first)
         XCTAssertEqual(m.label, "key-a")
         XCTAssertEqual(m.state, .unknown)
@@ -123,13 +141,6 @@ final class ProviderPoolsTests: XCTestCase {
                        "34JNbOSl1WkZm4QhuDl3nN")
         let listRow = #"{"id": "s1", "status": "RUNNING", "provider": "claude-accounts"}"#
         XCTAssertNil(try decoder.decode(Session.self, from: Data(listRow.utf8)).poolMemberProviderId)
-    }
-
-    // MARK: - which members can take work
-
-    func testOnlyAvailableRunningAndNoQuotaMembersCanTakeWork() {
-        let can = PoolMemberState.allCases.filter { ProviderPools.canTakeWork(member(1, $0)) }
-        XCTAssertEqual(Set(can), [.available, .running, .noQuota])
     }
 
     // MARK: - the account a session is on
@@ -183,42 +194,60 @@ final class ProviderPoolsTests: XCTestCase {
                        "A session on Claude accounts starts on Home — the account with the most room right now")
     }
 
-    // MARK: - when the picker greys a pool out
+    // MARK: - when the picker greys a pool out, and when it only says it is spent
 
     private let utc = TimeZone(identifier: "UTC")!
     private let now = RelativeTime.parse("2026-09-25T09:00:00.000Z")!
 
-    func testAPoolWithAnyMemberThatCanTakeWorkIsNotGreyed() {
-        for state in [PoolMemberState.available, .running, .noQuota] {
-            XCTAssertNil(ProviderPools.unavailableReason(pool([member(1, .spent), member(2, state)]), now: now),
-                         "\(state)")
+    /// Greyed on the server's word alone: only it knows which accounts its admission still takes, and
+    /// every door that takes a provider refuses such a pool.
+    func testAPoolIsGreyedOnlyWithTheServersReason() {
+        XCTAssertEqual(ProviderPools.unavailableReason(pool([member(1, .noQuota)], unavailable: "No account can run")),
+                       "No account can run")
+        XCTAssertEqual(ProviderPools.unavailableReason(pool([], unavailable: "No accounts")), "No accounts")
+        // Not without it, whatever its accounts read as — spent ones included.
+        for states: [PoolMemberState] in [[.spent, .spent], [.spent, .available], [.refused, .disabled], [.unknown], []] {
+            let members = states.enumerated().map { member($0.offset + 1, $0.element) }
+            XCTAssertNil(ProviderPools.unavailableReason(pool(members, resetsAt: "2026-09-25T10:30:00.000Z")),
+                         "\(states)")
         }
     }
 
-    /// Every account that can run is spent: the pool says when the FIRST of them frees up, which is
-    /// the reset the server already put on the pool.
+    /// Every account that can run is spent: not greyed — the server takes the pool, and a session on
+    /// it waits — but it says when the FIRST of them frees up, the reset the server put on the pool.
     func testAFullySpentPoolSaysWhenTheFirstAccountFreesUp() {
         let spent = pool([member(1, .spent, resetsAt: "2026-09-25T13:00:00.000Z"),
                           member(2, .spent, resetsAt: "2026-09-25T10:30:00.000Z")],
                          resetsAt: "2026-09-25T10:30:00.000Z")
-        XCTAssertEqual(ProviderPools.unavailableReason(spent, now: now, timeZone: utc), "All spent · resets 10:30")
+        XCTAssertNil(ProviderPools.unavailableReason(spent))
+        XCTAssertEqual(ProviderPools.spentNote(spent, now: now, timeZone: utc), "All spent · resets 10:30")
     }
 
     func testAResetMoreThanADayOutNamesItsDay() {
         let weekly = pool([member(1, .spent)], resetsAt: "2026-09-28T14:05:00.000Z")
-        XCTAssertEqual(ProviderPools.unavailableReason(weekly, now: now, timeZone: utc), "All spent · resets Mon 14:05")
+        XCTAssertEqual(ProviderPools.spentNote(weekly, now: now, timeZone: utc), "All spent · resets Mon 14:05")
     }
 
     func testAFullySpentPoolWithNoResetSaysOnlyThatItIsSpent() {
-        XCTAssertEqual(ProviderPools.unavailableReason(pool([member(1, .spent), member(2, .refused)]), now: now),
-                       "All spent")
+        XCTAssertEqual(ProviderPools.spentNote(pool([member(1, .spent), member(2, .refused)]), now: now), "All spent")
     }
 
-    func testAPoolNoAccountCanRunInSaysSo() {
-        XCTAssertEqual(ProviderPools.unavailableReason(pool([member(1, .refused), member(2, .disabled)]), now: now),
-                       "No account can run")
-        XCTAssertEqual(ProviderPools.unavailableReason(pool([]), now: now), "No account can run")
-        XCTAssertEqual(ProviderPools.unavailableReason(pool([member(1, .unknown)]), now: now), "No account can run")
+    /// An account the pool no longer admits reads as reporting no quota, yet no claim picks it: beside
+    /// a spent one there is no account for the next session, and the pool is spent, not idle.
+    func testAPoolWhoseOtherAccountItNoLongerAdmitsIsStillSpent() {
+        let spent = pool([member(1, .noQuota), member(2, .spent)], resetsAt: "2026-09-25T10:30:00.000Z")
+        XCTAssertEqual(ProviderPools.spentNote(spent, now: now, timeZone: utc), "All spent · resets 10:30")
+    }
+
+    func testAPoolWithAnAccountForTheNextSessionSaysNothingOfBeingSpent() {
+        XCTAssertNil(ProviderPools.spentNote(pool([member(1, .spent), member(2, .available, next: true)]), now: now))
+    }
+
+    /// No reset brings back a pool the server says cannot run, not even the spent window of an account
+    /// it no longer admits: its reason speaks instead.
+    func testAPoolThatCannotRunSaysNothingOfAReset() {
+        let stuck = pool([member(1, .spent)], resetsAt: "2026-09-25T10:30:00.000Z", unavailable: "No account can run")
+        XCTAssertNil(ProviderPools.spentNote(stuck, now: now))
     }
 
     func testAResetTimeIsHoursAndMinutesWithinADayAndGetsItsDayBeyond() {

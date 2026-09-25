@@ -245,8 +245,9 @@ final class SessionProviderChoicesTests: XCTestCase {
     }
 
     private func claudePool(_ states: (PoolMemberState, PoolMemberState) = (.available, .running),
-                            resetsAt: String? = nil) -> ProviderPool {
+                            resetsAt: String? = nil, unavailable: String? = nil) -> ProviderPool {
         ProviderPool(id: "pool-1", slug: "claude-accounts", label: "Claude accounts", resetsAt: resetsAt,
+                     unavailable: unavailable,
                      members: [poolMember(anthropic, states.0, next: states.0 == .available),
                                poolMember(anthropic2, states.1)])
     }
@@ -271,6 +272,7 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(tile?.brandKey, "anthropic")
         XCTAssertEqual(tile?.modelLabel, "Opus 5")
         XCTAssertNil(tile?.unavailable)
+        XCTAssertNil(tile?.note)
         XCTAssertEqual(choices.filter { $0.slug == "claude-accounts" }.count, 1, "listed once, as the pool")
     }
 
@@ -286,22 +288,32 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertNil(choices.first { $0.slug == "deepseek" }?.poolSize)
     }
 
-    /// "0 of N available": greyed out with the reason, and no runner to send it to — nothing on a
-    /// machine gives the accounts room back.
-    func testAPoolNoneOfWhoseAccountsCanTakeWorkIsGreyedWithItsReason() {
+    /// A pool the server says cannot run: greyed out with its reason, and no runner to send it to —
+    /// nothing on a machine gives it an account that can.
+    func testAPoolTheServerSaysCannotRunIsGreyedWithItsReason() {
+        let stuck = claudePool((.refused, .disabled), unavailable: "No account can run")
+        let tile = SessionProviderChoices.choices(
+            configured: withPools([anthropic, anthropic2], [stuck]), pools: [stuck])
+            .first { $0.slug == "claude-accounts" }
+        XCTAssertEqual(tile?.unavailable, "No account can run")
+        XCTAssertNil(tile?.fixEngine)
+        XCTAssertNil(tile?.note)
+    }
+
+    /// "0 of N available" because every account is spent is not unavailable: the server takes the
+    /// pool and a session on it waits for the first reset. So it stays pickable, and says when that
+    /// is where its model would be.
+    func testAFullySpentPoolStaysPickableAndSaysWhenItFreesUp() {
         let spent = claudePool((.spent, .spent), resetsAt: "2026-09-25T10:30:00.000Z")
         let now = RelativeTime.parse("2026-09-25T09:00:00.000Z")!
         let tile = SessionProviderChoices.choices(
-            configured: withPools([anthropic, anthropic2], [spent]), pools: [spent], now: now)
+            configured: withPools([anthropic, anthropic2], [spent]), catalog: opus5, pools: [spent], now: now)
             .first { $0.slug == "claude-accounts" }
-        XCTAssertEqual(tile?.unavailable,
-                       "All spent · resets \(ProviderPools.formatResetTime("2026-09-25T10:30:00.000Z", now: now)!)")
+        XCTAssertNil(tile?.unavailable)
         XCTAssertNil(tile?.fixEngine)
-
-        let refused = claudePool((.refused, .disabled))
-        XCTAssertEqual(SessionProviderChoices.choices(
-            configured: withPools([anthropic, anthropic2], [refused]), pools: [refused])
-            .first { $0.slug == "claude-accounts" }?.unavailable, "No account can run")
+        XCTAssertEqual(tile?.note,
+                       "All spent · resets \(ProviderPools.formatResetTime("2026-09-25T10:30:00.000Z", now: now)!)")
+        XCTAssertEqual(tile?.modelLabel, "Opus 5")
     }
 
     /// A pool runs on the Claude CLI like a key does, so a runner without it can't run the pool

@@ -8,8 +8,10 @@ import XCTest
 /// declarations to the web's and the server's:
 ///
 /// - the fields `PoolMember` / `ProviderPool` decode are the ones web's `lib/providerPools.ts`
-///   declares, and the session detail still declares `poolMemberProviderId` (`api.ts`);
+///   declares (`unavailable` among them), and the session detail still declares
+///   `poolMemberProviderId` (`api.ts`);
 /// - the member states are the server's `PoolMemberState` union and the web's;
+/// - a pool that cannot run is greyed in the server's own words, which the web's pool head says too;
 /// - the picker's and the status bar's words are the web's, word for word.
 ///
 /// A missing counterpart file is a FAILURE, never an `XCTSkip`: a check that quietly opts out
@@ -102,8 +104,10 @@ final class ProviderPoolsParityTests: XCTestCase {
     func testThePoolDecodesExactlyTheFieldsWebDeclares() throws {
         let web = try declaredFields(interfaceBody("ProviderPool", in: source(Self.anchor), file: Self.anchor))
         let pool = ProviderPool(id: "p", slug: "claude-accounts", label: "Claude accounts",
-                                resetsAt: "2026-09-25T10:00:00.000Z", members: [fullMember])
+                                resetsAt: "2026-09-25T10:00:00.000Z", unavailable: "No account can run",
+                                members: [fullMember])
         XCTAssertEqual(try encodedKeys(pool), web)
+        XCTAssertTrue(web.contains("unavailable"), "\(Self.anchor) no longer declares `unavailable` on a pool")
     }
 
     func testTheMemberStatesAreTheServersAndTheWebs() throws {
@@ -141,24 +145,38 @@ final class ProviderPoolsParityTests: XCTestCase {
         }
     }
 
-    /// A greyed pool says why in the words the pool's head says it on /providers (AccountPools'
-    /// `PoolGauge`), where "All spent · " and "resets …" are two runs of one line.
-    func testAGreyedPoolSaysWhyInThePoolHeadsWords() throws {
+    /// A pool that cannot run is greyed in the words the server puts on it (`poolViews`' `unavailable`),
+    /// read off the payload rather than worked out here — each of them, as the server writes it — and
+    /// the web's pool head says the same words, from the same field.
+    func testAGreyedPoolSaysWhyInTheServersWords() throws {
+        let server = "src/apiserver/src/providers/providers.service.ts"
+        let text = try source(server)
+        XCTAssertTrue(text.contains("unavailable:"), "\(server) no longer puts `unavailable` on a pool")
+        for reason in ["No account can run", "No accounts"] {
+            XCTAssertTrue(text.contains("'\(reason)'"), "\(server) no longer says “\(reason)”")
+            let json = #"{"id": "p", "slug": "s", "label": "L", "unavailable": "\#(reason)", "members": []}"#
+            let pool = try JSONDecoder().decode(ProviderPool.self, from: Data(json.utf8))
+            XCTAssertEqual(ProviderPools.unavailableReason(pool), reason)
+        }
+        XCTAssertTrue(try source(Self.anchor).contains("reason: pool.unavailable"),
+                      "\(Self.anchor)'s pool head no longer says the server's `unavailable`")
+    }
+
+    /// A spent pool says when it frees up in the words the pool's head says it on /providers
+    /// (AccountPools' `PoolGauge`), where "All spent · " and "resets …" are two runs of one line.
+    func testASpentPoolSaysWhenInThePoolHeadsWords() throws {
         let web = try source("src/web/src/components/AccountPools.tsx")
         let now = RelativeTime.parse("2026-09-25T09:00:00.000Z")!
         let spent = ProviderPool(id: "p", slug: "s", label: "L", resetsAt: "2026-09-25T10:30:00.000Z",
                                  members: [PoolMember(id: "m", slug: "k", label: "K", state: .spent)])
-        let withReset = try XCTUnwrap(ProviderPools.unavailableReason(spent, now: now))
+        let withReset = try XCTUnwrap(ProviderPools.spentNote(spent, now: now))
         let head = try XCTUnwrap(withReset.components(separatedBy: "resets ").first)
         XCTAssertTrue(web.contains("\(head)</span>resets {formatResetTime(head.resetsAt)}"),
                       "AccountPools.tsx no longer says `\(head)resets <time>`")
 
         let noReset = ProviderPool(id: "p", slug: "s", label: "L", members: spent.members)
-        XCTAssertEqual(ProviderPools.unavailableReason(noReset, now: now), "All spent")
+        XCTAssertEqual(ProviderPools.spentNote(noReset, now: now), "All spent")
         XCTAssertTrue(web.contains("'All spent'"))
-
-        let none = try XCTUnwrap(ProviderPools.unavailableReason(ProviderPool(id: "p", slug: "s", label: "L"), now: now))
-        XCTAssertTrue(web.contains(">\(none)<"), "AccountPools.tsx no longer says `\(none)`")
     }
 
     func testThePickersWordsAreTheWebs() throws {
