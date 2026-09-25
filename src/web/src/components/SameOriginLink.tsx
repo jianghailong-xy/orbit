@@ -1,5 +1,6 @@
-import type { AnchorHTMLAttributes } from 'react';
+import { useContext, type AnchorHTMLAttributes } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
+import { PublicLinkResolverCtx, publicDestination } from '../lib/publicLinks';
 
 /**
  * Turn an href on the current web origin into the location React Router should receive.
@@ -40,6 +41,7 @@ export function sameOriginRoute(href: unknown, currentHref?: string): string | n
  * Page-content link semantics: same-origin destinations stay in the SPA, while external
  * destinations open in an isolated tab. Outside a router (notably static HTML export), an
  * internal destination degrades to a normal same-tab anchor instead of requiring React context.
+ * On a public page an internal destination is the page's resolver's to give (see AppLink).
  */
 export function SameOriginLink({
   href,
@@ -47,7 +49,9 @@ export function SameOriginLink({
   ...rest
 }: AnchorHTMLAttributes<HTMLAnchorElement>) {
   const inRouter = useInRouterContext();
-  const to = sameOriginRoute(href);
+  const resolve = useContext(PublicLinkResolverCtx);
+  const route = sameOriginRoute(href);
+  const to = route && resolve ? publicDestination(route, resolve) : route;
   const nativeSameTab =
     (rest.download !== undefined && rest.download !== false) ||
     (typeof href === 'string' && href.trim().startsWith('#'));
@@ -62,6 +66,7 @@ export function SameOriginLink({
     );
   }
 
+  if (route && !to) return <>{children}</>;
   if (to && inRouter) {
     return (
       <Link {...rest} to={to} target={undefined} rel={undefined}>
@@ -71,7 +76,7 @@ export function SameOriginLink({
   }
   if (to) {
     return (
-      <a {...rest} href={href} target={undefined} rel={undefined}>
+      <a {...rest} href={to === route ? href : to} target={undefined} rel={undefined}>
         {children}
       </a>
     );

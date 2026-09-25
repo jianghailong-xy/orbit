@@ -437,7 +437,7 @@ describe('a conversation page', () => {
 describe('the shared page and the export', () => {
   it('draws no card and asks for no card data on a shared session', async () => {
     fetchMock = vi.fn(async (url: string) =>
-      url === '/api/shared/token-1'
+      url.startsWith('/api/shared/token-1?')
         ? okJson({
             title: 'x',
             workspaceName: 'orbit',
@@ -463,10 +463,11 @@ describe('the shared page and the export', () => {
     expect(container.querySelectorAll('.orbit-link-card')).toHaveLength(0);
     // The page read the session it was pointed at, and nothing else asked anything: a visitor here
     // may not be signed in at all, so a card is not a thing this page may try to draw.
-    expect(requests().map(([url]) => url)).toEqual(['/api/shared/token-1']);
-    // The link is still the link it was: this deployment's own address, said in the app's own
-    // route (`SameOriginLink` keeps a same-origin destination inside the SPA).
-    expect(container.querySelector(`a[href="/tasks/${TASK}"]`)).toBeTruthy();
+    expect(requests().map(([url]) => url)).toEqual(['/api/shared/token-1?limit=200&maxPayload=2048']);
+    // The address stays in the text, but not as a link: to a signed-out reader an app page is a
+    // sign-in page, so a public page draws it as its words (PublicLinkResolverCtx).
+    expect(container.querySelector(`a[href="/tasks/${TASK}"]`)).toBeNull();
+    expect(container.textContent).toContain(`${BASE}/tasks/${TASK}`);
   });
 
   it('draws no card and asks for no card data in an exported file', async () => {
