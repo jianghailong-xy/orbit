@@ -136,7 +136,7 @@ function EntryRoute({ space, entryParam }: { space: SpaceRow; entryParam: string
       <div className="wk-drawer-bg" aria-hidden="true">
         {topic ? (
           <WikiFrame space={space}>
-            <WikiTopicPage spaceId={space.id} spaceSlug={space.slug} />
+            <WikiTopicPage spaceId={space.id} spaceSlug={space.slug} topicSlug={topic} />
           </WikiFrame>
         ) : (
           <WikiFrame space={space}>

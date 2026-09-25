@@ -41,9 +41,19 @@ import {
  * group appears exactly when the topic has entries of those kinds and disappears when it does not —
  * the design's rule is that a group with nothing in it is not shown at all.
  */
-export function WikiTopicPage({ spaceId, spaceSlug }: { spaceId: string; spaceSlug: string }) {
+export function WikiTopicPage({
+  spaceId,
+  spaceSlug,
+  topicSlug,
+}: {
+  spaceId: string;
+  spaceSlug: string;
+  /** The topic to draw, when the caller knows it and the route does not name it — the entry drawer
+   *  draws the page its entry belongs to behind itself, and that page is not at a topic URL. */
+  topicSlug?: string;
+}) {
   const params = useParams();
-  const topic = params.topic ?? '';
+  const topic = topicSlug ?? params.topic ?? '';
   // The ROOM's id on the wire and its slug in the URL: a slug is what a reader can read and what a
   // link should carry, and the door addresses a space by its id.
   const topicView = useQuery(wikiTopicQuery(spaceId, topic || null));
