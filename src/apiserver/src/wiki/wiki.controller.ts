@@ -9,6 +9,7 @@ import {
   WikiDecideDto,
   WikiProposeDto,
 } from './dto';
+import { flagParam, listParam, WikiRetrieval } from './wiki-retrieval';
 import { answerFor, WikiService, type WikiPrincipal } from './wiki.service';
 
 /**
@@ -23,13 +24,57 @@ import { answerFor, WikiService, type WikiPrincipal } from './wiki.service';
  * The owner is taken from the credential, never from a body or a query: every id below is an address
  * of one of this account's own rows, and another account's is a plain 404.
  *
- * NOT HERE YET, and whose it is: `GET /wiki/search` (T4 owns retrieval), the topic view, the timeline
- * and pin/unpin — the last three read what T8's pages will ask for, and none of them is a write path.
+ * NOT HERE YET, and whose it is: the topic view, the timeline and pin/unpin — all three read what
+ * T8's pages will ask for, and none of them is a write path.
  */
 @UseGuards(JwtAuthGuard)
 @Controller('wiki')
 export class WikiController {
-  constructor(private readonly wiki: WikiService) {}
+  constructor(
+    private readonly wiki: WikiService,
+    private readonly retrieval: WikiRetrieval,
+  ) {}
+
+  /**
+   * What ⌘K calls (design §6, contract `agentSurface.doors.user`): entries only, each saying which
+   * legs found it.
+   *
+   * A STATIC ROUTE, and it sits above every `:id` route in this class deliberately: Nest matches in
+   * declaration order, so a `search` that came after `entries/:id` would be read as an entry whose
+   * id is the word "search".
+   *
+   * The reader is the owner, which is what decides what is visible: the statuses asked for, active
+   * by default. `space` is the space in scope and is checked as the owner's own before it is used —
+   * another account's space is the same 404 every other route here answers with; leave it out and
+   * the search spans every space this owner has.
+   */
+  @Get('search')
+  async search(
+    @CurrentUser() user: AuthUser,
+    @Query('q') q?: string,
+    @Query('space', PublicIdPipe) space?: string,
+    @Query('kind') kind?: string | string[],
+    @Query('topic') topic?: string,
+    @Query('trust') trust?: string | string[],
+    @Query('status') status?: string | string[],
+    @Query('paths') paths?: string | string[],
+    @Query('limit') limit?: string,
+    @Query('semantic') semantic?: string,
+  ) {
+    if (space) await this.wiki.requireSpace(user.userId, space);
+    return this.retrieval.search({
+      ownerId: user.userId,
+      spaceId: space ?? null,
+      q,
+      kinds: listParam(kind),
+      topic: topic?.trim() || undefined,
+      trust: listParam(trust),
+      statuses: listParam(status),
+      paths: listParam(paths),
+      limit: limit === undefined ? undefined : Number(limit),
+      semantic: flagParam(semantic),
+    });
+  }
 
   /** The owner's spaces, each with the pending count the sidebar shows. */
   @Get('spaces')

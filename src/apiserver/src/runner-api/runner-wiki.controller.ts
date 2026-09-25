@@ -5,6 +5,7 @@ import { toUuid } from '@orbit/shared';
 import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiProposeDto } from '../wiki/dto';
+import { flagParam, listParam, WikiRetrieval } from '../wiki/wiki-retrieval';
 import { answerFor, WikiService, WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -35,7 +36,54 @@ export class RunnerWikiController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly wiki: WikiService,
+    private readonly retrieval: WikiRetrieval,
   ) {}
+
+  /**
+   * `wiki_search` (contract `agentSurface.toolSpecs`): entries only, each saying which legs found it.
+   *
+   * WHAT A SESSION SEES IS THE ROLE'S, NOT THIS REQUEST'S. It reads `active` entries of the space its
+   * workspace is bound to — a pending proposal is visible only to the session that made it
+   * (`readBoundary`), so this route takes no status parameter and the session's own proposals are
+   * added by the retrieval behind it, never by a caller asking for them.
+   *
+   * `kind` (the tool spec's `kinds`, joined with commas), `topic`, `trust`, `paths` and `limit`
+   * narrow within that boundary and cannot widen it: the space is resolved from the calling session,
+   * and another codebase's entries are simply not in scope.
+   */
+  @Get('search')
+  async search(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Query('q') q?: string,
+    @Query('kind') kind?: string | string[],
+    @Query('topic') topic?: string,
+    @Query('trust') trust?: string | string[],
+    @Query('paths') paths?: string | string[],
+    @Query('limit') limit?: string,
+    @Query('semantic') semantic?: string,
+  ) {
+    const sessionId = await this.callingSession(runner, callingSessionId);
+    if (!sessionId) {
+      throw new BadRequestException(
+        'missing session context: what a session may read is what its bound workspace shares, so this door needs X-Orbit-Session-Id',
+      );
+    }
+    await this.assertNotExcluded(sessionId);
+    const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
+    return this.retrieval.search({
+      ownerId: runner.ownerId,
+      sessionId,
+      spaceId,
+      q,
+      kinds: listParam(kind),
+      topic: topic?.trim() || undefined,
+      trust: listParam(trust),
+      paths: listParam(paths),
+      limit: limit === undefined ? undefined : Number(limit),
+      semantic: flagParam(semantic),
+    });
+  }
 
   /**
    * Propose what this session learned: the one write an agent has (`wiki_propose`).
