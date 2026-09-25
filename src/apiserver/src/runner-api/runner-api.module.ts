@@ -35,6 +35,8 @@ import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
 import { IntegrationJobRelay } from './integration-job-relay';
 import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
 import { WatchesModule } from '../watches/watches.module';
+import { WikiModule } from '../wiki/wiki.module';
+import { RunnerWikiController } from './runner-wiki.controller';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -58,6 +60,9 @@ import { WatchesModule } from '../watches/watches.module';
     OutcomeReconcilerModule,
     // RunnerWatchesController reads and writes through the one WatchesService the user door uses.
     WatchesModule,
+    // And RunnerWikiController through the one WikiService the user door writes with: one entry point
+    // underneath both doors is what makes "there is one write path" true rather than intended.
+    WikiModule,
   ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
@@ -74,6 +79,7 @@ import { WatchesModule } from '../watches/watches.module';
     RunnerNotifyController,
     RunnerProjectsController,
     RunnerWatchesController,
+    RunnerWikiController,
   ],
   providers: [
     RunnerAuthGuard,
