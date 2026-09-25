@@ -1,0 +1,39 @@
+{
+  "about": [
+    "The \"Tasks created here\" row above a session's composer: its fixed words and the sentence its",
+    "collapsed form writes — one set of cases both clients are proved against. The shared",
+    "`sessionCreatedTasks.spec.ts` checks `createdTasksCountLine` and `SESSION_CREATED_TASKS_COPY`",
+    "(@orbit/shared, what the web renders) against this file; the native client reads the same file,",
+    "so the two ends cannot drift into two sentences.",
+    "",
+    "`copy`: the row's fixed words. `replacesPrefix` is followed directly by the replaced task's",
+    "title, `createdInChip` (the Tasks page's filter chip) by the session's title.",
+    "",
+    "`countLine`: `{running, failed, done, total}` → `text`, the counts exactly as",
+    "`GET /sessions/:id/created-tasks` returns them (they count rows, not tasks). `N running` and",
+    "`N failed` are written only when N > 0; `done/total done` always is; the parts are joined by",
+    "\" · \" (U+00B7 between two spaces).",
+    "",
+    "`singleNamesTheTask`: when `total` is 1 the collapsed row writes no count sentence; it names",
+    "the task and shows its status pill instead, as the Watching row does. With `total` 0 the session",
+    "created nothing and there is no row."
+  ],
+  "copy": {
+    "title": "Tasks created here",
+    "viewAll": "View all in Tasks ›",
+    "openProject": "Open project ›",
+    "replacesPrefix": "Replaces ",
+    "createdInChip": "Created in "
+  },
+  "singleNamesTheTask": true,
+  "countLine": [
+    { "running": 2, "failed": 1, "done": 4, "total": 8, "text": "2 running · 1 failed · 4/8 done" },
+    { "running": 0, "failed": 0, "done": 8, "total": 8, "text": "8/8 done" },
+    { "running": 0, "failed": 1, "done": 0, "total": 3, "text": "1 failed · 0/3 done" },
+    { "running": 3, "failed": 0, "done": 0, "total": 3, "text": "3 running · 0/3 done" },
+    { "running": 1, "failed": 0, "done": 1, "total": 2, "text": "1 running · 1/2 done" },
+    { "running": 0, "failed": 0, "done": 0, "total": 4, "text": "0/4 done" },
+    { "running": 0, "failed": 2, "done": 6, "total": 8, "text": "2 failed · 6/8 done" },
+    { "running": 12, "failed": 3, "done": 97, "total": 118, "text": "12 running · 3 failed · 97/118 done" }
+  ]
+}

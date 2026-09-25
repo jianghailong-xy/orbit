@@ -28,6 +28,7 @@ import { ProjectsController } from '../projects/projects.controller';
 import { TaskListsController } from '../task-lists/task-lists.controller';
 import { TasksController } from '../tasks/tasks.controller';
 import { TaskCompletionEvidenceController } from '../tasks/task-completion-evidence.controller';
+import { SessionCreatedTasksController } from '../tasks/session-created-tasks.controller';
 import { AdminController } from '../users/admin.controller';
 import { RunnerAgentsController } from '../runner-api/runner-agents.controller';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
@@ -79,6 +80,7 @@ const CONTROLLERS = [
   TaskListsController,
   TasksController,
   TaskCompletionEvidenceController,
+  SessionCreatedTasksController,
   AdminController,
   RunnerAgentsController,
   RunnerApiController,

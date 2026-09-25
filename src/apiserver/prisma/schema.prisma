@@ -4054,6 +4054,10 @@ model Task {
   @@index([discoveredFromProjectId], map: "task_discovered_from_project_idx")
   @@index([sourceTaskId], map: "task_source_task_idx")
   @@index([sourceSessionId], map: "task_source_session_idx")
+  /// "Which tasks did this session create": a session's "Tasks created here" row and the task
+  /// list's `?creatorSessionId=` scope, plus the lookup side of the column's SET NULL on session
+  /// purge (migration 0305). Plain, not partial — nearly every task has a creator session.
+  @@index([creatorSessionId], map: "task_creator_session_idx")
   /// The criterion declaration's lookup index, and the referencing side of its foreign key. Both
   /// directions need it: "which work serves this criterion" is the read, and without it every
   /// criterion delete scans `task` to find the rows its SET NULL applies to.

@@ -56,8 +56,11 @@ export class TasksController {
   }
 
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.tasks.list(user.userId);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('creatorSessionId', PublicIdPipe) creatorSessionId?: string,
+  ) {
+    return this.tasks.list(user.userId, { creatorSessionId });
   }
 
   // Kept above :id so Nest never interprets the literal "page" as a task UUID.
@@ -76,6 +79,7 @@ export class TasksController {
     @Query('labels') labels?: string | string[],
     @Query('q') q?: string,
     @Query('counts') counts?: string,
+    @Query('creatorSessionId', PublicIdPipe) creatorSessionId?: string,
   ) {
     return this.tasks.listPage(user.userId, {
       cursor,
@@ -86,6 +90,7 @@ export class TasksController {
       labels,
       q,
       counts,
+      creatorSessionId,
     });
   }
 
@@ -97,8 +102,9 @@ export class TasksController {
     @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
     @Query('assigneeId', PublicIdPipe) assigneeId?: string,
     @Query('labels') labels?: string | string[],
+    @Query('creatorSessionId', PublicIdPipe) creatorSessionId?: string,
   ) {
-    return this.tasks.taskCounts(user.userId, { listId, assigneeId, labels });
+    return this.tasks.taskCounts(user.userId, { listId, assigneeId, labels, creatorSessionId });
   }
 
   // Above :id, like "page" and "labels" — none of these literals is a task uuid.

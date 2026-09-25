@@ -1149,6 +1149,9 @@ function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
   if (typeof scope.assigneeId === 'string') {
     clauses.push(Prisma.sql`t.assignee_id = ${scope.assigneeId}::uuid`);
   }
+  if (typeof scope.creatorSessionId === 'string') {
+    clauses.push(Prisma.sql`t.creator_session_id = ${scope.creatorSessionId}::uuid`);
+  }
   // Mirror of the `labels.hasEvery` filter listPage puts on every other tab. The Ready tab is the
   // one scope that reaches the database as SQL rather than as a Prisma where, so a filter added
   // to the object form and not here is not a type error anywhere — it just silently stops
@@ -1428,6 +1431,14 @@ export interface ListTasksPageQuery {
   q?: string;
   /** `'none'` drops the aggregate block (and `total`) from the response. Omitted = include it. */
   counts?: string;
+  /**
+   * Tasks created from exactly this session (`creator_session_id`) — where a session's "Tasks
+   * created here" row sends "View all". A scope like `projectId`, and like it never checked
+   * against the session table: an id that names nothing, or another owner's session, narrows to
+   * nothing. The tasks as created, not followed along their supersession chains — that is the
+   * row's reading, and this page lists tasks.
+   */
+  creatorSessionId?: string;
 }
 
 /** The scope-wide tallies: identical for every tab, because none of them reads a filter. */
@@ -1447,6 +1458,10 @@ export interface LabelSummaryQuery {
   listId?: string;
   assigneeId?: string;
 }
+
+/** The scope `GET /tasks/counts` takes: the same one the paged list's tallies are read over. */
+export type TaskCountsQuery = LabelSummaryQuery &
+  Pick<ListTasksPageQuery, 'labels' | 'creatorSessionId'>;
 
 /** How many labels one summary reports. See labelSummary for why it is capped at all. */
 export const TASK_LABEL_SUMMARY_MAX = 500;
@@ -5982,9 +5997,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
   }
 
-  async list(ownerId: string) {
+  async list(ownerId: string, query: Pick<ListTasksPageQuery, 'creatorSessionId'> = {}) {
+    const where: Prisma.TaskWhereInput = { ownerId };
+    // The paged list's scope of the same name, for the native task list, which reads this one.
+    if (query.creatorSessionId) {
+      if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');
+      where.creatorSessionId = query.creatorSessionId;
+    }
     const tasks = await this.prisma.task.findMany({
-      where: { ownerId },
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         // runner is included so the batch-run modal can show which runners back the
@@ -6066,6 +6087,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       query.labels,
       query.q,
       query.counts,
+      query.creatorSessionId,
     ]);
     return this.listPageSingleFlight.run(key, () =>
       this.serializeListPage(ownerId, () => this.loadListPage(ownerId, query)),
@@ -6129,6 +6151,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (query.assigneeId) {
       if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');
       scopedWhere.assigneeId = query.assigneeId;
+    }
+    // Scope too: the tab badges then say how the session's own tasks are doing.
+    if (query.creatorSessionId) {
+      if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');
+      scopedWhere.creatorSessionId = query.creatorSessionId;
     }
     // Scope, not filter: unlike `q` below, a label narrows the tab badges too. The question a
     // label filter is asked is "how far along is this batch", and counts that answered it for the
@@ -6270,12 +6297,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * every tab — asking for them again with each tab's first page was recomputing a constant.
    * Given their own request they are fetched once per scope and read from cache thereafter.
    */
-  taskCounts(ownerId: string, query: LabelSummaryQuery & { labels?: string | string[] } = {}) {
+  taskCounts(ownerId: string, query: TaskCountsQuery = {}) {
     const key = JSON.stringify([
       ownerId,
       query.listId,
       query.assigneeId,
       query.labels,
+      query.creatorSessionId,
     ]);
     return this.taskCountsSingleFlight.run(key, () =>
       // Counts and page rows are two views of the same owner's task library. Serialize them on the
@@ -6284,10 +6312,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private async loadTaskCounts(
-    ownerId: string,
-    query: LabelSummaryQuery & { labels?: string | string[] },
-  ) {
+  private async loadTaskCounts(ownerId: string, query: TaskCountsQuery) {
     const scope: Prisma.TaskWhereInput = { ownerId };
     if (query.listId === 'none') scope.listId = null;
     else if (query.listId) {
@@ -6297,6 +6322,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (query.assigneeId) {
       if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');
       scope.assigneeId = query.assigneeId;
+    }
+    if (query.creatorSessionId) {
+      if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');
+      scope.creatorSessionId = query.creatorSessionId;
     }
     const labelFilter = parseLabelsQuery(query.labels);
     if (labelFilter.length) scope.labels = { hasEvery: labelFilter };

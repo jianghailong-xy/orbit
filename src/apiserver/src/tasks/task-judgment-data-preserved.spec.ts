@@ -1197,7 +1197,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // is not another writer of the DONE fence and names none of the six preserved objects — and it
       // has no INSERT, UPDATE or DELETE. The `project_acceptance_*` tables are not named, and
       // neither is the 0177 pair.
-      '0303_project_settled_unmerged'],
+      '0303_project_settled_unmerged',
+      // `task_creator_session_idx`: one btree index on `task.creator_session_id`, a column that
+      // already existed. Read against every claim above: one `CREATE INDEX IF NOT EXISTS` and
+      // nothing else — no function, trigger, type, column or constraint is created, altered or
+      // dropped, so it is not another writer of the DONE fence and names none of the six preserved
+      // objects. `task` is named only as the table the index is built on: no column of it is
+      // added, dropped or retyped, `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named, and no
+      // `project_acceptance_*` object is. No INSERT, UPDATE or DELETE: the build reads every task
+      // row once and writes none.
+      '0305_task_creator_session_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
