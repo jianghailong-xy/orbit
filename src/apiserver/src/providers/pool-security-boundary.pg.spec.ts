@@ -233,6 +233,19 @@ function credentialsIn(text: string, ciphertexts: Iterable<string>): string[] {
   return found;
 }
 
+/**
+ * What a door did with a request, without reading why: the assertions on another owner's pool are about
+ * what the door resolved and wrote, and a refusal is only checked AFTER that — never by its wording.
+ */
+async function settle(request: Promise<unknown>): Promise<'went through' | 'refused'> {
+  try {
+    await request;
+    return 'went through';
+  } catch {
+    return 'refused';
+  }
+}
+
 /** Every route the given controllers declare, as `METHOD path/with/:params`. */
 function routesOf(...controllers: Array<new (...args: never[]) => unknown>): string[] {
   return controllers.flatMap((controller) => {
@@ -465,7 +478,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     const own = await sessions.create(bob, { prompt: 'hello', title: 'on his pool', workspaceId: at.workspaceId, provider: bobPool.slug });
     assert.equal((await recorded(own.id)).provider, bobPool.slug);
 
-    await assert.rejects(
+    const attempt = await settle(
       sessions.create(bob, { prompt: 'hello', title: 'on her pool', workspaceId: at.workspaceId, provider: alicePool.slug }),
     );
     assert.deepEqual(
@@ -473,15 +486,17 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
       [],
       'a session of his was written on her pool',
     );
+    assert.equal(attempt, 'refused');
   });
 
   await t.test("(A2) a live session switches onto its owner's own pool, and onto another owner's pool not at all", async () => {
     const at = await machine(db, bob, 'bob-switches');
     const session = await live(db, bob, at, 'claude');
 
-    await assert.rejects(sessions.updateConfig(bob, session, { provider: alicePool.slug }));
+    const attempt = await settle(sessions.updateConfig(bob, session, { provider: alicePool.slug }));
     assert.equal((await recorded(session)).provider, 'claude', 'his session was moved onto her pool');
     assert.equal(await db.conversationTurn.count({ where: { sessionId: session } }), 0, 'a reload was queued onto her pool');
+    assert.equal(attempt, 'refused');
 
     await sessions.updateConfig(bob, session, { provider: bobPool.slug });
     assert.equal((await recorded(session)).provider, bobPool.slug);
@@ -492,7 +507,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     const at = await machine(db, bob, 'bob-revives');
     const session = await ended(db, bob, at, 'claude');
 
-    await assert.rejects(
+    const attempt = await settle(
       sessions.resume(bob, session, { clientTurnId: randomUUID(), content: 'again', provider: alicePool.slug }),
     );
     assert.deepEqual(
@@ -500,6 +515,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
       { provider: 'claude', status: RunStatus.FAILED, poolMemberProviderId: null, turns: 0 },
       'his session was revived onto her pool',
     );
+    assert.equal(attempt, 'refused');
 
     await sessions.resume(bob, session, { clientTurnId: randomUUID(), content: 'again', provider: bobPool.slug });
     const revived = await recorded(session);
@@ -512,14 +528,15 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     const pinned = await tasks.create(bob, { title, provider: bobPool.slug, ...TASK_CHECK } as never);
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: pinned.id } })).provider, bobPool.slug);
 
-    await assert.rejects(tasks.create(bob, { title: `${title} on hers`, provider: alicePool.slug, ...TASK_CHECK } as never));
-    await assert.rejects(tasks.update(bob, pinned.id, { provider: alicePool.slug }));
+    const created = await settle(tasks.create(bob, { title: `${title} on hers`, provider: alicePool.slug, ...TASK_CHECK } as never));
+    const repinned = await settle(tasks.update(bob, pinned.id, { provider: alicePool.slug }));
     assert.deepEqual(
       await db.task.findMany({ where: { ownerId: bob, provider: alicePool.slug }, select: { title: true } }),
       [],
       'a task of his was pinned to her pool',
     );
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: pinned.id } })).provider, bobPool.slug);
+    assert.deepEqual({ created, repinned }, { created: 'refused', repinned: 'refused' });
   });
 
   await t.test("(A2) the provider list an agent reads names its owner's own pool, and another owner's not at all", async () => {
@@ -565,13 +582,13 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
 
     const toHers = to(herAgent);
     assert.ok(toHers, 'no delivery was made for the second mention');
-    assert.equal(toHers.targetSessionId, null, 'the mention opened a session on her pool');
-    assert.equal(toHers.errorCode, 'PROVIDER_UNAVAILABLE');
     assert.deepEqual(
       (await db.session.findMany({ where: { workspaceId: herAgent.workspaceId }, select: { id: true } })).map((s) => s.id),
       [forged],
-      'a session was opened for the mention',
+      'the mention opened a session on her pool',
     );
+    assert.equal(toHers.targetSessionId, null, 'the mention was bound to a session');
+    assert.equal(toHers.errorCode, 'PROVIDER_UNAVAILABLE');
   });
 
   await t.test("(A3) the claim hands another owner's session none of the pool's tokens, whether it names the pool or a member", async () => {
