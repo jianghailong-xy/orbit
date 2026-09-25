@@ -112,8 +112,17 @@ async function wholeTranscript(token: string, sessionId?: string): Promise<Share
  * logged-out viewer still sees them. Links to anything the conversation names go where the link's
  * scope sends them (PublicLinkResolverCtx): under a task link, the task and its runs to their pages
  * here; everything else, and everything a session link's conversation names, is words.
+ *
+ * One page per conversation: a link from one run to another is the same route with another id, so
+ * the page is keyed by it — the pages scrolled in above, the cursor to the next one and where the
+ * reader landed all belong to the conversation they were read from.
  */
 export function SharedSessionPage() {
+  const { token = '', sessionId } = useParams();
+  return <SharedConversation key={`${token}/${sessionId ?? ''}`} />;
+}
+
+function SharedConversation() {
   const { token = '', sessionId: sessionParam } = useParams();
   // A conversation under the link rather than its root, in the spelling every id here has.
   const sessionId = sessionParam ? routeId(sessionParam) ?? undefined : undefined;
