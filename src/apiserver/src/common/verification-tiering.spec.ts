@@ -320,7 +320,10 @@ test('(k) the tiers forbid measuring a subtraction with a branch diff', () => {
 // (l) ----------------------------------------------------------------------------------------------
 test('(l) tiering added no service and nothing that keeps running', () => {
   const compose = read('docker-compose.yml');
-  const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gmu)].map((match) => match[1]);
+  // Top-level `x-*` blocks are Compose extension fields (the `x-logging` anchor), never services.
+  const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
+  const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gmu)]
+    .map((match) => match[1]);
   assert.deepEqual(services.sort(),
     ['apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web']);
 

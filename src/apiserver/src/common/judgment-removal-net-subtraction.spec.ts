@@ -107,9 +107,12 @@ test('(y) nothing at or after the removal re-creates what it dropped', () => {
 
 test('(z) no compose service or resident process is added', () => {
   const compose = readFileSync(path.join(ROOT, 'docker-compose.yml'), 'utf8');
-  // `services:` is the first line and `volumes:` is the only other top-level key, so the service
-  // block is everything between them. Counting the whole file would count the named volume too.
-  const services = compose.slice(0, compose.indexOf('\nvolumes:'));
+  // Top-level `x-*` blocks are Compose extension fields (the `x-logging` anchor), never services.
+  // Without them `services:` is the first key and `volumes:` the only other top-level one, so the
+  // service block is everything before `volumes:`. Counting the whole file would count the named
+  // volume too.
+  const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
+  const services = withoutExtensions.slice(0, withoutExtensions.indexOf('\nvolumes:'));
   const names = [...services.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gmu)].map((match) => match[1]);
   assert.deepEqual(names, ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'],
     `compose declares ${names.length} services: ${names.join(', ')}`);

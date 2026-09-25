@@ -304,7 +304,10 @@ test('(c) nothing still schedules the four removed suites', () => {
 // (i) ---------------------------------------------------------------------------------------------
 test('(i) this is subtraction: no new service, no new resident process', () => {
   const compose = read('docker-compose.yml');
-  const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
+  // Top-level `x-*` blocks are Compose extension fields (the `x-logging` anchor), never services.
+  const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
+  const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)]
+    .map((match) => match[1]);
   assert.deepEqual(services.sort(),
     ['apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web']);
   assert.equal(/restart:\s*unless-stopped/.test(REMOVAL_SQL), false);
