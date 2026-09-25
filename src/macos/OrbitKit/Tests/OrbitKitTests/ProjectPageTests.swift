@@ -200,6 +200,67 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertNil(ProjectPage.integrationFacts(ProjectIntegrationView(), now: Self.now))
     }
 
+    // MARK: The landing in flight
+
+    /// The row the owner approved: `◌ Landing <task> · checking · 1m 20s`.
+    func testTheLandingLineNamesTheTaskAndCountsSecondsWhileTheChecksRun() {
+        let view = ProjectIntegrationView(
+            integratingCount: 1, queuedCount: 0,
+            inFlight: .init(taskTitle: "T2 wiki 契约、迁移与共享类型", state: "RUNNING",
+                            startedAt: iso(80)))
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
+            what: "T2 wiki 契约、迁移与共享类型", running: true, state: "checking", clock: "1m 20s"))
+    }
+
+    func testTheLandingLineIsQueuedAndStillWhileTheJobWaitsItsTurn() {
+        let view = ProjectIntegrationView(
+            integratingCount: 0, queuedCount: 1,
+            inFlight: .init(taskTitle: "T1", state: "QUEUED", startedAt: iso(40)))
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
+            what: "T1", running: false, state: "queued", clock: "0m 40s"))
+    }
+
+    /// The oldest job's state and clock, but the COUNT in the name slot: a title would have said
+    /// "this is the only thing happening", which is the one thing the line must not say.
+    func testTheLandingLineNamesTheCountWhenSeveralAreInFlight() {
+        let view = ProjectIntegrationView(
+            integratingCount: 2, queuedCount: 1,
+            inFlight: .init(taskTitle: "T1", state: "RUNNING", startedAt: iso(80)))
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.what, "3 jobs")
+    }
+
+    /// Nothing in flight is the row's absence, and so is a project whose server never described a
+    /// job — an older apiserver, or one that has nothing to describe.
+    func testTheLandingLineIsAbsentWhenNothingIsLanding() {
+        XCTAssertNil(ProjectPage.landingLine(
+            ProjectIntegrationView(integratingCount: 0, queuedCount: 0, inFlight: nil), now: Self.now))
+        XCTAssertNil(ProjectPage.landingLine(ProjectIntegrationView(), now: Self.now))
+    }
+
+    /// A job that names no task — a promotion of the project's own branch, a merge check — keeps
+    /// the row's word and state; an instant the clock cannot read counts from zero rather than
+    /// printing a number nobody sent.
+    func testTheLandingLineKeepsItsWordsForAJobWithNoTaskAndNoReadableClock() {
+        let view = ProjectIntegrationView(
+            integratingCount: 1, queuedCount: 0,
+            inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: "not a date"))
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
+            what: nil, running: true, state: "checking", clock: "0m 0s"))
+    }
+
+    /// Minutes AND seconds, at every length: this is not `RelativeTime.span`, which rounds to the
+    /// largest unit it needs and would show "2m" twice a minute apart.
+    func testTheLandingClockNeverRoundsAwayTheSeconds() {
+        XCTAssertEqual(ProjectPage.landingClock(80), "1m 20s")
+        XCTAssertEqual(ProjectPage.landingClock(40), "0m 40s")
+        XCTAssertEqual(ProjectPage.landingClock(0), "0m 0s")
+        XCTAssertEqual(ProjectPage.landingClock(59), "0m 59s")
+        XCTAssertEqual(ProjectPage.landingClock(3_600), "60m 0s")
+        // A clock a little behind the server (skew) counts from zero, never backwards.
+        XCTAssertEqual(ProjectPage.landingClock(-5), "0m 0s")
+        XCTAssertEqual(RelativeTime.span(80), "1m")   // what this deliberately is not
+    }
+
     // MARK: Tasks
 
     func testTaskBandsFollowTheWebsOrder() {

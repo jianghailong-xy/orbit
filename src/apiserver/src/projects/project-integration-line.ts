@@ -246,6 +246,26 @@ export async function readProjectIntegrationView(
        AND "main_sync_sha" IS NOT NULL
      ORDER BY "finished_at" DESC, "id" DESC
      LIMIT 1`);
+  // The oldest job in flight, which is the one the two counts above are waiting on and the one the
+  // Work overview card's live line names. Not filtered by kind, deliberately: it is the same rows
+  // the counts count, so the line and the numbers can never be about different sets of jobs.
+  //
+  // Its clock starts at the claim for a running job and at the enqueue for a queued one — a QUEUED
+  // job has never been claimed, so the two spellings are one COALESCE and no job reports the age of
+  // the wrong wait. `id` breaks a tie between two jobs created in the same millisecond; uuid v7
+  // sorts by time.
+  const [oldest] = await prisma.$queryRaw<Array<{
+    state: string; taskTitle: string | null; startedAt: Date;
+  }>>(Prisma.sql`
+    SELECT j."state",
+           t."title" AS "taskTitle",
+           COALESCE(j."claimed_at", j."created_at") AS "startedAt"
+      FROM "project_integration_job" j
+      LEFT JOIN "task" t ON t."id" = j."task_id"
+     WHERE j."project_id" = ${projectId}::uuid
+       AND j."state" IN ('RUNNING', 'QUEUED')
+     ORDER BY COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC
+     LIMIT 1`);
 
   const ahead = newest?.aheadOfUpstream ?? null;
   return {
@@ -257,6 +277,13 @@ export async function readProjectIntegrationView(
     integratingCount: counts?.integrating ?? 0,
     queuedCount: counts?.queued ?? 0,
     mergeCheckOnTip: mergeCheckOnTip(newest?.state ?? null),
+    inFlight: oldest
+      ? {
+        taskTitle: oldest.taskTitle,
+        state: oldest.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
+        startedAt: oldest.startedAt,
+      }
+      : null,
   };
 }
 
