@@ -91,23 +91,60 @@ final class WikiLogicTests: XCTestCase {
         XCTAssertEqual(recipe[1].lines, ["Command: curl -fsS", "Expected exit code: 0"])
     }
 
-    /// A kind this build has no schema for is drawn from what it carries rather than not at all.
+    /// A kind this build has no schema for is drawn from what it carries rather than not at all, in
+    /// the order its keys arrive.
     func testAKindWithNoSchemaIsDrawnFromWhatItCarries() {
         let rows = WikiLogic.fieldRows(kind: .unknown, fields: .object(["probe": .string("curl"),
                                                                         "contract": .string("200")]))
-        XCTAssertEqual(rows.map(\.label), ["Contract", "Probe"])
+        XCTAssertEqual(rows.map(\.label), ["Probe", "Contract"])
     }
 
-    /// Every line of the old value removed and every line of the new one added; a key the op does
-    /// not name carries over, so it is not drawn.
+    /// The order keys arrive in from a `jsonb` column — shortest first, then bytewise — which is the
+    /// order the web's `Object.entries` walks them in.
+    func testKeysGoInTheOrderJsonbKeepsThem() {
+        XCTAssertEqual(WikiLogic.jsonbOrder(["summary", "title", "anchors", "fields", "aliases", "topics"]),
+                       ["title", "fields", "topics", "aliases", "anchors", "summary"])
+        // Every phase-1 kind's nested fields arrive in the registry's order anyway.
+        for (_, nested) in WikiLogic.nestedFields {
+            XCTAssertEqual(WikiLogic.jsonbOrder(nested), nested)
+        }
+    }
+
+    /// Every line of the old value removed and every line of the new one added, one hunk per change in
+    /// the order the changes arrive; a key the op does not name carries over, so it is not drawn.
     func testAnAmendmentsDiff() {
         let hunks = WikiLogic.changesDiff(
             before: .object(["summary": .string("Old"), "title": .string("Same")]),
             changes: .object(["summary": .string("New"), "topics": .array([.string("deploy-ops")])]))
-        XCTAssertEqual(hunks.map(\.label), ["Summary", "Topics"])
-        XCTAssertEqual(hunks[0].lines, [.init(sign: .removed, text: "Old"), .init(sign: .added, text: "New")])
-        XCTAssertEqual(hunks[1].lines, [.init(sign: .added, text: "deploy-ops")])
+        XCTAssertEqual(hunks.map(\.label), ["Topics", "Summary"])
+        XCTAssertEqual(hunks[1].lines, [.init(sign: .removed, text: "Old"), .init(sign: .added, text: "New")])
+        XCTAssertEqual(hunks[0].lines, [.init(sign: .added, text: "deploy-ops")])
         XCTAssertTrue(WikiLogic.changesDiff(before: nil, changes: nil).isEmpty)
+    }
+
+    /// A card's anchors: the draft's own, else the ones the named entry stands on — a commit by its
+    /// whole sha, as the web's card lists it.
+    func testACardsAnchorLines() {
+        let draft: JSONValue = .object(["anchors": .array([
+            .object(["type": .string("symbol"), "path": .string("src/a.go"), "symbol": .string("f")]),
+            .object(["type": .string("commit"), "sha": .string(WikiFixtures.sha)]),
+        ])])
+        XCTAssertEqual(WikiLogic.reviewAnchorLines(draft: draft, fallback: nil), ["src/a.go · f", WikiFixtures.sha])
+        let named = [WikiAnchor(type: .path, path: "src/runner-go/mcp.go"), WikiAnchor(type: .criterion, criterionId: "c")]
+        XCTAssertEqual(WikiLogic.reviewAnchorLines(draft: .object([:]), fallback: named), ["src/runner-go/mcp.go"])
+        XCTAssertEqual(WikiLogic.reviewAnchorLines(draft: nil, fallback: nil), [])
+    }
+
+    /// An anchor goes back as a proposer writes it: the server's last check and the public-id twin it
+    /// adds beside a criterion's id are keys no anchor type names, and the door refuses them.
+    func testAnAnchorGoesBackAsWritten() {
+        let echoed: JSONValue = .object([
+            "type": .string("criterion"), "criterionId": .string("3dLgnjLcmdUL6pGaRCT2xr"),
+            "criterionPublicId": .string("3dLgnjLcmdUL6pGaRCT2xr"),
+            "check": .object(["state": .string("verified")]),
+        ])
+        XCTAssertEqual(WikiLogic.anchorInput(echoed),
+                       .object(["type": .string("criterion"), "criterionId": .string("3dLgnjLcmdUL6pGaRCT2xr")]))
     }
 
     // MARK: the home page

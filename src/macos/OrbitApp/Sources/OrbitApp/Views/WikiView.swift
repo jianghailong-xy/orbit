@@ -101,16 +101,13 @@ struct WikiHomePage: View {
     /// with the repository it describes under its name.
     private var spacePicker: some View {
         Menu {
+            // A toggle per space, not a button: a menu draws a toggle's tick in its own column, and
+            // takes the label's second text as the line under the name — the repository.
             ForEach(content.spaces) { space in
-                Button {
-                    actions.pickSpace(space.slug)
-                } label: {
-                    Label {
-                        Text(space.slug)
-                        if let repo = space.repoUrlNorm { Text(repo) }
-                    } icon: {
-                        if space.id == content.space.id { Image(systemName: "checkmark") }
-                    }
+                Toggle(isOn: Binding(get: { space.id == content.space.id },
+                                     set: { if $0 { actions.pickSpace(space.slug) } })) {
+                    Text(space.slug)
+                    if let repo = space.repoUrlNorm { Text(repo) }
                 }
             }
         } label: {
@@ -146,6 +143,8 @@ struct WikiHomePage: View {
             }
         case .principles:
             Section {
+                bandHeader(WikiCopy.principles, count: content.principles.count,
+                           badge: content.principlesAllOwner ? WikiCopy.trustLabel(.owner) : nil)
                 if content.principles.isEmpty {
                     empty(WikiCopy.noEntries)
                 } else {
@@ -153,45 +152,38 @@ struct WikiHomePage: View {
                         entryRow(entry, detail: entry.summary, time: entry.validFrom)
                     }
                 }
-            } header: {
-                bandHeader(WikiCopy.principles, count: content.principles.count,
-                           badge: content.principlesAllOwner ? WikiCopy.trustLabel(.owner) : nil)
             }
         case .topics:
             Section {
+                bandHeader(WikiCopy.topics, count: content.topics.count)
                 if content.topics.isEmpty {
                     empty(WikiCopy.noTopics)
                 } else {
                     ForEach(content.topics) { topic in topicRow(topic) }
                 }
-            } header: {
-                bandHeader(WikiCopy.topics, count: content.topics.count)
             }
         case .recentDecisions:
             Section {
+                bandHeader(WikiCopy.recentDecisions, count: content.recentDecisions.count)
                 if content.recentDecisions.isEmpty {
                     empty(WikiCopy.noDecisions)
                 } else {
                     ForEach(content.recentDecisions) { entry in decisionRow(entry) }
                 }
-            } header: {
-                bandHeader(WikiCopy.recentDecisions, count: content.recentDecisions.count)
             }
         case .recentlyChanged:
             Section {
+                bandHeader(WikiCopy.recentlyChanged)
                 if content.recentlyChanged.isEmpty {
                     empty(WikiCopy.noChanges)
                 } else {
                     ForEach(content.recentlyChanged) { item in changeRow(item) }
                 }
-            } header: {
-                bandHeader(WikiCopy.recentlyChanged)
             }
         case .agentsUsed:
             Section {
-                usage
-            } header: {
                 bandHeader(WikiCopy.agentsUsed, hint: WikiCopy.agentsUsedHint)
+                usage
             }
         }
     }
@@ -253,6 +245,9 @@ struct WikiHomePage: View {
 
     // MARK: rows
 
+    /// A band's heading, as the first row of its band rather than a section header: a plain list pins
+    /// its section headers, and on iOS 26 a pinned header has no backing, so it drew over the rows
+    /// scrolling under it. The mock's headings scroll with their bands.
     private func bandHeader(_ title: String, count: Int? = nil, badge: String? = nil,
                             hint: String? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -270,7 +265,8 @@ struct WikiHomePage: View {
             }
             Spacer(minLength: 0)
         }
-        .textCase(nil)
+        .padding(.top, 14)
+        .listRowSeparator(.hidden)
     }
 
     private func empty(_ text: String) -> some View {
@@ -450,6 +446,9 @@ struct WikiEntryPage: View {
     var now: Date = Date()
     /// A session's title, when this client holds one; the row falls back to the id.
     var sessionTitle: (String) -> String? = { _ in nil }
+    /// The title of the task or session a source cites, once its card has been read — the web draws
+    /// those two as the conversation's own link cards; anything else is its word and its record.
+    var sourceTitle: (WikiSource) -> String? = { _ in nil }
     var busy = false
     var actions = WikiEntryActions()
 
@@ -572,7 +571,8 @@ struct WikiEntryPage: View {
             } header: {
                 countedHeader(section.title, entry.anchors?.count ?? 0)
             } footer: {
-                Text(WikiCopy.anchorsNote)
+                // What re-checks the anchors, said only when there are some to re-check.
+                if !(entry.anchors ?? []).isEmpty { Text(WikiCopy.anchorsNote) }
             }
         case .whereUsed:
             Section {
@@ -622,22 +622,32 @@ struct WikiEntryPage: View {
     /// the quote in that record. A task or a session opens.
     private func sourceRow(_ source: WikiSource) -> some View {
         let opens = source.kind == .task || (source.kind == .turn && source.locator?["turnId"] != nil)
+        let title = sourceTitle(source)
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: WikiGlyph.source(source.kind))
                     .font(.orbitMeta)
                     .foregroundStyle(Color.accentColor)
-                Text(source.kind == .turn ? "Session" : WikiLogic.sourceWord(source.kind))
+                // A turn is shown as the session it is in when it names one, as the web's card does.
+                Text(source.kind == .turn && opens ? OrbitLinkCopy.typeName(.session) : WikiLogic.sourceWord(source.kind))
                     .font(.orbitLabel.weight(.semibold))
-                Text(WikiLogic.sourceRef(source))
-                    .font(.orbitMonoFine)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                if title == nil {
+                    Text(WikiLogic.sourceRef(source))
+                        .font(.orbitMonoFine)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
                 Spacer(minLength: 0)
                 if opens {
                     Image(systemName: "chevron.forward").font(.orbitMeta).foregroundStyle(.tertiary)
                 }
+            }
+            if let title {
+                Text(title)
+                    .font(.orbitProse.weight(.semibold))
+                    .foregroundStyle(opens ? Color.accentColor : Color.primary)
+                    .lineLimit(3)
             }
             if let quote = source.quote, !quote.isEmpty {
                 Text(quote)
@@ -1032,6 +1042,10 @@ struct WikiReviewCard: View {
         if let fields = entry.fields { object["fields"] = fields }
         if let topics = entry.topics { object["topics"] = .array(topics.map(JSONValue.string)) }
         if let aliases = entry.aliases { object["aliases"] = .array(aliases.map(JSONValue.string)) }
+        if let anchors = entry.anchors, let data = try? JSONEncoder().encode(anchors),
+           let value = try? JSONDecoder().decode(JSONValue.self, from: data) {
+            object["anchors"] = value
+        }
         return .object(object)
     }
 
@@ -1046,17 +1060,9 @@ struct WikiReviewCard: View {
         }
     }
 
+    /// The draft's anchors, or the ones the named entry already stands on.
     private var anchorLines: [String] {
-        guard case .array(let anchors)? = op.payload?["entry"]?["anchors"] ?? op.payload?["changes"]?["anchors"]
-        else { return [] }
-        return anchors.map { anchor in
-            WikiLogic.anchorLabel(WikiAnchor(type: anchor["type"]?.stringValue.flatMap(WikiAnchorType.init(rawValue:)),
-                                             path: anchor["path"]?.stringValue,
-                                             symbol: anchor["symbol"]?.stringValue,
-                                             sha: anchor["sha"]?.stringValue,
-                                             command: anchor["command"]?.stringValue,
-                                             ref: anchor["ref"]?.stringValue))
-        }
+        WikiLogic.reviewAnchorLines(draft: op.payload?["entry"], fallback: entry?.anchors)
     }
 
     /// What the proposal resembles, and the note that says none.
@@ -1082,8 +1088,9 @@ struct WikiReviewCard: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label).font(.orbitLabel).foregroundStyle(.secondary)
             ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                // The dash that says "none" is a word, not code, whatever the row holds.
                 Text(line)
-                    .font(mono ? .orbitMono : .orbitProse)
+                    .font(mono && line != "—" ? .orbitMono : .orbitProse)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

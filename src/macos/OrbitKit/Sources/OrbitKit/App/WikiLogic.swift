@@ -432,13 +432,21 @@ public enum WikiLogic {
         return out
     }
 
+    /// The order an object's keys arrive in from the server, which is the order the web walks them in
+    /// (`Object.entries`): Postgres stores `jsonb` keys shortest first, then bytewise.
+    public static func jsonbOrder<S: Sequence>(_ keys: S) -> [String] where S.Element == String {
+        keys.sorted { a, b in
+            a.utf8.count != b.utf8.count ? a.utf8.count < b.utf8.count : Array(a.utf8).lexicographicallyPrecedes(b.utf8)
+        }
+    }
+
     /// The rows the Details section draws for one entry (`wikiFieldRows`): the kind's schema, in the
     /// schema's order, with the values it actually carries. A kind this build has no schema for is
-    /// drawn from whatever it carries, keys in order, rather than not at all.
+    /// drawn from whatever it carries, in the order it arrives, rather than not at all.
     public static func fieldRows(kind: WikiEntryKind?, fields: JSONValue?) -> [WikiFieldRow] {
         let object: [String: JSONValue]
         if case .object(let values)? = fields { object = values } else { object = [:] }
-        let keys = kind.flatMap { kindFields[$0] } ?? object.keys.sorted()
+        let keys = kind.flatMap { kindFields[$0] } ?? jsonbOrder(object.keys)
         return keys.flatMap { rows(key: $0, value: object[$0]) }
     }
 
@@ -472,7 +480,8 @@ public enum WikiLogic {
     }
 
     /// Every scalar inside a value, one line each, an object's as `Label: value` (`scalarLines`).
-    /// An object's keys go in the registry's order when it has one for them, and sorted otherwise.
+    /// An object's keys go in the registry's order when it has one for them (which is also the order
+    /// they arrive in, for every phase-1 kind), and in the order they arrive otherwise.
     private static func scalarLines(_ value: JSONValue, parent: String? = nil) -> [String] {
         switch value {
         case .string(let text):
@@ -485,7 +494,7 @@ public enum WikiLogic {
             return items.flatMap { scalarLines($0, parent: parent) }
         case .object(let values):
             let known = parent.flatMap { nestedFields[$0] } ?? []
-            let keys = known.filter { values[$0] != nil } + values.keys.filter { !known.contains($0) }.sorted()
+            let keys = known.filter { values[$0] != nil } + jsonbOrder(values.keys.filter { !known.contains($0) })
             return keys.flatMap { key in
                 scalarLines(values[key]!, parent: key).map { "\(fieldLabel(key)): \($0)" }
             }
@@ -496,14 +505,13 @@ public enum WikiLogic {
 
     /// What an amendment would change, as the red and green lines Review draws (`wikiChangesDiff`):
     /// every line of the old value removed and every line of the new one added. A key the op does not
-    /// name carries over from the base revision, so it is not drawn at all.
+    /// name carries over from the base revision, so it is not drawn at all. The hunks go in the order
+    /// the changes arrive, as the web's do.
     public static func changesDiff(before: JSONValue?, changes: JSONValue?) -> [WikiDiffHunk] {
         guard case .object(let changed)? = changes else { return [] }
         let old: [String: JSONValue]
         if case .object(let values)? = before { old = values } else { old = [:] }
-        let order = ["title", "summary", "fields", "topics", "aliases", "anchors"]
-        let keys = order.filter { changed[$0] != nil } + changed.keys.filter { !order.contains($0) }.sorted()
-        return keys.compactMap { key in
+        return jsonbOrder(changed.keys).compactMap { key in
             let after = scalarLines(changed[key]!, parent: key)
             let was = old[key].map { scalarLines($0, parent: key) } ?? []
             guard !(after.isEmpty && was.isEmpty) else { return nil }
@@ -677,14 +685,44 @@ public enum WikiLogic {
             .min { $0.1 < $1.1 }?.0
     }
 
-    /// What a card is about, as Review's card says it: the title the proposal carries (an add's or a
-    /// supersede's draft, or an amend's new title), else the title of the entry it names, else the
-    /// word `entry`.
+    /// What a card is about, as Review's card says it: the title an add's or a supersede's draft
+    /// carries, else the title of the entry the op names (an amend's new title is its diff's to say),
+    /// else the word `entry`.
     public static func cardTitle(_ card: ReviewCard, entry: WikiEntry?) -> String {
-        let draft = card.op.payload?["entry"] ?? card.op.payload?["changes"]
-        if let title = draft?["title"]?.stringValue { return title }
+        if let title = card.op.payload?["entry"]?["title"]?.stringValue { return title }
         if let title = entry?.title, !title.isEmpty { return title }
         return WikiCopy.entryWord
+    }
+
+    /// The anchor lines a card lists (`anchorsOf`): the draft's own, or the ones the named entry
+    /// already has — a path with its symbol, a commit's whole sha, a command, a record.
+    public static func reviewAnchorLines(draft: JSONValue?, fallback: [WikiAnchor]?) -> [String] {
+        func line(path: String?, symbol: String?, sha: String?, command: String?, ref: String?) -> String? {
+            if let path { return symbol.map { "\(path) · \($0)" } ?? path }
+            return sha ?? command ?? ref
+        }
+        if case .array(let anchors)? = draft?["anchors"] {
+            return anchors.compactMap {
+                line(path: $0["path"]?.stringValue, symbol: $0["symbol"]?.stringValue, sha: $0["sha"]?.stringValue,
+                     command: $0["command"]?.stringValue, ref: $0["ref"]?.stringValue)
+            }
+        }
+        return (fallback ?? []).compactMap {
+            line(path: $0.path, symbol: $0.symbol, sha: $0.sha, command: $0.command, ref: $0.ref)
+        }
+    }
+
+    /// The keys an anchor is written with (contract `anchorTypes.<type>.fields`, and `type`). What the
+    /// server sends back carries more — its last check, the public-id twin beside a criterion's id —
+    /// and a key no anchor type names is refused, so an anchor goes back with these and no others.
+    public static let anchorInputKeys: Set<String> = ["type", "path", "symbol", "regionSha256", "sha",
+                                                      "criterionId", "semanticHash", "contentHash",
+                                                      "command", "expectedExit", "ref"]
+
+    /// An anchor as a proposer writes it, from one the server sent.
+    public static func anchorInput(_ anchor: JSONValue) -> JSONValue {
+        guard case .object(let values) = anchor else { return anchor }
+        return .object(values.filter { anchorInputKeys.contains($0.key) })
     }
 
     /// The entry a card's content is drawn from: the proposal's own draft for an add or a supersede,
@@ -750,7 +788,8 @@ public struct WikiHomeContent: Equatable, Sendable {
     public let spaces: [WikiSpace]
     public let entries: [WikiEntry]
     public let timeline: [WikiTimelineItem]
-    /// Proposals waiting in every space — the banner's number, which is the drawer's.
+    /// Proposals waiting in this space — the banner's number, as the web home's Review card counts it
+    /// (the drawer's row sums every space's).
     public let proposals: Int
 
     public init(space: WikiSpace, spaces: [WikiSpace], entries: [WikiEntry],
