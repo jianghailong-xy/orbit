@@ -7,7 +7,7 @@ import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty } from './WikiCards';
 import { WikiAim } from './WikiMarks';
 import { WikiSourceList } from './WikiSources';
-import { wikiEntryQuery, wikiReviewQuery, wikiSpacesQuery } from '../lib/queries';
+import { wikiEntriesQuery, wikiEntryQuery, wikiReviewQuery, wikiSpacesQuery } from '../lib/queries';
 import {
   WIKI_ACCEPT_NOTE,
   WIKI_AFTER_RETIRE,
@@ -18,7 +18,6 @@ import {
   WIKI_CHALLENGE,
   WIKI_CHALLENGE_NOTE,
   WIKI_NO_REVIEW,
-  WIKI_PENDING_EXPIRES,
   WIKI_REINFORCE,
   WIKI_REINFORCE_NOTE,
   WIKI_REJECT_MENU,
@@ -73,6 +72,8 @@ import { decideWikiChangeset, useWikiWrite, type WikiDecision } from '../lib/wik
  * about the proposal.
  */
 export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
+  // Handed down to every card: how many entries the proposal was compared against. Null when the
+  // queue spans every space, because then there is no one corpus to name.
   const spaces = useQuery(wikiSpacesQuery());
   const spaceId = spaceSlug ? (spaces.data?.find((row) => row.slug === spaceSlug)?.id ?? null) : null;
   // With a space in the URL the queue is that space's; Review's own route has none and asks across
@@ -81,6 +82,7 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
     ...wikiReviewQuery(spaceSlug ? spaceId : null),
     enabled: !spaceSlug || spaceId !== null,
   });
+  const entries = useQuery({ ...wikiEntriesQuery(spaceSlug ? spaceId : null), enabled: spaceId !== null });
 
   const changesets = useMemo(() => review.data ?? [], [review.data]);
   const [tab, setTab] = useState<'all' | 'add' | 'amend' | 'retire'>('all');
@@ -154,7 +156,14 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
               <WikiEmpty>{WIKI_NO_REVIEW}</WikiEmpty>
             </WikiCard>
           ) : (
-            shown.map(({ changeset, op }) => <ReviewCard key={op.id} changeset={changeset} op={op} />)
+            shown.map(({ changeset, op }) => (
+              <ReviewCard
+                key={op.id}
+                changeset={changeset}
+                op={op}
+                comparedTo={entries.data ? entries.data.length : null}
+              />
+            ))
           )}
         </div>
         <div className="rv-rail">
@@ -185,15 +194,26 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
 }
 
 /** One op, as a card the owner answers. */
-function ReviewCard({ changeset, op }: { changeset: WikiChangeset; op: WikiChangesetOp }) {
+function ReviewCard({
+  changeset,
+  op,
+  comparedTo,
+}: {
+  changeset: WikiChangeset;
+  op: WikiChangesetOp;
+  /** How many entries `similar[]` was computed against, or null when the corpus is not known. */
+  comparedTo: number | null;
+}) {
   const payload = wikiOpPayload(op);
   const draft = (payload.entry ?? {}) as Record<string, unknown>;
   const changes = (payload.changes ?? {}) as Record<string, unknown>;
   const retire = op.op === 'retire';
   const diffed = !retire && Object.keys(changes).length > 0;
-  // The current revision, for the cards that show a diff: what the proposal would remove is a fact
-  // about the entry, and this read is what makes the red lines real rather than invented.
-  const target = useQuery({ ...wikiEntryQuery(diffed ? (op.entryId ?? null) : null) });
+  // The entry this op is about, read for two reasons: what a proposal would REMOVE is a fact about
+  // the entry rather than about the proposal (which is what makes the red lines real rather than
+  // invented), and a retirement's own payload names nothing but a reason — the title it retires and
+  // the kind it retires are the entry's.
+  const target = useQuery({ ...wikiEntryQuery(op.entryId ?? null) });
   const kind = (draft.kind as string) ?? (target.data?.kind ?? null);
   const title =
     typeof draft.title === 'string' ? draft.title : (target.data?.title ?? null);
@@ -319,7 +339,8 @@ function ReviewCard({ changeset, op }: { changeset: WikiChangeset; op: WikiChang
               <span className="v wk-none">
                 {op.similar.length === 0 ? (
                   <>
-                    {WIKI_SIMILAR_NONE} <span className="dim">· {wikiComparedWith(0)}</span>
+                    {WIKI_SIMILAR_NONE}
+                    {comparedTo !== null && <span className="dim"> · {wikiComparedWith(comparedTo)}</span>}
                   </>
                 ) : (
                   op.similar.map((similar) => (
@@ -328,10 +349,6 @@ function ReviewCard({ changeset, op }: { changeset: WikiChangeset; op: WikiChang
                     </div>
                   ))
                 )}
-              </span>
-              <span className="k">Expires</span>
-              <span className="v wk-none">
-                {changeset.expiresAt ? WIKI_PENDING_EXPIRES(relTime(changeset.expiresAt)) : DASH}
               </span>
             </>
           )}

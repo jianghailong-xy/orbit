@@ -39,9 +39,10 @@ export function WikiEntryRow({
   /** How many times this entry was used in the window the space read. 0 hides the number. */
   used?: number;
   selected?: boolean;
-  /** A blue dot and a tinted row: this entry moved since the reader last opened this topic. */
+  /** A blue dot: this entry moved since the reader last opened this topic. White row, like any
+   *  other — the tint below belongs to a broken anchor, which is a different and worse fact. */
   changedSinceLastVisit?: boolean;
-  /** The amber line under a row whose anchor moved: why it is held back from agents. */
+  /** Why the row is tinted amber and held back from agents: its anchor moved on main. */
   warnLine?: string | null;
   /** The entry that superseded this one, when the list already holds it. */
   successor?: WikiEntry | null;
@@ -51,7 +52,7 @@ export function WikiEntryRow({
   return (
     <div
       className={`wk-erow${superseded ? ' sup' : ''}${selected ? ' is-selected' : ''}${
-        changedSinceLastVisit ? ' changed' : ''
+        warnLine ? ' changed' : ''
       }`}
     >
       <WikiKindMark kind={entry.kind} />
