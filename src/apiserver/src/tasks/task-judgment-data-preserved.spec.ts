@@ -1198,6 +1198,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // has no INSERT, UPDATE or DELETE. The `project_acceptance_*` tables are not named, and
       // neither is the 0177 pair.
       '0303_project_settled_unmerged',
+      // `task.priority`: one INTEGER NOT NULL DEFAULT 0 column (a constant default, so catalog-only —
+      // no row is rewritten) and one partial index over it, `task_list_priority_idx` on
+      // (list_id, priority) WHERE priority > 0 AND status = 'OPEN' — `ADD COLUMN IF NOT EXISTS` and
+      // `CREATE INDEX IF NOT EXISTS`, so a deployment may run both by hand first. Read against every
+      // claim above: like 0236 and 0298 it ALTERs the table the 0177 pair lives on and reaches no
+      // stored row — every existing task reads 0, nothing is backfilled, and
+      // `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. The index
+      // holds no data of its own and its build reads rows without changing any. No function,
+      // trigger, type or constraint is created, altered or dropped — no `CREATE OR REPLACE
+      // FUNCTION`, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects — and it has no INSERT, UPDATE or DELETE. No `project_acceptance_*`
+      // object is named.
+      '0304_task_priority',
       // `task_creator_session_idx`: one btree index on `task.creator_session_id`, a column that
       // already existed. Read against every claim above: one `CREATE INDEX IF NOT EXISTS` and
       // nothing else — no function, trigger, type, column or constraint is created, altered or
