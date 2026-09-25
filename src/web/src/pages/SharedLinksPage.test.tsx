@@ -277,6 +277,32 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     expect(document.body.querySelector('.ant-modal.share-dialog .ant-modal-title')?.textContent).toBe('Share task');
   });
 
+  it('a project row has Copy, Settings and Turn off, and its Settings opens the Share dialog on that project', async () => {
+    const PROJECT: ShareLink = {
+      ...sessionLink('Claude 账号池：按订阅配额均衡派发'),
+      kind: 'PROJECT',
+      include: { taskPages: true, commentsAndFiles: false, conversations: false, toolOutput: true },
+      root: { id: 'P1', title: 'Claude 账号池：按订阅配额均衡派发', status: 'OPEN' },
+    };
+    serve([PROJECT]);
+    vi.mocked(getShareLink).mockResolvedValue({
+      link: PROJECT,
+      counts: { tasks: 12, comments: 29, files: 0, runs: 13, transcripts: 14 },
+    });
+    await open();
+
+    const [row] = rows();
+    expect(row).toMatchObject({ chips: ['Overview', 'Task pages'], actions: ['Copy', 'Settings', 'Turn off'] });
+    const project = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
+      (r) => r.querySelector('.shared-link-title')?.textContent === PROJECT.root.title,
+    );
+    await click([...project!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
+
+    await vi.waitFor(() => expect(document.body.querySelector('.ant-modal.share-dialog')).not.toBeNull());
+    expect(getShareLink).toHaveBeenCalledWith('PROJECT', 'P1');
+    expect(document.body.querySelector('.ant-modal.share-dialog .ant-modal-title')?.textContent).toBe('Share project');
+  });
+
   it('Settings opens the Share dialog on that link’s session', async () => {
     serve(LINKS);
     vi.mocked(getShareLink).mockResolvedValue({ link: RECENT, counts: { messages: 12, toolCalls: 40 } });

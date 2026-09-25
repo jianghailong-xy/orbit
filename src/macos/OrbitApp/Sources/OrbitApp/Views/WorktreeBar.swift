@@ -662,6 +662,8 @@ private struct DiffFileView: View {
 /// (status · command · age) opens as an accordion to show that shell's captured output tail.
 struct BackgroundTrayView: View {
     let procs: [BackgroundProc]
+    /// The background agents' and workflows' progress, by launching call (TranscriptState.taskProgress).
+    var progress: [String: TaskProgress] = [:]
     @State private var open = false
     @State private var expandedID: String? = nil
 
@@ -705,7 +707,7 @@ struct BackgroundTrayView: View {
     private var rows: some View {
         VStack(spacing: 0) {
             ForEach(procs) { proc in
-                BackgroundRow(proc: proc, expanded: expandedID == proc.id) {
+                BackgroundRow(proc: proc, progress: progress[proc.id], expanded: expandedID == proc.id) {
                     withAnimation(.easeOut(duration: 0.12)) {
                         expandedID = expandedID == proc.id ? nil : proc.id
                     }
@@ -741,13 +743,23 @@ struct BackgroundTrayView: View {
 /// captured output tail (or an empty-state note). Mirrors web's `BgShellRow`.
 private struct BackgroundRow: View {
     let proc: BackgroundProc
+    var progress: TaskProgress? = nil
     let expanded: Bool
     let onToggle: () -> Void
+
+    /// An async agent or a workflow rather than a shell: named by kind, and opening to its progress.
+    private var isTask: Bool { proc.kind == "agent" || proc.kind == "workflow" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 statusIcon.frame(width: 18)
+                if isTask {
+                    Text(proc.kind == "workflow" ? "Workflow" : "Agent")
+                        .font(.orbitMonoFine).foregroundStyle(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.gray.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
+                }
                 Text(proc.description ?? proc.command ?? "Background process")
                     .font(.orbitMono).lineLimit(1).truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -759,7 +771,20 @@ private struct BackgroundRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: onToggle)
-            if expanded {
+            // Where a running workflow is, or what a running agent is on — the row's second line.
+            if isTask, proc.status == "running", let progress, let line = TaskProgressCopy.trayLine(progress) {
+                Text(line).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+                    .padding(.leading, 26)
+            }
+            if expanded && isTask {
+                if let progress {
+                    TaskProgressView(progress: progress)
+                } else {
+                    Text("No progress reported yet.")
+                        .font(.orbitMeta).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else if expanded {
                 // When a human description supplies the title above, surface the actual command too —
                 // otherwise it's lost (web parity: BgShellRow renders `<Pre command prompt>` here).
                 if proc.description != nil, let cmd = proc.command {

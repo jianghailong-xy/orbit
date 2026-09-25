@@ -45,6 +45,21 @@ test('executeTask starts the owned task through TasksService and carries its act
   assert.equal(result, expected);
 });
 
+test('executeTask asks as the runner door, which waits for the project to be started', async () => {
+  let runnerDoor: boolean | undefined;
+  const tasks = {
+    execute: async (...args: unknown[]) => {
+      runnerDoor = args[5] as boolean | undefined;
+      return { ok: true };
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
+
+  await controller.executeTask(RUNNER, 'task-1', undefined, { triggerId: 'press-1' });
+
+  assert.equal(runnerDoor, true);
+});
+
 test('executeTask still starts the task for a runner that names no press', async () => {
   // Every runner predating the field sends no body at all, and Nest hands the handler `{}`.
   const seen: { triggerId?: string } = { triggerId: 'unset' };

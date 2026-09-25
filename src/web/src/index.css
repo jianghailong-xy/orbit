@@ -8271,6 +8271,15 @@ button.chat-jump-start:hover {
   line-height: 1.6;
   color: var(--text-3);
 }
+/* The action row is a wrapping flex row: the hint under it carries `flex-basis: 100%`, which is a
+   no-op unless the row is flex — it was meant to sit under the buttons and instead ran on beside
+   them (`.approval-actions` alone is not a flex container; `.card-actions` is). */
+.project-settlement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
 .project-settlement-error {
   margin-top: 10px;
 }
@@ -11164,6 +11173,50 @@ button.chat-jump-start:hover {
   padding: 40px;
 }
 
+/* ── Public project page (SharedProjectPage) ────────────────────────────────────
+   docs/mocks/share-links/04: the app project page's own blocks and CSS at its own reading width,
+   with what only its owner reads taken out. What is here is only what the public page adds. */
+.share-inner.is-wide {
+  max-width: 1040px;
+}
+.share-project-meta::before {
+  content: '·';
+  margin-right: 9px;
+  color: var(--text-4);
+}
+/* A phone keeps the status, the count and the last activity on one line (mock 07): when it started
+   is the one fact the header can give up there. */
+@media (max-width: 640px) {
+  .share-project-meta.is-started {
+    display: none;
+  }
+}
+/* Work overview on a row of its own: the Coordinator card beside it on the app page is the owner's. */
+.share-project-overview {
+  margin-bottom: 20px;
+}
+.share-project-coordinator {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+}
+.share-project-tasks {
+  margin-bottom: 24px;
+}
+/* A task's title opens its public page, and reads as the title it is on the app's row. */
+.share-project-task {
+  color: inherit;
+}
+.share-project-task:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+.pdg-footnote {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 /* ── Public task page (SharedTaskPage) ──────────────────────────────────────────
    docs/mocks/share-links/05, left half: the task's header, then one card per block in the app task
    panel's order — Dependencies, Description, Acceptance, (Inputs), Runs, (Comments). */
@@ -11553,6 +11606,16 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 12px;
   white-space: nowrap;
+}
+/* A layer that sits under another (a project's Comments & files and Conversations, under Task
+   pages): indented beneath it, and greyed out while that one is off. */
+.share-layer.is-nested {
+  padding-left: 26px;
+}
+.share-layer.is-idle .share-layer-name,
+.share-layer.is-idle .share-layer-detail,
+.share-layer.is-idle .share-layer-count {
+  color: var(--text-4);
 }
 .share-dialog-row {
   display: flex;
@@ -26833,6 +26896,75 @@ button.chat-jump-start:hover {
     grid-row: 1 / span 2;
   }
 }
+/* The Work overview's live landing line (ProjectPanoramaHeader): the card's one moving part, shown
+   only while the platform is landing work — which is exactly the minutes its counts stand still and
+   the page reads as stopped. Full width above the cells, with the same hairline under it that
+   separates the cells from each other.
+
+   The ring is the Integrating cell's own mark, and it wears that cell's brand blue while the
+   combined-tree checks run. QUEUED is the third label's grey instead: nothing is being computed, the
+   job is waiting its turn, and a row that spun through that would be reporting work that is not
+   happening. The words `checking` and `queued` say both states without colour or motion — which is
+   what lets the two decorative channels be dropped under `prefers-reduced-motion` below. */
+.project-landing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13.5px;
+}
+.project-landing-ring {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+}
+.project-landing-running .project-landing-ring {
+  color: var(--brand);
+  animation: project-landing-spin 1.6s linear infinite;
+}
+.project-landing-word {
+  flex: none;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.project-landing-running .project-landing-word {
+  color: var(--brand);
+}
+/* The row's flexible middle: the task's title, or "N jobs". It truncates rather than wrapping —
+   one row, always the same height — and it is what keeps the state and the clock right-aligned. */
+.project-landing-what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+}
+.project-landing-state,
+.project-landing-clock {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+/* Tabular figures so the count does not shuffle the words beside it as the digits change. */
+.project-landing-clock {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.project-landing-running .project-landing-clock {
+  color: var(--brand);
+}
+@keyframes project-landing-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-landing-running .project-landing-ring {
+    animation: none;
+  }
+}
 .project-work-overview > header {
   flex-wrap: wrap;
 }
@@ -29734,4 +29866,94 @@ button.chat-jump-start:hover {
   .wk-pkv > .k { padding-top: 6px; }
   .rv-head { flex-direction: column; align-items: flex-start; }
   .wk-seg { margin-left: 0; }
+}
+
+/* Background agent / workflow progress (TaskProgressBlock): the agents by phase, then the totals.
+   Opens under a Workflow card in the conversation and under its row in the tray. */
+.agent-progress {
+  border-top: 1px dashed var(--border-subtle);
+  padding: 4px 12px 8px 38px;
+  background: var(--bg-subtle);
+}
+.agent-progress-head {
+  display: flex;
+  gap: 4px;
+  margin: 8px 0 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.agent-progress-count {
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.agent-progress-agent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.agent-progress-label {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-1);
+}
+.agent-progress-now {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-3);
+}
+.agent-progress-detail {
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+.agent-progress-queued {
+  flex: none;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-4);
+}
+.agent-progress-foot:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.agent-progress-foot {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.bg-shell-detail .agent-progress {
+  border-top: none;
+  padding: 2px 2px 4px;
+  background: transparent;
+}
+.bg-shell-kind {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  color: var(--text-2);
+  background: var(--bg-hover);
+}
+.bg-shell-sub {
+  padding: 0 10px 6px 34px;
+  font-size: 11.5px;
+  color: var(--text-3);
 }

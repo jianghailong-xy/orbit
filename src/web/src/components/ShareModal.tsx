@@ -17,13 +17,16 @@ import { countOf, EXPIRY_CHOICES, previewUrl, publicLinkUrl, shortDate, viewsLin
 import { useToast } from '../lib/toast';
 
 /** One row of Includes. `layer: null` is the root's own content, which a link always includes.
- *  `warn` marks the row whose detail is a risk, said in amber once the layer is on. */
+ *  `warn` marks the row whose detail is a risk, said in amber once the layer is on. `under` names
+ *  the layer this one sits under: indented beneath it, and greyed out while it is off, since
+ *  nothing below it is shared then. */
 interface LayerRow {
   layer: ShareLayer | null;
   name: string;
-  detail: string;
+  detail: string | ((counts: ShareCounts | undefined) => string);
   count: (counts: ShareCounts) => string;
   warn?: true;
+  under?: ShareLayer;
 }
 
 /** The Conversations layer's risk, in the contract's fixed words (§8). */
@@ -41,7 +44,7 @@ interface RootKindSpec {
   shows: readonly QueryKey[];
 }
 
-/** The kinds of root this dialog is wired for. Tasks and projects join with their own links. */
+/** The kinds of root this dialog is wired for. */
 const ROOT_KINDS: { readonly [K in ShareRootKind]?: RootKindSpec } = {
   SESSION: {
     title: 'Share session',
@@ -91,6 +94,48 @@ const ROOT_KINDS: { readonly [K in ShareRootKind]?: RootKindSpec } = {
     ],
     appPath: (id) => `/tasks/${encodeId(id)}`,
     // The task panel's ⋯ reads the link under this dialog's own key, which every write here updates.
+    shows: [],
+  },
+  PROJECT: {
+    title: 'Share project',
+    publicDetail: 'Anyone with the link can view — no sign-in. They can’t change anything.',
+    layers: [
+      {
+        layer: null,
+        name: 'Overview',
+        detail: 'Goal, work overview, acceptance criteria and task graph',
+        count: () => 'Always',
+      },
+      {
+        layer: 'taskPages',
+        name: 'Task pages',
+        detail: 'Description, acceptance and runs for each task',
+        count: (counts) => countOf(counts.tasks ?? 0, 'task'),
+      },
+      {
+        layer: 'commentsAndFiles',
+        name: 'Comments & files',
+        detail: 'Written by agents and people',
+        count: (counts) =>
+          [countOf(counts.comments ?? 0, 'comment'), ...(counts.files ? [countOf(counts.files, 'file')] : [])].join(' · '),
+        under: 'taskPages',
+      },
+      {
+        layer: 'conversations',
+        name: 'Conversations',
+        // What the transcripts are, then the fixed risk sentence (§8).
+        detail: (counts) =>
+          counts
+            ? `${countOf(counts.runs ?? 0, 'run')}${(counts.transcripts ?? 0) > (counts.runs ?? 0) ? ' and the coordinator' : ''}. ${CONVERSATIONS_RISK}`
+            : CONVERSATIONS_RISK,
+        count: (counts) => countOf(counts.transcripts ?? 0, 'transcript'),
+        warn: true,
+        under: 'taskPages',
+      },
+    ],
+    appPath: (id) => `/projects/${encodeId(id)}`,
+    // The project header's pill reads the link under this dialog's own key, which every write here
+    // updates.
     shows: [],
   },
 };
@@ -303,19 +348,26 @@ export function ShareModal({
           <div className="share-layers">
             {spec.layers.map((row) => {
               const on = row.layer === null || link.include[row.layer] !== false;
+              // Under a layer that is off, this one shares nothing whatever it says: greyed out.
+              const idle = row.under !== undefined && link.include[row.under] === false;
+              const detail = typeof row.detail === 'function' ? row.detail(counts) : row.detail;
               return (
-                <div key={row.name} className="share-layer" data-layer={row.layer ?? 'overview'}>
+                <div
+                  key={row.name}
+                  className={`share-layer${row.under ? ' is-nested' : ''}${idle ? ' is-idle' : ''}`}
+                  data-layer={row.layer ?? 'overview'}
+                >
                   <Checkbox
                     className="share-layer-check"
                     checked={on}
-                    disabled={row.layer === null || busy}
+                    disabled={row.layer === null || busy || idle}
                     onChange={(e) => {
                       const layer = row.layer;
                       if (layer) putMut.mutate({ include: { [layer]: e.target.checked } });
                     }}
                   >
                     <span className="share-layer-name">{row.name}</span>
-                    <span className={`share-layer-detail${row.warn && on ? ' is-warn' : ''}`}>{row.detail}</span>
+                    <span className={`share-layer-detail${row.warn && on && !idle ? ' is-warn' : ''}`}>{detail}</span>
                   </Checkbox>
                   <span className="share-layer-count">{counts ? row.count(counts) : ''}</span>
                 </div>

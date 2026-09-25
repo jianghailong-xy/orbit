@@ -151,6 +151,30 @@ describe('the composer model control', { timeout: 60_000 }, () => {
       await vi.waitFor(() => expect(row(key)).toBeDefined(), { timeout: 20_000, interval: 20 });
     });
   };
+  /**
+   * What the pointer can do, as `useMediaQuery('(hover: hover)')` reads it. Must be called before
+   * mount: the composer decides a level-down row's gesture from this at render, and re-decides
+   * when the media query changes.
+   */
+  const stubPointer = (canHover: boolean) => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: canHover && query === '(hover: hover)',
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+  };
+  /** React's onMouseEnter, which it synthesizes from a bubbling mouseover with a relatedTarget. */
+  const hover = async (el: HTMLElement | undefined, what: string) => {
+    if (!el) throw new Error(`nothing to hover: ${what}`);
+    await act(async () => {
+      el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));
+    });
+  };
   /** Let a mutation that was going to fire, fire. */
   const settle = async () => {
     await act(async () => {
@@ -204,11 +228,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
       if (p.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
       return reply([]);
     });
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: false, media: query, onchange: null,
-      addListener: () => {}, removeListener: () => {},
-      addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
-    }));
+    stubPointer(false);
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
     Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: () => {} });
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: () => {} });
@@ -295,5 +315,38 @@ describe('the composer model control', { timeout: 60_000 }, () => {
       await vi.waitFor(() => expect(configCalls()).toHaveLength(2), { timeout: 20_000, interval: 20 });
     });
     expect(configCalls()[1]).toEqual({ effort: 'high' });
+  });
+
+  it('opens a level-down row on hover where the pointer can hover, and picks from it', async () => {
+    // The menu is one control for both clients, so the gesture is the pointer's to decide: a mouse
+    // reaches the Provider / Effort / Speed rows the way it reaches any other menu's — by hovering.
+    stubPointer(true);
+    await mount();
+    await open();
+    await hover(submenu('Provider'), 'the Provider row');
+    await act(async () => {
+      await vi.waitFor(() => expect(row('provider:deepseek')).toBeDefined(), { timeout: 20_000, interval: 20 });
+    });
+    // The level the hover opened is the same one a click opens, and it picks as before.
+    await click(row('provider:deepseek'), 'DeepSeek');
+    await act(async () => {
+      await vi.waitFor(() => expect(configCalls()).toHaveLength(1), { timeout: 20_000, interval: 20 });
+    });
+    expect(configCalls()[0]).toMatchObject({ provider: 'deepseek' });
+  });
+
+  it('leaves the tap as the gesture where there is no hover', async () => {
+    // A touch device (the default `stubPointer(false)`, and the reading a phone really gets): the
+    // pointer resting on a level-down row opens nothing — the delay is the one rc-menu would use
+    // to open it — and the tap is still what opens it.
+    await mount();
+    await open();
+    await hover(submenu('Effort'), 'the Effort row');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    expect(row('effort:high')).toBeUndefined();
+    await openSub('Effort', 'effort:high');
+    expect(row('effort:high')).toBeDefined();
   });
 });

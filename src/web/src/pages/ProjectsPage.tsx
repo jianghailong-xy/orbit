@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   SessionLifecycleState,
   type ProjectIntegrationSettings,
@@ -45,6 +45,8 @@ import { BranchMark, ProjectIntegrationLine } from '../components/ProjectIntegra
 import { ProjectOpenItems } from '../components/ProjectProgressStatus';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectGoalCard } from '../components/ProjectGoalCard';
+import { ProjectPageBlock } from '../components/ProjectPageBlocks';
+import { ProjectShareControls } from '../components/ProjectShareControls';
 import { ProjectSections } from '../components/ProjectSections';
 import {
   BucketMeter,
@@ -167,13 +169,13 @@ interface ProjectDetail extends Omit<Project, 'integration'> {
   integration?: ProjectIntegrationSettings;
 }
 
-const STATUS_COLOR: Record<Project['status'], string> = {
+export const STATUS_COLOR: Record<Project['status'], string> = {
   OPEN: 'blue',
   DONE: 'green',
   CANCELLED: 'default',
 };
 
-const STATUS_LABEL: Record<Project['status'], string> = {
+export const STATUS_LABEL: Record<Project['status'], string> = {
   OPEN: 'Open',
   DONE: 'Completed',
   CANCELLED: 'Cancelled',
@@ -1065,7 +1067,7 @@ export function ProjectDetailPage() {
               card beside two lines of title metadata, creating a large dead rectangle under the
               title. A balanced command centre now leads with changing work state and the way to
               act on it, followed by the stable goal they are working toward. */}
-          <header className="project-detail-identity">
+          <header className="project-detail-identity" data-project-block="header">
             <Typography.Title level={2} className="page-title">
               {p.title}
             </Typography.Title>
@@ -1078,6 +1080,10 @@ export function ProjectDetailPage() {
                   status is stated — and until now the only place it could be READ, with every way
                   to change it living behind the API, the CLI or an agent. */}
               <ProjectStatusActions projectId={id!} project={p} />
+              {/* Whether the project is public, beside the status it stands in: the Share pill
+                  (Shared · Live while a link is open) and Copy link — the signed-in address — with
+                  the ⋯ menu that adds Copy as Markdown (docs/share-links-design.md §8). */}
+              <ProjectShareControls projectId={id!} project={p} />
               {/* Furthest from the title and behind a confirmation, because it is the one press on
                   this page nothing undoes. The project is NAMED in the question: this is the only
                   place a reader can tell which project they are about to lose. */}
@@ -1109,7 +1115,9 @@ export function ProjectDetailPage() {
               flight, and whether the tip is green — with the three settings that decide all of it
               behind the same row (§7.2 V3 / V4). A project with no integration line draws nothing
               here at all. */}
-          <ProjectIntegrationLine projectId={id!} />
+          <ProjectPageBlock name="integration-line">
+            <ProjectIntegrationLine projectId={id!} />
+          </ProjectPageBlock>
 
           {/* A refused delete, in the server's own words. 409 here is a downstream reference — the
               project's tasks, or a session dispatched from one of its actions — and which one it is
@@ -1131,19 +1139,25 @@ export function ProjectDetailPage() {
               the coordinator's. The same question the blockers answer — what is standing in the
               way — answered from the exceptions rather than from the platform's own guards. It
               draws nothing while nothing is open. */}
-          <ProjectOpenItems projectId={id} />
+          <ProjectPageBlock name="open-items">
+            <ProjectOpenItems projectId={id} />
+          </ProjectPageBlock>
 
           {/* The one merge nobody but the reader may make (mock 4): what it would put on main, what
               the checks came to on the combined tree, and the two presses that answer it. Here
               rather than inside the row above for the reason the questions are: the row is the way
               in, and the card is where it is decided. It draws nothing while no candidate is
               asking or telling anything. */}
-          <ProjectPromotion projectId={id} />
+          <ProjectPageBlock name="promotion">
+            <ProjectPromotion projectId={id} />
+          </ProjectPageBlock>
 
           {/* The questions among those items, as the cards that answer them (mock 5). The rows
               above link here rather than drawing a second copy: one question, answered in one
               place, whichever of the two the reader came through. */}
-          <CoordinatorQuestions projectId={id} />
+          <ProjectPageBlock name="coordinator-questions">
+            <CoordinatorQuestions projectId={id} />
+          </ProjectPageBlock>
 
           {/* One command centre, two responsibilities: the work account establishes context on
               the left, then the coordinator offers the primary human action on the right. On
@@ -1169,51 +1183,69 @@ export function ProjectDetailPage() {
           {/* The stable definition of the project follows the changing execution state and its
               coordinator. A long brief stays complete here; its full Markdown remains the one
               source rather than being hidden behind a disclosure or repeated below the graph. */}
-          <ProjectGoalCard goal={p.goal} />
+          <ProjectPageBlock name="goal">
+            <ProjectGoalCard goal={p.goal} />
+          </ProjectPageBlock>
 
 
           {/* The graph is the picture summarized by the overview above. Every project gets one,
               at any size: the section draws whatever the graph endpoint serves and says so when
               the server truncates. */}
-          <ProjectTasksGraph projectId={id} />
+          <ProjectPageBlock name="task-graph">
+            <ProjectTasksGraph projectId={id} />
+          </ProjectPageBlock>
 
           {/* Draws nothing at all unless this project is a chain: it reads the same shape the
               header above does and returns null for a mesh, so the strip is not something this
               page decides to show — it is something a chain-shaped project has. */}
-          <ProjectChainProgress projectId={id} />
+          <ProjectPageBlock name="chain-progress">
+            <ProjectChainProgress projectId={id} />
+          </ProjectPageBlock>
 
           {/* What is standing in this project's way, directly above what can be started: each
               open blocker's kind, what it asks for and its files, and the press that resolves it.
               Drawn from this same document, and not at all while nothing is open. It sits with
               the queue rather than leading the page because the two are the reader's own work in
               order — what has to be answered before what can be run. */}
-          <ProjectBlockersCard projectId={id!} blockers={p.blockers} />
+          <ProjectPageBlock name="blockers">
+            <ProjectBlockersCard projectId={id!} blockers={p.blockers} />
+          </ProjectPageBlock>
 
           {/* After the graph, its chain-specific reading and the blockers standing in front of
               it, this queue turns that context into action. Full width, with active work retained
               above the remaining runnable tasks so a Run press changes the row's state instead of
               making it disappear. */}
-          <ProjectReadyToRun projectId={id} />
+          <ProjectPageBlock name="run-queue">
+            <ProjectReadyToRun projectId={id} />
+          </ProjectPageBlock>
 
           {/* The criteria live HERE and nowhere else on this page, in the slot they always had:
               after the goal, above the plan, and above the task list rather than buried under it,
               because "what was it for" outranks "how far along is it". */}
-          <ProjectAcceptanceCard projectId={id} />
+          <ProjectPageBlock name="acceptance-criteria">
+            <ProjectAcceptanceCard projectId={id} />
+          </ProjectPageBlock>
 
-          <Field label="Instructions" text={p.instructions} empty="No instructions set" />
+          <ProjectPageBlock name="instructions">
+            <Field label="Instructions" text={p.instructions} empty="No instructions set" />
+          </ProjectPageBlock>
 
           {/* The same tasks the graph above draws, as an indented topological plan — and the only
               one of the two that is exact at any size. Inside this branch on purpose: the tasks
               page is only asked for once the project it belongs to came back, so a project that
               404s never puts a second doomed request on the wire. `id` is the normalized route id
               — the same spelling the project query above is keyed and fetched with. */}
-          <ProjectTasks projectId={id} />
+          <ProjectPageBlock name="tasks">
+            <ProjectTasks projectId={id} />
+          </ProjectPageBlock>
 
           {/* Unit L7. A sibling of everything above, on the same terms: a crossings queue that
               500s costs the reader that card and leaves the page standing. Below the coordinator
               because it is a thing a PERSON answers, and §7 RB2 is explicit that it is the
               person's alone — no coordinator signs a crossing for another goal. */}
-          <ProjectCrossingsCard projectId={id} />
+          <ProjectPageBlock name="crossings">
+            <ProjectCrossingsCard projectId={id} />
+          </ProjectPageBlock>
         </>
       ) : null}
     </div>
@@ -1512,6 +1544,7 @@ export function ProjectCoordinatorSection({
   return (
     <div
       className="project-command-coordinator"
+      data-project-block="coordinator"
       style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}
     >
       {status.isPending ? (
@@ -1791,7 +1824,7 @@ interface ProjectTaskPage {
   nextCursor: string | null;
 }
 
-interface ProjectTask {
+export interface ProjectTask {
   id: string;
   title: string;
   // Keep this tied to the server's enum. A hand-written subset once omitted FAILED, so a failed
@@ -1844,7 +1877,7 @@ interface ProjectTask {
 
 /** A task has a status a project does not (IN_PROGRESS), so it gets its own map rather than a
  *  widened shared one — a project can never be IN_PROGRESS, and the types should keep saying so. */
-const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
+export const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
   OPEN: 'blue',
   IN_PROGRESS: 'gold',
   DONE: 'green',
@@ -1937,7 +1970,7 @@ export function projectTaskWorkStateOf(task: ProjectTask): NonNullable<ProjectTa
 /** `aria-hidden` on purpose: the row's own status Tag already spells the status out, so a second
  *  reading of it is noise. The shape is here for the eye — the text is what the screen reader
  *  gets. `data-glyph` is what makes the marks tellable apart without reading their colour. */
-function TaskStatusMark({ status }: { status: ProjectTask['status'] }) {
+export function TaskStatusMark({ status }: { status: ProjectTask['status'] }) {
   const { glyph, color } = TASK_STATUS_MARK[status] ?? UNKNOWN_TASK_STATUS_MARK;
   return (
     <svg
@@ -2281,49 +2314,66 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
           }
         />
       ) : tasks.data && tasks.data.items.length > 0 ? (
-        <>
-          {projectTaskGroups(tasks.data.items).map((group) => (
-            // The finished band is dimmed rather than dropped: it is still the answer to "did that
-            // land?", just not to "what can run now", which is what the levels above it answer.
-            <div key={group.key} style={group.level === null ? { opacity: 0.55 } : undefined}>
-              <div
-                data-topo-group={group.key}
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'space-between',
-                  gap: 16,
-                  marginTop: 16,
-                }}
-              >
-                <Typography.Text strong={group.level !== null} type="secondary">
-                  {group.heading}
-                </Typography.Text>
-                <Typography.Text type="secondary">
-                  {group.tasks.length} task{group.tasks.length === 1 ? '' : 's'}
-                </Typography.Text>
-              </div>
-              <List
-                dataSource={group.tasks}
-                rowKey="id"
-                renderItem={(t) => (
-                  <ProjectTaskRow projectId={projectId} task={t} branches={branches} />
-                )}
-              />
-            </div>
-          ))}
-          {/* Said outright rather than shown as a button: this unit reads one page and sends no
-              cursor, so a silent stop here would read as "that is all of them". */}
-          {tasks.data.nextCursor ? (
-            <Typography.Text type="secondary">
-              More top-level tasks exist beyond this first page.
-            </Typography.Text>
-          ) : null}
-        </>
+        <ProjectTaskGroupsList
+          items={tasks.data.items}
+          hasMore={Boolean(tasks.data.nextCursor)}
+          renderRow={(t) => <ProjectTaskRow projectId={projectId} task={t} branches={branches} />}
+        />
       ) : (
         <Empty description="No top-level tasks yet" />
       )}
     </div>
+  );
+}
+
+/**
+ * One page of tasks in its bands (projectTaskGroups), each band's heading and count over its rows,
+ * each row drawn by `renderRow` — the project page's own rows here, a public project page's rows
+ * there, under the same bands.
+ */
+export function ProjectTaskGroupsList({
+  items,
+  hasMore,
+  renderRow,
+}: {
+  items: ProjectTask[];
+  hasMore: boolean;
+  renderRow: (task: ProjectTask) => ReactNode;
+}) {
+  return (
+    <>
+      {projectTaskGroups(items).map((group) => (
+        // The finished band is dimmed rather than dropped: it is still the answer to "did that
+        // land?", just not to "what can run now", which is what the levels above it answer.
+        <div key={group.key} style={group.level === null ? { opacity: 0.55 } : undefined}>
+          <div
+            data-topo-group={group.key}
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              gap: 16,
+              marginTop: 16,
+            }}
+          >
+            <Typography.Text strong={group.level !== null} type="secondary">
+              {group.heading}
+            </Typography.Text>
+            <Typography.Text type="secondary">
+              {group.tasks.length} task{group.tasks.length === 1 ? '' : 's'}
+            </Typography.Text>
+          </div>
+          <List dataSource={group.tasks} rowKey="id" renderItem={renderRow} />
+        </div>
+      ))}
+      {/* Said outright rather than shown as a button: this unit reads one page and sends no
+          cursor, so a silent stop here would read as "that is all of them". */}
+      {hasMore ? (
+        <Typography.Text type="secondary">
+          More top-level tasks exist beyond this first page.
+        </Typography.Text>
+      ) : null}
+    </>
   );
 }
 

@@ -42,6 +42,9 @@ export function coordinatorSessionTitle(projectTitle: string): string {
  * conversation of its own for it, which knows none of this one. The confirmation card is the
  * owner's answer, and the brief the coordinator writes is all that new conversation inherits —
  * which is what the body now says.
+ *
+ * It says the start is the owner's, because `task_start` is refused until they press it
+ * (`projectAwaitingStart`): a coordinator told only at the refusal has already said it is starting.
  */
 function renderCoordinatorInstructions(projectIdentity: string): string {
   return (
@@ -52,6 +55,8 @@ function renderCoordinatorInstructions(projectIdentity: string): string {
     + '推进靠的是跟人对话：把现状说清楚，该问的问，商量下一步，然后动手。没有任何自动的环会替你决定什么时候动。\n\n'
     + '该动的时候你手上有工具：project_update 改这个项目的标题、目标、作业指导；'
     + 'task_create、task_update、task_start 管它下面的任务。\n\n'
+    + '项目确认卡上的「Start the project」账号所有者还没按下时，task_start 会被拒：任务可以先建好，'
+    + '别想办法绕开，等 Orbit 告诉你项目已开工再启动。\n\n'
     + '这条会话里冒出来的新工作，先看它是不是这个项目的一部分：是就记成这个项目下的任务；'
     + '真是一摊另外的事，可以开新项目——project_create 会先给屏幕这边的账号所有者弹一张确认卡，他点头才建。'
     + '开之前要知道：一个会话只能协调一个项目，所以新项目不会挂到这条会话上，服务器会在同一个 workspace 里'

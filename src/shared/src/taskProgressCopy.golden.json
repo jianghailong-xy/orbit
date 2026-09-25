@@ -1,0 +1,94 @@
+{
+  "_about": "Golden table for the progress copy both clients draw. @orbit/shared taskProgressCopy.spec.ts and OrbitKit TaskProgressCopyParityTests.swift assert the SAME rows; change a word here and in both implementations together.",
+  "cases": [
+    {
+      "name": "a resumed workflow halfway through its design phase",
+      "progress": {
+        "toolUseId": "toolu_wf", "taskId": "w2f3yv1s8", "taskType": "local_workflow",
+        "usage": { "totalTokens": 0, "toolUses": 113, "durationMs": 1020000 },
+        "phases": [ { "index": 0, "title": "Ground" }, { "index": 1, "title": "Design" }, { "index": 2, "title": "Judge" } ],
+        "agents": [
+          { "index": 0, "label": "ground:first-principles", "phaseIndex": 0, "state": "done", "cached": true },
+          { "index": 1, "label": "ground:web-forms", "phaseIndex": 0, "state": "done", "cached": true },
+          { "index": 2, "label": "ground:web-api", "phaseIndex": 0, "state": "done", "cached": true },
+          { "index": 3, "label": "ground:code-api", "phaseIndex": 0, "state": "done", "cached": true },
+          { "index": 4, "label": "design:page-wiki", "phaseIndex": 1, "state": "done", "toolCalls": 34 },
+          { "index": 6, "label": "design:entity-graph", "phaseIndex": 1, "state": "running", "toolCalls": 46, "lastToolName": "Bash", "lastToolSummary": "grep -rn \"entity\" src/apiserver/src" },
+          { "index": 5, "label": "design:typed-records", "phaseIndex": 1, "state": "done", "toolCalls": 33 },
+          { "index": 7, "label": "judge:product", "phaseIndex": 2, "state": "start" },
+          { "index": 8, "label": "judge:engineering", "phaseIndex": 2, "state": "start" }
+        ]
+      },
+      "badge": "6/9",
+      "trayLine": "Design 2/3 · design:entity-graph running · 113 tool calls",
+      "footer": "113 tool calls · 17m",
+      "groups": [
+        { "title": "Ground", "done": 4, "total": 4, "agents": [
+          { "label": "ground:first-principles", "lane": "done", "detail": "cached", "now": "" },
+          { "label": "ground:web-forms", "lane": "done", "detail": "cached", "now": "" },
+          { "label": "ground:web-api", "lane": "done", "detail": "cached", "now": "" },
+          { "label": "ground:code-api", "lane": "done", "detail": "cached", "now": "" } ] },
+        { "title": "Design", "done": 2, "total": 3, "agents": [
+          { "label": "design:page-wiki", "lane": "done", "detail": "34 tools", "now": "" },
+          { "label": "design:typed-records", "lane": "done", "detail": "33 tools", "now": "" },
+          { "label": "design:entity-graph", "lane": "running", "detail": "46 tools", "now": "Bash grep -rn \"entity\" src/apiserver/src" } ] },
+        { "title": "Judge", "done": 0, "total": 2, "agents": [
+          { "label": "judge:product", "lane": "queued", "detail": "queued", "now": "" },
+          { "label": "judge:engineering", "lane": "queued", "detail": "queued", "now": "" } ] }
+      ]
+    },
+    {
+      "name": "an agent running in the background",
+      "progress": {
+        "toolUseId": "toolu_agent", "taskType": "local_agent", "description": "Deep-read wikova for reusable design",
+        "lastToolName": "Bash", "usage": { "totalTokens": 1200000, "toolUses": 57, "durationMs": 725000 }
+      },
+      "badge": "57",
+      "trayLine": "Bash · 57 tool calls",
+      "footer": "57 tool calls · 12m",
+      "groups": []
+    },
+    {
+      "name": "a workflow whose script names no phases, one agent failed",
+      "progress": {
+        "toolUseId": "toolu_wf2",
+        "agents": [
+          { "index": 1, "label": "b", "state": "error", "error": "rate limited", "toolCalls": 0 },
+          { "index": 0, "label": "a", "state": "done", "toolCalls": 1 }
+        ]
+      },
+      "badge": "1/2",
+      "trayLine": "1/2 · 1 tool call",
+      "footer": "1 tool call",
+      "groups": [
+        { "title": "", "done": 1, "total": 2, "agents": [
+          { "label": "a", "lane": "done", "detail": "1 tool", "now": "" },
+          { "label": "b", "lane": "failed", "detail": "failed", "now": "" } ] }
+      ]
+    },
+    {
+      "name": "a workflow that has only just started",
+      "progress": { "toolUseId": "toolu_wf3", "taskType": "local_workflow", "description": "3 competing designs; 2 judges" },
+      "badge": null,
+      "trayLine": null,
+      "footer": "",
+      "groups": []
+    }
+  ],
+  "durations": [ [45000, "45s"], [60000, "1m"], [1020000, "17m"], [3900000, "1h 5m"], [7200000, "2h"] ],
+  "titles": [
+    { "name": "the launch receipt names it",
+      "input": { "resumeFromRunId": "wf_37d4e19e-c97" },
+      "result": "Workflow launched in background. Task ID: w2f3yv1s8\nSummary: 3 competing designs; 2 judges\nTranscript dir: /x",
+      "progressDescription": "ignored when the receipt says it",
+      "title": "3 competing designs; 2 judges" },
+    { "name": "before the receipt, the progress does",
+      "input": { "resumeFromRunId": "wf_37d4e19e-c97" }, "result": null,
+      "progressDescription": "First-principles + web research", "title": "First-principles + web research" },
+    { "name": "before either, the script's own meta does",
+      "input": { "script": "export const meta = {\n  name: 'orbit-wiki-review',\n  description: 'Review the idea: it\\'s a wiki',\n}" },
+      "result": null, "progressDescription": null, "title": "Review the idea: it's a wiki" },
+    { "name": "nothing to go on",
+      "input": { "scriptPath": "/x/y.js" }, "result": null, "progressDescription": null, "title": null }
+  ]
+}

@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>项目页 · 落地中的 4 分钟看得见（方案 A / 方案 B）</title>
+<style>
+  :root {
+    --brand: #007AFF;
+    --success: #34C759;
+    --warning: #FF9500;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .60);
+    --label-3: rgba(60, 60, 67, .30);
+    --sep: rgba(60, 60, 67, .18);
+    --surface: #fff;
+    --grouped: #F2F2F7;
+    --glass: rgba(255,255,255,.55);
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 34px 40px 48px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, "Liberation Sans", "Helvetica Neue", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 23px; letter-spacing: -.02em; margin: 0 0 6px; }
+  .lede { color: #55555e; max-width: 1220px; margin: 0 0 26px; font-size: 14px; }
+  .lede b { color: #16161a; }
+  .row { display: flex; gap: 26px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { margin-top: 12px; width: 393px; font-size: 12.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 13.5px; margin-bottom: 3px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 9px; margin-bottom: 8px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.a { background: #d6e4ff; color: #14428f; }
+  .tag.b { background: #e4e4ea; color: #3a3a44; }
+
+  /* ── 手机片段 ───────────────────────────────────────────── */
+  .phone {
+    width: 393px; background: var(--grouped); overflow: hidden;
+    border-radius: 26px; box-shadow: 0 16px 40px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.06);
+    color: var(--label); padding-bottom: 18px;
+  }
+  .status { height: 54px; display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 26px 0 30px; font-size: 16px; font-weight: 600; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 500; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 25px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+  .nav { height: 44px; display: flex; align-items: center; justify-content: space-between;
+         padding: 0 16px; }
+  .platter { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+             background: var(--glass); border-radius: 999px;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .ico { width: 20px; height: 20px; stroke: var(--label); fill: none; stroke-width: 1.9;
+         stroke-linecap: round; stroke-linejoin: round; }
+
+  .title { padding: 2px 16px 0; font-size: 30px; font-weight: 700; letter-spacing: -.5px; }
+  .sub { padding: 6px 16px 0; display: flex; align-items: center; gap: 8px; }
+  .pill { font-size: 12.5px; font-weight: 600; color: var(--brand); background: rgba(0,122,255,.12);
+          border-radius: 999px; padding: 2px 9px; }
+  .sub .n { font-size: 14px; color: var(--label-2); }
+
+  .strip { padding: 10px 16px 0; display: flex; gap: 7px; color: var(--label-2); font-size: 13px;
+           line-height: 1.45; }
+  .strip .bmark { flex: none; margin-top: 3px; }
+  .strip .bmark svg { width: 13px; height: 13px; stroke: var(--label-2); fill: none; stroke-width: 1.5; }
+
+  .sec { padding: 18px 16px 9px; display: flex; align-items: baseline; gap: 8px; }
+  .sec h2 { font-size: 21px; font-weight: 700; letter-spacing: -.3px; margin: 0; }
+  .sec .n { font-size: 13px; color: var(--label-2); }
+
+  .card { margin: 0 12px; background: var(--surface); border-radius: 18px; padding: 4px 0 12px;
+          box-shadow: 0 .5px 2px rgba(0,0,0,.05); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; padding: 12px 16px 0; row-gap: 14px; }
+  .cell .k { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--label-2); }
+  .cell .k svg { width: 12px; height: 12px; flex: none; }
+  .cell .v { font-size: 25px; font-weight: 700; letter-spacing: -.5px; margin-top: 1px;
+             font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 6px; }
+  .cell .f { font-size: 11.5px; color: var(--label-2); margin-top: 1px; }
+  .cell .t { font-size: 12.5px; font-weight: 600; color: var(--brand); font-variant-numeric: tabular-nums; }
+  .bar { height: 6px; border-radius: 3px; margin: 14px 16px 0; display: flex; overflow: hidden;
+         background: rgba(60,60,67,.22); }
+  .bar i { display: block; height: 100%; }
+
+  /* ── 方案 A 的那一行 ────────────────────────────────────── */
+  .landing { display: flex; align-items: center; gap: 8px; padding: 10px 16px 11px;
+             border-bottom: .5px solid var(--sep); font-size: 13.5px; }
+  .landing .ring { width: 13px; height: 13px; flex: none; }
+  .landing.running .ring { stroke: var(--brand); animation: spin 1.6s linear infinite; }
+  .landing.queued .ring { stroke: var(--label-3); }
+  .landing .word { flex: none; font-weight: 600; }
+  .landing.running .word { color: var(--brand); }
+  .landing.queued .word { color: var(--label-2); }
+  .landing .what { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
+                   text-overflow: ellipsis; color: var(--label); }
+  .landing .state { flex: none; font-size: 12.5px; color: var(--label-2); }
+  .landing .clock { flex: none; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .landing.running .clock { color: var(--brand); }
+  .landing.queued .clock { color: var(--label-2); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .mark { outline: 1.5px dashed var(--mark); outline-offset: 3px; border-radius: 10px; }
+  .note { display: inline-block; font-size: 11px; font-weight: 700; color: #fff; background: var(--mark);
+          border-radius: 999px; padding: 0 6px; margin-left: 6px; vertical-align: 1px; }
+</style>
+
+<h1>项目页：把「落地中的那几分钟」变成看得见</h1>
+<p class="lede">
+  左一是你截图那一刻（13:58:48–14:02:56 之间）：<b>Running 0 · Ready 0</b>，只有一格 <b>Integrating 1</b>，
+  读起来像停摆，其实平台正在把 T2 落到项目分支上（合并 main → 在合并后的树上重跑 T2 的验收命令 → 写回执）。
+  方案 A 给「集成线正在干什么」一行活的状态（带计时）；方案 B 不新增元素，只在格子上加计时。
+  文案按仓库约束一律英文；任务标题是项目里的中文内容，不译。
+</p>
+
+<div class="row">
+
+  <!-- ① 现在 -->
+  <figure>
+    <span class="tag now">现在</span>
+    <div class="phone">
+      <div class="status"><span>8:01</span><span class="r">
+        <span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>
+        5G <span class="batt">86</span></span></div>
+      <div class="nav">
+        <span class="platter"><svg class="ico" viewBox="0 0 20 20"><path d="M12.5 5 L7.5 10 L12.5 15"/></svg></span>
+        <span class="platter"><svg class="ico" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.2" fill="none"/><circle cx="6.9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="13.1" cy="10" r="1" fill="currentColor" stroke="none"/></svg></span>
+      </div>
+      <div class="title">Orbit Wiki · 阶段 1（MVP）</div>
+      <div class="sub"><span class="pill">Open</span><span class="n">11 tasks</span></div>
+      <div class="strip">
+        <span class="bmark"><svg viewBox="0 0 16 16"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5.5" r="1.6"/><path d="M4 5.1v5.8M12 7.1c0 3-3 3.2-6.4 4.6"/></svg></span>
+        <span>project/34Uty9dJvewpbDwMZDIkZ · 1 commit ahead of main · Integrating 1 · Queued 0 · Merge check ✓ passing on the branch tip</span>
+      </div>
+      <div class="sec"><h2>Work overview</h2><span class="n">11 tasks · 20 dependencies</span></div>
+      <div class="card">
+        <div class="grid">
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#007AFF"/></svg>Running</div>
+            <div class="v">0</div><div class="f">active sessions</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><polygon points="2.5,1 11,6 2.5,11" fill="#FF9500"/></svg>Ready</div>
+            <div class="v">0</div><div class="f">can start now</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="2"/></svg>Waiting</div>
+            <div class="v">9</div><div class="f">for a prerequisite to land</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><path d="M10.5 6 A4.5 4.5 0 1 1 6 1.5 M6 1.5 L4 3.4 M6 1.5 L8 3.4" fill="none" stroke="#007AFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Integrating</div>
+            <div class="v">1</div><div class="f">checks running on the combined tree</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><g fill="none" stroke="#34C759" stroke-width="1.5"><circle cx="3" cy="2.6" r="1.2"/><circle cx="3" cy="9.4" r="1.2"/><circle cx="9" cy="4.1" r="1.2"/><path d="M3 3.8v4.4M9 5.3c0 2.2-2.2 2.4-4.8 3.4"/></g></svg>On project branch</div>
+            <div class="v">0</div><div class="f">not on main yet</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><path d="M1.5 6.4 L4.6 9.5 L10.5 2.6" fill="none" stroke="#34C759" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>On main</div>
+            <div class="v">1</div><div class="f">landed on main</div></div>
+        </div>
+        <div class="bar"><i style="width:76%; background:rgba(60,60,67,.35)"></i><i style="width:15%; background:#007AFF"></i><i style="width:9%; background:#34C759"></i></div>
+      </div>
+    </div>
+    <figcaption><b>读到的：停了</b>六格里唯一非零的「在动」信号只有 Integrating 1，而它的脚注是术语
+      （checks running on the combined tree）；计时、任务名、以及"还要多久"都不在页面上。</figcaption>
+  </figure>
+
+  <!-- ② 方案 A · 检查中 -->
+  <figure>
+    <span class="tag a">方案 A · 检查中</span>
+    <div class="phone">
+      <div class="status"><span>8:01</span><span class="r">
+        <span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>
+        5G <span class="batt">86</span></span></div>
+      <div class="nav">
+        <span class="platter"><svg class="ico" viewBox="0 0 20 20"><path d="M12.5 5 L7.5 10 L12.5 15"/></svg></span>
+        <span class="platter"><svg class="ico" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.2" fill="none"/><circle cx="6.9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="13.1" cy="10" r="1" fill="currentColor" stroke="none"/></svg></span>
+      </div>
+      <div class="title">Orbit Wiki · 阶段 1（MVP）</div>
+      <div class="sub"><span class="pill">Open</span><span class="n">11 tasks</span></div>
+      <div class="strip">
+        <span class="bmark"><svg viewBox="0 0 16 16"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5.5" r="1.6"/><path d="M4 5.1v5.8M12 7.1c0 3-3 3.2-6.4 4.6"/></svg></span>
+        <span>project/34Uty9dJvewpbDwMZDIkZ · 1 commit ahead of main · Integrating 1 · Queued 0 · Merge check ✓ passing on the branch tip</span>
+      </div>
+      <div class="sec"><h2>Work overview</h2><span class="n">11 tasks · 20 dependencies</span></div>
+      <div class="card">
+        <div class="landing running mark">
+          <svg class="ring" viewBox="0 0 12 12"><path d="M10.5 6 A4.5 4.5 0 1 1 6 1.5 M6 1.5 L4 3.4 M6 1.5 L8 3.4" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="word">Landing</span>
+          <span class="what">T2 wiki 契约、迁移与共享类型，并把设计文档和效果图带进仓库</span>
+          <span class="state">checking</span>
+          <span class="clock">1m 20s</span>
+        </div>
+        <div class="grid">
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#007AFF"/></svg>Running</div>
+            <div class="v">0</div><div class="f">active sessions</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><polygon points="2.5,1 11,6 2.5,11" fill="#FF9500"/></svg>Ready</div>
+            <div class="v">0</div><div class="f">can start now</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="2"/></svg>Waiting</div>
+            <div class="v">9</div><div class="f">for a prerequisite to land</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><path d="M10.5 6 A4.5 4.5 0 1 1 6 1.5 M6 1.5 L4 3.4 M6 1.5 L8 3.4" fill="none" stroke="#007AFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Integrating</div>
+            <div class="v">1</div><div class="f">checks running on the combined tree</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><g fill="none" stroke="#34C759" stroke-width="1.5"><circle cx="3" cy="2.6" r="1.2"/><circle cx="3" cy="9.4" r="1.2"/><circle cx="9" cy="4.1" r="1.2"/><path d="M3 3.8v4.4M9 5.3c0 2.2-2.2 2.4-4.8 3.4"/></g></svg>On project branch</div>
+            <div class="v">0</div><div class="f">not on main yet</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><path d="M1.5 6.4 L4.6 9.5 L10.5 2.6" fill="none" stroke="#34C759" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>On main</div>
+            <div class="v">1</div><div class="f">landed on main</div></div>
+        </div>
+        <div class="bar"><i style="width:76%; background:rgba(60,60,67,.35)"></i><i style="width:15%; background:#007AFF"></i><i style="width:9%; background:#34C759"></i></div>
+      </div>
+    </div>
+    <figcaption><b>方案 A：给集成线一行活的状态</b>卡内第一行说清「谁、在做什么、多久了」——
+      环在转（只在有落地时转，尊重 prefers-reduced-motion），计时用等宽数字。它只讲一件事实：
+      <b>集成线上有活</b>（= 头行 Integrating/Queued 非零），与六个格子不重叠。</figcaption>
+  </figure>
+
+  <!-- ③ 方案 A · 已排队 -->
+  <figure>
+    <span class="tag a">方案 A · 已排队（会话还在收尾）</span>
+    <div class="phone">
+      <div class="status"><span>8:01</span><span class="r">
+        <span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>
+        5G <span class="batt">86</span></span></div>
+      <div class="nav">
+        <span class="platter"><svg class="ico" viewBox="0 0 20 20"><path d="M12.5 5 L7.5 10 L12.5 15"/></svg></span>
+        <span class="platter"><svg class="ico" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.2" fill="none"/><circle cx="6.9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="13.1" cy="10" r="1" fill="currentColor" stroke="none"/></svg></span>
+      </div>
+      <div class="title">Orbit Wiki · 阶段 1（MVP）</div>
+      <div class="sub"><span class="pill">Open</span><span class="n">11 tasks</span></div>
+      <div class="strip">
+        <span class="bmark"><svg viewBox="0 0 16 16"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5.5" r="1.6"/><path d="M4 5.1v5.8M12 7.1c0 3-3 3.2-6.4 4.6"/></svg></span>
+        <span>project/34Uty9dJvewpbDwMZDIkZ · 1 commit ahead of main · Integrating 0 · Queued 1 · Merge check ✓ passing on the branch tip</span>
+      </div>
+      <div class="sec"><h2>Work overview</h2><span class="n">11 tasks · 20 dependencies</span></div>
+      <div class="card">
+        <div class="landing queued mark">
+          <svg class="ring" viewBox="0 0 12 12"><path d="M10.5 6 A4.5 4.5 0 1 1 6 1.5 M6 1.5 L4 3.4 M6 1.5 L8 3.4" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="word">Landing</span>
+          <span class="what">T2 wiki 契约、迁移与共享类型，并把设计文档和效果图带进仓库</span>
+          <span class="state">queued</span>
+          <span class="clock">0m 40s</span>
+        </div>
+        <div class="grid">
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#007AFF"/></svg>Running</div>
+            <div class="v">0</div><div class="f">active sessions</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><polygon points="2.5,1 11,6 2.5,11" fill="#FF9500"/></svg>Ready</div>
+            <div class="v">0</div><div class="f">can start now</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="2"/></svg>Waiting</div>
+            <div class="v">9</div><div class="f">for a prerequisite to land</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><path d="M10.5 6 A4.5 4.5 0 1 1 6 1.5 M6 1.5 L4 3.4 M6 1.5 L8 3.4" fill="none" stroke="#007AFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Integrating</div>
+            <div class="v">0</div><div class="f">checks running on the combined tree</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><g fill="none" stroke="#34C759" stroke-width="1.5"><circle cx="3" cy="2.6" r="1.2"/><circle cx="3" cy="9.4" r="1.2"/><circle cx="9" cy="4.1" r="1.2"/><path d="M3 3.8v4.4M9 5.3c0 2.2-2.2 2.4-4.8 3.4"/></g></svg>On project branch</div>
+            <div class="v">0</div><div class="f">not on main yet</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><path d="M1.5 6.4 L4.6 9.5 L10.5 2.6" fill="none" stroke="#34C759" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>On main</div>
+            <div class="v">1</div><div class="f">landed on main</div></div>
+        </div>
+        <div class="bar"><i style="width:76%; background:rgba(60,60,67,.35)"></i><i style="width:15%; background:rgba(0,122,255,.35)"></i><i style="width:9%; background:#34C759"></i></div>
+      </div>
+    </div>
+    <figcaption><b>同一行还兜住前 1m42s</b>T2 报 DONE 后、它的会话把 checkout 提交完之前，
+      落地被平台<b>故意压着</b>（提前落会是空分支）：这一档六个格子全是 0/9，正是最像"停摆"的窗口。
+      灰环 + <code>queued</code> + 计时说明"在队列里、有人在处理"。排队的缘由（它的会话还在收尾）
+      放 tooltip / 点开细节，不占这一行。<b>这一档只有 A 能说，B 说不了。</b></figcaption>
+  </figure>
+
+  <!-- ④ 方案 B -->
+  <figure>
+    <span class="tag b">方案 B · 只在格子上加计时</span>
+    <div class="phone">
+      <div class="status"><span>8:01</span><span class="r">
+        <span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>
+        5G <span class="batt">86</span></span></div>
+      <div class="nav">
+        <span class="platter"><svg class="ico" viewBox="0 0 20 20"><path d="M12.5 5 L7.5 10 L12.5 15"/></svg></span>
+        <span class="platter"><svg class="ico" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.2" fill="none"/><circle cx="6.9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="13.1" cy="10" r="1" fill="currentColor" stroke="none"/></svg></span>
+      </div>
+      <div class="title">Orbit Wiki · 阶段 1（MVP）</div>
+      <div class="sub"><span class="pill">Open</span><span class="n">11 tasks</span></div>
+      <div class="strip">
+        <span class="bmark"><svg viewBox="0 0 16 16"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5.5" r="1.6"/><path d="M4 5.1v5.8M12 7.1c0 3-3 3.2-6.4 4.6"/></svg></span>
+        <span>project/34Uty9dJvewpbDwMZDIkZ · 1 commit ahead of main · Integrating 1 · Queued 0 · Merge check ✓ passing on the branch tip</span>
+      </div>
+      <div class="sec"><h2>Work overview</h2><span class="n">11 tasks · 20 dependencies</span></div>
+      <div class="card">
+        <div class="grid">
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#007AFF"/></svg>Running</div>
+            <div class="v">0</div><div class="f">active sessions</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><polygon points="2.5,1 11,6 2.5,11" fill="#FF9500"/></svg>Ready</div>
+            <div class="v">0</div><div class="f">can start now</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="2"/></svg>Waiting</div>
+            <div class="v">9</div><div class="f">for a prerequisite to land</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><path d="M10.5 6 A4.5 4.5 0 1 1 6 1.5 M6 1.5 L4 3.4 M6 1.5 L8 3.4" fill="none" stroke="#007AFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Integrating</div>
+            <div class="v mark">1<span class="t">1m 20s</span></div><div class="f">checks running on the combined tree</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><g fill="none" stroke="#34C759" stroke-width="1.5"><circle cx="3" cy="2.6" r="1.2"/><circle cx="3" cy="9.4" r="1.2"/><circle cx="9" cy="4.1" r="1.2"/><path d="M3 3.8v4.4M9 5.3c0 2.2-2.2 2.4-4.8 3.4"/></g></svg>On project branch</div>
+            <div class="v">0</div><div class="f">not on main yet</div></div>
+          <div class="cell"><div class="k"><svg viewBox="0 0 12 12"><path d="M1.5 6.4 L4.6 9.5 L10.5 2.6" fill="none" stroke="#34C759" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>On main</div>
+            <div class="v">1</div><div class="f">landed on main</div></div>
+        </div>
+        <div class="bar"><i style="width:76%; background:rgba(60,60,67,.35)"></i><i style="width:15%; background:#007AFF"></i><i style="width:9%; background:#34C759"></i></div>
+      </div>
+    </div>
+    <figcaption><b>方案 B：最小改动</b>不新增元素，只在 Integrating 的数字旁加计时（真实字段已有：
+      任务行上的 <code>checksRunningForMs</code>）。说得出"在动"，说不出"哪个任务、在做什么"，
+      也覆盖不了上一档"已排队"的窗口。</figcaption>
+  </figure>
+
+</div>

@@ -53,6 +53,18 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// The check that currently settles this row, from the detail read.
     public let verifier: TaskVerifierRef?
 
+    // What Copy as Markdown reads besides the fields above (`ShareMarkdown.task`): what settles the
+    // task, and what replaced it or what it replaced. Detail payload only.
+    public let acceptanceCriteria: String?
+    public let acceptanceCommand: String?
+    public let acceptanceExpectedExitCode: Int?
+    /// Why a superseded task names no successor (`SUCCESSOR_DELETED` when it was deleted).
+    public let supersededByTaskIdAbsentReason: String?
+    /// The attempts this task replaced.
+    public let supersedes: [TaskRef]?
+    /// What replaced this task, oldest first: the last one is the live attempt.
+    public let successorChain: [TaskRef]?
+
     // Computed list-view flags (absent on the detail payload).
     public let running: Bool?
     public let queued: Bool?
@@ -84,6 +96,8 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
         case completionPolicy, verifiesTaskId, verificationState, verifier
+        case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode
+        case supersededByTaskIdAbsentReason, supersedes, successorChain
         case running, queued, blocked, dependencyState, runnable
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
