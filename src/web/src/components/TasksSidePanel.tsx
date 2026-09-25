@@ -784,9 +784,13 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
 /** The trailing status slot shared by the expanded row and collapsed rail.
  *
- * Attention wins first. In the expanded list, Runner availability lives on the leading folder;
- * this slot therefore stays empty for offline and merely suppresses a stale spinner. The compact
- * rail keeps its existing Disconnect overlay here because its avatar is a separate surface.
+ * In the expanded list — the desktop sidebar and the <=960px drawer alike — this slot is the
+ * needs-you count's alone: activity and Runner availability live on the leading folder, so every
+ * row's marks line up in one column whether or not a count sits at the row's far end. The compact
+ * rail pins the count to the avatar's top corner and activity to its bottom one: beside it rather
+ * than replaced by it, because the two answer different questions and the server leaves the
+ * sessions waiting on you out of `running`/`jobs`. The rail keeps its existing Disconnect overlay
+ * in that bottom corner because its avatar is a separate surface, and a count still outranks it.
  */
 export function WorkspaceStateMark({
   offline,
@@ -804,9 +808,10 @@ export function WorkspaceStateMark({
   runnerLabel?: string;
   compact?: boolean;
 }) {
+  let badge: ReactNode = null;
   if (needsYou > 0) {
     const title = `${needsYou} ${needsYou === 1 ? 'session needs' : 'sessions need'} your reply`;
-    return (
+    badge = (
       <span
         className={compact ? 'tp-rail-badge needs-you' : 'tp-count needs-you'}
         title={title}
@@ -816,8 +821,9 @@ export function WorkspaceStateMark({
       </span>
     );
   }
+  if (!compact) return badge;
   if (offline) {
-    if (!compact) return null;
+    if (badge) return badge;
     const title = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
     return (
       <Tooltip title={title}>
@@ -831,14 +837,17 @@ export function WorkspaceStateMark({
   }
   if (running) {
     return (
-      <Tooltip title="Running">
-        <LoadingOutlined
-          className={compact ? 'tp-rail-running' : 'tp-workspace-running'}
-          spin
-          aria-label="Session running"
-          style={{ color: 'var(--brand)', fontSize: 16 }}
-        />
-      </Tooltip>
+      <>
+        <Tooltip title="Running">
+          <LoadingOutlined
+            className="tp-rail-running"
+            spin
+            aria-label="Session running"
+            style={{ color: 'var(--brand)', fontSize: 16 }}
+          />
+        </Tooltip>
+        {badge}
+      </>
     );
   }
   // Below the spinner and said in the terminal glyph's own words: something is running here, but
@@ -847,18 +856,21 @@ export function WorkspaceStateMark({
   if (jobs > 0) {
     const title = `${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`;
     return (
-      <Tooltip title={title}>
-        <CodeOutlined
-          // In the collapsed rail this mark sits at the avatar's corner like the spinner it
-          // replaces, and the desktop rule below turns it into a quiet dot there.
-          className={compact ? 'tp-rail-jobs status-glyph-active' : 'status-glyph-active'}
-          aria-label={title}
-          style={{ color: 'var(--text-3)', fontSize: 16 }}
-        />
-      </Tooltip>
+      <>
+        <Tooltip title={title}>
+          <CodeOutlined
+            // In the collapsed rail this mark sits at the avatar's corner like the spinner it
+            // replaces, and the desktop rule below turns it into a quiet dot there.
+            className="tp-rail-jobs status-glyph-active"
+            aria-label={title}
+            style={{ color: 'var(--text-3)', fontSize: 16 }}
+          />
+        </Tooltip>
+        {badge}
+      </>
     );
   }
-  return null;
+  return badge;
 }
 
 // A compact, permanently visible workspace row. Its folder occupies the same icon column as the
@@ -886,12 +898,14 @@ export function WorkspaceRow({
   onOpen: (a: Workspace) => void;
 }) {
   const offlineTitle = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
-  // Attention and disconnection remain higher priority than background activity. CSS reveals this
-  // quiet mark on the expanded desktop sidebar; the mobile drawer keeps its trailing spinner.
-  const showRunningDot = running && !offline && needsYou === 0;
+  // Disconnection remains higher priority than background activity. A needs-you count does not
+  // hide it: the count sits at the row's other end, and the server leaves the sessions waiting on
+  // you out of `running` and `jobs`, so a dot beside it is other work still moving. The desktop
+  // sidebar and the drawer draw this same quiet mark.
+  const showRunningDot = running && !offline;
   // One slot, one blue: this dot means a job is in flight here with nobody generating, which the
   // still dot above outranks when generation happens. The two differ by breathing only.
-  const showJobsDot = jobs > 0 && !running && !offline && needsYou === 0;
+  const showJobsDot = jobs > 0 && !running && !offline;
   return (
     <div
       className={`tp-item ${active ? 'active' : ''}`}

@@ -16,56 +16,56 @@ test('workspace counts separate queued activity from Session-list spinner work',
   // is unknown rather than stalled and counts exactly as it did before the rule existed.
   const sessionsWithJobs = [
     {
+      id: 's-jobs',
       workspaceId: 'w-jobs',
       runningBgJobs: ['bgj_live'],
       runningBgJobActivity: { bgj_live: now - 5_000 },
     },
     {
+      id: 's-stalled',
       workspaceId: 'w-stalled',
       runningBgJobs: ['bgj_stalled'],
       runningBgJobActivity: { bgj_stalled: now - BG_JOB_ACTIVITY_STALE_AFTER_MS - 60_000 },
     },
-    { workspaceId: 'w-unknown', runningBgJobs: ['bgj_unreported'], runningBgJobActivity: {} },
+    { id: 's-unknown', workspaceId: 'w-unknown', runningBgJobs: ['bgj_unreported'], runningBgJobActivity: {} },
+    // A job as live as `w-jobs`' — but it is the job still reading the card below that needs you,
+    // and a session that needs you is counted there only.
+    {
+      id: 's-job-live',
+      workspaceId: 'w-job-live',
+      runningBgJobs: ['bgj_up'],
+      runningBgJobActivity: { bgj_up: now - 5_000 },
+    },
   ];
   const prisma = {
     session: {
       groupBy: async (args: any) => {
         groupByCalls.push(args);
-        // Two different populations reach this one method, told apart by what they ask for rather
-        // than by call order, so adding a tally elsewhere cannot silently rewire this fixture.
-        //
-        // The first is admitted work: w-queued is intentionally present here only. The second is
-        // the exact spinner population: a normal RUNNING row, a self-driven engine turn, or a
-        // parked parent whose sub-agent is still working. (The jobs-only tally used to be a third;
-        // it is a findMany now, because whether a job still counts is a fact about `now`.)
-        if (args?.where?.status) {
-          return [
-            { workspaceId: 'w-queued', _count: { _all: 1 } },
-            { workspaceId: 'w-running', _count: { _all: 2 } },
-          ];
-        }
+        // Admitted work: w-queued is intentionally present here only. (The spinner and jobs-only
+        // tallies used to reach this method too; they are findMany now — the jobs one because
+        // whether a job still counts is a fact about `now`, the spinner one because a session
+        // that needs you is taken back out of it by id.)
         return [
-          { workspaceId: 'w-running', _count: { _all: 1 } },
-          { workspaceId: 'w-engine-turn', _count: { _all: 1 } },
-          { workspaceId: 'w-subagent', _count: { _all: 1 } },
+          { workspaceId: 'w-queued', _count: { _all: 1 } },
+          { workspaceId: 'w-running', _count: { _all: 2 } },
         ];
       },
       findMany: async (args: any) => {
         findManyCalls.push(args);
-        // Four different questions reach this method, told apart by what they ask for rather than
+        // Five different questions reach this method, told apart by what they ask for rather than
         // by call order. The first is the jobs-only set — work in flight with nobody generating,
         // which is neither of the others: a workspace whose only live session is parked with a
         // `bg_run` job and no turn in it. The second is the blocked-on-a-tool-call population; the
         // third is the cards a runner-hosted JOB is still reading — the one population a turn rule
-        // cannot see, since there need not be a live turn at all — and the fourth resolves the
-        // conversations an owner DECISION is waiting on (`projects/owner-decision-signal.ts`) to
-        // the workspaces they run in.
+        // cannot see, since there need not be a live turn at all — the fourth is the spinner
+        // population, and the fifth resolves the conversations an owner DECISION is waiting on
+        // (`projects/owner-decision-signal.ts`) to the workspaces they run in.
         if (args?.where?.runningBgJobs) {
           return sessionsWithJobs;
         }
         if (args?.where?.approvals) {
           return [
-            { id: 's-running', workspaceId: 'w-running' },
+            { id: 's-blocked', workspaceId: 'w-running' },
             { id: 's-needs-you', workspaceId: 'w-needs-you' },
           ];
         }
@@ -94,6 +94,18 @@ test('workspace counts separate queued activity from Session-list spinner work',
               runningBgShells: ['bgj_up'],
               approvals: [{ backgroundJobId: null }],
             },
+          ];
+        }
+        if (args?.where?.OR) {
+          // The exact spinner population before anything is taken out: a normal RUNNING row, a
+          // self-driven engine turn, a parked parent whose sub-agent is still working — and the two
+          // turns blocked on a tool call above, which are generating too.
+          return [
+            { id: 's-running', workspaceId: 'w-running' },
+            { id: 's-blocked', workspaceId: 'w-running' },
+            { id: 's-engine-turn', workspaceId: 'w-engine-turn' },
+            { id: 's-subagent', workspaceId: 'w-subagent' },
+            { id: 's-needs-you', workspaceId: 'w-needs-you' },
           ];
         }
         return [{ id: 's-coordinator', workspaceId: 'w-decision' }];
@@ -142,6 +154,8 @@ test('workspace counts separate queued activity from Session-list spinner work',
     jobs: 0,
     needsYou: 0,
   });
+  // Two turns in flight, one of them blocked on you: the count says the blocked one and the spinner
+  // tally says the other — the sidebar draws them side by side, so neither may say both.
   assert.deepEqual(byWorkspace.get('w-running'), {
     workspaceId: 'w-running',
     active: 2,
@@ -179,6 +193,8 @@ test('workspace counts separate queued activity from Session-list spinner work',
   });
   assert.equal(byWorkspace.get('w-engine-turn')?.running, 1);
   assert.equal(byWorkspace.get('w-subagent')?.running, 1);
+  // Its only turn is blocked on you: generating, and still not the spinner — the Session list draws
+  // this row with the waiting glyph — so the dot stays dark beside the count.
   assert.deepEqual(byWorkspace.get('w-needs-you'), {
     workspaceId: 'w-needs-you',
     active: 0,
@@ -190,7 +206,8 @@ test('workspace counts separate queued activity from Session-list spinner work',
   // reading on a conversation that is parked — no turn in flight, a live process polling for the
   // answer. The rail lights for it, and lights for exactly it: the same conversation shape with the
   // job gone is not a question (its card is what the reap collects), and a card naming no job at all
-  // is the turn's, which is over.
+  // is the turn's, which is over. Its job is still producing output, and `jobs` leaves it out all
+  // the same: the one thing this workspace is doing is waiting on you.
   assert.deepEqual(byWorkspace.get('w-job-live'), {
     workspaceId: 'w-job-live',
     active: 0,
@@ -213,7 +230,11 @@ test('workspace counts separate queued activity from Session-list spinner work',
   // And it is scoped to the Open list the same way the blocked query is, so a decision waiting on
   // a conversation the owner filed away does not light a workspace they are not looking at.
   const decisionQuery = findManyCalls.find(
-    (call) => !call?.where?.approvals && !call?.where?.runningBgJobs && !call?.where?.runningBgShells,
+    (call) =>
+      !call?.where?.approvals &&
+      !call?.where?.runningBgJobs &&
+      !call?.where?.runningBgShells &&
+      !call?.where?.OR,
   );
   assert.equal(decisionQuery.where.completedAt, null);
   assert.equal(decisionQuery.where.deletedAt, null);
@@ -242,20 +263,28 @@ test('workspace counts separate queued activity from Session-list spinner work',
   assert.deepEqual(jobsQuery.where.runningBgJobs, { isEmpty: false });
   assert.equal(jobsQuery.where.completedAt, null);
   assert.equal(jobsQuery.where.deletedAt, null);
-  // It reads the two columns the verdict needs and nothing else: the verdict itself is not stored
-  // anywhere, so it cannot be selected.
+  // It reads the two columns the verdict needs and nothing else — the verdict itself is not stored
+  // anywhere, so it cannot be selected — plus the id a session that needs you is taken out by.
   assert.deepEqual(jobsQuery.select, {
+    id: true,
     workspaceId: true,
     runningBgJobs: true,
     runningBgJobActivity: true,
   });
 
+  assert.equal(groupByCalls.length, 1);
   assert.deepEqual(groupByCalls[0].where.status.in, [RunStatus.RUNNING, RunStatus.PENDING]);
-  assert.deepEqual(groupByCalls[1].where.OR, [
+  // The blocked query carries an `OR` too (GENERATING_SESSION_FILTER), which is why it is ruled out
+  // by its `approvals`.
+  const runningQuery = findManyCalls.find((call) => call?.where?.OR && !call?.where?.approvals);
+  assert.deepEqual(runningQuery.where.OR, [
     { status: RunStatus.RUNNING },
     {
       status: RunStatus.AWAITING_INPUT,
       OR: [{ engineTurnActive: true }, { runningSubagents: { isEmpty: false } }],
     },
   ]);
+  assert.equal(runningQuery.where.completedAt, null);
+  assert.equal(runningQuery.where.deletedAt, null);
+  assert.deepEqual(runningQuery.select, { id: true, workspaceId: true });
 });

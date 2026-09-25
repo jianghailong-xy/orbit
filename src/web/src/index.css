@@ -739,16 +739,14 @@ body {
   white-space: nowrap;
   color: var(--text-3);
 }
-.tp-workspace-running {
-  flex: none;
-}
 .tp-workspace-icon {
   position: relative;
 }
-/* On the desktop console the Session list already owns the live spinner. Keep Workspace identity
-   stable and reduce the duplicate motion to a small, static aggregate mark on the folder. */
+/* The Session list owns the live spinner. Keep Workspace identity stable and reduce the duplicate
+   motion to a small, static aggregate mark on the folder — on the desktop sidebar and the <=960px
+   drawer alike, so every row's mark sits in the same column and a needs-you count keeps the row's
+   far end to itself. */
 .tp-workspace-icon-running {
-  display: none;
   position: absolute;
   right: -3px;
   bottom: -2px;
@@ -781,7 +779,6 @@ body {
   animation: status-glyph-breathe 2.4s ease-in-out infinite;
 }
 .tp-workspace-icon-jobs {
-  display: none;
   position: absolute;
   right: -3px;
   bottom: -2px;
@@ -1134,20 +1131,9 @@ body {
    (which toggles on .open, not .collapsed) is never touched — there the panel
    always opens as the full list. */
 @media (min-width: 961px) {
-  /* Workspace-level activity keeps one stable visual language across desktop routes: a quiet dot
-     on the expanded folder or collapsed avatar. Session rows remain the only rotating indicators;
-     the <=960px drawer keeps its existing spinner. */
-  .app-shell .app-nav:not(.collapsed) .tp-workspace-icon-running {
-    display: block;
-  }
-  /* Same reveal, same slot, same dot — a rule of its own so the existing one keeps reading as the
-     single statement about the working dot. */
-  .app-shell .app-nav:not(.collapsed) .tp-workspace-icon-jobs {
-    display: block;
-  }
-  .app-shell .app-nav:not(.collapsed) .tp-workspace-running {
-    display: none;
-  }
+  /* Workspace-level activity keeps one stable visual language: the quiet dot the expanded folder
+     shows at every width, here on the collapsed avatar. Session rows remain the only rotating
+     indicators. */
   .app-shell .app-nav:not(.collapsed) .tp-workspace-shortcut {
     display: inline;
   }
