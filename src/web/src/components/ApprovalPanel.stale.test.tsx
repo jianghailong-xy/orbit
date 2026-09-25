@@ -198,6 +198,7 @@ beforeEach(() => {
       // here can only have arrived as a frame.
       if (path.includes('/approvals')) return reply([]);
       if (path.includes('/background')) return reply([]);
+      if (path.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
       if (path.includes('/diff')) return reply({ files: [] });
       return reply(sessionRow);
     }

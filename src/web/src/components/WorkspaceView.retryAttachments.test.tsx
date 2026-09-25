@@ -126,6 +126,7 @@ function answer(path: string, method: string, body: unknown): unknown {
     if (path.includes('/turns')) return activeTurns;
     if (path.includes('/approvals')) return [];
     if (path.includes('/background')) return [];
+    if (path.includes('/created-tasks')) return { total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] };
     if (path.includes('/diff')) return { files: [] };
     return SESSION;
   }

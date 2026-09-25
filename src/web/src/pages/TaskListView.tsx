@@ -28,8 +28,10 @@ import {
   Segmented,
   Select,
   Spin,
+  Tag,
   Tooltip,
 } from 'antd';
+import { SESSION_CREATED_TASKS_COPY } from '@orbit/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, openTaskListConsole } from '../api';
@@ -54,7 +56,7 @@ import {
   rememberTaskFilter,
   matchesTaskFilter,
 } from '../lib/taskFilters';
-import { activeTasksQuery, labelSummaryQuery, taskCountsQuery } from '../lib/queries';
+import { activeTasksQuery, labelSummaryQuery, sessionQuery, taskCountsQuery } from '../lib/queries';
 import type { LabelSummaryRow } from '../lib/taskPages';
 import { taskPagePath, type TaskCounts, type TaskPage } from '../lib/taskPages';
 import {
@@ -435,6 +437,12 @@ export function TaskListView() {
   const listId = listKey && !isUnlisted ? routeId(listKey) : null;
   const isListView = !!listId;
   const scopeListId = isUnlisted ? 'none' : (listId ?? undefined);
+  // `?createdIn=<session>`: only the tasks one conversation created — where "View all in Tasks ›"
+  // under a session's "Tasks created here" row lands. A scope like the list's, so the server narrows
+  // the rows and the tallies alike; the chip in the toolbar names it and takes it off.
+  const createdIn = routeId(searchParams.get('createdIn')) ?? undefined;
+  const createdInSession = useQuery(sessionQuery(createdIn));
+  const createdInTitle = createdInSession.data?.title?.trim() || 'this session';
 
   // Every view — all tasks, one user list, the unlisted bucket — pages through the same cursor
   // endpoint, which executes the status/title/list filters server-side, so even an owner with
@@ -450,7 +458,13 @@ export function TaskListView() {
     queryKey: [
       'tasks',
       'page',
-      { filter, query, listId: scopeListId ?? null, labels: labels.length ? labels : undefined },
+      {
+        filter,
+        query,
+        listId: scopeListId ?? null,
+        labels: labels.length ? labels : undefined,
+        creatorSessionId: createdIn,
+      },
     ],
     queryFn: ({ pageParam }) =>
       api<TaskPage>(
@@ -461,6 +475,7 @@ export function TaskListView() {
           listId: scopeListId,
           labels,
           q: query,
+          creatorSessionId: createdIn,
           // Never the scope-wide block: that is its own request now, keyed by scope, so a tab
           // change is a cache hit rather than four aggregates over the whole task table. Page 1
           // still asks for `total`, which is the filtered count and does move with the tab and
@@ -490,7 +505,7 @@ export function TaskListView() {
   // The tallies have their own request, keyed by the scope they describe rather than by the tab.
   // They survive a tab change because nothing about them changed — no carrying, no cache trick,
   // just a query whose key says what it depends on.
-  const taskCounts = useQuery(taskCountsQuery(scopeListId, labels));
+  const taskCounts = useQuery(taskCountsQuery(scopeListId, labels, createdIn));
   const taskPageCounts = taskCounts.data;
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
   // Feeds both the Batches table and the picker's options, so opening the picker costs no
@@ -499,19 +514,22 @@ export function TaskListView() {
   // tasks run oldest-first while the list is served newest-first, so the active ones sit at the
   // far end of the pagination — 550 pages down on this deployment. Only on the unfiltered tab;
   // Running and Failed already answer for themselves, and pinning a row above the tab that
-  // exists to show it is just showing it twice.
+  // exists to show it is just showing it twice. Nor in one session's scope: `/tasks/active` cannot
+  // be narrowed to it, so it would pin other conversations' work over this one's — and the tasks a
+  // session created are few enough to all be on the first page anyway.
   const activeTasks = useQuery({
     ...activeTasksQuery(scopeListId),
-    enabled: view === 'tasks' && filter === 'ALL',
+    enabled: view === 'tasks' && filter === 'ALL' && !createdIn,
   });
   // Ranked by live state here, which is the one place that ranking is honest: the strip is the
   // complete set in scope (capped at 50 and reporting when it capped), not a page of it, so
   // "running first" is a statement about all of it rather than about what happened to load.
   const activeRows = useMemo(() => {
-    if (filter !== 'ALL') return [];
+    // Checked here as well as in `enabled`: a disabled query still hands back what it cached.
+    if (filter !== 'ALL' || createdIn) return [];
     const items = activeTasks.data?.items ?? [];
     return [...items].sort((a: any, b: any) => compareTasksBy(a, b, 'status'));
-  }, [activeTasks.data, filter]);
+  }, [activeTasks.data, filter, createdIn]);
   const labelSummary = useQuery(labelSummaryQuery(scopeListId));
   const labelRows = labelSummary.data?.items ?? [];
   const hasLabels = labelRows.length > 0 || labels.length > 0;
@@ -537,30 +555,37 @@ export function TaskListView() {
   // Opening a task writes its own address, which is the whole point: a task URL can be copied,
   // bookmarked and pasted into a chat, and it reopens over the same background. `replace` and
   // never `push` — the list and the panel above it are one place, and arrowing down a long list
-  // would otherwise leave one history entry per row for Back to walk through.
+  // would otherwise leave one history entry per row for Back to walk through. A session scope
+  // rides along in `?createdIn=` as the list does in `?list=`, so a task opened over one
+  // conversation's tasks still has those behind it.
   const openTask = useCallback(
     (id: string) => {
       // One spelling everywhere — the row's id, the address and the panel all hold the base62
       // public id — so the effect above cannot flip the panel between two spellings of one task.
       const publicId = encodeId(id);
       setSelectedTaskId(publicId);
-      navigate(`/tasks/${publicId}${listKey ? `?list=${listKey}` : ''}`, { replace: true });
+      const scope = new URLSearchParams();
+      if (listKey) scope.set('list', listKey);
+      if (createdIn) scope.set('createdIn', createdIn);
+      const search = scope.toString();
+      navigate(`/tasks/${publicId}${search ? `?${search}` : ''}`, { replace: true });
     },
-    [listKey, navigate],
+    [listKey, createdIn, navigate],
   );
   // Closing puts the address back where it was before the panel opened — the list it came from,
   // or every task when there was none. Same replace, so Back still leaves the page rather than
   // undoing one panel per press.
   const closeTask = useCallback(() => {
     setSelectedTaskId(null);
-    navigate(listKey ? `/lists/${listKey}` : '/tasks', { replace: true });
-  }, [listKey, navigate]);
+    const scope = createdIn ? `?${new URLSearchParams({ createdIn })}` : '';
+    navigate(`${listKey ? `/lists/${listKey}` : '/tasks'}${scope}`, { replace: true });
+  }, [listKey, createdIn, navigate]);
   // The selection is scoped to what's currently visible; reset it whenever that set
   // changes (different list/section, or a different status filter) to avoid running
   // tasks the user can no longer see. Deliberately not keyed on the pathname: the panel opening
   // does not change which rows are behind it, and neither a click nor an arrow key — which
   // re-anchors the selection as it moves — may drop a multi-selection the user just built.
-  useEffect(() => setSelection(EMPTY_SELECTION), [scopeListId, filter]);
+  useEffect(() => setSelection(EMPTY_SELECTION), [scopeListId, filter, createdIn]);
   // Re-sorting or re-searching keeps the selection — the rows are still there — but voids
   // the anchor: a range is defined by two rows' positions, which just moved under it.
   useEffect(() => setSelection(dropAnchor), [sortField, sortDir, query]);
@@ -1305,6 +1330,19 @@ export function TaskListView() {
                         );
                       }}
                     />
+                  )}
+                  {createdIn && (
+                    <Tag
+                      className="tasks-createdin"
+                      closable={{ 'aria-label': 'Remove this filter' }}
+                      onClose={() => setParam('createdIn', '', '')}
+                      title={`${SESSION_CREATED_TASKS_COPY.createdInChip}${createdInTitle}`}
+                    >
+                      <span className="tasks-createdin-text">
+                        {SESSION_CREATED_TASKS_COPY.createdInChip}
+                        {createdInTitle}
+                      </span>
+                    </Tag>
                   )}
                   {uniformAssignee?.name && (
                     <span className="task-assignee-chip" style={{ marginLeft: 'auto' }}>

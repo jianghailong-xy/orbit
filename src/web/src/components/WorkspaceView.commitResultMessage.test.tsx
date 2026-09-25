@@ -177,6 +177,7 @@ beforeEach(() => {
     // never arrives here: it is read by the stubbed module-local `getSession` above.
     if (path.startsWith('/sessions/')) {
       if (path.includes('/background')) return reply([]);
+      if (path.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
       if (path.includes('/diff')) return reply({ patches: [] });
       return reply([]);
     }
