@@ -68,6 +68,11 @@ var cliParityParamAlias = map[string]string{
 	"targets":    "--target",
 	"taskIds":    "--task-id",
 	"sessionIds": "--session-id",
+	// Singular at a terminal for the same reason: --kind carries one kind and repeats, and --path
+	// carries one repo-relative path, which is also what keeps a comma inside a path from being read
+	// as a separator.
+	"kinds": "--kind",
+	"paths": "--path",
 }
 
 // The CLI and the MCP server are two doors onto the same API, and `orbit capabilities` is what an
@@ -76,7 +81,7 @@ var cliParityParamAlias = map[string]string{
 // grew `provider` and `permissionMode` and the hand-written argument list kept quiet about them.
 func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 	specs := map[string]cliCapabilitySpec{}
-	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, watchCLICapabilities} {
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, watchCLICapabilities, wikiCLICapabilities} {
 		for _, spec := range list {
 			specs[spec.Tool] = spec
 		}

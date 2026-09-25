@@ -3075,7 +3075,7 @@ final class ConsoleModel {
         if !force, let last = lastBackgroundFetch, now.timeIntervalSince(last) < 30 { return }
         guard let dtos = try? await api.backgroundShells(sessionID: sessionID) else { return }
         lastBackgroundFetch = now
-        reducer.seedBackground(dtos.map { $0.asBackgroundProc() })
+        reducer.seedBackground(dtos.map { $0.asBackgroundProc() }, progress: dtos.compactMap(\.taskProgress))
         publishStateNow()
     }
 

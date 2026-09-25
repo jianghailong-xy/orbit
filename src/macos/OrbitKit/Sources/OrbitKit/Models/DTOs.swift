@@ -263,6 +263,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Drives the breathing terminal glyph — see `SessionStatusGlyph.pulse`. Absent from older
     /// servers, which keeps the glyph still.
     public let runningBgJobCount: Int?
+    /// How many sub-agents and workflows the runtime started are still at work (the server's
+    /// Session.runningSubagents, counted): the parked-but-working state web calls "Running Agent".
+    /// Read off the session list; absent from older servers, which reads as none.
+    public let runningSubagentCount: Int?
     /// Whether the engine is generating on a turn nobody dispatched. A runtime restarts the model
     /// on its own when a background task reports in or a scheduled wake-up fires; those turns
     /// never reach the control plane's turn bookkeeping, so the session stays at AWAITING_INPUT
@@ -374,6 +378,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
+        runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
@@ -398,6 +403,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
+                runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
@@ -435,6 +441,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastUserText = lastUserText
         self.runningBgCount = runningBgCount
         self.runningBgJobCount = runningBgJobCount
+        self.runningSubagentCount = runningSubagentCount
         self.engineTurnActive = engineTurnActive
         self.error = error
         self.endReason = endReason
@@ -709,17 +716,26 @@ public struct BgShellDTO: Decodable, Sendable {
     public let status: String
     public let latestOutput: String?
     public let startedTs: String?
+    /// `shell`, `agent` or `workflow` — what launched it. Absent from older servers, which list shells only.
+    public let kind: String?
+    /// An agent's or workflow's last progress, carried by the notification that ended it.
+    public let progress: JSONValue?
 
     /// Map to the reducer's `BackgroundProc`: key by `toolUseId`, translate the web status vocab to
     /// the native one, and default a missing output to empty (the tray shows "No output captured yet").
     public func asBackgroundProc() -> BackgroundProc {
         BackgroundProc(id: toolUseId,
-                       command: command,
+                       command: command?.isEmpty == false ? command : nil,
                        description: description,
                        status: status == "done" ? "completed" : status,
                        outputTail: latestOutput ?? "",
-                       startedAt: startedTs)
+                       startedAt: startedTs,
+                       kind: kind,
+                       taskId: shellId)
     }
+
+    /// The progress this row ended with, for `seedBackground`.
+    public var taskProgress: TaskProgress? { TaskProgress.from(progress) }
 }
 
 public enum ApprovalBehavior: String, Codable, Sendable {

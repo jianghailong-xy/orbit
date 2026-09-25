@@ -66,6 +66,7 @@ import {
   isUsageLimitErrorText,
   parseQuotaResetAt,
   planUsageBlockedUntil,
+  workflowLaunchReceipt,
   type PlanUsage,
   PermissionMode,
   QuestionAnswers,
@@ -145,6 +146,7 @@ import {
   hasCoordinatorOpening,
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
+import { appendWikiContext } from '../wiki/wiki-push';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -332,6 +334,9 @@ const APPROVAL_LONG_POLL_MS = 25_000;
 const APPROVAL_POLL_INTERVAL_MS = 1_500;
 // Spread over which quota retries are scattered past their reset. See retryPlanFor.
 const QUOTA_RETRY_JITTER_MS = 60_000;
+// The runtime tools whose call starts work that outlives it — see subStarted in the events ingest.
+// Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them.
+const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow']);
 const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // Session primary keys are UUIDv7, while older rows may still be UUIDv4. Keep
 // entity-ID validation separate from the stricter runner-generated lease UUID
@@ -2905,6 +2910,12 @@ export class RunnerApiController {
             coordinatorContextEpoch: true,
             coordinatorContextAckKey: true,
             coordinatorForProject: { select: { id: true } },
+            // What the wiki context below is decided from: which space this session's workspace is
+            // bound to, and the three things about a run that take it out of the push entirely —
+            // a verifier, a foreman, or a judgment session (design §7.3).
+            workspaceId: true,
+            dispatchOrigin: true,
+            task: { select: { verifiesTaskId: true, isForeman: true } },
           },
         });
         // A message turn that already produced runtime output is a lease re-delivery.
@@ -3035,6 +3046,34 @@ export class RunnerApiController {
                   data: { coordinatorContextKey: contextKey },
                 });
               }
+            }
+          }
+          // The wiki's opening context for this session: the notes the owner has confirmed for the
+          // codebase it works in (design §7.1). Beside the coordinator block and on the same rule —
+          // delivery-time context, appended to what the person wrote and never written over it, so
+          // `turn.content` and the task start card built from it are untouched. Said once per engine
+          // process rather than once per turn, which is why it asks the lease generation.
+          //
+          // Best-effort, exactly like the list conditions and the background jobs above: a note
+          // ABOUT the work must never be the reason the turn carrying it fails to be delivered.
+          if (t.kind !== 'steer') {
+            try {
+              content = (await appendWikiContext(tx, {
+                sessionId,
+                turnId: t.id,
+                leaseGeneration,
+                ownerId: sessionContext.ownerId,
+                workspaceId: sessionContext.workspaceId,
+                taskId: owned[0].taskId,
+                task: sessionContext.task,
+                dispatchOrigin: sessionContext.dispatchOrigin,
+                content,
+              })) ?? content;
+            } catch (e) {
+              this.logger.warn(
+                `could not attach wiki context to session ${sessionId}: `
+                + `${e instanceof Error ? e.message : e}`,
+              );
             }
           }
         }
@@ -4608,13 +4647,21 @@ export class RunnerApiController {
 
       // Denormalize the latest assistant reply onto the session for the list's preview
       // line. Take the highest-seq assistant event in this batch with non-empty text;
-      // seq is monotonic per session, so this only ever advances.
+      // seq is monotonic per session, so this only ever advances. The workspace's own reply
+      // only: a sub-agent's text (parentToolUseId) is the report it hands its caller, and on a
+      // session running background agents it keeps arriving after the turn has answered — as
+      // the preview it read as the workspace talking, and as the retry signal below its "API
+      // Error" armed a re-send of the person's message and its ordinary prose disarmed one.
       const lastAssistant = durable
-        .filter((e) => e.type === RunEventType.ASSISTANT)
-        .reduce<{ seq: number; text: string } | null>((acc, e) => {
+        .filter(
+          (e) =>
+            e.type === RunEventType.ASSISTANT &&
+            !(e.payload as { parentToolUseId?: string } | null)?.parentToolUseId,
+        )
+        .reduce<{ seq: number; text: string; turnId: string | null } | null>((acc, e) => {
           const text = (e.payload as { text?: string } | null)?.text?.trim();
           if (!text) return acc;
-          return !acc || e.seq > acc.seq ? { seq: e.seq, text } : acc;
+          return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
         }, null);
       // Denormalize the "frontier" activity for the sidebar's live status line. The
       // highest-seq durable event is the workspace's latest known state: a tool_use means a
@@ -4715,7 +4762,7 @@ export class RunnerApiController {
       // that moment. Detected here rather than in the runner so it also covers runners too old
       // to know about this — they self-update on their own schedule and outlive a release.
       const retry = lastAssistant
-        ? await this.retryPlanFor(tx, sessionId, runner.id, lastAssistant.text)
+        ? await this.retryPlanFor(tx, sessionId, runner.id, lastAssistant.text, lastAssistant.turnId != null)
         : {};
       // Whether the engine is generating right now — see Session.engineTurnActive. Tracked
       // separately from the frontier above because it must survive a tool_result (a tool
@@ -4857,17 +4904,21 @@ export class RunnerApiController {
       // any row that confirms it is the answer.
       for (const id of bgConfirmed) bgRefused.delete(id);
       const bgStarted = [...batchToolIds].filter((id) => bgConfirmed.has(id));
-      // Sub-workspaces (Task/Workspace tool) run async: the launch tool_result ("Async workspace launched")
-      // lands immediately and the parent then streams its own top-scope system progress events,
-      // so lastToolUse can't stay 'Workspace'. Track in-flight sub-workspaces the same way as background
-      // shells — by their launch tool_use id, cleared by the same terminal background_task
-      // (bgEnded) — so the list can show "Running Workspace…" the whole time one runs. Only top-level
-      // launches count; a sub-workspace's own nested tool_use carries parentToolUseId, so skip those.
+      // The runtime's own sub-agents (Claude Code's Agent tool, formerly Task) and its workflows (the
+      // Workflow tool, which runs a whole team of them) work on after their launch tool_result
+      // ("Async agent launched" / "Workflow launched in background") lands, and the parent then
+      // streams its own top-scope system progress events, so lastToolUse can't stay on the call.
+      // Track them the same way as background shells — by their launch tool_use id, cleared by the
+      // same terminal background_task (bgEnded) — so the list can show "Running Agent…" the whole
+      // time one runs. These are the RUNTIME's tool names, not Orbit's: the 08-14 Agent→Workspace
+      // rename rewrote 'Agent' here too, and no call named 'Workspace' exists, so from then on this
+      // set never saw a sub-agent. Only top-level launches count; a sub-agent's own nested tool_use
+      // carries parentToolUseId, so skip those.
       const subStarted = events
         .filter(
           (e) =>
             e.type === RunEventType.TOOL_USE &&
-            ['Task', 'Workspace'].includes(String((e.payload as { name?: string }).name ?? '')) &&
+            RUNTIME_SUBAGENT_TOOLS.has(String((e.payload as { name?: string }).name ?? '')) &&
             !(e.payload as { parentToolUseId?: string }).parentToolUseId,
         )
         .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
@@ -4882,19 +4933,21 @@ export class RunnerApiController {
         )
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
-      // A *synchronous* sub-workspace (Task/Workspace run inline) reports completion as its own top-level
+      // A *synchronous* sub-agent (Agent run inline) reports completion as its own top-level
       // tool_result, never a <task-notification> — so without this it stays in runningSubagents
-      // forever and the list is stuck on "Running Workspace…". A sub-workspace's own nested tool_results
-      // carry parentToolUseId (skip those), and an async workspace's immediate "Async workspace launched"
-      // ack is also a top-level tool_result for its id — but that one runs on and is cleared later
-      // by its terminal background_task (bgEnded), so exclude it. Any non-sub-workspace tool_result id
-      // here is harmless: it's simply absent from runningSubagents, so array_remove is a no-op.
+      // forever and the list is stuck on "Running Agent…". A sub-agent's own nested tool_results
+      // carry parentToolUseId (skip those), and an async agent's immediate "Async agent launched"
+      // ack — like a workflow's launch receipt — is also a top-level tool_result for its id, but
+      // that one runs on and is cleared later by its terminal background_task (bgEnded), so exclude
+      // it. Any other tool_result id here is harmless: it's simply absent from runningSubagents, so
+      // array_remove is a no-op.
       const subEnded = events
         .filter(
           (e) =>
             e.type === RunEventType.TOOL_RESULT &&
             !(e.payload as { parentToolUseId?: string }).parentToolUseId &&
-            !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content),
+            !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content) &&
+            !workflowLaunchReceipt((e.payload as { content?: unknown }).content),
         )
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
@@ -5945,15 +5998,25 @@ export class RunnerApiController {
    *    over, so clear the count. This is the ONLY thing that clears it: doing it when a retry
    *    is dispatched instead would restart the backoff at every attempt, and a provider that
    *    fails identically every time would be re-sent to forever.
+   *
+   * `delivered` is whether the reply belongs to a turn somebody sent — false for one the runtime
+   * started for itself (a background agent or workflow reporting in; its events carry no turn id,
+   * the same "turn nobody delivered" the spend fuse reads). Such a failure leaves both fields
+   * alone: a retry re-sends the person's latest message, and that message was answered before
+   * this turn began, so arming here re-sent an already-answered question until one attempt got
+   * through. The notification that woke it is not lost — the runtime hands it over with the next
+   * message it is sent.
    */
   private async retryPlanFor(
     tx: RetryPlanTransaction,
     sessionId: string,
     runnerId: string,
     text: string,
+    delivered = true,
   ): Promise<{ retryAt?: Date | null; retryAttempts?: number }> {
     const quotaSpent = isUsageLimitErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
+    if (!delivered) return {};
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {

@@ -85,8 +85,9 @@ describe('TasksSidePanel nav', () => {
     // The judgment inbox stood first here until migration 0229 removed the project acceptance
     // judgment: the page it opened read an endpoint that is no longer served. Following (the
     // watches page, docs/watch-contract.md) stood after Projects until it left the sidebar: its
-    // watches are agents' waits, reached from the session that keeps them.
-    expect(keys).toEqual(['projects', 'runners', 'providers']);
+    // watches are agents' waits, reached from the session that keeps them. Wiki went in under
+    // Projects (design §12.1): a codebase has two faces, the work in it and what the work learned.
+    expect(keys).toEqual(['projects', 'wiki', 'runners', 'providers']);
     expect(source).not.toContain('tp-workspaces-head');
     expect(source).not.toContain('<span className="tp-group-name">Workspaces</span>');
   });
@@ -288,23 +289,19 @@ describe('TasksSidePanel workspace rows', () => {
     expect(source).toContain('shortcutLabel={workspaceShortcutLabel(index)}');
   });
 
-  it('keeps the trailing spinner markup as the mobile fallback', () => {
-    const running = renderToStaticMarkup(
-      <WorkspaceStateMark offline={false} running needsYou={0} />,
-    );
-    expect(running).toContain('anticon-loading');
-    expect(running).toContain('anticon-spin');
-    expect(running).toContain('color:var(--brand)');
-    expect(running).toContain('font-size:16px');
-    expect(running).toContain('aria-label="Session running"');
-
-    const idle = renderToStaticMarkup(
-      <WorkspaceStateMark offline={false} running={false} needsYou={0} />,
-    );
-    expect(idle).toBe('');
+  it('gives the drawer the folder dot rather than a trailing spinner of its own', () => {
+    // The expanded list's trailing slot is the count's alone at every width, so the drawer's
+    // running rows line up with its idle ones instead of pushing a spinner in front of a count.
+    for (const running of [true, false]) {
+      expect(
+        renderToStaticMarkup(<WorkspaceStateMark offline={false} running={running} needsYou={0} />),
+      ).toBe('');
+    }
+    // …and no width hides the folder's dots: they are not a desktop-only reveal any more.
+    expect(styles).not.toMatch(/\.tp-workspace-icon-(?:running|jobs)\s*\{[^}]*display:\s*none/);
   });
 
-  it('uses quiet Workspace dots across desktop routes in both sidebar densities', () => {
+  it('uses quiet Workspace dots at every width and in both sidebar densities', () => {
     const html = renderToStaticMarkup(
       <WorkspaceRow
         workspace={workspace}
@@ -320,19 +317,15 @@ describe('TasksSidePanel workspace rows', () => {
     expect(html).toContain('tp-workspace-icon-running');
     expect(html).toContain('title="Running"');
     expect(html).toContain('aria-label="Workspace has a running session"');
-    expect(html).toContain('anticon-loading');
+    expect(html).not.toContain('anticon-loading');
     expect(styles).toMatch(
-      /\.tp-workspace-icon-running\s*\{[\s\S]*?display:\s*none;[\s\S]*?width:\s*6px;[\s\S]*?height:\s*6px;[\s\S]*?background:\s*var\(--brand\)/,
+      /\.tp-workspace-icon-running\s*\{[\s\S]*?width:\s*6px;[\s\S]*?height:\s*6px;[\s\S]*?background:\s*var\(--brand\)/,
     );
     const dotRule = styles.match(/\.tp-workspace-icon-running\s*\{([\s\S]*?)\}/)?.[1] ?? '';
     expect(dotRule).not.toContain('animation');
     expect(styles).toMatch(
       /\.tp-item\.active \.tp-workspace-icon-running\s*\{[\s\S]*?box-shadow:\s*0 0 0 1\.5px var\(--bg-raised\)/,
     );
-    const desktopDotSelector =
-      '.app-shell .app-nav:not(.collapsed) .tp-workspace-icon-running';
-    const desktopSpinnerSelector =
-      '.app-shell .app-nav:not(.collapsed) .tp-workspace-running';
     const collapsedRailSpinnerSelector =
       '.app-shell .app-nav.collapsed .tp-rail-running';
     const collapsedRailSvgSelector = `${collapsedRailSpinnerSelector} > svg`;
@@ -343,17 +336,9 @@ describe('TasksSidePanel workspace rows', () => {
     expect(desktopStart).toBeGreaterThanOrEqual(0);
     expect(mobileStart).toBeGreaterThan(desktopStart);
     expect(desktopStyles).not.toContain(':has(.workspace-split > .session-col)');
-    expect(desktopStyles).toContain(desktopDotSelector);
-    expect(desktopStyles).toContain(desktopSpinnerSelector);
     expect(desktopStyles).toContain(collapsedRailSpinnerSelector);
     expect(desktopStyles).toContain(collapsedRailSvgSelector);
     expect(desktopStyles).toContain(collapsedRailDotSelector);
-    expect(
-      styles.match(new RegExp(`${desktopDotSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1],
-    ).toContain('display: block');
-    expect(
-      styles.match(new RegExp(`${desktopSpinnerSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1],
-    ).toContain('display: none');
     expect(
       styles.match(new RegExp(`${collapsedRailSpinnerSelector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\}`))?.[1],
     ).toMatch(/background:\s*transparent;[\s\S]*animation:\s*none !important;/);
@@ -395,15 +380,11 @@ describe('TasksSidePanel workspace rows', () => {
     expect(both).toContain('tp-workspace-icon-running');
     expect(both).not.toContain('tp-workspace-icon-jobs');
 
-    // The mobile fallback for the same state, and the reason it is not a spinner: a background job
-    // is not the agent working, so the tray's rotating indicator never stands for it.
+    // The drawer draws this same breathing dot on the folder; its trailing slot stays the count's.
     const trailing = renderToStaticMarkup(
       <WorkspaceStateMark offline={false} running={false} jobs={1} needsYou={0} />,
     );
-    expect(trailing).toContain('anticon-code');
-    expect(trailing).toContain('status-glyph-active');
-    expect(trailing).toContain('aria-label="1 background job running"');
-    expect(trailing).not.toContain('anticon-spin');
+    expect(trailing).toBe('');
 
     // Same brand blue as the dot above — work in flight is activity too — and the only animated
     // mark in this rail: the dot beside it stays still.
@@ -412,9 +393,6 @@ describe('TasksSidePanel workspace rows', () => {
     expect(jobsRule).toContain('animation: status-glyph-breathe');
     expect(styles).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.tp-workspace-icon-jobs\s*\{\s*animation:\s*none;/,
-    );
-    expect(styles).toMatch(
-      /@media \(min-width:\s*961px\)[\s\S]*?\.app-shell \.app-nav:not\(\.collapsed\) \.tp-workspace-icon-jobs\s*\{\s*display:\s*block;/,
     );
 
     // The collapsed rail keeps the language it already has for the spinner: the mark sits at the
@@ -433,19 +411,20 @@ describe('TasksSidePanel workspace rows', () => {
     ).toMatch(/background:\s*var\(--brand\);[\s\S]*animation:\s*status-glyph-breathe/);
   });
 
-  it('keeps needs-you and offline states ahead of the quiet running dot', () => {
-    const needsYou = renderToStaticMarkup(
-      <WorkspaceRow
-        workspace={workspace}
-        runnerLabel="wikova"
-        active={false}
-        offline={false}
-        running
-        jobs={3}
-        needsYou={2}
-        onOpen={() => undefined}
-      />,
-    );
+  it('shows activity beside a needs-you count in every density, and keeps offline ahead of it', () => {
+    const needsYou = (running: boolean) =>
+      renderToStaticMarkup(
+        <WorkspaceRow
+          workspace={workspace}
+          runnerLabel="wikova"
+          active={false}
+          offline={false}
+          running={running}
+          jobs={3}
+          needsYou={2}
+          onOpen={() => undefined}
+        />,
+      );
     const offline = renderToStaticMarkup(
       <WorkspaceRow
         workspace={workspace}
@@ -458,14 +437,32 @@ describe('TasksSidePanel workspace rows', () => {
         onOpen={() => undefined}
       />,
     );
-    expect(needsYou).toContain('tp-count needs-you');
-    expect(needsYou).not.toContain('tp-workspace-icon-running');
-    expect(needsYou).not.toContain('tp-workspace-icon-jobs');
-    expect(needsYou).not.toContain('anticon-loading');
+    // The count and the dot sit at opposite ends of the row and say different things: the server
+    // leaves the sessions waiting on you out of `running`/`jobs`, so the dot is other work.
+    expect(needsYou(true)).toContain('tp-count needs-you');
+    expect(needsYou(true)).toContain('tp-workspace-icon-running');
+    expect(needsYou(true)).not.toContain('tp-workspace-icon-jobs');
+    // The drawer shows the same folder dot, so no spinner squeezes in front of the count there.
+    expect(needsYou(true)).not.toContain('anticon-loading');
+    expect(needsYou(false)).toContain('tp-count needs-you');
+    expect(needsYou(false)).toContain('tp-workspace-icon-jobs');
+    expect(needsYou(false)).not.toContain('tp-workspace-icon-running');
     expect(offline).toContain('tp-workspace-icon-offline');
     expect(offline).not.toContain('tp-workspace-icon-running');
     expect(offline).not.toContain('tp-workspace-icon-jobs');
     expect(offline).not.toContain('anticon-loading');
+
+    // The collapsed rail: the count in the avatar's top corner, activity in its bottom one.
+    const rail = (running: boolean, jobs: number) =>
+      renderToStaticMarkup(
+        <WorkspaceStateMark compact offline={false} running={running} jobs={jobs} needsYou={2} />,
+      );
+    expect(rail(true, 0)).toContain('tp-rail-badge needs-you');
+    expect(rail(true, 0)).toContain('tp-rail-running');
+    expect(rail(false, 1)).toContain('tp-rail-badge needs-you');
+    expect(rail(false, 1)).toContain('tp-rail-jobs');
+    expect(styles).toMatch(/\.tp-rail-badge\s*\{[\s\S]*?top:\s*1px;[\s\S]*?right:\s*1px;/);
+    expect(styles).toMatch(/\.tp-rail-running\s*\{[\s\S]*?right:\s*1px;[\s\S]*?bottom:\s*1px;/);
   });
 
   it('moves expanded offline state onto the folder and suppresses a stale running signal', () => {

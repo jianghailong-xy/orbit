@@ -348,6 +348,113 @@ test('a Monitor call with no receipt puts nothing in the running background set'
   );
 });
 
+/** Claude Code's own receipts, verbatim from a production session (claude 2.1.282). */
+const ASYNC_AGENT_ACK =
+  'Async agent launched successfully. (This tool result is internal metadata — never quote or paste' +
+  ' any part of it, including the agentId below, into a user-facing reply.) agentId: a05fc3596d22b3d3e';
+const WORKFLOW_RECEIPT =
+  'Workflow launched in background. Task ID: w2f3yv1s8\nSummary: 3 competing designs; 2 judges\n' +
+  'Transcript dir: /root/.claude/projects/x/subagents/workflows/wf_37d4e19e-c97';
+
+// The runtime's sub-agents are called Agent (Task before Claude Code 2.x) and a workflow is a team of
+// them. The 08-14 Agent→Workspace rename rewrote the name this set is keyed on to one no call has,
+// and from then on a session running background agents read "Waiting for your reply".
+test('an async Agent and a Workflow count as running sub-agents until their notification', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 60, type: RunEventType.TOOL_USE, ts: '2026-09-25T06:03:38.000Z',
+        payload: { id: 'toolu_agent', name: 'Agent', input: { description: 'Deep-read wikova', run_in_background: true } } },
+      { seq: 61, type: RunEventType.TOOL_RESULT, ts: '2026-09-25T06:03:38.500Z',
+        payload: { toolUseId: 'toolu_agent', content: [{ type: 'text', text: ASYNC_AGENT_ACK }] } },
+      { seq: 62, type: RunEventType.TOOL_USE, ts: '2026-09-25T07:59:59.000Z',
+        payload: { id: 'toolu_wf', name: 'Workflow', input: { resumeFromRunId: 'wf_37d4e19e-c97' } } },
+      { seq: 63, type: RunEventType.TOOL_RESULT, ts: '2026-09-25T08:00:02.000Z',
+        payload: { toolUseId: 'toolu_wf', content: WORKFLOW_RECEIPT } },
+    ],
+  });
+
+  assert.deepEqual(
+    calls.update[0].data.runningSubagents,
+    ['toolu_agent', 'toolu_wf'],
+    'both launch receipts leave their call running',
+  );
+});
+
+test('a Workflow leaves the running sub-agents when its notification arrives', async () => {
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', {
+    runningSubagents: ['toolu_agent', 'toolu_wf'],
+  });
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 70, type: RunEventType.BACKGROUND_TASK, ts: '2026-09-25T08:27:20.000Z',
+        payload: { status: 'completed', shellId: 'w2f3yv1s8', toolUseId: 'toolu_wf', summary: 'Dynamic workflow completed' } },
+    ],
+  });
+
+  assert.deepEqual(calls.update[0].data.runningSubagents, ['toolu_agent']);
+});
+
+/** The paired negative: a sub-agent run inline answers in its own tool_result, so the same batch
+ *  that started it ends it — and a Workflow the tool refused never started at all. */
+test('an inline Agent and a refused Workflow leave no running sub-agent behind', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 80, type: RunEventType.TOOL_USE, ts: '2026-09-25T06:00:00.000Z',
+        payload: { id: 'toolu_inline', name: 'Agent', input: { description: 'Quick lookup' } } },
+      { seq: 81, type: RunEventType.TOOL_RESULT, ts: '2026-09-25T06:01:00.000Z',
+        payload: { toolUseId: 'toolu_inline', content: [{ type: 'text', text: 'Here is my research report.' }] } },
+      { seq: 82, type: RunEventType.TOOL_USE, ts: '2026-09-25T06:02:00.000Z',
+        payload: { id: 'toolu_bad', name: 'Workflow', input: { script: 'no meta' } } },
+      { seq: 83, type: RunEventType.TOOL_RESULT, ts: '2026-09-25T06:02:00.100Z',
+        payload: { toolUseId: 'toolu_bad', content: 'Error: script must begin with export const meta', isError: true } },
+    ],
+  });
+
+  assert.equal('runningSubagents' in calls.update[0].data, false, 'nothing is left running');
+});
+
+// A background sub-agent keeps reporting after the turn that started it has answered. Its text is a
+// report to its caller, not the workspace's reply: it must neither become the list's preview nor
+// feed the retry decision (whose "API Error" armed a re-send of the person's message).
+test('a sub-agent reply is neither the preview nor a retry signal', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 90, type: RunEventType.ASSISTANT, ts: '2026-09-25T06:05:12.000Z',
+        payload: { text: 'API Error: 529 {"type":"error","error":{"type":"overloaded_error"}}', parentToolUseId: 'toolu_agent' } },
+      { seq: 91, type: RunEventType.ASSISTANT, ts: '2026-09-25T06:05:13.000Z',
+        payload: { text: 'Now the enqueue side and URL canonicalization.', parentToolUseId: 'toolu_agent' } },
+    ],
+  });
+
+  const data = calls.update[0]?.data ?? {};
+  assert.equal('lastAssistantText' in data, false, 'the preview keeps the workspace\'s own last reply');
+  assert.equal('retryAt' in data, false, 'no retry is armed or cleared by a sub-agent');
+});
+
+// The turn Claude Code starts for a background notification carries no turn id. Its failure is not
+// the person's message failing — that one was answered before it — so nothing is armed to re-send it.
+test('a failure in a turn nobody delivered arms no retry', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 95, type: RunEventType.ASSISTANT, ts: '2026-09-25T07:32:56.000Z',
+        payload: { text: "API Error: Request rejected (429) · This request would exceed your account's rate limit. Please try again later." } },
+    ],
+  });
+
+  const data = calls.update[0]?.data ?? {};
+  assert.equal(data.lastAssistantText?.startsWith('API Error'), true, 'it is still the preview');
+  assert.equal('retryAt' in data, false, 'and nothing is armed to re-send the answered message');
+});
+
 // A tool_use stores its id, and the tool_result pairs back to that row to fill the outcome —
 // output/is_error/finished_at were dead columns until the id gave the result something to join to.
 test('a tool_result fills the outcome of the tool_call its tool_use created', async () => {

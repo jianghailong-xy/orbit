@@ -85,7 +85,7 @@ function makeService(
   rows: SessionRow[],
   opts: {
     resume?: () => Promise<unknown>;
-    events?: Array<{ type: string; payload: unknown; turnId?: string }>;
+    events?: Array<{ type: string; payload: unknown; turnId?: string; seq?: number }>;
     /**
      * §13.1 AG6: the task ids the owner-scoped EXISTS would return for this batch. Modelled as the
      * ANSWER rather than as child rows, because the whole point of that query is that the predicate
@@ -273,14 +273,27 @@ function makeService(
         if (target) Object.assign(target, args.data);
         return {};
       },
+      // The card's read (`retryMessage`): the session, owner-scoped.
+      findFirst: async (args: { where: { id: string; ownerId: string } }) =>
+        rows.find((r) => r.id === args.where.id && r.ownerId === args.where.ownerId) ?? null,
     },
     runEvent: {
       // Honour `where.type` and `take`: what stranded these sessions was reading a fixed
       // window of the stream's end, which on a long turn holds no user event at all. A fake
       // that hands back the user events regardless of what was asked for cannot see that.
-      findMany: async (args: { where: { type?: string }; take: number }) => {
-        const all = opts.events ?? [{ type: 'user', payload: { text: 'the original message' } }];
-        const matching = args.where.type ? all.filter((e) => e.type === args.where.type) : all;
+      // `turnId` and `seq: { gt }` too, when asked: which turn a reply belongs to, and whether it
+      // came after the message, is the whole question a failed background turn raises.
+      findMany: async (args: {
+        where: { type?: string; turnId?: string | null; seq?: { gt?: number } };
+        take: number;
+      }) => {
+        const all: Array<{ type: string; payload: unknown; turnId?: string; seq?: number }> =
+          opts.events ?? [{ type: 'user', payload: { text: 'the original message' } }];
+        const { type, turnId, seq } = args.where;
+        const matching = all.filter((e) =>
+          (!type || e.type === type)
+          && (turnId === undefined || (e.turnId ?? null) === turnId)
+          && (seq?.gt === undefined || (e.seq ?? 0) > seq.gt));
         return matching.slice(-args.take).reverse();
       },
     },
@@ -712,6 +725,38 @@ test('a failed background job wake re-sends nothing, least of all the message be
   const wordless = failedAfter('0f6a9d4e-5b1c-4e2a-9d3f-7c8b6a5e4d21');
   await wordless.service.sweep(NOW);
   assert.deepEqual(wordless.resumed, [{ id: 'session-1', content: 'run the deploy' }]);
+});
+
+// Production, 2026-09-25: a workflow finished while the session sat answered, the turn Claude Code
+// started for its notification hit a 429, and the retry re-sent the person's already-answered
+// message four times over 25 minutes. A turn nobody sent carries no turn id on its events.
+test('a background turn failing after the person was answered re-sends nothing', async () => {
+  const RATE_LIMITED =
+    "API Error: Request rejected (429) · This request would exceed your account's rate limit.";
+  const afterAnswer = (answer: string) => makeService([row()], {
+    events: [
+      { type: 'user', payload: { text: 'the question' }, turnId: 'turn-4', seq: 10 },
+      { type: 'assistant', payload: { text: 'a sub-agent report', parentToolUseId: 'toolu_a' }, turnId: 'turn-4', seq: 15 },
+      { type: 'assistant', payload: { text: answer }, turnId: 'turn-4', seq: 20 },
+      // The workflow's notification turn, and a background sub-agent still talking after it.
+      { type: 'assistant', payload: { text: RATE_LIMITED }, seq: 30 },
+      { type: 'assistant', payload: { text: 'still reading files', parentToolUseId: 'toolu_a' }, seq: 40 },
+    ],
+    turnContents: { 'turn-4': 'the question' },
+  });
+
+  const answered = afterAnswer('Here is the review.');
+  await answered.service.sweep(NOW);
+  assert.deepEqual(answered.resumed, [], 'the retry re-sent a message its own turn had answered');
+  assert.equal(answered.rows[0].retryAt, null, 'disarmed as nothing to re-send');
+  assert.deepEqual(await answered.service.retryMessage('owner-1', 'session-1'), { text: '' },
+    'the card offers no button for it either');
+
+  // The paired positive: the message's own turn died on the quota, so it is still owed its retry
+  // however many background turns failed after it.
+  const unanswered = afterAnswer("You've hit your session limit · resets 6:20pm (Europe/Berlin)");
+  await unanswered.service.sweep(NOW);
+  assert.deepEqual(unanswered.resumed, [{ id: 'session-1', content: 'the question' }]);
 });
 
 test('falls back to the opening prompt when the very first turn hit the limit', async () => {

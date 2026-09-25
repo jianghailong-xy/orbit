@@ -147,6 +147,15 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         void qc.invalidateQueries({ queryKey: ['watches'] });
       }, WATCH_SETTLE_MS);
     };
+    // The owner's wiki: `['wiki']` is the whole group — the space list, a space's entries, one
+    // entry, and the Review queue all hang off it — so one invalidation reaches every wiki view on
+    // screen. Every write path (a recorded changeset, a decided one) says only "this space moved",
+    // so the group is what gets re-read; the event names no entry, op or count (contract
+    // `realtime.redaction`). It is an accelerant and nothing more (contract `realtime.correctness`),
+    // which is why no wiki read is made to depend on it.
+    const refetchWiki = (): void => {
+      void qc.invalidateQueries({ queryKey: ['wiki'] });
+    };
     const REFETCH: Record<string, () => void> = {
       sessions: refetchSessions,
       tasks: refetchTasks,
@@ -155,6 +164,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       providers: refetchProviders,
       decisions: refetchPendingDecisions,
       watches: refetchWatches,
+      wiki: refetchWiki,
     };
     // Which cache groups an event dirties. An event is only ever a nudge to refetch (never a
     // delta), so this is a plain type-prefix → group map. Note the pairs: a workspace rename and a
@@ -174,6 +184,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // either — so before this event the list only found them on its 60s poll, which still runs
       // and is still what makes a dropped event a latency bug and nothing more.
       if (type.startsWith('watch.')) return ['watches'];
+      // The owner's wiki: one of its spaces moved — a changeset recorded something, the owner
+      // decided ops in Review, or the space's own settings or bindings moved (contract
+      // `realtime.publishedWhen`). Named explicitly because the default below is `['sessions']`:
+      // unmapped, every wiki write would re-read a session list the event says nothing about.
+      if (type.startsWith('wiki.')) return ['wiki'];
       // What a watch's leaves read besides a task's status: a session's status and filing, and its
       // pending approvals (docs/watch-contract.md §2.2).
       if (type.startsWith('session.') || type.startsWith('approval.')) return ['sessions', 'watches'];

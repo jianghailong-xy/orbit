@@ -409,5 +409,12 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
    pending 的 amend 内容只存在 op 的 payload 里，被接受时才写新一版。
 8. **`wiki.changed` 的 id 是 space 的 id**：每次写都落在一个 space 里，客户端按 space 重读。
 
+9. **主题名由 slug 反推**（T8）：阶段 1 没有任何写入点写 `wiki_topic`，条目只按 slug 记自己的主题，所以
+   `GET /api/wiki/spaces/:id/topics/:slug` 的名字取自 slug（`tasks-dispatch` → "Tasks dispatch"），
+   `declared: false` 明说这不是 owner 起的名字；阶段 2 的维护作业写下 `wiki_topic` 行之后，名字改由那一行决定。
+10. **用量读数是 `GET /api/wiki/spaces/:id?include=usage`**（T8）：首页右栏「Agents used the wiki」要的是
+   `wiki_exposure` 上的四个聚合，属于按需付钱的那一类，所以不新开路由，按 `entries/:id` 已有的 `include` 写法挂在
+   space 文档上；窗口是滚动的 7 天，否则「this week」名不副实。
+
 尚待后续任务确认的一点：没有对应 space 的 workspace 第一次使用时，是自动为它的仓库建一个 space，还是回 `WIKI_SPACE_UNBOUND`
 等 owner 手动建，设计只写了「自动绑到对应 space」。本契约只规定了绑定到已有 space 的情形，建与不建由 T3 与 owner 定。

@@ -44,6 +44,15 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 		if msg["subtype"] == "init" {
 			slashReg.learn(stringsFromJSON(msg["slash_commands"]), stringsFromJSON(msg["skills"]))
 		}
+		// A background agent or workflow reporting how far it has got: relayed live on its own
+		// event rather than as a bare system ping (claude_task_progress.go).
+		if p := taskProgressPayload(msg); p != nil {
+			if bg != nil {
+				p = bg.noteTaskProgress(p)
+			}
+			emit(evTaskProgress, p)
+			break
+		}
 		sys := map[string]interface{}{
 			"subtype":   msg["subtype"],
 			"model":     msg["model"],

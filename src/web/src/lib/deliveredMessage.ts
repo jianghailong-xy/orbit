@@ -2,8 +2,9 @@
  * Separating what a person typed from what Orbit appended to it.
  *
  * Orbit can add context to a message at delivery — `#`-reference expansion, a task list's
- * condition board, the background work a returning engine is told about, and the standing role of
- * a conversation promoted to project coordinator. These deliberately leave
+ * condition board, the background work a returning engine is told about, the standing role of
+ * a conversation promoted to project coordinator, and the wiki's confirmed notes for the
+ * codebase (`<orbit_wiki_context>`). These deliberately leave
  * `conversation_turn.content` alone, so the durable record of what was sent is the person's own
  * words. But the runner echoes what it *received* into the transcript, which is what the UI
  * renders: the result was a one-line question followed by a block of generated context, inside the
@@ -102,6 +103,9 @@ const TAG_LABEL: Record<string, string> = {
   'background-jobs': 'background jobs',
 };
 
+/** The wiki context block, whose line says how much it holds rather than only what it is. */
+const WIKI_CONTEXT_TAG = 'orbit_wiki_context';
+
 /** Each name once, in the order first seen, counted where it repeats. */
 function countNames(names: string[]): string {
   const counts = new Map<string, number>();
@@ -119,13 +123,23 @@ function countNames(names: string[]): string {
  * ends (splitRecordedNote), so nothing here decides what is shown as theirs. Delivery can append
  * several blocks to one message, so each is named by its opening tag and skipped past its closing
  * one; an opening that is not one of Orbit's blocks is still named, generically.
+ *
+ * The wiki context says how many notes rode along, off the count the block itself carries
+ * (`<orbit_wiki_context entries="3">`, wiki-push.ts) — "Wiki context · 3 entries". Counted here
+ * rather than by reading the block's lines, which is what the expanded list is for: this line is
+ * the one that has to be right while the block is still folded shut.
  */
 export function describeNote(note: string): string {
   const names: string[] = [];
   let rest = note.trim();
   while (rest) {
     const tag = /^<([\w-]+)[\s>]/.exec(rest)?.[1];
-    names.push(tag && Object.hasOwn(TAG_LABEL, tag) ? TAG_LABEL[tag] : 'context');
+    if (tag === WIKI_CONTEXT_TAG) {
+      const count = /^<orbit_wiki_context\s+entries="(\d+)"/.exec(rest)?.[1];
+      names.push(count ? `Wiki context · ${count} entries` : 'Wiki context');
+    } else {
+      names.push(tag && Object.hasOwn(TAG_LABEL, tag) ? TAG_LABEL[tag] : 'context');
+    }
     const close = tag ? rest.indexOf(`\n</${tag}>`) : -1;
     if (close < 0) break;
     rest = rest.slice(close + `\n</${tag}>`.length).trim();

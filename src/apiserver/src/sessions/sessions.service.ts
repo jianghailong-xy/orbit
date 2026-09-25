@@ -2298,7 +2298,10 @@ export class SessionsService {
    * quiet is a process, not work in progress, and the rail should not draw it as the latter. The
    * rail draws this as its own quieter mark: real work the workspace can be doing with nobody
    * generating in it, and the one thing `running` deliberately does not cover.
-   * `needsYou` is returned separately and wins the sidebar status slot.
+   * `needsYou` is returned separately, and a session it counts is in neither `running` nor `jobs`:
+   * the Session list draws that row with the waiting glyph, not the spinner or the breathing
+   * terminal, and the expanded sidebar shows its activity dot beside the count — where a turn
+   * blocked on you would otherwise light the dot for work that is not moving.
    * Sessions with no workspace belong to no row and are skipped.
    */
   async workspaceSessionCounts(ownerId: string) {
@@ -2315,8 +2318,9 @@ export class SessionsService {
         where: { ...open, status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } },
         _count: { _all: true },
       }),
-      this.prisma.session.groupBy({
-        by: ['workspaceId'],
+      // Rows rather than a `groupBy`, so a session that needs you can be taken back out by id.
+      // These are the sessions in flight right now — a handful even for a busy account.
+      this.prisma.session.findMany({
         where: {
           ...open,
           OR: [
@@ -2327,7 +2331,7 @@ export class SessionsService {
             },
           ],
         },
-        _count: { _all: true },
+        select: { id: true, workspaceId: true },
       }),
       // The third tally, and the only one that is neither "the model is generating" nor "somebody
       // is being asked": sessions with a background JOB in flight (Session.runningBgJobs — a
@@ -2343,7 +2347,7 @@ export class SessionsService {
       // busy account, and the rule applied here is the same one the session payload counts with.
       this.prisma.session.findMany({
         where: { ...open, runningBgJobs: { isEmpty: false } },
-        select: { workspaceId: true, runningBgJobs: true, runningBgJobActivity: true },
+        select: { id: true, workspaceId: true, runningBgJobs: true, runningBgJobActivity: true },
       }),
       // Only the blocked rows come back (a handful at most), so this stays a lookup, not a scan
       // of the whole list. This one counts prompts a human has to answer, which a self-driven
@@ -2400,18 +2404,6 @@ export class SessionsService {
     for (const session of active) {
       if (session.workspaceId) row(session.workspaceId).active = session._count._all;
     }
-    for (const group of running) {
-      if (group.workspaceId) row(group.workspaceId).running = group._count._all;
-    }
-    // One session is one row of this tally however many jobs it has in flight, as it has always
-    // been. What changed with the freshness rule is that a session whose jobs have ALL gone quiet
-    // is not one of them: the rail should stop showing work where nothing is moving. `undefined`
-    // for a job nobody has reported progress on is not quiet — see BgJobActivity.
-    for (const session of jobs) {
-      if (!session.workspaceId) continue;
-      if (freshRunningBgJobs(session.runningBgJobs, session.runningBgJobActivity).length === 0) continue;
-      row(session.workspaceId).jobs += 1;
-    }
     // One conversation is one row of this tally however many things are waiting on it: the number
     // is "sessions that need you", and a coordinator blocked on a tool call while a proposal is
     // also unanswered is still one place to go.
@@ -2428,6 +2420,21 @@ export class SessionsService {
       if (!session.approvals.some((a) => readByLiveBackgroundJob(a, session.runningBgShells))) continue;
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
+    }
+    // The activity tallies, after `needsYou` because a session counted there is counted only there
+    // (see the doc above).
+    for (const session of running) {
+      if (!session.workspaceId || needsYou.has(session.id)) continue;
+      row(session.workspaceId).running += 1;
+    }
+    // One session is one row of this tally however many jobs it has in flight, as it has always
+    // been. What changed with the freshness rule is that a session whose jobs have ALL gone quiet
+    // is not one of them: the rail should stop showing work where nothing is moving. `undefined`
+    // for a job nobody has reported progress on is not quiet — see BgJobActivity.
+    for (const session of jobs) {
+      if (!session.workspaceId || needsYou.has(session.id)) continue;
+      if (freshRunningBgJobs(session.runningBgJobs, session.runningBgJobActivity).length === 0) continue;
+      row(session.workspaceId).jobs += 1;
     }
     return [...counts.values()];
   }
@@ -3439,7 +3446,8 @@ export class SessionsService {
 
   /**
    * The authoritative, complete list of background shells the session ever launched — every
-   * Bash(run_in_background), with output recovered from the workspace's persisted Read polls of the
+   * Bash(run_in_background), and the workspace's own background sub-agents and workflows (an async
+   * Agent call, a Workflow call) — with output recovered from the workspace's persisted Read polls of the
    * `.output` file. Derived server-side over ALL of the session's persisted events (not just the
    * client's loaded tail window), so the "Background processes" tray shows the same complete list
    * on every client regardless of how much transcript is loaded. Reuses the exact derivation the
@@ -3495,6 +3503,7 @@ export class SessionsService {
             AND (
               (payload->>'name' = 'Bash' AND payload->'input'->>'run_in_background' = 'true')
               OR (payload->>'name' = 'Read' AND payload->'input'->>'file_path' LIKE '%.output')
+              OR (payload->>'name' IN ('Agent', 'Task', 'Workflow') AND NOT (payload ? 'parentToolUseId'))
             )
           )
         )

@@ -72,6 +72,7 @@ function planFor(
   session: { taskId?: string | null; retryAttempts?: number; provider?: string },
   text: string,
   queue: QueueService = {} as never,
+  delivered = true,
 ): Promise<RetryPlan> {
   const tx = transactionDouble<RetryPlanTransaction>({
     session: {
@@ -96,10 +97,10 @@ function planFor(
   return (
     controller as unknown as {
       retryPlanFor(
-        tx: RetryPlanTransaction, id: string, runnerId: string, text: string,
+        tx: RetryPlanTransaction, id: string, runnerId: string, text: string, delivered: boolean,
       ): Promise<RetryPlan>;
     }
-  ).retryPlanFor(tx, 'session-1', RUNNER_ID, text);
+  ).retryPlanFor(tx, 'session-1', RUNNER_ID, text, delivered);
 }
 
 test('arms the first backoff step when the provider is overloaded', async () => {
@@ -203,4 +204,19 @@ test('an account pool no member reports on is armed as any unreported quota: for
     late >= 0 && late < 2 * 60_000,
     `expected ${named.toISOString()} (+jitter), got ${plan.retryAt?.toISOString()}`,
   );
+});
+
+// A turn the runtime started for itself — a background agent or workflow reporting in — failing is
+// not the person's message failing: that message was answered before the turn began, and the retry
+// re-sends it. Production, 2026-09-25: four re-sends of an answered question after one 429.
+test('a failure in a turn nobody delivered arms nothing and leaves an earlier arm standing', async () => {
+  for (const text of [OVERLOADED, RATE_LIMITED, QUOTA]) {
+    assert.deepEqual(await planFor({ retryAttempts: 1 }, text, {} as never, false), {}, text);
+  }
+});
+
+test('an ordinary reply in a turn nobody delivered still ends the run of failures', async () => {
+  const plan = await planFor({ retryAttempts: 2 }, 'Done — all four reports are in.', {} as never, false);
+
+  assert.deepEqual(plan, { retryAt: null, retryAttempts: 0 });
 });

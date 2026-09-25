@@ -46,6 +46,11 @@ public struct SessionLine: Equatable, Sendable {
         }
         if live && s.isGenerating {
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
+            // A sub-agent or workflow in flight: its launch result cleared the tool line at once, so
+            // say it rather than fall through to a preview that reads as idle (web parity).
+            if let n = s.runningSubagentCount, n > 0 {
+                return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
+            }
             // The agent hasn't answered yet: show the message you sent (server-kept from the moment
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
             // would read as if this one had already been answered. Content, not status — the
@@ -56,6 +61,12 @@ public struct SessionLine: Equatable, Sendable {
         }
         if live && s.effectiveRunState == .queued {
             return SessionLine(text: "Queued", tone: .queued)
+        }
+        // Parked while a sub-agent or workflow it started works on: the workspace itself still
+        // working, so it outranks the wait it is parked on and anything it left running (web's
+        // `parkedWorkLabel`, subagent first). Its turn has ended, so this is where it surfaces.
+        if live, let n = s.runningSubagentCount, n > 0 {
+            return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
         }
         // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever
         // else it left running — not a background process (contract §9.2). Said in the watch's words.
@@ -114,6 +125,12 @@ public struct SessionLine: Equatable, Sendable {
     /// tool names (Bash, Read, Edit) pass through unchanged.
     static func fmtTool(_ name: String) -> String {
         name.replacingOccurrences(of: "^mcp__[^_]+__", with: "", options: .regularExpression)
+    }
+
+    /// "Running Agent" / "Running N agents" — the runtime's own sub-agents and workflows, word for
+    /// word web's `subagentRunningLabel`.
+    static func subagentRunningLabel(_ n: Int) -> String {
+        n > 1 ? "Running \(n) agents" : "Running Agent"
     }
 
     /// "Background process running" / "N background processes running".
