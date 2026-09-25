@@ -976,6 +976,11 @@ func cliSessionMergeReceipt(args []string, out io.Writer, ctx cliOrchestrationCo
 	if res == "MERGED" && strings.TrimSpace(*targetShaAfter) == "" {
 		return fmt.Errorf("--target-sha-after is required for --result MERGED")
 	}
+	if res == "ALREADY_MERGED" {
+		if err := checkAlreadyMergedSource(*sourceSha, *targetBranch, *targetShaBefore, *targetShaAfter); err != nil {
+			return err
+		}
+	}
 	body := map[string]interface{}{
 		"result":       res,
 		"sourceSha":    strings.TrimSpace(*sourceSha),
