@@ -1,0 +1,41 @@
+# XcodeGen spec for a one-off probe that photographs the Work overview card's landing row on an
+# iOS simulator (the row file is the app's own, pulled in from the shared OrbitApp sources).
+#
+# Linux sessions cannot build SwiftUI, so the only way to see this row as iOS draws it is a
+# dispatch-only job on a Mac runner. This directory is probe scaffolding, not product: it lives on
+# a throwaway `-shots` branch and is deleted once the screenshots are taken.
+name: LandingProbe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  OrbitKit:
+    path: ../src/macos/OrbitKit
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+
+targets:
+  LandingProbe:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources
+      # The files under test, taken from the app's own sources: the row itself and the font tokens
+      # it draws with. Nothing else of OrbitApp is needed — the row takes a value, not the model.
+      - path: ../src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift
+      - path: ../src/macos/OrbitApp/Sources/OrbitApp/Views/Typography.swift
+    dependencies:
+      - package: OrbitKit
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGNING_ALLOWED: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.landingprobe
