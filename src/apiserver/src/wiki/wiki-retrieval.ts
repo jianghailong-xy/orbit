@@ -5,6 +5,7 @@ import {
   type WikiAnchorState,
   type WikiSearchHit,
   type WikiSearchMatch,
+  type WikiSearchRow,
   type WikiTrust,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -75,6 +76,10 @@ export interface WikiSearchRequest {
   /** Paths the caller is working on, which the path leg matches in place of a path-shaped `q`. */
   paths?: readonly string[];
   limit?: number;
+  /** Which of the fields a hit does not carry by default the caller asked for — the API's own
+   *  `?include=` convention. `space`, `topics` and `anchor` are the three names
+   *  (`WikiSearchRowAdditions`); anything else is not a field and is ignored. */
+  include?: readonly string[];
   /** Phase 2's leg. Accepted, reported, and off (see the module header). */
   semantic?: boolean;
   /** The calling session: it reads active entries, plus the ones IT proposed and that still wait. */
@@ -307,7 +312,8 @@ export class WikiRetrieval {
       { match: 'keyword', ids: keywords },
       { match: 'path', ids: byPath },
     ]);
-    return { q: norm?.raw ?? '', semantic: false, hits: await this.rank(request.ownerId, fused, take) };
+    const hits = await this.rank(request.ownerId, fused, take, request.include ?? []);
+    return { q: norm?.raw ?? '', semantic: false, hits };
   }
 
   /**
@@ -395,12 +401,31 @@ export class WikiRetrieval {
    * moment ago, and a candidate deleted since has no row and drops out, which beats answering with
    * an entry that no longer exists.
    */
-  private async rank(ownerId: string, fused: RankedHit[], take: number): Promise<WikiSearchHit[]> {
+  private async rank(
+    ownerId: string,
+    fused: RankedHit[],
+    take: number,
+    include: readonly string[],
+  ): Promise<WikiSearchRow[]> {
     if (fused.length === 0) return [];
     const ids = fused.map((hit) => hit.id);
     const entries = await this.prisma.wikiEntry.findMany({
       where: { id: { in: ids }, ownerId },
-      select: { id: true, kind: true, title: true, summary: true, trust: true, anchorState: true, stats: true },
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        summary: true,
+        trust: true,
+        anchorState: true,
+        stats: true,
+        // Three columns of a row this query is already reading. What the caller ASKED for decides
+        // what comes back, not what is read: the projection below is where `include` bites, so a
+        // column nothing asked for cannot reach an agent's tool output by being selected here.
+        topics: true,
+        anchorCheckedRef: true,
+        space: { select: { slug: true } },
+      },
     });
     const changedTimes = await this.changedAt(ownerId, ids);
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
@@ -419,6 +444,11 @@ export class WikiRetrieval {
             anchorState: entry.anchorState as WikiAnchorState,
             stats: entry.stats,
             changedAt: changedTimes.get(entry.id) ?? null,
+            // Carried through the ranking, not read off it: `compareRanked` orders by score, trust,
+            // anchor state, usage and the changed time, and none of these three is a term in it.
+            spaceSlug: entry.space.slug,
+            topics: entry.topics,
+            anchorCheckedRef: entry.anchorCheckedRef,
           },
         ];
       })
@@ -426,7 +456,7 @@ export class WikiRetrieval {
       .slice(0, take)
       .map((hit) => ({
         id: hit.id,
-        kind: hit.kind as WikiSearchHit['kind'],
+        kind: hit.kind as WikiSearchRow['kind'],
         title: hit.title,
         summary: hit.summary,
         trust: hit.trust,
@@ -435,6 +465,11 @@ export class WikiRetrieval {
         // A fused score is a sum of at most two terms of about 1/61: rounded so two runs of the
         // same search answer with the same number rather than with float noise.
         score: Number(hit.score.toFixed(6)),
+        // Each of the three only when it was named, so a hit answered without `include` is exactly
+        // the contract's list of fields — which `wiki-search.pg.spec.ts` pins key by key.
+        ...(include.includes('space') ? { spaceSlug: hit.spaceSlug } : {}),
+        ...(include.includes('topics') ? { topics: hit.topics } : {}),
+        ...(include.includes('anchor') ? { anchorCheckedRef: hit.anchorCheckedRef } : {}),
       }));
   }
 

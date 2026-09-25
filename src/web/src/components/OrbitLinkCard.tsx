@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  BookOutlined,
   CheckSquareOutlined,
   FolderOutlined,
   MessageOutlined,
@@ -27,20 +28,23 @@ import {
   type LinkPreviewRef,
   type LinkPreviewSession,
   type LinkPreviewTask,
+  type LinkPreviewWiki,
 } from '@orbit/shared';
 import { linkPreviewsQuery } from '../lib/queries';
 import {
   canonicalId,
   linkKey,
-  pageHref,
   pathLabel,
+  targetHref,
   ORBIT_LINK_CARD_TAG,
-  ORBIT_LINK_PATH,
+  ORBIT_LINK_KINDS,
   writtenId,
   type OrbitLinkKind,
   type OrbitLinkRef,
 } from '../lib/orbitLink';
+import { wikiAnchorLabel, wikiAnchorMark, wikiKindWord, WIKI_NO_LONGER_PUSHED } from '../lib/wiki';
 import { sessionRunStateOf, type SessionRunState, type SessionStateSource } from '../lib/sessionState';
+import { WikiAnchorMark, WikiTrustBadge } from './WikiMarks';
 import { TaskStatusPill } from './TaskStatusPill';
 import { relTime } from './Transcript';
 
@@ -76,6 +80,9 @@ export const ORBIT_LINK_UNASSIGNED = 'Unassigned';
 /** A task nothing has ever run. */
 export const ORBIT_LINK_NEVER_RUN = 'never run';
 
+/** A wiki entry filed under nothing. Not a warning: plenty of notes are true everywhere. */
+export const ORBIT_LINK_NO_ANCHOR = 'No anchor';
+
 /** The badge on a session that coordinates a project, and the head of a project card's foot. */
 export const ORBIT_LINK_COORDINATOR = 'Coordinator';
 
@@ -92,7 +99,22 @@ export const ORBIT_LINK_TYPE_NAMES: Record<OrbitLinkKind, string> = {
   session: 'Session',
   project: 'Project',
   list: 'Task list',
+  wiki: 'Wiki',
 };
+
+/**
+ * The card's first row: the type's name, and for a wiki entry the kind it is.
+ *
+ * "Wiki · Principle" rather than "Wiki" alone, because the entry's kind is what the note IS — the
+ * push block's own lines open the same way (`[Principle] …`), and a card that said only "Wiki" would
+ * make a reader open it to learn whether they are looking at a rule or a war story. The kind's word
+ * is `lib/wiki`'s, so the card and the Wiki pages cannot name one kind two ways.
+ */
+export function orbitLinkTypeName(kind: OrbitLinkKind, entryKind: string | undefined): string {
+  if (kind !== 'wiki') return ORBIT_LINK_TYPE_NAMES[kind];
+  const entry = entryKind ? wikiKindWord(entryKind) : '';
+  return entry === '' ? ORBIT_LINK_TYPE_NAMES.wiki : `${ORBIT_LINK_TYPE_NAMES.wiki}${ORBIT_LINK_SEPARATOR}${entry}`;
+}
 
 /** Groups thousands the way the app's other counts do (`27,468`). */
 export function orbitLinkNumber(value: number): string {
@@ -149,6 +171,9 @@ const KIND_ICONS: Record<OrbitLinkKind, ReactNode> = {
   session: <MessageOutlined />,
   project: <ProjectOutlined />,
   list: <UnorderedListOutlined />,
+  // A closed book, which is the drawer row's glyph too (`WikiMarks` draws the entry's own kind
+  // inside the card, so the tile is the wiki rather than the kind).
+  wiki: <BookOutlined />,
 };
 
 /** One secondary line: what it says, and what it wears. */
@@ -231,7 +256,13 @@ export function OrbitLinkCard({
   stateWord: (row: SessionStateSource) => string;
 }) {
   const kind = link.target.kind;
-  const answer: LinkPreviewTask | LinkPreviewSession | LinkPreviewProject | LinkPreviewList | undefined =
+  const answer:
+    | LinkPreviewTask
+    | LinkPreviewSession
+    | LinkPreviewProject
+    | LinkPreviewList
+    | LinkPreviewWiki
+    | undefined =
     preview?.state === 'ok'
       ? preview.kind === 'task'
         ? preview.task
@@ -239,11 +270,16 @@ export function OrbitLinkCard({
           ? preview.session
           : preview.kind === 'project'
             ? preview.project
-            : preview.list
+            : preview.kind === 'wiki'
+              ? preview.wiki
+              : preview.list
       : undefined;
   // An `ok` answer missing the payload it promised draws the unavailable card rather than a
   // half-drawn one: the server did not describe the object, so there is nothing to describe.
   const state = preview === undefined ? 'loading' : answer === undefined ? 'unavailable' : 'ready';
+  // Where the title leads. A wiki entry's page is `/wiki/<space>/e/<id>` — both halves, and only
+  // the server knows the space — so an entry it would not describe has no page to offer.
+  const href = targetHref(link.target, state === 'ready' && kind === 'wiki' ? (answer as LinkPreviewWiki) : undefined);
 
   const lines: CardLine[] = [];
   let title: string | null = null;
@@ -311,6 +347,29 @@ export function OrbitLinkCard({
         time: at ? relTime(at) : null,
       };
     }
+  } else if (state === 'ready' && kind === 'wiki') {
+    const entry = answer as LinkPreviewWiki;
+    // The trust badge the Wiki's own pages wear (`WikiMarks`), so "Owner" means here what it means
+    // in the drawer and on Review — the same word, the same deep surface.
+    headRight = <WikiTrustBadge trust={entry.trust} />;
+    title = cardTitle(entry.title, link);
+    if (entry.summary !== '') lines.push({ text: entry.summary });
+    // What the entry stands on, and whether it still stands: the entry's own anchor mark (`✓ 4db4f9f`
+    // when a re-check found it, the warning word when it did not), then the anchor itself. An entry
+    // nothing has re-checked says nothing about its anchors rather than claiming they are fine —
+    // `wikiAnchorMark` answers null for exactly that, which is why the mark is not the line's text.
+    const mark = wikiAnchorMark(entry);
+    const anchorLabel = entry.anchor ? wikiAnchorLabel(entry.anchor) : null;
+    lines.push({
+      text: anchorLabel ?? ORBIT_LINK_NO_ANCHOR,
+      glyph: mark ? <WikiAnchorMark mark={mark} /> : undefined,
+      isWarning: mark?.tone === 'amber' || mark?.tone === 'red',
+    });
+    // A retired or superseded entry still reads, and a card that hid it would keep claiming a note
+    // agents are no longer being handed (design §4: agents stop getting a retired entry).
+    if (entry.status !== 'active') {
+      lines.push({ text: WIKI_NO_LONGER_PUSHED, glyph: <WarningOutlined />, isWarning: true });
+    }
   } else if (state === 'ready') {
     const list = answer as LinkPreviewList;
     const counts = list.counts;
@@ -337,7 +396,7 @@ export function OrbitLinkCard({
           <span className="olc-tile" aria-hidden="true">
             {KIND_ICONS[kind]}
           </span>
-          {ORBIT_LINK_TYPE_NAMES[kind]}
+          {orbitLinkTypeName(kind, state === 'ready' && kind === 'wiki' ? (answer as LinkPreviewWiki).kind : undefined)}
         </span>
         {headRight}
       </div>
@@ -349,7 +408,7 @@ export function OrbitLinkCard({
       )}
       {title !== null && (
         <div className="olc-title">
-          <Link to={pageHref(link.target)}>{title}</Link>
+          {href !== null ? <Link to={href}>{title}</Link> : <span>{title}</span>}
         </div>
       )}
       {meter.length > 0 && (
@@ -509,7 +568,7 @@ function linkFromProps(props: {
 }): OrbitLinkRef | null {
   const { kind, id } = props;
   if (typeof kind !== 'string' || typeof id !== 'string') return null;
-  if (!(kind in ORBIT_LINK_PATH)) return null;
+  if (!(ORBIT_LINK_KINDS as readonly string[]).includes(kind)) return null;
   const target = { kind: kind as OrbitLinkKind, id };
   if (typeof props.url === 'string') return { target, source: { kind: 'url', url: props.url } };
   if (typeof props.reference === 'string') {

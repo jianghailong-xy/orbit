@@ -16335,6 +16335,151 @@ button.chat-jump-start:hover {
   .wk-seg { margin-left: 0; }
 }
 
+/* ── The wiki in a conversation: the context a session was handed, and what you add to it ──────
+   Mock 05 (docs/mocks/wiki/05-session-touchpoints). Two of its four panels need rules of their
+   own: the entries under the task start card's folded Wiki context line, and the Add to Wiki row
+   and its form. The link card borrows the Wiki's own marks and the search palette borrows
+   `.ssearch-*`, so neither has a block here beyond the group heading. */
+
+.wkctx { margin-top: 6px; }
+.wkctx-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--fill-inset);
+}
+.wkctx-row { display: flex; align-items: center; gap: 7px; height: 23px; font-size: 12.5px; }
+/* One word wide, the kind column, so the titles line up whatever they are filed as. */
+.wkctx-kind { flex: none; width: 70px; color: var(--text-3); font-size: 12px; }
+.wkctx-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--brand);
+  text-decoration: none;
+}
+a.wkctx-title:hover { text-decoration: underline; }
+.wkctx-foot { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
+
+/* A reply plus the row of actions under it, as one column — the user bubble's `.chat-user-wrap`,
+   on the other side. The wrapper is what keeps the row reachable: hovering it covers the few
+   pixels between the reply and the row, which the row's own hover could not. */
+.wk-msg-wrap { display: flex; flex-direction: column; margin: 8px 0; }
+.wk-msg-wrap > .chat-msg { margin: 0; }
+
+/* The row under an assistant reply: the copy button the user bubble already had, plus Add to Wiki
+   and the reply's time. Revealed on hover like the user bubble's, and for the same reason — it is
+   a set of actions on a message, not part of reading it. */
+.wk-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  margin-top: 3px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.wk-msg-wrap:hover .wk-msg-meta,
+.wk-msg-meta:focus-within { opacity: 1; pointer-events: auto; }
+.wk-addwiki {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 18px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.wk-addwiki:hover { color: var(--text-1); background: var(--bg-hover); }
+.wk-addwiki .ic { font-size: 12.5px; color: var(--brand); }
+
+/* The form, anchored under the row it was opened from with a caret pointing back at it. */
+.wk-pop {
+  position: relative;
+  z-index: 4;
+  width: min(452px, 100%);
+  margin: 8px 0 4px; 
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05);
+}
+.wk-pop::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 66px;
+  width: 12px;
+  height: 12px;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-subtle);
+  transform: rotate(45deg);
+}
+.wk-pop-h { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-1); }
+.wk-pop-h .ic.b { color: var(--brand); }
+.wk-pop-h .x {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: pointer;
+}
+.wk-pop-h .x:hover { color: var(--text-1); }
+
+.wk-src-auto { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; color: var(--text-2); }
+.wk-src-auto .ic { color: var(--brand); flex: none; }
+.wk-src-auto .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-pop-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.wk-pop-foot .note { flex: 1; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+.wk-pop-foot .note.warn { color: var(--warning); }
+
+/* The ⌘K palette's Wiki group: one heading, then rows that are `.ssearch-row`s like any other, so
+   the cursor, the title line and the meta line stay the palette's rather than a second palette's. */
+.wk-pal-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px 3px;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.wk-pal-group .n { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-4); }
+.wk-pal-group + .ssearch-row { margin-top: 0; }
+/* The wiki's rows put their own bits in the palette's slots: a kind tile where a session has its
+   status glyph, and the anchor's tick where a hit says what it matched on. */
+.ssearch-row > .wk-kind { flex: none; }
+.ssearch-meta .ok { color: var(--success); }
+
+@media (max-width: 600px) {
+  .wk-pop { width: 100%; }
+  .wk-pop::before { display: none; }
+  .wkctx-kind { width: 58px; }
+}
+
 /* Background agent / workflow progress (TaskProgressBlock): the agents by phase, then the totals.
    Opens under a Workflow card in the conversation and under its row in the tray. */
 .agent-progress {

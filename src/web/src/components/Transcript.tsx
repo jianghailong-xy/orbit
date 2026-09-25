@@ -67,6 +67,8 @@ import { WatchWakeCard } from './WatchWakeCard';
 import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
+import { WikiContextNote } from './WikiContextNote';
+import { AddToWikiRow, useAddToWiki } from './AddToWiki';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
 import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } from '../lib/liveTaskProgress';
 import { TaskProgressBlock } from './TaskProgressBlock';
@@ -82,6 +84,7 @@ import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
+import { parseWikiContext } from '../lib/wikiContext';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -300,6 +303,10 @@ type TextNode = {
   kind: 'user' | 'assistant' | 'thinking';
   seq: number;
   text: string;
+  /** The conversation turn this message belongs to, when its event named one. What Add to Wiki
+   *  cites an entry's provenance by (`{ kind: 'turn', ref: turnId }`), and what the wiki's
+   *  exposure and provenance rules are written in terms of. */
+  turnId?: string | null;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
   // one row. Both are known only while it streams (see lib/thinkingDraft) — a reload has neither,
   // so the row states its size alone.
@@ -587,6 +594,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             kind: 'user',
             seq: ev.seq,
             text: recorded ? recorded.text : p.text ? String(p.text) : '',
+            turnId: ev.turnId ?? null,
             note: recorded?.note,
             itemCard,
             taskStart,
@@ -633,7 +641,12 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           else if (isUsageLimitErrorText(text)) autoRetry(parent, ev.seq, text, 'quota');
           else if (isRetryableApiErrorText(text)) autoRetry(parent, ev.seq, text, 'apiError');
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
-          else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
+          else {
+            // A reply carries the turn it answers (`turnId`) and its own wall clock, neither of
+            // which the row under it can be drawn without: the turn is what Add to Wiki cites, and
+            // the stamp is the "2h ago" beside the button.
+            into(parent).push({ kind: 'assistant', seq: ev.seq, text, turnId: ev.turnId ?? null, ts: ev.ts });
+          }
         }
         break;
       case 'thinking': {
@@ -1165,7 +1178,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       return <UserBubble node={node} />;
     }
     case 'assistant':
-      return <AssistantBubble text={node.text} seq={node.seq} />;
+      return <AssistantBubble text={node.text} seq={node.seq} turnId={node.turnId} ts={node.ts} />;
     case 'thinking':
       return <Thinking text={node.text} seq={node.seq} ms={node.thinkingMs} blocks={node.blocks} />;
     case 'tool':
@@ -1608,6 +1621,8 @@ function UserBubble({ node }: { node: TextNode }) {
   const putBack = useContext(UndeliveredCtx);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  // The bubble itself, so Add to Wiki reads a selection only when it is inside THIS message.
+  const bubbleEl = useRef<HTMLDivElement>(null);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
   // — a reference expansion, a list's condition board, the background work a returning engine is
   // told about, or a promoted coordinator's standing role. Those belong to Orbit, not to the person
@@ -1617,6 +1632,7 @@ function UserBubble({ node }: { node: TextNode }) {
   // and the length cap follow the typed text for the same reason: neither should be measured
   // against a block nobody wrote.
   const typed = node.text;
+  const addWiki = useAddToWiki({ turnId: node.turnId ?? null, messageRef: bubbleEl });
   const attached = node.note ? { kind: describeNote(node.note), text: node.note } : null;
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
@@ -1629,7 +1645,7 @@ function UserBubble({ node }: { node: TextNode }) {
   };
   return (
     <div className="chat-user-wrap">
-      <div className="chat-msg chat-user" data-seq={node.seq}>
+      <div ref={bubbleEl} className="chat-msg chat-user" data-seq={node.seq}>
         <TurnAttachments node={node} />
         {shownText && <MD breaks>{shownText}</MD>}
         {attached && (
@@ -1684,9 +1700,17 @@ function UserBubble({ node }: { node: TextNode }) {
           >
             {copied ? <CheckOutlined /> : <CopyOutlined />}
           </button>
+          {/* A message of the owner's own is an entry waiting to be written just as much as a reply
+              is: design §8.1 has them saying "记到 wiki" in the conversation. Not in the export,
+              where nothing can be pressed, and not on a shared page, where `useAddToWiki` finds no
+              conversation to write as and hands back nothing at all. */}
+          {!exp && addWiki.button}
           {node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
         </div>
       )}
+      {/* Outside the row: the form takes a line of its own rather than sitting beside the copy
+          button in a row that is one line tall. */}
+      {!exp && addWiki.form}
     </div>
   );
 }
@@ -2262,18 +2286,38 @@ export function AssistantBubble({
   text,
   streaming,
   seq,
+  turnId,
+  ts,
 }: {
   text: string;
   streaming?: boolean;
   // Absent for the live draft, which has no persisted event to point at yet.
   seq?: number;
+  // The turn this reply answers, and when it was written. Both absent on the live draft, which has
+  // neither, and a draft is not something anyone records a note from — the row waits for the reply
+  // to settle (`streaming`).
+  turnId?: string | null;
+  ts?: string;
 }) {
+  const exp = useContext(ExportCtx);
+  const el = useRef<HTMLDivElement>(null);
   return (
-    <div
-      className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
-      data-seq={seq}
-    >
-      <MD highlight={!streaming}>{text}</MD>
+    <div className="wk-msg-wrap">
+      <div
+        ref={el}
+        className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
+        data-seq={seq}
+      >
+        <MD highlight={!streaming}>{text}</MD>
+      </div>
+      {!streaming && !exp && text.trim() !== '' && (
+        <AddToWikiRow
+          text={text}
+          turnId={turnId ?? null}
+          messageRef={el}
+          time={ts ? relTime(ts) : null}
+        />
+      )}
     </div>
   );
 }
@@ -2319,15 +2363,17 @@ function useThrottled(value: string, ms: number): string {
 function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const exp = useContext(ExportCtx);
   const [open, setOpen] = useState(!!exp);
-  // Two of the blocks open as something other than their own text: the inventory a returning engine
-  // is handed, whose lines are a list of outcomes, and the tasks a person named with `#`, whose
-  // table holds an id nobody could click. One note can carry both, so each reading is handed what
-  // the one before it did not take and what is left over is drawn as it always was. Their counts go
-  // on the line that names the note shut: "background jobs" alone never said whether opening it was
-  // worth the click.
+  // Three of the blocks open as something other than their own text: the inventory a returning engine
+  // is handed, whose lines are a list of outcomes; the tasks a person named with `#`, whose table
+  // holds an id nobody could click; and the wiki's notes for this codebase, whose lines are what the
+  // agent read before it began. One note can carry several, so each reading is handed what the one
+  // before it did not take and what is left over is drawn as it always was. Their counts go on the
+  // line that names the note shut: "background jobs" alone never said whether opening it was worth
+  // the click.
   const jobs = useMemo(() => parseBackgroundJobs(text), [text]);
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
-  const rest = tasks ? tasks.rest : jobs ? jobs.rest : text;
+  const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
+  const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
   return (
     <div className="chat-injected">
       <button
@@ -2341,10 +2387,11 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
         {jobs && ` · ${summarizeBackgroundJobs(jobs)}`}
       </button>
       {open &&
-        (tasks || jobs ? (
+        (tasks || jobs || wiki ? (
           <>
             {tasks && <ReferencedTaskNote tasks={tasks.tasks} />}
             {jobs && <BackgroundJobsNote jobs={jobs} />}
+            {wiki && <WikiContextNote context={wiki} />}
             {rest !== '' && <pre className="chat-injected-body">{rest}</pre>}
           </>
         ) : (

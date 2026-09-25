@@ -18,10 +18,12 @@ import type {
   SessionState,
   TaskStatus,
 } from './enums';
+import type { WikiAnchorInput, WikiAnchorState, WikiEntryKind, WikiEntryStatus, WikiTrust } from './wiki';
 
-/** The four kinds of object a link can name. */
-export type LinkPreviewKind = 'project' | 'task' | 'session' | 'list';
-export const LINK_PREVIEW_KINDS: readonly LinkPreviewKind[] = ['project', 'task', 'session', 'list'];
+/** The kinds of object a link can name. `wiki` arrived after the first four and is listed last, so
+ *  the order the clients hold their own tables in is untouched by it. */
+export type LinkPreviewKind = 'project' | 'task' | 'session' | 'list' | 'wiki';
+export const LINK_PREVIEW_KINDS: readonly LinkPreviewKind[] = ['project', 'task', 'session', 'list', 'wiki'];
 
 /** How many refs one request may carry. More is a 400, not a truncated answer. */
 export const LINK_PREVIEW_MAX_REFS = 50;
@@ -149,6 +151,34 @@ export interface LinkPreviewList {
   counts: LinkPreviewListCounts;
 }
 
+/**
+ * A wiki entry's card, read from the entry's own columns.
+ *
+ * `spaceSlug` is what makes the card's title a link: an entry is addressed by its space's slug and
+ * its own id (`/wiki/<slug>/e/<id>`), and the id alone — which is all the reference carries — names
+ * no page. Both are the public spellings.
+ *
+ * `anchor` is the entry's FIRST anchor as the record it is, not a sentence: which word a path, a
+ * symbol and a commit get is the client's (`wikiAnchorLabel`), the same way a task's status is the
+ * card's word rather than the wire's. Null on an entry with no anchors, which is an ordinary state
+ * rather than a warning.
+ */
+export interface LinkPreviewWiki {
+  /** The space the entry is filed in, and the slug its page is reached under. */
+  spaceId: string;
+  spaceSlug: string;
+  kind: `${WikiEntryKind}`;
+  title: string;
+  summary: string;
+  trust: `${WikiTrust}`;
+  /** `retired`/`superseded` are drawn — the entry outlives them, and a card that hid them would
+   *  keep claiming a note agents are no longer handed. */
+  status: `${WikiEntryStatus}`;
+  anchorState: `${WikiAnchorState}`;
+  anchorCheckedRef: string | null;
+  anchor: WikiAnchorInput | null;
+}
+
 type Addressed<K extends LinkPreviewKind> = {
   kind: K;
   /** The ref's id as a public id; a ref whose id is not one comes back as it was sent. */
@@ -166,7 +196,8 @@ export type LinkPreview<Instant = string> =
   | (Addressed<'session'> & { state: 'ok'; session: LinkPreviewSession<Instant> })
   | (Addressed<'task'> & { state: 'ok'; task: LinkPreviewTask<Instant> })
   | (Addressed<'project'> & { state: 'ok'; project: LinkPreviewProject<Instant> })
-  | (Addressed<'list'> & { state: 'ok'; list: LinkPreviewList });
+  | (Addressed<'list'> & { state: 'ok'; list: LinkPreviewList })
+  | (Addressed<'wiki'> & { state: 'ok'; wiki: LinkPreviewWiki });
 
 /** One preview per ref, in the order they were asked for. */
 export interface LinkPreviewsResponse<Instant = string> {
