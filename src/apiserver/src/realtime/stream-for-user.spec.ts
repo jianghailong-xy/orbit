@@ -512,6 +512,36 @@ test('watch.changed reaches its owner\'s stream, carrying the watch id and nothi
   assert.equal(theirs.length, 0);
 });
 
+/**
+ * A wiki space belongs to the account, not to any one session: the agent that proposed into it is
+ * one writer among many, and the owner's own writes in Review come from no session at all. So
+ * `wiki.changed` rides the owner key like the libraries do, and reaches that owner's stream and
+ * nobody else's — the nudge that carries a recorded changeset or a decided one to the owner's other
+ * devices (contract `realtime`).
+ */
+test('wiki.changed reaches its owner\'s stream, carrying the space id and nothing else', async () => {
+  const svc = svcWith({}, 0);
+  const mine: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
+  const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
+
+  svc.publishWikiChanged('userA', 'space-1');
+  await delay(30);
+  subA.unsubscribe();
+  subB.unsubscribe();
+
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].type, 'wiki.changed');
+  // The whole payload, asserted as a whole: no entry, title, status, op or count (contract
+  // `realtime.redaction`). A client re-reads the wiki reads, and those decide what it may see.
+  assert.deepEqual(mine[0].data, { id: 'space-1' });
+  // The owner's, not a session's: the envelope names none, and nothing looked one up.
+  assert.equal(mine[0].sessionId, '');
+  assert.equal(mine[0].agentId, null);
+  assert.equal(theirs.length, 0);
+});
+
 test('task.changed carries a bounded row set or an explicit full-resync signal', async () => {
   const svc = svcWith({}, 0);
   const events: ControlEvent[] = [];
@@ -629,6 +659,7 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
   svc.publishSessionUpdated('sessA');
   svc.publishForUser('userA', RunEventType.TAG_CHANGED, 'tag1');
   svc.publishWatchChanged('userA', 'watch-1');
+  svc.publishWikiChanged('userA', 'space-1');
   svc.publish('sessA', { seq: 3, type: RunEventType.STATUS, ts: 't', payload: {} });
   await delay(20);
   sub.unsubscribe();

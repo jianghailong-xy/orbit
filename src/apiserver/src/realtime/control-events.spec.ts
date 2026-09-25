@@ -32,6 +32,7 @@ test('controlTypeFor maps the synthesized lifecycle signals', () => {
     ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED,
   );
   assert.equal(controlTypeFor(RunEventType.WATCH_CHANGED), ControlEventType.WATCH_CHANGED);
+  assert.equal(controlTypeFor(RunEventType.WIKI_CHANGED), ControlEventType.WIKI_CHANGED);
 });
 
 test('only the owner-library events are user-scoped', () => {
@@ -43,6 +44,9 @@ test('only the owner-library events are user-scoped', () => {
     // A watch belongs to its owner, and the workers that announce most of them run on a replica
     // with no client attached: routing it by owner is what gets it onto the NOTIFY bridge at all.
     ControlEventType.WATCH_CHANGED,
+    // A wiki space belongs to the account, not to the session that proposed into it — and the
+    // owner's own writes in Review arrive from no session at all — so it rides the owner key too.
+    ControlEventType.WIKI_CHANGED,
   ]) {
     assert.equal(isUserScopedType(t), true, `${t} should be user-scoped`);
   }
