@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -59,7 +60,7 @@ func runDrainWatcher(t *testing.T, feed []string, timeout time.Duration,
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		watchShutdownDrain(procCtx, shutdownCtx, pending, timeout,
+		watchShutdownDrain(procCtx, shutdownCtx, pending, new(atomic.Int32), timeout,
 			func() {
 				probe.mu.Lock()
 				probe.polled = true
@@ -162,7 +163,7 @@ func TestShutdownDrainIsANoOpWithoutShutdown(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		watchShutdownDrain(procCtx, shutdownCtx, make(chan string), time.Second,
+		watchShutdownDrain(procCtx, shutdownCtx, make(chan string), new(atomic.Int32), time.Second,
 			func() {
 				probe.mu.Lock()
 				probe.polled = true
@@ -187,5 +188,81 @@ func TestShutdownDrainIsANoOpWithoutShutdown(t *testing.T) {
 	}
 	if got := probe.interrupts(); len(got) != 0 {
 		t.Errorf("published %d interrupt events without a shutdown, want 0", len(got))
+	}
+}
+
+// startShellDrainWatcher shuts down with `shells` runner shell turns in flight and nothing fed to
+// claude; the returned func waits for the watcher to finish.
+func startShellDrainWatcher(t *testing.T, shells *atomic.Int32, timeout time.Duration) (*drainProbe, func()) {
+	t.Helper()
+	procCtx, procCancel := context.WithCancel(context.Background())
+	t.Cleanup(procCancel)
+	shutdownCtx, shutdown := context.WithCancel(context.Background())
+	t.Cleanup(shutdown)
+	probe := &drainProbe{}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		watchShutdownDrain(procCtx, shutdownCtx, make(chan string, 8), shells, timeout,
+			func() {
+				probe.mu.Lock()
+				probe.polled = true
+				probe.mu.Unlock()
+			},
+			func() {
+				probe.mu.Lock()
+				probe.torndown = true
+				probe.mu.Unlock()
+				procCancel()
+			},
+			probe.emit, "s-1")
+	}()
+	shutdown()
+	return probe, func() {
+		t.Helper()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("drain watcher never returned")
+		}
+	}
+}
+
+// A shell turn the runner runs itself — an acceptance command, a `!cmd` — holds the drain as a turn
+// in the engine does: the process is torn down once the turn is settled, not while its command runs.
+func TestShutdownDrainWaitsForARunnerShellTurn(t *testing.T) {
+	var shells atomic.Int32
+	shells.Store(1)
+	probe, wait := startShellDrainWatcher(t, &shells, 5*time.Second)
+
+	time.Sleep(2 * drainPollInterval)
+	if _, torndown := probe.flags(); torndown {
+		t.Fatal("the process was torn down while a runner shell turn was still running: its command dies as exit -1")
+	}
+	shells.Add(-1) // the command exits and its turn-complete is sent
+	wait()
+
+	if got := probe.interrupts(); len(got) != 0 {
+		t.Errorf("published %d interrupt events for a shell turn that finished, want 0", len(got))
+	}
+	if _, torndown := probe.flags(); !torndown {
+		t.Error("a drained session must still be torn down so the runner can exit")
+	}
+}
+
+// And the same budget bounds it: a command still running at the deadline is torn down and marked
+// like any turn still in flight then, so a runner stop cannot outlast the service manager's wait.
+func TestShutdownDrainTearsDownARunnerShellTurnAtTheDeadline(t *testing.T) {
+	var shells atomic.Int32
+	shells.Store(1)
+	probe, wait := startShellDrainWatcher(t, &shells, 30*time.Millisecond)
+	wait()
+
+	interrupts := probe.interrupts()
+	if len(interrupts) != 1 || interrupts[0].Payload["reason"] != "runner_restart" {
+		t.Fatalf("interrupt events = %+v, want one runner_restart marker", interrupts)
+	}
+	if _, torndown := probe.flags(); !torndown {
+		t.Error("the process was not torn down at the drain deadline")
 	}
 }
