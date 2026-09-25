@@ -12,7 +12,9 @@ import {
   type LinkPreviewSession,
   type LinkPreviewTask,
   type LinkPreviewWatching,
+  type LinkPreviewWiki,
   type LinkPreviewsResponse,
+  type WikiAnchorInput,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { readProjectPanorama } from '../projects/project-panorama';
@@ -32,12 +34,29 @@ function uuidOf(id: string): string | null {
 }
 
 /**
+ * An entry's first anchor, as the record it is — or null on an entry that has none.
+ *
+ * The FIRST and not all of them: a card draws one line, and `anchors` is a jsonb column a
+ * proposal may fill with eight records carrying commands and paths. The one that leads is the one
+ * the entry was filed under, which is the order they were written in.
+ */
+function firstAnchor(raw: unknown): WikiAnchorInput | null {
+  if (!Array.isArray(raw)) return null;
+  const first = raw[0];
+  if (!first || typeof first !== 'object') return null;
+  const { type } = first as { type?: unknown };
+  return typeof type === 'string' ? (first as WikiAnchorInput) : null;
+}
+
+/**
  * The cards for links to Orbit objects in a conversation: one batch read for every card it shows.
  *
  * Each kind is read the way its own page reads it, so a card cannot say something its page does
  * not: a session is its list row (`SessionsService.listRowsByIds`), a project's lanes are
  * `readProjectPanorama`'s, a list's tallies are the task page's (`TasksService.taskCounts`), and a
- * task's pill is drawn from the task list's live overlays (`TasksService.withRunning`).
+ * task's pill is drawn from the task list's live overlays (`TasksService.withRunning`). A wiki
+ * entry is the one kind whose page has nothing of its own to say: the row IS the current revision
+ * (`wikiCards`), so there is no second reading for a card to drift from.
  *
  * Only the caller's own objects are read. Everything else — another account's, deleted, an id that
  * names nothing — is `unavailable`, and the three are the same answer, so the response says nothing
@@ -56,10 +75,11 @@ export class LinkPreviewsService {
     const idsOf = (kind: LinkPreviewKind) => [
       ...new Set(asked.flatMap((ref) => (ref.kind === kind && ref.uuid ? [ref.uuid] : []))),
     ];
-    const [projects, tasks, lists] = await Promise.all([
+    const [projects, tasks, lists, wiki] = await Promise.all([
       this.projects(ownerId, idsOf('project')),
       this.taskCards(ownerId, idsOf('task')),
       this.lists(ownerId, idsOf('list')),
+      this.wikiCards(ownerId, idsOf('wiki')),
     ]);
     // One read for every session card, the projects' coordinators among them.
     const coordinatorIds = [...projects.values()].flatMap((p) =>
@@ -100,6 +120,10 @@ export class LinkPreviewsService {
         case 'list': {
           const list = lists.get(uuid);
           return list ? { kind, ...address, state: 'ok', list } : unavailable;
+        }
+        case 'wiki': {
+          const entry = wiki.get(uuid);
+          return entry ? { kind, ...address, state: 'ok', wiki: entry } : unavailable;
         }
       }
     });
@@ -282,6 +306,55 @@ export class LinkPreviewsService {
           ];
         }),
       ),
+    );
+  }
+
+  /**
+   * The wiki entry a card stands for, read from `wiki_entry` itself.
+   *
+   * From the table and not through a page's service, because a card says exactly what one row
+   * already holds: the entry's own columns are its current revision's (0307 keeps the lineage's
+   * title, summary, topics and anchors beside `current_revision`). Nothing here is derived, so
+   * nothing here can disagree with the page it leads to, and the wiki module stays free of a
+   * dependency on the conversation's.
+   *
+   * A retired or superseded entry is answered as itself rather than as `unavailable`: the entry
+   * outlives both, its page still reads, and the card is how a reader learns an agent is no longer
+   * being handed this note.
+   */
+  private async wikiCards(ownerId: string, ids: string[]): Promise<Map<string, LinkPreviewWiki>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.prisma.wikiEntry.findMany({
+      where: { id: { in: ids }, ownerId },
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        summary: true,
+        trust: true,
+        status: true,
+        anchorState: true,
+        anchorCheckedRef: true,
+        anchors: true,
+        space: { select: { id: true, slug: true } },
+      },
+    });
+    return new Map(
+      rows.map((row): [string, LinkPreviewWiki] => [
+        row.id,
+        {
+          spaceId: uuidToBase62(row.space.id),
+          spaceSlug: row.space.slug,
+          kind: row.kind as LinkPreviewWiki['kind'],
+          title: row.title,
+          summary: row.summary,
+          trust: row.trust as LinkPreviewWiki['trust'],
+          status: row.status as LinkPreviewWiki['status'],
+          anchorState: row.anchorState as LinkPreviewWiki['anchorState'],
+          anchorCheckedRef: row.anchorCheckedRef,
+          anchor: firstAnchor(row.anchors),
+        },
+      ]),
     );
   }
 

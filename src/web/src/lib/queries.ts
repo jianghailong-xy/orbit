@@ -31,6 +31,7 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
+import type { WikiSearchRow } from '@orbit/shared';
 import type {
   WikiChangeset,
   WikiEntry,
@@ -844,6 +845,47 @@ export const wikiEntryQuery = (entryId: string | null) =>
     queryFn: () =>
       api<WikiEntryDetail>(`/wiki/entries/${encodeURIComponent(entryId!)}?include=sources,history,exposure`),
     enabled: entryId !== null,
+  });
+
+/**
+ * The wiki's own search, for the ⌘K palette's Wiki group: entries only, each saying which legs found
+ * it (design §6).
+ *
+ * A SEPARATE KEY AND A SEPARATE ENDPOINT from the session search, and that is the whole reason the
+ * route exists: a wiki hit is not a session and must not be decoded as one (an old client reading a
+ * `SessionSearchHit` would fail on the whole answer), and every session hit's click goes to
+ * `/sessions/:id`, which is not where an entry lives.
+ *
+ * `include=space,topics,anchor` because this caller OPENS what it finds: an entry's page is
+ * `/wiki/<space>/e/<id>`, a space AND an id (`WikiSearchRowAdditions`).
+ */
+export const wikiSearchQuery = (q: string) =>
+  queryOptions({
+    queryKey: ['wiki', 'search', q] as const,
+    queryFn: () =>
+      api<{ q: string; semantic: boolean; hits: WikiSearchRow[] }>(
+        `/wiki/search?q=${encodeURIComponent(q)}&include=space,topics,anchor`,
+      ),
+    // The same minute the session search keeps: a result set is a snapshot of a corpus that moves
+    // when somebody writes, and one palette session is not a reason to re-read it per keystroke.
+    staleTime: 60_000,
+  });
+
+/**
+ * The space a session's workspace is bound to: the codebase Add to Wiki files a note into, and whose
+ * topics its form offers.
+ *
+ * A read of its own rather than a lookup in the owner's space list, because which space a session
+ * belongs to is the server's rule (`resolveSpaceForCall`) and not a guess the client is entitled to
+ * make: an owner with two codebases would otherwise file a note into whichever the list happened to
+ * put first. Under the `['wiki']` prefix like every other wiki read, so a `wiki.changed` re-reads it.
+ */
+export const wikiSpaceForSessionQuery = (sessionId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'session-space', sessionId] as const,
+    queryFn: () => api<WikiSpaceRow>(`/wiki/spaces/for-session/${encodeURIComponent(sessionId!)}`),
+    enabled: sessionId !== null,
+    staleTime: 30_000,
   });
 
 /**

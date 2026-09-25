@@ -80,12 +80,14 @@ struct OrbitLinkCardView: View {
         inBubble ? Color.accentColor.opacity(0.20) : Color.primary.opacity(0.16)
     }
 
-    /// What the link is: its type's tile and name, and — for a task or a session — what state the
-    /// object is in, in the words the app already uses for it (`TaskStatusPill`, `SessionStatusGlyph`).
+    /// What the link is: its type's tile and name — and a wiki entry's kind beside it — and, for a
+    /// task or a session, what state the object is in, in the words the app already uses for it
+    /// (`TaskStatusPill`, `SessionStatusGlyph`); for a wiki entry, its trust, as the Wiki's own pages
+    /// badge it.
     private func head(_ content: OrbitLinkCardContent) -> some View {
         HStack(spacing: 7) {
             tile(content)
-            Text(OrbitLinkCopy.typeName(content.kind))
+            Text(content.typeName)
                 .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 6)
@@ -93,6 +95,8 @@ struct OrbitLinkCardView: View {
                 TaskStatusPill(pill: pill)
             } else if let glyph = content.sessionGlyph {
                 OrbitLinkStatusPill(glyph: glyph)
+            } else if let trust = content.wikiTrust, trust != .unknown {
+                WikiBadge(text: WikiCopy.trustLabel(trust), tone: WikiLogic.trustTone(trust))
             }
         }
         .frame(height: 20)
@@ -124,6 +128,15 @@ struct OrbitLinkCardView: View {
                     .font(.orbitMeta)
                     .foregroundStyle(line.isWarning ? Color.orange : Color.secondary)
                     .fixedSize()
+            }
+            if let mark = line.anchorMark {
+                // A wiki entry's anchor, checked: `✓ 4db4f9f`, or the warning word in its own tone.
+                HStack(spacing: 2) {
+                    if mark.tone == .green { Image(systemName: "checkmark").font(.orbitMeta.weight(.bold)) }
+                    Text(mark.word).font(.orbitMeta.weight(.semibold))
+                }
+                .foregroundStyle(WikiPalette.color(mark.tone))
+                .fixedSize()
             }
             Text(line.text)
                 .font(.orbitLabel)
@@ -192,6 +205,8 @@ struct OrbitLinkCardView: View {
         case .task:    return "checkmark.square"
         case .session: return "bubble.left"
         case .list:    return "list.bullet"
+        // The Wiki's own glyph — the drawer row's — so the tile says "wiki" whatever the entry's kind.
+        case .wiki:    return AppSection.wiki.systemImage
         }
     }
 

@@ -2,11 +2,12 @@ import Foundation
 
 // What an Orbit link card says, from the preview the server sent for it.
 //
-// One skeleton, four contents: the type's icon and name, a title, then one or two lines of status.
+// One skeleton, five contents: the type's icon and name, a title, then one or two lines of status.
 // Every word here is one this app already says somewhere — the task pill is `ReferencedTaskNote`'s
 // (the browser's TaskStatusPill), a session's status is `SessionStatusGlyph`'s own label, and the
-// progress line is the Tasks page's `TaskProgressSummary` — so a card and the page it leads to
-// cannot describe the same object in two vocabularies. The web client draws the same four cards;
+// progress line is the Tasks page's `TaskProgressSummary`, and a wiki entry's words are the Wiki
+// pages' own (`WikiCopy`) — so a card and the page it leads to cannot describe the same object in two
+// vocabularies. The web client draws the same five cards;
 // `OrbitLinkCopy` is the list of sentences it is checked against, which is why every one of them is
 // a public constant rather than a literal in the middle of a builder.
 
@@ -23,6 +24,9 @@ public enum OrbitLinkCopy {
     public static let unassigned = "Unassigned"
     /// A task nothing has ever run.
     public static let neverRun = "never run"
+
+    /// A wiki entry filed under nothing. Not a warning: plenty of notes are true everywhere.
+    public static let noAnchor = "No anchor"
 
     /// The badge on a session that coordinates a project, and the head of a project card's foot.
     public static let coordinator = "Coordinator"
@@ -41,7 +45,18 @@ public enum OrbitLinkCopy {
         case .session: return "Session"
         case .project: return "Project"
         case .list:    return "Task list"
+        case .wiki:    return "Wiki"
         }
+    }
+
+    /// The first row of a card that has been read: the type's name, and for a wiki entry the kind it
+    /// is — "Wiki · Principle" rather than "Wiki" alone, because the kind is what the note IS (the
+    /// push block's own lines open the same way, `[Principle] …`). The kind's word is the Wiki pages'
+    /// (`WikiCopy.kindLabel`), so the card and those pages cannot name one kind two ways.
+    public static func typeName(_ kind: OrbitLinkKind, wikiKind: WikiEntryKind?) -> String {
+        guard kind == .wiki, let wikiKind else { return typeName(kind) }
+        let entry = WikiCopy.kindLabel(wikiKind)
+        return entry.isEmpty ? typeName(kind) : "\(typeName(kind))\(separator)\(entry)"
     }
 
     /// Groups thousands the way the app's other counts do (`27,468`), and the way the browser's
@@ -127,12 +142,17 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
         public let badge: String?
         /// Drawn in the warning tone rather than the secondary one.
         public let isWarning: Bool
+        /// A wiki entry's anchor mark in front of the text — `✓ 4db4f9f` when a re-check found it,
+        /// the warning word when it did not, nothing when nothing has checked it yet.
+        public let anchorMark: WikiAnchorMark?
 
-        public init(text: String, glyph: Glyph? = nil, badge: String? = nil, isWarning: Bool = false) {
+        public init(text: String, glyph: Glyph? = nil, badge: String? = nil, isWarning: Bool = false,
+                    anchorMark: WikiAnchorMark? = nil) {
             self.text = text
             self.glyph = glyph
             self.badge = badge
             self.isWarning = isWarning
+            self.anchorMark = anchorMark
         }
     }
 
@@ -153,8 +173,32 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
     public let meter: [Segment]
     public let lines: [Line]
     public let foot: Foot?
-    /// The mono hint under a loading or unavailable card: `orbitd.io/tasks/<id>`.
+    /// The mono hint under a loading or unavailable card: `orbitd.io/tasks/<id>`, or a wiki entry's
+    /// reference as it was written.
     public let path: String
+    /// A wiki entry's kind, which the type name on the first row carries (`typeName(_:wikiKind:)`).
+    public let wikiKind: WikiEntryKind?
+    /// A wiki entry's trust, drawn as the badge the Wiki's own pages give it.
+    public let wikiTrust: WikiTrust?
+
+    public init(state: State, kind: OrbitLinkKind, title: String?, pill: TaskPill?,
+                sessionGlyph: SessionStatusGlyph?, meter: [Segment], lines: [Line], foot: Foot?,
+                path: String, wikiKind: WikiEntryKind? = nil, wikiTrust: WikiTrust? = nil) {
+        self.state = state
+        self.kind = kind
+        self.title = title
+        self.pill = pill
+        self.sessionGlyph = sessionGlyph
+        self.meter = meter
+        self.lines = lines
+        self.foot = foot
+        self.path = path
+        self.wikiKind = wikiKind
+        self.wikiTrust = wikiTrust
+    }
+
+    /// The first row's words: the type, and a wiki entry's kind beside it.
+    public var typeName: String { OrbitLinkCopy.typeName(kind, wikiKind: wikiKind) }
 
     // MARK: the three states
 
@@ -192,10 +236,13 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
         case .list:
             guard let list = preview.list else { return unavailable(ref, host: host) }
             return listCard(ref, list, host: host)
+        case .wiki:
+            guard let entry = preview.wiki else { return unavailable(ref, host: host) }
+            return wikiCard(ref, entry, host: host)
         }
     }
 
-    // MARK: the four contents
+    // MARK: the five contents
 
     /// Title, the project it is filed under, and how its newest run came out.
     private static func taskCard(_ ref: OrbitLinkRef, _ task: LinkPreviewTask, host: String,
@@ -303,6 +350,30 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
             foot: nil, path: pathLabel(ref, host: host))
     }
 
+    /// The entry's trust as its badge, its one sentence, what it stands on and whether that still
+    /// holds, and — for an entry agents are no longer handed — the line that says so. The words are
+    /// the browser's card's (`OrbitLinkCard.tsx`), line for line.
+    private static func wikiCard(_ ref: OrbitLinkRef, _ entry: LinkPreviewWiki,
+                                 host: String) -> OrbitLinkCardContent {
+        var lines: [Line] = []
+        if let summary = entry.summary, !summary.isEmpty { lines.append(Line(text: summary)) }
+        // An entry nothing has re-checked says nothing about its anchors rather than claiming they
+        // are fine: `anchorMark` answers nil for exactly that, which is why the mark is not the text.
+        let mark = WikiLogic.anchorMark(state: entry.anchorState, checkedRef: entry.anchorCheckedRef)
+        let anchor = entry.anchor.map(WikiLogic.anchorLabel) ?? OrbitLinkCopy.noAnchor
+        lines.append(Line(text: anchor, isWarning: mark?.tone == .amber || mark?.tone == .red,
+                          anchorMark: mark))
+        // A retired or superseded entry still reads, and a card that hid it would keep claiming a
+        // note agents are no longer being handed.
+        if let status = entry.status, status != .active {
+            lines.append(Line(text: WikiCopy.noLongerPushed, glyph: .warning, isWarning: true))
+        }
+        return OrbitLinkCardContent(
+            state: .ready, kind: ref.kind, title: cardTitle(entry.title, ref), pill: nil,
+            sessionGlyph: nil, meter: [], lines: lines, foot: nil, path: pathLabel(ref, host: host),
+            wikiKind: entry.kind, wikiTrust: entry.trust)
+    }
+
     /// Done green, ready orange, failed red, over the whole — the project page's meter. A lane
     /// nothing is in draws no segment at all rather than a zero-width one.
     private static func segments(done: Int, ready: Int, failed: Int, total: Int) -> [Segment] {
@@ -332,7 +403,14 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
 
     /// `orbitd.io/tasks/34Mx0dQe8RkV2uLbNw7Ta` — the host without its scheme, the path this
     /// deployment serves for the kind, and the id as the link wrote it.
+    ///
+    /// A wiki entry has no page URL to imitate — the reference IS its address — so its hint is the
+    /// reference as it was written.
     public static func pathLabel(_ ref: OrbitLinkRef, host: String) -> String {
+        if ref.kind == .wiki {
+            if case .reference(let written) = ref.source { return written }
+            return ref.source.writtenID
+        }
         var label = host.trimmingCharacters(in: .whitespacesAndNewlines)
         if let scheme = label.range(of: "://") { label = String(label[scheme.upperBound...]) }
         label = String(label.prefix { $0 != "/" && $0 != "?" && $0 != "#" })
