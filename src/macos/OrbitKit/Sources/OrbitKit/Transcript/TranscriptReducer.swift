@@ -196,6 +196,15 @@ public struct TranscriptReducer: Sendable, Codable {
         try c.encode(idSeq, forKey: .idSeq)
     }
 
+    /// Whether this event took the turns waiting in the queue off it. An interrupt does — the Stop
+    /// that asked for it dropped them server-side before the runner ever saw it — except the one a
+    /// runner writes for itself when it shuts down mid-turn (`reason: runner_restart`, runner-go's
+    /// `watchShutdownDrain`): nobody asked for that one, and the control plane goes on to deliver the
+    /// turn it cut short and every turn queued behind it.
+    public static func dropsQueue(_ ev: RunEvent) -> Bool {
+        ev.type == .interrupt && ev.payload["reason"]?.stringValue != "runner_restart"
+    }
+
     public mutating func apply(_ ev: RunEvent) {
         // `sentinelSeq` is a live-only terminal broadcast wearing a durable type — it must move
         // neither cursor (see `RunEvent.sentinelSeq`), and it is not deduped either: it is never
@@ -235,7 +244,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .turnEnd:        endTurn(ev)
         case .user:           appendUser(ev)
         case .userDelivery:   applyUserDelivery(ev)
-        case .interrupt:      appendInterrupt(seq: ev.seq)
+        case .interrupt:      appendInterrupt(seq: ev.seq, dropsQueue: Self.dropsQueue(ev))
         case .error:          appendError(ev)
         case .approvalRequest:  upsertApproval(ev)
         case .approvalResolved: resolveApproval(ev)
@@ -1072,14 +1081,15 @@ public struct TranscriptReducer: Sendable, Codable {
                                             startedCard: startedCard)))
     }
 
-    private mutating func appendInterrupt(seq: Int) {
+    private mutating func appendInterrupt(seq: Int, dropsQueue: Bool) {
         turnAccountedFor = true
         flushStreaming()
         state.items.append(.interrupt(id: nextID(), seq: seq))
         state.status = .interrupted
-        // An interrupt drops still-queued follow-ups server-side — they never get a durable `user`
-        // event to reconcile them — so clear the local queue to match (web parity).
-        state.queued.removeAll()
+        // A Stop drops still-queued follow-ups server-side — they never get a durable `user` event
+        // to reconcile them — so clear the local queue to match (web parity). A runner restart drops
+        // nothing, and its queue reconciles as each turn in it is delivered.
+        if dropsQueue { state.queued.removeAll() }
     }
 
     private mutating func appendError(_ ev: RunEvent) {

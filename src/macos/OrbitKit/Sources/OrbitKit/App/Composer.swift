@@ -259,6 +259,20 @@ public enum ComposerLogic {
         guard trimmed.hasPrefix("!") else { return (trimmed, false) }
         return (String(trimmed.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines), true)
     }
+
+    /// What a queued turn hands back to the composer when it comes off the queue unrun — withdrawn,
+    /// or dropped by a Stop: the words somebody typed, trimmed. Nil for a turn nobody typed, which
+    /// the queue draws as its card rather than as a message (`ConsoleView`'s queued row): a watch's
+    /// wake, the control plane's wake for a background job or a wakeup coming due, an exception
+    /// item's delivery, a project's start. Handed back, those put text written for the agent in the
+    /// composer as though the reader had typed it, one tap from being sent again under their name.
+    public static func restorableText(of bubble: UserBubble) -> String? {
+        guard bubble.itemCard == nil, bubble.startedCard == nil,
+              WatchWakeText.parse(bubble.text) == nil,
+              BackgroundWakeText.parse(bubble.text) == nil else { return nil }
+        let body = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return body.isEmpty ? nil : body
+    }
 }
 
 public struct ComposerStatusSnapshot: Equatable, Sendable {
