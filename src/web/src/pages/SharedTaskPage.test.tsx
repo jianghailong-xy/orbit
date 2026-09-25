@@ -39,6 +39,8 @@ const SHARE = `/api/shared/${TOKEN}`;
 const TASK = encodeId('01a0702b-242d-74ed-8c72-75d49d5b498b');
 const PROJECT = encodeId('01a07006-33b5-764d-ad26-26958a4bbcd9');
 const RUN = encodeId('eb4677c5-44c5-5257-8bbb-02e7da5fbbd2');
+/** The task's other run, which the first one's transcript links to. */
+const RERUN = encodeId('eb4677c5-44c5-5257-8bbb-02e7da5fbbd4');
 const COORDINATOR = encodeId('01a06fff-ff20-7638-b8ed-56be3c7741a2');
 const T3B = encodeId('01a0702b-1111-7000-8000-000000000001');
 const T7 = encodeId('01a0702b-2222-7000-8000-000000000002');
@@ -109,13 +111,22 @@ function run(events: SharedEvent[]): SharedSession {
     createdAt: rows.T6_RUN.createdAt,
     events,
     hasMore: true,
-    task: { id: TASK, title: 'T6 安全边界：跨 owner、准入与凭据不外泄的回归断言', runs: [{ sessionId: RUN }] },
+    task: { id: TASK, title: 'T6 安全边界：跨 owner、准入与凭据不外泄的回归断言', runs: [{ sessionId: RUN }, { sessionId: RERUN }] },
   };
 }
+
+/** A page of the run above the tail it opened with, and the other run, whole on its own. */
+const OLDER_OF_RUN: SharedEvent[] = [
+  { type: 'assistant', payload: { text: 'An older message of the first run.' }, turnId: null, ts: '2026-09-25T02:12:30.000Z', seq: 101 },
+];
+const RERUN_EVENTS: SharedEvent[] = [
+  { type: 'assistant', payload: { text: 'The second run says hello.' }, turnId: null, ts: '2026-09-25T05:00:00.000Z', seq: 5 },
+];
 
 const RUN_EVENTS: SharedEvent[] = [
   { ...rows.TASK_STARTED, seq: 202 },
   { type: 'assistant', payload: { text: REFERENCES }, turnId: null, ts: '2026-09-25T02:13:00.000Z', seq: 203 },
+  { type: 'assistant', payload: { text: `Then [the rerun](orbit-session:${RERUN}).` }, turnId: null, ts: '2026-09-25T02:14:00.000Z', seq: 204 },
 ];
 
 let container: HTMLDivElement;
@@ -133,7 +144,8 @@ function share(url: string): Response {
   const u = new URL(url, window.location.origin);
   if (u.pathname === SHARE) return okJson(rootAnswer);
   if (u.pathname === `${SHARE}/sessions/${RUN}`) return okJson(run(RUN_EVENTS));
-  if (u.pathname === `${SHARE}/sessions/${RUN}/events`) return okJson({ events: [], hasMore: false });
+  if (u.pathname === `${SHARE}/sessions/${RUN}/events`) return okJson({ events: OLDER_OF_RUN, hasMore: false });
+  if (u.pathname === `${SHARE}/sessions/${RERUN}`) return okJson({ ...run(RERUN_EVENTS), hasMore: false });
   return notFound();
 }
 
@@ -324,6 +336,29 @@ describe('a run of a shared task (/s/<token>/c/<run>)', { timeout: 60_000 }, () 
     expect(linkNamed('its run')).toBe(`/s/${TOKEN}/c/${RUN}`);
     for (const outside of ['the project', 'T3b', 'the coordinator']) expect(linkNamed(outside)).toBeNull();
     expect(appHrefs()).toEqual([]);
+  });
+});
+
+describe('from one run of a shared task to another', { timeout: 60_000 }, () => {
+  it('is a page of its own: nothing read on the first run’s page is carried over', async () => {
+    await mount(`/s/${TOKEN}/c/${RUN}`);
+    // Scroll up on the first run: the page above its tail comes in.
+    await act(async () => {
+      container.querySelector('.share-scroll')!.dispatchEvent(new Event('scroll'));
+    });
+    await settle();
+    expect(container.textContent).toContain('An older message of the first run.');
+
+    // Its transcript links to the task's other run, which the link shares too.
+    const rerun = [...container.querySelectorAll('a')].find((a) => a.textContent === 'the rerun')!;
+    expect(rerun.getAttribute('href')).toBe(`/s/${TOKEN}/c/${RERUN}`);
+    await act(async () => {
+      rerun.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+    });
+    await settle();
+    expect(requests).toContain(`${SHARE}/sessions/${RERUN}?limit=200&maxPayload=2048`);
+    expect(container.textContent).toContain('The second run says hello.');
+    expect(container.textContent).not.toContain('An older message of the first run.');
   });
 });
 
