@@ -817,6 +817,10 @@ type ClaimedSession struct {
 	// WatchesDisabled is set when Watch is not switched on for this session's owner (the apiserver's
 	// ORBIT_WATCHES); injected as ORBIT_WATCHES=off (watch_rollout.go). Absent means on.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
+	// WikiDisabled is the same statement about the Orbit wiki (the apiserver's ORBIT_WIKI); injected as
+	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
+	// `orbit capabilities` (wiki_tools.go). Absent means on.
+	WikiDisabled bool `json:"wikiDisabled,omitempty"`
 	// SpawnDepth is how many spawn links sit above this session (a root is 0), injected as
 	// ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
 	// nested wait always settles inside the wait that is waiting on it.
