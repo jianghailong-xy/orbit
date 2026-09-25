@@ -291,7 +291,8 @@ describe('a runner with one Codex account', () => {
       const codexRow = rows(page, '.re-row').find((row) => row.querySelector('.re-name')?.textContent === 'Codex')!;
       expect(tags(codexRow)).toEqual(['Signed in']);
       expect(codexRow.querySelector('.re-meta')?.textContent).toBe('codex 0.156.0');
-      expect(codexRow.textContent).not.toContain('+ Account');
+      // Not the group's: it is how one account gets to two, so the Codex row holds it too.
+      expect(button(codexRow, '+ Account')).toBeTruthy();
       expect(codexRow.textContent).not.toContain('DEFAULT');
       act(() => root?.unmount());
       host?.remove();

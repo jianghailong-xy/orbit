@@ -9,17 +9,20 @@ import { RunnerEngines, summaryOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 /**
- * One Codex account on a runner: the Providers page is the page it was before accounts.
+ * One Codex account on a runner: the Providers page is the page it was before accounts, plus the
+ * way to a second one.
  *
- * The group head, the account rows under it and `+ Account` are for two accounts or more. One
- * account is what every machine had before accounts, so none of that may show for it: the card
- * keeps one row per engine, and the Codex row keeps its name, sub-line, status tag, quota bar and
- * button. A runner too old to report accounts has one account, not none, and reads the same.
+ * The group head and the account rows under it are for two accounts or more. One account is what
+ * every machine had before accounts, so none of that may show for it: the card keeps one row per
+ * engine, and the Codex row keeps its name, sub-line, status tag, quota bar and button. What it
+ * adds is `+ Account`, ahead of that button — without it a machine with Default alone could never
+ * get to two. A runner too old to report accounts has one account, not none, and reads the same.
  *
- * Every BEFORE value is what the page rendered for the same fixture before accounts existed:
- * RunnerEngines.tsx at 864cad31c passes this file as it stands. RunnerEngines.test.tsx keeps its
- * own assertions, and this guard sits beside them. Red here means the page changed for one
- * account — fix the page, not these values.
+ * Every BEFORE value is what the page rendered for the same fixture before accounts existed, and
+ * the Codex row is held to it less `+ Account`, which has a test of its own: RunnerEngines.tsx at
+ * 864cad31c passes every BEFORE comparison here as it stands. RunnerEngines.test.tsx keeps its own
+ * assertions, and this guard sits beside them. Red here means the page changed for one account —
+ * fix the page, not these values.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -201,25 +204,37 @@ const strings = (scope: Element) =>
 const preset = (el: Element, pattern: RegExp) =>
   [...el.classList].map((c) => pattern.exec(c)?.[1]).find(Boolean) ?? null;
 
-function codexRow(page: HTMLElement): CodexRow {
+/** A button as `label · antd type`, with `· disabled` when it is. */
+const described = (button: HTMLButtonElement) =>
+  [
+    button.textContent?.trim(),
+    preset(button, /^ant-btn-(primary|default|dashed|text|link)$/),
+    button.disabled && 'disabled',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+const addAccount = (row: Element) =>
+  [...row.querySelectorAll('button')].find((button) => button.textContent?.trim() === '+ Account');
+
+function codexRowOf(page: HTMLElement): HTMLElement {
   const row = [...page.querySelectorAll<HTMLElement>('.re-row')].find(
     (el) => el.querySelector('.re-name')?.textContent === 'Codex',
   );
   if (!row) throw new Error(`no Codex row in ${page.textContent}`);
+  return row;
+}
+
+/** The Codex row as it reads less `+ Account`: one button taken out of a copy, and only that one. */
+function codexRow(page: HTMLElement): CodexRow {
+  const row = codexRowOf(page).cloneNode(true) as HTMLElement;
+  addAccount(row)?.remove();
   const tag = row.querySelector('.ant-tag');
   return {
     text: strings(row),
     tag: tag && preset(tag, /^ant-tag-(?!filled$|outlined$|solid$|borderless$)(.+)$/),
     bar: row.querySelector<HTMLElement>('.runner-util-fill')?.style.width ?? null,
-    buttons: [...row.querySelectorAll('button')].map((button) =>
-      [
-        button.textContent?.trim(),
-        preset(button, /^ant-btn-(primary|default|dashed|text|link)$/),
-        button.disabled && 'disabled',
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    ),
+    buttons: [...row.querySelectorAll('button')].map(described),
   };
 }
 
@@ -244,6 +259,32 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
       // One account counts once, as the engine always did: on the section, and on a folded card.
       expect(page.querySelector('.re-sec-count')?.textContent).toBe(count);
       expect(summaryOf(box)).toBe(folded);
+    },
+  );
+
+  it.each(BEFORE)(
+    '$state: + Account leads the Codex row, and opens the name for a second account',
+    async ({ auth, over, codex }) => {
+      const page = mount([runner({ auth, ...accountsOf(auth) }, over)]);
+      const row = codexRowOf(page);
+      const offline = over?.online === false;
+
+      // The group head's button, ahead of the row's own — and, like that one, not pressable while
+      // the machine is offline.
+      expect([...row.querySelectorAll<HTMLButtonElement>('.re-act button')].map(described)).toEqual([
+        offline ? '+ Account · default · disabled' : '+ Account · default',
+        ...codex.buttons,
+      ]);
+      if (offline) return;
+
+      await act(async () => {
+        addAccount(row)!.click();
+      });
+      // The panel the group head opens — a name, then the same sign-in as every other here — under
+      // this row and no other. Still one account: no head, no account rows.
+      expect(page.querySelectorAll('.re-add input')).toHaveLength(1);
+      expect(row.querySelector('.re-add input')).not.toBeNull();
+      expect(page.querySelectorAll('.re-acct, .re-grp, .re-rail, .re-chip')).toHaveLength(0);
     },
   );
 });
