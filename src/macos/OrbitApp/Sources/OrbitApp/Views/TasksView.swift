@@ -778,6 +778,10 @@ private struct TaskDetailContent: View {
     @State private var confirmingDelete = false
     @State private var confirmingReopen = false
     @State private var showingDependencyPicker = false
+    /// The Share panel, and whether the task has a public link open — what the menu's Share… says
+    /// under itself. Read when the task opens; the panel hands back every change made in it.
+    @State private var sharing = false
+    @State private var shareRead: ShareLinkRead?
 
     var body: some View {
         Group {
@@ -840,6 +844,32 @@ private struct TaskDetailContent: View {
             if tasks.detail?.id == taskID {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
+                        // Two words for two links (docs/share-links-design.md §8). Copy Link is the
+                        // signed-in address, for yourself; Share… is the public read-only link, and
+                        // says under itself whether one is open. Copy as Markdown needs neither.
+                        if let url = model.taskWebURL(taskID) {
+                            Button {
+                                PlatformPasteboard.copyString(url.absoluteString)
+                                PlatformHaptics.success()
+                                model.showToast(SharePanelCopy.linkCopied)
+                            } label: {
+                                Label(SharePanelCopy.copyLink, systemImage: "link")
+                            }
+                        }
+                        Button { sharing = true } label: {
+                            Label(SharePanelCopy.share, systemImage: "globe")
+                            if let status = SharePanel.menuStatus(shareRead) { Text(status) }
+                        }
+                        if let task = tasks.detail, let url = model.taskWebURL(taskID) {
+                            Button {
+                                PlatformPasteboard.copyString(ShareMarkdown.task(task, link: url.absoluteString))
+                                PlatformHaptics.success()
+                                model.showToast(SharePanelCopy.markdownCopied)
+                            } label: {
+                                Label(SharePanelCopy.copyAsMarkdown, systemImage: "doc.plaintext")
+                            }
+                        }
+                        Divider()
                         Button(role: .destructive) { confirmingDelete = true } label: {
                             Label("Delete task", systemImage: "trash")
                         }
@@ -860,6 +890,18 @@ private struct TaskDetailContent: View {
             await tasks.loadNavigation()
         }
         .task(id: detailPollKey) { await pollBusyDetail() }
+        .task(id: taskID) {
+            guard let baseURL = model.baseURL else { return }
+            // Nil when it could not be read: the menu then says nothing rather than guessing.
+            shareRead = try? await APIClient(baseURL: baseURL, tokenStore: model.tokenStore).shareLink(.task, taskID)
+        }
+        .sheet(isPresented: $sharing) {
+            if let baseURL = model.baseURL {
+                ShareSheet(kind: .task, rootID: taskID, baseURL: baseURL, tokenStore: model.tokenStore) {
+                    shareRead = $0
+                }
+            }
+        }
         .sheet(isPresented: $showingDependencyPicker) {
             let existing = Set((tasks.detail?.dependsOn ?? []).compactMap { $0.dependsOnTask?.id })
             TaskDependencyPicker(tasks: tasks, taskID: taskID, existing: existing)

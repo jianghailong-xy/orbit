@@ -244,7 +244,7 @@ struct ConsoleView: View {
         #endif
         .sheet(isPresented: $showShare) {
             if let baseURL = appModel.baseURL {
-                ShareSheet(sessionID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)
+                ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)
             }
         }
     }

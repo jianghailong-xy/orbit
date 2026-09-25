@@ -1,153 +1,258 @@
 import SwiftUI
 import OrbitKit
 
-/// A public, read-only link to one session's transcript — the native port of web's `ShareModal`
-/// (the "Share…" item in `AgentView`'s session menu). Presented as a sheet from the console: from
-/// its nav bar on iOS, from the window toolbar on macOS.
+/// The one Share panel — a session's, a task's and a project's alike: web's `ShareModal` as the
+/// contract draws it for the apps (docs/share-links-design.md §8; docs/mocks/share-links/07-mobile ③).
+/// From the top: Access (Only you / Anyone with the link), the public link with Copy Link and Share
+/// Link…, the layers the link includes with how much each holds, the Live line, Expires, and how
+/// often it was opened. Every change is saved as it is made — Done only closes — and turning the link
+/// off asks first, since whoever has it loses it at once. The same view on iOS and macOS, presented
+/// as a sheet: from the session's nav bar or window toolbar, and from the task's and the project's ⋯
+/// menus.
 ///
-/// Owns a fresh `APIClient` (built from the app's baseURL + tokenStore, exactly like `ConsoleModel`)
-/// and mirrors the web dialog's states: create → copy / share / revoke. The link resolves to the
-/// web app's public `/s/<token>` page, so recipients need no account. `enableShare` is idempotent
-/// server-side, so re-creating just returns the existing token.
+/// What it says and what each press sends is `SharePanel` (OrbitKit), where it is tested; this view
+/// draws it and runs the requests, with a fresh `APIClient` built from the app's baseURL + tokenStore
+/// (as `ConsoleModel` does). `onChange` hands every read and save back to whoever opened it, so a
+/// menu's "Live link" follows what was done here without asking the server again.
 struct ShareSheet: View {
-    let sessionID: String
+    let kind: ShareRootKind
+    let rootID: String
     let baseURL: URL
     let tokenStore: TokenStore
+    var onChange: (ShareLinkRead) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
 
-    /// nil = not shared (offer "Create link"); non-nil = shared (show link + revoke). Seeded from
-    /// the session detail on open, then updated by enable/disable.
-    @State private var token: String?
-    @State private var loading = true
+    @State private var panel: SharePanel
     @State private var busy = false
-    @State private var confirmingRevoke = false
+    @State private var confirmingTurnOff = false
     @State private var copied = false
     @State private var errorText: String?
 
-    private var api: APIClient { APIClient(baseURL: baseURL, tokenStore: tokenStore) }
-    /// `<baseURL>/s/<token>` — the same shape web builds from `window.location.origin`.
-    private var shareURL: URL? {
-        token.map { baseURL.appendingPathComponent("s").appendingPathComponent($0) }
+    init(kind: ShareRootKind, rootID: String, baseURL: URL, tokenStore: TokenStore,
+         onChange: @escaping (ShareLinkRead) -> Void = { _ in }) {
+        self.kind = kind
+        self.rootID = rootID
+        self.baseURL = baseURL
+        self.tokenStore = tokenStore
+        self.onChange = onChange
+        _panel = State(initialValue: SharePanel(kind: kind))
     }
+
+    private var api: APIClient { APIClient(baseURL: baseURL, tokenStore: tokenStore) }
 
     var body: some View {
         NavigationStack {
             Form {
-                if loading {
+                switch panel.phase {
+                case .loading:
                     HStack { Spacer(); ProgressView(); Spacer() }
-                } else if let url = shareURL {
-                    activeSections(url)
-                } else {
-                    createSection
+                case .failed(let reason):
+                    Section {
+                        Text(SharePanelCopy.couldNotLoad + " " + reason)
+                        Button(SharePanelCopy.retry) { Task { await load() } }
+                    }
+                case .ready:
+                    accessSection
+                    if let url = panel.publicURL(base: baseURL) {
+                        linkSection(url)
+                        includesSection
+                        updatesSection
+                    }
                 }
                 if let errorText {
-                    Text(errorText).font(.footnote).foregroundStyle(.red)
+                    Section { Text(errorText).font(.footnote).foregroundStyle(.red) }
                 }
             }
             // A Mac form lays its rows out in columns unless told otherwise; grouped reads as the
             // phone's sections do (and is already the phone's default).
             .formStyle(.grouped)
-            .navigationTitle("Share")
+            .navigationTitle(panel.title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button(SharePanelCopy.done) { dismiss() }
                 }
                 #else
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(SharePanelCopy.done) { dismiss() }
                 }
                 #endif
             }
         }
         .task { await load() }
+        .confirmationDialog(SharePanelCopy.turnOffTitle, isPresented: $confirmingTurnOff,
+                            titleVisibility: .visible) {
+            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff() } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(SharePanelCopy.turnOffDetail)
+        }
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 360)
+        .frame(minWidth: 460, minHeight: 560)
         #endif
     }
 
-    private var createSection: some View {
+    // MARK: the sections, top to bottom
+
+    /// Choosing Only you while a link is open does not turn it off: it asks, and the picker keeps
+    /// showing the link as it is until the answer is yes.
+    private var accessSection: some View {
         Section {
-            Button {
-                Task { await enable() }
+            Picker(selection: Binding(get: { panel.access }, set: { choose($0) })) {
+                ForEach(SharePanel.Access.allCases) { access in
+                    Text(access.label).tag(access)
+                }
             } label: {
-                Label("Create share link", systemImage: "link.badge.plus")
+                Label(SharePanelCopy.access, systemImage: panel.access == .onlyYou ? "lock" : "globe")
             }
             .disabled(busy)
         } footer: {
-            Text("Anyone with the link can view this session's transcript, read-only. No sign-in required.")
+            Text(panel.accessDetail)
         }
     }
 
-    @ViewBuilder
-    private func activeSections(_ url: URL) -> some View {
+    private func linkSection(_ url: URL) -> some View {
         Section {
             Text(url.absoluteString)
                 .font(.footnote.monospaced())
-                .textSelection(.enabled)
                 .foregroundStyle(.secondary)
-        } header: {
-            Label("Sharing is on", systemImage: "checkmark.circle.fill")
-        } footer: {
-            Text("Anyone with this link can view the transcript, read-only.")
-        }
-
-        Section {
+                .lineLimit(1)
+                .textSelection(.enabled)
             Button {
                 PlatformPasteboard.copyString(url.absoluteString)
+                PlatformHaptics.success()
                 copied = true
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 1_500_000_000)
                     copied = false
                 }
             } label: {
-                Label(copied ? "Copied" : "Copy link", systemImage: copied ? "checkmark" : "doc.on.doc")
+                Label(copied ? SharePanelCopy.copied : SharePanelCopy.copyLink,
+                      systemImage: copied ? "checkmark" : "link")
             }
             ShareLink(item: url) {
-                Label("Share link…", systemImage: "square.and.arrow.up")
+                Label(SharePanelCopy.shareLink, systemImage: "square.and.arrow.up")
             }
-        }
-
-        Section {
-            Button(role: .destructive) {
-                confirmingRevoke = true
-            } label: {
-                Label("Revoke link", systemImage: "link.badge.minus")
-            }
-            .disabled(busy)
-        }
-        .confirmationDialog("Revoke this link? Anyone with it will lose access.",
-                            isPresented: $confirmingRevoke, titleVisibility: .visible) {
-            Button("Revoke link", role: .destructive) { Task { await disable() } }
-            Button("Cancel", role: .cancel) {}
         }
     }
+
+    /// One switch per layer, with what it is and how much it holds. The root's own content is always
+    /// on; a layer under Task pages sits indented beneath it and cannot be pressed while it is off.
+    private var includesSection: some View {
+        Section {
+            ForEach(panel.layers) { row in
+                Toggle(isOn: Binding(get: { row.isOn }, set: { on in toggle(row, on: on) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.name)
+                        Text(row.detail)
+                            .font(.footnote)
+                            .foregroundStyle(row.warns ? Color.orange : Color.secondary)
+                        if let count = row.count {
+                            Text(count).font(.footnote).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.leading, row.isNested ? 16 : 0)
+                }
+                .disabled(!row.isEditable || busy)
+            }
+        } header: {
+            Text(SharePanelCopy.includes)
+        }
+    }
+
+    /// Live, said as the fact it is (§2), then Expires; under them how long the link has left and
+    /// how often it was opened.
+    private var updatesSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(SharePanelCopy.updates)
+                HStack(spacing: 6) {
+                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                    Text(SharePanelCopy.live)
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            Picker(SharePanelCopy.expires, selection: Binding(get: { panel.expirySelection },
+                                                             set: { chooseExpiry($0) })) {
+                ForEach(panel.expiryOptions) { option in
+                    Text(option.label).tag(option.value)
+                }
+            }
+            .disabled(busy)
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                if let hint = panel.expiryHint { Text(hint) }
+                if let views = panel.viewsLine(now: Date()) { Text(views) }
+            }
+        }
+    }
+
+    // MARK: presses
+
+    private func choose(_ access: SharePanel.Access) {
+        switch panel.step(to: access) {
+        case .open(let request): Task { await save(request) }
+        case .confirmTurnOff: confirmingTurnOff = true
+        case .nothing: break
+        }
+    }
+
+    private func toggle(_ row: ShareLayerRow, on: Bool) {
+        guard let layer = row.layer else { return }
+        let request = panel.toggle(layer, on: on)
+        Task { await save(request) }
+    }
+
+    private func chooseExpiry(_ value: String) {
+        guard let request = panel.chooseExpiry(value, now: Date()) else { return }
+        Task { await save(request) }
+    }
+
+    // MARK: the server
 
     @MainActor
     private func load() async {
-        do { token = try await api.sessionDetail(sessionID).shareToken }
-        catch { errorText = "Couldn't load the share status." }
-        loading = false
+        errorText = nil
+        do {
+            let read = try await api.shareLink(kind, rootID)
+            panel.loaded(read)
+            onChange(read)
+        } catch {
+            panel.loadFailed(APIClient.failureReason(error))
+        }
     }
 
     @MainActor
-    private func enable() async {
-        busy = true; errorText = nil
-        do { token = try await api.enableShare(sessionID).shareToken }
-        catch { errorText = "Couldn't create the share link." }
+    private func save(_ request: PutShareLinkRequest) async {
+        busy = true
+        errorText = nil
+        do {
+            let link = try await api.putShareLink(kind, rootID, request)
+            panel.saved(link)
+            onChange(ShareLinkRead(link: link, counts: panel.counts))
+        } catch {
+            panel.saveFailed()
+            errorText = APIClient.failureReason(error)
+        }
         busy = false
     }
 
     @MainActor
-    private func disable() async {
-        busy = true; errorText = nil
+    private func turnOff() async {
+        busy = true
+        errorText = nil
         do {
-            try await api.disableShare(sessionID)
-            token = nil; copied = false
-        } catch { errorText = "Couldn't revoke the share link." }
+            try await api.turnOffShareLink(kind, rootID)
+            panel.turnedOff()
+            copied = false
+            onChange(ShareLinkRead(link: nil, counts: panel.counts))
+        } catch {
+            errorText = APIClient.failureReason(error)
+        }
         busy = false
     }
 }

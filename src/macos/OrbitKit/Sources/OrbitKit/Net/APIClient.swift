@@ -265,12 +265,6 @@ public final class APIClient: @unchecked Sendable {
     public func setSessionTags(_ sessionID: String, tagIDs: [String]) async throws -> [SessionTag] {
         try await put("sessions/\(sessionID)/tags", body: SetSessionTagsRequest(tagIds: tagIDs))
     }
-    /// Share/unshare: mint (or clear) a public read-only link to this session's transcript, served
-    /// at `<baseURL>/s/<shareToken>` with no auth. `enableShare` is idempotent server-side (returns
-    /// the existing token if already shared); `disableShare` makes any live link 404 immediately.
-    public func enableShare(_ id: String) async throws -> ShareInfo { try await postEmpty("sessions/\(id)/share") }
-    public func disableShare(_ id: String) async throws { try await deleteRaw("sessions/\(id)/share") }
-
     /// What this session's Retry button would re-send. Asked when the loaded event window holds no
     /// user message — a run's message sits thousands of events behind its tail — so the card offers
     /// the server's own choice rather than nothing at all. Web parity: `getSessionRetryMessage`.
@@ -295,6 +289,27 @@ public final class APIClient: @unchecked Sendable {
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
+
+    // MARK: public links — one per session, task or project (docs/share-links-design.md §5)
+
+    /// The root's link that has not ended (nil when it has none), with how much each of its layers
+    /// holds. Web parity: `getShareLink`.
+    public func shareLink(_ kind: ShareRootKind, _ id: String) async throws -> ShareLinkRead {
+        try await get("\(kind.pathSegment)/\(id)/share")
+    }
+
+    /// Open the root's link, or change the open one; answers the link as it now stands. Web parity:
+    /// `putShareLink`.
+    public func putShareLink(_ kind: ShareRootKind, _ id: String,
+                             _ body: PutShareLinkRequest) async throws -> ShareLink {
+        try await put("\(kind.pathSegment)/\(id)/share", body: body)
+    }
+
+    /// Access → Only you: its token stops opening at once, and opening the link again makes a new
+    /// one. Nothing to turn off is not an error. Web parity: `turnOffShareLink`.
+    public func turnOffShareLink(_ kind: ShareRootKind, _ id: String) async throws {
+        try await deleteRaw("\(kind.pathSegment)/\(id)/share")
+    }
 
     // MARK: approvals
 

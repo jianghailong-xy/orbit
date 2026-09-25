@@ -957,17 +957,6 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// POST /sessions/:id/share response — the minted (or, idempotently, the already-existing) public
-/// share token. The read-only page it unlocks lives at `<baseURL>/s/<shareToken>`.
-public struct ShareInfo: Codable, Equatable, Sendable {
-    public let shareToken: String
-    public let sharedAt: String
-    public init(shareToken: String, sharedAt: String) {
-        self.shareToken = shareToken
-        self.sharedAt = sharedAt
-    }
-}
-
 public struct AttachmentRef: Codable, Sendable {
     public let id: String
 }
