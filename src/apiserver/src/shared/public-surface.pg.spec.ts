@@ -46,13 +46,10 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { RealtimeService } from '../realtime/realtime.service';
-import { SessionTagsService } from '../session-tags/session-tags.service';
-import { AutoRetryService } from '../sessions/auto-retry.service';
-import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { withSessionState } from '../sessions/session-state';
-import { SessionsController } from '../sessions/sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
+import { ShareLinksController } from '../share-links/share-links.controller';
+import { ShareLinksService } from '../share-links/share-links.service';
 import { SharedRateLimiter } from './public-surface.guard';
 import { SharedController } from './shared.controller';
 
@@ -71,6 +68,8 @@ const OLD_FIELDS = [
   'title', 'workspaceName', 'status', 'runStatus', 'sessionState', 'runState',
   'lifecycleState', 'filingState', 'createdAt',
 ];
+/** What every root answers with since links became `share_link` rows (0306), whatever the root. */
+const LINK_FIELDS = ['kind', 'include', 'sharedAt'];
 
 type Json = Record<string, any>;
 type Answer = { status: number; headers: IncomingHttpHeaders; body: Buffer; json: Json };
@@ -157,10 +156,16 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
       data: {
         id, ownerId, creatorId: ownerId, workspaceId, title, prompt: title,
         status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
-        ...(extra.shareToken ? { shareToken: extra.shareToken, sharedAt: new Date() } : {}),
         ...(extra.deletedAt ? { deletedAt: extra.deletedAt } : {}),
       },
     });
+    // A shared conversation's link is a `share_link` row since 0306, not the session's own column.
+    if (extra.shareToken) {
+      await sql.query(
+        `INSERT INTO share_link (id, owner_id, token, session_id) VALUES (gen_random_uuid(), $1::uuid, $2, $3::uuid)`,
+        [ownerId, extra.shareToken, id],
+      );
+    }
     return id;
   }
   async function event(sessionId: string, seq: number, type: string, payload: unknown, turnId?: string) {
@@ -173,10 +178,12 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
   const turnsOf = async (sessionId: string) => Number((await sql.query(
     'SELECT count(*)::int AS n FROM conversation_turn WHERE session_id = $1::uuid', [sessionId],
   )).rows[0].n);
-  const shareOf = async (sessionId: string) => (await sql.query(
-    'SELECT share_token AS "shareToken", shared_at AS "sharedAt" FROM session WHERE id = $1::uuid',
+  // The session's open link, as `share_link` holds it (0306) — the shape the old column pair had.
+  const shareOf = async (sessionId: string) => ((await sql.query(
+    `SELECT token AS "shareToken", created_at AS "sharedAt" FROM share_link
+      WHERE session_id = $1::uuid AND revoked_at IS NULL`,
     [sessionId],
-  )).rows[0] as { shareToken: string | null; sharedAt: Date | null };
+  )).rows[0] ?? { shareToken: null, sharedAt: null }) as { shareToken: string | null; sharedAt: Date | null };
 
   // The shared conversation. Replayable history is seq 1..600 plus 602, 604 and 606; 601 and 605
   // are progress pings and 603 a live-only snapshot, all three stored but never part of a transcript.
@@ -225,17 +232,12 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
   // so any call is a TypeError that surfaces as a 500 against the status each request asserts.
   const sessions = new SessionsService(prisma, {} as never, {} as never);
   @Module({
-    controllers: [SharedController, SessionsController],
+    controllers: [SharedController, ShareLinksController],
     providers: [
       { provide: SessionsService, useValue: sessions },
       { provide: AttachmentsService, useValue: new AttachmentsService(prisma) },
+      { provide: ShareLinksService, useValue: new ShareLinksService(prisma) },
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: BUDGET, windowMs: 60_000 }) },
-      // SessionsController's other dependencies: the share route touches none of them.
-      { provide: PrismaService, useValue: {} },
-      { provide: RealtimeService, useValue: {} },
-      { provide: SessionTagsService, useValue: {} },
-      { provide: MergeReceiptService, useValue: {} },
-      { provide: AutoRetryService, useValue: {} },
       JwtAuthGuard,
       Reflector,
       { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: ownerId }) } },
@@ -307,13 +309,15 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     });
     const state = withSessionState(row);
 
-    // The root: every old field, then the tail page (200) and hasMore — nothing else.
+    // The root: every old field, then the tail page (200) and hasMore, and the link's own three
+    // (kind, include, sharedAt) — nothing else.
     const root = await visit(at(''));
     assert.equal(root.status, 200, root.body.toString());
     assert.deepEqual(
       Object.keys(root.json).sort(),
-      [...OLD_FIELDS, 'events', 'hasMore', 'agentName'].sort(),
+      [...OLD_FIELDS, ...LINK_FIELDS, 'events', 'hasMore', 'agentName'].sort(),
     );
+    assert.equal(root.json.kind, 'SESSION');
     assert.equal(root.json.title, 'Draw the mock and show me');
     assert.equal(root.json.workspaceName, workspaceName);
     assert.equal(root.json.createdAt, row.createdAt.toISOString());

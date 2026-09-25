@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>02 model</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+  .nest { border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+  .L0 { background: #eef3ff; border: 1px solid #c9d8ff; }
+  .L1 { background: #fff; border: 1px solid #c9d8ff; margin-top: 10px; }
+  .L2 { background: #fff; border: 1px dashed #d0d3d8; margin-top: 8px; }
+  .nest .h { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+  .nest .d { color: var(--text-2); margin-top: 3px; line-height: 1.6; }
+  .lay { font-size: 11px; font-weight: 700; padding: 0 7px; line-height: 18px; border-radius: 4px; }
+  .lay.ov { background: #dfe8ff; color: #2a4fc4; }
+  .lay.tp { background: #e8f7ec; color: #1a7f37; }
+  .lay.cf { background: #fff1db; color: #a35f06; }
+  .lay.cv { background: #f3e8ff; color: #6b32b8; }
+  .lay.to { background: #eceef1; color: #4a515c; }
+  .dflt { margin-left: auto; font-size: 11.5px; font-weight: 500; color: var(--text-3); }
+  table.mx { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+  table.mx th { text-align: left; font-weight: 600; color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--bg-sunken); }
+  table.mx td { vertical-align: top; padding: 7px 8px; border-bottom: 1px solid var(--border-subtle); line-height: 1.55; }
+  table.mx td:first-child { white-space: nowrap; }
+  .on { color: var(--success); font-weight: 600; }
+  .off { color: var(--text-3); font-weight: 600; }
+  .na { color: var(--text-4); }
+  .never { columns: 2; column-gap: 22px; font-size: 12.5px; line-height: 1.75; margin: 0; padding-left: 18px; color: #3f4652; }
+  .url { font: 12px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet" id="sheet">
+  <h1 class="m-h1">2 · 一个模型：分享链接 = 一个根对象 + 勾选的层</h1>
+  <p class="m-sub">会话、任务、项目共用一套：同一个对话框、同一个公开页外壳、同一份管理清单。一个链接只读地打开「根 + 勾选的层」这一块。范围之外的东西，在公开页上既不显示，也不能点。</p>
+
+  <div class="row">
+    <div class="m-stage" style="width:520px;flex:none">
+      <div class="m-stage-l"><span class="m-k new">新</span> 范围 = 根对象往下，按层裁剪（以项目链接为例）</div>
+      <div class="nest L0">
+        <div class="h">▣ 项目 · Claude 账号池：按订阅配额均衡派发 <span class="lay ov">Overview</span><span class="dflt">总是包含</span></div>
+        <div class="d">Goal · Work overview · Task graph · Acceptance criteria · Tasks（标题 + 状态）</div>
+        <div class="nest L1">
+          <div class="h">☐ 12 个任务页 <span class="lay tp">Task pages</span><span class="dflt">默认开</span></div>
+          <div class="d">每个任务：Description · Acceptance · Dependencies（本项目内）· Runs 列表。关掉后，图和列表里的任务只剩标题和状态，不能点开。</div>
+          <div class="nest L2">
+            <div class="h">✎ 评论与附件 <span class="lay cf">Comments &amp; files</span><span class="dflt">默认关</span></div>
+            <div class="d">Comments（29 条）· Inputs 附件 · 进度说明。这些是 agent 和人写的自由文本。</div>
+          </div>
+          <div class="nest L2">
+            <div class="h">▤ 对话记录 <span class="lay cv">Conversations</span><span class="dflt">默认关</span></div>
+            <div class="d">每次 Run 的完整记录，再加协调会话。可能含命令输出、文件内容、路径。</div>
+          </div>
+        </div>
+      </div>
+      <p class="m-cap">任务链接就是从「任务页」这一层开始的同一棵树；会话链接是一棵只有「对话记录」的树。</p>
+    </div>
+
+    <div class="col grow">
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k new">新</span> 三种链接各有哪些层（✓ 默认开 · ○ 默认关 · — 不适用）</div>
+        <table class="mx">
+          <tr><th>层</th><th>项目链接</th><th>任务链接</th><th>会话链接</th></tr>
+          <tr><td><span class="lay ov">Overview</span></td><td>✓ 锁定：Goal、Work overview、Task graph、Acceptance criteria、Tasks</td><td>✓ 锁定：标题/结果、Description、Acceptance、Dependencies、Runs 列表</td><td>✓ 锁定：Messages</td></tr>
+          <tr><td><span class="lay tp">Task pages</span></td><td><span class="on">✓</span> 12 个任务可点开</td><td class="na">—</td><td class="na">—</td></tr>
+          <tr><td><span class="lay cf">Comments &amp; files</span></td><td><span class="off">○</span> 需先开 Task pages</td><td><span class="off">○</span> 3 条评论</td><td class="na">—</td></tr>
+          <tr><td><span class="lay cv">Conversations</span></td><td><span class="off">○</span> 14 段（13 次 Run + 协调会话）</td><td><span class="off">○</span> 1 段</td><td class="na">—（它本身就是）</td></tr>
+          <tr><td><span class="lay to">Tool output</span></td><td>随 Conversations</td><td>随 Conversations</td><td><span class="on">✓</span> 可关：只留消息和工具名 <span class="ref">借鉴 Claude</span></td></tr>
+        </table>
+        <p class="m-cap">对话框里每一层都写出数量（「14 transcripts」），让所有者按「会暴露多少」来决定，而不是按抽象的开关名。</p>
+      </div>
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k new">新</span> 每个链接的三项设置</div>
+        <table class="mx">
+          <tr><th style="width:92px">设置</th><th>选项</th><th>默认</th></tr>
+          <tr><td>Access</td><td>Only you（等于撤销）· Anyone with the link · <span class="muted">People signed in to this Orbit（多账号部署，后续）</span> <span class="ref">借鉴 Google Docs「General access」</span></td><td>Anyone with the link</td></tr>
+          <tr><td>Updates</td><td><b>Live</b>：访客看到的随工作更新 · <b>Snapshot</b>：冻结在此刻，可「Update snapshot」 <span class="ref">借鉴 ChatGPT / Claude 快照</span></td><td>Live</td></tr>
+          <tr><td>Expires</td><td>Never · 1 day · 7 days · 30 days <span class="ref">借鉴 Notion / Figma</span></td><td>Never</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:22px">
+    <div class="m-stage grow">
+      <div class="m-stage-l"><span class="m-k new">新</span> 生命周期：对象怎么变，链接就怎么变</div>
+      <table class="mx">
+        <tr><th style="width:200px">发生了什么</th><th>链接的反应</th></tr>
+        <tr><td>Access 改成 Only you</td><td>立即 404。再打开会发一个新 token，旧链接永远不会复活（沿用现在的做法）。</td></tr>
+        <tr><td>到期</td><td>自动撤销。清单里标「Expired」，一键「Share again」生成新链接。</td></tr>
+        <tr><td>会话进回收站</td><td>暂停，和撤销显示同一张 404 页，不透露对象还在。Restore 后恢复。这一点写进删除确认框和清单（<span class="paused">Paused · in Trash</span>）。</td></tr>
+        <tr><td>永久删除会话 / 删任务 / 删项目</td><td>链接随之删除（外键级联；项目和任务本来就是硬删除）。</td></tr>
+        <tr><td>任务被 Superseded / Abandoned</td><td>页面照常，显示「Superseded by …」。后继任务在范围内才能点。</td></tr>
+        <tr><td>项目 Completed / Cancelled</td><td>页面照常，显示终态。Live 在这之后等同于 Snapshot。</td></tr>
+        <tr><td>公开内容里的 Orbit 引用</td><td>orbit-task / orbit-session / 「Open the task ↗」：在范围内就跳到对应的公开页，在范围外就只显示文字。一律不指向要登录的 app。</td></tr>
+      </table>
+    </div>
+    <div class="m-stage" style="width:470px;flex:none">
+      <div class="m-stage-l"><span class="m-k state">红线</span> 勾什么都不会公开的</div>
+      <ul class="never">
+        <li>账号：owner、邮箱、user id</li>
+        <li>机器：runner 名、workDir、路径根</li>
+        <li>代码：仓库地址、分支、SHA、合并检查命令</li>
+        <li>算力：provider、模型、账号、费用、token 用量</li>
+        <li>Instructions（写给 agent 的）</li>
+        <li>Open items、Blockers、Run queue</li>
+        <li>Coordinator 卡：Workspace、Wake-ups、Self-started</li>
+        <li>Crossings、Attribution、Followed by</li>
+        <li>派发、收敛、验证的内部状态</li>
+        <li>评论 @ 投递记录</li>
+        <li>跨项目依赖的标题（只写「另有 1 个前置在别的项目」）</li>
+        <li>所有者自己的操作：Delete、Run、Resolve…</li>
+      </ul>
+      <p class="m-cap">实现上不复用所有者的 DTO（GET /tasks/:id 会把整行展开返回），每种公开页各写一个显式 select，再配一条否定断言的 spec：公开响应里一个上面的字段名都不能出现。providers 的「全文不含 sk-ant」断言就是这么写的。</p>
+    </div>
+  </div>
+
+  <div class="m-stage" style="margin-top:22px">
+    <div class="m-stage-l"><span class="m-k new">新</span> 地址形状（旧的 /s/&lt;token&gt; 全部继续有效）</div>
+    <div class="kv2" style="grid-template-columns:330px minmax(0,1fr)">
+      <span class="url">/s/&lt;token&gt;</span><span>根对象的公开页：项目、任务或会话，由链接的类型决定。</span>
+      <span class="url">/s/&lt;token&gt;/t/&lt;taskId&gt;</span><span>项目链接内的任务页。前提是勾了 Task pages，并且这个任务属于该项目。</span>
+      <span class="url">/s/&lt;token&gt;/c/&lt;sessionId&gt;</span><span>范围内的一段对话记录，要勾 Conversations。会话必须是范围内任务的 Run，或者是本项目的协调会话。</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

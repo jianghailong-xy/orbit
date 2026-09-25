@@ -96,20 +96,16 @@ export class AttachmentsService {
 
   /**
    * Serve an attachment's bytes for a public shared transcript: only if it belongs to the
-   * session shared under `token`. The share token is the capability (no ownerId check), so the
-   * read-only shared page can render inline images without the bearer-guarded download route.
+   * session a public link opens. The link — resolved from its token by ShareLinksService, the
+   * capability (no ownerId check) — names `sessionId`, so the read-only shared page can render
+   * inline images without the bearer-guarded download route.
    */
   async getForSharedSession(
-    token: string,
+    sessionId: string,
     id: string,
   ): Promise<{ data: Buffer; mimeType: string }> {
-    const session = await this.prisma.session.findFirst({
-      where: { shareToken: token, deletedAt: null },
-      select: { id: true },
-    });
-    if (!session) throw new NotFoundException('attachment not found');
     const row = await this.prisma.attachment.findFirst({
-      where: { id, sessionId: session.id },
+      where: { id, sessionId },
       select: { data: true, mimeType: true },
     });
     if (!row) throw new NotFoundException('attachment not found');

@@ -1221,7 +1221,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task_executable_acceptance_pair` and `task_completion_criterion` are not named, and no
       // `project_acceptance_*` object is. No INSERT, UPDATE or DELETE: the build reads every task
       // row once and writes none.
-      '0305_task_creator_session_idx'],
+      '0305_task_creator_session_idx',
+      // `share_link`: one new table (a public link = one root + its layers), four CHECKs, four
+      // foreign keys, five indexes and one backfill. Read against every claim above: no function,
+      // trigger, type or enum is created, replaced or dropped — no `CREATE OR REPLACE FUNCTION` —
+      // so it is not another writer of the DONE fence and names none of the six preserved objects;
+      // its `DO` blocks only wrap `ALTER TABLE "share_link" ADD CONSTRAINT` in a duplicate guard,
+      // and `share_link` is the only table any statement alters. `task`, `project`, `session` and
+      // `user` are named only as the tables the foreign keys reference (ON DELETE CASCADE, so a
+      // root's deletion takes its links — no preserved row is changed by a link), and `session` as
+      // the table the backfill reads: like 0239's fence body, reading a preserved relation is not
+      // among what this file forbids. The one INSERT writes `share_link` alone — one row per session
+      // holding a `share_token`, with that token unchanged — and `session.share_token` and
+      // `session.shared_at` are left exactly as they were; no UPDATE and no DELETE anywhere. The 0177
+      // pair, `task_executable_acceptance_pair`, `task_completion_criterion` and every
+      // `project_acceptance_*` object are not named.
+      '0306_share_link'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

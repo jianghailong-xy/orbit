@@ -19,10 +19,11 @@ import {
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
+import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import {
@@ -2893,6 +2894,13 @@ export class SessionsService {
         // from a project page has no other way to find its way back. At most one row (the unique
         // index behind Project.coordinatorSessionId), reached through that index.
         coordinatorForProject: { select: { id: true, title: true } },
+        // The public link, which lives in `share_link` since 0306: the one that has not ended and
+        // has not run past its expiry — at most one, by that table's partial unique index. It is
+        // still answered as `shareToken`/`sharedAt`, the names shipped clients read.
+        shareLinks: {
+          where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+          select: { token: true, createdAt: true },
+        },
       },
     });
     if (!session) throw new NotFoundException('session not found');
@@ -2921,6 +2929,10 @@ export class SessionsService {
     const {
       tagLinks,
       coordinatorForProject,
+      shareLinks,
+      // The retired columns (0306): never written since, so what they hold is at best stale.
+      shareToken: _retiredShareToken,
+      sharedAt: _retiredSharedAt,
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
       // Read, never spread: it is the input to the count below, and a client that wants to know
@@ -2945,41 +2957,9 @@ export class SessionsService {
       runningBgJobCount: freshRunningBgJobs(session.runningBgJobs, runningBgJobActivity).length,
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
+      shareToken: shareLinks?.[0]?.token ?? null,
+      sharedAt: shareLinks?.[0]?.createdAt ?? null,
     });
-  }
-
-  /**
-   * Enable a public read-only share link for this session: mint an unguessable `shareToken`
-   * (idempotent — returns the existing one if already shared). The token alone is the
-   * capability; anyone with the link can read the transcript with no login (see getShared).
-   * A session in the trash is refused before anything is written: trash pauses a link, and
-   * minting (or handing back) one there would promise a page that answers 404.
-   */
-  async enableShare(ownerId: string, id: string): Promise<{ shareToken: string; sharedAt: Date }> {
-    const session = await this.prisma.session.findFirst({
-      where: { id, ownerId },
-      select: { shareToken: true, sharedAt: true, deletedAt: true },
-    });
-    if (!session) throw new NotFoundException('session not found');
-    if (session.deletedAt) {
-      throw new ConflictException('this session is in the trash — restore it before sharing it');
-    }
-    if (session.shareToken && session.sharedAt) {
-      return { shareToken: session.shareToken, sharedAt: session.sharedAt };
-    }
-    const updated = await this.prisma.session.update({
-      where: { id },
-      data: { shareToken: randomBytes(24).toString('base64url'), sharedAt: new Date() },
-      select: { shareToken: true, sharedAt: true },
-    });
-    return { shareToken: updated.shareToken!, sharedAt: updated.sharedAt! };
-  }
-
-  /** Revoke the public share link (the token 404s afterwards). No-op if not shared. */
-  async disableShare(ownerId: string, id: string): Promise<void> {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
-    if (!session) throw new NotFoundException('session not found');
-    await this.prisma.session.update({ where: { id }, data: { shareToken: null, sharedAt: null } });
   }
 
   /**
@@ -3095,8 +3075,9 @@ export class SessionsService {
   }
 
   /**
-   * Resolve a public share token to its sanitized, read-only transcript. NO ownerId — the
-   * unguessable token IS the capability. Returns only what a viewer needs to render the
+   * The sanitized, read-only transcript of a session a public link opens. NO ownerId — the link
+   * was resolved from its token (ShareLinksService.resolve), which is the capability, and this is
+   * handed the session that link names. Returns only what a viewer needs to render the
    * conversation (title, workspace name, status, the event stream); never ownership, billing,
    * runner internals, or worktree/merge state. A trashed (deletedAt) session stops resolving.
    *
@@ -3104,9 +3085,9 @@ export class SessionsService {
    * not the whole history: a coordinator's transcript is megabytes, and the anonymous door was
    * handing all of it to whoever asked. Older events page in over getSharedEventPage.
    */
-  async getShared(token: string, opts: { limit?: number; maxPayload?: number } = {}) {
+  async getSharedTranscript(sessionId: string, opts: { limit?: number; maxPayload?: number } = {}) {
     const session = await this.prisma.session.findFirst({
-      where: { shareToken: token, deletedAt: null },
+      where: { id: sessionId, deletedAt: null },
       select: {
         id: true,
         title: true,
@@ -3119,7 +3100,7 @@ export class SessionsService {
         workspace: { select: { name: true } },
       },
     });
-    if (!session) throw new NotFoundException('shared session not found');
+    if (!session) throw linkNotFound();
     const stateful = withSessionState(session);
     // A share is another historical transcript reader, so it observes the same replay contract as
     // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
@@ -3141,13 +3122,14 @@ export class SessionsService {
     };
   }
 
-  /** getEventPage for a share link: an older page of the shared transcript (`before`/`limit`),
-   *  or its tail when `before` is absent. Same query, cap and truncation as the owner's page. */
+  /** getEventPage for a share link's session: an older page of the shared transcript
+   *  (`before`/`limit`), or its tail when `before` is absent. Same query, cap and truncation as the
+   *  owner's page. */
   async getSharedEventPage(
-    token: string,
+    sessionId: string,
     opts: { before?: number; limit?: number; maxPayload?: number },
   ) {
-    return this.eventPage(await this.sharedSessionId(token), opts);
+    return this.eventPage(sessionId, opts);
   }
 
   /**
@@ -3156,10 +3138,9 @@ export class SessionsService {
    * not show (a progress ping, a live-only row) is not reachable by asking for it directly.
    */
   async getSharedEventFull(
-    token: string,
+    sessionId: string,
     seq: number,
   ): Promise<{ seq: number; type: string; payload: unknown; turnId: string | null; ts: Date }> {
-    const sessionId = await this.sharedSessionId(token);
     const [row] = await this.prisma.$queryRaw<
       { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
     >`
@@ -3171,16 +3152,6 @@ export class SessionsService {
     `;
     if (!row) throw new NotFoundException('event not found');
     return { seq: row.seq, type: row.type, payload: row.payload, turnId: row.turnId ?? null, ts: row.createdAt };
-  }
-
-  /** The session a share token opens, by the rule getShared applies: shared, and not in the trash. */
-  private async sharedSessionId(token: string): Promise<string> {
-    const session = await this.prisma.session.findFirst({
-      where: { shareToken: token, deletedAt: null },
-      select: { id: true },
-    });
-    if (!session) throw new NotFoundException('shared session not found');
-    return session.id;
   }
 
   /**
@@ -3221,7 +3192,7 @@ export class SessionsService {
   }
 
   /** getEventPage's query, for a session the caller has already resolved — by owner there, by
-   *  share token in getShared / getSharedEventPage. */
+   *  share link in getSharedTranscript / getSharedEventPage. */
   private async eventPage(
     id: string,
     opts: { tail?: number; before?: number; limit?: number; maxPayload?: number },
@@ -3558,16 +3529,11 @@ export class SessionsService {
    * into memory) — neither is something an anonymous visitor should be able to start.
    */
   async getLegacyArtifactForShared(
-    token: string,
+    sessionId: string,
     rawPath: string | undefined,
   ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
-    const session = await this.prisma.session.findFirst({
-      where: { shareToken: token, deletedAt: null },
-      select: { id: true },
-    });
-    if (!session) throw new NotFoundException('artifact not found');
-    const resolved = await this.resolveLegacyArtifactPath(session.id, rawPath);
-    const attached = await this.getLegacyArtifactAttachment(session.id, path.basename(resolved.file));
+    const resolved = await this.resolveLegacyArtifactPath(sessionId, rawPath);
+    const attached = await this.getLegacyArtifactAttachment(sessionId, path.basename(resolved.file));
     if (!attached) throw new NotFoundException('artifact not found');
     return attached;
   }
