@@ -9,6 +9,10 @@ import { ago } from './watches';
 /** The public address of a link — what its owner copies and hands out. */
 export const publicLinkUrl = (token: string): string => `${window.location.origin}/s/${token}`;
 
+/** The same page as its owner's Preview opens it: `?preview=1`, which the link does not count as a
+ *  view (its root page passes the flag on to the server). */
+export const previewUrl = (token: string): string => `${publicLinkUrl(token)}?preview=1`;
+
 /** "Oct 2", the way the dialog and the list name a day. */
 export const shortDate = (iso: string): string =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
