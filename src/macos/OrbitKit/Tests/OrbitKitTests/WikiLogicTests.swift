@@ -224,10 +224,12 @@ final class WikiLogicTests: XCTestCase {
         XCTAssertEqual(WikiLogic.cardTitle(cards[0], entry: nil), "Secret redaction lets ENV_VAR=value secrets through",
                        "an add is about the entry it drafts")
         XCTAssertEqual(WikiLogic.cardKind(cards[0], entry: nil), .pitfall)
-        XCTAssertEqual(WikiLogic.cardTitle(cards[1], entry: nil), "An entry", "until the named entry is read")
+        XCTAssertEqual(WikiLogic.cardTitle(cards[1], entry: nil), "entry", "until the named entry is read")
         let named = WikiEntry(id: "34UDFnrgM4q5oWakeLost", kind: .pitfall,
                               title: "Claude's ScheduleWakeup is lost when the engine is recycled")
         XCTAssertEqual(WikiLogic.cardTitle(cards[1], entry: named), named.title)
+        XCTAssertEqual(WikiLogic.cardTitle(cards[2], entry: named), named.title,
+                       "an amend that leaves the title alone is about the entry it names")
         XCTAssertEqual(WikiLogic.cardKind(cards[1], entry: named), .pitfall)
         XCTAssertEqual(cards.map { WikiLogic.cardChip($0.op.op) }, ["ADD", "RETIRE", "AMEND"])
         XCTAssertEqual(WikiLogic.cardChip(.supersede), "AMEND", "a supersede is an Amend on Review")

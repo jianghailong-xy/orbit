@@ -585,7 +585,9 @@ struct WikiEntryPage: View {
                 if detail.history.isEmpty {
                     Text(WikiCopy.noHistory).font(.orbitLabel).foregroundStyle(.secondary)
                 } else {
-                    ForEach(detail.history) { revision in historyRow(revision) }
+                    ForEach(Array(detail.history.enumerated()), id: \.offset) { index, revision in
+                        historyRow(revision, next: index == 0 ? detail.history.dropFirst().first : nil)
+                    }
                 }
             } header: {
                 Text(section.title)
@@ -715,9 +717,9 @@ struct WikiEntryPage: View {
         .disabled(id == nil)
     }
 
-    /// One revision: its number, who wrote it, and when — the current one with the way back to the
-    /// one before.
-    private func historyRow(_ revision: WikiRevision) -> some View {
+    /// One revision: its number, who wrote it, and when — the newest with the way back to the one
+    /// before it.
+    private func historyRow(_ revision: WikiRevision, next: WikiRevision?) -> some View {
         let word: String
         switch revision.authorKind {
         case .owner?:       word = WikiCopy.historyConfirmedBy
@@ -727,8 +729,8 @@ struct WikiEntryPage: View {
         }
         let number = revision.revision ?? 0
         var meta = revision.createdAt.flatMap { RelativeTime.format($0, now: now) } ?? ""
-        if number > 1, number == entry.currentRevision {
-            meta += " · Compare with r\(number - 1)"
+        if let older = next?.revision {
+            meta += " · " + WikiCopy.compareWith(older)
         }
         return HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(WikiCopy.revision(number))
@@ -810,8 +812,9 @@ struct WikiReviewPage: View {
         }
     }
 
+    /// The entry an op is about — an amend's, a supersede's or a retire's target; an add names none.
     private func namedEntry(_ card: WikiLogic.ReviewCard) -> WikiEntry? {
-        (card.op.resultEntryId ?? card.op.entryId).flatMap(entry)
+        card.op.entryId.flatMap(entry)
     }
 
     /// "Review" over how many proposals from how many sessions, and how old the oldest is.
@@ -928,8 +931,11 @@ struct WikiReviewCard: View {
                     }
                     .buttonStyle(.bordered)
                     Menu {
-                        ForEach(WikiRejectReason.allCases, id: \.self) { reason in
-                            Button(WikiCopy.rejectReasonLabel(reason)) { actions.decide(card, .reject, reason) }
+                        // The four reasons, headed by where the reason goes (mock 09 ③).
+                        Section(WikiCopy.rejectReasonFoot) {
+                            ForEach(WikiRejectReason.allCases, id: \.self) { reason in
+                                Button(WikiCopy.rejectReasonLabel(reason)) { actions.decide(card, .reject, reason) }
+                            }
                         }
                     } label: {
                         HStack(spacing: 4) {
@@ -965,7 +971,7 @@ struct WikiReviewCard: View {
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .foregroundStyle(Color.accentColor)
                     .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
-                Text(kind.isEmpty ? "entry" : kind).font(.orbitLabel.weight(.semibold))
+                Text(kind.isEmpty ? WikiCopy.entryWord : kind).font(.orbitLabel.weight(.semibold))
             }
             HStack(spacing: 4) {
                 Text(WikiCopy.proposedBy).foregroundStyle(.secondary)
