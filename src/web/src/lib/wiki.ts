@@ -313,6 +313,11 @@ export const WIKI_ALWAYS_ASKS = 'Always asks you';
 export const WIKI_ALWAYS_ASKS_NOTE =
   'Add, Amend and Retire, and anything a session proposed after reading the web.';
 
+/** The phone's card pager (mock 09): one card at a time, with the position and two plain buttons. */
+export const WIKI_PREVIOUS = 'Previous';
+export const WIKI_NEXT = 'Next';
+export const wikiOfCount = (at: number, total: number): string => `${at} of ${total}`;
+
 /** The tabs' words. `Amend` covers an amend and a supersede; `Change` stays the anchor's word. */
 export const WIKI_TAB_ALL = 'All';
 export const WIKI_TAB_ADD = 'Add';

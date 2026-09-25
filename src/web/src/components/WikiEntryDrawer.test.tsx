@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import type { WikiEntryDetail } from '../lib/wiki';
-import { WikiEntryDrawer } from './WikiEntryDrawer';
+import { WikiEntryDrawer, sessionTitle } from './WikiEntryDrawer';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -109,9 +109,22 @@ const DETAIL: WikiEntryDetail = {
   ],
 };
 
-function paint(entry: WikiEntryDetail = DETAIL): string {
+function paint(entry: WikiEntryDetail = DETAIL, titles: Record<string, string> = {}): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['wiki', 'entry', ENTRY_ID], entry);
+  // What `POST /api/link-previews` answers for the sessions the exposure rows name, under the key the
+  // read asks with: one batch of refs, canonicalised.
+  const refs = Object.keys(titles).map((id) => `session:${id}`);
+  if (refs.length > 0) {
+    client.setQueryData(['link-previews', refs], {
+      previews: Object.entries(titles).map(([id, title]) => ({
+        kind: 'session',
+        id,
+        state: 'ok',
+        session: { id, title },
+      })),
+    });
+  }
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <MemoryRouter>
@@ -167,6 +180,26 @@ describe('the entry drawer', () => {
     expect(html).toContain('src/runner-go/mcp.go');
     expect(html).toContain('ddddddd');
     expect(html).toContain('Checked again after every commit to main');
+  });
+
+  it('names the session an entry was shown to, from the one batched read', () => {
+    const session = '0196c000-0000-7000-8000-0000000000cc';
+    const html = paint(DETAIL, { [session]: 'runner-go suite hit prod' });
+    expect(html).toContain('runner-go suite hit prod');
+    expect(html).not.toContain('Session 0196c000');
+  });
+
+  it('falls back to the short id when the answer has no title for a session', () => {
+    const html = paint();
+    expect(html).toContain('Session 0196c000');
+  });
+
+  it('reads a session’s title by either spelling of its id, and says so when there is none', () => {
+    const uuid = '0196c000-0000-7000-8000-0000000000cc';
+    const titles = new Map([[uuid, 'A named session']]);
+    expect(sessionTitle(uuid, titles)).toBe('A named session');
+    expect(sessionTitle(uuid, new Map())).toBe('Session 0196c000');
+    expect(sessionTitle(null, titles)).toBe('A session without an id');
   });
 
   it('counts the sessions it was pushed to, and names the revision that is current', () => {

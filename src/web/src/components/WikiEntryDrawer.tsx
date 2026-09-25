@@ -9,13 +9,15 @@ import {
 } from '@ant-design/icons';
 import { App, Button, Dropdown, Input, Modal } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { LINK_PREVIEW_MAX_REFS, type LinkPreviewRef } from '@orbit/shared';
 import { useNavigate } from 'react-router-dom';
 import { relTime } from './Transcript';
 import { WikiEmpty } from './WikiCards';
 import { WikiAim, WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
 import { WikiSourceList } from './WikiSources';
-import { wikiEntryQuery } from '../lib/queries';
+import { linkPreviewsQuery, wikiEntryQuery } from '../lib/queries';
+import { decodeId } from '../lib/idCodec';
 import {
   WIKI_ACTION_COPY_LINK,
   WIKI_ACTION_EDIT,
@@ -281,7 +283,15 @@ function DetailRow({ label, value }: { label: string; value: string | string[] }
   );
 }
 
-/** Where it's used: the numbers over this week, then the sessions behind them. */
+/**
+ * Where it's used: the numbers over this week, then the sessions behind them.
+ *
+ * THE SESSION TITLES ARE ONE REQUEST, not one per row: `link-previews` takes a batch of refs (up to
+ * `LINK_PREVIEW_MAX_REFS`), and the drawer asks it for the sessions these exposure rows name — the
+ * same endpoint the conversation's own link cards read, so a session is described here exactly as it
+ * is described there. Rows the answer does not cover keep the short id they came with: an exposure
+ * row is a fact this page already has, and a title is a nicety it may not get.
+ */
 function UsedSection({ exposure }: { exposure: WikiEntryDetail['exposure'] }) {
   const rows = exposure ?? [];
   const pushed = rows.filter((row) => row.channel === 'push');
@@ -289,6 +299,30 @@ function UsedSection({ exposure }: { exposure: WikiEntryDetail['exposure'] }) {
   const fetched = rows.filter((row) => row.channel === 'get').length;
   const navigate = useNavigate();
   const recent = useMemo(() => rows.slice(0, 3), [rows]);
+
+  // Every distinct session the rows name, in batches the endpoint accepts.
+  const asked = useMemo(() => {
+    const ids = [...new Set(rows.map((row) => row.sessionId).filter((id): id is string => !!id))];
+    const batches: LinkPreviewRef[][] = [];
+    for (let at = 0; at < ids.length; at += LINK_PREVIEW_MAX_REFS) {
+      batches.push(
+        ids.slice(at, at + LINK_PREVIEW_MAX_REFS).map((id) => ({ kind: 'session' as const, id: decodeId(id) ?? id })),
+      );
+    }
+    return batches;
+  }, [rows]);
+  const answers = useQueries({
+    queries: asked.map((batch) => ({ ...linkPreviewsQuery(batch), staleTime: 60_000 })),
+  });
+  const titles = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const answer of answers) {
+      for (const preview of answer.data?.previews ?? []) {
+        if (preview.state === 'ok' && preview.kind === 'session') map.set(preview.id, preview.session.title);
+      }
+    }
+    return map;
+  }, [answers]);
 
   if (rows.length === 0) return <WikiEmpty>{WIKI_NO_USE_YET}</WikiEmpty>;
   return (
@@ -302,9 +336,7 @@ function UsedSection({ exposure }: { exposure: WikiEntryDetail['exposure'] }) {
         >
           <span className={`tdp-dot ${row.channel === 'push' ? 'RUNNING' : 'SUCCEEDED'}`} />
           <div className="tdp-session-main">
-            <div className="tdp-session-title">
-              {row.sessionId ? `Session ${row.sessionId.slice(0, 8)}` : 'A session without an id'}
-            </div>
+            <div className="tdp-session-title">{sessionTitle(row.sessionId, titles)}</div>
             <div className="tdp-session-sub">
               {row.channel === 'push' ? 'in its Wiki context at start' : 'wiki_get'} · {relTime(row.at)}
             </div>
@@ -314,6 +346,20 @@ function UsedSection({ exposure }: { exposure: WikiEntryDetail['exposure'] }) {
       ))}
     </>
   );
+}
+
+/**
+ * A session's title, or the id it is known by.
+ *
+ * The lookup is by BOTH spellings, because the answer comes back under the id that was asked for and
+ * that is not always the spelling the exposure row carries: the read normalises a ref before it asks
+ * (`decodeId`), and the answer is keyed off what the server sent back. Missing means the title was not
+ * in the batch's answer — a session deleted since, or one this account cannot see — and the id is a
+ * better thing to show than a blank.
+ */
+export function sessionTitle(sessionId: string | null, titles: Map<string, string>): string {
+  if (!sessionId) return 'A session without an id';
+  return titles.get(sessionId) ?? titles.get(decodeId(sessionId) ?? sessionId) ?? `Session ${sessionId.slice(0, 8)}`;
 }
 
 /** Who wrote a revision, in the design's own three words. */
