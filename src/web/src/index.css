@@ -11776,6 +11776,21 @@ button.chat-jump-start:hover {
   color: var(--warning);
   font-weight: 500;
 }
+/* A pool none of whose accounts can run says why, in red: unlike a spent one, no reset brings it
+   back, and every door that takes a provider refuses it. */
+.pool-gauge.none {
+  color: var(--error);
+  font-weight: 500;
+}
+/* Why the pool would no longer admit an account, in the words joining it is refused with: a line of
+   the row's own under the account's name, since those words run past the status column. */
+.pool-why {
+  grid-column: 1 / -1;
+  margin-top: -8px;
+  padding-left: 38px;
+  font-size: 11.5px;
+  color: var(--error);
+}
 .pool-note {
   padding: 10px 14px;
   font-size: 12px;
@@ -11808,6 +11823,11 @@ button.chat-jump-start:hover {
   }
   .pool-gauge .runner-util {
     width: 40px;
+  }
+  /* Whole, whatever it says — the next account's bar, a reset, or why nothing can run. Left to
+     shrink, it gave way beside a long name instead and ran into the Manage arrow (390px). */
+  .pool-gauge {
+    flex: none;
   }
   .pool-row,
   .pool-detail .pool-row {

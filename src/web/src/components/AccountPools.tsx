@@ -6,12 +6,14 @@ import { Button, Checkbox, Input, Modal, Tag, Tooltip } from 'antd';
 import { api } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import {
-  canTakeWork,
+  availableCount,
   formatResetTime,
   memberQuota,
+  memberRefusal,
   memberStatus,
   poolHeadline,
   type PoolMember,
+  type PoolRefusals,
   type ProviderPool,
 } from '../lib/providerPools';
 import type { ProviderRow } from '../lib/providerAdmin';
@@ -36,15 +38,15 @@ function readFold(): Record<string, boolean> {
 const accounts = (n: number) => `${n} account${n === 1 ? '' : 's'}`;
 
 /** "2 of 3 accounts available": the members a session could start on right now. */
-export const availabilityOf = (pool: ProviderPool): string =>
-  `${pool.members.filter(canTakeWork).length} of ${accounts(pool.members.length)} available`;
+export const availabilityOf = (pool: ProviderPool, refusals: PoolRefusals): string =>
+  `${availableCount(pool, refusals)} of ${accounts(pool.members.length)} available`;
 
 /** The same words for a head line, where a phone drops "accounts" to keep the pool's name. */
-function Availability({ pool }: { pool: ProviderPool }) {
+function Availability({ pool, refusals }: { pool: ProviderPool; refusals: PoolRefusals }) {
   const total = pool.members.length;
   return (
     <span className="re-summary">
-      {pool.members.filter(canTakeWork).length} of {total}
+      {availableCount(pool, refusals)} of {total}
       <span className="pool-wide"> account{total === 1 ? '' : 's'}</span> available
     </span>
   );
@@ -53,7 +55,8 @@ function Availability({ pool }: { pool: ProviderPool }) {
 /**
  * The head's gauge: the member the next session runs on, by name, with its own 5-hour bar — the
  * pool's real answer, where an average would show half a quota no account has. With no member to
- * run on it says when the first one frees up (the earliest reset, not the latest).
+ * run on it says when the first one frees up (the earliest reset, not the latest), and with none
+ * that can run at all, why (the server's `unavailable`).
  */
 export function PoolGauge({ pool }: { pool: ProviderPool }) {
   const head = poolHeadline(pool);
@@ -71,7 +74,7 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
       </span>
     );
   }
-  if (head.kind === 'none') return <span className="pool-gauge none">No account can run</span>;
+  if (head.kind === 'none') return <span className="pool-gauge none">{head.reason}</span>;
   const { member, quota } = head;
   return (
     <span className="pool-gauge" title={`The next session starts on ${member.label}`}>
@@ -90,10 +93,19 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
   );
 }
 
-/** One account in a pool: who it is, where it stands, its own gauge, and what can be done about it. */
-function MemberRow({ member, onRemove }: { member: PoolMember; onRemove?: () => void }) {
+/** One account in a pool: who it is, where it stands, its own gauge, and what can be done about it.
+ *  `refusal` is why the pool would no longer admit it (memberRefusal). */
+function MemberRow({
+  member,
+  refusal,
+  onRemove,
+}: {
+  member: PoolMember;
+  refusal: string | null;
+  onRemove?: () => void;
+}) {
   const navigate = useNavigate();
-  const status = memberStatus(member);
+  const status = memberStatus(member, undefined, refusal);
   const quota = memberQuota(member);
   return (
     <div className="re-row pool-row" data-member={member.id}>
@@ -149,35 +161,60 @@ function MemberRow({ member, onRemove }: { member: PoolMember; onRemove?: () => 
           </Tooltip>
         )}
       </div>
+      {refusal && <div className="pool-why">{refusal}</div>}
     </div>
   );
 }
 
 /** A pool's members, with what a pool of fewer than two accounts is worth saying about itself. */
-export function PoolMembers({ pool, onRemove }: { pool: ProviderPool; onRemove?: (member: PoolMember) => void }) {
+export function PoolMembers({
+  pool,
+  refusals,
+  onRemove,
+}: {
+  pool: ProviderPool;
+  refusals: PoolRefusals;
+  onRemove?: (member: PoolMember) => void;
+}) {
   const [only] = pool.members;
   return (
     <>
+      {/* Every door that takes a provider refuses a pool with nothing in it (the server's
+          `unavailable`), so this says that rather than where such a session would run. */}
       {pool.members.length === 0 && (
-        <div className="pool-note">
-          No accounts yet — until one is added, a session on this pool runs on the runner&apos;s own
-          Claude sign-in.
-        </div>
+        <div className="pool-note">No accounts yet — no session can start on this pool until one is added.</div>
       )}
-      {pool.members.length === 1 && (
+      {/* Not of one the pool no longer admits: on its own that account still runs, and in the pool
+          it can't. */}
+      {pool.members.length === 1 && !memberRefusal(only, refusals) && (
         <div className="pool-note">
           With one account this pool is the same as using <b>{only.label}</b> on its own. Add another
           so a session can move when this one runs out.
         </div>
       )}
       {pool.members.map((member) => (
-        <MemberRow key={member.id} member={member} onRemove={onRemove && (() => onRemove(member))} />
+        <MemberRow
+          key={member.id}
+          member={member}
+          refusal={memberRefusal(member, refusals)}
+          onRemove={onRemove && (() => onRemove(member))}
+        />
       ))}
     </>
   );
 }
 
-function PoolCard({ pool, collapsed, onToggle }: { pool: ProviderPool; collapsed: boolean; onToggle: () => void }) {
+function PoolCard({
+  pool,
+  refusals,
+  collapsed,
+  onToggle,
+}: {
+  pool: ProviderPool;
+  refusals: PoolRefusals;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   return (
     <div className={`re-card pool-card${collapsed ? ' collapsed' : ''}`} data-pool={pool.id}>
       <div className="re-head">
@@ -186,7 +223,7 @@ function PoolCard({ pool, collapsed, onToggle }: { pool: ProviderPool; collapsed
             ▸
           </span>
           <span className="re-runner">{pool.label}</span>
-          <Availability pool={pool} />
+          <Availability pool={pool} refusals={refusals} />
         </button>
         <span className="re-head-sp" />
         <PoolGauge pool={pool} />
@@ -194,7 +231,7 @@ function PoolCard({ pool, collapsed, onToggle }: { pool: ProviderPool; collapsed
           <span className="pool-wide">Manage </span>→
         </Link>
       </div>
-      {!collapsed && <PoolMembers pool={pool} />}
+      {!collapsed && <PoolMembers pool={pool} refusals={refusals} />}
     </div>
   );
 }
@@ -202,9 +239,10 @@ function PoolCard({ pool, collapsed, onToggle }: { pool: ProviderPool; collapsed
 /**
  * The Providers page's middle section: the user's account pools — several Claude subscriptions
  * under one name, each session starting on whichever has the most room. Between the engines above
- * (one machine's login) and the keys below (what a pool is made of).
+ * (one machine's login) and the keys below (what a pool is made of), whose verdicts say which
+ * accounts a pool would no longer admit (`refusals`, poolRefusals).
  */
-export function AccountPools({ pools }: { pools: ProviderPool[] }) {
+export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refusals: PoolRefusals }) {
   const isMobile = useIsMobile();
   const [fold, setFold] = useState<Record<string, boolean>>(readFold);
   const toggle = (id: string, open: boolean) =>
@@ -229,7 +267,15 @@ export function AccountPools({ pools }: { pools: ProviderPool[] }) {
       </div>
       {pools.map((pool) => {
         const open = fold[pool.id] ?? !isMobile;
-        return <PoolCard key={pool.id} pool={pool} collapsed={!open} onToggle={() => toggle(pool.id, open)} />;
+        return (
+          <PoolCard
+            key={pool.id}
+            pool={pool}
+            refusals={refusals}
+            collapsed={!open}
+            onToggle={() => toggle(pool.id, open)}
+          />
+        );
       })}
     </div>
   );

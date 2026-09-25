@@ -62,6 +62,33 @@ export const providerPoolsQuery = () =>
 export const canTakeWork = (member: PoolMember): boolean =>
   member.state === 'AVAILABLE' || member.state === 'RUNNING' || member.state === 'NO_QUOTA';
 
+/**
+ * Why the pool would no longer admit each of the user's keys, by key id: the verdict the server puts on
+ * the key's own row (`poolRefusal`, GET /providers/mine), in the words joining a pool is refused with.
+ * The pool view has no state for it. A member made a metered key, or pointed off api.anthropic.com,
+ * before an edit had to pass the pool's admission is no candidate — no claim picks it — but it reports
+ * no quota, so the view reads it as last in line (NO_QUOTA).
+ */
+export type PoolRefusals = ReadonlyMap<string, string>;
+
+export const poolRefusals = (keys: readonly ProviderRow[]): PoolRefusals =>
+  new Map(
+    keys.flatMap((row): [string, string][] =>
+      row.poolRefusal ? [[routeId(row.id) ?? row.id, row.poolRefusal.message]] : [],
+    ),
+  );
+
+/** Why the pool would no longer admit `member`, or null when it would. One its owner switched off
+ *  reads as Disabled instead: that is the reason the server names first for an account that is out. */
+export function memberRefusal(member: PoolMember, refusals: PoolRefusals): string | null {
+  if (member.state === 'DISABLED') return null;
+  return refusals.get(routeId(member.id) ?? member.id) ?? null;
+}
+
+/** The "N" of "N of M accounts available": the members a session could start on right now. */
+export const availableCount = (pool: ProviderPool, refusals: PoolRefusals): number =>
+  pool.members.filter((member) => canTakeWork(member) && !memberRefusal(member, refusals)).length;
+
 /** How many of the user's keys the server would let into a pool. `poolRefusal` is its verdict,
  *  row by row; a row that carries none (an older server) is not counted. */
 export const poolEligibleCount = (rows: readonly ProviderRow[]): number =>
@@ -123,8 +150,16 @@ export function formatResetTime(iso: string, now: number = Date.now()): string {
   return `${at.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`;
 }
 
-/** A member's status tag: its words and its colour. */
-export function memberStatus(member: PoolMember, now?: number): { label: string; color: string } {
+/** A member's status tag: its words and its colour. `refusal` is why the pool would no longer admit it
+ *  (memberRefusal), which outranks whatever the view says. */
+export function memberStatus(
+  member: PoolMember,
+  now?: number,
+  refusal?: string | null,
+): { label: string; color: string } {
+  // Out, however the view reads it. The refusal's own words go on a line of the row's: they run
+  // longer than a status has room for.
+  if (refusal) return { label: 'Unavailable', color: 'red' };
   switch (member.state) {
     case 'RUNNING':
       return { label: 'Running now', color: 'processing' };
@@ -148,16 +183,20 @@ export function memberStatus(member: PoolMember, now?: number): { label: string;
 /**
  * What a pool's head says beside "N of M accounts available": the gauge of the member the next
  * session runs on — never an average, which would read 50% for one spent account beside one
- * untouched — or, with none to run on, when the first one frees up.
+ * untouched — or, with none to run on, when the first one frees up, or, with none that can run at
+ * all, why.
  */
 export type PoolHeadline =
   | { kind: 'next'; member: PoolMember; quota: PlanUsageDisplayRow | null }
   | { kind: 'spent'; resetsAt: string | null }
-  | { kind: 'none' };
+  | { kind: 'none'; reason: string };
 
 export function poolHeadline(pool: ProviderPool): PoolHeadline {
   const next = pool.members.find((m) => m.next);
   if (next) return { kind: 'next', member: next, quota: memberQuota(next) };
+  // The server's word before any reading of the members: no reset will help this pool, even one a
+  // member it no longer admits still reports a spent window for.
+  if (pool.unavailable) return { kind: 'none', reason: pool.unavailable };
   if (pool.members.some((m) => m.state === 'SPENT')) return { kind: 'spent', resetsAt: pool.resetsAt };
-  return { kind: 'none' };
+  return { kind: 'none', reason: 'No account can run' };
 }

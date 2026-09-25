@@ -6,7 +6,7 @@ import { api } from '../api';
 import { availabilityOf, PoolAccountsModal, PoolGauge, PoolMembers } from '../components/AccountPools';
 import { encodeId, routeId } from '../lib/idCodec';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
-import { providerPoolsQuery, type PoolMember } from '../lib/providerPools';
+import { poolRefusals, providerPoolsQuery, type PoolMember } from '../lib/providerPools';
 import { useToast } from '../lib/toast';
 
 /**
@@ -51,6 +51,7 @@ export function ProviderPoolPage() {
     );
   }
   const pool = pools.data?.find((row) => routeId(row.id) === poolId);
+  const refusals = poolRefusals(keys.data ?? []);
   if (!pool) {
     return (
       <div className="provider-form">
@@ -73,8 +74,8 @@ export function ProviderPoolPage() {
             {pool.label}
           </h1>
           <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Account pool · {availabilityOf(pool)} · each session starts on the account with the most
-            room in its 5-hour window, and stays on it until that one runs out.
+            Account pool · {availabilityOf(pool, refusals)} · each session starts on the account with
+            the most room in its 5-hour window, and stays on it until that one runs out.
           </div>
         </div>
         <Button type="primary" disabled={keys.isPending} onClick={() => setAdding(true)}>
@@ -88,7 +89,7 @@ export function ProviderPoolPage() {
           <span className="re-head-sp" />
           <PoolGauge pool={pool} />
         </div>
-        <PoolMembers pool={pool} onRemove={(member) => removeMember.mutate(member)} />
+        <PoolMembers pool={pool} refusals={refusals} onRemove={(member) => removeMember.mutate(member)} />
       </div>
 
       <div className="pool-danger">
