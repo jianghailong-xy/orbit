@@ -8271,6 +8271,15 @@ button.chat-jump-start:hover {
   line-height: 1.6;
   color: var(--text-3);
 }
+/* The action row is a wrapping flex row: the hint under it carries `flex-basis: 100%`, which is a
+   no-op unless the row is flex — it was meant to sit under the buttons and instead ran on beside
+   them (`.approval-actions` alone is not a flex container; `.card-actions` is). */
+.project-settlement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
 .project-settlement-error {
   margin-top: 10px;
 }

@@ -20,6 +20,7 @@ import {
   ACCEPTANCE_START_LABEL,
 } from './AcceptanceConfirmationCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
+import { SETTLEMENT_DELEGATE_ACTION } from './ProjectSettlementCard';
 
 /**
  * The settlement confirmation card where the owner meets it: the real WorkspaceView, on a
@@ -35,8 +36,16 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
-  // Both call the module-local `api`, so replacing the exported one alone would not reach them.
-  return { ...actual, api: vi.fn(), getSessionEventPage: vi.fn(), listApprovals: vi.fn() };
+  // All four call the module-local `api`, so replacing the exported one alone would not reach
+  // them. `sendTurn` is the one write these cases can make: stubbed at its own seam, because what
+  // a send SENDS is the claim, and the transport under it is the real `api`'s business.
+  return {
+    ...actual,
+    api: vi.fn(),
+    getSessionEventPage: vi.fn(),
+    listApprovals: vi.fn(),
+    sendTurn: vi.fn(),
+  };
 });
 // jsdom has no IndexedDB, and a cached transcript would seed the window instead of the stub.
 vi.mock('../lib/transcriptStore', () => ({
@@ -44,8 +53,9 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage, listApprovals } = await import('../api');
+const { api, getSessionEventPage, listApprovals, sendTurn } = await import('../api');
 const apiMock = vi.mocked(api);
+const sendTurnMock = vi.mocked(sendTurn);
 const { WorkspaceView } = await import('./WorkspaceView');
 const { encodeId } = await import('../lib/idCodec');
 
@@ -153,6 +163,10 @@ class FakeEventSource {
 /** Every path the page asked the api for, in order. */
 const requested: string[] = [];
 const unstubbed: string[] = [];
+/** Whether the coordinating conversation's project document carries a projection that is STILL
+ *  withholding — the fourth read the settlement card turns on, and the state its second press is
+ *  drawn in. Off by default: the card is not what most cases here are about. */
+let settlementHeld = false;
 /** The standing the confirmation door serves: `UNCONFIRMED` for most cases, and a case that is
  *  about the RECORD sets one with a confirmation on it. Reset per case like every other stub. */
 let confirmationStanding: StandardSetConfirmationStanding = STANDING;
@@ -179,6 +193,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   FakeEventSource.open = [];
   requested.length = 0;
+  settlementHeld = false;
   unstubbed.length = 0;
   confirmationStanding = STANDING;
   confirmationReads = 0;
@@ -205,6 +220,14 @@ beforeEach(() => {
   }));
   vi.mocked(listApprovals).mockReset();
   vi.mocked(listApprovals).mockImplementation(async () => []);
+  // A session at rest: the send goes out live, which is the branch this card's press is on.
+  sendTurnMock.mockReset();
+  sendTurnMock.mockImplementation(async () => ({
+    turnId: 'turn-sent',
+    seq: 2,
+    kind: 'message',
+    placement: 'accepted',
+  }));
   apiMock.mockImplementation(((path: string) => {
     const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
     requested.push(path);
@@ -215,7 +238,36 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_PUBLIC}`) {
       // `_count` is the fourth fact the card's condition turns on — a project with nothing filed
       // under it is not one anybody can start, which is the state `project_create` returns in.
-      return reply({ id: PROJECT_PUBLIC, title: 'the criteria seal', status: 'OPEN', coordinatorEnabled: false, _count: { tasks: 1 }, acceptanceCriteriaItems: CRITERIA });
+      return reply({
+        id: PROJECT_PUBLIC,
+        title: 'the criteria seal',
+        status: 'OPEN',
+        coordinatorEnabled: false,
+        _count: { tasks: 1 },
+        acceptanceCriteriaItems: CRITERIA,
+        // A project LOOKING finished while the derivation still withholds: every criterion met,
+        // none with a merge receipt, and a set the owner has stood behind. Drawn only for the case
+        // that is about that card — the projection is the fourth read it turns on.
+        ...(settlementHeld
+          ? {
+              derivedDone: {
+                status: 'OPEN',
+                done: false,
+                withheld: ['CRITERION_UNLANDED'],
+                criteria: [{
+                  definitionId: 'c1',
+                  satisfied: true,
+                  landing: 'UNKNOWN',
+                  independence: 'INDEPENDENT',
+                  conflicts: [],
+                  remedy: null,
+                  withheld: ['CRITERION_UNLANDED'],
+                }],
+                confirmation: 'CONFIRMED',
+              },
+            }
+          : {}),
+      });
     }
     // The open items the coordinator question card reads (§5.2). Empty: no question is open in any
     // of these cases, and the card draws nothing — what is asserted here is the strip and the cards
@@ -561,6 +613,47 @@ describe('Chat about this on the settlement card', { timeout: 60_000 }, () => {
   });
 });
 
+/**
+ * The OTHER settlement card's second press — the project's, not the criteria set's. It is the one
+ * press on that card that is not a decision: the agent that owns the project is this conversation,
+ * so the hand-over is a turn in it, and whether that turn is actually sent (rather than arming a
+ * composer and waiting for a sentence) is a fact about the page the two live on.
+ */
+describe('Ask the coordinator to handle it, on the project settlement card', { timeout: 60_000 }, () => {
+  it('sends the card’s own facts as a turn, and leaves the card where it stands', async () => {
+    settlementHeld = true;
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.project-settlement')).toBe(1);
+    });
+    const card = (): HTMLElement => mounted().querySelector<HTMLElement>('.project-settlement')!;
+    const actions = (): HTMLButtonElement[] => [
+      ...card().querySelectorAll<HTMLButtonElement>('.project-settlement-actions button'),
+    ];
+    // One press and it is not a question: this project's set is confirmed, so the only thing on the
+    // card that can move is the work, and the work is this conversation's.
+    expect(actions().map(labelOf)).toEqual([SETTLEMENT_DELEGATE_ACTION]);
+    expect(sendTurnMock, 'the page sent something before the press').not.toHaveBeenCalled();
+
+    await act(async () => {
+      actions()[0]!.click();
+    });
+
+    await waitForUi(() => {
+      expect(sendTurnMock).toHaveBeenCalledTimes(1);
+    });
+    const [session, content] = sendTurnMock.mock.calls[0]!;
+    // To this conversation, which is the one that coordinates the project the card is about.
+    expect(session).toBe(COORDINATOR_PUBLIC);
+    // The facts ARE the message: they name what is withheld and what would clear it, so the agent
+    // reads the card's own account of the project rather than a sentence about it.
+    expect(content).toContain('Orbit has not recorded it done');
+    expect(content).toContain('land the branch, or record the merge with merge_receipt');
+    // The card is not an answer to anything, so it stays where it was.
+    expect(count('.project-settlement'), 'the card went away when it handed the work over').toBe(1);
+  });
+});
+
 describe('where the card is mounted', () => {
   /** Both spellings, because the web suite runs from `src/web` and a runner may start at the root. */
   const workspaceView = (): string => {
@@ -592,16 +685,16 @@ describe('where the card is mounted', () => {
    *
    * What is pinned is the one way this target differs from the other three: it starts an ORDINARY
    * turn. The other three each name a door (`decide`, `ownerDecision.mutate`); a send through this
-   * branch that grew one would have this card answering a call that nobody made. The branch is
-   * shared with the project settlement card's "Chat about this", which is the same kind of send.
+   * branch that grew one would have this card answering a call that nobody made. The project
+   * settlement card's press was the other kind on this branch until 2026-09-25; it now sends its
+   * own turn from its own handler, with no armed reply and nothing typed, so this branch is the
+   * plan change's alone.
    */
   it('sends a plan change as an ordinary turn carrying the plan, through no door', () => {
     const source = workspaceView();
-    // The whole line: the disarm effect carries the same two kinds and ends in `return;`, and this
+    // The whole line: the disarm effect above carries the same kind and ends in `return;`, and this
     // is the branch that sends.
-    const at = source.indexOf(
-      "if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') {",
-    );
+    const at = source.indexOf("if (replyTo.target.kind === 'planChange') {");
     expect(at, 'nothing in onSend handles an armed plan change').toBeGreaterThan(-1);
     // To the end of the branch: the `return` that leaves onSend's replyTo block.
     const branch = source.slice(at, source.indexOf('\n      }', at));
