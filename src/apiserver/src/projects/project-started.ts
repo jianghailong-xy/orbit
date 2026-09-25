@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { TaskStatus } from '@prisma/client';
+import { ProjectStatus, TaskStatus } from '@prisma/client';
 import { type ProjectStartedCard, uuidToBase62 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
@@ -260,4 +260,64 @@ export async function tellCoordinatorProjectStarted(
     throw e;
   }
   return { sessionId, clientTurnId };
+}
+
+/**
+ * A project its owner has not started yet, as `task_start` is refused over it.
+ *
+ * "Start the project" is the owner's go-ahead, and until it is pressed an agent does not start the
+ * project's tasks by hand either. On 2026-09-25 a coordinator filed nine tasks and started two of
+ * them itself sixteen seconds later, while the owner was still being asked whether to start — the
+ * card said the project had not begun, and the project page showed two runs.
+ *
+ * Not started means the card is still asking: an OPEN project with criteria nobody has ever
+ * confirmed, and switched off. A project the owner turned on with its Automatic switch has been
+ * started, and so has one confirmed once and switched off since. A project without criteria has
+ * no card to press, so it is not held here.
+ */
+export interface ProjectAwaitingStart {
+  projectId: string;
+  title: string;
+}
+
+export async function projectAwaitingStart(
+  prisma: Pick<
+    PrismaService,
+    'project' | 'projectAcceptanceCriterionDefinition' | 'projectStandardSetConfirmation'
+  >,
+  ownerId: string,
+  projectId: string,
+): Promise<ProjectAwaitingStart | null> {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, ownerId, status: ProjectStatus.OPEN, coordinatorEnabled: false },
+    select: { title: true },
+  });
+  if (!project) return null;
+  const criterion = await prisma.projectAcceptanceCriterionDefinition.findFirst({
+    where: { projectId },
+    select: { id: true },
+  });
+  if (!criterion) return null;
+  const confirmation = await prisma.projectStandardSetConfirmation.findFirst({
+    where: { projectId },
+    select: { id: true },
+  });
+  return confirmation ? null : { projectId, title: project.title };
+}
+
+/** The 409 an agent's `task_start` gets for a task in a project nobody has started. */
+export function projectNotStartedRefusal(
+  taskId: string,
+  project: ProjectAwaitingStart,
+): { code: 'PROJECT_NOT_STARTED'; message: string } {
+  return {
+    code: 'PROJECT_NOT_STARTED',
+    message:
+      `task ${uuidToBase62(taskId)}: its project “${project.title}” `
+      + `(${uuidToBase62(project.projectId)}) has not been started. Its owner has not pressed `
+      + '“Start the project” yet, and until they do, task_start starts none of its tasks. Do not '
+      + 'work around this: tell the owner the plan is ready and leave the start to them. The '
+      + 'project’s coordinator is told when it starts (“From Orbit · project started”); from then '
+      + 'on its auto-run tasks start by themselves, and task_start starts the rest.',
+  };
 }
