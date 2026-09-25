@@ -1467,7 +1467,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // that dismisses it — the bubble lingers on screen (e.g. an "Unpin" tip stuck after a
   // pin tap, or a composer pill's tip stacked over the Select it just opened). Suppress
   // these tooltips where hover is unavailable; every gated control already labels itself.
-  const hoverTipOpen = useMediaQuery('(hover: hover)') ? undefined : false;
+  // The same reading decides how a menu opens a level down: on hover where the pointer can
+  // hover, on a tap where it cannot (the composer model menu's `triggerSubMenuAction`).
+  const canHover = useMediaQuery('(hover: hover)');
+  const hoverTipOpen = canHover ? undefined : false;
   const [text, setText] = useState('');
   // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
   // draft rather than in the URL or the server, because it only has to survive as long as the
@@ -8262,15 +8265,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   trigger={['click']}
                   placement="topRight"
                   disabled={!configEditable}
-                  // Rows that open a level down open on a click, not a hover: the pointer
-                  // crosses them on its way to the model list, and on a phone there is no hover.
+                  // Rows that open a level down open on hover where the pointer can hover, the way
+                  // the browser's own menus do — and on a tap where it cannot, because a phone has
+                  // no hover to give: one row, two gestures, decided by the pointer.
                   // They open to the right — and on a phone, where the control sits near the
                   // right edge, there is no right: shift the level back inside the screen rather
                   // than let it hang off the edge (and widen the page with it).
                   menu={{
                     className: 'composer-model-menu',
                     items: modelMenuItems,
-                    triggerSubMenuAction: 'click',
+                    triggerSubMenuAction: canHover ? 'hover' : 'click',
                     builtinPlacements: {
                       rightTop: {
                         points: ['tl', 'tr'],
