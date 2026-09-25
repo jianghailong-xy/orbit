@@ -466,11 +466,11 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-api.controller.ts#dequeueTurn',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE (rank 30), then conversation_turn FOR UPDATE SKIP LOCKED and the claim UPDATE (rank 60).',
+    locks: 'session FOR UPDATE (rank 30), then conversation_turn FOR UPDATE SKIP LOCKED and the claim UPDATE (rank 60). The wiki context this delivery may carry (wiki/wiki-push.ts) writes only wiki_exposure rows (rank 60) under the KEY SHARE its entry foreign keys take, so it adds no edge above the lock already held. Every other read the delivery makes — the session context, the references, a list\'s conditions, the background jobs, a coordinator\'s role — is a plain SELECT on the row already locked.',
     identity: 'The runner and lease generation asking; the claimed turn is chosen inside.',
     isolation: '',
     attempts: 4,
-    replay: "A deadlock victim's claim never happened — the row is still queued — so a re-run claims from the state that exists rather than reporting a turn it does not own.",
+    replay: "A deadlock victim's claim never happened — the row is still queued — so a re-run claims from the state that exists rather than reporting a turn it does not own. Each block appended to the delivery is re-decided from rows read inside the closure, and the wiki exposure rows a rolled-back attempt wrote go with it, so a retry records the same deliveries once.",
     effects: 'None. Nothing is sent to the runner until this returns.',
     answer: 'Typed 503; the runner polls again and the turn is still queued.',
   },
@@ -1231,6 +1231,14 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'wiki/wiki.service.ts#insertSources', under: 'wiki.submitChangeset and wiki.decide, through applyOp and insertRevision — the first-hand records a revision rests on, written once with the revision they support' },
   { at: 'wiki/wiki.service.ts#writeOpDecision', under: 'wiki.decide — the owner\'s answer on one op row, after whatever it applied, so what the op did and what was decided about it are one fact' },
   { at: 'wiki/wiki.service.ts#settleChangeset', under: 'wiki.decide — the changeset\'s own terminal marker, written in the same transaction as the last decision that emptied its queue' },
+  // The wiki's opening context, appended to what `dequeueTurn` is about to deliver (design §7.1).
+  // It runs inside that unit's rank-30 Session transaction and reads unlocked: the session's
+  // workspace binding, its space's settings, the space's eligible entries, and the task or first
+  // message its relevance is weighed against — all plain SELECTs before any row is written. Its
+  // one write is the exposure ledger, one row per line sent, and 0307's own comment is why it is
+  // safe there: the composite `(entry_id, owner_id)` foreign key takes KEY SHARE on the rank-60
+  // entry row rather than reaching the rank-10 user row this transaction must never wait on.
+  { at: 'wiki/wiki-push.ts#appendWikiContext', under: 'runnerApi.dequeueTurn — inside the rank-30 Session transaction that already holds this session\'s row FOR UPDATE; it writes only wiki_exposure rows (rank 60) under the entry keys their foreign key takes, so its locks are ascending and its caller\'s retry re-runs it from the rows as the committed world leaves them' },
   // Test-only, and reachable only from the harness's own transaction.
 ];
 
