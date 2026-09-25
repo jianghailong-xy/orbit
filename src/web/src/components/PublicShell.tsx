@@ -36,7 +36,7 @@ export function PublicShell({
     <div className="share-page">
       <header className="share-header">
         <div className="share-brand">Orbit</div>
-        <nav className="share-crumbs" aria-label="Shared">
+        <nav className="share-crumbs" aria-label="Breadcrumb">
           {crumbs.map((crumb, i) => {
             const here = i === crumbs.length - 1;
             return (
