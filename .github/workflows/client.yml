@@ -162,7 +162,8 @@ jobs:
 
   share-shots-ios:
     name: Share probe (iOS project menu)
-    if: github.event_name == 'workflow_dispatch'
+    # Off after run 36112396685 took its pictures; only the Mac probe is being re-run.
+    if: false
     runs-on: macos-26
     timeout-minutes: 40
     steps:

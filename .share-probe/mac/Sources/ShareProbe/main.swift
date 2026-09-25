@@ -60,8 +60,9 @@ final class ProbeDelegate: NSObject, NSApplicationDelegate {
             SessionPageStandIn(sessionID: Probe.session, appModel: Probe.appModel)
         }
         let host = NSHostingController(rootView: root)
-        host.sceneBridgingOptions = [.toolbars, .title]
+        host.sceneBridgingOptions = [.toolbars]
         let window = NSWindow(contentViewController: host)
+        window.title = "Share links · T3"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.toolbarStyle = .unified
         window.setContentSize(NSSize(width: 980, height: 640))

@@ -5,6 +5,7 @@
 /api/sessions/:id/share — the owner routes the real sheet reads and writes.
 """
 import json
+import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 TOKEN = "Qm4kT9vR2mT7wLp4sYb8nZq1Xc6dVh0e"
@@ -47,4 +48,12 @@ class Handler(BaseHTTPRequestHandler):
         print("stub:", self.command, self.path, flush=True)
 
 
-ThreadingHTTPServer(("127.0.0.1", 8787), Handler).serve_forever()
+class Server(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer.server_bind asks getfqdn() for a name, which on macOS goes looking on the local
+        # network and puts a privacy alert over the window being photographed. A name isn't needed.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
+
+
+Server(("127.0.0.1", 8787), Handler).serve_forever()
