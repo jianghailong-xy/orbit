@@ -1759,7 +1759,7 @@ final class AppModel {
         show(.console(sessionID: id, origin: .list), agent: agent)
     }
 
-    /// The project's page on the web, for the share sheet.
+    /// The project's page on the web — a signed-in address, for the project menu's Copy Link.
     func projectWebURL(_ projectID: String) -> URL? {
         baseURL?.appendingPathComponent("projects").appendingPathComponent(PublicID.toPublic(projectID))
     }

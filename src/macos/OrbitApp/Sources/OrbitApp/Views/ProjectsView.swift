@@ -1315,8 +1315,15 @@ struct ProjectDetailView: View {
                     Label("Reopen project", systemImage: "arrow.uturn.backward.circle")
                 }
             }
+            // The signed-in address, for yourself: copied, not handed to the share sheet. `Share`
+            // is the public read-only link's word, and this is not that link.
             if let url = model.projectWebURL(document.id) {
-                ShareLink(item: url) { Label("Share link", systemImage: "square.and.arrow.up") }
+                Button {
+                    PlatformPasteboard.copyString(url.absoluteString)
+                    PlatformHaptics.success()
+                } label: {
+                    Label("Copy Link", systemImage: "link")
+                }
             }
             Divider()
             Button(role: .destructive) { confirmingDelete = true } label: {
