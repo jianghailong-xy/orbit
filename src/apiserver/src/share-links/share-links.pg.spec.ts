@@ -269,6 +269,13 @@ test('share links: one row per link, an owner interface for three roots, one 404
     // The template database already ran 0306 against no sessions at all. The file is written to run
     // twice, so running it again here is its backfill meeting sessions that hold a token.
     await sql.query(MIGRATION);
+    for (const [session, token] of [[legacy, legacyToken], [legacyTrashed, legacyTrashedToken], [legacyUndated, legacyUndatedToken]]) {
+      assert.deepEqual(
+        (await rowsOf('session_id', session)).map((row) => row.token),
+        [token],
+        'the backfill did not carry this session\'s share_token over as one link',
+      );
+    }
     const [carried] = await rowsOf('session_id', legacy);
     assert.equal(carried.token, legacyToken, 'the token string changed on the way over');
     assert.deepEqual(carried.include, { toolOutput: true });
