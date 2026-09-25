@@ -16,7 +16,6 @@ import Foundation
 public enum WikiCopy {
     public static let title = "Wiki"                                    // WIKI_TITLE
     public static let searchPlaceholder = "Search the wiki"              // WIKI_SEARCH_PLACEHOLDER
-    public static let newEntry = "New entry"                             // WIKI_NEW_ENTRY
     public static let reviewTitle = "Review"                             // WIKI_REVIEW_TITLE
 
     /// The drawer's amber count said in words, and the home page's banner (`wikiProposalsToReview`).
@@ -26,7 +25,6 @@ public enum WikiCopy {
         "\(count) proposal\(count == 1 ? "" : "s") from \(sessions) session\(sessions == 1 ? "" : "s")"
     }
     public static func oldest(_ when: String) -> String { "oldest \(when)" }             // wikiOldest
-    public static func expires(_ when: String) -> String { "expires \(when)" }           // WIKI_PENDING_EXPIRES
 
     // The bands of the home page, in the order both clients draw them.
     public static let principles = "Principles"                         // WIKI_PRINCIPLES
@@ -38,7 +36,6 @@ public enum WikiCopy {
 
     /// The status line under the title: what the space holds, and how fresh its anchors are.
     public static func entryNoun(_ count: Int) -> String { count == 1 ? "entry" : "entries" }
-    public static let toReview = "to review"                            // WIKI_TO_REVIEW
     public static func anchorsVerified(ref: String, ago: String) -> String {   // wikiAnchorsVerified
         ago.isEmpty ? "Anchors verified at \(ref)" : "Anchors verified at \(ref) \(ago)"
     }
@@ -50,7 +47,6 @@ public enum WikiCopy {
     public static let sessionsReceived = "sessions received wiki context"   // WIKI_SESSIONS_RECEIVED
     public static let searches = "searches"                                 // WIKI_SEARCHES
 
-    public static let supersededBy = "Superseded by"                        // WIKI_SUPERSEDED_BY
     public static let noLongerPushed = "no longer sent to agents"           // WIKI_NO_LONGER_PUSHED
 
     /// The entry page's sections, in the order both clients draw them.
@@ -113,9 +109,12 @@ public enum WikiCopy {
     public static let historyMaintenance = "Wiki maintenance"               // WIKI_HISTORY_MAINTENANCE
     public static let historySystem = "Recorded by the server"              // WIKI_HISTORY_SYSTEM
     public static func revision(_ number: Int) -> String { "r\(number)" }   // wikiRevision
+    public static func compareWith(_ number: Int) -> String { "Compare with r\(number)" }   // wikiCompareWith
 
     // Review.
     public static let proposedBy = "Proposed by"
+    /// What a card says when it knows neither the kind nor the title yet (`WIKI_ENTRY_WORD`).
+    public static let entryWord = "entry"
     public static let reasonLabel = "Reason"
     public static let evidenceLabel = "Evidence"
     public static let afterLabel = "After"
@@ -130,7 +129,6 @@ public enum WikiCopy {
     public static let webDerivedNote = "Web-derived is never auto-accepted" // WIKI_WEB_DERIVED_NOTE
     public static let rejectReasonFoot = "The reason goes back to the session that proposed it."
     public static let similarNone = "None"                                  // WIKI_SIMILAR_NONE
-    public static func comparedWith(_ count: Int) -> String { "compared with \(count) entries" }
     public static let similarEntries = "Similar entries"                    // WIKI_SIMILAR_ENTRIES
     public static let afterRetire = "Agents stop getting this entry. It stays in History, struck through, and points to the entry that replaced it."
     public static let webDerived = "Web-derived"                            // WIKI_WEB_DERIVED
@@ -679,12 +677,14 @@ public enum WikiLogic {
             .min { $0.1 < $1.1 }?.0
     }
 
-    /// What a card is about (`opTitle`): the entry it names, or the title the proposal carries.
+    /// What a card is about, as Review's card says it: the title the proposal carries (an add's or a
+    /// supersede's draft, or an amend's new title), else the title of the entry it names, else the
+    /// word `entry`.
     public static func cardTitle(_ card: ReviewCard, entry: WikiEntry?) -> String {
+        let draft = card.op.payload?["entry"] ?? card.op.payload?["changes"]
+        if let title = draft?["title"]?.stringValue { return title }
         if let title = entry?.title, !title.isEmpty { return title }
-        if let title = card.op.payload?["entry"]?["title"]?.stringValue { return title }
-        if let title = card.op.payload?["changes"]?["title"]?.stringValue { return title }
-        return card.op.op == .add ? "A new entry" : "An entry"
+        return WikiCopy.entryWord
     }
 
     /// The entry a card's content is drawn from: the proposal's own draft for an add or a supersede,
@@ -711,7 +711,7 @@ public enum WikiLogic {
                   !rationale.isEmpty else { return "a session" }
             return rationale.count > 48 ? String(rationale.prefix(47)) + "…" : rationale
         }
-        return changeset.origin == .owner ? "you" : "Wiki maintenance"
+        return changeset.origin == .owner ? "you" : WikiCopy.historyMaintenance
     }
 
     /// How many sessions the waiting proposals came from — Review's subtitle. Counted as the web
