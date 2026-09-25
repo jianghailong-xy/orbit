@@ -59,22 +59,27 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED;
     case RunEventType.WATCH_CHANGED:
       return ControlEventType.WATCH_CHANGED;
+    case RunEventType.WIKI_CHANGED:
+      return ControlEventType.WIKI_CHANGED;
     default:
       return null;
   }
 }
 
-/** The user-scoped events — the owner's libraries, a project's pending criteria decisions, and the
- *  owner's watches: they carry no session, so `toControlEvent` routes them by owner id and ships an
- *  empty `sessionId` (see the ControlEvent doc comment). A watch belongs to its owner and not to the
- *  session observing it: a NOTIFY_USER watch has no observer session at all. */
+/** The user-scoped events — the owner's libraries, a project's pending criteria decisions, the
+ *  owner's watches, and the owner's wiki: they carry no session, so `toControlEvent` routes them by
+ *  owner id and ships an empty `sessionId` (see the ControlEvent doc comment). A watch belongs to its
+ *  owner and not to the session observing it: a NOTIFY_USER watch has no observer session at all. A
+ *  wiki space belongs to the account — the session that proposed into it is one writer among many,
+ *  and the owner's own writes in Review come from no session at all. */
 export function isUserScopedType(t: ControlEventType): boolean {
   return (
     t === ControlEventType.TASK_LIST_CHANGED ||
     t === ControlEventType.TAG_CHANGED ||
     t === ControlEventType.PROVIDER_CHANGED ||
     t === ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED ||
-    t === ControlEventType.WATCH_CHANGED
+    t === ControlEventType.WATCH_CHANGED ||
+    t === ControlEventType.WIKI_CHANGED
   );
 }
 

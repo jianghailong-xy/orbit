@@ -622,6 +622,27 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     this.publishForUser(ownerId, RunEventType.WATCH_CHANGED, watchId);
   }
 
+  /**
+   * One of the owner's wiki spaces changed — a changeset recorded something, the owner decided ops in
+   * Review, or a space's settings or bindings moved. User-scoped, because a wiki belongs to the
+   * account and not to the session that proposed into it: the owner's own writes in Review come from
+   * no session at all, and the same space is read by every device.
+   *
+   * THE PAYLOAD IS THE SPACE'S ID AND NOTHING ELSE. Not an entry, a title, a status, an op or a
+   * count: the event rides a channel that is neither authenticated per event nor scoped to the
+   * session allowed to read a row (contract `realtime.redaction`). A client re-reads the wiki reads
+   * it shows, and those reads decide what it may see.
+   *
+   * An accelerant only (contract `realtime.correctness`): every one of these may be dropped — a
+   * replica restarting, a socket going quiet — and nothing about a wiki write is decided differently
+   * for it. Pages re-read on focus and on reconnect; a lost announcement costs latency and nothing
+   * else. Callers publish it AFTER their transaction commits, never inside it and never on a path
+   * that recorded nothing: a replay of a request that already happened has nothing to announce.
+   */
+  publishWikiChanged(ownerId: string, spaceId: string): void {
+    this.publishForUser(ownerId, RunEventType.WIKI_CHANGED, spaceId);
+  }
+
   /** Same, but for a deployment-wide change every user sees — today only the shared (admin-owned)
    *  model providers. Reaches every connected stream; keep it to genuinely global, low-rate edits. */
   publishForAllUsers(type: RunEventType, id: string): void {

@@ -34,6 +34,7 @@ import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { canonicalRepoUrl } from '../projects/project-integration-line';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
 type Tx = Prisma.TransactionClient;
@@ -56,10 +57,11 @@ type Tx = Prisma.TransactionClient;
  * and a headless runner call is an agent with no session — which may still only PROPOSE. No parameter
  * anywhere below could name another owner.
  *
- * WHAT THIS FILE DOES NOT DO YET, and who owns it: `GET /api/wiki/search` and the `wiki_search`
- * retrieval legs (T4), the `<orbit_wiki_context>` delivery (T6), the `wiki.changed` announcement
- * (T7), anchors' re-verification, which needs git on a runner (phase 2), and the review queue's
- * 14-day expiry sweep, which the contract gives an `expires_at` and no worker yet.
+ * WHAT THIS FILE DOES NOT DO YET, and who owns it: the `<orbit_wiki_context>` delivery (T6),
+ * anchors' re-verification, which needs git on a runner (phase 2), and the review queue's 14-day
+ * expiry sweep, which the contract gives an `expires_at` and no worker yet. Of the writes the contract has announce a change
+ * (`realtime.publishedWhen`), the two below do: a recorded changeset, and a decided one. A space
+ * created, a setting changed and a workspace bound announce nothing yet.
  */
 
 // ── The shape of a caller ───────────────────────────────────────────────────────────────────────
@@ -499,7 +501,15 @@ export function changesetView(row: ChangesetRow): Record<string, unknown> {
 export class WikiService {
   private readonly logger = new Logger(WikiService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // The one thing that leaves this service other than a return value: `wiki.changed`, published
+    // after a write's transaction commits and only when one recorded something (`publishWikiChanged`
+    // carries the argument). An accelerant and nothing more — contract `realtime.correctness` — so
+    // it is defaulted, and the specs that construct this service by hand do not each have to stub a
+    // hub they never read. `RealtimeModule` is global, so Nest injects the real one by type.
+    private readonly realtime: RealtimeService = undefined as unknown as RealtimeService,
+  ) {}
 
   // ── Spaces (§2.1) ─────────────────────────────────────────────────────────────────────────────
 
@@ -751,7 +761,7 @@ export class WikiService {
       ? sha256(canonicalJson({ spaceId, ops, rationale: input.rationale }))
       : null;
     const literals = await this.envLiterals(this.prisma, principal.ownerId);
-    return withTransactionRetry(
+    const answer = await withTransactionRetry(
       this.prisma,
       async (tx) => {
         if (input.idempotencyKey) {
@@ -762,6 +772,17 @@ export class WikiService {
       },
       loggedRetry(this.logger, 'wiki.submitChangeset'),
     );
+    // AFTER the commit, never inside the closure above: a retried transaction would announce the same
+    // write once per attempt, and this announcement is what a client's re-read hangs off — it may
+    // only be made once the rows it points at are readable (contract `realtime.publishedWhen`).
+    //
+    // Silent for everything that is not a recorded write (`realtime.notPublishedWhen`): an idempotent
+    // replay changed nothing for it to announce, a dry run writes nothing by construction, and a
+    // request whose every op was refused left no changeset behind.
+    if (answer.replayed !== true && typeof answer.changesetId === 'string') {
+      this.realtime?.publishWikiChanged(principal.ownerId, space.id);
+    }
+    return answer;
   }
 
   /** The recorded answer to an earlier request under the same key; or the refusal for a key reused. */
@@ -1099,7 +1120,7 @@ export class WikiService {
           + 'session: report what should be accepted, and let a person accept it.',
       );
     }
-    return withTransactionRetry(
+    const decided = await withTransactionRetry(
       this.prisma,
       async (tx) => {
         const changeset = await tx.wikiChangeset.findFirst({
@@ -1119,6 +1140,12 @@ export class WikiService {
       },
       loggedRetry(this.logger, 'wiki.decide'),
     );
+    // After the commit, and outside it, for `submitChangeset`'s reason. A decision moves the space's
+    // review queue and its entries, so the nudge names the SPACE — the same event either write path
+    // sends, and the id and nothing else about it (contract `realtime.redaction`). A decide the
+    // service refused threw before reaching here and announces nothing.
+    this.realtime?.publishWikiChanged(ownerId, String(decided.spaceId));
+    return decided;
   }
 
   /** One op's answer: what the owner decided, and what it applied. */
