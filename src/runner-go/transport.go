@@ -1942,6 +1942,63 @@ func (t *Transport) releaseWatch(callerSessionID, orchestrationToken, id string)
 	return receipt, err
 }
 
+// ── Wiki ops for the `orbit mcp` server and `orbit wiki` (wiki_tools.go) ────────────────────────
+//
+// The runner wiki door (`/api/runner/wiki/*`) is reached with the calling session's header and the
+// machine's runner token, and deliberately NOT with an orchestration credential: what a session may
+// read is what its bound workspace shares, and proposing is not a power over anybody else's session,
+// so a session without the orchestration grant still reads the wiki and proposes to it. The server
+// resolves the space from the session header alone, which is why no request here carries one.
+
+func (t *Transport) searchWiki(sessionID string, query wikiSearchQuery) (json.RawMessage, error) {
+	values := url.Values{}
+	if query.Q != "" {
+		values.Set("q", query.Q)
+	}
+	for _, kind := range query.Kinds {
+		values.Add("kind", kind)
+	}
+	if query.Topic != "" {
+		values.Set("topic", query.Topic)
+	}
+	for _, path := range query.Paths {
+		values.Add("paths", path)
+	}
+	if query.Limit > 0 {
+		values.Set("limit", strconv.Itoa(query.Limit))
+	}
+	path := "/runner/wiki/search"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// getWikiEntry reads one entry. include is the door's own parameter: "" (its default) carries the
+// entry with its sources, "none" carries it alone, and "all" adds its history.
+func (t *Transport) getWikiEntry(sessionID, id, include string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	path := "/runner/wiki/entries/" + url.PathEscape(id)
+	if include != "" {
+		path += "?include=" + url.QueryEscape(include)
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// proposeWikiChangeset is the one write an agent has. Its answer is per op, and a batch none of
+// whose ops was recorded comes back as a 4xx carrying that answer — wikiProposeAnswerIn reads it.
+func (t *Transport) proposeWikiChangeset(sessionID string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, http.MethodPost, "/runner/wiki/changesets", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // ── Service tokens for headless processes (`orbit token`) ──────────────────
 // Runner-token authenticated on purpose: a service token can never mint another, so a leaked
 // bridge credential cannot renew itself or widen its own scope.

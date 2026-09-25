@@ -82,8 +82,42 @@ has not settled carries `"watch": {"error", "note", "code"}` instead (`code` is 
 gave one), stderr says so in one line naming `orbit session await`, and nothing will wake the caller for it; a watch the
 control plane refuses (a quota, a permission) ends the wait at once. The exit status stays 0: the session exists.
 
-## Headless runner-local access
+## Wiki
 
+The Orbit wiki is a codebase's own knowledge — decisions and what they rejected, pitfalls and their
+fixes, conventions — and an agent reads it and proposes to it, never decides.
+
+```bash
+orbit wiki search "trgm index" --kind decision --json
+orbit wiki search src/apiserver/src/wiki --limit 5 --json
+orbit wiki get <entry-id>[,<entry-id>...] --include sources --json
+orbit wiki propose --ops '[...]' --rationale "why it is worth recording" --idempotency-key <key> --json
+orbit wiki propose --ops-file ops.json --dry-run --json
+```
+
+The three verbs are the three MCP tools of the same name (`wiki_search`, `wiki_get`, `wiki_propose`)
+with the same parameters. Each acts for the session it runs in (`ORBIT_SESSION_ID`): what that
+session may read is what its bound workspace shares, and its proposal is recorded against it, so
+there is no headless form. `search` and `get` only read. `propose` records a changeset that waits
+for the owner in Review — `--dry-run` checks every op and records nothing — and an agent cannot
+accept, edit, reject, delete or overwrite an entry: deciding is the owner's, and a request carrying
+a session header is refused `WIKI_OWNER_CHANNEL_ONLY` on the decide route. Cite an entry to the
+user as `[title](orbit-wiki:<id>)`, the way every other Orbit thing is cited.
+
+A proposal is answered per op — `pending`, `applied`, `conflict` (with the entry's current revision
+and a diff) or `refused` (with the contract's reason codes and, for a schema failure, every field
+that failed) — and a batch none of whose ops was recorded answers with the first refusal's status
+and every op's outcome in the body, so a 4xx there is the answer rather than a failed call. A source
+must resolve among the owner's own records, and a quote must be a substring of the record it cites
+(`WIKI_SOURCE_UNRESOLVED`, `WIKI_QUOTE_NOT_FOUND`).
+
+The wiki is switched on per account by the server's rollout flag. A session spawned with it off
+(`ORBIT_WIKI=off`) is offered neither these commands nor the tools, and a server that has the wiki
+off answers `404 WIKI_DISABLED` — which this binary reports as the wiki being off, not as a missing
+entry. A runner newer than the server it talks to says in words that the server has no wiki door
+rather than reporting a bare 404.
+
+## Headless runner-local access
 A process on a registered runner with no `ORBIT_SESSION_ID` can use the runner credential to inspect and send
 messages only to sessions hosted by that runner:
 

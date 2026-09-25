@@ -593,6 +593,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_TASK_ID="+publicID(job.TaskID),
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
+		envWiki+"="+wikiEnv(job.WikiDisabled),
 		envMCPPermissionPrompt+"=0",
 	)
 	// Runner-hosted background jobs (mcp__orbit__bg_run). Kimi's `orbit` MCP server
