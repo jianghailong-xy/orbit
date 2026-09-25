@@ -303,6 +303,66 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     expect(path).toBe(`/providers/${refused.id}`);
   });
 
+  it('counts out an account the pool would no longer admit, and says why on its row', async () => {
+    // Made a metered key, or pointed off api.anthropic.com, before an edit had to pass the pool's own
+    // admission: no claim picks either, but the view reads each as an account that reports no quota.
+    keys = [WORK, HOME, METERED, GATEWAY];
+    pools = [
+      pool([
+        member(WORK, { state: 'RUNNING', planUsage: fiveHour(80) }),
+        member(HOME, { state: 'AVAILABLE', planUsage: fiveHour(20), next: true }),
+        member(METERED, { state: 'NO_QUOTA' }),
+        member(GATEWAY, { state: 'NO_QUOTA' }),
+      ]),
+    ];
+    await mount('/providers');
+    expect(section()!.querySelector('.re-head')?.textContent).toContain('2 of 4 accounts available');
+    const tag = (label: string) => rowOf(label)?.querySelector('.ant-tag')?.textContent;
+    const why = (label: string) => rowOf(label)?.querySelector('.pool-why')?.textContent ?? null;
+    // In the words joining the pool is refused with.
+    expect(tag('Team API key')).toBe('Unavailable');
+    expect(why('Team API key')).toBe('Metered API key — no 5-hour window');
+    expect(tag('Gateway')).toBe('Unavailable');
+    expect(why('Gateway')).toBe('Endpoint is not api.anthropic.com');
+    expect(section()!.textContent).not.toContain('No quota reported');
+    expect(why('Work')).toBeNull();
+    expect(why('Home')).toBeNull();
+  });
+
+  it("heads a pool nothing in can run with the server's reason, and promises no session on it", async () => {
+    const weekend = key(8, 'Weekend', { enabled: false });
+    keys = [WORK, HOME, METERED, weekend];
+    pools = [
+      {
+        ...pool([member(METERED, { state: 'NO_QUOTA' }), member(weekend, { state: 'DISABLED', enabled: false })]),
+        unavailable: 'No account can run',
+      },
+      { ...pool([]), id: id(901), slug: 'claude-accounts-2', label: 'Empty', unavailable: 'No accounts' },
+    ];
+    await mount('/providers');
+    const [stuck, empty] = Array.from(section()!.querySelectorAll<HTMLElement>('.pool-card'));
+    expect(stuck.querySelector('.re-head')?.textContent).toContain('0 of 2 accounts available');
+    expect(stuck.querySelector('.pool-gauge')?.textContent).toBe('No account can run');
+    // Switched off reads as that, not as the admission it would fail once back on.
+    expect(rowOf('Weekend')?.querySelector('.ant-tag')?.textContent).toBe('Disabled');
+    expect(rowOf('Weekend')?.querySelector('.pool-why')).toBeNull();
+
+    expect(empty.querySelector('.re-head')?.textContent).toContain('0 of 0 accounts available');
+    expect(empty.querySelector('.pool-gauge')?.textContent).toBe('No accounts');
+    // Every door that takes a provider refuses this pool: nothing here may say a session would run.
+    expect(empty.querySelector('.pool-note')?.textContent).toBe(
+      'No accounts yet — no session can start on this pool until one is added.',
+    );
+  });
+
+  it('does not call a pool of one account it no longer admits the same as that account', async () => {
+    keys = [WORK, METERED];
+    pools = [{ ...pool([member(METERED, { state: 'NO_QUOTA' })]), unavailable: 'No account can run' }];
+    await mount('/providers');
+    expect(section()?.textContent).toContain('0 of 1 account available');
+    expect(section()?.textContent).not.toContain('the same as using');
+  });
+
   it('says so when a fully spent pool frees up — at the earliest reset, not the latest', async () => {
     const early = at(HOUR);
     const late = at(4 * HOUR);
@@ -424,6 +484,25 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     await mount(`/providers/pools/${POOL_ID}`);
     await click(rowOf('Home')!.querySelector('button[aria-label="Remove Home from this pool"]'));
     expect(posted).toEqual([{ method: 'DELETE', path: `/providers/pools/${POOL_ID}/members/${HOME.id}`, body: undefined }]);
+  });
+
+  it("the pool's own page counts out an account it no longer admits, and takes it out", async () => {
+    keys = [WORK, HOME, METERED];
+    pools = [
+      pool([
+        member(WORK, { state: 'AVAILABLE', planUsage: fiveHour(40), next: true }),
+        member(HOME, { state: 'AVAILABLE', planUsage: fiveHour(60) }),
+        member(METERED, { state: 'NO_QUOTA' }),
+      ]),
+    ];
+    await mount(`/providers/pools/${POOL_ID}`);
+    expect(text()).toContain('Account pool · 2 of 3 accounts available');
+    expect(rowOf('Team API key')?.querySelector('.ant-tag')?.textContent).toBe('Unavailable');
+    expect(rowOf('Team API key')?.querySelector('.pool-why')?.textContent).toBe('Metered API key — no 5-hour window');
+    await click(rowOf('Team API key')!.querySelector('button[aria-label="Remove Team API key from this pool"]'));
+    expect(posted).toEqual([
+      { method: 'DELETE', path: `/providers/pools/${POOL_ID}/members/${METERED.id}`, body: undefined },
+    ]);
   });
 
   it('a pool that is gone says so on its own page', async () => {

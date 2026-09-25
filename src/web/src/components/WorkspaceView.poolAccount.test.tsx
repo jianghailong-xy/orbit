@@ -174,6 +174,7 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
       if (p.startsWith(`/sessions/${SESSION}`)) {
         if (p.includes('/events/page')) return reply({ events: [], hasMore: false });
         if (p.includes('/diff')) return reply({ files: [] });
+        if (p.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
         if (p.includes('/turns') || p.includes('/approvals') || p.includes('/background')) return reply([]);
         return reply(detail);
       }

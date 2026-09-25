@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { encodeId } from './idCodec';
 import {
+  availableCount,
   formatResetTime,
   memberQuota,
+  memberRefusal,
   memberStatus,
   poolEligibleCount,
   poolHeadline,
+  poolRefusals,
   poolsAsProviders,
   sessionPoolAccount,
   type PoolMember,
@@ -70,8 +73,65 @@ describe("a pool's head line", () => {
   it('has no account to name when every account is refused or off', () => {
     expect(poolHeadline(pool([member(1, { state: 'REFUSED' }), member(2, { state: 'DISABLED' })]))).toEqual({
       kind: 'none',
+      reason: 'No account can run',
     });
-    expect(poolHeadline(pool([]))).toEqual({ kind: 'none' });
+    expect(poolHeadline(pool([]))).toEqual({ kind: 'none', reason: 'No account can run' });
+  });
+
+  it("says why a pool nothing in can run is out in the server's words, before any reset", () => {
+    expect(poolHeadline({ ...pool([]), unavailable: 'No accounts' })).toEqual({ kind: 'none', reason: 'No accounts' });
+    // A member the pool no longer admits can still report a spent window; no reset makes it a candidate.
+    const stale = member(1, { state: 'SPENT', planUsage: fiveHour(100), resetsAt: at(HOUR) });
+    expect(poolHeadline({ ...pool([stale], at(HOUR)), unavailable: 'No account can run' })).toEqual({
+      kind: 'none',
+      reason: 'No account can run',
+    });
+  });
+});
+
+describe('an account the pool would no longer admit', () => {
+  const metered = { reason: 'NOT_SUBSCRIPTION_TOKEN', message: 'Metered API key — no 5-hour window' };
+  const foreign = { reason: 'NOT_ANTHROPIC_ENDPOINT', message: 'Endpoint is not api.anthropic.com' };
+  const key = (n: number, poolRefusal: ProviderRow['poolRefusal']) => ({ id: id(n), poolRefusal }) as ProviderRow;
+  // As GET /providers/mine gives them: a verdict on every key, whether or not it is in a pool.
+  const refusals = poolRefusals([key(1, null), key(2, metered), key(3, foreign), key(4, undefined)]);
+
+  it("is out in the words joining the pool is refused with, whatever the view reads it as", () => {
+    for (const state of ['NO_QUOTA', 'AVAILABLE', 'RUNNING', 'SPENT', 'REFUSED'] as const) {
+      expect(memberRefusal(member(2, { state }), refusals)).toBe('Metered API key — no 5-hour window');
+      expect(memberStatus(member(2, { state }), NOW, memberRefusal(member(2, { state }), refusals))).toEqual({
+        label: 'Unavailable',
+        color: 'red',
+      });
+    }
+    expect(memberRefusal(member(3), refusals)).toBe('Endpoint is not api.anthropic.com');
+    expect(memberRefusal(member(1), refusals)).toBeNull();
+    // A key the server gave no verdict for is not refused on a guess.
+    expect(memberRefusal(member(4), refusals)).toBeNull();
+    expect(memberRefusal(member(5), refusals)).toBeNull();
+  });
+
+  it('matches its key whichever id spelling either arrives in', () => {
+    const raw = { ...member(2), id: '0195c0de-0000-7000-8000-000000000002' };
+    expect(memberRefusal(raw, refusals)).toBe('Metered API key — no 5-hour window');
+  });
+
+  it('reads as Disabled once its owner switched it off: the reason the server names first', () => {
+    const off = member(2, { state: 'DISABLED', enabled: false });
+    expect(memberRefusal(off, refusals)).toBeNull();
+    expect(memberStatus(off, NOW, memberRefusal(off, refusals)).label).toBe('Disabled');
+  });
+
+  it('is not counted among the accounts a session could start on', () => {
+    const claude = pool([
+      member(1, { state: 'RUNNING', planUsage: fiveHour(70) }),
+      member(2),
+      member(3, { state: 'AVAILABLE', planUsage: fiveHour(10) }),
+      member(5, { state: 'AVAILABLE', planUsage: fiveHour(20), next: true }),
+    ]);
+    expect(availableCount(claude, refusals)).toBe(2);
+    // Without the keys' verdicts every one of them reads as able to take work.
+    expect(availableCount(claude, poolRefusals([]))).toBe(4);
   });
 });
 

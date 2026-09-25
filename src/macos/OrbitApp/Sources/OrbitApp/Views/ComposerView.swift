@@ -417,7 +417,7 @@ struct ComposerView: View {
                             // closed menu's own label, and a parenthetical would live in the
                             // footer of every turn.
                             let blocked = choice.unavailable != nil && choice.slug != console.provider
-                            // An account pool none of whose accounts can take work: no runner
+                            // An account pool the server says cannot run at all: no runner
                             // fixes that, so it is greyed out with its reason instead.
                             let fixable = blocked && choice.fixEngine != nil
                             let reason = choice.unavailable ?? ""

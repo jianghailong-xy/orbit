@@ -5,7 +5,7 @@ import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'an
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
-import { poolEligibleCount, providerPoolsQuery } from '../lib/providerPools';
+import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
 import { AccountPools, PoolHint } from '../components/AccountPools';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
@@ -36,6 +36,7 @@ export function ProvidersPage() {
   const pools = useQuery({ ...providerPoolsQuery(), refetchInterval: 60_000 });
   const poolList = pools.data ?? [];
   const eligible = poolEligibleCount(providers.data ?? []);
+  const refusals = poolRefusals(providers.data ?? []);
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api(`${PROVIDERS_BASE}/${id}`, { method: 'DELETE' }),
@@ -155,7 +156,7 @@ export function ProvidersPage() {
 
       {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
           leave sessions dispatching to something the page no longer lets you see or delete. */}
-      {poolList.length > 0 && <AccountPools pools={poolList} />}
+      {poolList.length > 0 && <AccountPools pools={poolList} refusals={refusals} />}
 
       <div className="re-sec-head" style={{ marginTop: 28 }}>
         <h3>Your API keys</h3>
