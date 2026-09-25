@@ -148,10 +148,30 @@ final class OrbitLinkCopyParityTests: XCTestCase {
         let declared = try section(web, from: "export const ORBIT_LINK_TYPE_NAMES", to: "\n};",
                                    Self.webCard)
         let theirs = try captures(declared, "\\w+: '([^']*)'")
-        let mine = [OrbitLinkKind.task, .session, .project, .list].map(OrbitLinkCopy.typeName)
+        let mine = [OrbitLinkKind.task, .session, .project, .list, .wiki].map(OrbitLinkCopy.typeName)
         XCTAssertEqual(theirs, mine,
                        "the type names drifted — first is the web's, second is this client's, and "
                            + "both are read in the same order")
+    }
+
+    /// A wiki card's words: the kind beside the type ("Wiki · Principle"), the line an entry with no
+    /// anchor says, and the one a retired or superseded entry says — each the browser's own, and the
+    /// kind's word the Wiki pages' (`WIKI_KIND_LABELS`), so a card and the page it leads to cannot
+    /// name one kind two ways.
+    func testTheWikiCardsWordsAreTheWebsWords() throws {
+        let web = try flat(Self.webCard)
+        assertDeclares(web, "ORBIT_LINK_NO_ANCHOR", OrbitLinkCopy.noAnchor)
+        XCTAssertEqual(OrbitLinkCopy.typeName(.wiki, wikiKind: .principle), "Wiki · Principle")
+        XCTAssertEqual(OrbitLinkCopy.typeName(.wiki, wikiKind: nil), "Wiki")
+        XCTAssertEqual(OrbitLinkCopy.typeName(.task, wikiKind: .pitfall), "Task",
+                       "only a wiki card carries an entry's kind")
+        assertBuilds(web, "return entry === '' ? ORBIT_LINK_TYPE_NAMES.wiki : "
+                     + "`${ORBIT_LINK_TYPE_NAMES.wiki}${ORBIT_LINK_SEPARATOR}${entry}`;",
+                     "the wiki card's first row")
+        assertBuilds(web, "lines.push({ text: WIKI_NO_LONGER_PUSHED, glyph: <WarningOutlined />, isWarning: true });",
+                     "the line a card for an entry agents no longer get says")
+        assertBuilds(web, "if (entry.status !== 'active')", "when that line is drawn")
+        assertBuilds(web, "text: anchorLabel ?? ORBIT_LINK_NO_ANCHOR,", "the anchor line")
     }
 
     // MARK: the sentences built around values

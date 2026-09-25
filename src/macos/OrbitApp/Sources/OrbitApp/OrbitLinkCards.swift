@@ -71,9 +71,11 @@ final class OrbitLinkCards {
     }
 
     /// The deployment's own page for an object: what a long press copies, and what a project with no
-    /// coordinator session opens.
+    /// coordinator session opens. A wiki entry's page takes its space too, which only its read names —
+    /// so an entry nothing has answered for has no page to offer yet.
     func pageURL(for ref: OrbitLinkRef) -> URL? {
-        OrbitLinkParser.pageURL(for: ref.target, baseURL: baseURL)
+        OrbitLinkParser.pageURL(for: ref.target, baseURL: baseURL,
+                                wikiSpaceSlug: readings[ref.target.key]?.preview.wiki?.spaceSlug)
     }
 
     // MARK: reading
@@ -202,15 +204,17 @@ extension AppModel {
         }
     }
 
-    /// Every destination an Orbit link can have, applied in one place. A task or a session opened
-    /// from a phone's conversation is pushed over it (`openFromConversation`); a task list is a scope
-    /// of the Tasks page rather than a page of its own, so it routes there wherever the link is.
+    /// Every destination an Orbit link can have, applied in one place. A task, a session or a wiki
+    /// entry opened from a phone's conversation is pushed over it (`openFromConversation`,
+    /// `openWikiEntry`); a task list is a scope of the Tasks page rather than a page of its own, so it
+    /// routes there wherever the link is.
     func open(_ destination: OrbitLinkDestination, overConsole: Bool = false) {
         switch destination {
-        case .task(let id):    openFromConversation(.task(id), overConsole: overConsole)
-        case .session(let id): openFromConversation(.session(id), overConsole: overConsole)
-        case .list(let id):    route(to: .list(id))
-        case .web(let url):    openExternal(url)
+        case .task(let id):      openFromConversation(.task(id), overConsole: overConsole)
+        case .session(let id):   openFromConversation(.session(id), overConsole: overConsole)
+        case .list(let id):      route(to: .list(id))
+        case .wikiEntry(let id): openWikiEntry(id, overConsole: overConsole)
+        case .web(let url):      openExternal(url)
         }
     }
 
