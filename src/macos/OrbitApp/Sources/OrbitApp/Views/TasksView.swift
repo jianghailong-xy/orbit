@@ -23,6 +23,7 @@ struct TasksListView: View {
                 #endif
                 if let error = tasks.errorText { errorBanner(error, tasks: tasks) }
                 if let conflict = tasks.runConflict { runConflictBanner(conflict, tasks: tasks) }
+                if let creator = tasks.creatorFilter { creatorChip(creator, tasks: tasks) }
                 #if !os(iOS)
                 toolbar(tasks)
                 Divider()
@@ -372,6 +373,24 @@ struct TasksListView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.orange.opacity(0.12))
+    }
+
+    /// `Created in ‹session›`: the page is narrowed to what that session created — where its "Tasks
+    /// created here" card's `View all in Tasks ›` lands. The ✕ takes only that narrowing off.
+    private func creatorChip(_ creator: TaskCreatorFilter, tasks: TasksModel) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.square").font(.orbitMeta).foregroundStyle(.secondary)
+            Text(SessionCreatedTasksCopy.createdIn(creator.sessionTitle))
+                .font(.orbitLabel).lineLimit(1).truncationMode(.tail)
+            Button { tasks.clearCreatorFilter() } label: { Image(systemName: "xmark.circle.fill") }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .accessibilityLabel("Remove the Created in filter")
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Color.accentColor.opacity(0.1), in: Capsule())
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     /// The same card the console shows, over the list — where a Run press is made and so where its

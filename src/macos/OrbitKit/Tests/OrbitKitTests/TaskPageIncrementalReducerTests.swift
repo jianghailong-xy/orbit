@@ -7,13 +7,15 @@ final class TaskPageIncrementalReducerTests: XCTestCase {
                       status: String = "OPEN",
                       createdAt: String,
                       listID: String? = nil,
-                      runnable: Bool = false) -> TaskItem {
+                      runnable: Bool = false,
+                      creatorSessionID: String? = nil) -> TaskItem {
         let list = listID.map { ",\"listId\":\"\($0)\"" } ?? ""
         let assignee = runnable
             ? ",\"assignee\":{\"id\":\"agent\",\"runner\":{\"id\":\"runner\"}}"
             : ""
+        let creator = creatorSessionID.map { ",\"creatorSessionId\":\"\($0)\"" } ?? ""
         let json = "{\"id\":\"\(id)\",\"title\":\"\(title)\",\"status\":\"\(status)\"," +
-            "\"createdAt\":\"\(createdAt)\"\(list)\(assignee)}"
+            "\"createdAt\":\"\(createdAt)\"\(list)\(assignee)\(creator)}"
         return try! JSONDecoder().decode(TaskItem.self, from: Data(json.utf8))
     }
 
@@ -73,6 +75,44 @@ final class TaskPageIncrementalReducerTests: XCTestCase {
 
         XCTAssertEqual(result.items.map(\.id), ["a", "b"])
         XCTAssertEqual(result.filteredTotalDelta, 1)
+    }
+
+    /// A page scoped to one session's created tasks ("View all in Tasks ›") takes a changed row only
+    /// when that session created it — in either spelling of the session's id — and lets go of a
+    /// loaded row the moment the server says it is somebody else's.
+    func testCreatorSessionScopeDecidesMembership() {
+        let sessionID = "34TYUP5wb87XfuYCInJRY"
+        let sessionUUID = "01a0cc01-771c-767d-846b-8fddfa669490"
+        let mine = task("a", createdAt: middle, creatorSessionID: sessionUUID)
+        let inserted = TaskPageIncrementalReducer.reduce(
+            items: [task("z", createdAt: newest, creatorSessionID: sessionID)],
+            changed: mine, taskID: "a", scope: .all, filter: .all, search: "", hasMore: false,
+            creatorSessionID: sessionID
+        )
+        XCTAssertEqual(inserted.items.map(\.id), ["z", "a"])
+        XCTAssertEqual(inserted.filteredTotalDelta, 1)
+
+        let elsewhere = task("b", createdAt: newest, creatorSessionID: "34TcwNgAIo6tGUiIKjqnQ")
+        let kept = TaskPageIncrementalReducer.reduce(
+            items: [mine], changed: elsewhere, taskID: "b", scope: .all, filter: .all, search: "",
+            hasMore: false, creatorSessionID: sessionID
+        )
+        XCTAssertEqual(kept.items.map(\.id), ["a"], "another session's task is not on this page")
+        XCTAssertEqual(kept.filteredTotalDelta, 0)
+
+        let unattributed = TaskPageIncrementalReducer.reduce(
+            items: [mine], changed: task("a", createdAt: middle), taskID: "a", scope: .all,
+            filter: .all, search: "", hasMore: false, creatorSessionID: sessionID
+        )
+        XCTAssertTrue(unattributed.items.isEmpty, "a row no session created leaves the page")
+        XCTAssertEqual(unattributed.filteredTotalDelta, -1)
+
+        // Unscoped, the creator is nobody's business: the same row belongs.
+        let unscoped = TaskPageIncrementalReducer.reduce(
+            items: [], changed: elsewhere, taskID: "b", scope: .all, filter: .all, search: "",
+            hasMore: false
+        )
+        XCTAssertEqual(unscoped.items.map(\.id), ["b"])
     }
 
     func testMissingOlderRowIsNotInsertedPastAPaginatedTail() {

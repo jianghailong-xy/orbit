@@ -2,6 +2,14 @@ import Foundation
 import Observation
 import OrbitKit
 
+/// The Tasks page narrowed to the tasks one session created: where the `View all in Tasks ›` of that
+/// session's "Tasks created here" card lands, drawn as the page's removable `Created in ‹session›`
+/// chip. The title is only for the chip; the id is the scope.
+struct TaskCreatorFilter: Equatable {
+    let sessionID: String
+    let sessionTitle: String
+}
+
 /// Drives the shared native Tasks section. Every scope uses the interactive paged endpoint;
 /// named-list detail may contain tens of thousands of embedded tasks and is never a list refresh
 /// primitive. One instance is owned by `AppModel`, so navigation, selection and detail share state.
@@ -13,6 +21,10 @@ final class TasksModel {
     private(set) var unlistedCount = 0
 
     var scope: TaskScope = .all
+    /// A scope on top of `scope`, like the list the server narrows by: only the tasks this session
+    /// created (`creatorSessionId` on the page, its counts and its events). Set by
+    /// `showCreated(in:)`, dropped by the chip's ✕ or by picking a scope.
+    private(set) var creatorFilter: TaskCreatorFilter?
     var filter: TaskFilter = .runnable
     var searchText = ""
     var sort: TaskSort = .created {
@@ -119,7 +131,13 @@ final class TasksModel {
     /// response and made every event-driven refresh repeat it.
     var queryKey: String {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "\(scope.id)|\(filter.rawValue)|\(q)"
+        return "\(scope.id)|\(filter.rawValue)|\(q)|\(creatorFilter?.sessionID ?? "")"
+    }
+
+    /// What the scope counts are read for: the list scope and the creator scope together, since both
+    /// narrow them.
+    private var countsScope: String {
+        "\(scope.id)|\(creatorFilter?.sessionID ?? "")"
     }
 
     func item(_ id: String) -> TaskItem? {
@@ -131,7 +149,38 @@ final class TasksModel {
     /// Switch list scope as one UI transaction. Web scopes filter/search state to the route, so a
     /// newly opened list starts at Ready with a clean search and created-desc ordering.
     func selectScope(_ newScope: TaskScope) {
-        guard scope != newScope else { return }
+        guard scope != newScope || creatorFilter != nil else { return }
+        resetSnapshot()
+        scope = newScope
+        creatorFilter = nil
+        filter = .runnable
+        searchText = ""
+        sort = .created
+        descending = true
+    }
+
+    /// `View all in Tasks ›` on a session's card: everything that session created, on every status —
+    /// the reader asked for all of it, not the part that happens to be runnable.
+    func showCreated(in creator: TaskCreatorFilter) {
+        resetSnapshot()
+        scope = .all
+        creatorFilter = creator
+        filter = .all
+        searchText = ""
+        sort = .created
+        descending = true
+    }
+
+    /// The chip's ✕: back to the whole scope, keeping the status and search the reader is on.
+    func clearCreatorFilter() {
+        guard creatorFilter != nil else { return }
+        resetSnapshot()
+        creatorFilter = nil
+    }
+
+    /// Drop everything read for the scope being left, so nothing counted or listed under it can
+    /// land in the next one.
+    private func resetSnapshot() {
         countsGeneration &+= 1
         countsTask?.cancel()
         countsTask = nil
@@ -140,11 +189,6 @@ final class TasksModel {
         countsInvalidationVersion = 0
         countsCommittedVersion = 0
         countsRetryNotBefore = .distantPast
-        scope = newScope
-        filter = .runnable
-        searchText = ""
-        sort = .created
-        descending = true
         items = []
         pageCounts = nil
         countsRefreshedAt = nil
@@ -223,7 +267,8 @@ final class TasksModel {
             let response = try await api.taskPage(limit: 200, status: filter.queryValue,
                                                   listId: scope.listQueryValue,
                                                   query: query.isEmpty ? nil : query,
-                                                  counts: .none)
+                                                  counts: .none,
+                                                  creatorSessionId: creatorFilter?.sessionID)
             guard generation == listGeneration, key == queryKey else { return false }
             items = response.items
             // Be liberal toward a transitional server that still includes this block, but current
@@ -254,7 +299,7 @@ final class TasksModel {
     /// SwiftUI query task being cancelled when the user types another search character: the count
     /// depends only on scope, so restarting it would repeat the expensive work for no new answer.
     private func scheduleCountsRefresh(force: Bool) {
-        let key = scope.id
+        let key = countsScope
         let requestedForce = force || pendingForcedCountsRefresh
         guard requestedForce || pageCounts == nil else { return }
         if countsScopeKey == key, countsTask != nil {
@@ -272,16 +317,17 @@ final class TasksModel {
         countsGeneration &+= 1
         let generation = countsGeneration
         let listID = scope.listQueryValue
+        let creatorID = creatorFilter?.sessionID
         let coveredInvalidationVersion = countsInvalidationVersion
         countsTask?.cancel()
         pendingForcedCountsRefresh = false
         countsScopeKey = key
         countsTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            let response = try? await self.api.taskCounts(listId: listID)
+            let response = try? await self.api.taskCounts(listId: listID, creatorSessionId: creatorID)
             guard !Task.isCancelled,
                   self.countsGeneration == generation,
-                  self.scope.id == key else { return }
+                  self.countsScope == key else { return }
             if let response {
                 self.pageCounts = response
                 self.countsRefreshedAt = Date()
@@ -317,7 +363,8 @@ final class TasksModel {
                                                   status: filter.queryValue,
                                                   listId: scope.listQueryValue,
                                                   query: query.isEmpty ? nil : query,
-                                                  counts: .none)
+                                                  counts: .none,
+                                                  creatorSessionId: creatorFilter?.sessionID)
             guard generation == listGeneration, key == queryKey else { return }
             let existing = Set(items.map(\.id))
             items.append(contentsOf: response.items.filter { !existing.contains($0.id) })
@@ -487,7 +534,8 @@ final class TasksModel {
             scope: scope,
             filter: filter,
             search: searchText,
-            hasMore: nextCursor != nil
+            hasMore: nextCursor != nil,
+            creatorSessionID: creatorFilter?.sessionID
         )
         items = result.items
         return result.needsPageReconcile
@@ -501,7 +549,8 @@ final class TasksModel {
             let response = try await api.taskPage(limit: 200, status: filter.queryValue,
                                                   listId: scope.listQueryValue,
                                                   query: query.isEmpty ? nil : query,
-                                                  counts: .none)
+                                                  counts: .none,
+                                                  creatorSessionId: creatorFilter?.sessionID)
             guard generation == listGeneration, key == queryKey else { return }
             items = response.items
             nextCursor = response.nextCursor
