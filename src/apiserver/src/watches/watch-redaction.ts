@@ -1,4 +1,5 @@
 import { WATCH_LEAVES, type WatchSnapshot, type WatchTargetObservation } from '@orbit/shared';
+import { redactSecrets } from '../common/secret-redaction';
 
 /**
  * What a Watch lets out of the database about the rows it watches, and in what shape (contract
@@ -104,25 +105,9 @@ export function redactReason(reason: unknown): string {
   return typeof reason === 'string' && reason.length <= REASON_MAX_CHARS && REASON.test(reason) ? reason : REDACTED;
 }
 
-/** Each secret shape, and what replaces it. Case-insensitive where the shape is. */
-const SECRETS: ReadonlyArray<readonly [RegExp, string]> = [
-  // The userinfo of any URL: postgres://orbit:hunter2@db:5432/orbit.
-  [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi, `$1${REDACTED}@`],
-  // An authorization scheme and its credentials.
-  [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{6,}/gi, `$1 ${REDACTED}`],
-  // A JSON web token.
-  [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, REDACTED],
-  // Provider API keys (sk-…, sk-ant-…), GitHub tokens, AWS access key ids.
-  [/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}/g, REDACTED],
-  [/\bgh[pousr]_[A-Za-z0-9]{20,}/g, REDACTED],
-  [/\bAKIA[0-9A-Z]{16}\b/g, REDACTED],
-  // password=…, token: …, api_key="…".
-  [/\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key)(\s*["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi, `$1$2${REDACTED}`],
-];
-
-/** Failure text as a delivery stores it: secrets replaced, then cut to a thousand characters. */
+/** Failure text as a delivery stores it: secrets replaced (`common/secret-redaction.ts`), then cut to a thousand characters. */
 export function redactErrorText(text: string): string {
-  const redacted = SECRETS.reduce((current, [shape, replacement]) => current.replace(shape, replacement), text);
+  const { text: redacted } = redactSecrets(text);
   return redacted.length > ERROR_MAX_CHARS ? `${redacted.slice(0, ERROR_MAX_CHARS)}…` : redacted;
 }
 
