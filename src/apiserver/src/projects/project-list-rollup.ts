@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { ProjectStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { everyPrerequisiteDoneOrRetiredSql } from '../tasks/task-dependencies';
 import type { ProjectPanoramaBuckets } from './project-panorama';
 import { projectTaskWorkStateSql } from './project-task-work-state';
 
@@ -60,7 +61,15 @@ export async function readProjectListRollups(
   const narrowed = status
     ? Prisma.sql`AND proj."status" = ${status}::"project_status"`
     : Prisma.empty;
-  const workState = Prisma.raw(projectTaskWorkStateSql('t'));
+  // READY is the one lane that walks the dependency graph per row, and on the 109,875-task project
+  // measured here that walk was 6.3s of this read's 7.3s — the drawer's project rows waited on it at
+  // every launch. Narrowed the way the classifier offers, to rows whose every prerequisite is DONE
+  // or retired, the walk runs on a couple of hundred rows and the read takes 0.6–1s, every bucket
+  // of all 69 projects unchanged. It is a superset of READY, not a second spelling of it; see the
+  // guard.
+  const workState = Prisma.raw(projectTaskWorkStateSql('t', {
+    readyCandidates: everyPrerequisiteDoneOrRetiredSql('t'),
+  }));
 
   const rows = await prisma.$queryRaw<RollupRow[]>(Prisma.sql`
     WITH classified AS MATERIALIZED (

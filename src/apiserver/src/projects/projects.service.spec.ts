@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { ProjectStatus, uuidToBase62 } from '@orbit/shared';
+import { everyPrerequisiteDoneOrRetiredSql } from '../tasks/task-dependencies';
 import { criterionKeyOf } from './project-acceptance';
 import { ProjectsService } from './projects.service';
 
@@ -358,6 +359,34 @@ test('concurrent identical project indexes share one aggregate without caching i
   await service.list(OWNER_ID, ProjectStatus.OPEN as never);
   assert.equal(projectReads, 2, 'settlement removes the promise; the next request reads fresh state');
   assert.equal(aggregateReads, 6);
+});
+
+// What a fake can say about the READY lane's cost: where the dependency walk sits in it. That the
+// narrowing leaves every bucket where it was is proved on real PostgreSQL, retired prerequisites
+// included, in project-list-rollup.pg.spec.ts.
+test('the index asks the cheap prerequisite guard before it walks a dependency chain', async () => {
+  const statements: string[] = [];
+  const service = serviceWith({
+    project: { findMany: async () => [{ id: PROJECT_ID, members: [], runtime: { coordinatorGeneration: 0n } }] },
+    projectCodebase: { findMany: async () => [] },
+    $queryRaw: async (query: Prisma.Sql) => {
+      statements.push(query.sql);
+      return [];
+    },
+  });
+  await service.list(OWNER_ID);
+
+  const rollup = statements.find((sql) => sql.includes('WITH classified AS MATERIALIZED'));
+  assert.ok(rollup, 'the task rollup was read');
+  const end = rollup.indexOf("THEN 'READY'");
+  const ready = rollup.slice(rollup.lastIndexOf('WHEN ', end), end);
+  const guard = ready.indexOf(everyPrerequisiteDoneOrRetiredSql('t'));
+  const walk = ready.indexOf('task_dependency_tail_id');
+  assert.notEqual(guard, -1, 'the READY lane is narrowed by the guard');
+  assert.notEqual(walk, -1, 'and is still the execute predicate, chain walk included');
+  assert.ok(guard < walk, 'the guard is asked before the walk it is there to spare');
+  assert.doesNotMatch(everyPrerequisiteDoneOrRetiredSql('t'), /task_dependency_tail_id/u,
+    'a guard that walked the chain itself would spare nothing');
 });
 
 test('the detail read reports progress without loading the project’s tasks', async () => {

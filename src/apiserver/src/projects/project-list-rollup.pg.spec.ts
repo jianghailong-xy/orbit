@@ -457,3 +457,74 @@ test('a dispatched task is running in the index rather than ready, and the page 
       await identity.end();
     }
   });
+
+/**
+ * The READY lane is narrowed before it walks: only a row whose every prerequisite is DONE or
+ * retired is asked the dependency walk. That is sound only while a RETIRED prerequisite is let
+ * through to the walk, because its chain can end in a DONE successor that satisfies the edge — so
+ * these are the rows a shortcut reading "every prerequisite DONE" would get wrong, beside the ones
+ * the guard exists to stop.
+ */
+test('a prerequisite replaced by finished work leaves its dependent ready, and the page agrees',
+  { skip: !URL, timeout: 300_000 }, async (t) => {
+    assertCoordinatorPgUrlIsIsolated(URL);
+    const identity = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
+    await identity.connect();
+    await verifyCoordinatorPgIdentity(identity);
+
+    const db = prismaClientFor(URL);
+    const projects = new ProjectsService(db as unknown as PrismaService);
+
+    /** Retire `id` in favour of `successor`: terminal first, then the link, as SU4 requires. */
+    const supersede = async (id: string, successor: string): Promise<void> => {
+      await db.task.update({
+        where: { id },
+        data: { supersededByTaskId: successor, terminalReason: 'SUPERSEDED', supersededAt: new Date() },
+      });
+    };
+
+    try {
+      const ownerId = randomUUID();
+      await db.user.create({
+        data: { id: ownerId, email: `retired-${ownerId}@rollup.invalid`, name: 'retired', passwordHash: 'x' },
+      });
+
+      //   r1 OPEN -> p1 DONE                                  -> ready
+      //   r2 OPEN -> p2 CANCELLED, replaced by p2b DONE       -> ready    (retired; chain ends DONE)
+      //   r3 OPEN -> p3 CANCELLED, replaced by p3b OPEN       -> blocked  (retired; chain ends OPEN)
+      //   r4 OPEN -> p4 OPEN                                  -> blocked  (the row the guard stops)
+      //   p3b and p4 have no prerequisites                    -> ready
+      const projectId = await makeProject(db, ownerId, 'replaced attempts');
+      const p1 = await makeTask(db, ownerId, projectId, 'p1', TaskStatus.DONE);
+      const p2 = await makeTask(db, ownerId, projectId, 'p2', TaskStatus.CANCELLED);
+      const p2b = await makeTask(db, ownerId, projectId, 'p2b', TaskStatus.DONE);
+      const p3 = await makeTask(db, ownerId, projectId, 'p3', TaskStatus.CANCELLED);
+      const p3b = await makeTask(db, ownerId, projectId, 'p3b', TaskStatus.OPEN);
+      const p4 = await makeTask(db, ownerId, projectId, 'p4', TaskStatus.OPEN);
+      await supersede(p2, p2b);
+      await supersede(p3, p3b);
+      for (const [title, prerequisite] of [['r1', p1], ['r2', p2], ['r3', p3], ['r4', p4]] as const) {
+        const dependent = await makeTask(db, ownerId, projectId, title, TaskStatus.OPEN);
+        await db.taskDependency.create({ data: { taskId: dependent, dependsOnTaskId: prerequisite } });
+      }
+
+      const listed = async (): Promise<Listed> => {
+        const rows = (await projects.list(ownerId)) as unknown as Listed[];
+        return rows.find((row) => row.id === projectId)!;
+      };
+
+      await t.test('a retired prerequisite is judged by where its chain ends', async () => {
+        assert.deepEqual((await listed()).buckets, {
+          running: 0, ready: 4, blocked: 2, awaitingVerification: 0,
+          done: 2, failed: 0, cancelled: 2,
+        });
+      });
+
+      await t.test('the index and the project page report the same seven numbers', async () => {
+        assert.deepEqual((await listed()).buckets, (await projects.panorama(ownerId, projectId)).buckets);
+      });
+    } finally {
+      await db.$disconnect();
+      await identity.end();
+    }
+  });
