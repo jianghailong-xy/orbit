@@ -1,13 +1,20 @@
 import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CheckOutlined, DownOutlined, GlobalOutlined, RightOutlined } from '@ant-design/icons';
-import { App, Dropdown } from 'antd';
+import {
+  CheckOutlined,
+  DownOutlined,
+  GlobalOutlined,
+  LeftOutlined,
+  RightOutlined,
+} from '@ant-design/icons';
+import { App, Button, Dropdown } from 'antd';
 import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty } from './WikiCards';
 import { WikiAim } from './WikiMarks';
 import { WikiSourceList } from './WikiSources';
 import { wikiEntriesQuery, wikiEntryQuery, wikiReviewQuery, wikiSpacesQuery } from '../lib/queries';
+import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import {
   WIKI_ACCEPT_NOTE,
   WIKI_AFTER_RETIRE,
@@ -17,7 +24,9 @@ import {
   WIKI_AUTO_ACCEPT_HINT,
   WIKI_CHALLENGE,
   WIKI_CHALLENGE_NOTE,
+  WIKI_NEXT,
   WIKI_NO_REVIEW,
+  WIKI_PREVIOUS,
   WIKI_REINFORCE,
   WIKI_REINFORCE_NOTE,
   WIKI_REJECT_MENU,
@@ -40,6 +49,7 @@ import {
   wikiComparedWith,
   wikiFieldRows,
   wikiKindWord,
+  wikiOfCount,
   wikiOldest,
   wikiOpPayload,
   wikiProposalsFrom,
@@ -104,6 +114,15 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
     [pending],
   );
   const shown = tab === 'all' ? pending : pending.filter((row) => wikiTabOf(row.op.op) === tab);
+  // The phone shows one card at a time (design §12.1, mock 09): the same cards, the same words, one
+  // per screen, with Previous / Next to move between them — because a phone has no hover, no room
+  // for a queue, and iOS pages the same way, so the two clients read as one product.
+  const phone = useMediaQuery(PHONE_QUERY);
+  const [at, setAt] = useState(0);
+  // Clamped rather than reset: deciding a card shortens the queue under the reader, and landing on
+  // the next one is better than being thrown back to the first.
+  const current = shown.length === 0 ? 0 : Math.min(at, shown.length - 1);
+  const visible = phone ? shown.slice(current, current + 1) : shown;
   const sessions = new Set(changesets.map((changeset) => changeset.sessionId).filter(Boolean));
   const oldest = [...changesets].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))[0]?.createdAt;
 
@@ -151,12 +170,26 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
 
       <div className="rv-cols">
         <div className="rv-list">
+          {phone && shown.length > 1 && (
+            <div className="wk-pager">
+              <Button disabled={current === 0} onClick={() => setAt(current - 1)} icon={<LeftOutlined />}>
+                {WIKI_PREVIOUS}
+              </Button>
+              <span className="pos">
+                {wikiOfCount(current + 1, shown.length)}
+              </span>
+              <Button disabled={current >= shown.length - 1} onClick={() => setAt(current + 1)}>
+                {WIKI_NEXT}
+                <RightOutlined />
+              </Button>
+            </div>
+          )}
           {shown.length === 0 ? (
             <WikiCard title={WIKI_REVIEW_TITLE}>
               <WikiEmpty>{WIKI_NO_REVIEW}</WikiEmpty>
             </WikiCard>
           ) : (
-            shown.map(({ changeset, op }) => (
+            visible.map(({ changeset, op }) => (
               <ReviewCard
                 key={op.id}
                 changeset={changeset}
