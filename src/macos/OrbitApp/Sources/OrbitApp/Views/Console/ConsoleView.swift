@@ -92,11 +92,10 @@ struct ConsoleView: View {
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
-                    // Error, staged attachments, background tray, git bar, composer — web's order
-                    // (`workspace-composer`). The image you just added tops the stack rather than
-                    // sitting between the tray and the composer, where it read as another piece of
-                    // session chrome instead of part of the message about to be sent. The band owns
-                    // the gutter and the gaps; members only say whether they are on screen.
+                    // Error, background tray, git bar, composer — web's order (`workspace-composer`).
+                    // Staged attachments are not a member: they sit inside the composer's card, above
+                    // the text they go out with. The band owns the gutter and the gaps; members only
+                    // say whether they are on screen.
                     ComposerBand {
                         // Errors only, and sticky until the ✕ — this row is in flow, so anything that
                         // comes and goes on a timer here shoves the composer around while the user is
@@ -137,7 +136,6 @@ struct ConsoleView: View {
                                 onDismiss: dismiss)
                                 .padding(.bottom, .composerBandGap)
                         }
-                        ComposerAttachmentsView(console: console)
                         // What this session waits on — a watch, not a process — above the real shells.
                         WatchingCardStack(sessionID: console.sessionID)
                         BackgroundTrayView(procs: console.state.background)
