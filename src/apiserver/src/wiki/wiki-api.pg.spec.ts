@@ -42,6 +42,7 @@ import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { ServiceTokenAuthorizer } from '../runner-api/service-token.authorizer';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiController } from './wiki.controller';
+import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -82,6 +83,9 @@ function boot(): Promise<Harness> {
       controllers: [WikiController, RunnerWikiController],
       providers: [
         { provide: WikiService, useValue: new WikiService(prisma as unknown as PrismaService) },
+        // The two controllers also answer the search route, which is T4's read; this spec exercises
+        // the write path, so it only has to construct.
+        { provide: WikiRetrieval, useValue: new WikiRetrieval(prisma as unknown as PrismaService) },
         { provide: PrismaService, useValue: prisma },
         RunnerAuthGuard,
         JwtAuthGuard,
