@@ -229,7 +229,8 @@ export interface WorkspaceSessionCounts {
    *  The rail's quieter activity mark — work a workspace can be doing with nobody generating in it.
    *  Optional for the same rolling-compatibility reason as `running`. */
   jobs?: number;
-  /** Sessions blocked on an approval — the nav sidebar's per-workspace attention badge. */
+  /** Sessions blocked on an approval — the nav sidebar's per-workspace attention badge. A session
+   *  counted here is in neither `running` nor `jobs`. */
   needsYou: number;
 }
 
