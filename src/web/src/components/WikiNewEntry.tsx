@@ -104,8 +104,10 @@ function NewEntryModal({ spaceId, onClose }: { spaceId: string; onClose: () => v
   );
 }
 
-/** One field of the kind's schema, as the input its type asks for. */
-function SchemaInput({
+/** One field of the kind's schema, as the input its type asks for. Exported because the second place
+ *  an owner writes an entry walks the same schema — Add to Wiki, from a conversation — and two
+ *  walkers is how one kind's fields come to be writable through one door and not the other. */
+export function SchemaInput({
   name,
   schema,
   value,

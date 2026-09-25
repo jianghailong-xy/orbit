@@ -103,8 +103,11 @@ const TAG_LABEL: Record<string, string> = {
   'background-jobs': 'background jobs',
 };
 
-/** The wiki context block, whose line says how much it holds rather than only what it is. */
-const WIKI_CONTEXT_TAG = 'orbit_wiki_context';
+/** The wiki context block, whose line says how much it holds rather than only what it is. Exported
+ *  because the entries inside it are read by a second parser (`lib/wikiContext`), and two spellings
+ *  of one tag is how the row list and the line that names it come to disagree about what a note
+ *  holds. */
+export const WIKI_CONTEXT_TAG = 'orbit_wiki_context';
 
 /** Each name once, in the order first seen, counted where it repeats. */
 function countNames(names: string[]): string {
