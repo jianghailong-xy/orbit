@@ -131,6 +131,34 @@ func withCodexAccountFingerprints(engines []EngineHealthReport, codexUsage *code
 	return out
 }
 
+// signedOut is whether this report says, beyond doubt, that nothing on the engine can run until
+// someone signs in: the CLI's own answer is "no", and so is every account's. "unknown" is not a
+// sign-out, and neither is a Codex whose Default is signed out while another account is signed in.
+func (r EngineHealthReport) signedOut() bool {
+	if r.Auth != "no" {
+		return false
+	}
+	for _, account := range r.Accounts {
+		if account.Auth != "no" {
+			return false
+		}
+	}
+	return true
+}
+
+// signedIn is whether anything on the engine is signed in: the CLI itself, or any Codex account.
+func (r EngineHealthReport) signedIn() bool {
+	if r.Auth == "yes" {
+		return true
+	}
+	for _, account := range r.Accounts {
+		if account.Auth == "yes" {
+			return true
+		}
+	}
+	return false
+}
+
 // engineHealthProbe is the cached snapshot the heartbeat attaches: refreshed on a timer in the
 // background, and on demand after this runner installs or signs in — never on the heartbeat
 // goroutine itself, which must not wait on a wedged CLI.
@@ -139,6 +167,17 @@ type engineHealthProbe struct {
 	snapshot []EngineHealthReport
 	// Serialises refreshes so a forced one during the timer's own run doesn't double the probe.
 	refreshMu sync.Mutex
+	// What a refresh runs: probeEngineHealth, unless a test stands in for the machine's CLIs.
+	probe func() []EngineHealthReport
+	// Told when a refresh finds an engine signed in that the probe last found signed out. A
+	// signed-out engine can be empty in the model catalog (readModelCatalog), so without this the
+	// models of an engine someone just signed into would stay out of the picker until the hourly
+	// refresh. Called on the refreshing goroutine, so it hands its work off rather than doing it.
+	onSignIn func()
+	// The engines whose last conclusive answer was "signed out", kept by refresh under refreshMu.
+	// An "unknown" isn't conclusive — a CLI that wouldn't say this time says nothing about its
+	// login — so it neither ends a sign-out nor starts one.
+	wasSignedOut map[string]bool
 }
 
 func (p *engineHealthProbe) refresh() {
@@ -146,10 +185,49 @@ func (p *engineHealthProbe) refresh() {
 		return
 	}
 	defer p.refreshMu.Unlock()
-	next := probeEngineHealth()
+	probe := p.probe
+	if probe == nil {
+		probe = probeEngineHealth
+	}
+	next := probe()
 	p.mu.Lock()
 	p.snapshot = next
 	p.mu.Unlock()
+	// Only now, so the refresh this asks for already reads the engine as signed in.
+	if p.signedInSinceLastProbe(next) && p.onSignIn != nil {
+		p.onSignIn()
+	}
+}
+
+// signedInSinceLastProbe records each engine's answer and says whether one the probe last found
+// signed out is signed in now.
+func (p *engineHealthProbe) signedInSinceLastProbe(reports []EngineHealthReport) bool {
+	if p.wasSignedOut == nil {
+		p.wasSignedOut = map[string]bool{}
+	}
+	signedIn := false
+	for _, r := range reports {
+		switch {
+		case r.signedOut():
+			p.wasSignedOut[r.Engine] = true
+		case r.signedIn():
+			signedIn = signedIn || p.wasSignedOut[r.Engine]
+			delete(p.wasSignedOut, r.Engine)
+		}
+	}
+	return signedIn
+}
+
+// signedOut is whether the last completed probe found engine signed out (see
+// EngineHealthReport.signedOut). False before the first one finishes: an engine nobody has asked
+// yet isn't known to be anything.
+func (p *engineHealthProbe) signedOut(engine string) bool {
+	for _, r := range p.snapshotNow() {
+		if r.Engine == engine {
+			return r.signedOut()
+		}
+	}
+	return false
 }
 
 // snapshotNow returns the last completed probe, or nil before the first one finishes — which the

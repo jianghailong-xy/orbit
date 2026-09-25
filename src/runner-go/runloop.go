@@ -151,6 +151,96 @@ func coalescingRefresh(refresh func()) func() {
 	}
 }
 
+// catalogRuntime is where one runtime's model list comes from: the engine it belongs to (as the
+// engine probe names it), whether its CLI is on this machine, and how to ask that CLI.
+type catalogRuntime struct {
+	engine    string
+	available func() bool
+	fetch     func(context.Context) ([]ModelInfo, error)
+}
+
+// catalogRuntimes are the runtimes a catalog refresh asks, in order.
+var catalogRuntimes = []catalogRuntime{
+	{providerCodex, codexCLIAvailable, fetchCodexModelCatalog},
+	{providerClaude, claudeCLIAvailable, fetchClaudeModelCatalog},
+	{providerKimi, kimiCLIAvailable, fetchKimiModelCatalog},
+	// A heartbeat catalog is runner-wide, while OpenCode project config is workDir-scoped. Report
+	// only globally available models from a neutral directory; unioning project catalogs would
+	// offer agent A a model that exists only in agent B's checkout. The empty-model picker sentinel
+	// still leaves selection to OpenCode; guarded modes use its global/current choice, while
+	// Auto/Bypass may also opt into project configuration.
+	{providerOpenCode, openCodeCLIAvailable, fetchGlobalOpenCodeModelCatalog},
+}
+
+// models is where c keeps engine's list.
+func (c *ModelCatalog) models(engine string) *[]ModelInfo {
+	switch engine {
+	case providerCodex:
+		return &c.Codex
+	case providerClaude:
+		return &c.Claude
+	case providerKimi:
+		return &c.Kimi
+	case providerOpenCode:
+		return &c.OpenCode
+	}
+	return nil
+}
+
+// readModelCatalog asks every runtime CLI on this machine for its model list, and names the engines
+// that came back empty because they are signed out.
+//
+// A signed-out engine is still asked. Claude Code and Codex read their lists locally and answer
+// whether or not anyone is signed in — measured 2026-09-25 on an empty home, Claude Code 2.1.282's
+// `claude -p "/model opus"` still resolved Opus 5.5 and codex-cli 0.156.1's `codex debug models`
+// still printed every model — and those lists aren't only the engine's own: a configured Anthropic
+// or OpenAI provider runs on the same CLI with its own key, signed out or not, and its picker
+// follows this catalog (modelsFromRuntime).
+//
+// What the sign-out settles is what an empty answer means. Kimi's list is what its sign-in brings
+// (plus any provider imported by hand), so a Kimi nobody signed into has nothing to list — `kimi
+// provider list --json` is `{"providers":{},"models":{}}`. A signed-out engine that comes back empty
+// has said something true rather than failed: it isn't worth a log line on every refresh, and it
+// mustn't be covered over with the list it had while signed in (see mergeModelCatalog). Only the
+// probe's conclusive "no" counts — an engine whose sign-in is unknown, or not probed yet, that can't
+// list its models is a fault, and is logged as one.
+func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut func(engine string) bool, logf func(...interface{})) (*ModelCatalog, map[string]bool) {
+	catalog := &ModelCatalog{}
+	empty := map[string]bool{}
+	for _, rt := range runtimes {
+		if !rt.available() {
+			continue
+		}
+		models, err := rt.fetch(ctx)
+		if len(models) == 0 && signedOut(rt.engine) {
+			empty[rt.engine] = true
+			continue
+		}
+		if err != nil {
+			logf(rt.engine, "model catalog refresh failed:", err)
+			continue
+		}
+		*catalog.models(rt.engine) = models
+	}
+	return catalog, empty
+}
+
+// mergeModelCatalog is the catalog a refresh leaves behind: this round's lists, the last good list of
+// a runtime that failed this round (carryOverModelCatalog), and nothing for an engine that came back
+// empty because it is signed out — the list it had while signed in included, which is the one thing
+// carrying over must not keep. A first round that read nothing reports nothing, as before.
+func mergeModelCatalog(prev, next *ModelCatalog, signedOut map[string]bool) *ModelCatalog {
+	if prev == nil && len(next.Codex) == 0 && len(next.Claude) == 0 && len(next.Kimi) == 0 &&
+		len(next.OpenCode) == 0 {
+		return nil
+	}
+	merged := carryOverModelCatalog(prev, next)
+	for engine := range signedOut {
+		*merged.models(engine) = nil
+	}
+	return merged
+}
+
 // carryOverModelCatalog keeps a provider's last good model list when this round's refresh produced
 // nothing for it. The heartbeat replaces the server's stored catalog wholesale, so a half-failed
 // round — `codex debug models` erroring mid-`codex update`, one CLI briefly off PATH — would
@@ -868,53 +958,23 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// engines asks at 09:38:50 and again at 09:38:58, and a refresh takes tens of seconds to two
 	// minutes. A request that arrives during one is served by one more run after it, so the second
 	// engine's new models are in the list seconds later rather than at the next hourly tick.
+	//
+	// The engine probe (started below) is what tells a signed-out engine's empty list from a failure.
+	engineHealth := &engineHealthProbe{}
 	refreshModelCatalog := coalescingRefresh(func() {
-		catalog := &ModelCatalog{}
-		if codexCLIAvailable() {
-			if models, err := fetchCodexModelCatalog(loopCtx); err != nil {
-				logln("codex model catalog refresh failed:", err)
-			} else {
-				catalog.Codex = models
-			}
-		}
-		if claudeCLIAvailable() {
-			if models, err := fetchClaudeModelCatalog(loopCtx); err != nil {
-				logln("claude model catalog refresh failed:", err)
-			} else {
-				catalog.Claude = models
-			}
-		}
-		if kimiCLIAvailable() {
-			if models, err := fetchKimiModelCatalog(loopCtx); err != nil {
-				logln("kimi model catalog refresh failed:", err)
-			} else {
-				catalog.Kimi = models
-			}
-		}
-		if openCodeCLIAvailable() {
-			// A heartbeat catalog is runner-wide, while OpenCode project config is
-			// workDir-scoped. Report only globally available models from a neutral
-			// directory; unioning project catalogs would offer agent A a model that
-			// exists only in agent B's checkout. The empty-model picker sentinel still
-			// leaves selection to OpenCode; guarded modes use its global/current choice,
-			// while Auto/Bypass may also opt into project configuration.
-			if models, err := fetchGlobalOpenCodeModelCatalog(loopCtx); err != nil {
-				logln("opencode model catalog refresh failed:", err)
-			} else {
-				catalog.OpenCode = models
-			}
-		}
+		catalog, signedOut := readModelCatalog(loopCtx, catalogRuntimes, engineHealth.signedOut, logln)
 		modelSnapshotMu.Lock()
-		if len(catalog.Codex) > 0 || len(catalog.Claude) > 0 || len(catalog.Kimi) > 0 ||
-			len(catalog.OpenCode) > 0 {
-			hbModelCatalog = carryOverModelCatalog(hbModelCatalog, catalog)
-		}
+		hbModelCatalog = mergeModelCatalog(hbModelCatalog, catalog, signedOut)
 		published := hbModelCatalog
 		modelSnapshotMu.Unlock()
 		// Same catalog the heartbeat reports, handed to the running sessions: it carries each
 		// model's context window, which is the denominator they ship with every occupancy reading.
 		publishModelCatalog(published)
 	})
+	// Signing in is the other thing that changes what the catalog should hold: a signed-out engine
+	// can be empty in it, so the probe that finds it signed in — after a sign-in from the web or one
+	// made in a terminal here — has the list re-read now, not at the next hourly tick.
+	engineHealth.onSignIn = func() { go refreshModelCatalog() }
 	// The other way the catalog goes stale: this runner installs a newer engine, whose point is
 	// often a model the old CLI did not have. Every path that updates one ends in updateEngine, so
 	// they all report a version that really moved — the periodic pass, the idle retry, and the Engines
@@ -985,7 +1045,6 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Which engine CLIs this machine has, and whether they're signed in — the Providers page's
 	// "On your runners" section. Probed in the background: it spawns a couple of processes per
 	// engine, so the heartbeat only ever reads the last completed snapshot.
-	engineHealth := &engineHealthProbe{}
 	go engineHealth.run(loopCtx)
 
 	telemetry := newHeartbeatTelemetryProbe(heartbeatTelemetryTimeout, nil)
