@@ -300,6 +300,9 @@ model User {
   /// Persistent observations this account is keeping (migration 0259).
   watches          Watch[]
 
+  /// Public links this account made, ended ones included (migration 0306).
+  shareLinks       ShareLink[]
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -1275,13 +1278,14 @@ model Session {
   // (a per-owner personal ordering). null = not pinned. Toggled via POST/DELETE /sessions/:id/pin.
   // Ordering only — never affects visibility or the runner.
   pinnedAt             DateTime? @map("pinned_at")
-  // ── Public read-only share link ─────────────────────────────────────────────
-  // shareToken is an unguessable token embedded in a public URL (/s/<token>); anyone
-  // with the link can view this session's transcript read-only, no login. null = not
-  // shared. Revoking sets it back to null (old links 404); re-sharing mints a fresh
-  // token. sharedAt records when the current link was minted. Only the transcript is
-  // exposed via the token (see SharedController) — never ownership/billing/runner internals.
+  // ── Public read-only share link (retired) ───────────────────────────────────
+  // Where a session's public link used to live. Migration 0306 carried every token into
+  // `ShareLink` unchanged, and from then on nothing writes or reads these two columns: the link,
+  // its layers, expiry and views are a `share_link` row (share-links/). The session detail's
+  // `shareToken` is read from that row. Kept only until a later migration drops them.
+  /// @deprecated Not written or read since 0306 — see ShareLink.
   shareToken           String?   @unique @map("share_token")
+  /// @deprecated Not written or read since 0306 — see ShareLink.
   sharedAt             DateTime? @map("shared_at")
   // ── A failure that fixes itself → re-send when it will work ─────────────────
   // Two failures say nothing about the work and succeed on a plain re-send: the account's
@@ -1344,6 +1348,8 @@ model Session {
   /// Not what is being watched: a Watch names its targets in `watch_target`, which carries no
   /// foreign key precisely so a deleted target can be recorded as GONE instead of erased.
   observingWatches      Watch[]
+  /// Public links with this session as their root, ended ones included (migration 0306).
+  shareLinks            ShareLink[]
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -1359,6 +1365,53 @@ model Session {
   // The auto-retry sweeper's only query: armed retries that have come due.
   @@index([retryAt])
   @@map("session")
+}
+
+/// A public, read-only link: one root — a Session, a Task or a Project — plus the layers its owner
+/// ticked (docs/share-links-design.md §4, migration 0306). The token in `/s/<token>` is the whole
+/// capability: whoever holds it reads the root and those layers without signing in, through
+/// SharedController, which resolves it here. Three things end what a token opens and all answer the
+/// same 404: `revokedAt` (turned off, or noticed expired), `expiresAt` in the past, and — for a
+/// session root — the session being in the trash, which pauses the link rather than ending it.
+///
+/// Two constraints carry the contract and neither can be spelled here: `share_link_one_root_chk`
+/// (exactly one of the three roots is set) and one partial unique index per root over
+/// `revoked_at IS NULL` (at most one link per root has not ended). An ended row is never revived:
+/// turning sharing on again inserts a new row with a new token.
+model ShareLink {
+  id      String @id @default(uuid(7)) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// 192 random bits, base64url — the shape `session.share_token` had, so 0306 carried those over
+  /// unchanged. Unique over every row, ended ones included.
+  token   String @unique
+
+  sessionId String?  @map("session_id") @db.Uuid
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  taskId    String?  @map("task_id") @db.Uuid
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectId String?  @map("project_id") @db.Uuid
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// The ticked layers: `taskPages`, `commentsAndFiles`, `conversations`, `toolOutput`. A key that is
+  /// absent reads as its default (contract §1), so this records choices, not the defaults.
+  include       Json      @default("{}")
+  /// NULL = never. Lazy: the public door compares it on every read.
+  expiresAt     DateTime? @map("expires_at") @db.Timestamptz(3)
+  /// Set with `revokedReason` when the link ends; both NULL while it has not.
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(3)
+  /// `TURNED_OFF` | `EXPIRED`.
+  revokedReason String?   @map("revoked_reason")
+  /// Opens of the ROOT page (`GET /shared/:token`); pages, attachments and nested pages do not count.
+  viewCount     Int       @default(0) @map("view_count")
+  lastViewedAt  DateTime? @map("last_viewed_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Moves when the owner changes the link — its layers, its expiry, turning it off — and not when
+  /// it is viewed, so the writes that change it set it rather than it being @updatedAt.
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ownerId])
+  @@map("share_link")
 }
 
 // Durable activation/retirement records for runner inbox consumers. A retired row is kept as a
@@ -2006,6 +2059,9 @@ model Project {
   /// `project_task_status_count_sync` triggers on `task` and read by the detail read instead of a
   /// groupBy over this project's rows.
   taskStatusCounts ProjectTaskStatusCount[]
+
+  /// Public links with this project as their root, ended ones included (migration 0306).
+  shareLinks ShareLink[]
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off, cf. `task_id_owner_id_key`.
@@ -3947,6 +4003,8 @@ model Task {
   /// Files the task carries as INPUT to its work (design mocks, specs). Copied into each run's
   /// session at dispatch; cascade-deleted with the task.
   attachments  Attachment[]
+  /// Public links with this task as their root, ended ones included (migration 0306).
+  shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   evidenceDecisions TaskEvidenceDecision[]

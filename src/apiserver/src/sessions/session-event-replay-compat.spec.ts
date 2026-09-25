@@ -86,7 +86,7 @@ test('the public shared transcript applies the same historical replay fence', as
   };
   const service = new SessionsService(prisma as never, {} as never, {} as never);
 
-  const shared = await service.getShared('share-token');
+  const shared = await service.getSharedTranscript(SESSION);
 
   assert.deepEqual(shared.events, []);
   assert.equal(shared.hasMore, false);
@@ -106,7 +106,7 @@ test('a shared transcript event fetched by seq sits behind the same fence', asyn
   };
   const service = new SessionsService(prisma as never, {} as never, {} as never);
 
-  await assert.rejects(service.getSharedEventFull('share-token', 7), /event not found/);
+  await assert.rejects(service.getSharedEventFull(SESSION, 7), /event not found/);
 
   assert.ok(captured);
   assert.match(renderedQuery(captured), /seq = \?[\s\S]*type NOT IN \([?, ]+\)/);
