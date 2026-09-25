@@ -270,13 +270,15 @@ export interface EventPage {
  *  long transcript open at the latest message instead of replaying its whole history over SSE. */
 export const getSessionEventPage = (
   id: string,
-  opts: { tail?: number; before?: number; limit?: number; signal?: AbortSignal },
+  opts: { tail?: number; before?: number; limit?: number; whole?: boolean; signal?: AbortSignal },
 ): Promise<EventPage> => {
   const qs = new URLSearchParams();
   if (opts.tail != null) qs.set('tail', String(opts.tail));
   if (opts.before != null) qs.set('before', String(opts.before));
   if (opts.limit != null) qs.set('limit', String(opts.limit));
-  qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
+  // Clipped like every page the transcript shows, unless `whole`: Download HTML reads the events
+  // unclipped, since a saved file cannot fetch a card's full payload when it is opened.
+  if (!opts.whole) qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
   return api<EventPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
 };
 
@@ -770,13 +772,76 @@ export const armAutoRetry = (sessionId: string, retryAt: Date) =>
   });
 
 // ── Public read-only sharing ──
-// Enable sharing mints (or returns) an unguessable token; the public link is `/s/<token>`.
-// Disable revokes it (the old link 404s). The current token also rides on SessionDetail.shareToken.
-export const enableSessionShare = (sessionId: string) =>
-  api<{ shareToken: string; sharedAt: string }>(`/sessions/${sessionId}/share`, { method: 'POST' });
+// A public link is a `share_link` row of its own: one root (a session, a task or a project), the
+// layers it includes, an expiry, how often it was opened (docs/share-links-design.md §4–§5). The
+// public address is `/s/<token>`. The open link's token also rides on SessionDetail.shareToken.
 
-export const disableSessionShare = (sessionId: string) =>
-  api(`/sessions/${sessionId}/share`, { method: 'DELETE' });
+export type ShareRootKind = 'SESSION' | 'TASK' | 'PROJECT';
+/** The layers a link can turn on or off; which of them a link has depends on its root. Overview is
+ *  not one of them: it is always included. */
+export type ShareLayer = 'taskPages' | 'commentsAndFiles' | 'conversations' | 'toolOutput';
+export type ShareInclude = Partial<Record<ShareLayer, boolean>>;
+/** ACTIVE opens; PAUSED is a session in the Trash (it opens again once restored); ENDED is turned
+ *  off or expired, for good. */
+export type ShareLinkState = 'ACTIVE' | 'PAUSED' | 'ENDED';
+
+export interface ShareLink {
+  id: string;
+  kind: ShareRootKind;
+  token: string;
+  include: ShareInclude;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  viewCount: number;
+  lastViewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  state: ShareLinkState;
+  stateReason: 'TURNED_OFF' | 'EXPIRED' | 'IN_TRASH' | null;
+  /** The root, named and placed: a session root also says where it is filed and when it completed. */
+  root: {
+    id: string;
+    title: string;
+    status: string;
+    lifecycleState?: string;
+    completedAt?: string | null;
+  };
+}
+
+/** How much a session link's layers hold, counted over the whole transcript. */
+export interface SessionShareCounts {
+  messages: number;
+  toolCalls: number;
+}
+
+const SHARE_ROOT_PATH: Record<ShareRootKind, string> = {
+  SESSION: 'sessions',
+  TASK: 'tasks',
+  PROJECT: 'projects',
+};
+
+/** A root's link that has not ended (null when it has none), with its layers' counts. */
+export const getShareLink = (kind: ShareRootKind, id: string) =>
+  api<{ link: ShareLink | null; counts?: SessionShareCounts }>(`/${SHARE_ROOT_PATH[kind]}/${id}/share`);
+
+/** Open the root's link, or change the open one: a field left out is left as it is, and
+ *  `expiresAt: null` is Never. Idempotent. */
+export const putShareLink = (
+  kind: ShareRootKind,
+  id: string,
+  body: { include?: ShareInclude; expiresAt?: string | null },
+) => api<ShareLink>(`/${SHARE_ROOT_PATH[kind]}/${id}/share`, { method: 'PUT', body });
+
+/** Access → Only you. Its token stops opening at once; opening again makes a new one. */
+export const turnOffShareLink = (kind: ShareRootKind, id: string) =>
+  api(`/${SHARE_ROOT_PATH[kind]}/${id}/share`, { method: 'DELETE' });
+
+/** Every link this account has made, ended ones included, newest first (Settings → Shared links). */
+export const listShareLinks = () => api<{ links: ShareLink[] }>('/share-links');
+
+/** Turn off these links in one request; `count` is how many were still open. */
+export const turnOffShareLinks = (shareLinkIds: string[]) =>
+  api<{ count: number }>('/share-links/turn-off', { method: 'POST', body: { shareLinkIds } });
 
 /** One event in a public shared transcript (mirrors the owner SSE payload, sans live state). */
 export interface SharedEvent {
@@ -985,8 +1050,9 @@ export interface SessionDetail {
    *  the checkout while it committed, and what it did about them. Null/absent when it said nothing
    *  (older runners, or nothing worth saying), which reads as "no detail line". */
   commitResultMessage?: string | null;
-  // Public read-only sharing: the unguessable token behind the `/s/<token>` link, or null when
-  // not shared. Set/cleared by enable/disableSessionShare; drives the Share dialog's state.
+  // Public read-only sharing: the token behind the `/s/<token>` link that opens this session now,
+  // or null when none does (never shared, turned off, or past its expiry). Drives the header's
+  // "Shared · Live" and the menu's "Live link"; the Share dialog reads the link itself (getShareLink).
   shareToken?: string | null;
   sharedAt?: string | null;
   completedAt?: string | null;
