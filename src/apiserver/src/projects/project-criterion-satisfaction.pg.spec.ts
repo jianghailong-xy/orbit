@@ -160,6 +160,20 @@ const SERVICE_SPEC = 'src/apiserver/src/projects/project-get-criterion-satisfact
  * reader of this derivation can find that it was.
  */
 const DONE_PROJECTION = 'src/apiserver/src/projects/project-done-derived.ts';
+/**
+ * The third reader that is not a test: a shared project's public page, and a second read endpoint.
+ *
+ * `readPublicProject` draws a project link's Acceptance criteria block for a visitor
+ * (docs/share-links-design.md §7), and that block is all it reads the answer for: each stated
+ * criterion's `satisfied`, and the tasks its `unmet` reasons name, copied field by field into the
+ * public projection and returned. It is `ProjectsService.get`'s answer shown to somebody else, not
+ * a second opinion — `share-links/public-project.pg.spec.ts` asserts the two agree criterion by
+ * criterion, reading the owner's side through `GET /projects/:id` rather than importing this
+ * module, which is why that spec is not named here. A read-only projection and not a gate: nothing
+ * is written on the strength of the answer, and the one thing `readPublicProject` refuses — the 404
+ * of a link whose project is gone — is decided before the answer is read.
+ */
+const PUBLIC_PROJECT = 'src/apiserver/src/share-links/public-project.ts';
 
 /** Every source file that could wire this derivation into something. */
 function sourceFiles(dir: string): string[] {
@@ -610,10 +624,11 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     assert.deepEqual(
       mentions,
       [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC, CRITERION_READY_SPEC,
-        SERVICE, SERVICE_SPEC, DONE_PROJECTION].sort(),
+        SERVICE, SERVICE_SPEC, DONE_PROJECTION, PUBLIC_PROJECT].sort(),
       'the readers of the derivation — the module itself, and every file that imports it — are '
         + 'exactly these, each named above with what it does with the answer: four tests of it, '
-        + 'one read endpoint that serves it, that endpoint’s own test, and — since the owner’s '
+        + 'two read endpoints that serve it (the owner’s project, and a shared project’s public '
+        + 'page), the first one’s own test, and — since the owner’s '
         + '2026-09-08 re-deliberation of 0229 — one projection that folds it into '
         + '`project.status`. Not one of them is a gate: none refuses anybody’s write, and a file '
         + 'arriving here is a consumer somebody has to come and write down');
