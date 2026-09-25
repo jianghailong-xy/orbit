@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>Tasks created here — 停车栏新一行（web）</title>
+<!-- The app's own stylesheet: .bg-tray / .wt-bar / .status-pill below are the real rules, so the
+     new row is drawn with exactly what the Background processes tray beside it is drawn with. -->
+<link rel="stylesheet" href="../../src/web/src/index.css" />
+<style>
+  html, body { height: auto !important; }
+  body { margin: 0; padding: 26px 30px 34px; background: #e9ebef; width: 1540px; box-sizing: border-box;
+         font-family: -apple-system, "Nimbus Sans", "Noto Sans CJK SC", sans-serif; }
+  .anticon { display: inline-flex; align-items: center; line-height: 0; }
+  .anticon svg { width: 1em; height: 1em; fill: currentColor; }
+  h1 { font-size: 19px; font-weight: 650; margin: 0 0 4px; color: #1f2329; }
+  .sub { color: #4a4f57; margin: 0 0 18px; font-size: 13px; line-height: 1.55; max-width: 1180px; }
+  .sub code, .rules code { font-family: "DejaVu Sans Mono", monospace; font-size: 11.5px; background: #dfe2e7; border-radius: 4px; padding: 1px 4px; }
+  .grid { display: grid; grid-template-columns: 740px 740px; gap: 20px; align-items: start; }
+  .cap { font-size: 12.5px; font-weight: 650; margin: 0 0 8px; color: #1f2329; }
+  .cap.before { color: #b3380a; } .cap.after { color: #1a7f37; }
+  .cap span { font-weight: 400; color: #646a73; margin-left: 6px; }
+  /* One slice of the conversation column: the tail of the transcript, the composer band. */
+  .pane { background: var(--bg-base, #fff); border: 1px solid #d5d8dd; border-radius: 10px; padding: 0 20px 12px; overflow: hidden; }
+  .pane .tail { color: #646a73; font-size: 13.5px; line-height: 1.6; padding: 14px 0 6px; height: 44px; overflow: hidden;
+                -webkit-mask-image: linear-gradient(to bottom, transparent, #000 60%); }
+  .pane .workspace-composer { margin-top: 4px; }
+  /* The composer, drawn only as far as the screenshot needs it. */
+  .cbox { display: flex; align-items: center; height: 44px; border: 1px solid var(--border); border-radius: 8px; padding: 0 6px 0 12px; background: #fff; }
+  .cbox .plus { color: #1f2329; font-size: 20px; font-weight: 300; }
+  .cbox .send { margin-left: auto; width: 34px; height: 30px; border-radius: 6px; background: #3370ff; display: flex; align-items: center; justify-content: center; }
+  .cbox .send i { width: 11px; height: 11px; border: 1.5px solid #fff; border-radius: 2px; }
+  .cfoot { display: flex; gap: 22px; font-size: 12px; color: #646a73; padding: 9px 2px 0; }
+  .cfoot .r { margin-left: auto; display: flex; gap: 22px; }
+  /* The change, outlined. */
+  .is-new { outline: 2px dashed #e8590c; outline-offset: 3px; }
+  .new-tag { font-size: 11px; color: #e8590c; font-weight: 650; margin: -2px 0 6px; }
+
+  /* ── The new row: the tray's own shell (.bg-tray / .bg-tray-row), plus what a task list needs. ── */
+  .ct-failed { color: var(--error-solid); }
+  .ct-one { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--brand); }
+  .ct-list { border-top: 1px solid var(--border-subtle); max-height: 320px; overflow: auto; display: flex; flex-direction: column; }
+  .ct-row { display: flex; align-items: center; gap: 8px; min-height: 31px; padding: 0 10px; font-size: 12px; color: var(--text-1); text-decoration: none; }
+  .ct-row + .ct-row { border-top: 1px solid var(--border-subtle); }
+  .ct-row:hover, .ct-row.hover { background: var(--bg-hover); }
+  .ct-pill { flex: none; width: 82px; display: flex; }
+  .ct-row .status-pill { height: 20px; font-size: 11.5px; }
+  .status-pill.queued { animation: none; }
+  .ct-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ct-replaces { color: var(--text-3); }
+  .ct-age { flex: none; color: var(--text-3); }
+  .ct-caret { flex: none; color: var(--text-4); }
+  .ct-foot { display: flex; gap: 18px; padding: 8px 10px; border-top: 1px solid var(--border-subtle); font-size: 12px; }
+  .ct-foot a { color: var(--brand); text-decoration: none; }
+
+  .small { display: flex; flex-direction: column; gap: 16px; }
+  .note { font-size: 12px; color: #646a73; margin: 6px 0 0; line-height: 1.5; }
+  .rules { margin-top: 22px; background: #fff; border: 1px solid #d5d8dd; border-radius: 10px; padding: 14px 18px; display: grid;
+           grid-template-columns: repeat(3, 1fr); gap: 8px 28px; font-size: 12.5px; line-height: 1.6; color: #30343b; }
+  .rules h3 { grid-column: 1 / -1; margin: 0 0 2px; font-size: 13px; }
+  .rules b { color: #1f2329; }
+  .spin { animation: none !important; }
+</style>
+</head>
+<body>
+
+<h1>停车栏新一行：<i>Tasks created here</i>（web · 会话页）</h1>
+<p class="sub">
+  这个会话里 agent 建的任务（<code>task.creator_session_id</code> = 本会话），折叠成一行，放在 Background processes 和分支条之间。
+  外壳直接用 Background processes 的 <code>.bg-tray</code>，状态胶囊用任务列表的 <code>TaskStatusPill</code>，这张图就是用仓库里的 <code>index.css</code> 画的。
+  虚线框 = 新增。
+</p>
+
+<!-- Icons (antd): check-square = the task glyph the Orbit link card uses; console-sql = the tray's own. -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-task" viewBox="64 64 896 896"><path d="M433.1 657.7a31.8 31.8 0 0051.7 0l210.6-292c3.8-5.3 0-12.7-6.5-12.7H642c-10.2 0-19.9 4.9-25.9 13.3L459 584.3l-71.2-98.8c-6-8.3-15.6-13.3-25.9-13.3H315c-6.5 0-10.3 7.4-6.5 12.7l124.6 172.8z"/><path d="M880 112H144c-17.7 0-32 14.3-32 32v736c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V144c0-17.7-14.3-32-32-32zm-40 728H184V184h656v656z"/></symbol>
+  <symbol id="i-console" viewBox="64 64 896 896"><path d="M301.3 496.7c-23.8 0-40.2-10.5-41.6-26.9H205c.9 43.4 36.9 70.3 93.9 70.3 59.1 0 95-28.4 95-75.5 0-35.8-20-55.9-64.5-64.5l-29.1-5.6c-23.8-4.7-33.8-11.9-33.8-24.2 0-15 13.3-24.5 33.4-24.5 20.1 0 35.3 11.1 36.6 27h53c-.9-41.7-37.5-70.3-90.3-70.3-54.4 0-89.7 28.9-89.7 73 0 35.5 21.2 58 62.5 65.8l29.7 5.9c25.8 5.2 35.6 11.9 35.6 24.4.1 14.7-14.5 25.1-36 25.1z"/><path d="M928 140H96c-17.7 0-32 14.3-32 32v496c0 17.7 14.3 32 32 32h380v112H304c-8.8 0-16 7.2-16 16v48c0 4.4 3.6 8 8 8h432c4.4 0 8-3.6 8-8v-48c0-8.8-7.2-16-16-16H548V700h380c17.7 0 32-14.3 32-32V172c0-17.7-14.3-32-32-32zm-40 488H136V212h752v416z"/><path d="M828.5 486.7h-95.8V308.5h-57.4V534h153.2zm-298.6 53.4c14.1 0 27.2-2 39.1-5.8l13.3 20.3h53.3L607.9 511c21.1-20 33-51.1 33-89.8 0-73.3-43.3-118.8-110.9-118.8s-111.2 45.3-111.2 118.8c-.1 73.7 43 118.9 111.1 118.9zm0-190c31.6 0 52.7 27.7 52.7 71.1 0 16.7-3.6 30.6-10 40.5l-5.2-6.9h-48.8L542 491c-3.9.9-8 1.4-12.2 1.4-31.7 0-52.8-27.5-52.8-71.2.1-43.6 21.2-71.1 52.9-71.1z"/></symbol>
+  <symbol id="i-load" viewBox="0 0 1024 1024"><path d="M988 548c-19.9 0-36-16.1-36-36 0-59.4-11.6-117-34.6-171.3a440.45 440.45 0 00-94.3-139.9 437.71 437.71 0 00-139.9-94.3C629 83.6 571.4 72 512 72c-19.9 0-36-16.1-36-36s16.1-36 36-36c69.1 0 136.2 13.5 199.3 40.3C772.3 66 827 103 874 150c47 47 83.9 101.8 109.7 162.7 26.7 63.1 40.2 130.2 40.2 199.3.1 19.9-16 36-35.9 36z"/></symbol>
+</svg>
+
+<template id="tray">
+  <div class="bg-tray"><div class="bg-tray-row">
+    <span class="anticon bg-tray-ico"><svg><use href="#i-console"/></svg></span>
+    <span class="bg-tray-title">Background processes</span>
+    <span class="bg-tray-count">26 total</span>
+    <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+  </div></div>
+</template>
+<template id="branch">
+  <div class="wt-bar"><div class="wt-row wt-row-toggle">
+    <button type="button" class="wt-branch"><span class="wt-branch-ico">⎇</span><span class="wt-branch-name">orbit/opus-5-5-4437dc</span></button>
+    <span class="wt-stat"><span class="wt-add">+32774</span><span class="wt-del">−948</span><span class="wt-files">· 290 files</span></span>
+    <span class="wt-spacer"></span>
+  </div></div>
+</template>
+<template id="composer">
+  <div class="cbox"><span class="plus">+</span><span class="send"><i></i></span></div>
+  <div class="cfoot"><span>Auto</span><span class="r"><span>Opus 5.5</span><span>Max</span><span>Standard</span><span>◔ 65%</span></span></div>
+</template>
+
+<div class="grid">
+  <div>
+    <p class="cap before">改前<span>现在的样子（与你截图同一套条）</span></p>
+    <div class="pane">
+      <div class="tail">…确认卡建好的任务，对话往下走就滚出视野了；要找它只能往上翻，或去 Tasks 页搜标题。</div>
+      <div class="workspace-composer">
+        <div data-use="tray"></div>
+        <div data-use="branch"></div>
+        <div data-use="composer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap after">改后 · 折叠<span>多条时：计数句（和 Background 同一个写法）</span></p>
+    <div class="pane">
+      <div class="tail">…确认卡建好的任务，对话往下走就滚出视野了；要找它只能往上翻，或去 Tasks 页搜标题。</div>
+      <div class="workspace-composer">
+        <div data-use="tray"></div>
+        <div class="bg-tray is-new"><div class="bg-tray-row">
+          <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+          <span class="bg-tray-title">Tasks created here</span>
+          <span class="bg-tray-count">2 running · <span class="ct-failed">1 failed</span> · 4/8 done</span>
+          <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+        </div></div>
+        <div data-use="branch"></div>
+        <div data-use="composer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap after">改后 · 展开<span>点这一行展开；点任务 = 打开任务详情</span></p>
+    <div class="pane">
+      <div class="tail">…确认卡建好的任务，对话往下走就滚出视野了；要找它只能往上翻，或去 Tasks 页搜标题。</div>
+      <div class="workspace-composer">
+        <div data-use="tray"></div>
+        <div class="bg-tray bg-open is-new">
+          <div class="bg-tray-row">
+            <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+            <span class="bg-tray-title">Tasks created here</span>
+            <span class="bg-tray-count">2 running · <span class="ct-failed">1 failed</span> · 4/8 done</span>
+            <span class="wt-spacer"></span><button type="button" class="wt-expand">▾</button>
+          </div>
+          <div class="ct-list">
+            <a class="ct-row"><span class="ct-pill"><span class="status-pill failed"><span class="status-dot"></span>Failed</span></span>
+              <span class="ct-title">iOS 离线空态重做</span><span class="ct-age">3h ago</span><span class="ct-caret">›</span></a>
+            <a class="ct-row hover"><span class="ct-pill"><span class="status-pill running"><span class="anticon"><svg><use href="#i-load"/></svg></span>Running</span></span>
+              <span class="ct-title">未登录的引擎不再探测模型目录、不再每次报错；登录后立即刷新</span><span class="ct-age">2h ago</span><span class="ct-caret">›</span></a>
+            <a class="ct-row"><span class="ct-pill"><span class="status-pill running"><span class="anticon"><svg><use href="#i-load"/></svg></span>Running</span></span>
+              <span class="ct-title">Web：输入框上方加 Tasks created here 一行</span><span class="ct-age">1h ago</span><span class="ct-caret">›</span></a>
+            <a class="ct-row"><span class="ct-pill"><span class="status-pill queued"><span class="status-dot"></span>Queued</span></span>
+              <span class="ct-title">Tasks 页支持按来源会话筛选</span><span class="ct-age">40m ago</span><span class="ct-caret">›</span></a>
+            <a class="ct-row"><span class="ct-pill"><span class="status-pill done"><span class="status-dot"></span>Done</span></span>
+              <span class="ct-title">task.creator_session_id 加索引 + 会话已建任务读接口</span><span class="ct-age">5h ago</span><span class="ct-caret">›</span></a>
+            <a class="ct-row"><span class="ct-pill"><span class="status-pill done"><span class="status-dot"></span>Done</span></span>
+              <span class="ct-title">修复登录重定向循环（重跑） <span class="ct-replaces">· Replaces 修复 token 过期后登录重定向循环</span></span><span class="ct-age">1d ago</span><span class="ct-caret">›</span></a>
+            <a class="ct-row"><span class="ct-pill"><span class="status-pill done"><span class="status-dot"></span>Done</span></span>
+              <span class="ct-title">runner 自更新失败时回滚</span><span class="ct-age">1d ago</span><span class="ct-caret">›</span></a>
+            <a class="ct-row"><span class="ct-pill"><span class="status-pill done"><span class="status-dot"></span>Done</span></span>
+              <span class="ct-title">清理 running_bg_shells 里的幽灵条目</span><span class="ct-age">2d ago</span><span class="ct-caret">›</span></a>
+          </div>
+          <div class="ct-foot"><a>View all in Tasks ›</a><a>Open project ›</a></div>
+        </div>
+        <div data-use="branch"></div>
+        <div data-use="composer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="small">
+    <div>
+      <p class="cap after">只有 1 条时<span>照 Watching 条：直接写任务名 + 它的状态</span></p>
+      <div class="bg-tray is-new"><div class="bg-tray-row">
+        <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+        <span class="bg-tray-title">Tasks created here</span>
+        <span class="ct-one">未登录的引擎不再探测模型目录、不再每次报错；登录后立即刷新</span>
+        <span class="status-pill running" style="height:20px;font-size:11.5px"><span class="anticon"><svg><use href="#i-load"/></svg></span>Running</span>
+        <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+      </div></div>
+      <p class="note">建过任务的会话里，<b>202 / 337 个只建了 1 条</b>——这是最常见的一种，写 “1 running · 0/1 done” 不如直接写名字。</p>
+    </div>
+    <div>
+      <p class="cap after">全部完成后<span>这一行留着，当「这场对话产出了什么」的清单</span></p>
+      <div class="bg-tray is-new"><div class="bg-tray-row">
+        <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+        <span class="bg-tray-title">Tasks created here</span>
+        <span class="bg-tray-count">8/8 done</span>
+        <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+      </div></div>
+      <p class="note">和 Background processes 的 “26 total” 一样：没有在跑的，句子自己就短了，不加别的状态。</p>
+    </div>
+    <div>
+      <p class="cap after">窄窗口（480px）<span>计数句不让位，名字/标题先截断</span></p>
+      <div style="width:480px">
+        <div class="bg-tray is-new"><div class="bg-tray-row">
+          <span class="anticon bg-tray-ico"><svg><use href="#i-task"/></svg></span>
+          <span class="bg-tray-title">Tasks created here</span>
+          <span class="bg-tray-count" style="white-space:nowrap">2 running · <span class="ct-failed">1 failed</span> · 4/8 done</span>
+          <span class="wt-spacer"></span><button type="button" class="wt-expand">▸</button>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="rules">
+  <h3>这一行的规则（实现时照这张表，不另加判断）</h3>
+  <div><b>放哪</b>：Watching → Background processes → <b>Tasks created here</b> → 分支条。两种产出（任务、代码）挨着。<br/>
+       <b>出现</b>：本会话建过 ≥ 1 条任务就出现；全部完成后照样留着。待确认、被拒的提案不进（它们在确认卡和 Needs you 里）。</div>
+  <div><b>计数句</b>：<code>N running</code> · <code>N failed</code>（红）· <code>done/total done</code>。为 0 的段不写。三段都是现成的句子：Background、后台作业、Tasks 标签的进度。<br/>
+       <b>1 条时</b>：写任务名 + 状态胶囊，跟 Watching 条一个做法。</div>
+  <div><b>展开</b>：Failed → Running → Queued → Open → Done → Cancelled，同组新的在前；超过 20 条只列前 20，底部 <code>View all in Tasks ›</code>（Tasks 页要补「按来源会话」筛选）。任务属于项目时多一个 <code>Open project ›</code>。<br/>
+       <b>被接替的任务</b>：这一格显示接替它的那条（它的状态 + <code>Replaces ‹原任务›</code>），不画红色 Failed；计数也按它算，所以胶囊数和计数句永远对得上。</div>
+</div>
+
+<script>
+  // Stamp the shared pieces into each pane, so all four panes draw the same tray / branch / composer.
+  for (const slot of document.querySelectorAll('[data-use]')) {
+    slot.replaceWith(document.getElementById(slot.dataset.use).content.cloneNode(true));
+  }
+  document.title = 'H=' + Math.ceil(document.body.getBoundingClientRect().height);
+</script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>Tasks created here — 停车栏新一行（iPhone）</title>
+<style>
+  /* iPhone console geometry, in points (1px here = 1pt), from the measured screenshots in
+     ios-console-mock-geometry: nav y59–103, transcript from y110, divider, then the band above the
+     composer — each card 30pt tall with an 8pt gap (`.composerBandGap`), composer 52pt r22 at y731,
+     footer line ≈ y799. Cards: RoundedRectangle(8), Color.primary 4% fill, 10% hairline
+     (WorktreeBar.swift / BackgroundTrayView). Fonts: orbitLabel = .footnote 13pt,
+     orbitMeta = .caption2 11pt, orbitMono = footnote monospaced. */
+  :root { --tint: #2E6AFF; --sec: #8A8A8E; --ter: #C5C5C7; --sep: rgba(60,60,67,.29);
+          --blue: #007AFF; --orange: #FF9500; --green: #34C759; --red: #FF3B30; --gray: #8E8E93; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 26px 30px 34px; background: #e9ebef; width: 1480px;
+         font-family: "Nimbus Sans", "Noto Sans CJK SC", sans-serif; color: #000; }
+  .doc { font-family: "Nimbus Sans", "Noto Sans CJK SC", sans-serif; color: #1f2329; }
+  h1 { font-size: 19px; font-weight: 650; margin: 0 0 4px; }
+  .sub { color: #4a4f57; margin: 0 0 18px; font-size: 13px; line-height: 1.55; max-width: 1180px; }
+  .sub code, .why code { font-family: "DejaVu Sans Mono", monospace; font-size: 11.5px; background: #dfe2e7; border-radius: 4px; padding: 1px 4px; }
+  .phones { display: flex; gap: 38px; align-items: flex-start; }
+  .cap { font-size: 12.5px; font-weight: 650; margin: 0 0 8px; }
+  .cap.before { color: #b3380a; } .cap.after { color: #1a7f37; }
+  .cap span { font-weight: 400; color: #646a73; margin-left: 6px; }
+  .bezel { padding: 11px; background: #1c1c1e; border-radius: 66px; box-shadow: 0 1px 0 #000, 0 12px 30px rgba(0,0,0,.18); }
+  .screen { position: relative; width: 393px; height: 852px; border-radius: 55px; overflow: hidden; background: #fff; }
+  .abs { position: absolute; }
+  /* Status bar + nav. */
+  .time { left: 51px; top: 17px; font-size: 17px; font-weight: 600; letter-spacing: -.2px; }
+  .island { left: 134px; top: 11px; width: 125px; height: 37px; border-radius: 20px; background: #000; }
+  .sbar { right: 34px; top: 21px; display: flex; gap: 6px; align-items: center; }
+  .glass { top: 59px; width: 44px; height: 44px; border-radius: 22px; background: rgba(255,255,255,.75);
+           box-shadow: 0 0 0 .5px rgba(0,0,0,.12), 0 4px 14px rgba(0,0,0,.08); display: flex; align-items: center; justify-content: center; }
+  .navtitle { left: 70px; right: 70px; top: 62px; text-align: center; }
+  .navtitle b { display: block; font-size: 16.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .navtitle span { display: block; font-size: 12.5px; color: var(--sec); margin-top: 2px; }
+  /* Transcript, bottom-anchored: whatever the band leaves is what you get to read. */
+  .chat { left: 16px; right: 16px; top: 110px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; gap: 14px; }
+  .chat p { margin: 0; font-size: 17px; line-height: 1.45; }
+  .bubble { align-self: flex-end; max-width: 241px; background: rgb(226,233,254); border-radius: 12px; padding: 6px 12px 3px; font-size: 17px; line-height: 1.45; }
+  .divider { left: 0; right: 0; height: .5px; background: var(--sep); }
+  /* The band's cards. */
+  .card { left: 16px; width: 361px; border-radius: 8px; background: rgba(0,0,0,.04); box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; }
+  .t13 { font-size: 13px; } .semi { font-weight: 600; }
+  .meta { font-size: 11px; color: var(--sec); white-space: nowrap; }
+  .mono { font-family: "DejaVu Sans Mono", monospace; font-size: 12.4px; white-space: nowrap; }
+  .grow { flex: 1 1 auto; min-width: 0; }
+  .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bpill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 6px; background: rgba(0,0,0,.05); box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); }
+  .composer { left: 16px; width: 361px; top: 731px; height: 52px; border-radius: 22px; background: #fafafa; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+              display: flex; align-items: center; padding: 0 8px 0 12px; }
+  .composer .ph { font-size: 17px; color: #b8b8bd; margin-left: 10px; }
+  .send { margin-left: auto; width: 34px; height: 34px; border-radius: 17px; background: var(--tint); display: flex; align-items: center; justify-content: center; }
+  .foot { left: 22px; right: 22px; top: 790px; display: flex; gap: 16px; font-size: 15.5px; color: var(--sec); }
+  .foot .r { margin-left: auto; display: flex; gap: 16px; }
+  .home { left: 129.5px; top: 839px; width: 134px; height: 5px; border-radius: 3px; background: #000; }
+  /* TaskStatusPill (TasksView.swift): capsule, 6pt dot or a mini spinner, caption2, colour at 15%. */
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 99px; font-size: 11px; white-space: nowrap; }
+  .pill i { width: 6px; height: 6px; border-radius: 3px; background: currentColor; }
+  .pill.run { color: var(--blue); background: rgba(0,122,255,.15); }
+  .pill.que { color: var(--orange); background: rgba(255,149,0,.15); }
+  .pill.done { color: #248A3D; background: rgba(52,199,89,.15); }
+  .pill.done i { background: var(--green); }
+  .pill.fail { color: var(--red); background: rgba(255,59,48,.15); }
+  .spin { width: 9px; height: 9px; border-radius: 50%; border: 1.6px solid rgba(0,122,255,.25); border-top-color: var(--blue); }
+  /* The new card's rows. */
+  .list { border-top: .5px solid rgba(60,60,67,.18); height: 170px; overflow: hidden; position: relative; }
+  .trow { display: flex; align-items: center; gap: 8px; height: 31px; padding: 0 12px; }
+  .trow + .trow { border-top: .5px solid rgba(60,60,67,.12); }
+  .trow .pc { flex: none; width: 70px; display: flex; }
+  .trow .age { font-size: 11px; color: var(--sec); flex: none; }
+  .trow .chev { flex: none; }
+  .rep { color: var(--sec); }
+  .more { position: absolute; left: 0; right: 0; bottom: 0; height: 22px; background: linear-gradient(to bottom, rgba(245,245,245,0), rgba(245,245,245,1)); }
+  .tfoot { border-top: .5px solid rgba(60,60,67,.18); height: 32px; display: flex; align-items: center; gap: 18px; padding: 0 10px; font-size: 11px; color: var(--tint); }
+  .new { outline: 2px dashed #e8590c; outline-offset: 3px; }
+  .ann { font-size: 12px; color: #646a73; margin: 10px 4px 0; line-height: 1.5; max-width: 415px; }
+  .ann b { color: #1f2329; }
+  .strip { background: #fff; border-radius: 14px; padding: 14px 16px; width: 393px; }
+  .strip .card { position: static; }
+  .cases { display: flex; gap: 38px; margin-top: 26px; align-items: flex-start; }
+  .why { margin-top: 24px; background: #fff; border: 1px solid #d5d8dd; border-radius: 10px; padding: 14px 18px; display: grid;
+         grid-template-columns: repeat(3, 1fr); gap: 6px 28px; font-size: 12.5px; line-height: 1.6; color: #30343b; }
+  .why h3 { margin: 0 0 4px; font-size: 13px; color: #1f2329; }
+  .why ul { margin: 0; padding-left: 16px; }
+  .why li { margin: 0 0 4px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <!-- SF Symbols, redrawn: terminal, checkmark.square, arrow.triangle.branch, chevrons, ellipsis. -->
+  <symbol id="terminal" viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="11.6" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.2 6.2 6.4 8 4.2 9.8M7.6 10.2h4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="task" viewBox="0 0 16 16"><rect x="1.4" y="1.4" width="13.2" height="13.2" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.6 8.2 7 10.5l4.6-5.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="sf-branch" viewBox="0 0 16 16"><path d="M5 2.5v11M5 9c0-2.6 6-2 6-5.2V2.5M11 2.5l-2 2M11 2.5l2 2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cr" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cd" viewBox="0 0 16 16"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cl" viewBox="0 0 16 16"><path d="M10.5 3 5.5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="dots" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></symbol>
+  <symbol id="up" viewBox="0 0 16 16"><path d="M8 13V3.5M3.8 7.6 8 3.4l4.2 4.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="doc">
+  <h1>停车栏新一行：<i>Tasks created here</i>（iPhone · 会话页）</h1>
+  <p class="sub">
+    原生这一叠条在 <code>ConsoleView.swift</code> 里和 web 同一个顺序：附件 → Watching → Background processes → <b>Tasks created here</b> → 分支条 → 输入框。
+    新卡片用 <code>BackgroundTrayView</code> 的外壳（8pt 圆角、4% 底色、10% 描边、30pt 行高），状态胶囊用任务列表的 <code>TaskStatusPill</code>。虚线框 = 新增；对话区被挤掉多少，三台手机逐点画出来了。
+  </p>
+</div>
+
+<template id="chrome">
+  <div class="abs time">9:41</div>
+  <div class="abs island"></div>
+  <div class="abs sbar">
+    <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="7" width="3" height="4" rx=".8"/><rect x="5" y="5" width="3" height="6" rx=".8"/><rect x="10" y="2.5" width="3" height="8.5" rx=".8"/><rect x="15" y="0" width="3" height="11" rx=".8"/></svg>
+    <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 10.6 5.6 8.1a3.4 3.4 0 0 1 4.8 0zM3.5 6a6.4 6.4 0 0 1 9 0l-1.3 1.3a4.6 4.6 0 0 0-6.4 0zM1.2 3.7a9.6 9.6 0 0 1 13.6 0L13.6 5A7.8 7.8 0 0 0 2.4 5z"/></svg>
+    <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.6" fill="none" stroke="#000" stroke-opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2.2"/><path d="M25 4.4v4.2c.8-.3 1.3-1.1 1.3-2.1s-.5-1.8-1.3-2.1z" fill-opacity=".45"/></svg>
+  </div>
+  <div class="abs glass" style="left:16px"><svg width="20" height="20"><use href="#cl"/></svg></div>
+  <div class="abs glass" style="left:333px"><svg width="20" height="20"><use href="#dots"/></svg></div>
+  <div class="abs navtitle"><b>停车栏显示会话创建的任务</b><span>Opus 5.5 · Max</span></div>
+</template>
+
+<template id="talk">
+  <p>任务详情里有 Created from ‹会话› 这条反向链接，但从会话这边找它建过的任务，三端都没有入口。</p>
+  <p>近 30 天 1,735 个会话里有 300 个建过任务；失败或取消的 108 条里，44 条已经有后继任务接手。</p>
+  <div class="bubble">先评估产品设计合理性</div>
+  <p>评估的结论是可以做：建过任务的交互会话，中位数建 6 条，建完还会接着用 12 小时，确认卡早就滚出去了。</p>
+  <p>它和 Background processes、分支条是同一类东西——这个会话的产出，自己有状态变化。</p>
+  <div class="bubble">出效果图</div>
+  <p>好的，按上面的默认画：放在 Background processes 和分支条之间，全部完成后也留着。</p>
+</template>
+
+<template id="bg">
+  <div class="row">
+    <svg width="12" height="12" style="color:var(--sec)"><use href="#terminal"/></svg>
+    <span class="t13 semi">Background processes</span><span class="meta">26 total</span>
+    <span class="grow"></span><svg width="10" height="10" style="color:var(--sec)"><use href="#cr"/></svg>
+  </div>
+</template>
+
+<template id="branch">
+  <div class="row">
+    <span class="bpill"><svg width="11" height="11" style="color:var(--sec)"><use href="#sf-branch"/></svg><span class="mono">orbit/opus-5…4437dc</span></span>
+    <span class="mono ell grow"><span style="color:#248A3D">+32774</span> <span style="color:var(--red)">−948</span><span style="color:var(--sec)"> · 290 files</span></span>
+  </div>
+</template>
+
+<template id="tasksHead">
+  <svg width="12" height="12" style="color:var(--sec)"><use href="#task"/></svg>
+  <span class="t13 semi" style="white-space:nowrap">Tasks created here</span>
+  <span class="meta">2 running · <span style="color:var(--red)">1 failed</span> · 4/8 done</span>
+  <span class="grow"></span>
+</template>
+
+<template id="bottom">
+  <div class="abs composer">
+    <svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 4v14M4 11h14" stroke="#3c3c43" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span class="ph">Message</span>
+    <span class="send"><svg width="16" height="16"><use href="#up"/></svg></span>
+  </div>
+  <div class="abs foot"><span>Auto</span><span class="r"><span>Opus 5.5</span><span>Max</span><span>65%</span></span></div>
+  <div class="abs home"></div>
+</template>
+
+<div class="phones">
+  <div>
+    <p class="cap before">改前<span>现在：Background + 分支条</span></p>
+    <div class="bezel"><div class="screen">
+      <div data-use="chrome"></div>
+      <div class="abs chat" style="height:526px"><div data-use="talk"></div></div>
+      <div class="abs divider" style="top:644px"></div>
+      <div class="abs card" style="top:656px;height:30px"><div data-use="bg"></div></div>
+      <div class="abs card" style="top:694px;height:30px"><div data-use="branch"></div></div>
+      <div data-use="bottom"></div>
+    </div></div>
+    <p class="ann">对话区 y110–644：<b>534pt</b>。</p>
+  </div>
+
+  <div>
+    <p class="cap after">改后 · 折叠<span>多了一行 30pt + 8pt 间距</span></p>
+    <div class="bezel"><div class="screen">
+      <div data-use="chrome"></div>
+      <div class="abs chat" style="height:488px"><div data-use="talk"></div></div>
+      <div class="abs divider" style="top:606px"></div>
+      <div class="abs card" style="top:618px;height:30px"><div data-use="bg"></div></div>
+      <div class="abs card new" style="top:656px;height:30px">
+        <div class="row"><div data-use="tasksHead"></div><svg width="10" height="10" style="color:var(--sec)"><use href="#cr"/></svg></div>
+      </div>
+      <div class="abs card" style="top:694px;height:30px"><div data-use="branch"></div></div>
+      <div data-use="bottom"></div>
+    </div></div>
+    <p class="ann">对话区 <b>496pt</b>（−38pt，约 −7%）。计数句在 361pt 宽的卡里正好一行；数字再长时让 “Tasks created here” 截断，计数不让位（Watching 条同一个规矩）。</p>
+  </div>
+
+  <div>
+    <p class="cap after">改后 · 展开<span>点这一行；列表最多露 5 行半，里面滚</span></p>
+    <div class="bezel"><div class="screen">
+      <div data-use="chrome"></div>
+      <div class="abs chat" style="height:285px"><div data-use="talk"></div></div>
+      <div class="abs divider" style="top:403px"></div>
+      <div class="abs card" style="top:415px;height:30px"><div data-use="bg"></div></div>
+      <div class="abs card new" style="top:453px;height:233px">
+        <div class="row"><div data-use="tasksHead"></div><svg width="10" height="10" style="color:var(--sec)"><use href="#cd"/></svg></div>
+        <div class="list">
+          <div class="trow"><span class="pc"><span class="pill fail"><i></i>Failed</span></span><span class="t13 grow ell">iOS 离线空态重做</span><span class="age">3h ago</span><svg class="chev" width="9" height="9" style="color:var(--ter)"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="t13 grow ell">未登录的引擎不再探测模型目录、不再每次报错；登录后立即刷新</span><span class="age">2h ago</span><svg class="chev" width="9" height="9" style="color:var(--ter)"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="t13 grow ell">Web：输入框上方加 Tasks created here 一行</span><span class="age">1h ago</span><svg class="chev" width="9" height="9" style="color:var(--ter)"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill que"><i></i>Queued</span></span><span class="t13 grow ell">Tasks 页支持按来源会话筛选</span><span class="age">40m ago</span><svg class="chev" width="9" height="9" style="color:var(--ter)"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill done"><i></i>Done</span></span><span class="t13 grow ell">task.creator_session_id 加索引 + 读接口</span><span class="age">5h ago</span><svg class="chev" width="9" height="9" style="color:var(--ter)"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill done"><i></i>Done</span></span><span class="t13 grow ell">修复登录重定向循环（重跑）<span class="rep"> · Replaces 修复 token 过期后…</span></span><span class="age">1d ago</span><svg class="chev" width="9" height="9" style="color:var(--ter)"><use href="#cr"/></svg></div>
+          <div class="more"></div>
+        </div>
+        <div class="tfoot"><span>View all in Tasks ›</span><span>Open project ›</span></div>
+      </div>
+      <div class="abs card" style="top:694px;height:30px"><div data-use="branch"></div></div>
+      <div data-use="bottom"></div>
+    </div></div>
+    <p class="ann">对话区剩 <b>293pt</b>，所以列表封顶（Background 托盘展开也是 <code style="font-family:DejaVu Sans Mono;font-size:11px">ViewThatFits</code> + 上限）。点一行 = push 到任务详情，条里不放按钮。</p>
+  </div>
+</div>
+
+<div class="cases">
+  <div>
+    <p class="cap after">只有 1 条时<span>照 Watching 条：任务名 + 状态胶囊</span></p>
+    <div class="strip">
+      <div class="card new"><div class="row">
+        <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#task"/></svg>
+        <span class="t13 semi" style="white-space:nowrap">Tasks created here</span>
+        <span class="meta ell grow" style="color:var(--tint)">未登录的引擎不再探测模型目录、不再每次报错；登录后立即刷新</span>
+        <span class="pill run" style="flex:none"><span class="spin"></span>Running</span>
+        <svg width="10" height="10" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+      </div></div>
+    </div>
+    <p class="ann">iPhone 上名字只露 8 个字左右——够认出是哪条，状态胶囊不让位；要看全名点开。</p>
+  </div>
+  <div>
+    <p class="cap after">全部完成后<span>这一行留着</span></p>
+    <div class="strip">
+      <div class="card new"><div class="row">
+        <svg width="12" height="12" style="color:var(--sec)"><use href="#task"/></svg>
+        <span class="t13 semi">Tasks created here</span><span class="meta">8/8 done</span>
+        <span class="grow"></span><svg width="10" height="10" style="color:var(--sec)"><use href="#cr"/></svg>
+      </div></div>
+    </div>
+    <p class="ann">和 “Background processes 26 total” 一样安静：没有在跑的、没有失败的，句子自己就短了。</p>
+  </div>
+</div>
+
+<div class="why">
+  <div>
+    <h3>iOS 系统</h3>
+    <ul>
+      <li>不新造外观：和 Background processes 同一张浮起卡（8pt 圆角、4% 底、发丝边、30pt 行），不用 <code>.bar</code> 材质。</li>
+      <li>字号只用现成 token：标题 footnote semibold，计数 caption2 secondary；图标 <code>checkmark.square</code>，Orbit 链接卡片里任务用的就是它。</li>
+      <li>点行 = 系统 push 到任务详情；展开列表有上限、里面滚，不把对话挤没。</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Orbit 一致性</h3>
+    <ul>
+      <li>状态词和颜色 = 任务列表的 <code>TaskStatusPill</code>，同一个任务在哪都是同一个词。</li>
+      <li>计数句全是现成句子：<code>N running</code>（Background）、<code>N failed</code>（后台作业）、<code>4/8 done</code>（Tasks 标签进度）。</li>
+      <li>1 条时写名字、展开底部 <code>View all in Tasks ›</code>——照 Watching 条（<code>Manage in Watches ›</code>）。标题对上任务详情的 <code>Created from ‹会话›</code>。</li>
+    </ul>
+  </div>
+  <div>
+    <h3>协调性</h3>
+    <ul>
+      <li>三端同一顺序、同一文案（web <code>WorkspaceView</code> 与原生 <code>ConsoleView</code>），两种产出（任务、代码）挨着。</li>
+      <li>被接替的任务显示接替者（它的状态 + <code>Replaces ‹原任务›</code>），计数也按它算——胶囊数和计数句对得上，不会假红。</li>
+      <li>待确认 / 被拒的提案不进这行（在确认卡和 Needs you 里）；项目会话多一个 <code>Open project ›</code>，项目全貌留给项目页。</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  for (const slot of document.querySelectorAll('[data-use]')) {
+    slot.replaceWith(document.getElementById(slot.dataset.use).content.cloneNode(true));
+  }
+  document.title = 'H=' + Math.ceil(document.body.getBoundingClientRect().height);
+</script>
+</body>
+</html>
