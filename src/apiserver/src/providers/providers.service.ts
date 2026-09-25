@@ -58,8 +58,8 @@ function poolMemberRefusal(row: {
   }
 }
 
-/** What a pool is read with, in the order the provider lists use. The key and the endpoint are here only
- *  to ask each member's credential for its quota (poolViews): no view built from this carries them. */
+/** A pool as its owner reads it: the providers in it, keyless and endpointless, in the order the
+ *  provider lists use. */
 const POOL_SELECT = {
   id: true,
   slug: true,
@@ -72,12 +72,25 @@ const POOL_SELECT = {
       { provider: { createdAt: 'asc' } },
       { providerId: 'asc' },
     ],
+    select: { provider: { select: { id: true, slug: true, label: true } } },
+  },
+} satisfies Prisma.ProviderPoolSelect;
+
+function poolView({ members, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
+  return { ...pool, members: members.map((member) => member.provider) };
+}
+
+/** The same pools, read with what asking each member's credential for its quota takes (poolViews). The key
+ *  and the endpoint are selected for that and nothing else: no view built from this carries them. Only the
+ *  list reads it — a write answers with the membership it wrote, and never asks after a quota. */
+const POOL_QUOTA_SELECT = {
+  ...POOL_SELECT,
+  members: {
+    ...POOL_SELECT.members,
     select: {
       provider: {
         select: {
-          id: true,
-          slug: true,
-          label: true,
+          ...POOL_SELECT.members.select.provider.select,
           presetSlug: true,
           enabled: true,
           ownerId: true,
@@ -90,7 +103,7 @@ const POOL_SELECT = {
   },
 } satisfies Prisma.ProviderPoolSelect;
 
-type PoolRow = Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>;
+type PoolRow = Prisma.ProviderPoolGetPayload<{ select: typeof POOL_QUOTA_SELECT }>;
 
 /**
  * Where one member of a pool stands, in the order the claim reads a member: a refused key and a disabled
@@ -341,12 +354,13 @@ export class ProvidersService {
     return { ok: true };
   }
 
-  /** The caller's account pools, each with the providers in it and where each of them stands. */
+  /** The caller's account pools, each with the providers in it and where each of them stands — the one
+   *  pool read that asks after quota (poolViews). */
   async listPools(ownerId: string) {
     const rows = await this.prisma.providerPool.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'asc' },
-      select: POOL_SELECT,
+      select: POOL_QUOTA_SELECT,
     });
     return this.poolViews(ownerId, rows);
   }
@@ -368,8 +382,7 @@ export class ProvidersService {
       }),
     );
     this.publishChanged(ownerId, pool.id);
-    const [view] = await this.poolViews(ownerId, [pool]);
-    return view;
+    return poolView(pool);
   }
 
   /** Put one of the caller's providers into one of their pools. Adding a member again changes nothing. */
@@ -500,8 +513,7 @@ export class ProvidersService {
   private async getScopedPool(ownerId: string, id: string) {
     const pool = await this.prisma.providerPool.findFirst({ where: { id, ownerId }, select: POOL_SELECT });
     if (!pool) throw new NotFoundException('pool not found');
-    const [view] = await this.poolViews(ownerId, [pool]);
-    return view;
+    return poolView(pool);
   }
 
   /**

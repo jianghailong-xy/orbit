@@ -73,7 +73,7 @@ test('account pools against PostgreSQL', { skip, concurrency: 1, timeout: 300_00
   // What every stored credential is encrypted under; any value does in a throwaway database.
   process.env.PROVIDER_SECRET_KEY ??= 'provider-pool-pg-spec';
   const realtime = { publishForUser: () => undefined, publishForAllUsers: () => undefined };
-  // A pool reads back with each member's quota; nothing here is about quota, so every member has none.
+  // The pool list reads each member's quota; nothing here is about quota, so every member has none.
   const planUsage = { snapshot: () => null, refused: () => false };
   const service = new ProvidersService(prisma as unknown as PrismaService, realtime as never, planUsage as never);
 
@@ -133,7 +133,13 @@ test('account pools against PostgreSQL', { skip, concurrency: 1, timeout: 300_00
     const home = await connect(alice, 'Home', subscriptionToken());
     const pool = await service.createPool(alice, { label: 'Claude accounts', providerIds: [work.id, home.id] });
     assert.deepEqual(memberIds(pool), sorted([work.id, home.id]));
-    assert.deepEqual(await service.listPools(alice), [pool], 'the list reads back exactly what the write returned');
+    // The list says more than the write — where each member stands (provider-pool-usage.pg.spec.ts) — and
+    // everything the write returned it says the same.
+    const listed = (await service.listPools(alice)).map(({ resetsAt: _resetsAt, members, ...rest }) => ({
+      ...rest,
+      members: members.map(({ id, slug, label }) => ({ id, slug, label })),
+    }));
+    assert.deepEqual(listed, [pool], 'the list reads back exactly what the write returned');
     assert.deepEqual(await service.listPools(bob), [], 'and to its owner only');
     assert.deepEqual(
       await memberRows(pool.id),
