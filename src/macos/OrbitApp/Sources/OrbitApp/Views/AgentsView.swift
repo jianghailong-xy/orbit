@@ -971,7 +971,7 @@ struct NewSessionView: View {
                             .buttonStyle(.plain)
                             .disabled(agent.runnerId == nil)
                         } else if let blocker = currentProviderChoice.unavailable {
-                            // An account pool none of whose accounts can take work: no runner fixes
+                            // An account pool the server says cannot run at all: no runner fixes
                             // that, so the line only says why — in the picker row's own words.
                             Text(blocker)
                                 .font(.callout).foregroundStyle(.secondary).lineLimit(2)

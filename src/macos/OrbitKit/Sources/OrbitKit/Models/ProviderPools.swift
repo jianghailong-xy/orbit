@@ -21,8 +21,8 @@ public enum PoolMemberState: String, Codable, Sendable, CaseIterable {
     case available = "AVAILABLE"
     /// It runs, but reports no 5-hour window: last in line, which is not the same as idle.
     case noQuota = "NO_QUOTA"
-    /// Forward-compatibility floor: a state this build does not know. It counts as unable to take
-    /// work (`ProviderPools.canTakeWork`), as it does on web, where only the three named states do.
+    /// Forward-compatibility floor: a state this build does not know. Nothing here reads it as spent,
+    /// and whether its pool can run at all is the server's to say (`ProviderPool.unavailable`).
     case unknown = "UNKNOWN"
 
     public init(from decoder: Decoder) throws {
@@ -89,14 +89,20 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
     /// Set only while every member that can run is spent: the EARLIEST of their resets, since one
     /// account freeing up is enough for work to continue.
     public let resetsAt: String?
+    /// Set only when no member can run at all, and no reset will change that — none in it, or each
+    /// one disabled, refused by the endpoint, or one the pool would not admit today: why, in a few
+    /// words ("No accounts", "No account can run"). The server refuses to start or switch a session
+    /// onto such a pool, or to pin a task to it. A pool whose members are only spent never carries it.
+    public let unavailable: String?
     public let members: [PoolMember]
 
     public init(id: String, slug: String, label: String, resetsAt: String? = nil,
-                members: [PoolMember] = []) {
+                unavailable: String? = nil, members: [PoolMember] = []) {
         self.id = id
         self.slug = slug
         self.label = label
         self.resetsAt = resetsAt
+        self.unavailable = unavailable
         self.members = members
     }
 
@@ -106,6 +112,9 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
         slug = try c.decode(String.self, forKey: .slug)
         label = try c.decodeIfPresent(String.self, forKey: .label) ?? slug
         resetsAt = try c.decodeIfPresent(String.self, forKey: .resetsAt)
+        // A reason in a shape this build cannot read is no reason to lose the pool — and no reason.
+        let reason = (try? c.decodeIfPresent(String.self, forKey: .unavailable)) ?? nil
+        unavailable = reason?.isEmpty == false ? reason : nil
         members = try c.decodeIfPresent([LossyDecodable<PoolMember>].self, forKey: .members)?
             .compactMap(\.value) ?? []
     }
