@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// WHERE AN EXCEPTION CARD IS DRAWN — the sibling of `PromotionReceiptPlacementTests`, and the same
+/// WHERE AN EXCEPTION CARD IS DRAWN — the sibling of `PromotionPlacementTests`, and the same
 /// complaint one card over.
 ///
 /// An item that became the owner's was a delivered card, and a delivered card anchors where it
@@ -138,10 +138,22 @@ final class ExceptionCardPlacementTests: XCTestCase {
     /// The exception rule is for the two cards whose moment IS the item's own: the merge a person is
     /// asked to approve still arrives the way a question does — what it is about happened before the
     /// read found it — so it anchors where it arrived and this change did not move it.
+    ///
+    /// ONE OF ITS FOUR STATES IS NOT A QUESTION, and has a moment of its own like the two above: a
+    /// candidate a check BLOCKED is delivered at `decided_at` rather than at arrival
+    /// (`DeliveryAnchor.promotion`, added 2026-09-24 — `PromotionPlacementTests`). The arrival
+    /// anchor below is the one this switch hands back for a candidate still asking.
     func testAMergeApprovalStillAnchorsWhereItArrived() {
         let items = transcript()
         XCTAssertEqual(DeliveryAnchor.onArrival(of: .promotionApproval(promotionID: "pr-1"),
                                                 items: items),
                        "i3")
+        // The new rule agrees, for the state that is still a question: it is not a second rule.
+        let asking = ProjectPromotionView(
+            promotionId: "pr-1", state: .ready, sourceRef: "refs/heads/project/34ODo",
+            sourceSha: "58f3a4711d0c", upstreamRef: "refs/heads/main",
+            askedAt: "2026-09-21T09:25:00.000Z", recheckedAt: nil, decidedAt: nil, merged: nil)
+        XCTAssertEqual(DeliveryAnchor.promotion(asking, items: items),
+                       .onArrival(afterItemID: "i3"))
     }
 }

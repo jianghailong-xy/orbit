@@ -26,6 +26,23 @@ final class ModelsCodableTests: XCTestCase {
         XCTAssertEqual(ev.payload, .null)
     }
 
+    /// The instant a check blocked a promotion — the moment the conversation draws that card at
+    /// (`DeliveryAnchor.promotion`), and the one field of this view a hand-written decoder could
+    /// silently drop. `GET /projects/:id/promotions/current`, contract §3.6.
+    func testBlockedPromotionCarriesTheInstantItWasBlocked() throws {
+        let json = #"{"promotionId":"pr-1","state":"BLOCKED","sourceRef":"refs/heads/orbit/runner-web-714027","sourceSha":"58f3a4711d0c","upstreamRef":"refs/heads/main","askedAt":"2026-09-24T02:41:42.218Z","decidedAt":"2026-09-24T02:41:42.218Z","merged":null}"#
+        let view = try JSONDecoder().decode(ProjectPromotionView.self, from: Data(json.utf8))
+        XCTAssertEqual(view.state, .blocked)
+        XCTAssertEqual(view.decidedAt, "2026-09-24T02:41:42.218Z")
+
+        // And a server older than the field is "no moment" rather than a decode failure: the card is
+        // then delivered by arrival, which is what every end did before 2026-09-24.
+        let older = try JSONDecoder().decode(
+            ProjectPromotionView.self,
+            from: Data(#"{"promotionId":"pr-1","state":"BLOCKED","sourceRef":"refs/heads/main"}"#.utf8))
+        XCTAssertNil(older.decidedAt)
+    }
+
     func testEnumRawValuesMatchWireStrings() {
         XCTAssertEqual(RunStatus.awaitingInput.rawValue, "AWAITING_INPUT")
         XCTAssertEqual(SessionRunState.succeeded.rawValue, "SUCCEEDED")

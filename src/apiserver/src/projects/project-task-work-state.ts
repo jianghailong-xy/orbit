@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { manualRunnableTaskSql } from '../tasks/manual-runnable-task-sql';
+import { everyPrerequisiteDoneOrRetiredSql } from '../tasks/task-dependencies';
 import {
   latestLiveVerificationCheckIdSql,
   verificationCheckPassedSql,
@@ -205,7 +206,12 @@ async function readTaskWorkStates(
   prisma: PrismaService,
   where: Prisma.Sql,
 ): Promise<Map<string, ProjectTaskWorkStateFields>> {
-  const state = Prisma.raw(projectTaskWorkStateSql('t'));
+  // Narrowed as the project index narrows it: the dependency graph hands this up to 50,000 ids, and
+  // on the 109,875-task project the READY lane's walk was 3.5s of the 4.5s this read took for them.
+  // The guard is a superset of READY, so every lane reads what it read before.
+  const state = Prisma.raw(projectTaskWorkStateSql('t', {
+    readyCandidates: everyPrerequisiteDoneOrRetiredSql('t'),
+  }));
   const verificationState = Prisma.raw(projectTaskVerificationStateSql());
   const latestVerifier = Prisma.raw(latestLiveVerificationCheckIdSql('t'));
   const verifierPassed = Prisma.raw(verificationCheckPassedSql('verifier_task', 't'));

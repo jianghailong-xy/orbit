@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// WHERE A MERGE'S RECORD IS DRAWN — the one thing about it that was still wrong on the clients
+/// WHERE A PROMOTION'S CARD IS DRAWN — the one thing about it that was still wrong on the clients
 /// while the browser had already been fixed.
 ///
 /// The account owner, on the iOS build (2026-09-21), read this in a session:
@@ -19,10 +19,19 @@ import XCTest
 /// MERGED rows newest first, each carrying its own `mergedSha`/`mergedAt`, and drawing the record
 /// where it happened (`ProjectPromotionReceipt`, anchored by `decisionReceiptAnchor`).
 ///
-/// These tests are the Linux-runnable half of the same fix on this client: WHERE a record lands, that
-/// an unplaceable one is not drawn at all, and the wire from the console and the card to both. Layout
-/// is what the beta and the owner's screenshot are for; ORDER is what this file settles.
-final class PromotionReceiptPlacementTests: XCTestCase {
+/// The same defect came back on the other state that is not a question, and it was read off the
+/// browser this time (2026-09-24): `orbit/runner-web-714027 can’t merge into main yet` sat under the
+/// newest message of a conversation whose block had happened nine hours and eleven messages earlier.
+/// A BLOCKED candidate carries its own moment too — `decided_at`, the instant the check refused it —
+/// and both ends now draw it there: web's `promotionRecordMoment` (BLOCKED → `decidedAt`, MERGED →
+/// `merged.at`) and `DeliveryAnchor.promotion` here, for the half whose placement is a delivery
+/// rather than a record.
+///
+/// These tests are the Linux-runnable half of those fixes on this client: WHERE a record lands, where
+/// the blocked card lands, that an unplaceable one is not dropped, and the wire from the console and
+/// the card to all of it. Layout is what the beta and the owner's screenshot are for; ORDER is what
+/// this file settles.
+final class PromotionPlacementTests: XCTestCase {
 
     // MARK: the fixture
 
@@ -37,6 +46,27 @@ final class PromotionReceiptPlacementTests: XCTestCase {
             commitsAhead: 7, filesChanged: 18, taskIds: tasks,
             askedAt: "2026-09-21T09:00:00.000Z", recheckedAt: nil,
             merged: .init(sha: sha, at: stamp))
+    }
+
+    /// The candidate a check blocked, as the read serves one: state D, its `decided_at` on the row,
+    /// and its own branch rather than a project's — the account owner's own, 2026-09-24.
+    private func blocked(_ promotionID: String = "pr-2", at stamp: String?,
+                         source: String = "refs/heads/orbit/runner-web-714027")
+        -> ProjectPromotionView {
+        ProjectPromotionView(
+            promotionId: promotionID, state: .blocked,
+            sourceRef: source, sourceSha: "58f3a4711d0c", upstreamRef: "refs/heads/main",
+            commitsAhead: 7, filesChanged: 18, taskIds: ["t1"],
+            askedAt: stamp, recheckedAt: nil, decidedAt: stamp, merged: nil)
+    }
+
+    /// The candidate still asking — the state whose placement this rule must NOT move.
+    private func asking(_ promotionID: String = "pr-3") -> ProjectPromotionView {
+        ProjectPromotionView(
+            promotionId: promotionID, state: .ready,
+            sourceRef: "refs/heads/project/34ODo", sourceSha: "58f3a4711d0c",
+            upstreamRef: "refs/heads/main", commitsAhead: 7, filesChanged: 18, taskIds: ["t1"],
+            askedAt: "2026-09-21T09:25:00.000Z", recheckedAt: nil, decidedAt: nil, merged: nil)
     }
 
     private func item(_ id: String, at stamp: String) -> TranscriptItem {
@@ -183,6 +213,55 @@ final class PromotionReceiptPlacementTests: XCTestCase {
         XCTAssertFalse(line.contains("1f2e3d4"), "that is the other merge's commit: \(line)")
     }
 
+    // MARK: (e) the candidate a check blocked
+
+    /// The row the console delivers for the candidate itself: the card's own address, placed by the
+    /// rule under test.
+    private func approval(_ view: ProjectPromotionView,
+                          items: [TranscriptItem]) -> DeliveredDecisionCard {
+        DeliveredDecisionCard(kind: .promotionApproval(promotionID: view.promotionId),
+                              placement: DeliveryAnchor.promotion(view, items: items))
+    }
+
+    /// The blocked card is drawn where the block HAPPENED — the instant the check refused it — and
+    /// `i3`, which arrived after that, stays BELOW it. That is the whole difference from the rule it
+    /// had: anchored by arrival, the card sits under the newest message instead.
+    func testABlockedCandidateIsDrawnWhereItWasBlockedAndNotAtTheTail() {
+        let items = transcript()
+        let view = blocked(at: "2026-09-21T09:30:00.000Z")
+
+        XCTAssertEqual(PromotionCards.blockedAt(view), "2026-09-21T09:30:00.000Z")
+        XCTAssertEqual(DeliveryAnchor.promotion(view, items: items), .at("2026-09-21T09:30:00.000Z"))
+        XCTAssertEqual(rows(items: items, cards: [approval(view, items: items)]),
+                       ["i1", "i2", "promotion-pr-2", "i3", "transcript-bottom"])
+    }
+
+    /// A candidate still ASKING has no moment of its own, and keeps the rule every question has: it
+    /// arrives where the read found it. Ninety-nine of these are ordinary; the hundredth is the one
+    /// that must not walk up the conversation when main moves under its check.
+    func testACandidateStillAskingIsDeliveredWhereItArrived() {
+        let items = transcript()
+        XCTAssertEqual(PromotionCards.blockedAt(asking()), nil)
+        XCTAssertEqual(DeliveryAnchor.promotion(asking(), items: items),
+                       .onArrival(afterItemID: "i3"))
+        XCTAssertEqual(rows(items: items, cards: [approval(asking(), items: items)]),
+                       ["i1", "i2", "i3", "promotion-pr-3", "transcript-bottom"])
+    }
+
+    /// And a stamp nothing can parse is not a moment: the card trails the tail rather than going
+    /// nowhere at all — the fallback `exception` keeps too, and for the same reason (a card dropped
+    /// for a clock this build cannot read is worse than one in the wrong place), and the case a
+    /// server older than `decided_at` leaves the reader in.
+    func testABlockedCandidateWithNoReadableStampTrailsTheTailRatherThanGoingNowhere() {
+        let items = transcript()
+        for view in [blocked(at: nil), blocked(at: "some time last Tuesday")] {
+            XCTAssertEqual(DeliveryAnchor.promotion(view, items: items),
+                           .onArrival(afterItemID: "i3"))
+            XCTAssertEqual(rows(items: items, cards: [approval(view, items: items)]),
+                           ["i1", "i2", "i3", "promotion-pr-2", "transcript-bottom"])
+        }
+    }
+
     // MARK: the wire — the read the record is drawn from
 
     private enum WiringError: Error, CustomStringConvertible {
@@ -286,8 +365,23 @@ final class PromotionReceiptPlacementTests: XCTestCase {
         XCTAssertTrue(written.contains("if stage == .merged {"), written)
         XCTAssertTrue(written.contains("close(.promotionApproval(promotionID: current.promotionId))"),
                       "a candidate that has merged keeps its card at the tail: \(written)")
-        XCTAssertTrue(written.contains("deliver(.promotionApproval(promotionID: current.promotionId))"),
+        XCTAssertTrue(written.contains("deliver(.promotionApproval(promotionID: current.promotionId),"),
                       "and a candidate that is still asking must still be delivered: \(written)")
+    }
+
+    /// AND THE BLOCKED ONE IS DELIVERED AT ITS OWN MOMENT, which is what the two tests above cannot
+    /// see: the rule decides nothing unless the console asks it, and the console is compiled only by
+    /// the macOS and iOS jobs. Delivered by arrival — the line this replaces — the card sits at the
+    /// bottom of the pane, which is the report this section exists for.
+    func testTheConsoleDeliversABlockedCandidateAtItsOwnMoment() throws {
+        let console = try source(Self.consolePath)
+        let site = try section(console, from: "let current = try await api.currentPromotion",
+                               to: "        } catch {")
+        let written = statements(site).joined(separator: " ")
+        XCTAssertTrue(
+            written.contains("placement: DeliveryAnchor.promotion(current, items: state.items)"),
+            "the blocked candidate is delivered by arrival, so it lands at the tail of whatever "
+            + "conversation reads it: \(written)")
     }
 
     /// The row reaches the screen: the switch dispatches it, the card draws that merge's own commit

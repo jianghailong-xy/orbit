@@ -364,6 +364,12 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
+		if getString(args, "result") == "ALREADY_MERGED" {
+			if err := checkAlreadyMergedSource(getString(args, "sourceSha"), getString(args, "targetBranch"),
+				getString(args, "targetShaBefore"), getString(args, "targetShaAfter")); err != nil {
+				return toolResult(err.Error(), true)
+			}
+		}
 		body := map[string]interface{}{}
 		copyIfPresent(body, args, "result", "sourceSha", "targetBranch", "sourceBranch",
 			"targetShaBefore", "targetShaAfter", "rebaseBaseSha", "conflicts")
@@ -2259,7 +2265,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"the same merge twice is a no-op: the second call returns the first receipt. Give " +
 				"FULL 40-character object names — an abbreviated SHA is refused, because it resolves " +
 				"against a repository that has since gained objects and can silently come to mean a " +
-				"different commit. `rebaseBaseSha` is the field people skip and the one that decides " +
+				"different commit. Result ALREADY_MERGED has a precondition, checked here before " +
+				"anything is sent: `sourceSha` must already be in the target — `git merge-base " +
+				"--is-ancestor` in the repository this runs in, against `targetShaAfter`, else " +
+				"`targetShaBefore`, else `origin/<targetBranch>`. The receipt is refused when it is " +
+				"not, and when git cannot tell (fetch first, or run from inside the repository). " +
+				"Work that landed by cherry-pick or rebase is a DIFFERENT commit on the target: name " +
+				"that commit, never the original branch tip. A receipt's sourceSha goes into every " +
+				"dependent task's dependency closure, and one the target does not contain keeps them " +
+				"refused DEPENDENCY_BASE_NOT_LANDED, because a receipt cannot be taken back. " +
+				"`rebaseBaseSha` is the field people skip and the one that decides " +
 				"whether the tests that passed were about this tree: omit it only if the source was " +
 				"genuinely not rebased. This is not an orchestration power and needs no orchestration " +
 				"grant: it records work that already happened, inside your own tenant.",
@@ -2273,7 +2288,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"enum":        []string{"MERGED", "ALREADY_MERGED", "CONFLICT", "ERROR"},
 					"description": "MERGED moved the target. ALREADY_MERGED is a RESULT, not a no-op — it is the answer when the target already contained this work, which is the external fast-forward case and every re-run. CONFLICT names the paths in `conflicts`; ERROR is everything else.",
 				},
-				"sourceSha":       map[string]interface{}{"type": "string", "description": "The full 40-character tip that was merged."},
+				"sourceSha":       map[string]interface{}{"type": "string", "description": "The full 40-character tip that was merged. For ALREADY_MERGED, a commit the target contains: after a cherry-pick or rebase, the commit on the target that carries the work, not the original branch tip."},
 				"targetBranch":    map[string]interface{}{"type": "string", "description": "The branch it was merged into."},
 				"sourceBranch":    map[string]interface{}{"type": "string", "description": "Defaults to the session's own recorded branch."},
 				"targetShaBefore": map[string]interface{}{"type": "string", "description": "The target tip before the merge."},

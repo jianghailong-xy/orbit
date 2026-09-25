@@ -4,6 +4,7 @@ import { RunStatus } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
 import { TasksService } from './tasks.service';
 import { recordingQueryRaw } from './query-raw-test-helper';
+import { everyPrerequisiteDoneOrRetiredSql } from './task-dependencies';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 
@@ -174,6 +175,11 @@ test('runnable filter is applied before pagination with the same rules as the Ru
     );
     assert.match(sql, /t\.completion_policy = 'MANUAL'::task_completion_policy/);
     assert.match(sql, /aggregate_child\.parent_task_id = t\.id/);
+    // The guard changes no row. It keeps the walk off every row with an unfinished prerequisite;
+    // without it the owner-wide badge walked 82k rows and took 7.4s.
+    const guard = sql.indexOf(everyPrerequisiteDoneOrRetiredSql('t'));
+    assert.notEqual(guard, -1, 'the Ready predicate asks the prerequisite guard');
+    assert.ok(guard < sql.indexOf('task_dependency_tail_id'), 'before the walk it is there to spare');
   }
   const [page, badge] = raw.statements;
   assert.match(page.text, /ORDER BY t\.created_at DESC, t\.id DESC/);

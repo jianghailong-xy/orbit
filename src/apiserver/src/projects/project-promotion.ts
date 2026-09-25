@@ -316,6 +316,7 @@ export function promotionView(row: PromotionRow, facts: PromotionFacts): Project
     askedAt: row.state === 'CHECKING' ? null : row.updatedAt,
     recheckedAt: row.recheckedAt,
     recheck: facts.recheck,
+    decidedAt: row.decidedAt,
     merged: row.mergedSha && row.mergedAt
       ? {
         sha: row.mergedSha,
