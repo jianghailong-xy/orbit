@@ -1942,8 +1942,9 @@ export class RunnerApiController {
     }
     // Reclaim never mutates lifecycle/lease ownership. The runner takes each row over with an
     // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed request
-    // cannot retire a generation activated from a newer response. The only write below is an
-    // unset-only model snapshot, which prevents a rolling-upgrade session from drifting again.
+    // cannot retire a generation activated from a newer response. The only writes below are an
+    // unset-only model snapshot, which prevents a rolling-upgrade session from drifting again, and
+    // the account-pool member a pool session is rebuilt on, recorded as the claim records it.
     const watchRollout = currentWatchRollout();
     const out: ReclaimSession[] = [];
     for (const s of reclaimable) {
@@ -1961,16 +1962,17 @@ export class RunnerApiController {
       const declared = s.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
-      // scope mirrors the claim path: a personal provider resolves only for its owner's sessions.
+      // scope mirrors the claim path: a personal provider resolves only for its owner's sessions,
+      // and an account pool is rebuilt on the member the claim would choose, not the runner's login.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
       const customRow = declaredIsBuiltin
         ? null
-        : await this.prisma.modelProvider.findFirst({
+        : ((await this.prisma.modelProvider.findFirst({
             where: {
               slug: declared!,
               OR: [{ ownerId: null }, { ownerId: s.ownerId }],
             },
-          });
+          })) ?? (await this.queue.resolvePoolMember(this.prisma, s, declared!)));
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
           declaredProvider: declared,
@@ -3091,6 +3093,10 @@ export class RunnerApiController {
    * Resolved here rather than stored on the turn: the injected environment carries the provider's
    * decrypted key, and `conversation_turn.content` is neither encrypted nor short-lived. The queued
    * turn names the provider; this reads the session as it stands now and builds the rest.
+   *
+   * A switch onto one of the owner's account pools re-spawns on the member the claim would choose,
+   * recorded as the claim records it (QueueService.resolvePoolMember) — through `tx`, which holds this
+   * session's row. Resolved as a plain slug, it would come up on the runner's own login.
    */
   private async reloadProviderEnv(
     tx: Prisma.TransactionClient,
@@ -3107,10 +3113,12 @@ export class RunnerApiController {
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {
+        id: true,
         ownerId: true,
         model: true,
         provider: true,
         providerBuiltin: true,
+        poolMemberProviderId: true,
         usesRuntimeDefaultModel: true,
         workspace: { select: { model: true, env: true, codexAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
@@ -3119,12 +3127,12 @@ export class RunnerApiController {
     if (!session) return undefined;
     const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
       ? null
-      : await tx.modelProvider.findFirst({
+      : ((await tx.modelProvider.findFirst({
           where: {
             slug: session.provider!,
             OR: [{ ownerId: null }, { ownerId: session.ownerId }],
           },
-        });
+        })) ?? (await this.queue.resolvePoolMember(tx, session, session.provider!)));
     const exec = resolveProviderExec({
       declaredProvider: session.provider,
       declaredProviderBuiltin: session.providerBuiltin,

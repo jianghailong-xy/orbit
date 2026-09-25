@@ -12,9 +12,11 @@ function makeService(
   lastProvider: string | null = 'claude',
   configuredRows: Array<{ slug: string; runtime?: string }> = [],
   lastProviderBuiltin = true,
+  pools: Array<{ slug: string; ownerId: string }> = [],
 ) {
   const creates: Array<Record<string, unknown>> = [];
   const providerQueries: unknown[] = [];
+  const poolQueries: unknown[] = [];
   const workspaceChanges: Array<[string, string, boolean]> = [];
   const prisma = {
     workspace: {
@@ -37,6 +39,13 @@ function makeService(
         providerQueries.push(args);
         const where = (args as { where: { slug: string } }).where;
         return configuredRows.find((r) => r.slug === where.slug) ?? null;
+      },
+    },
+    providerPool: {
+      findFirst: async (args: unknown) => {
+        poolQueries.push(args);
+        const where = (args as { where: { slug: string; ownerId: string } }).where;
+        return pools.find((p) => p.slug === where.slug && p.ownerId === where.ownerId) ?? null;
       },
     },
     session: {
@@ -63,6 +72,7 @@ function makeService(
     service: new SessionsService(prisma, queue, realtime),
     creates,
     providerQueries,
+    poolQueries,
     workspaceChanges,
   };
 }
@@ -170,6 +180,44 @@ test('a seeded configured provider is looked up for the runtime it borrows', asy
     enabled: true,
     OR: [{ ownerId: null }, { ownerId: 'owner-1' }],
   });
+});
+
+/**
+ * An account pool has no ModelProvider row: it dispatches on whichever of its members the claim
+ * picks, every one a Claude subscription. So it borrows Claude — the session gets Claude's
+ * pre-generated id — and only the caller's own pools count.
+ */
+test("one of the caller's own account pools is accepted and borrows Claude; another owner's is refused", async () => {
+  const pools = [
+    { slug: 'claude-accounts', ownerId: 'owner-1' },
+    { slug: 'their-accounts', ownerId: 'owner-2' },
+  ];
+  const fixture = makeService('claude', [], true, pools);
+  await fixture.service.create('owner-1', {
+    prompt: 'Fix the login timeout',
+    title: 'Fix login',
+    workspaceId: 'workspace-1',
+    provider: 'claude-accounts',
+  });
+
+  assert.equal(fixture.creates[0].provider, 'claude-accounts');
+  assert.equal(fixture.creates[0].providerBuiltin, false);
+  assert.equal(typeof fixture.creates[0].runtimeSessionId, 'string');
+  assert.deepEqual((fixture.poolQueries[0] as { where: unknown }).where, {
+    slug: 'claude-accounts',
+    ownerId: 'owner-1',
+  });
+
+  await assert.rejects(
+    fixture.service.create('owner-1', {
+      prompt: 'Fix the login timeout',
+      title: 'Fix login',
+      workspaceId: 'workspace-1',
+      provider: 'their-accounts',
+    }),
+    /provider not available/,
+  );
+  assert.equal(fixture.creates.length, 1);
 });
 
 test('an unknown or unreachable provider slug is rejected, not silently ignored', async () => {

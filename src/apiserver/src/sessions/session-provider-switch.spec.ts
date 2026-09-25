@@ -38,10 +38,17 @@ const providerRow = (over: Partial<ProviderRow> & { slug: string }): ProviderRow
   ...over,
 });
 
+/** An account pool, by the slug it dispatches under and the owner it belongs to. */
+interface PoolRow {
+  slug: string;
+  ownerId: string;
+}
+
 /** A session row plus the providers that exist, wired into the tx shape updateConfig uses. */
 function harness(
   session: Record<string, unknown>,
   providers: ProviderRow[] = [],
+  pools: PoolRow[] = [],
 ): {
   service: SessionsService;
   updated: () => Record<string, unknown>;
@@ -74,6 +81,10 @@ function harness(
         providers.find(
           (p) => p.slug === where.slug && (where.enabled === undefined || p.enabled),
         ) ?? null,
+    },
+    providerPool: {
+      findFirst: async ({ where }: { where: PoolRow }) =>
+        pools.find((p) => p.slug === where.slug && p.ownerId === where.ownerId) ?? null,
     },
     conversationTurn: {
       findUnique: async () => null,
@@ -164,6 +175,47 @@ test('a provider the caller cannot dispatch with is refused', async () => {
     () => service.updateConfig(ownerId, id, { provider: 'never-configured' }),
     /provider not available/,
   );
+});
+
+// A pool has no row of its own: the reload that re-spawns the engine resolves it to a member
+// (RunnerApiController.reloadProviderEnv). Only the owner's own pools resolve at all.
+test("one of the caller's own account pools is a legal target, and another owner's is refused", async () => {
+  const pools = [
+    { slug: 'claude-accounts', ownerId },
+    { slug: 'their-accounts', ownerId: '44444444-4444-4444-8444-444444444444' },
+  ];
+  const { service, updated, reloads } = harness(
+    { provider: 'anthropic', providerBuiltin: false, model: 'claude-opus-5' },
+    [providerRow({ slug: 'anthropic' })],
+    pools,
+  );
+
+  await service.updateConfig(ownerId, id, { provider: 'claude-accounts' });
+
+  assert.equal(updated().provider, 'claude-accounts');
+  assert.equal(updated().providerBuiltin, false);
+  // Its members are Claude subscriptions, so the session keeps the Claude model it runs.
+  assert.equal(updated().model, 'claude-opus-5');
+  assert.equal(JSON.parse(reloads()[0].content as string).provider, 'claude-accounts');
+
+  await assert.rejects(
+    () => service.updateConfig(ownerId, id, { provider: 'their-accounts' }),
+    /provider not available/,
+  );
+});
+
+test('a codex session cannot switch onto an account pool, which runs on Claude', async () => {
+  const { service, reloads } = harness(
+    { provider: 'codex', providerBuiltin: true, model: 'gpt-5.5' },
+    [],
+    [{ slug: 'claude-accounts', ownerId }],
+  );
+
+  await assert.rejects(
+    () => service.updateConfig(ownerId, id, { provider: 'claude-accounts' }),
+    /codex session cannot switch to a provider that runs on claude/,
+  );
+  assert.equal(reloads().length, 0);
 });
 
 test('a target that maintains its own model list restarts at its default', async () => {

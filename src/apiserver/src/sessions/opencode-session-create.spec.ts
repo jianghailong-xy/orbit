@@ -21,6 +21,8 @@ test('creating an OpenCode session does not preseed a Claude runtime id', async 
       { workspace_id: 'workspace-1', provider: AgentProvider.OPENCODE, provider_builtin: false },
     ],
     modelProvider: { findFirst: async () => null },
+    // Nor does any account pool of the owner's.
+    providerPool: { findFirst: async () => null },
     session: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         createdData = data;

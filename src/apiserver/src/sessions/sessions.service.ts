@@ -142,6 +142,7 @@ import {
   normalizeRuntimeProvider,
 } from '../common/runtime-provider';
 import {
+  accountPoolRuntime,
   execRuntime,
   isBuiltinProvider,
   resolveProviderExec,
@@ -766,8 +767,11 @@ export class SessionsService {
           where: { slug: dto.provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
           select: { runtime: true },
         });
-        if (!configured) throw new BadRequestException('provider not available');
-        borrowedRuntime = configured.runtime;
+        // …or one of the caller's own account pools, which the claim resolves to a member.
+        borrowedRuntime = configured
+          ? configured.runtime
+          : await accountPoolRuntime(this.prisma, ownerId, dto.provider);
+        if (!configured && !borrowedRuntime) throw new BadRequestException('provider not available');
       }
     } else if (!providerBuiltin) {
       // Inherited from the workspace, so it hasn't been looked up yet. A row that has since been
@@ -777,7 +781,9 @@ export class SessionsService {
         where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
         select: { runtime: true },
       });
-      borrowedRuntime = configured?.runtime ?? null;
+      borrowedRuntime = configured
+        ? configured.runtime
+        : await accountPoolRuntime(this.prisma, ownerId, provider);
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
     // A mode the target machine cannot run at all: Bypass on a runner deployed as root, which
@@ -6784,7 +6790,11 @@ export class SessionsService {
             OR: [{ ownerId: null }, { ownerId: session.ownerId }],
           },
         });
-    if (!providerBuiltin && !targetRow) {
+    // One of the owner's own account pools has no row: the claim and the reload resolve it to the
+    // member they choose, whose model space is Claude's own.
+    const poolRuntime =
+      providerBuiltin || targetRow ? null : await accountPoolRuntime(tx, session.ownerId, requested);
+    if (!providerBuiltin && !targetRow && !poolRuntime) {
       throw new BadRequestException('provider not available');
     }
     const from = execRuntime({
@@ -6792,11 +6802,13 @@ export class SessionsService {
       declaredProviderBuiltin: session.providerBuiltin,
       customRow: currentRow,
     });
-    const to = execRuntime({
-      declaredProvider: requested,
-      declaredProviderBuiltin: providerBuiltin,
-      customRow: targetRow,
-    });
+    const to =
+      poolRuntime ??
+      execRuntime({
+        declaredProvider: requested,
+        declaredProviderBuiltin: providerBuiltin,
+        customRow: targetRow,
+      });
     if (from !== to) {
       throw new BadRequestException(
         `a ${from} session cannot switch to a provider that runs on ${to}`,

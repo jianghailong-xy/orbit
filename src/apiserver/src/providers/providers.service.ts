@@ -118,6 +118,9 @@ export class ProvidersService {
    * a browser picks providers by clicking a row, but an agent has to type the string, and until
    * this list there was no way to learn it other than guessing and being refused. Keyless and
    * endpointless, like listPublic.
+   *
+   * The caller's own account pools are listed too, by name alone: which members a pool holds, and
+   * their keys, are nothing a caller needs to dispatch with it.
    */
   async listUsable(ownerId: string): Promise<UsableProvider[]> {
     const rows = await this.prisma.modelProvider.findMany({
@@ -139,6 +142,11 @@ export class ProvidersService {
         followsPreset: true,
       },
     });
+    const pools = await this.prisma.providerPool.findMany({
+      where: { ownerId },
+      orderBy: { createdAt: 'asc' },
+      select: { slug: true, label: true },
+    });
     return [
       // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
       ...Object.values(AgentProvider).map((slug) => ({ slug, runtime: slug, builtin: true })),
@@ -149,6 +157,9 @@ export class ProvidersService {
         const { presetSlug, followsPreset, ...view } = withPreset(row);
         return { ...view, builtin: false };
       }),
+      // A pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own —
+      // so, like a built-in engine, it names no model list of its own.
+      ...pools.map((pool) => ({ ...pool, runtime: AgentProvider.CLAUDE, builtin: false })),
     ];
   }
 
