@@ -233,7 +233,8 @@ describe('the Share dialog on a session', { timeout: 60_000 }, () => {
     const preview = [...dialog().querySelectorAll<HTMLAnchorElement>('.share-dialog-foot a')].find(
       (a) => a.textContent?.includes('Preview'),
     );
-    expect(preview?.getAttribute('href')).toBe(`${window.location.origin}/s/${TOKEN}`);
+    // The owner's own look is flagged, so the link does not count it as a visit.
+    expect(preview?.getAttribute('href')).toBe(`${window.location.origin}/s/${TOKEN}?preview=1`);
     expect(preview?.getAttribute('target')).toBe('_blank');
   });
 

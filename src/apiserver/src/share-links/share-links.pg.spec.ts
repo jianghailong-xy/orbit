@@ -10,7 +10,7 @@
  *   (3) an expired link and a session in the trash answer exactly what a turned-off link answers,
  *       status and body; restoring the session opens its link again;
  *   (4) hard-deleting a task or a project deletes its links;
- *   (5) only the root page counts a view;
+ *   (5) only the root page counts a view, and not when it is the owner's Preview (`?preview=1`);
  *   (6) another account can neither read nor change any of it;
  *   (7) the old `POST/DELETE /sessions/:id/share` and the session detail's `shareToken` behave as
  *       they did;
@@ -326,11 +326,12 @@ test('share links: one row per link, an owner interface for three roots, one 404
     task: { conversations: true },
     project: { taskPages: false, conversations: true },
   };
-  /** What the owner reads for a root with no link. A session also counts its layers — these roots
-   *  have no events, so nothing (case 10 counts a transcript that has some). */
+  /** What the owner reads for a root with no link. A session and a task also count their layers —
+   *  these roots hold nothing yet (case 10 counts a transcript that has some; public-task.pg.spec a
+   *  task that has comments, files and runs). */
   const UNSHARED = {
     session: { link: null, counts: { messages: 0, toolCalls: 0 } },
-    task: { link: null },
+    task: { link: null, counts: { comments: 0, files: 0, transcripts: 0 } },
     project: { link: null },
   };
 
@@ -376,8 +377,15 @@ test('share links: one row per link, an owner interface for three roots, one 404
       assert.equal(open.status, 200, `${kind}: ${open.text}`);
       assert.equal(open.json.kind, kind.toUpperCase());
       if (kind !== 'session') {
-        assert.deepEqual(open.json.root, { id: pub(id), title: `A ${kind} to share`, status: 'OPEN', publicId: pub(id) });
         assert.deepEqual(Object.keys(open.json).sort(), ['include', 'kind', 'root', 'sharedAt']);
+      }
+      if (kind === 'project') {
+        assert.deepEqual(open.json.root, { id: pub(id), title: `A ${kind} to share`, status: 'OPEN', publicId: pub(id) });
+      }
+      if (kind === 'task') {
+        // The task page itself — its fields and its layers — is public-task.pg.spec's subject.
+        const { id: rootId, title, status } = open.json.root;
+        assert.deepEqual({ rootId, title, status }, { rootId: pub(id), title: `A ${kind} to share`, status: 'OPEN' });
       }
 
       // Off: the token stops opening, and the row says why.
@@ -571,6 +579,13 @@ test('share links: one row per link, an owner interface for three roots, one 404
     assert.deepEqual(below.map((a) => a.status), [200, 200, 200, 200, 200], below.map((a) => a.text).join(' | '));
     assert.deepEqual(await count(), once, 'a request below the root page counted a view');
 
+    // The owner's Preview (the dialog's Preview ↗ opens `/s/<token>?preview=1`) is its owner looking,
+    // not a visitor: the root page, whole, without a view.
+    const previewed = await visit(token, '?preview=1');
+    assert.equal(previewed.status, 200, previewed.text);
+    assert.equal(previewed.json.title, 'Counted');
+    assert.deepEqual(await count(), once, 'the owner\'s Preview counted a view');
+
     // The root page again, and one that answers 404 — which is nobody's view.
     assert.equal((await visit(token, '?limit=1')).status, 200);
     assert.equal((await count()).views, 2);
@@ -586,6 +601,9 @@ test('share links: one row per link, an owner interface for three roots, one 404
     const taskToken = (await owner('PUT', `/tasks/${pub(counted)}/share`, {})).json.token;
     await visit(taskToken);
     assert.equal((await rowByToken(taskToken))!.view_count, 1);
+    // …and its Preview does not.
+    assert.equal((await visit(taskToken, '?preview=1')).status, 200);
+    assert.equal((await rowByToken(taskToken))!.view_count, 1, 'the owner\'s Preview of a task counted a view');
   });
 
   await t.test('(6) another account can neither read nor change any of it', async () => {

@@ -257,9 +257,24 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     expect(open7.updates).toBe(
       `Live · until ${new Date(OPEN.expiresAt!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
     );
-    // A task's link can be copied and turned off here; its settings open once tasks have the dialog.
+    // A task's link has the same three: tasks have the dialog too.
     expect(task).toMatchObject({ where: 'Task · Done', chips: ['Overview', 'Comments', 'Conversations'] });
-    expect(task.actions).toEqual(['Copy', 'Turn off']);
+    expect(task.actions).toEqual(['Copy', 'Settings', 'Turn off']);
+  });
+
+  it('a task row’s Settings opens the Share dialog on that task', async () => {
+    serve(LINKS);
+    vi.mocked(getShareLink).mockResolvedValue({ link: TASK, counts: { comments: 3, files: 0, transcripts: 1 } });
+    await open();
+
+    const row = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
+      (r) => r.querySelector('.shared-link-title')?.textContent === TASK.root.title,
+    );
+    await click([...row!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
+
+    await vi.waitFor(() => expect(document.body.querySelector('.ant-modal.share-dialog')).not.toBeNull());
+    expect(getShareLink).toHaveBeenCalledWith('TASK', TASK.root.id);
+    expect(document.body.querySelector('.ant-modal.share-dialog .ant-modal-title')?.textContent).toBe('Share task');
   });
 
   it('Settings opens the Share dialog on that link’s session', async () => {
