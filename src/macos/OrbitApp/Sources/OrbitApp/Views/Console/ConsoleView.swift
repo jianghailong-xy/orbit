@@ -26,8 +26,9 @@ struct ConsoleView: View {
     // mirroring how web's console header reads `selected` off the cached session list; macOS shows
     // that status in the in-transcript `statusBar` instead.
     @Environment(AppModel.self) private var appModel
-    #if os(iOS)
+    /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
+    #if os(iOS)
     /// Tapping the nav-bar title renames the session (web double-clicks its header title). Seeded
     /// from the session's own title — not `SessionHeader.title`, whose agent-name fallback would
     /// otherwise be typed in as if it were the name.
@@ -230,13 +231,24 @@ struct ConsoleView: View {
                 .accessibilityLabel("Share session")
             }
         }
+        .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
+        #else
+        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
+        // `.primaryAction` there, as the project and task pages' menus do.
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showShare = true } label: {
+                    Label("Share session", systemImage: "square.and.arrow.up")
+                }
+                .help("Share a read-only link to this session")
+            }
+        }
+        #endif
         .sheet(isPresented: $showShare) {
             if let baseURL = appModel.baseURL {
                 ShareSheet(sessionID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)
             }
         }
-        .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
-        #endif
     }
 }
 
