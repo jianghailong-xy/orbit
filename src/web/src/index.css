@@ -16363,15 +16363,11 @@ button.chat-jump-start:hover {
 a.wkctx-title:hover { text-decoration: underline; }
 .wkctx-foot { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
 
-/* A reply plus the row of actions under it, as one column — the user bubble's `.chat-user-wrap`,
-   on the other side. The wrapper is what keeps the row reachable: hovering it covers the few
-   pixels between the reply and the row, which the row's own hover could not. */
-.wk-msg-wrap { display: flex; flex-direction: column; margin: 8px 0; }
-.wk-msg-wrap > .chat-msg { margin: 0; }
-
 /* The row under an assistant reply: the copy button the user bubble already had, plus Add to Wiki
    and the reply's time. Revealed on hover like the user bubble's, and for the same reason — it is
-   a set of actions on a message, not part of reading it. */
+   a set of actions on a message, not part of reading it. It lives INSIDE the reply's own box (see
+   AssistantBubble): the reply is a plain block, so the row is drawn under its text, and hovering
+   the text the row belongs to is what reveals it. */
 .wk-msg-meta {
   display: flex;
   align-items: center;
@@ -16383,7 +16379,7 @@ a.wkctx-title:hover { text-decoration: underline; }
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-.wk-msg-wrap:hover .wk-msg-meta,
+.chat-msg:hover > .wk-msg-meta,
 .wk-msg-meta:focus-within { opacity: 1; pointer-events: auto; }
 .wk-addwiki {
   display: inline-flex;
