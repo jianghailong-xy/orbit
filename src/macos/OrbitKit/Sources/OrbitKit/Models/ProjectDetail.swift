@@ -220,6 +220,32 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
 
 // MARK: - GET /projects/:id/integration
 
+/// One integration job in flight, as the Work overview card's live line reads it.
+///
+/// `taskTitle` is nil for the kinds that land no single task — a promotion of the project's own
+/// branch, a merge check — because the title is a fact only the task's row has and inventing one for
+/// those would name work that is not what is being pushed.
+public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
+    public let taskTitle: String?
+    /// `RUNNING` while the combined-tree checks run, `QUEUED` while the job waits its turn.
+    public let state: String
+    /// What "for how long" counts from: the claim for a running job, the enqueue for a queued one.
+    public let startedAt: String
+
+    public init(taskTitle: String? = nil, state: String, startedAt: String) {
+        self.taskTitle = taskTitle
+        self.state = state
+        self.startedAt = startedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        taskTitle = try c.decodeIfPresent(String.self, forKey: .taskTitle)
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? "QUEUED"
+        startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt) ?? ""
+    }
+}
+
 /// The integration line plus what the queue has done with it — the facts the page's line row draws.
 public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     public let line: IntegrationLine?
@@ -233,10 +259,14 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     public let queuedCount: Int
     /// `PASSING`, `FAILING` or `UNKNOWN` (no finished check — never a failure).
     public let mergeCheckOnTip: String
+    /// The OLDEST job those two counts count, described; nil when there is none. What the Work
+    /// overview card's live landing line is drawn from.
+    public let inFlight: ProjectIntegrationInFlight?
 
     public init(line: IntegrationLine? = nil, ref: String? = nil, upstreamRef: String? = nil,
                 commitsAheadOfUpstream: Int? = nil, lastUpstreamSyncAt: String? = nil,
-                integratingCount: Int = 0, queuedCount: Int = 0, mergeCheckOnTip: String = "UNKNOWN") {
+                integratingCount: Int = 0, queuedCount: Int = 0, mergeCheckOnTip: String = "UNKNOWN",
+                inFlight: ProjectIntegrationInFlight? = nil) {
         self.line = line
         self.ref = ref
         self.upstreamRef = upstreamRef
@@ -245,6 +275,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         self.integratingCount = integratingCount
         self.queuedCount = queuedCount
         self.mergeCheckOnTip = mergeCheckOnTip
+        self.inFlight = inFlight
     }
 
     public init(from decoder: Decoder) throws {
@@ -257,6 +288,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         integratingCount = try c.decodeIfPresent(Int.self, forKey: .integratingCount) ?? 0
         queuedCount = try c.decodeIfPresent(Int.self, forKey: .queuedCount) ?? 0
         mergeCheckOnTip = try c.decodeIfPresent(String.self, forKey: .mergeCheckOnTip) ?? "UNKNOWN"
+        inFlight = try c.decodeIfPresent(ProjectIntegrationInFlight.self, forKey: .inFlight)
     }
 }
 

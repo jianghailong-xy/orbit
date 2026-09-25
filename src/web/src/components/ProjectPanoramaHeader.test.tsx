@@ -3,10 +3,13 @@ import { fileURLToPath, URL } from 'node:url';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ProjectIntegrationView } from '@orbit/shared';
 import {
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
+  landingClock,
+  landingLine,
   stalledOnReady,
   type ProjectPanorama,
 } from './ProjectPanoramaHeader';
@@ -232,3 +235,177 @@ describe('ProjectPanoramaHeader', () => {
     expect(html).not.toContain('Running');
   });
 });
+
+// The read behind the landing row, spelled out rather than imported from the component: a key the
+// component changes unilaterally has to break these tests.
+const integrationKey = ['project', PROJECT, 'integration'];
+
+/**
+ * `GET /projects/:id/integration`, as the card reads it. Every field the shared declaration carries,
+ * because the row is drawn from the same payload the page's own line row is — a stub with only
+ * `inFlight` would keep passing while the two readers disagreed about the rest of it.
+ */
+const integration = (over: Partial<ProjectIntegrationView> = {}): ProjectIntegrationView => ({
+  line: 'PROJECT_BRANCH',
+  lineAbsentReason: null,
+  ref: `project/${PROJECT}`,
+  upstreamRef: 'main',
+  source: 'EXPLICIT',
+  locked: true,
+  startedAt: '2026-09-25T13:46:00Z',
+  mergeCheckCommand: 'npm test',
+  mergeCheckCommandAbsentReason: null,
+  mergeCheckTimeoutSeconds: 900,
+  escalationSeconds: 3600,
+  commitsAheadOfUpstream: 1,
+  commitsAheadOfUpstreamAbsentReason: null,
+  lastUpstreamSyncAt: null,
+  lastUpstreamSyncAbsentReason: 'NEVER_SYNCED',
+  integratingCount: 1,
+  queuedCount: 0,
+  mergeCheckOnTip: 'PASSING',
+  // The report this card was specified against: T2, claimed at 13:58:00.
+  inFlight: { taskTitle: 'T2 wiki 契約、迁移与共享类型', state: 'RUNNING', startedAt: '2026-09-25T13:58:00Z' },
+  ...over,
+});
+
+describe('the landing row', () => {
+  // The clock is read off `now`, so the render has to be told what time it is: the whole point of
+  // the row is the number, and "about a minute" is not what the mock says.
+  const at = (iso: string) => vi.setSystemTime(new Date(iso));
+  afterEach(() => vi.useRealTimers());
+
+  function renderAt(qc: QueryClient, iso: string) {
+    vi.useFakeTimers();
+    at(iso);
+    return render(qc);
+  }
+
+  function seeded(view: ProjectIntegrationView = integration()) {
+    const qc = newClient();
+    qc.setQueryData(panoramaKey, panorama());
+    qc.setQueryData(integrationKey, view);
+    return qc;
+  }
+
+  it('draws the approved checking line: the ring spins, and the clock counts seconds', () => {
+    // 80 seconds after the claim — the mock's own 1m 20s.
+    const html = renderAt(seeded(), '2026-09-25T13:59:20Z');
+
+    expect(html).toContain('class="project-landing project-landing-running"');
+    expect(html).toContain('>Landing<');
+    expect(html).toContain('T2 wiki 契約、迁移与共享类型');
+    expect(html).toContain('>checking<');
+    expect(html).toContain('>1m 20s<');
+    // The ring is the Integrating cell's own mark rather than a second spinner drawing, and it
+    // inherited the row's colour rather than carrying one of its own.
+    expect(html).toContain('data-glyph="spinner"');
+  });
+
+  it('draws the approved queued line: grey and still, and counting from the enqueue', () => {
+    const html = renderAt(
+      seeded(integration({
+        integratingCount: 0,
+        queuedCount: 1,
+        inFlight: { taskTitle: 'T2 wiki 契約、迁移与共享类型', state: 'QUEUED',
+                    startedAt: '2026-09-25T13:58:40Z' },
+      })),
+      '2026-09-25T13:59:20Z',
+    );
+
+    expect(html).toContain('class="project-landing"');
+    expect(html).not.toContain('project-landing-running');
+    expect(html).toContain('>queued<');
+    expect(html).toContain('>0m 40s<');
+  });
+
+  it('names the count rather than one task when several are in flight', () => {
+    const html = renderAt(
+      seeded(integration({ integratingCount: 2, queuedCount: 1 })),
+      '2026-09-25T13:59:20Z',
+    );
+    expect(html).toContain('>3 jobs<');
+    expect(html).not.toContain('T2 wiki');
+  });
+
+  it('draws no row at all while nothing is landing', () => {
+    const qc = newClient();
+    qc.setQueryData(panoramaKey, panorama());
+    qc.setQueryData(integrationKey, integration({ integratingCount: 0, queuedCount: 0, inFlight: null }));
+    expect(renderAt(qc, '2026-09-25T13:59:20Z')).not.toContain('project-landing');
+
+    // ...including when the integration read never answered: the card is the panorama's, and a row
+    // it cannot draw is absent rather than blank.
+    const only = newClient();
+    only.setQueryData(panoramaKey, panorama());
+    expect(renderAt(only, '2026-09-25T13:59:20Z')).not.toContain('project-landing');
+  });
+
+  it('counts a job the server cannot date from zero rather than printing NaN', () => {
+    const html = renderAt(
+      seeded(integration({ inFlight: { taskTitle: null, state: 'RUNNING', startedAt: 'not a date' } })),
+      '2026-09-25T13:59:20Z',
+    );
+    expect(html).toContain('>0m 0s<');
+    expect(html).not.toContain('NaN');
+    // A job that names no task — a promotion, a merge check — keeps the row's word and state.
+    expect(html).toContain('>Landing<');
+    expect(html).toContain('>checking<');
+  });
+});
+
+describe('landingClock', () => {
+  it('always shows minutes AND seconds, whatever the length', () => {
+    expect(landingClock(80_000)).toBe('1m 20s');
+    expect(landingClock(40_000)).toBe('0m 40s');
+    expect(landingClock(0)).toBe('0m 0s');
+    // 59s is not "1m" and 3h is not "3h": this clock never rounds to a unit that moves slower than
+    // the reader is watching it, which is the whole reason it is not `formatSpan`.
+    expect(landingClock(59_400)).toBe('0m 59s');
+    expect(landingClock(3_600_000)).toBe('60m 0s');
+    // A clock a little behind the server (skew) counts from zero, never backwards.
+    expect(landingClock(-5_000)).toBe('0m 0s');
+  });
+});
+
+describe('landingLine', () => {
+  it('is null when the server reports nothing in flight', () => {
+    expect(landingLine(integration({ inFlight: null }), Date.parse('2026-09-25T13:59:20Z'))).toBeNull();
+  });
+
+  it('carries the running job as checking and the queued one as queued', () => {
+    const now = Date.parse('2026-09-25T13:59:20Z');
+    expect(landingLine(integration(), now)).toEqual({
+      what: 'T2 wiki 契約、迁移与共享类型',
+      running: true,
+      state: 'checking',
+      clock: '1m 20s',
+    });
+    expect(
+      landingLine(
+        integration({ inFlight: { taskTitle: 'T1', state: 'QUEUED', startedAt: '2026-09-25T13:58:40Z' } }),
+        now,
+      ),
+    ).toEqual({ what: 'T1', running: false, state: 'queued', clock: '0m 40s' });
+  });
+});
+
+describe('the landing row’s styles', () => {
+  const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+
+  it('stops the spin for a reader who asked for less motion, and keeps everything else', () => {
+    // The spin is decoration: `checking` and `queued` are the words, and they are text, so the
+    // reduced-motion branch removes the animation and nothing else. Read out of the sheet's own
+    // reduced-motion blocks rather than the one nearest the rule, since it has others.
+    const blocks = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n\}/g)]
+      .map((block) => block[0]);
+    expect(blocks.some((block) => block.includes('.project-landing-running .project-landing-ring')
+      && block.includes('animation: none'))).toBe(true);
+    expect(css).toContain('@keyframes project-landing-spin');
+    // The clock's digits must not shuffle the words beside them as they change.
+    expect(css).toMatch(/\.project-landing-clock \{[\s\S]*?font-variant-numeric: tabular-nums;/);
+    // One row, always: the task title truncates rather than wrapping the card taller.
+    expect(css).toMatch(/\.project-landing-what \{[\s\S]*?text-overflow: ellipsis;/);
+  });
+});
+

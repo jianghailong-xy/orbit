@@ -98,6 +98,75 @@ public enum ProjectPage {
             + plural(shape.edgeCount, "dependency", "dependencies")
     }
 
+    // MARK: - Work overview: the landing in flight
+
+    /// The landing in flight, in the words the card's live line uses — the one row that says what
+    /// the platform itself is doing while a project's numbers stand still.
+    ///
+    /// The card needed it because its own counts cannot say it: a landing holds no task session, so
+    /// `Running` is 0 through the four minutes it takes, and the only non-zero cell is `Integrating`
+    /// whose footnote is a term of art. The owner read exactly that page on 2026-09-25 and concluded
+    /// the project had stopped.
+    public struct LandingLine: Equatable, Sendable {
+        /// The task being landed, "N jobs" when more than one is in flight, or nil when the job
+        /// names no single task (a promotion, a merge check) — the row then draws its word and
+        /// state alone.
+        public let what: String?
+        /// Whether the combined-tree checks are running, as opposed to the job still waiting its
+        /// turn. What the ring's spin and the two brand-blue words are drawn from; the `state` word
+        /// is what carries the same fact to a reader who cannot use motion.
+        public let running: Bool
+        /// "checking" or "queued".
+        public let state: String
+        /// "1m 20s". See `landingClock`.
+        public let clock: String
+
+        public init(what: String?, running: Bool, state: String, clock: String) {
+            self.what = what
+            self.running = running
+            self.state = state
+            self.clock = clock
+        }
+    }
+
+    /// The row's first word, and the whole of what the line is about.
+    public static let landingWord = "Landing"
+
+    /// "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
+    ///
+    /// Not `RelativeTime.span`, deliberately, and the difference is the point: that one rounds to
+    /// the largest unit it needs, so a landing two minutes in reads "2m" and then "2m" again a
+    /// minute later. This number is watched while it moves — it is what says the four minutes are
+    /// passing rather than stalled — so the seconds are the part that has to be there. Minutes are
+    /// not folded into hours either: a wait is read here in the unit it started in, and "65m 0s"
+    /// says "over an hour" as honestly as "1h 5m" does.
+    public static func landingClock(_ seconds: TimeInterval) -> String {
+        let whole = Int(Swift.max(0, seconds))
+        return "\(whole / 60)m \(whole % 60)s"
+    }
+
+    /// The line, or nil when nothing is landing — which is what removes the row from the card.
+    ///
+    /// `inFlight` is the server's answer to "is anything in flight", so the whole row is drawn from
+    /// it rather than from the two counts: the counts and the job they count are read together, and
+    /// a row that appeared on a count while having no job to describe would have to invent one.
+    ///
+    /// The name slot takes the job's task, or the COUNT when there is more than one: "Landing 2
+    /// jobs" says what a single task's title would have pretended to — that this is the oldest of
+    /// several, not the only thing the queue is doing.
+    public static func landingLine(_ view: ProjectIntegrationView, now: Date = Date()) -> LandingLine? {
+        guard let inFlight = view.inFlight else { return nil }
+        let running = inFlight.state == "RUNNING"
+        let jobs = view.integratingCount + view.queuedCount
+        // An instant this clock cannot read is no elapsed time rather than a wrong one: the row
+        // stays up and counts from zero, which is the one thing it can still say truthfully.
+        let elapsed = RelativeTime.parse(inFlight.startedAt).map { now.timeIntervalSince($0) } ?? 0
+        return LandingLine(what: jobs > 1 ? "\(jobs) jobs" : inFlight.taskTitle,
+                           running: running,
+                           state: running ? "checking" : "queued",
+                           clock: landingClock(elapsed))
+    }
+
     // MARK: - Acceptance criteria
 
     public enum CriterionMark: Sendable {

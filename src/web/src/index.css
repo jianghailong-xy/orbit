@@ -13323,6 +13323,75 @@ button.chat-jump-start:hover {
     grid-row: 1 / span 2;
   }
 }
+/* The Work overview's live landing line (ProjectPanoramaHeader): the card's one moving part, shown
+   only while the platform is landing work — which is exactly the minutes its counts stand still and
+   the page reads as stopped. Full width above the cells, with the same hairline under it that
+   separates the cells from each other.
+
+   The ring is the Integrating cell's own mark, and it wears that cell's brand blue while the
+   combined-tree checks run. QUEUED is the third label's grey instead: nothing is being computed, the
+   job is waiting its turn, and a row that spun through that would be reporting work that is not
+   happening. The words `checking` and `queued` say both states without colour or motion — which is
+   what lets the two decorative channels be dropped under `prefers-reduced-motion` below. */
+.project-landing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13.5px;
+}
+.project-landing-ring {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+}
+.project-landing-running .project-landing-ring {
+  color: var(--brand);
+  animation: project-landing-spin 1.6s linear infinite;
+}
+.project-landing-word {
+  flex: none;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.project-landing-running .project-landing-word {
+  color: var(--brand);
+}
+/* The row's flexible middle: the task's title, or "N jobs". It truncates rather than wrapping —
+   one row, always the same height — and it is what keeps the state and the clock right-aligned. */
+.project-landing-what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+}
+.project-landing-state,
+.project-landing-clock {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+/* Tabular figures so the count does not shuffle the words beside it as the digits change. */
+.project-landing-clock {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.project-landing-running .project-landing-clock {
+  color: var(--brand);
+}
+@keyframes project-landing-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-landing-running .project-landing-ring {
+    animation: none;
+  }
+}
 .project-work-overview > header {
   flex-wrap: wrap;
 }
