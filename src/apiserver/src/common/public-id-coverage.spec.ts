@@ -39,6 +39,8 @@ import { RunnerSessionsController } from '../runner-api/runner-sessions.controll
 import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from '../runner-api/runner-task-completion-evidence.controller';
 import { RunnerTaskProgressController } from '../runner-api/runner-task-progress.controller';
+import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
+import { WikiController } from '../wiki/wiki.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -92,6 +94,10 @@ const CONTROLLERS = [
   RunnerTasksController,
   RunnerTaskCompletionEvidenceController,
   RunnerTaskProgressController,
+  // The Orbit Wiki's two doors (migration 0307, design §5.1). Registered by hand on purpose: a new
+  // controller nothing lists here is a controller whose ids nothing checks.
+  WikiController,
+  RunnerWikiController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed
