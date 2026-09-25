@@ -57,10 +57,9 @@ type Tx = Prisma.TransactionClient;
  * and a headless runner call is an agent with no session — which may still only PROPOSE. No parameter
  * anywhere below could name another owner.
  *
- * WHAT THIS FILE DOES NOT DO YET, and who owns it: `GET /api/wiki/search` and the `wiki_search`
- * retrieval legs (T4), the `<orbit_wiki_context>` delivery (T6), anchors' re-verification, which
- * needs git on a runner (phase 2), and the review queue's 14-day expiry sweep, which the contract
- * gives an `expires_at` and no worker yet. Of the writes the contract has announce a change
+ * WHAT THIS FILE DOES NOT DO YET, and who owns it: the `<orbit_wiki_context>` delivery (T6),
+ * anchors' re-verification, which needs git on a runner (phase 2), and the review queue's 14-day
+ * expiry sweep, which the contract gives an `expires_at` and no worker yet. Of the writes the contract has announce a change
  * (`realtime.publishedWhen`), the two below do: a recorded changeset, and a decided one. A space
  * created, a setting changed and a workspace bound announce nothing yet.
  */
