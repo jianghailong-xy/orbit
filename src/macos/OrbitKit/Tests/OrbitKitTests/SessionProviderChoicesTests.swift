@@ -235,4 +235,99 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(choices.first { $0.slug == "claude" }?.unavailable, "Not signed in")
         XCTAssertNil(choices.first { $0.slug == "anthropic-2" }?.unavailable)
     }
+
+    // MARK: - account pools (web: the pool is one tile; its accounts wait behind "Pin a specific account")
+
+    private func poolMember(_ provider: ConfiguredProvider, _ state: PoolMemberState,
+                            next: Bool = false) -> PoolMember {
+        PoolMember(id: "id-\(provider.slug)", slug: provider.slug, label: provider.label,
+                   presetSlug: "anthropic", state: state, next: next)
+    }
+
+    private func claudePool(_ states: (PoolMemberState, PoolMemberState) = (.available, .running),
+                            resetsAt: String? = nil) -> ProviderPool {
+        ProviderPool(id: "pool-1", slug: "claude-accounts", label: "Claude accounts", resetsAt: resetsAt,
+                     members: [poolMember(anthropic, states.0, next: states.0 == .available),
+                               poolMember(anthropic2, states.1)])
+    }
+
+    private let opus5 = RunnerModelCatalog(claude: [RunnerModelInfo(value: "claude-opus-5", label: "Opus 5")])
+
+    /// The catalogue the pickers read: the keys, then the pools as providers (ProviderPools.asProviders).
+    private func withPools(_ keys: [ConfiguredProvider], _ pools: [ProviderPool]) -> [ConfiguredProvider] {
+        keys + ProviderPools.asProviders(pools)
+    }
+
+    func testAPoolIsOneChoiceAfterTheEnginesWithItsAccountCount() {
+        let pool = claudePool()
+        let choices = SessionProviderChoices.choices(
+            configured: withPools([anthropic, anthropic2, deepseek], [pool]), catalog: opus5, pools: [pool])
+        XCTAssertEqual(choices.map(\.slug),
+                       ["claude", "codex", "kimi", "claude-accounts", "anthropic", "anthropic-2", "deepseek"])
+        let tile = choices.first { $0.slug == "claude-accounts" }
+        XCTAssertEqual(tile?.kind, .pool)
+        XCTAssertEqual(tile?.poolSize, 2)
+        XCTAssertEqual(tile?.label, "Claude accounts")
+        XCTAssertEqual(tile?.brandKey, "anthropic")
+        XCTAssertEqual(tile?.modelLabel, "Opus 5")
+        XCTAssertNil(tile?.unavailable)
+        XCTAssertEqual(choices.filter { $0.slug == "claude-accounts" }.count, 1, "listed once, as the pool")
+    }
+
+    /// Its accounts stay pickable on their own — pinning one is a real need — but are marked for the
+    /// picker to fold away; a key in no pool is not.
+    func testTheAccountsOfAPoolAreMarkedToFoldAwayAndStayPickable() {
+        let pool = claudePool()
+        let choices = SessionProviderChoices.choices(
+            configured: withPools([anthropic, anthropic2, deepseek], [pool]), pools: [pool])
+        XCTAssertEqual(choices.filter(\.inPool).map(\.slug), ["anthropic", "anthropic-2"])
+        XCTAssertTrue(choices.filter(\.inPool).allSatisfy { $0.kind == .byok && $0.unavailable == nil })
+        XCTAssertFalse(choices.first { $0.slug == "deepseek" }?.inPool ?? true)
+        XCTAssertNil(choices.first { $0.slug == "deepseek" }?.poolSize)
+    }
+
+    /// "0 of N available": greyed out with the reason, and no runner to send it to — nothing on a
+    /// machine gives the accounts room back.
+    func testAPoolNoneOfWhoseAccountsCanTakeWorkIsGreyedWithItsReason() {
+        let spent = claudePool((.spent, .spent), resetsAt: "2026-09-25T10:30:00.000Z")
+        let now = RelativeTime.parse("2026-09-25T09:00:00.000Z")!
+        let tile = SessionProviderChoices.choices(
+            configured: withPools([anthropic, anthropic2], [spent]), pools: [spent], now: now)
+            .first { $0.slug == "claude-accounts" }
+        XCTAssertEqual(tile?.unavailable,
+                       "All spent · resets \(ProviderPools.formatResetTime("2026-09-25T10:30:00.000Z", now: now)!)")
+        XCTAssertNil(tile?.fixEngine)
+
+        let refused = claudePool((.refused, .disabled))
+        XCTAssertEqual(SessionProviderChoices.choices(
+            configured: withPools([anthropic, anthropic2], [refused]), pools: [refused])
+            .first { $0.slug == "claude-accounts" }?.unavailable, "No account can run")
+    }
+
+    /// A pool runs on the Claude CLI like a key does, so a runner without it can't run the pool
+    /// either — and that one is fixed on the runner, so it outranks the accounts.
+    func testAPoolNeedsTheClaudeCLIAndThatIsFixedOnTheRunner() {
+        let spent = claudePool((.spent, .spent))
+        let tile = SessionProviderChoices.choices(
+            configured: withPools([anthropic, anthropic2], [spent]),
+            engines: [health("claude", installed: false, auth: "no")], pools: [spent])
+            .first { $0.slug == "claude-accounts" }
+        XCTAssertEqual(tile?.unavailable, "Not installed")
+        XCTAssertEqual(tile?.fixEngine, "claude")
+        // Signed out doesn't matter: each run carries one of the accounts' own keys.
+        let signedOut = SessionProviderChoices.choices(
+            configured: withPools([anthropic], [claudePool()]),
+            engines: [health("claude", installed: true, auth: "no")], pools: [claudePool()])
+        XCTAssertNil(signedOut.first { $0.slug == "claude-accounts" }?.unavailable)
+    }
+
+    /// A session on the pool may move to one of its accounts, or back, without changing CLI.
+    func testSameRuntimeOffersThePoolAndItsAccountsTogether() {
+        let pool = claudePool()
+        let configured = withPools([anthropic, anthropic2, moonshot], [pool])
+        let slugs = SessionProviderChoices.sameRuntime(
+            "claude-accounts", in: SessionProviderChoices.choices(configured: configured, pools: [pool]),
+            configured: configured).map(\.slug)
+        XCTAssertEqual(slugs, ["claude", "claude-accounts", "anthropic", "anthropic-2"])
+    }
 }

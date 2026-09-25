@@ -834,6 +834,7 @@ struct AgentConsoleDetail: View {
                            defaultModel: agents.effectiveDefaultModel(for: agent),
                            configuredProviders: agents.configuredProviders,
                            configuredProvidersLoaded: agents.configuredProvidersLoaded,
+                           providerPools: agents.providerPools,
                            modelCatalog: agents.modelCatalog(for: agent.runnerId),
                            defaultEffort: app.user?.preferences?.defaultEffort) { session in
                 app.openCreatedAgentSession(session)
@@ -891,6 +892,8 @@ struct NewSessionView: View {
     /// a custom model alias before the draft's first asynchronous refresh.
     let configuredProviders: [ConfiguredProvider]
     let configuredProvidersLoaded: Bool
+    /// The account pools the parent has loaded, so a workspace that runs on one opens on its tile.
+    let providerPools: [ProviderPool]
     /// The owning runner's cached model catalogue — what `defaultModel` was resolved from, and what
     /// NAMES it. Passed in so the first frame reads the same label the picker will settle on.
     let modelCatalog: RunnerModelCatalog?
@@ -906,6 +909,7 @@ struct NewSessionView: View {
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
          configuredProvidersLoaded: Bool = false,
+         providerPools: [ProviderPool] = [],
          modelCatalog: RunnerModelCatalog? = nil,
          defaultEffort: String? = nil,
          onCreated: @escaping (Session) -> Void) {
@@ -913,12 +917,14 @@ struct NewSessionView: View {
         self.defaultModel = defaultModel
         self.configuredProviders = configuredProviders
         self.configuredProvidersLoaded = configuredProvidersLoaded
+        self.providerPools = providerPools
         self.modelCatalog = modelCatalog
         self.defaultEffort = defaultEffort
         _draft = State(initialValue: registry.draftModel(
             for: agent, defaultModel: defaultModel,
             configuredProviders: configuredProviders,
             configuredProvidersLoaded: configuredProvidersLoaded,
+            providerPools: providerPools,
             modelCatalog: modelCatalog, accountDefaultEffort: defaultEffort,
             onCreated: onCreated))
     }
@@ -935,7 +941,8 @@ struct NewSessionView: View {
                     VStack(spacing: 14) {
                         ProviderMark(provider: draft.provider, size: 68,
                                      brandKey: currentProviderChoice.brandKey,
-                                     label: currentProviderChoice.label)
+                                     label: currentProviderChoice.label,
+                                     poolSize: currentProviderChoice.poolSize)
                         Button { showProviderPicker = true } label: {
                             HStack(spacing: 7) {
                                 Text(currentProviderChoice.label)
@@ -952,7 +959,8 @@ struct NewSessionView: View {
                         // The pick is sticky, so it can point at an engine this machine can no
                         // longer run — and the session would only fail minutes later, at the runner.
                         // Say so here, and make the line the route to the fix (web parity).
-                        if let blocker = currentProviderChoice.unavailable {
+                        if let blocker = currentProviderChoice.unavailable,
+                           currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId { app.route(to: .runner(rid)) }
                             } label: {
@@ -962,6 +970,12 @@ struct NewSessionView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(agent.runnerId == nil)
+                        } else if let blocker = currentProviderChoice.unavailable {
+                            // An account pool none of whose accounts can take work: no runner fixes
+                            // that, so the line only says why — in the picker row's own words.
+                            Text(blocker)
+                                .font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                                .multilineTextAlignment(.center)
                         } else {
                             Text("Send a task to get started.")
                                 .font(.callout).foregroundStyle(.secondary)
@@ -1072,12 +1086,14 @@ struct NewSessionView: View {
         WorkspaceTitleSwitcher(name: agent.name) { showSwitcher = true }
     }
 
-    /// Engines first, then this account's configured providers. Built from the draft's own
-    /// snapshot so the list matches the model space the pills are already resolving against.
+    /// Engines first, then this account's pools, then its configured providers. Built from the
+    /// draft's own snapshot so the list matches the model space the pills are already resolving
+    /// against.
     private var providerChoices: [ProviderChoice] {
         SessionProviderChoices.choices(configured: draft.configuredProviders,
                                        catalog: draft.modelCatalog,
-                                       engines: draft.runnerEngines)
+                                       engines: draft.runnerEngines,
+                                       pools: draft.providerPools)
     }
 
     private var currentProviderChoice: ProviderChoice {

@@ -104,6 +104,13 @@ extension Font {
         .system(size: diameter * 0.4, weight: .bold, design: .monospaced)
     }
 
+    /// The count badge in the corner of an account pool's brand mark, scaled to the mark the way
+    /// web's `.np-pool-badge` is (a fifth of the mark, never under 9). Part of the mark, not text,
+    /// so it stays Dynamic-Type-static like `orbitAgentGlyph`. Identical on both platforms.
+    static func orbitMarkBadge(_ markSize: CGFloat) -> Font {
+        .system(size: max(9, (markSize * 0.2).rounded()), weight: .bold)
+    }
+
     /// A control-affordance glyph sized for a fixed disc (e.g. the transcript scroll-to-bottom
     /// arrow). Like `orbitHeroGlyph`, it's a mark in a fixed-size container, not text, so it stays
     /// Dynamic-Type-static — a scaling glyph would overflow the disc. Identical on both platforms.

@@ -224,10 +224,13 @@ final class ConsoleModel {
     /// arrival so the gauge follows a provider switch made after the fetch — see `planUsage`.
     private(set) var runnerPlanUsage: PlanUsage?
     /// The quota for the credential *this* session spends: the configured provider's own, or the
-    /// runner login's for a built-in engine (web parity — see `AgentDefaults.planUsage`).
+    /// runner login's for a built-in engine (web parity — see `AgentDefaults.planUsage`). On an
+    /// account pool that is the quota of the account it runs on (`poolAccount`), never the pool's —
+    /// and none at all while no account can be named.
     var planUsage: PlanUsageSnapshot? {
-        AgentDefaults.planUsage(for: provider, runner: runnerPlanUsage,
-                                configured: configuredProviders)
+        if currentPool != nil { return poolAccount?.member.planUsage }
+        return AgentDefaults.planUsage(for: provider, runner: runnerPlanUsage,
+                                       configured: configuredProviders)
     }
     private(set) var modelCatalog: RunnerModelCatalog?
     /// What the session's runner last reported about each engine CLI it can host. A provider
@@ -244,6 +247,24 @@ final class ConsoleModel {
     /// the endpoint.
     private(set) var configuredProviders: [ConfiguredProvider] = []
     private var configuredProvidersLoaded = false
+    /// The user's account pools (GET /providers/pools): the new-session picker's pool rows, and which
+    /// of a pool's accounts a session on one is spending. Each also rides in `configuredProviders`
+    /// (`ProviderPools.asProviders`), where a pool's name, runtime and models resolve from. Loaded
+    /// with them; an older server without the route leaves it empty.
+    private(set) var providerPools: [ProviderPool] = []
+    /// On an account pool: the member this session's last claim dispatched on. Only the session
+    /// detail carries it — the list's rows don't — so only a detail read sets it.
+    private(set) var poolMemberProviderID: String?
+
+    /// The account pool this session or draft runs on, if its provider is one.
+    var currentPool: ProviderPool? { providerPools.first { $0.slug == provider } }
+    /// Which of that pool's accounts it is spending (web parity — `sessionPoolAccount`): the member
+    /// the last claim recorded, or — for a draft, or a session no claim has reached yet — the one the
+    /// next claim picks. Nil once the recorded member has left the pool: nobody is guessed.
+    var poolAccount: PoolAccount? {
+        guard let pool = currentPool else { return nil }
+        return ProviderPools.sessionAccount(in: pool, memberID: isDraft ? nil : poolMemberProviderID)
+    }
 
     var providerCapabilitiesResolved: Bool {
         AgentDefaults.isBuiltInProvider(provider) || configuredProvidersLoaded
@@ -325,6 +346,7 @@ final class ConsoleModel {
     init(draftFor agent: Agent, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
          configuredProvidersLoaded: Bool = false,
+         providerPools: [ProviderPool] = [],
          modelCatalog: RunnerModelCatalog? = nil, accountDefaultEffort: String? = nil,
          baseURL: URL, tokenStore: TokenStore,
          attachments: AttachmentImageStore) {
@@ -344,7 +366,10 @@ final class ConsoleModel {
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
         self.agentName = agent.name
         self.provider = agent.defaultProvider
-        self.configuredProviders = configuredProviders
+        // The parent's pools too, so a workspace that runs on one opens on its tile and badge rather
+        // than waiting for this draft's own read.
+        self.providerPools = providerPools
+        self.configuredProviders = configuredProviders + ProviderPools.asProviders(providerPools)
         self.configuredProvidersLoaded = configuredProvidersLoaded
         // The parent's cached runner snapshot — the same one `defaultModel` was resolved from. It
         // NAMES that id as well, so seeding it here is what keeps the first frame from rendering a
@@ -883,6 +908,7 @@ final class ConsoleModel {
         ownerReadMoment = runMoment(s)
         if taskID != nil { Task { [weak self] in await self?.refreshOwnerConfirmation() } }
         provider = s.provider ?? "claude"
+        poolMemberProviderID = s.poolMemberProviderId
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
         // already touched the picker while the session request was in flight, their explicit value
@@ -931,9 +957,10 @@ final class ConsoleModel {
         applySlashItems(from: sessionRunner)
         // Configured providers own a separate model space/default. Best-effort: a transient failure
         // keeps the last good list, and built-in runtimes still resolve from the runner/static data.
+        // The account pools ride along; a failed pool read keeps the last good pools.
+        let pools = try? await api.providerPools()
         if let providers = try? await api.providers() {
-            configuredProviders = providers
-            configuredProvidersLoaded = true
+            adoptProviders(providers, pools: pools ?? providerPools)
         }
         // A stored model the Runtime has since retired is no longer something this session can
         // run — the server drops it at dispatch too — so re-resolve it exactly like a model-less
@@ -979,6 +1006,10 @@ final class ConsoleModel {
         if moment != ownerReadMoment {
             ownerReadMoment = moment
             if taskID != nil { Task { [weak self] in await self?.refreshOwnerConfirmation(force: true) } }
+            // A claim can move a session on an account pool onto another of its accounts, and only
+            // the detail says which: re-read it when the run moves, so the account the status bar
+            // names follows the claim.
+            if currentPool != nil { Task { [weak self] in _ = await self?.refreshServerStatus() } }
         }
         // The final SSE notification is intentionally live-only and can be missed while this app
         // is disconnected. REST is authoritative too: once it observes an idle/terminal run, drop
@@ -1005,6 +1036,7 @@ final class ConsoleModel {
     private func refreshServerStatus() async -> Bool {
         guard let s = try? await api.session(sessionID) else { return false }
         adoptServerSnapshot(s)
+        poolMemberProviderID = s.poolMemberProviderId
         return true
     }
 
@@ -1038,7 +1070,8 @@ final class ConsoleModel {
         return SessionProviderChoices.sameRuntime(
             provider,
             in: SessionProviderChoices.choices(configured: configuredProviders,
-                                               catalog: modelCatalog, engines: runnerEngines),
+                                               catalog: modelCatalog, engines: runnerEngines,
+                                               pools: providerPools),
             configured: configuredProviders,
             catalog: modelCatalog)
     }
@@ -1111,6 +1144,13 @@ final class ConsoleModel {
                                                 catalog: modelCatalog)
     }
 
+    /// Adopt a provider catalogue with the account pools folded in, each resolved like a Claude key.
+    private func adoptProviders(_ providers: [ConfiguredProvider], pools: [ProviderPool]) {
+        providerPools = pools
+        configuredProviders = providers + ProviderPools.asProviders(pools)
+        configuredProvidersLoaded = true
+    }
+
     /// Keep an already-constructed draft in sync with AgentsModel's later provider/runner fetch.
     /// SwiftUI preserves the draft's @State across parent updates, so constructor snapshots alone
     /// are insufficient. An unresolved custom slug retains its placeholder seed; once the provider
@@ -1119,11 +1159,9 @@ final class ConsoleModel {
                                    defaultModel: String) {
         guard isDraft else { return }
         // Successful provider discovery is last-good state. A slower parent request that is still
-        // pending (or failed) must not erase a snapshot this draft already fetched itself.
-        if loaded {
-            configuredProviders = providers
-            configuredProvidersLoaded = true
-        }
+        // pending (or failed) must not erase a snapshot this draft already fetched itself. The
+        // parent's list carries no pools, so this draft's own stay folded in.
+        if loaded { adoptProviders(providers, pools: providerPools) }
         if modelSelectionRevision.isPristine,
            AgentDefaults.isBuiltInProvider(provider) || loaded {
             // `defaultModel` is the parent's, computed for the AGENT's provider. Once this draft
@@ -1777,9 +1815,9 @@ final class ConsoleModel {
                 runnerRunsAsRoot = nil
             }
         }
+        let pools = try? await api.providerPools()
         if let providers = try? await api.providers() {
-            configuredProviders = providers
-            configuredProvidersLoaded = true
+            adoptProviders(providers, pools: pools ?? providerPools)
         }
         // AgentsModel resolves the seed from its cached runner snapshot so the composer is correct
         // immediately. Re-resolve only while no explicit picker action has ever occurred.
