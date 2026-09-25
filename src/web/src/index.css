@@ -11833,6 +11833,10 @@ button.chat-jump-start:hover {
   .pool-detail .pool-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
+  /* The actions take a line of their own here; why an account is out stays under its name, above them. */
+  .pool-row .re-act {
+    order: 1;
+  }
 }
 /* At the top of the keys list while there is something to pool and no pool yet. */
 .pool-hint {
