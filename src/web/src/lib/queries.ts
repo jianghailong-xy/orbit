@@ -13,6 +13,7 @@ import {
   api,
   getSession,
   getSessionDiff,
+  listShareLinks,
   type SessionListItem,
   type WorkspacePermissionRuleInfo,
 } from '../api';
@@ -716,6 +717,16 @@ export const watchesQuery = () =>
         ]),
       ),
     refetchInterval: 60_000,
+  });
+
+/**
+ * Every public link this account has made, ended ones included (Settings → Shared links). Under
+ * `['share-links']`, the prefix the Share dialog refreshes after every change it makes.
+ */
+export const shareLinksQuery = () =>
+  queryOptions({
+    queryKey: ['share-links'] as const,
+    queryFn: listShareLinks,
   });
 
 /**

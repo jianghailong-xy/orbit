@@ -8,7 +8,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ExportCtx, PublicLinkResolverCtx, Transcript, type PublicLinkResolver, type RunEvent } from '../components/Transcript';
-import { fetchAttachmentDataUrl } from '../api';
+import { fetchAttachmentDataUrl, getSessionEventPage } from '../api';
 import { titleFirstLine } from './title';
 // Vite `?raw`: pull the real CSS text into the bundle. index.css carries the design tokens
 // (:root light + dark) and every .chat-*/.md/.diff-* rule; github.css is the light-theme
@@ -185,4 +185,25 @@ export async function exportSessionHtml(
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+// The largest page the owner's event route serves.
+const OWNER_EXPORT_PAGE = 500;
+
+/** Every event of one of your sessions, unclipped: from the newest page back to the first. */
+async function ownerTranscript(sessionId: string): Promise<RunEvent[]> {
+  const pages: RunEvent[][] = [];
+  let before: number | undefined;
+  for (;;) {
+    const page = await getSessionEventPage(sessionId, { before, limit: OWNER_EXPORT_PAGE, whole: true });
+    pages.unshift(page.events);
+    if (!page.hasMore || page.events.length === 0) return pages.flat();
+    before = page.events[0].seq;
+  }
+}
+
+/** Download HTML from the session's own menu: the whole transcript read through the owner's routes,
+ *  its images through the owner's attachment route — keeping a copy needs no public link. */
+export async function downloadSessionHtml(session: ExportSession): Promise<void> {
+  await exportSessionHtml(session, await ownerTranscript(session.id));
 }

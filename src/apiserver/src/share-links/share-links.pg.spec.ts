@@ -15,7 +15,9 @@
  *   (7) the old `POST/DELETE /sessions/:id/share` and the session detail's `shareToken` behave as
  *       they did;
  *   (8) with Tool output off, the public events carry no tool input and no tool output;
- *   (9) the CHECK and the partial unique indexes refuse what they exist to refuse.
+ *   (9) the CHECK and the partial unique indexes refuse what they exist to refuse;
+ *  (10) the session list says which sessions a link opens right now — not one turned off, past its
+ *       expiry or paused by the trash — and the dialog's read counts what each layer holds.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/share-links/share-links.pg.spec.ts
  *
@@ -324,6 +326,13 @@ test('share links: one row per link, an owner interface for three roots, one 404
     task: { conversations: true },
     project: { taskPages: false, conversations: true },
   };
+  /** What the owner reads for a root with no link. A session also counts its layers — these roots
+   *  have no events, so nothing (case 10 counts a transcript that has some). */
+  const UNSHARED = {
+    session: { link: null, counts: { messages: 0, toolCalls: 0 } },
+    task: { link: null },
+    project: { link: null },
+  };
 
   await t.test('(2) opening is idempotent; off 404s the token; on again is a new token — for all three roots', async () => {
     for (const [kind, root] of Object.entries(roots) as [keyof typeof roots, (typeof roots)[keyof typeof roots]][]) {
@@ -331,7 +340,7 @@ test('share links: one row per link, an owner interface for three roots, one 404
       const at = `/${root.path}/${pub(id)}/share`;
       const none = await owner('GET', at);
       assert.equal(none.status, 200, `${kind}: ${none.text}`);
-      assert.deepEqual(none.json, { link: null }, `${kind}: a root nobody shared has no link`);
+      assert.deepEqual(none.json, UNSHARED[kind], `${kind}: a root nobody shared has no link`);
 
       const opened = await owner('PUT', at, {});
       assert.equal(opened.status, 200, `${kind}: ${opened.text}`);
@@ -378,7 +387,7 @@ test('share links: one row per link, an owner interface for three roots, one 404
       const [ended] = await rowsOf(root.column, id);
       assert.equal(ended.revoked_reason, 'TURNED_OFF');
       assert.notEqual(ended.revoked_at, null);
-      assert.deepEqual((await owner('GET', at)).json, { link: null });
+      assert.deepEqual((await owner('GET', at)).json, UNSHARED[kind]);
       // Off twice is not an error.
       assert.equal((await owner('DELETE', at)).status, 200);
 
@@ -758,5 +767,56 @@ test('share links: one row per link, an owner interface for three roots, one 404
     const [{ token }] = (await sql.query('SELECT token FROM share_link WHERE session_id = $1::uuid LIMIT 1', [session])).rows;
     const reused = [ownerId, token, null, taskId, null, new Date(), 'TURNED_OFF'];
     assert.deepEqual(await refusal(sql, insert, reused), { code: '23505', constraint: 'share_link_token_key' });
+  });
+
+  await t.test('(10) the list marks what a link opens right now; the dialog counts what each layer holds', async () => {
+    const live = await conversation('Listed, shared');
+    const plain = await conversation('Listed, never shared');
+    const off = await conversation('Listed, turned off');
+    const lapsed = await conversation('Listed, past its expiry');
+    const binned = await conversation('Listed, shared then trashed');
+    for (const id of [live, off, lapsed, binned]) {
+      assert.equal((await owner('PUT', `/sessions/${pub(id)}/share`, {})).status, 200);
+    }
+    await owner('DELETE', `/sessions/${pub(off)}/share`);
+    await sql.query(`UPDATE share_link SET expires_at = now() - interval '1 second' WHERE session_id = $1::uuid`, [lapsed]);
+    await sql.query('UPDATE session SET deleted_at = now() WHERE id = $1::uuid', [binned]);
+    /** `shared` on each of these sessions' rows, as a view of the list draws it. */
+    const flags = async (view: string, ids: string[]) => {
+      const list = await owner('GET', `/sessions?view=${view}`);
+      assert.equal(list.status, 200, list.text);
+      const rows = new Map((list.json as unknown as Json[]).map((row) => [row.id, row.shared]));
+      return ids.map((id) => rows.get(pub(id)));
+    };
+    assert.deepEqual(
+      await flags('open', [live, plain, off, lapsed]),
+      [true, false, false, false],
+      'only the session with a link that opens is marked shared',
+    );
+    // The trash pauses a link: it is not shared while it is there, and is again once it is back.
+    assert.deepEqual(await flags('trash', [binned]), [false]);
+    await sql.query('UPDATE session SET deleted_at = NULL WHERE id = $1::uuid', [binned]);
+    assert.deepEqual(await flags('open', [binned]), [true]);
+
+    // Counted over the whole transcript: `user` and `assistant` are messages, `tool_use` is a call;
+    // results, system events and everything else are neither.
+    const talk = await conversation('Counted');
+    await event(talk, 1, RunEventType.USER, { text: 'run the build' });
+    await event(talk, 2, RunEventType.SYSTEM, { subtype: 'init', sessionId: 'rt-1' });
+    await event(talk, 3, RunEventType.ASSISTANT, { text: 'Running it.' });
+    await event(talk, 4, RunEventType.TOOL_USE, { id: 'toolu_1', name: 'Bash', input: { command: 'make' } });
+    await event(talk, 5, RunEventType.TOOL_RESULT, { toolUseId: 'toolu_1', content: 'ok', isError: false });
+    await event(talk, 6, RunEventType.TOOL_USE, { id: 'toolu_2', name: 'Read', input: { file_path: 'x' } });
+    await event(talk, 7, RunEventType.TOOL_RESULT, { toolUseId: 'toolu_2', content: 'x', isError: false });
+    await event(talk, 8, RunEventType.ASSISTANT, { text: 'The build passed.' });
+    await event(talk, 9, RunEventType.RESULT, { subtype: 'success' });
+    const at = `/sessions/${pub(talk)}/share`;
+    assert.deepEqual((await owner('GET', at)).json, { link: null, counts: { messages: 3, toolCalls: 2 } });
+    // The same numbers with a link open, and only for its owner.
+    await owner('PUT', at, {});
+    const opened = await owner('GET', at);
+    assert.equal(opened.json.link.state, 'ACTIVE');
+    assert.deepEqual(opened.json.counts, { messages: 3, toolCalls: 2 });
+    assert.equal((await other('GET', at)).status, 404);
   });
 });

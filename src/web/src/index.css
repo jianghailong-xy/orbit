@@ -4209,6 +4209,37 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12.5px;
   color: var(--text-4);
 }
+/* A public link opens this session (the list row's `shared`): a globe beside the time. */
+.session-shared {
+  display: inline-flex;
+  flex: none;
+  color: var(--success);
+  font-size: 12px;
+}
+/* The conversation header's "Shared · Live": says the session is public, and opens its dialog. */
+.session-shared-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--success-bg);
+  color: var(--success);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.session-shared-pill:hover {
+  box-shadow: inset 0 0 0 1px var(--success-border);
+}
+.session-share-icon-live {
+  color: var(--success);
+}
 /* Merge failed/conflicted on this session's branch — a red nudge so it's noticed even
    when the session isn't open (its status bar, where the reason lives, is then unseen). */
 .session-merge-badge {
@@ -10772,7 +10803,7 @@ button.chat-jump-start:hover {
   .ant-input-affix-wrapper input,
   textarea.ant-input,
   .skills-search,
-  .share-modal-url {
+  .share-dialog-url-input {
     font-size: 16px;
   }
   /* AntD Select focuses this hidden search input on tap — a <16px font here is what
@@ -11156,18 +11187,105 @@ button.chat-jump-start:hover {
   font-size: 13px;
 }
 
-/* ── Share dialog (ShareModal) ───────────────────────────────────────────────── */
-.share-modal-desc {
-  color: var(--text-2);
-  font-size: 13px;
-  margin: 0 0 16px;
+/* ── Share dialog (ShareModal) ─────────────────────────────────────────────────
+   docs/mocks/share-links/03-share-dialog: Access, the link, Includes with counts, the Live line,
+   Expires, and a foot with the views and the two buttons. */
+.share-dialog-state {
+  padding: 28px 0;
+  text-align: center;
+  color: var(--text-3);
 }
-.share-modal-link {
+.share-access {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.share-access-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 15px;
+}
+.share-access-icon.is-public {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.share-access-main {
+  min-width: 0;
+}
+.share-access-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: -6px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.share-access-select:hover {
+  background: var(--fill-muted);
+}
+.share-access-caret {
+  color: var(--text-3);
+  font-size: 10px;
+}
+.share-access-detail {
+  margin-top: 1px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.share-access-menu .ant-dropdown-menu-item {
+  align-items: flex-start;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.share-access-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+  margin-top: 3px;
+}
+.share-access-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 300px;
+}
+.share-access-option-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.share-access-option-title {
+  font-weight: 500;
+}
+.share-access-option-detail {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
+}
+.share-access-option-check {
+  margin-top: 4px;
+  color: var(--brand);
+}
+.share-dialog-url {
   display: flex;
   gap: 8px;
-  align-items: center;
+  margin-top: 14px;
 }
-.share-modal-url {
+.share-dialog-url-input {
   flex: 1;
   min-width: 0;
   height: 32px;
@@ -11176,21 +11294,104 @@ button.chat-jump-start:hover {
   border-radius: 6px;
   background: var(--bg-sunken);
   color: var(--text-1);
-  font-size: 13px;
-  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
-.share-modal-actions {
+.share-dialog-label {
+  margin: 16px 0 4px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.share-layer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+}
+.share-layer + .share-layer {
+  border-top: 1px solid var(--border-subtle);
+}
+.share-layer-check {
+  align-items: flex-start;
+  min-width: 0;
+}
+.share-layer-check .ant-checkbox {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.share-layer-name {
+  display: block;
+  color: var(--text-1);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.share-layer-detail {
+  display: block;
+  margin-top: 1px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.share-layer-count {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.share-dialog-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-top: 14px;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
 }
-.share-modal-on {
+.share-dialog-row:first-of-type {
+  margin-top: 8px;
+}
+.share-dialog-key {
+  flex: none;
+  width: 64px;
+  color: var(--text-2);
+}
+.share-dialog-live {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 8px;
+  color: var(--text-2);
+}
+.share-dialog-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success-solid);
+  box-shadow: 0 0 0 3px var(--success-bg);
+}
+.share-dialog-expiry {
+  min-width: 96px;
+}
+.share-dialog-hint {
   color: var(--text-3);
+  font-size: 12px;
+}
+.share-dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.share-dialog-stat {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.share-dialog-muted {
+  color: var(--text-4);
 }
 
 /* ============================================================================
@@ -13694,6 +13895,144 @@ button.chat-jump-start:hover {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+/* ── Settings → Shared links (SharedLinksPage) ─────────────────────────────────
+   docs/mocks/share-links/06-manage-and-entry: the Following page's frame, one card per link. */
+.shared-links-page {
+  max-width: 1080px;
+}
+.shared-links-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  background: var(--warning-bg);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.shared-links-banner-icon {
+  color: var(--warning);
+}
+.shared-links-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+.shared-links-banner-text b {
+  font-weight: 600;
+}
+.shared-links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shared-link-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px 236px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  font-size: 13px;
+}
+.shared-link-row.is-head {
+  padding-top: 0;
+  padding-bottom: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.shared-link-kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 13px;
+}
+.shared-link-kind.kind-project {
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+}
+.shared-link-kind.kind-task {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.shared-link-item {
+  min-width: 0;
+}
+.shared-link-title {
+  overflow: hidden;
+  color: var(--text-1);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.shared-link-where {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.shared-link-paused {
+  color: var(--warning);
+  font-weight: 600;
+}
+.shared-link-includes {
+  min-width: 0;
+}
+.shared-link-chip {
+  display: inline-block;
+  margin: 2px 4px 0 0;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 18px;
+}
+.shared-link-chip.is-warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.shared-link-updates,
+.shared-link-views {
+  color: var(--text-1);
+  font-size: 12px;
+}
+.shared-link-since {
+  color: var(--text-3);
+}
+.shared-link-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+@media (max-width: 900px) {
+  .shared-link-row {
+    grid-template-columns: 26px minmax(0, 1fr);
+  }
+  .shared-link-row.is-head {
+    display: none;
+  }
+  .shared-link-includes,
+  .shared-link-updates,
+  .shared-link-views,
+  .shared-link-actions {
+    grid-column: 2;
+  }
+  .shared-link-actions {
+    justify-content: flex-start;
+  }
 }
 .watch-card {
   overflow: hidden;
