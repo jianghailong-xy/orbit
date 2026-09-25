@@ -1,5 +1,6 @@
-import type { AnchorHTMLAttributes } from 'react';
+import { useContext, type AnchorHTMLAttributes } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
+import { PublicLinkResolverCtx, publicDestination } from '../lib/publicLinks';
 
 /**
  * A link to a page of this app, drawn as a link even where there is no router to route with.
@@ -13,6 +14,9 @@ import { Link, useInRouterContext } from 'react-router-dom';
  * The exported file needs more than "not throwing": it is opened from disk, offline, where the
  * router's own path (`/tasks/<id>`) resolves against the filesystem and goes nowhere. So outside a
  * router the destination is the whole URL, which is what a saved file's links have to be.
+ *
+ * On a public page (PublicLinkResolverCtx) the destination is the page's to give, not the app's: an
+ * object inside what the link shares goes to its public address, and anything else is its words.
  */
 export function AppLink({
   to,
@@ -20,15 +24,18 @@ export function AppLink({
   ...rest
 }: { to: string } & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'>) {
   const inRouter = useInRouterContext();
+  const resolve = useContext(PublicLinkResolverCtx);
+  const dest = resolve ? publicDestination(to, resolve) : to;
+  if (dest == null) return <>{children}</>;
   if (inRouter) {
     return (
-      <Link {...rest} to={to}>
+      <Link {...rest} to={dest}>
         {children}
       </Link>
     );
   }
   return (
-    <a {...rest} href={absoluteUrl(to)}>
+    <a {...rest} href={absoluteUrl(dest)}>
       {children}
     </a>
   );
