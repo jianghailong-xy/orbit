@@ -488,6 +488,7 @@ function Card({ hint, children }: { hint?: string; children: ReactNode }) {
     <section
       className="project-work-overview"
       aria-label="Work overview"
+      data-project-block="work-overview"
       style={{
         background: 'var(--bg-raised)',
         border: '1px solid var(--border-subtle)',
@@ -522,8 +523,6 @@ export function ProjectPanoramaHeader({
   integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
 }) {
   const panorama = useQuery({ ...projectPanoramaQuery(projectId), enabled: Boolean(projectId) });
-  const buckets = panorama.data?.buckets;
-  const stalled = buckets ? stalledOnReady(buckets) : false;
 
   // `isPending`, not `isLoading`: a first render that has not dispatched its fetch yet (which is
   // every static render, and the first paint of a live one) is pending with `fetchStatus: 'idle'`,
@@ -557,8 +556,35 @@ export function ProjectPanoramaHeader({
     );
   }
 
-  const { shape } = panorama.data;
-  const loaded = panorama.data.buckets;
+  return (
+    <ProjectPanoramaCard
+      panorama={panorama.data}
+      projectStatus={projectStatus}
+      integrationLine={integrationLine}
+    />
+  );
+}
+
+/**
+ * The card itself, drawn from a panorama already in hand — the header above once its read answers,
+ * and a public project page from the panorama its link carries. `banners: false` leaves out the two
+ * banners, which speak to the project's owner: "Dispatch needs attention" sends them to their
+ * providers, and "Ready to wrap up" asks them to confirm the outcome (docs/share-links-design.md §7).
+ */
+export function ProjectPanoramaCard({
+  panorama,
+  projectStatus,
+  integrationLine,
+  banners = true,
+}: {
+  panorama: ProjectPanorama;
+  projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED';
+  integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
+  banners?: boolean;
+}) {
+  const { shape } = panorama;
+  const loaded = panorama.buckets;
+  const stalled = stalledOnReady(loaded);
   const lanes = reportsIntegrationLanes(loaded)
     ? integrationLanes(loaded, integrationLine ?? null)
     : null;
@@ -629,7 +655,7 @@ export function ProjectPanoramaHeader({
             // The one cell that changes colour, and only in the state this card is about: ready
             // work with nothing serving it. The amber is a second reading of the banner below, not
             // the thing that says it.
-            attention={lane.key === 'ready' && stalled}
+            attention={banners && lane.key === 'ready' && stalled}
           />
         ))}
       </div>
@@ -638,11 +664,11 @@ export function ProjectPanoramaHeader({
         <BucketMeter buckets={loaded} segments={lanes ?? undefined} />
       </div>
 
-      {stalled ? (
+      {banners && stalled ? (
         <StalledBanner buckets={loaded} />
       ) : null}
 
-      {wrappingUp ? <WrappingUpBanner settled={settled} /> : null}
+      {banners && wrappingUp ? <WrappingUpBanner settled={settled} /> : null}
     </Card>
   );
 }

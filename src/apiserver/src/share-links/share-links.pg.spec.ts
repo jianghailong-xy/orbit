@@ -326,13 +326,13 @@ test('share links: one row per link, an owner interface for three roots, one 404
     task: { conversations: true },
     project: { taskPages: false, conversations: true },
   };
-  /** What the owner reads for a root with no link. A session and a task also count their layers —
-   *  these roots hold nothing yet (case 10 counts a transcript that has some; public-task.pg.spec a
-   *  task that has comments, files and runs). */
+  /** What the owner reads for a root with no link, with what each of its layers holds — these roots
+   *  hold nothing yet (case 10 counts a transcript that has some; public-task.pg.spec a task and
+   *  public-project.pg.spec a project that have comments, files and runs). */
   const UNSHARED = {
     session: { link: null, counts: { messages: 0, toolCalls: 0 } },
     task: { link: null, counts: { comments: 0, files: 0, transcripts: 0 } },
-    project: { link: null },
+    project: { link: null, counts: { tasks: 0, comments: 0, files: 0, runs: 0, transcripts: 0 } },
   };
 
   await t.test('(2) opening is idempotent; off 404s the token; on again is a new token — for all three roots', async () => {
@@ -376,14 +376,16 @@ test('share links: one row per link, an owner interface for three roots, one 404
       const open = await visit(first.token);
       assert.equal(open.status, 200, `${kind}: ${open.text}`);
       assert.equal(open.json.kind, kind.toUpperCase());
-      if (kind !== 'session') {
+      if (kind === 'task') {
         assert.deepEqual(Object.keys(open.json).sort(), ['include', 'kind', 'root', 'sharedAt']);
       }
       if (kind === 'project') {
-        assert.deepEqual(open.json.root, { id: pub(id), title: `A ${kind} to share`, status: 'OPEN', publicId: pub(id) });
+        // With what the link opens besides the root page: public-project.pg.spec's subject.
+        assert.deepEqual(Object.keys(open.json).sort(), ['include', 'kind', 'root', 'scope', 'sharedAt']);
       }
-      if (kind === 'task') {
-        // The task page itself — its fields and its layers — is public-task.pg.spec's subject.
+      if (kind !== 'session') {
+        // The page itself — its fields and its layers — is public-task.pg.spec's and
+        // public-project.pg.spec's subject.
         const { id: rootId, title, status } = open.json.root;
         assert.deepEqual({ rootId, title, status }, { rootId: pub(id), title: `A ${kind} to share`, status: 'OPEN' });
       }

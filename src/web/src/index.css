@@ -11164,6 +11164,50 @@ button.chat-jump-start:hover {
   padding: 40px;
 }
 
+/* ── Public project page (SharedProjectPage) ────────────────────────────────────
+   docs/mocks/share-links/04: the app project page's own blocks and CSS at its own reading width,
+   with what only its owner reads taken out. What is here is only what the public page adds. */
+.share-inner.is-wide {
+  max-width: 1040px;
+}
+.share-project-meta::before {
+  content: '·';
+  margin-right: 9px;
+  color: var(--text-4);
+}
+/* A phone keeps the status, the count and the last activity on one line (mock 07): when it started
+   is the one fact the header can give up there. */
+@media (max-width: 640px) {
+  .share-project-meta.is-started {
+    display: none;
+  }
+}
+/* Work overview on a row of its own: the Coordinator card beside it on the app page is the owner's. */
+.share-project-overview {
+  margin-bottom: 20px;
+}
+.share-project-coordinator {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+}
+.share-project-tasks {
+  margin-bottom: 24px;
+}
+/* A task's title opens its public page, and reads as the title it is on the app's row. */
+.share-project-task {
+  color: inherit;
+}
+.share-project-task:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+.pdg-footnote {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 /* ── Public task page (SharedTaskPage) ──────────────────────────────────────────
    docs/mocks/share-links/05, left half: the task's header, then one card per block in the app task
    panel's order — Dependencies, Description, Acceptance, (Inputs), Runs, (Comments). */
@@ -11553,6 +11597,16 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 12px;
   white-space: nowrap;
+}
+/* A layer that sits under another (a project's Comments & files and Conversations, under Task
+   pages): indented beneath it, and greyed out while that one is off. */
+.share-layer.is-nested {
+  padding-left: 26px;
+}
+.share-layer.is-idle .share-layer-name,
+.share-layer.is-idle .share-layer-detail,
+.share-layer.is-idle .share-layer-count {
+  color: var(--text-4);
 }
 .share-dialog-row {
   display: flex;

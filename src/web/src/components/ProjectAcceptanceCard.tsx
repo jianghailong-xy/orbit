@@ -2,12 +2,13 @@ import { DownOutlined } from '@ant-design/icons';
 import { useId, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Skeleton, Typography } from 'antd';
-import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { useMediaQuery } from '../lib/useMediaQuery';
+import { AppLink } from './AppLink';
+import { TaskStatusPill } from './TaskStatusPill';
 
 /**
  * What this project is held to, drawn from `GET /projects/:id` → `acceptanceCriteriaItems`.
@@ -90,17 +91,20 @@ import { useMediaQuery } from '../lib/useMediaQuery';
 
 /** One task standing between a criterion and its work having met it, and the one thing that
  *  would move it. `requiredAction` is the code every completion refusal already quotes, so the
- *  reader is told what settles that task rather than only that it is unfinished. */
+ *  reader is told what settles that task rather than only that it is unfinished. A public project
+ *  page is told how the task stands instead (`status`): what settles a task is its owner's to act on. */
 export interface CriterionBlockingTask {
   taskId: string;
   title: string;
-  requiredAction: string;
+  requiredAction?: string;
+  status?: string;
 }
 
 /** One clause that does not hold, and the work holding it open. `heldUpBy` is empty for the
- *  clause whose whole content is that there is nobody to name. */
+ *  clause whose whole content is that there is nobody to name. A public project page names the
+ *  work and not the clause. */
 export interface CriterionUnmetReason {
-  clause: string;
+  clause?: string;
   heldUpBy?: CriterionBlockingTask[];
 }
 
@@ -297,19 +301,26 @@ function CriterionWork({
       </div>
       {unmet.length === 0 ? null : (
         <div className="acceptance-unmet">
-          {unmet.map((reason) => (
-            <div key={reason.clause} className="acceptance-unmet-reason">
-              <div className="acceptance-unmet-clause">
-                {UNMET_CLAUSE[reason.clause] ?? reason.clause}
-              </div>
+          {unmet.map((reason, index) => (
+            <div key={reason.clause ?? index} className="acceptance-unmet-reason">
+              {reason.clause ? (
+                <div className="acceptance-unmet-clause">
+                  {UNMET_CLAUSE[reason.clause] ?? reason.clause}
+                </div>
+              ) : null}
               {(reason.heldUpBy ?? []).map((task) => (
                 <div key={task.taskId} className="acceptance-held-up">
                   {/* The whole reason this line exists is "who does what next", and the reader's
-                      next move after recognising the name is to open it. */}
-                  <Link className="acceptance-held-up-title" to={`/tasks/${task.taskId}`}>
+                      next move after recognising the name is to open it — on a public page, only
+                      where the link shares that task (AppLink asks the page's resolver). */}
+                  <AppLink className="acceptance-held-up-title" to={`/tasks/${task.taskId}`}>
                     {task.title}
-                  </Link>
-                  <RequiredAction code={task.requiredAction} />
+                  </AppLink>
+                  {task.requiredAction ? (
+                    <RequiredAction code={task.requiredAction} />
+                  ) : task.status ? (
+                    <TaskStatusPill status={task.status} />
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -431,21 +442,47 @@ export function ProjectAcceptanceCard({
   projectId: string;
   action?: ReactNode;
 }) {
-  const phone = useMediaQuery(ACCEPTANCE_PHONE_QUERY);
-  const criteriaListId = useId();
   const detail = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api<ProjectAcceptanceDetail>(`/projects/${encodeURIComponent(projectId)}`),
     enabled: Boolean(projectId),
   });
+  return (
+    <AcceptanceCriteriaCard
+      action={action}
+      pending={detail.isPending}
+      error={detail.isError ? detail.error : null}
+      criteria={Array.isArray(detail.data?.acceptanceCriteriaItems) ? detail.data.acceptanceCriteriaItems : []}
+      integrationRef={detail.data?.integration?.ref ?? null}
+    />
+  );
+}
+
+/**
+ * The card itself, from criteria already in hand — the project page's once its document answers, and
+ * a public project page's from what its link carries (with no branch to name: a criterion met on the
+ * project's branch reads "on the project branch · not on main yet").
+ */
+export function AcceptanceCriteriaCard({
+  criteria,
+  integrationRef,
+  pending = false,
+  error = null,
+  action,
+}: {
+  criteria: AcceptanceCriterionItem[];
+  integrationRef: string | null;
+  pending?: boolean;
+  error?: Error | null;
+  action?: ReactNode;
+}) {
+  const phone = useMediaQuery(ACCEPTANCE_PHONE_QUERY);
+  const criteriaListId = useId();
   // Collapsed until asked: see CRITERIA_PREVIEW. A static render cannot press the button, which
   // is why the slice is `criteriaPreview` — the function this reads through is the one the suite
   // asserts both readings of.
   const [expanded, setExpanded] = useState(false);
 
-  const criteria = Array.isArray(detail.data?.acceptanceCriteriaItems)
-    ? detail.data.acceptanceCriteriaItems
-    : [];
   const previewLimit = phone ? MOBILE_CRITERIA_PREVIEW : CRITERIA_PREVIEW;
   const shown = criteriaPreview(criteria, expanded, previewLimit);
   const hasCriteriaDisclosure = criteria.length > previewLimit;
@@ -457,17 +494,17 @@ export function ProjectAcceptanceCard({
       styles={{ body: { padding: 0 } }}
       extra={action}
     >
-      {detail.isPending ? (
+      {pending ? (
         <div className="acceptance-block">
           <Skeleton active title={false} paragraph={{ rows: 3 }} />
         </div>
-      ) : detail.isError ? (
+      ) : error ? (
         <div className="acceptance-block">
           <Alert
             type="error"
             showIcon
             message="Acceptance criteria could not be loaded"
-            description={detail.error instanceof Error ? detail.error.message : undefined}
+            description={error instanceof Error ? error.message : undefined}
           />
         </div>
       ) : criteria.length === 0 ? (
@@ -483,7 +520,7 @@ export function ProjectAcceptanceCard({
           <AcceptanceCriteriaList
             id={criteriaListId}
             criteria={shown}
-            integrationRef={detail.data?.integration?.ref ?? null}
+            integrationRef={integrationRef}
           />
           {hasCriteriaDisclosure ? (
             // Says what it is hiding. A list that stopped at twelve without naming the other
