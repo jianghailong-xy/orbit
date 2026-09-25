@@ -380,7 +380,7 @@ export class QueueService {
       ? null
       : ((await this.prisma.modelProvider.findFirst({
           where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
-        })) ?? (await this.resolvePoolMember(session, declared!)));
+        })) ?? (await this.resolvePoolMember(this.prisma, session, declared!)));
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
         declaredProvider: declared,
@@ -585,8 +585,8 @@ export class QueueService {
    * `ownerId`'s account pool on `slug`: its member rows, and the enabled ones as candidates with their
    * quota as the cache has it. Null when `slug` names no pool of theirs.
    */
-  private async accountPool(ownerId: string, slug: string) {
-    const pool = await this.prisma.providerPool.findFirst({
+  private async accountPool(ownerId: string, slug: string, db: Prisma.TransactionClient = this.prisma) {
+    const pool = await db.providerPool.findFirst({
       where: { slug, ownerId },
       select: {
         members: {
@@ -619,12 +619,18 @@ export class QueueService {
    * user's keys. The member chosen is recorded on the session, which is what the next claim stays on,
    * and a move off another member records the line the transcript owes for it — carried by the next
    * engine start event the runner reports (RunnerApiController.events).
+   *
+   * Every door that builds a pool session's engine environment resolves it here — this claim, the
+   * reclaim a restarted runner rebuilds the session from, and the reload a provider switch re-spawns it
+   * with (RunnerApiController) — so none of them lands on another member, or on the runner's own login.
+   * `db` is the caller's client: the reload runs inside the transaction that holds this session's row.
    */
-  private async resolvePoolMember(
+  async resolvePoolMember(
+    db: Prisma.TransactionClient | PrismaService,
     session: { id: string; ownerId: string; poolMemberProviderId: string | null },
     slug: string,
   ) {
-    const pool = await this.accountPool(session.ownerId, slug);
+    const pool = await this.accountPool(session.ownerId, slug, db);
     if (!pool) return null;
     const now = new Date();
     const { rows, candidates } = pool;
@@ -632,7 +638,7 @@ export class QueueService {
     if (!chosen || chosen.id === session.poolMemberProviderId) return chosen;
     const previous = rows.find((row) => row.id === session.poolMemberProviderId);
     const standing = candidates.find((candidate) => candidate.row.id === previous?.id);
-    await this.prisma.session.update({
+    await db.session.update({
       where: { id: session.id },
       data: {
         poolMemberProviderId: chosen.id,

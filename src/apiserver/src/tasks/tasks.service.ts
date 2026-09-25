@@ -217,6 +217,7 @@ import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { runCodexAccount } from '../providers/plan-usage-accounts';
+import { accountPoolRuntime } from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
@@ -2096,9 +2097,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * A task may only pin a provider this caller can actually dispatch with: a built-in engine
-   * slug, or one of the configured providers visible to them. Rejected here rather than at run
-   * time, so a typo surfaces on the edit instead of failing every future run of the task.
-   * Mirrors the identical check SessionsService.create runs on an explicit provider.
+   * slug, one of the configured providers visible to them, or one of their own account pools.
+   * Rejected here rather than at run time, so a typo surfaces on the edit instead of failing every
+   * future run of the task. Mirrors the identical check SessionsService.create runs on an explicit
+   * provider.
    */
   private async assertUsableProvider(ownerId: string, provider?: string | null): Promise<void> {
     if (!provider) return;
@@ -2107,7 +2109,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
       select: { slug: true },
     });
-    if (!configured) throw new BadRequestException('provider not available');
+    if (!configured && !(await accountPoolRuntime(this.prisma, ownerId, provider))) {
+      throw new BadRequestException('provider not available');
+    }
   }
 
   /** A task may only be filed under a list the same user owns (cf. assertOwnedWorkspace). */
@@ -11557,13 +11561,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     //
     // Availability, so the delivery budget is untouched: re-enabling the provider clears it.
     if (!Object.values(AgentProvider).includes(seed.provider as AgentProvider)) {
-      const usable = await this.prisma.modelProvider.findFirst({
-        where: {
-          slug: seed.provider, enabled: true,
-          OR: [{ ownerId: null }, { ownerId: delivery.ownerId }],
-        },
-        select: { slug: true },
-      });
+      const usable =
+        (await this.prisma.modelProvider.findFirst({
+          where: {
+            slug: seed.provider, enabled: true,
+            OR: [{ ownerId: null }, { ownerId: delivery.ownerId }],
+          },
+          select: { slug: true },
+        })) ?? (await accountPoolRuntime(this.prisma, delivery.ownerId, seed.provider));
       if (!usable) {
         throw new MentionUndeliverable(
           'PROVIDER_UNAVAILABLE',

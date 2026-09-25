@@ -15,13 +15,23 @@ const DEEPSEEK = {
   followsPreset: false,
 };
 
-const serviceFor = (rows: unknown[], captured?: { where?: unknown }) =>
+const serviceFor = (
+  rows: unknown[],
+  captured?: { where?: unknown; poolWhere?: unknown },
+  pools: unknown[] = [],
+) =>
   new ProvidersService(
     {
       modelProvider: {
         findMany: async (args: { where: unknown }) => {
           if (captured) captured.where = args.where;
           return rows;
+        },
+      },
+      providerPool: {
+        findMany: async (args: { where: unknown }) => {
+          if (captured) captured.poolWhere = args.where;
+          return pools;
         },
       },
     } as never,
@@ -67,6 +77,23 @@ test('the query matches the check task and session writes run', async () => {
     slug: { not: 'opencode' },
     enabled: true,
     OR: [{ ownerId: null }, { ownerId: 'user-1' }],
+  });
+});
+
+// A pool is a slug to dispatch with like any provider, but only its owner's: the claim resolves it
+// for nobody else, and so do the write paths.
+test("the caller's own account pools are listed by name, on Claude, and only theirs", async () => {
+  const captured: { poolWhere?: unknown } = {};
+  const listed = await serviceFor([DEEPSEEK], captured, [
+    { slug: 'claude-accounts', label: 'Claude accounts' },
+  ]).listUsable('user-1');
+
+  assert.deepEqual(captured.poolWhere, { ownerId: 'user-1' });
+  assert.deepEqual(listed.at(-1), {
+    slug: 'claude-accounts',
+    label: 'Claude accounts',
+    runtime: 'claude',
+    builtin: false,
   });
 });
 

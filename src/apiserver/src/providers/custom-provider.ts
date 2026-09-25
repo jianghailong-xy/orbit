@@ -95,6 +95,24 @@ export async function sessionExecRuntime(
   });
 }
 
+/**
+ * The runtime `slug` borrows when it names one of `ownerId`'s own account pools, else null. Always
+ * Claude: a pool runs on whichever member the claim picks (QueueService.resolvePoolMember), and only a
+ * Claude subscription is admitted as one (ProvidersService.assertPoolMembers).
+ *
+ * Asked by the doors that accept a provider slug once no provider holds it. Owner-scoped with no shared
+ * branch because a pool has none: another owner's pool is refused like a slug nothing holds, which is
+ * also how the claim treats it.
+ */
+export async function accountPoolRuntime(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  slug: string,
+): Promise<AgentProvider | null> {
+  const pool = await db.providerPool.findFirst({ where: { slug, ownerId }, select: { id: true } });
+  return pool ? AgentProvider.CLAUDE : null;
+}
+
 // Env injected so the borrowed runtime CLI talks to the provider's endpoint. Claude runtime →
 // Anthropic-compatible vars (Phase 1); codex runtime → OpenAI-compatible (Phase 2); kimi runtime →
 // the Kimi CLI's own KIMI_MODEL_* provider.

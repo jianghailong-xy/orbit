@@ -177,11 +177,47 @@ test('a provider the caller cannot dispatch with is rejected on the write, not a
     task: { update: async () => ({ id: TASK_ID }) },
     // No configured row matches, and the slug isn't a built-in engine either.
     modelProvider: { findFirst: async () => null },
+    // Nor one of the caller's account pools.
+    providerPool: { findFirst: async () => null },
   } as never;
   const service = serviceForUpdate(prisma);
 
   await assert.rejects(
     service.update('owner-1', TASK_ID, { provider: 'not-a-provider' }),
+    /provider not available/,
+  );
+});
+
+test("one of the caller's own account pools is a provider a task may pin", async () => {
+  const writes: any[] = [];
+  const poolQueries: any[] = [];
+  const prisma = {
+    // Every run door opens its receipt (0137) before anything else.
+    ...fakeReceiptStore(),
+    task: {
+      update: async ({ data }: any) => {
+        writes.push(data);
+        return { id: TASK_ID };
+      },
+    },
+    // A pool has no provider row of its own.
+    modelProvider: { findFirst: async () => null },
+    providerPool: {
+      findFirst: async (args: any) => {
+        poolQueries.push(args);
+        return args.where.ownerId === 'owner-1' ? { id: 'pool-1' } : null;
+      },
+    },
+  } as never;
+  const service = serviceForUpdate(prisma);
+
+  await service.update('owner-1', TASK_ID, { provider: 'claude-accounts' });
+
+  assert.equal(writes[0].provider, 'claude-accounts');
+  // Owner-scoped: another owner's pool of that slug is not one this caller can dispatch with.
+  assert.deepEqual(poolQueries[0].where, { slug: 'claude-accounts', ownerId: 'owner-1' });
+  await assert.rejects(
+    service.update('owner-2', TASK_ID, { provider: 'claude-accounts' }),
     /provider not available/,
   );
 });
