@@ -71,7 +71,8 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       canonicalRepoUrl: `ssh://git@example.invalid/${label}`,
       upstreamRef: 'refs/heads/main',
       integrationRef: `refs/heads/project/${projectId}`,
-      refAuthority: 'RUNNER',
+      // The two closed sets 0231's CHECKs hold these to: a normalised URL and a known authority.
+      refAuthority: 'REMOTE',
     },
   });
   return { ownerId, projectId, codebaseId: codebase.id };
@@ -98,12 +99,19 @@ async function task(db: PrismaClient, f: Fixture, title: string): Promise<string
 /**
  * One integration job, written the way the row is written in production: the enqueue stamps
  * `created_at` and leaves `claimed_at` null, and the claim sets `claimed_at` and moves the state to
- * RUNNING. `at` is the enqueue, `claimedAt` the claim when there is one.
+ * RUNNING. `at` is the enqueue, `claimedAt` the claim when there is one, `finishedAt` the runner's
+ * answer.
+ *
+ * Only the states this read has an opinion about are written: it describes a job it finds RUNNING or
+ * QUEUED and ignores the rest, so a finished one is a CHECK_FAILED rather than a LANDED — 0281's
+ * `landed_tree_chk` holds a LANDED row to two equal tree shas, and a test that satisfied it would be
+ * writing facts about a push nobody made.
  */
 async function job(
   db: PrismaClient,
   f: Fixture,
-  spec: { at: Date; claimedAt?: Date; state: string; taskId?: string | null; idempotency: string },
+  spec: { at: Date; claimedAt?: Date; finishedAt?: Date; state: string;
+          taskId?: string | null; idempotency: string },
 ): Promise<string> {
   const id = randomUUID();
   await db.projectIntegrationJob.create({
@@ -121,6 +129,7 @@ async function job(
       state: spec.state,
       createdAt: spec.at,
       claimedAt: spec.claimedAt ?? null,
+      finishedAt: spec.finishedAt ?? null,
       idempotencyKey: `ij:v1:test:${f.projectId}:${spec.idempotency}`,
     },
   });
@@ -160,7 +169,8 @@ test('the landing line describes the oldest job in flight, on real PostgreSQL',
       await t.test('nothing in flight is the line’s absence, not a row with nothing in it',
         async () => {
           const f = await fixture(db, 'idle');
-          await job(db, f, { at: at(0), state: 'LANDED', idempotency: 'finished' });
+          await job(db, f, { at: at(0), claimedAt: at(1), finishedAt: at(60), state: 'CHECK_FAILED',
+                             idempotency: 'finished' });
 
           const view = await read(db, f);
 
@@ -193,9 +203,10 @@ test('the landing line describes the oldest job in flight, on real PostgreSQL',
         + 'enqueue', async () => {
         const f = await fixture(db, 'running-first');
         const taskId = await task(db, f, 'T2 wiki 契约、迁移与共享类型');
-        // Enqueued at 0, claimed at 60, a second job enqueued at 30. The claim is when the wait
-        // this card counts really began, and it is also what makes this job the oldest.
-        await job(db, f, { at: at(0), claimedAt: at(60), state: 'RUNNING', taskId, idempotency: 'older' });
+        // Enqueued at 0, claimed at 10, and a second job enqueued at 30 — after the first was
+        // already being checked. The claim is when the wait this card counts really began: measured
+        // from the enqueue instead, the job that started first would read as the newer of the two.
+        await job(db, f, { at: at(0), claimedAt: at(10), state: 'RUNNING', taskId, idempotency: 'older' });
         await job(db, f, { at: at(30), state: 'QUEUED', idempotency: 'newer' });
 
         const view = await read(db, f);
@@ -203,7 +214,7 @@ test('the landing line describes the oldest job in flight, on real PostgreSQL',
         assert.deepEqual(view.inFlight, {
           taskTitle: 'T2 wiki 契约、迁移与共享类型',
           state: 'RUNNING',
-          startedAt: at(60),
+          startedAt: at(10),
         });
       });
 
@@ -222,14 +233,18 @@ test('the landing line describes the oldest job in flight, on real PostgreSQL',
       await t.test('a finished job, and another project’s job, are both not in flight', async () => {
         const f = await fixture(db, 'settled');
         const other = await fixture(db, 'settled-other');
-        await job(db, f, { at: at(0), claimedAt: at(1), state: 'CHECK_FAILED', idempotency: 'failed' });
+        const taskId = await task(db, f, 'T3 唯一写入口');
+        await job(db, f, { at: at(0), claimedAt: at(1), finishedAt: at(60), state: 'CHECK_FAILED',
+                           taskId, idempotency: 'failed' });
         await job(db, other, { at: at(0), claimedAt: at(1), state: 'RUNNING', idempotency: 'theirs' });
 
         const view = await read(db, f);
 
         assert.equal(view.inFlight, null);
-        // The newest finished job still answers the tip — a job that did not run its checks to a
-        // verdict leaves it UNKNOWN rather than failing it.
+        assert.equal(view.integratingCount, 0);
+        assert.equal(view.queuedCount, 0);
+        // The newest finished job still answers the tip, which is why the two are read separately:
+        // a project with nothing in flight is often one whose last landing is why.
         assert.equal(view.mergeCheckOnTip, 'FAILING');
       });
     } finally {
