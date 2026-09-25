@@ -96,6 +96,9 @@ export function WikiEntryDrawer({
   }, [entryId]);
 
   const data = entry.data;
+  // Newest revision first, ordered here rather than trusted: which one is CURRENT is a claim this
+  // list makes, and the door's own order is not something a client should depend on to be right.
+  const ordered = [...(data?.history ?? [])].sort((a, b) => b.revision - a.revision);
 
   if (entry.isError) {
     return (
@@ -215,20 +218,23 @@ export function WikiEntryDrawer({
                 {/* Ordered here rather than trusted: which revision is CURRENT is a claim this list
                     makes, and the door's own order (`revision: 'desc'`) is not something a client
                     should depend on to be right about it. */}
-                {[...(data.history ?? [])]
-                  .sort((a, b) => b.revision - a.revision)
-                  .map((revision, index) => (
+                {ordered.map((revision, index) => {
+                  // The comparison belongs to the CURRENT revision: what a reader wants to see is what
+                  // changed to get here, and that is this revision against the one before it.
+                  const next = ordered[index + 1];
+                  return (
                   <li className={index === 0 ? 'cur' : ''} key={revision.id}>
                     <span className="rev">{wikiRevision(revision.revision)}</span>
                     <div>
                       <div className="h">{historyWord(revision.authorKind)}</div>
                       <div className="m">
                         {relTime(revision.createdAt)}
-                        {index > 0 && ` · ${wikiCompareWith(revision.revision)}`}
+                        {index === 0 && next && ` · ${wikiCompareWith(next.revision)}`}
                       </div>
                     </div>
                     </li>
-                  ))}
+                  );
+                })}
               </ol>
             )}
           </Section>
