@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>03 wiki entry drawer</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="wiki-desktop.css">
+<style>
+  .frame .app-nav { width: 280px; }
+  /* one grid cell, three layers: the topic page (scrolled to its Pitfalls), a scrim, the drawer.
+     The page is size-contained, so the drawer alone decides how tall the viewport is. */
+  .f03 { display: grid; }
+  .f03 > .app-shell { grid-area: 1 / 1; contain: size; overflow: hidden; }
+  .f03 > .wk-scrim { grid-area: 1 / 1; background: rgba(15, 23, 42, .16); }
+  .f03 > .wk-drawer { grid-area: 1 / 1; justify-self: end; position: relative; z-index: 3; width: 560px; display: flex; flex-direction: column;
+                      background: var(--bg-raised); border-left: 1px solid var(--border-subtle); box-shadow: -10px 0 28px rgba(15, 23, 42, .14); }
+  .f03 .doc-col { margin-top: -1170px; }
+  .wk-erow.is-selected { background: var(--brand-tint); }
+
+  .wk-drawer .tdp-head { position: relative; padding: 16px 12px 14px 20px; }
+  .wk-dkind { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+  .wk-dkind .dim { font-weight: 400; color: var(--text-3); }
+  .wk-drawer .tdp-title { margin-top: 8px; font-size: 18px; line-height: 1.35; max-width: 300px; }
+  .wk-drawer .tdp-meta { margin-top: 10px; }
+  .wk-iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; color: var(--text-2); font-size: 16px; flex: none; }
+  .wk-iconbtn.on { background: var(--bg-hover-strong); color: var(--text-1); }
+  .wk-menu { position: absolute; z-index: 5; top: 50px; right: 46px; width: 156px; padding: 4px; border-radius: 8px; background: var(--bg-raised);
+             box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05); }
+  .wk-menu .it { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 10px; border-radius: 4px; font-size: 14px; color: var(--text-1); }
+  .wk-menu .it .ic { font-size: 14px; color: var(--text-2); }
+  .wk-menu .it.hover { background: var(--bg-hover); }
+  .wk-menu .it.danger, .wk-menu .it.danger .ic { color: var(--error); }
+  .wk-menu .sep { height: 1px; margin: 4px 0; background: var(--border-subtle); }
+
+  .wk-drawer .tdp-section { padding: 14px 20px 16px; }
+  .wk-drawer .tdp-section-title { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .wk-drawer .tdp-section-title .c { font-weight: 400; }
+  .wk-dkv { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 7px 12px; font-size: 13.5px; line-height: 1.6; }
+  .wk-dkv > .k { color: var(--text-3); font-size: 12.5px; padding-top: 1px; }
+  .wk-dkv > .v { color: var(--text-1); min-width: 0; }
+  .wk-dkv.md { font-size: 13.5px; }
+  .wk-dkv .md-codeblock pre { margin: 0; white-space: pre; }
+  .wk-dkv .md-codeblock pre code { font-size: 12px; line-height: 1.6; }
+  .wk-dkv .md-copy { opacity: 1; pointer-events: auto; }
+
+  .wk-det-head { display: flex; align-items: baseline; gap: 10px; }
+  .wk-det-head .big { font-size: 24px; font-weight: 650; letter-spacing: -.01em; color: var(--text-1); }
+  .wk-det-head .lbl { font-size: 13px; color: var(--text-2); }
+  .wk-det-sub { margin-top: 2px; font-size: 12.5px; color: var(--text-3); }
+  .wk-det-sub code { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 11.5px; }
+  .wk-det-bars { margin-top: 10px; display: grid; grid-template-columns: 148px minmax(0, 1fr) 40px; gap: 7px 10px; align-items: center; font-size: 12.5px; }
+  .wk-det-bars .l { color: var(--text-2); white-space: nowrap; }
+  .wk-det-bars .bar { height: 8px; border-radius: 0 4px 4px 0; background: var(--fill-muted); overflow: hidden; }
+  .wk-det-bars .bar.after { background: var(--brand-tint); }
+  .wk-det-bars .bar i { display: block; height: 8px; border-radius: 0 4px 4px 0; background: var(--text-4); }
+  .wk-det-bars .bar.after i { background: var(--brand); }
+  .wk-det-bars .v { color: var(--text-1); font-weight: 600; text-align: right; }
+
+  .wk-dsrc { display: flex; flex-direction: column; gap: 8px; }
+  .wk-dsrc .orbit-link-card { margin: 0; }
+  .wk-dsrc .olc-quote .wk-mono { font-size: 11.5px; overflow-wrap: anywhere; }
+  .wk-commit { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+  .wk-commit .h { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-1); }
+  .wk-commit .h .ic { color: var(--brand); font-size: 14px; }
+  .wk-commit .h .sha { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 12px; color: var(--brand); }
+  .wk-commit .h .dim { color: var(--text-3); font-size: 12.5px; }
+  .wk-anc-note { margin-top: 8px; font-size: 12px; color: var(--text-3); line-height: 1.5; }
+
+  .wk-used-h { font-size: 13px; color: var(--text-2); margin-bottom: 4px; }
+  .wk-used-h b { color: var(--text-1); font-weight: 600; }
+  .wk-drawer .tdp-session { padding: 7px 8px; margin: 0 -8px; }
+  .wk-drawer .tdp-session .tdp-badge { font-size: 11.5px; }
+
+  .wk-hist { list-style: none; margin: 0; padding: 0; }
+  .wk-hist li { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 0 0 12px; }
+  .wk-hist li::before { content: ""; position: absolute; left: 14px; top: 22px; bottom: 0; width: 1px; background: var(--border); }
+  .wk-hist li:last-child { padding-bottom: 0; }
+  .wk-hist li:last-child::before { display: none; }
+  .wk-hist .rev { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 20px; border-radius: 10px; background: var(--fill-muted);
+                  color: var(--text-2); font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; }
+  .wk-hist li.cur .rev { background: var(--brand-tint); color: var(--brand-strong); }
+  .wk-hist .h { font-size: 13px; color: var(--text-1); line-height: 20px; }
+  .wk-hist .h a, .wk-hist .m a { color: var(--brand); text-decoration: none; }
+  .wk-hist .m { font-size: 12px; color: var(--text-3); margin-top: 1px; }
+  .wk-drawer .m-mark { outline-offset: -2px; border-radius: 0; }
+  .wk-drawer .m-mark > .m-n { top: 6px; right: 8px; }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');const h=Math.ceil(s.getBoundingClientRect().height);document.title='03 wiki entry · H='+h;document.body.setAttribute('data-h',String(h))})</script>
+</head>
+<body class="m">
+<script src="wiki-desktop-icons.js"></script>
+<div class="m-sheet wide">
+  <h1 class="m-h1 zh">03 · 条目详情：右侧抽屉，一条知识的全部——字段、有没有用、从哪来、锚在哪、谁在用、怎么改过</h1>
+  <p class="m-sub zh">Web · 在 02 上点 Pitfall「runner-go's full suite inside a session reaches production」，抽屉宽 560 从右侧盖上来，主题页留在后面（背景已滚到 Pitfalls，被点的那行高亮）。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">新增</span>抽屉内部照任务详情面板的结构排：头部（标题 + 标签 + 动作）→ 一节一节往下</div>
+    <div class="frame f03">
+      <div class="app-shell">
+        <aside class="app-nav">
+          <div class="tp-brand">
+            <span class="tp-brand-logo"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="og-nav" x1="14" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse"><stop stop-color="#5b8bff"/><stop offset="1" stop-color="#3370ff"/></linearGradient></defs><g transform="rotate(-26 32 32)"><ellipse cx="32" cy="32" rx="28" ry="12.5" stroke="url(#og-nav)" stroke-width="3.4" opacity="0.6"/><circle cx="56" cy="25.6" r="5.4" fill="url(#og-nav)"/></g><rect x="19" y="20" width="26" height="24" rx="6" fill="url(#og-nav)"/><path d="M25 27.5 L30 32 L25 36.5" stroke="#fff" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/><line x1="33" y1="35.8" x2="39.5" y2="35.8" stroke="#fff" stroke-width="2.9" stroke-linecap="round"/></svg></span>
+            <span class="tp-brand-name">Orbit</span>
+            <span class="tp-collapse-btn"><svg class="ic"><use href="#i-menu-fold"/></svg></span>
+          </div>
+          <div class="tp-scroll">
+            <div class="tp-section">
+              <div class="tp-item"><span class="tp-ico"><svg class="ic"><use href="#i-project"/></svg></span><span class="tp-label">Projects</span><kbd class="tp-count tp-nav-shortcut">⌘P</kbd></div>
+              <div class="tp-item active"><span class="tp-ico"><svg class="ic"><use href="#i-book"/></svg></span><span class="tp-label">Wiki</span><span class="tp-count needs-you">3</span></div>
+              <div class="tp-item"><span class="tp-ico"><svg class="ic"><use href="#i-desktop"/></svg></span><span class="tp-label">Runners</span></div>
+              <div class="tp-item"><span class="tp-ico"><svg class="ic"><use href="#i-api"/></svg></span><span class="tp-label">Providers</span></div>
+            </div>
+            <div class="tp-divider"></div>
+            <div class="tp-group">
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><span class="tp-count needs-you">1</span></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-develop</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><kbd class="tp-count tp-workspace-shortcut">⌘2</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-prod</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><kbd class="tp-count tp-workspace-shortcut">⌘3</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg><span class="tp-workspace-icon-running"></span></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-data</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span><kbd class="tp-count tp-workspace-shortcut">⌘4</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">longdeMac-mini.local</span></span><kbd class="tp-count tp-workspace-shortcut">⌘5</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">lfs</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span><kbd class="tp-count tp-workspace-shortcut">⌘6</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikids</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span><kbd class="tp-count tp-workspace-shortcut">⌘7</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">rocm</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation-gpu</span></span><kbd class="tp-count tp-workspace-shortcut">⌘8</kbd></div>
+            </div>
+            <div class="tp-divider"></div>
+            <div class="tp-group">
+              <div class="tp-group-head"><span class="tp-group-name">Task List</span><span class="tp-count">10</span></div>
+              <div class="tp-group-head"><span class="tp-group-name">Completed</span><span class="tp-count">6</span></div>
+            </div>
+          </div>
+          <div class="tp-user"><div class="tp-user-trigger"><span class="wk-avatar"><svg class="ic"><use href="#i-user"/></svg></span><span class="tp-user-name">wikova</span></div></div>
+        </aside>
+        <main class="app-main"><div class="app-view app-view--doc"><div class="doc-col">
+          <div class="wk-crumb"><a>Wiki</a><svg class="ic"><use href="#i-right"/></svg><span>Tasks &amp; dispatch</span></div>
+          <h1 class="t-title">Tasks &amp; dispatch</h1>
+          <div class="t-meta"><span>17 entries</span><span style="color:var(--text-4)">·</span><span class="chg"><span class="wk-new"></span>2 changed since last visit</span></div>
+
+          <section class="wk-summary">
+            <div class="wk-summary-h"><b>Summary</b><span>· generated from 17 entries at <span class="wk-mono">4db4f9f</span></span><span class="regen"><svg class="ic"><use href="#i-sync"/></svg>Regenerate</span></div>
+            <p class="wk-summary-p">Work starts only from a committed fact — evidence revised, a receipt written, a turn ended; a clock can only hand an open item to a person.<sup class="wk-fn">[1]</sup> A task is done when its declared criterion says so, and an EXECUTABLE criterion judges by the exit code alone.<sup class="wk-fn">[2]</sup><sup class="wk-fn">[3]</sup> Order is a field on the task: the dispatcher reads <code>priority</code>, then age, and no scheduler session moves tasks between lists.<sup class="wk-fn">[4]</sup> Wakeups are held by the server, so a recycled engine no longer loses them.<sup class="wk-fn">[5]</sup></p>
+            <div class="wk-refs">
+              <span><b>[1]</b>A clock never starts agent work</span>
+              <span><b>[2]</b>Completion is adjudicated, not claimed</span>
+              <span><b>[3]</b>EXECUTABLE judges by exit code and records nothing</span>
+              <span><b>[4]</b>Task priority is a field on the task, not a dispatcher session</span>
+              <span><b>[5]</b>Wakeups are held by the server</span>
+            </div>
+          </section>
+
+          <section class="wk-sec">
+            <div class="wk-sec-h"><h3>Principles &amp; conventions</h3><span class="n">4</span><span class="note">What every task in this topic starts from</span>
+              <span class="cols"><span class="col">Confirmed by</span><span class="col">Anchor</span><span class="col">This week</span></span></div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-flag"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">A clock never starts agent work</span></div><div class="wk-row-d">Work starts from a committed fact (evidence revised, a receipt written, a turn ended); elapsed time may only reassign an open item to a person.</div></div>
+              <span><span class="tdp-badge tone-owner">Owner</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>29×</b> this week</span></div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-flag"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">Completion is adjudicated, not claimed</span></div><div class="wk-row-d">A task is DONE when its declared criterion says so, not when the agent says so.</div></div>
+              <span><span class="tdp-badge tone-owner">Owner</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>24×</b> this week</span></div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-tag"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">Tool descriptions state “ask first” as a precondition</span></div><div class="wk-row-d">Convention · anchored at <code>src/runner-go/task_create_acceptance_criteria_test.go:317</code></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>9×</b> this week</span></div>
+            <div class="wk-more">Show 1 more</div>
+          </section>
+
+          <section class="wk-sec">
+            <div class="wk-sec-h"><h3>Decisions</h3><span class="n">4</span><span class="note">Active decisions, newest first · 1 superseded</span></div>
+            <div class="wk-open">
+              <div class="wk-erow"><span class="wk-kind" style="background:var(--brand-tint);color:var(--brand)"><svg class="ic"><use href="#i-fork"/></svg></span>
+                <div class="main"><div class="wk-row-t"><span class="wk-new"></span><span class="tt">Task priority is a field on the task, not a dispatcher session</span></div><div class="wk-row-d">Add <code>priority</code> to tasks; the dispatcher reads it.</div></div>
+                <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>2×</b> this week</span></div>
+              <div class="wk-open-body">
+                <div class="wk-open-when"><span class="tdp-badge tone-green">Active</span><span>Decided 2026-09-25 · confirmed by you 2h ago · r1</span></div>
+                <div class="wk-kv">
+                  <span class="k">Context</span><span class="v">Ordering work meant pausing lists and moving tasks between them by hand.</span>
+                  <span class="k">Decision</span><span class="v">Add <code>priority</code> to tasks; the dispatcher reads it.</span>
+                  <span class="k">Rejected</span><span class="v">A dedicated scheduler session that shuffles tasks between paused lists — it would be one more agent to babysit and invisible to the dispatcher.</span>
+                  <span class="k">Consequences</span><span class="v">Migration <code>0304_task_priority</code>; task lists sort by priority, then age.</span>
+                </div>
+                <div class="wk-sub-h">Sources <span class="c">2</span></div>
+                <div class="wk-srcs">
+                  <div class="orbit-link-card" data-kind="session">
+                    <div class="olc-head"><span class="olc-kind"><span class="olc-tile"><svg class="ic"><use href="#i-message"/></svg></span>Session</span><span class="olc-state is-live">Running</span></div>
+                    <div class="olc-title"><a>Orbit：给任务加优先级，让派发器尊重它</a></div>
+                    <div class="olc-line"><span class="olc-line-text">orbit · claude-opus-5 · 2h ago</span></div>
+                    <div class="olc-quote">“改 Orbit 加 priority 字段”<div class="who">Your answer to the session's question · 2026-09-25<span class="ver">quote verified ✓</span></div></div>
+                  </div>
+                  <div class="orbit-link-card" data-kind="commit">
+                    <div class="olc-head"><span class="olc-kind"><span class="olc-tile"><svg class="ic"><use href="#i-branches"/></svg></span>Commit</span><span class="olc-state is-done">On main</span></div>
+                    <div class="olc-title"><a>feat(tasks): a task's priority decides which of its list's ready tasks takes the next slot</a></div>
+                    <div class="olc-line"><span class="olc-line-text">b2f8526a8 · migration 0304_task_priority · 2026-09-25</span></div>
+                    <div class="olc-quote">“Higher is dispatched first. An ORDER, never a permission: it starts nothing, bypasses no gate”<div class="who">0304_task_priority/migration.sql<span class="ver">quote verified ✓</span></div></div>
+                  </div>
+                </div>
+                <div class="wk-sub-h">Anchors <span class="c">2</span></div>
+                <div class="wk-anchors">
+                  <div class="wk-anc"><svg class="ic aim"><use href="#i-aim"/></svg><span class="p">src/apiserver/prisma/migrations/0304_task_priority/</span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span></div>
+                  <div class="wk-anc"><svg class="ic aim"><use href="#i-aim"/></svg><span class="p">schema.prisma · Task.priority</span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span></div>
+                </div>
+                <div class="wk-open-foot"><span class="wk-btn sm">Open entry</span><span class="wk-btn sm text">Collapse</span></div>
+              </div>
+            </div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-fork"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">EXECUTABLE judges by exit code and records nothing</span></div><div class="wk-row-d">2026-09-04 · the owner: “根据 exit code 来简单判断，不需要实际记录数据” · migration <code>0230</code></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>14×</b> this week</span></div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-fork"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">Wakeups are held by the server</span></div><div class="wk-row-d">2026-09-13 · <code>session_scheduled_wakeup</code> · commit <code>1125c445a</code></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>6×</b> this week</span></div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-fork"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">Project DONE is a projection, not a gate</span></div><div class="wk-row-d">2026-09-03 · anchored at <code>docs/project-done-gate.md</code>, <code>src/apiserver/src/projects/project-done-derived.ts</code></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>8×</b> this week</span></div>
+            <div class="wk-erow sup"><span class="wk-kind"><svg class="ic"><use href="#i-fork"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">Projects close through an acceptance DONE gate</span></div><div class="supby">Superseded by <a>Project DONE is a projection, not a gate</a> · 2026-09-03 · no longer sent to agents</div></div>
+              <span><span class="tdp-badge tone-muted">Superseded</span></span><span></span><span></span></div>
+          </section>
+
+          <section class="wk-sec">
+            <div class="wk-sec-h"><h3>Pitfalls</h3><span class="n">5</span><span class="note">Traps a run has actually hit, with the way out</span></div>
+            <div class="wk-erow is-selected"><span class="wk-kind"><svg class="ic"><use href="#i-warning"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">runner-go's full suite inside a session reaches production</span></div><div class="wk-row-d">Fix: unset the <code>ORBIT_*</code> variables before <code>go test ./...</code></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>41×</b> this week</span></div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-warning"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">Piping a test run into grep hides its exit code</span></div><div class="wk-row-d">Fix: <code>set -o pipefail</code> or check <code>PIPESTATUS</code></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>17×</b> this week</span></div>
+            <div class="wk-erow changed"><span class="wk-kind"><svg class="ic"><use href="#i-warning"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="wk-new"></span><span class="tt">apiserver <code>tsc</code> in a worktree reads the main checkout's <code>shared/dist</code></span></div><div class="wk-row-d">Fix: build <code>src/shared</code> in the worktree first</div>
+                <div class="warnline"><svg class="ic"><use href="#i-exclamation-circle"/></svg><span><code>src/apiserver/tsconfig.json</code> changed on main · held back from agents until someone re-checks it</span></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor changed"><svg class="ic"><use href="#i-warning"/></svg>Changed</span><span class="used"><span class="wk-btn sm">Re-check</span></span></div>
+            <div class="wk-more">Show 2 more</div>
+          </section>
+
+          <section class="wk-sec">
+            <div class="wk-sec-h"><h3>Recipes</h3><span class="n">2</span><span class="note">Steps that worked, with how to check them</span></div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-tool"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">Show an agent-made image to the user</span></div><div class="wk-row-d">Upload to <code>/api/runner/sessions/:id/attachments</code>, then reference <code>orbit-attachment:&lt;publicId&gt;</code></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>5×</b> this week</span></div>
+            <div class="wk-more">Show 1 more</div>
+          </section>
+
+          <section class="wk-sec">
+            <div class="wk-sec-h"><h3>Concepts</h3><span class="n">2</span><span class="note">The words this topic uses, defined once</span></div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-bulb"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">Integration line</span></div><div class="wk-row-d">The project branch every task lands on before promotion to main · <code>docs/project-integration-line-contract.md</code></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>11×</b> this week</span></div>
+            <div class="wk-erow"><span class="wk-kind"><svg class="ic"><use href="#i-bulb"/></svg></span>
+              <div class="main"><div class="wk-row-t"><span class="tt">Landing vs promotion</span></div><div class="wk-row-d">Landed = on the integration line; promoted = on main · <code>src/apiserver/src/projects/project-criterion-landing.ts:48</code></div></div>
+              <span><span class="tdp-badge tone-blue">Confirmed</span></span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span><span class="used">Used <b>7×</b> this week</span></div>
+          </section>
+        </div></div></main>
+      </div>
+      <div class="wk-scrim"></div>
+      <aside class="wk-drawer">
+        <div class="tdp-head m-mark"><span class="m-n">1</span>
+          <div class="tdp-head-main">
+            <div class="wk-dkind"><span class="wk-kind"><svg class="ic"><use href="#i-warning"/></svg></span>Pitfall<span class="dim">· Runner &amp; engines · Tasks &amp; dispatch</span></div>
+            <div class="tdp-title">runner-go's full suite inside a session reaches production</div>
+            <div class="tdp-meta">
+              <span class="tdp-badge tone-blue">Confirmed</span>
+              <span class="tdp-badge tone-green"><svg class="ic"><use href="#i-check"/></svg>Verified at 4db4f9f</span>
+              <span class="tdp-badge tone-muted"><svg class="ic"><use href="#i-pushpin"/></svg>Pinned</span>
+            </div>
+          </div>
+          <div class="tdp-head-actions"><span class="wk-btn sm" style="height:32px;padding:0 12px;font-size:13.5px"><svg class="ic"><use href="#i-edit"/></svg>Edit</span><span class="wk-iconbtn on"><svg class="ic"><use href="#i-ellipsis"/></svg></span></div>
+          <span class="wk-iconbtn"><svg class="ic"><use href="#i-close"/></svg></span>
+          <div class="wk-menu">
+            <div class="it hover"><svg class="ic"><use href="#i-swap"/></svg>Supersede…</div>
+            <div class="it danger"><svg class="ic"><use href="#i-stop"/></svg>Retire…</div>
+            <div class="sep"></div>
+            <div class="it"><svg class="ic"><use href="#i-link"/></svg>Copy link</div>
+          </div>
+        </div>
+
+        <section class="tdp-section m-mark"><span class="m-n">2</span>
+          <div class="tdp-section-title">Details</div>
+          <div class="wk-dkv md">
+            <span class="k">Trigger</span><span class="v"><code>go test ./...</code> in <code>src/runner-go</code> with <code>ORBIT_*</code> set</span>
+            <span class="k">Symptom</span><span class="v">11 CLI tests fail and one hangs until <code>-timeout</code> panics. The errors name your own session: <code>POST /runner/sessions/…/approvals → 403 PROJECT_SCOPE_MISMATCH</code></span>
+            <span class="k">Cause</span><span class="v">The tests point the CLI at an httptest server, but it still reads the session's <code>ORBIT_*</code> variables and takes the real approval path to the live control plane.</span>
+            <span class="k">Fix</span><span class="v"><div class="md-codeblock"><span class="md-copy"><svg class="ic"><use href="#i-copy"/></svg></span><pre><code>env -u ORBIT_SESSION_ID -u ORBIT_AGENT_ID \
+    -u ORBIT_TASK_ID -u ORBIT_HOME \
+    -u ORBIT_ALLOW_ORCHESTRATION \
+    -u ORBIT_WATCHES -u ORBIT_BG_SOCKET \
+    -u ORBIT_BG_TOKEN -u ORBIT_SPAWN_DEPTH \
+    go test ./...</code></pre></div></span>
+          </div>
+        </section>
+
+        <section class="tdp-section m-mark"><span class="m-n">3</span>
+          <div class="tdp-section-title">Detector</div>
+          <div class="wk-det-head"><span class="lbl">Compliance</span><span class="big">32% → 88%</span><span class="lbl">since confirmed</span></div>
+          <div class="wk-det-sub">34 sessions hit the trigger · compliance = ran the suite with <code>ORBIT_*</code> unset</div>
+          <div class="wk-det-bars">
+            <span class="l">Before it was confirmed</span><span class="bar"><i style="width:32%"></i></span><span class="v">32%</span>
+            <span class="l">Since confirmed · 09-23</span><span class="bar after"><i style="width:88%"></i></span><span class="v">88%</span>
+          </div>
+        </section>
+
+        <section class="tdp-section m-mark"><span class="m-n">4</span>
+          <div class="tdp-section-title">Sources <span class="c">3</span></div>
+          <div class="wk-dsrc">
+            <div class="orbit-link-card" data-kind="session">
+              <div class="olc-head"><span class="olc-kind"><span class="olc-tile"><svg class="ic"><use href="#i-message"/></svg></span>Session</span><span class="olc-state is-done">Succeeded</span></div>
+              <div class="olc-title"><a>runner-go suite hit prod</a></div>
+              <div class="olc-line"><span class="olc-line-text">orbit · claude-opus-5 · 2026-09-23</span></div>
+              <div class="olc-quote"><span class="wk-mono">POST /runner/sessions/4X5lUuVWWEnCac52nlGitt/approvals -&gt; 403 refused: PROJECT_SCOPE_MISMATCH</span><div class="who">Tool output · <span class="wk-mono">go test ./...</span><span class="ver">quote verified ✓</span></div></div>
+            </div>
+            <div class="orbit-link-card" data-kind="task">
+              <div class="olc-head"><span class="olc-kind"><span class="olc-tile"><svg class="ic"><use href="#i-check-square"/></svg></span>Task</span><span class="status-pill todo"><span class="status-dot"></span>Open</span></div>
+              <div class="olc-title"><a>runner-go 的 task/project CLI 测试会串到线上:在 Orbit 会话里跑整包,11 个红、其中 1 个永远挂住</a></div>
+              <div class="olc-line"><span class="olc-line-text">orbit · never run · 2026-09-23</span></div>
+              <div class="olc-quote">“把 ORBIT_* 变量 env -u 掉之后同样的命令 0.6s 全绿”<div class="who">From the task · 2026-09-23<span class="ver">quote verified ✓</span></div></div>
+            </div>
+            <div class="wk-commit">
+              <div class="h"><svg class="ic"><use href="#i-branches"/></svg><span class="sha">864cad31c</span><span>reproduced on a clean copy of main</span><span class="dim">· 2026-09-23</span></div>
+              <div class="olc-quote"><span class="wk-mono">ok  orbit  0.588s</span> — the same 11 tests, with <span class="wk-mono">ORBIT_*</span> unset<div class="who">Controlled run on that tree<span class="ver">quote verified ✓</span></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tdp-section m-mark"><span class="m-n">5</span>
+          <div class="tdp-section-title">Anchors <span class="c">2</span></div>
+          <div class="wk-anchors">
+            <div class="wk-anc"><svg class="ic aim"><use href="#i-aim"/></svg><span class="p">src/runner-go/mcp.go · askBeforeCreate</span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span></div>
+            <div class="wk-anc"><svg class="ic aim"><use href="#i-aim"/></svg><span class="p">src/runner-go/task_completion_criterion_test.go</span><span class="wk-anchor ok"><svg class="ic"><use href="#i-check"/></svg><span class="wk-mono">4db4f9f</span></span></div>
+          </div>
+          <div class="wk-anc-note">Checked again after every commit to main. If the anchored code changes, agents stop getting this entry until someone re-checks it.</div>
+        </section>
+
+        <section class="tdp-section m-mark"><span class="m-n">6</span>
+          <div class="tdp-section-title">Where it's used</div>
+          <div class="wk-used-h">Pushed to <b>41</b> sessions this week · fetched <b>6×</b></div>
+          <div class="tdp-session"><span class="tdp-dot RUNNING"></span><div class="tdp-session-main"><div class="tdp-session-title">执行任务：runner 自动更新不驱逐在途回合（发布 0.1.186）</div><div class="tdp-session-sub">orbit · in its Wiki context at start · 3h ago</div></div><span class="tdp-badge tone-muted">Pushed</span></div>
+          <div class="tdp-session"><span class="tdp-dot RUNNING"></span><div class="tdp-session-main"><div class="tdp-session-title">Orbit：给任务加优先级，让派发器尊重它</div><div class="tdp-session-sub">orbit · wiki_get before running go test · 5h ago</div></div><span class="tdp-badge tone-blue">Fetched</span></div>
+          <div class="tdp-session"><span class="tdp-dot SUCCEEDED"></span><div class="tdp-session-main"><div class="tdp-session-title">执行任务：T6b 准入闭环：编辑成员同样过准入、入口拒绝无可用成员的池、回落不再静默、会话载荷不外泄</div><div class="tdp-session-sub">orbit · in its Wiki context at start · 6h ago</div></div><span class="tdp-badge tone-muted">Pushed</span></div>
+        </section>
+
+        <section class="tdp-section m-mark"><span class="m-n">7</span>
+          <div class="tdp-section-title">History</div>
+          <ol class="wk-hist">
+            <li class="cur"><span class="rev">r2</span><div><div class="h"><b>Amended</b> · fix now also unsets <span class="wk-mono">ORBIT_BG_SOCKET</span> / <span class="wk-mono">ORBIT_BG_TOKEN</span></div><div class="m">Confirmed by you · 2026-09-24 · <a>Compare with r1</a></div></div></li>
+            <li><span class="rev">r1</span><div><div class="h"><b>Confirmed by you</b></div><div class="m">2026-09-23</div></div></li>
+            <li><span class="rev">r1</span><div><div class="h"><b>Proposed</b> by session <a>“runner-go suite hit prod”</a></div><div class="m">2026-09-23</div></div></li>
+          </ol>
+        </section>
+      </aside>
+    </div>
+
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>头部</b>：类型 + 所属主题、标题、三个标签（Confirmed / ✓ Verified at 4db4f9f / Pinned），右上 Edit 和 ⋯，⋯ 里是 Supersede… / Retire… / Copy link（Retire 用红字，因为它把条目从 agent 那里撤掉）。<span class="t orbit">Orbit 一致性</span>整个头部照任务详情面板（<code>.tdp-head</code>：标题 → 一行标签 → 右侧动作 → 关闭 ✕），标签就是 <code>.tdp-badge</code>；Pinned 沿用会话列表里已有的 Pinned。<span class="t xin">新词</span>Supersede、Retire、Verified at。</span></li>
+      <li><span class="m-n">2</span><span><b>Details</b>：Pitfall 固定四栏 Trigger / Symptom / Cause / Fix；Fix 是可复制的代码块。其他类型各有自己的一组字段（Decision 是 Context / Decision / Rejected / Consequences，见 02）。<span class="t orbit">Orbit 一致性</span>代码块和行内代码直接用会话 markdown 的 <code>.md pre</code> / <code>.md code</code>，右上角复制按钮同款。<span class="t xin">新词</span>Trigger、Symptom、Cause、Fix。</span></li>
+      <li><span class="m-n">3</span><span><b>Detector</b>：「这条知识有没有用」的读数——会话碰到触发条件（在 runner-go 里跑整包）时，有没有照 Fix 做。确认前 32%，确认后 88%，本周期共 34 个会话碰到。条形图两根：确认前灰、确认后主色，数值写在条尾。<span class="t ref">借鉴</span>Guru 卡片上的验证与使用读数。<span class="t xin">新词</span>Detector、compliance。</span></li>
+      <li><span class="m-n">4</span><span><b>Sources</b>：3 条出处，每条带原文引文 + quote verified ✓（系统核对过引文确实出现在出处里，不是 agent 转述）。会话和任务用 Orbit 链接卡，提交用一行。规格写的第二条是「任务评论」；这张真实任务没有评论，引文取自任务正文。<span class="t orbit">Orbit 一致性</span>链接卡 = 会话里的 <code>.orbit-link-card</code>，任务状态胶囊 = <code>TaskStatusPill</code>。</span></li>
+      <li><span class="m-n">5</span><span><b>Anchors</b>：两个锚点，都在 4db4f9f 上复验通过。下面一句说明规则：main 每次提交后重验，锚定的代码变了，这条暂停推送，等人 Re-check（02 那条琥珀的就是这个状态）。<span class="t coord">协调性</span>✓ / Changed / Missing 三态在 02 列表、这里、05 的 Wiki context 口径一致。<span class="t xin">新词</span>Anchor。</span></li>
+      <li><span class="m-n">6</span><span><b>Where it's used</b>：本周开工时推送给 41 个会话，agent 主动取了 6 次（wiki_get）；下面列最近 3 个会话，右侧标明是推送的还是主动取的。<span class="t orbit">Orbit 一致性</span>会话行照任务详情 Runs 区（<code>.tdp-session</code> + 状态圆点）。</span></li>
+      <li><span class="m-n">7</span><span><b>History</b>：修订时间线，新的在上；每次写明谁提议、谁确认，r2 可以和 r1 对比。<span class="t ref">借鉴</span>Wikipedia 的历史页（cur / prev 对比）、Notion page history。<span class="t coord">协调性</span>Proposed / Confirmed / Amended 与 01 的 Recently changed、04 的 Review 用同一组动词。</span></li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

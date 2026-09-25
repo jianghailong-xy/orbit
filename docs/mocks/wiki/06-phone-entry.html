@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>06 phone entry</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="phone-mock.css">
+<style>
+  /* the page under the web drawer (Projects, dimmed by the backdrop) */
+  .bg-row { padding: 10px 2px 11px; border-bottom: 1px solid var(--border-subtle); }
+  .bg-row .t { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bg-row .g { font-size: 12.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* the three states of the new row, drawn on a strip of drawer */
+  .st-web { background: var(--bg-raised); padding: 10px 8px 12px; }
+  .st-cap { font: 12px/1.5 "Noto Sans CJK SC", sans-serif; color: var(--text-3); padding: 8px 8px 4px; }
+  .st-cap:first-child { padding-top: 2px; }
+  .st-ios { background: #F9F9F9; padding: 10px 0 12px; }
+  .st-ios .st-cap { padding: 8px 22px 4px; }
+  .peek-row { padding: 10px 16px 11px; border-bottom: .5px solid #D8D8DC; white-space: nowrap; font-size: 17px; }
+  .peek-row span { display: block; font-size: 15px; color: #8A8A8D; margin-top: 3px; }
+</style>
+</head>
+<body class="m">
+<script src="phone-mock-antd.js"></script>
+<script src="phone-mock.js"></script>
+<div class="m-sheet pb-sheet">
+  <h1 class="m-h1 zh">06 · 入口：抽屉里加一行 Wiki（web 手机 ｜ iOS ｜ 说明）</h1>
+  <p class="pb-lede zh">两端各加<b>一行</b>，其余都是今天的抽屉：web 手机（≤960px 侧栏变抽屉）在 <b>Projects 下面</b>、iOS 抽屉在 <b>Tasks 下面</b>加 <b>Wiki</b>，右侧琥珀数字 = 等你审的提议数（今天 3）。
+    虚线框 + 编号 = 改动点。workspace、任务清单、项目名取自线上真实数据；web 抽屉的类名全是 <code>TasksSidePanel</code> 现成的 <code>.tp-*</code>，iOS 照 <code>CompactShell.swift</code> 的 <code>NavigationDrawer</code> 量。</p>
+  <div class="pb-legend zh"><span class="pb-tag sys">iOS 系统</span>系统控件与习惯 <span class="pb-tag con">Orbit 一致性</span>沿用现成组件 / 用词 <span class="pb-tag co">协调性</span>同一个词、同一个数在各处口径一致 <span class="pb-tag new">新词</span>新造的词，要你拍板 <span class="pb-tag ref">借鉴</span>参考产品 <span class="pb-tag done">已定</span>owner 已拍板 <span class="pb-tag later">另议</span>不在这次范围</div>
+
+  <div class="pb-grid">
+    <div class="pb-colhead">web 手机 <span>· 390 CSS px · 抽屉 min(320px, 84vw)</span></div>
+    <div class="pb-colhead">iOS <span>· 402×874pt · 抽屉 min(324, 0.76w) = 305.5pt</span></div>
+    <div class="pb-colhead zh">说明</div>
+
+    <!-- ① the drawer, open -->
+    <div class="pb-band zh"><span class="pb-bn">1</span>抽屉打开时 <small>· 新增一行 Wiki，位置两端都在「工作」类目的地之后</small></div>
+
+    <div class="pb-web tall" data-name="web-drawer">
+      <div class="wp-topbar"><span class="wp-toggle"><i data-ant="menu"></i></span><span class="wp-topname">Orbit</span></div>
+      <div class="wp-page">
+        <div class="wp-titlerow"><h1 class="page-title">Projects</h1><span class="wp-btn text">History</span><span class="wp-btn primary i40"><i data-ant="plus"></i></span></div>
+        <div class="wp-input"><i data-ant="search"></i>Search projects and goals</div>
+        <div class="wp-sec"><div class="wp-sech"><h3>Needs attention</h3><span class="wp-count">3</span></div>
+          <div class="bg-row"><div class="t">把「什么算完成」从项目末尾搬到开工前</div><div class="g">Needs you · Approve merge to main · 2h</div></div>
+          <div class="bg-row"><div class="t">Postgres 性能与容量治理</div><div class="g">Needs you · 1 question from coordinator · 35m</div></div>
+          <div class="bg-row"><div class="t">Wikids AI 游戏模块：狼人杀 MVP</div><div class="g">Ready · no activity 3d</div></div>
+        </div>
+        <div class="wp-sec"><div class="wp-sech"><h3>Running</h3><span class="wp-count">1</span></div>
+          <div class="bg-row"><div class="t">落地可靠性：做出来的成果必须真的到达目的地</div><div class="g">Coordinator · resolving a merge conflict · 18m</div></div>
+        </div>
+      </div>
+      <div class="wp-backdrop"></div>
+      <aside class="wp-drawer">
+        <div class="tp-brand">
+          <span class="tp-brand-logo"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="og" x1="14" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse"><stop stop-color="#5b8bff"/><stop offset="1" stop-color="#3370ff"/></linearGradient></defs><g transform="rotate(-26 32 32)"><ellipse cx="32" cy="32" rx="28" ry="12.5" stroke="url(#og)" stroke-width="3.4" opacity="0.6"/><circle cx="56" cy="25.6" r="5.4" fill="url(#og)"/></g><rect x="19" y="20" width="26" height="24" rx="6" fill="url(#og)"/><path d="M25 27.5 L30 32 L25 36.5" stroke="#fff" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/><line x1="33" y1="35.8" x2="39.5" y2="35.8" stroke="#fff" stroke-width="2.9" stroke-linecap="round"/></svg></span>
+          <span class="tp-brand-name">Orbit</span>
+        </div>
+        <div class="tp-scroll">
+          <div class="tp-section">
+            <div class="tp-item"><span class="tp-ico"><i data-ant="project"></i></span><span class="tp-label">Projects</span></div>
+            <div class="pb-mark"><span class="m-n">1</span>
+              <div class="tp-item"><span class="tp-ico"><i data-ant="book"></i></span><span class="tp-label">Wiki</span><span class="tp-count needs-you">3</span></div>
+            </div>
+            <div class="tp-item"><span class="tp-ico"><i data-ant="desktop"></i></span><span class="tp-label">Runners</span></div>
+            <div class="tp-item"><span class="tp-ico"><i data-ant="api"></i></span><span class="tp-label">Providers</span></div>
+          </div>
+          <div class="tp-divider"></div>
+          <div class="tp-group">
+            <div class="tp-item"><span class="tp-ico tp-workspace-icon"><i data-ant="folder"></i></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><span class="tp-count needs-you">1</span></div>
+            <div class="tp-item"><span class="tp-ico tp-workspace-icon"><i data-ant="folder"></i><span class="wp-folderdot"></span></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikids</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span></div>
+            <div class="tp-item"><span class="tp-ico tp-workspace-icon"><i data-ant="folder"></i></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-develop</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">mac-mini</span></span></div>
+          </div>
+          <div class="tp-divider"></div>
+          <div class="tp-group">
+            <div class="tp-item"><span class="tp-ico"><i data-ant="inbox"></i></span><span class="tp-label">No list</span><span class="tp-count">12</span></div>
+          </div>
+          <div class="tp-group">
+            <div class="tp-group-head"><span class="tp-group-name">Task List</span><span class="tp-count">9</span><i data-ant="caret-down" style="font-size:12px;color:var(--text-3)"></i></div>
+            <div class="tp-item inset"><span class="tp-list-dot running"></span><span class="tp-label">Release checklist</span></div>
+            <div class="tp-item inset"><span class="tp-list-dot"></span><span class="tp-label">Bugs</span></div>
+            <div class="tp-item inset"><span class="tp-list-dot done"></span><span class="tp-label done">FineWeb CC-MAIN-2025-26</span></div>
+          </div>
+        </div>
+        <div class="tp-user"><div class="tp-user-trigger"><span class="wp-avatar"><i data-ant="user"></i></span><span class="tp-user-name">wikova</span></div></div>
+      </aside>
+    </div>
+
+    <div class="pb-ios full" data-name="ios-drawer">
+      <div class="io-drawer">
+        <div style="height:62px"></div>
+        <div class="io-dhead"><b>Orbit</b><span class="io-disc"><i data-sf="search"></i></span></div>
+        <div class="io-drow"><span class="gl"><i data-sf="grid"></i></span><span class="lb">Projects</span><span class="sp"></span><span class="num">2</span></div>
+        <div class="io-drow"><span class="gl"><i data-sf="checklist"></i></span><span class="lb">Tasks</span></div>
+        <div class="pb-mark" style="margin:1px 10px"><span class="m-n">1</span>
+          <div class="io-drow" style="margin:0"><span class="gl"><i data-sf="book"></i></span><span class="lb">Wiki</span><span class="sp"></span><span class="num">3</span></div>
+        </div>
+        <div class="io-dsep"></div>
+        <div class="io-dlabel">Workspaces</div>
+        <div class="io-drow"><span class="gl"><i data-sf="folder"></i></span><span class="lb">orbit<span class="rn"> · wikova</span></span><span class="sp"></span><span class="io-cap">1</span></div>
+        <div class="io-drow"><span class="gl"><i data-sf="folder"></i></span><span class="lb">wikids<span class="rn"> · wikova</span></span><span class="sp"></span><span class="io-spin"></span></div>
+        <div class="io-drow"><span class="gl"><i data-sf="folder"></i></span><span class="lb">wikova-develop<span class="rn"> · mac-mini</span></span></div>
+        <div class="io-dlabel">Projects <span class="c">26</span></div>
+        <div class="io-drow"><span class="lb">把「什么算完成」从项目末尾搬到开工前</span><span class="sp"></span><span class="io-cap">1</span></div>
+        <div class="io-drow"><span class="lb">Postgres 性能与容量治理</span><span class="sp"></span><span class="io-cap">1</span></div>
+        <div class="io-drow"><span class="lb">落地可靠性：做出来的成果必须真的到达目的地</span><span class="sp"></span><span class="io-spin"></span></div>
+        <div class="io-drow"><span class="lb">Wikids AI 游戏模块：狼人杀 MVP</span></div>
+        <div class="io-actionbar">
+          <span class="io-newsession"><i data-sf="compose"></i>New session</span>
+          <span class="io-disc raised"><i data-sf="gear"></i></span>
+        </div>
+      </div>
+      <div class="io-peek" data-clip>
+        <div style="height:62px"></div>
+        <div class="io-nav"><span class="io-glass l"><i data-sf="menu"></i></span></div>
+        <div class="io-search" style="margin-right:0">Search pro</div>
+        <div class="peek-row" style="font-weight:700;font-size:15px;border:0;padding-top:14px">Needs attention</div>
+        <div class="peek-row">把「什么算完成」从项目末尾<span>Needs you · Approve merge</span></div>
+        <div class="peek-row">Postgres 性能与容量治理<span>Needs you · 1 question</span></div>
+        <div class="peek-row">Wikids AI 游戏模块：狼人杀<span>Ready · no activity 3d</span></div>
+      </div>
+      <div data-ios="status" style="position:absolute;top:0;left:0;right:0;z-index:5"></div>
+      <div class="io-home"></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="m-n" style="display:inline-flex;vertical-align:-3px;margin-right:6px">1</span><b>新增一行 Wiki</b>（虚线框）。其余行一个没动。</p>
+      <p><span class="pb-tag co">协调性</span>两端都放在「工作」类目的地之后、机器与设置之前：iOS 的 <code>AppSection.workSections</code> 由 <code>[.projects, .tasks]</code> 变成 <code>[.projects, .tasks, .wiki]</code>；web 顶部的 <code>TOP</code> 里没有 Tasks（任务在下面的 Task List 里），所以紧跟 Projects、排在 Runners / Providers 之前。两边读起来都是「做的事 → 知道的事 → 机器」。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>web 就是一条 <code>.tp-item</code>（36px 行、16px 图标、14px 字），图标 AntD <code>BookOutlined</code>；数字用 workspace 行现成的 <code>.tp-count.needs-you</code> 琥珀胶囊。手机抽屉照旧不画 ⌘ 快捷键（<code>.tp-nav-shortcut</code> 只在 ≥961px 出现）。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>iOS 用 <code>sectionRow</code> 的行壳（约 44pt 行、24pt 图标列、12pt 间距），图标 SF <code>book.closed</code>；数字照 <code>projectsRow</code> 的写法——<code>.orbitMeta.weight(.semibold)</code> 橙色裸数字，不套胶囊（胶囊 <code>NeedsYouCountCapsule</code> 是 workspace / 项目行的，两者在 iOS 抽屉里本来就这样分）。</p>
+      <p><span class="pb-tag sys">iOS 系统</span><code>book.closed</code> 是 SF Symbols 里「书 / 资料库」的标准字形；VoiceOver 读 <span class="en">“Wiki, 3 proposals to review”</span>。</p>
+      <p><span class="pb-tag co">协调性</span><b>数字 3 = 等你 Accept / Reject 的提议数</b>：和 Wiki 首页横幅 <span class="en">“3 proposals to review”</span>、Review 页头 <span class="en">“3 proposals from 2 sessions”</span> 是同一个数；为 0 时不画（与 Projects 行同一规则）。web 的悬停提示与 iOS 的无障碍标签都写 <span class="en">“3 proposals to review”</span><span class="pb-new">新词</span>。</p>
+      <p><span class="pb-tag co">协调性</span>只数提议。锚点 <span class="en">Changed</span> 的条目先由 Wiki maintenance 复核，复核结论变成提议后才进这个数。汉堡按钮上不加点、不发推送：提议不挡任何 agent 干活，Needs you 横幅只为「停住的工作」亮，这条边界不动。</p>
+      <p><span class="pb-tag ref">借鉴</span>Notion 侧栏把 wiki 当一级目的地、不藏进某个 teamspace；数字是 Orbit 自己的 needs-you 计数，没有借别家。</p>
+      <p><span class="pb-tag later">另议</span>web 的 Projects 行今天没有琥珀数字（iOS 有 <span class="en">“Projects 2”</span>）。Wiki 两端都给数字；web Projects 要不要补同一个数，不在这次范围里。</p>
+    </div>
+
+    <!-- ② the row's three states -->
+    <div class="pb-band zh"><span class="pb-bn">2</span>这一行的三种状态 <small>· 有提议 / 没有提议 / 正在 Wiki 页</small></div>
+
+    <div class="pb-web" data-name="web-states">
+      <div class="st-web">
+        <div class="st-cap">有 3 条提议等你</div>
+        <div class="tp-item"><span class="tp-ico"><i data-ant="book"></i></span><span class="tp-label">Wiki</span><span class="tp-count needs-you">3</span></div>
+        <div class="st-cap">没有提议 —— 不画数字</div>
+        <div class="tp-item"><span class="tp-ico"><i data-ant="book"></i></span><span class="tp-label">Wiki</span></div>
+        <div class="st-cap">正在 Wiki 页 —— 选中底色，数字仍是琥珀</div>
+        <div class="tp-item active"><span class="tp-ico"><i data-ant="book"></i></span><span class="tp-label">Wiki</span><span class="tp-count needs-you">3</span></div>
+      </div>
+    </div>
+
+    <div class="pb-ios" data-name="ios-states">
+      <div class="st-ios">
+        <div class="st-cap zh">有 3 条提议等你</div>
+        <div class="io-drow"><span class="gl"><i data-sf="book"></i></span><span class="lb">Wiki</span><span class="sp"></span><span class="num">3</span></div>
+        <div class="st-cap zh">没有提议 —— 不画数字</div>
+        <div class="io-drow"><span class="gl"><i data-sf="book"></i></span><span class="lb">Wiki</span></div>
+        <div class="st-cap zh">正在 Wiki 页 —— 选中底色，数字仍是橙色</div>
+        <div class="io-drow sel"><span class="gl"><i data-sf="book"></i></span><span class="lb">Wiki</span><span class="sp"></span><span class="num">3</span></div>
+      </div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag con">Orbit 一致性</span>选中态全是现成规则：web <code>.tp-item.active</code>（品牌浅底、图标变蓝）加上已有的 <code>.tp-item.active .tp-count.needs-you</code>——它就是为了「选中时数字不被染蓝」写的；iOS <code>pill(selected:)</code>：tint 14% 圆角底、图标 tint、标题 semibold，数字不变色。</p>
+      <p><span class="pb-tag co">协调性</span>数字只跟「还有没有等你的提议」走，和你在不在 Wiki 页无关：打开 Wiki 不会让它消失，Review 里处理掉一条就减一，和 Projects 行、workspace 行的数字是同一种行为。</p>
+      <p><span class="pb-tag sys">iOS 系统</span>点这一行 = 切到 Wiki 分区并关抽屉（<code>selectedSection = .wiki</code>，回到根），与 Projects 行同一个动作；web 点击 = 路由到 <code>/wiki</code>，抽屉随路由变化自动关（<code>AppShell</code> 现成行为）。</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

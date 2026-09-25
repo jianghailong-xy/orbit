@@ -1,0 +1,168 @@
+/* Orbit Wiki — web desktop mocks 01–05.
+   Linked after the shipped src/web/src/index.css and ../project-progress/mock.css, so every colour
+   below resolves through the real tokens and every class that already exists in the app (.tp-*,
+   .tsc*, .chat-*, .orbit-link-card/.olc-*, .ssearch-*, .tdp-*, .approval-card, .card-action*,
+   .chat-diff/.diff-*, .project-integration*, .project-open-items*) is drawn by the app's own rule.
+   What is defined here is only (a) the mock frame and (b) the pieces the Wiki adds, prefixed wk-. */
+
+/* ── sheet & frame ───────────────────────────────────────────────────────────────────────── */
+.m-sheet.wide { width: 1550px; }              /* stage content = 1440 CSS px, a real desktop viewport */
+.ic { display: inline-block; width: 1em; height: 1em; fill: currentColor; flex: none; vertical-align: -0.125em; }
+.frame { position: relative; width: 1440px; border: 1px solid #d5d8dd; border-radius: 10px; overflow: hidden;
+         background: var(--bg-base); box-shadow: 0 1px 3px rgba(15, 23, 42, .06); }
+.frame .app-shell { height: auto; align-items: stretch; }
+.frame .app-nav { height: auto; }
+.frame .app-main { height: auto; overflow: visible; }
+.frame .app-view--doc { overflow: visible; padding: 24px 32px 40px; }
+.doc-col { max-width: 1040px; margin: 0 auto; }
+.m-stage.flush { padding: 16px 20px 20px; }
+.m-xin { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; background: #f3f0ff; color: #5b3fc4;
+         font: 700 10.5px/17px "Noto Sans CJK SC", "PingFang SC", sans-serif; letter-spacing: .02em; white-space: nowrap;
+         vertical-align: 1px; flex: none; }
+.m-notes .t { display: inline-block; margin: 0 4px 0 0; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 700;
+              line-height: 17px; white-space: nowrap; vertical-align: 1px; }
+.m-notes .t.ref { background: #eceef1; color: #4a5160; }
+.m-notes .t.orbit { background: var(--brand-tint); color: var(--brand-strong); }
+.m-notes .t.coord { background: #e8f6ec; color: #1a7f37; }
+.m-notes .t.xin { background: #f3f0ff; color: #5b3fc4; }
+.m-notes code, .m-sub code { font-family: "DejaVu Sans Mono", ui-monospace, monospace; font-size: 11.5px; background: #e6e8ec;
+                            border-radius: 4px; padding: 0 4px; color: #30343b; }
+.m-notes.two { display: grid; grid-template-columns: 1fr 1fr; column-gap: 26px; }
+.m-notes.two li + li { margin-top: 0; }
+.m-notes.two li { margin-bottom: 5px; }
+
+/* ── sidebar additions ───────────────────────────────────────────────────────────────────── */
+.tp-item .ic { font-size: 16px; }
+.wk-tip { position: absolute; z-index: 6; padding: 5px 9px; border-radius: 6px; background: rgba(0, 0, 0, .85); color: #fff;
+          font-size: 12.5px; line-height: 18px; white-space: nowrap; box-shadow: 0 6px 16px rgba(0, 0, 0, .12); }
+.wk-tip::before { content: ""; position: absolute; top: -5px; right: 14px; border: 5px solid transparent; border-top: 0;
+                  border-bottom-color: rgba(0, 0, 0, .85); }
+.wk-avatar { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%;
+             background: var(--bg-hover-strong); color: var(--text-2); font-size: 12px; flex: none; }
+
+/* ── page chrome (Projects' title row + toolbar, redrawn without antd) ───────────────────── */
+.wk-title-row { display: flex; align-items: center; gap: 12px; }
+.wk-title-row .page-title { flex: none; }
+.wk-select { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border: 1px solid var(--border);
+             border-radius: 6px; background: var(--bg-raised); font-size: 13px; color: var(--text-1); white-space: nowrap; }
+.wk-select .dim { color: var(--text-3); }
+.wk-select .ic.caret { font-size: 11px; color: var(--text-3); }
+.wk-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.wk-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 15px; border-radius: 6px;
+          border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-1); font-size: 14px; white-space: nowrap; }
+.wk-btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 2px 0 rgba(5, 145, 255, .1); }
+.wk-btn.text { border-color: transparent; background: transparent; color: var(--text-2); padding: 0 8px; }
+.wk-btn.sm { height: 24px; padding: 0 9px; font-size: 12.5px; border-radius: 5px; }
+.wk-btn .ic { font-size: 13px; }
+.wk-search { display: flex; align-items: center; gap: 8px; height: 32px; margin: 16px 0 0; padding: 0 8px 0 11px;
+             border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); font-size: 14px; color: var(--text-4); }
+.wk-search .ic { color: var(--text-4); font-size: 14px; }
+.wk-search .grow { flex: 1; }
+.wk-kbd { padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-subtle); color: var(--text-3);
+          font: 11px/17px -apple-system, "Segoe UI", sans-serif; white-space: nowrap; }
+.wk-crumb { font-size: 13px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+.wk-crumb a { color: var(--brand); text-decoration: none; }
+.wk-crumb .ic { font-size: 10px; color: var(--text-4); }
+.project-integration code, .wk-mono { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 11.5px; }
+.project-integration code { color: var(--text-1); }
+
+/* ── cards (the Open items card's frame, .project-open-items) ────────────────────────────── */
+.wk-cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; margin-top: 16px; }
+.wk-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.wk-card { margin: 0; }
+.wk-card .project-open-items-head { align-items: center; }
+.wk-card-more { margin-left: auto; font-size: 12.5px; color: var(--brand); white-space: nowrap; }
+.wk-pin { color: var(--text-3); font-size: 13px; }
+
+/* trust and anchor marks — one vocabulary on every surface (lists, drawer, cards, ⌘K) */
+.tdp-badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; flex: none; }
+.tdp-badge.tone-owner { background: var(--invert-surface); color: var(--invert-text); border-color: var(--invert-surface); font-weight: 500; }
+.tdp-badge .ic { font-size: 11px; }
+.wk-anchor { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+.wk-anchor.ok { color: var(--success); }
+.wk-anchor.ok .wk-mono { color: var(--success); }
+.wk-anchor.changed { color: var(--warning); font-weight: 600; }
+.wk-anchor.missing { color: var(--error); font-weight: 600; }
+.wk-anchor .ic { font-size: 12px; }
+.wk-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.wk-dot.owner { background: var(--invert-surface); }
+.wk-dot.confirmed { background: var(--brand); }
+.wk-dot.proposed { background: var(--dot-idle); }
+.wk-dot.amber { background: var(--warning-solid); }
+.wk-kind { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px;
+           background: var(--fill-muted); color: var(--text-2); font-size: 13px; flex: none; }
+.wk-op { display: inline-block; min-width: 56px; text-align: center; box-sizing: border-box; padding: 0 6px; border-radius: 4px; font: 700 10.5px/18px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
+         letter-spacing: .04em; white-space: nowrap; flex: none; }
+.wk-op.add { background: var(--success-bg); color: var(--success); }
+.wk-op.amend { background: var(--brand-tint); color: var(--brand-strong); }
+.wk-op.retire { background: var(--fill-muted); color: var(--text-2); }
+
+/* entry rows: the project list row (title line + one summary line), with the Wiki's three trailing facts */
+.wk-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 2px;
+          border-top: 1px solid var(--border-subtle); }
+.wk-row.first { border-top: 0; }
+.wk-row-t { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text-1); }
+.wk-row-t > span.tt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.wk-row-d { margin-top: 1px; font-size: 12.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-row-d code, .wk-row-t code { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 11.5px; }
+.wk-new { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); flex: none; }
+
+/* ── topic page (02, and behind the drawer in 03) ─────────────────────────────────────────── */
+.t-title { margin: 8px 0 0; font-size: 34px; font-weight: 650; line-height: 1.18; letter-spacing: -.025em; color: var(--text-1); }
+.t-meta { display: flex; align-items: center; gap: 9px; margin-top: 10px; font-size: 13px; color: var(--text-2); }
+.t-meta .chg { display: inline-flex; align-items: center; gap: 6px; }
+.wk-summary { margin-top: 18px; padding: 14px 18px 12px; background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; }
+.wk-summary-h { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); }
+.wk-summary-h b { font-weight: 600; color: var(--text-2); }
+.wk-summary-h .regen { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--brand); }
+.wk-summary-p { margin: 8px 0 0; font-size: 14px; line-height: 1.75; color: var(--text-1); }
+.wk-summary-p code { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 12.5px; background: var(--fill-muted); border-radius: 4px; padding: 0 4px; }
+.wk-fn { font-size: 11px; line-height: 0; vertical-align: super; color: var(--brand); margin-left: 1px; font-weight: 600; }
+.wk-refs { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-2); }
+.wk-refs span b { color: var(--brand); font-weight: 600; margin-right: 4px; }
+.wk-sec { margin-top: 22px; }
+.wk-sec-h { display: flex; align-items: center; gap: 9px; padding: 0 2px 8px; border-bottom: 1px solid var(--border-subtle); }
+.wk-sec-h h3 { margin: 0; font-size: 12.5px; font-weight: 650; letter-spacing: .3px; color: var(--text-1); }
+.wk-sec-h .n { font-size: 11.5px; font-weight: 600; color: var(--text-2); background: var(--fill-muted); border-radius: 999px; padding: 1px 7px; }
+.wk-sec-h .note { font-size: 11.5px; color: var(--text-3); }
+.wk-sec-h .col { font-size: 11px; color: var(--text-3); letter-spacing: .02em; }
+.wk-sec-h .cols { margin-left: auto; margin-right: 10px; display: grid; grid-template-columns: 92px 118px 128px; column-gap: 12px; }
+.wk-sec-h .cols span:last-child { text-align: right; }
+.wk-erow { display: grid; grid-template-columns: 22px minmax(0, 1fr) 92px 118px 128px; gap: 0 12px; align-items: center;
+           padding: 10px 12px 10px 2px; border-bottom: 1px solid var(--border-subtle); }
+.wk-erow > .main { min-width: 0; }
+.wk-erow .used { text-align: right; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.wk-erow .used b { font-weight: 600; color: var(--text-1); }
+.wk-erow.changed { background: color-mix(in srgb, var(--warning-bg) 55%, transparent); }
+.wk-erow .warnline { margin-top: 3px; font-size: 12px; color: var(--warning); display: flex; align-items: center; gap: 6px; }
+.wk-erow .warnline code { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 11.5px; }
+.wk-erow.sup .wk-row-t .tt { text-decoration: line-through; color: var(--text-3); font-weight: 500; }
+.wk-erow.sup .wk-kind { opacity: .6; }
+.wk-erow.sup .supby { font-size: 12.5px; color: var(--text-3); margin-top: 1px; }
+.wk-erow.sup .supby a { color: var(--brand); text-decoration: none; }
+.wk-more { padding: 8px 2px 0; font-size: 12.5px; color: var(--brand); }
+/* the one decision opened in place */
+.wk-open { margin: 8px 0 6px; border: 1px solid var(--brand-border); border-radius: 10px; background: var(--bg-raised); overflow: hidden;
+           box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+.wk-open > .wk-erow { border-bottom: 1px solid var(--border-subtle); padding: 12px 11px 10px 12px; background: color-mix(in srgb, var(--brand-tint) 45%, var(--bg-raised)); }
+.wk-open-body { padding: 12px 14px 14px 46px; }
+.wk-open-when { font-size: 12px; color: var(--text-3); margin-bottom: 8px; display: flex; gap: 8px; align-items: center; }
+.wk-kv { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 6px 12px; font-size: 13.5px; line-height: 1.6; }
+.wk-kv > .k { color: var(--text-3); font-size: 12.5px; padding-top: 1px; }
+.wk-kv > .v { color: var(--text-1); min-width: 0; }
+.wk-kv code { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 12px; background: var(--fill-muted); border-radius: 4px; padding: 0 4px; }
+.wk-sub-h { margin: 14px 0 6px; font-size: 12px; font-weight: 600; color: var(--text-3); display: flex; align-items: center; gap: 8px; }
+.wk-sub-h .c { font-weight: 400; }
+.wk-srcs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wk-srcs .orbit-link-card { margin: 0; }
+.olc-quote { margin-top: 7px; padding: 6px 8px; border-radius: 6px; background: var(--fill-inset); font-size: 12.5px; line-height: 1.5; color: var(--text-1); }
+.olc-quote .who { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 11.5px; color: var(--text-3); }
+.olc-quote .ver { margin-left: auto; color: var(--success); font-weight: 600; white-space: nowrap; }
+.olc-tile.dark { background: var(--fill-muted); color: var(--text-2); }
+.wk-anchors { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.wk-anc { display: flex; align-items: center; gap: 10px; padding: 7px 10px; font-size: 12.5px; }
+.wk-anc + .wk-anc { border-top: 1px solid var(--border-subtle); }
+.wk-anc .p { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 12px; color: var(--text-1); }
+.wk-anc .ic.aim { color: var(--text-3); font-size: 13px; }
+.wk-open-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.m-mark.row { outline-offset: 3px; border-radius: 8px; }

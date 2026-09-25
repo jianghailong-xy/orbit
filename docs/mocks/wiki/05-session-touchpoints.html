@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>05 wiki in sessions</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="wiki-desktop.css">
+<style>
+  .s05 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+  .s05 .m-col { gap: 22px; }
+  .s05 .m-stage { padding: 16px 20px 20px; }
+  .m-k.new.l { font-family: -apple-system, "Segoe UI", sans-serif; }
+  /* one slice of the conversation pane (.workspace-view gutter), not the whole page */
+  .wk-pane { background: var(--bg-base); border: 1px solid #dde0e6; border-radius: 10px; padding: 8px 24px 14px; position: relative; }
+  .wk-pane .fade { color: var(--text-3); font-size: 13px; line-height: 1.6; padding: 6px 12px 2px; height: 40px; overflow: hidden;
+                   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 70%); }
+  .wk-pane .md p { margin: 0 0 8px; }
+  .wk-pane .md p:last-child { margin-bottom: 0; }
+
+  /* (a) Wiki context inside the task start card */
+  .tsc .chat-injected.m-mark { outline-offset: 5px; }
+  .tsc .chat-injected-head b { font-weight: 600; color: var(--text-2); }
+  .wkctx { list-style: none; margin: 6px 0 0; padding: 6px 8px; border-radius: 8px; background: var(--fill-inset); }
+  .wkctx li { display: flex; align-items: center; gap: 7px; height: 23px; font-size: 12.5px; color: var(--text-1); }
+  .wkctx .k { flex: none; width: 70px; color: var(--text-3); font-size: 12px; }
+  .wkctx .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--brand); }
+  .wkctx-foot { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
+  .wkctx-foot .warn { color: var(--warning); }
+
+  /* (b) the Wiki kind of an Orbit link card */
+  .olc-state.is-owner { border-color: var(--invert-surface); background: var(--invert-surface); color: var(--invert-text); }
+  .orbit-link-card[data-kind="wiki"] .olc-line .ok { color: var(--success); }
+  .orbit-link-card.m-mark { outline-offset: 5px; border-radius: 10px; margin: 14px 0 16px; }
+
+  /* (c) the hover row under a reply, and the Add to Wiki form */
+  .sel { background: #b4d2ff; }
+  .wk-msg-meta { display: flex; align-items: center; gap: 6px; height: 22px; margin: 2px 0 0 12px; }
+  .wk-msg-meta .chat-copy { width: 22px; height: 22px; font-size: 13px; }
+  .wk-addwiki { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 7px; border-radius: 5px; font-size: 12px;
+                color: var(--text-1); background: var(--bg-hover); }
+  .wk-addwiki .ic { font-size: 12.5px; color: var(--brand); }
+  .wk-msg-meta.m-mark { outline-offset: 3px; width: fit-content; padding-right: 4px; }
+  .wk-pop { position: relative; z-index: 4; width: 452px; margin: 8px 0 4px 12px; padding: 12px 14px 12px; border-radius: 10px; background: var(--bg-raised);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05); }
+  .wk-pop::before { content: ""; position: absolute; top: -6px; left: 66px; width: 12px; height: 12px; background: var(--bg-raised); transform: rotate(45deg);
+                    box-shadow: -2px -2px 3px rgba(0, 0, 0, .04); }
+  .wk-pop-h { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-1); }
+  .wk-pop-h .ic.b { color: var(--brand); }
+  .wk-pop-h .x { margin-left: auto; color: var(--text-3); font-size: 13px; }
+  .wk-form { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 8px 10px; align-items: center; margin-top: 10px; font-size: 13px; }
+  .wk-form .k { color: var(--text-2); }
+  .wk-form .k.top { align-self: start; padding-top: 5px; }
+  .wk-in { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px;
+           background: var(--bg-raised); color: var(--text-1); font-size: 13px; line-height: 20px; }
+  .wk-in.sel-in { width: 150px; justify-content: space-between; }
+  .wk-in.sel-in .ic { color: var(--text-3); font-size: 11px; }
+  .wk-in.area { align-items: flex-start; min-height: 62px; }
+  .wk-in.focus { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-tint); }
+  .wk-src-auto { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; color: var(--text-2); }
+  .wk-src-auto .ic { color: var(--brand); flex: none; }
+  .wk-src-auto span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wk-pop-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+  .wk-pop-foot .note { flex: 1; font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+
+  /* (d) the ⌘K palette with a Wiki group */
+  .wk-mask { background: rgba(15, 23, 42, .28); border-radius: 10px; padding: 28px 24px 30px; }
+  .wk-palette { width: 640px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: var(--bg-raised);
+                box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05); }
+  .wk-palette .ssearch-input { display: flex; align-items: center; }
+  .wk-palette .caret { display: inline-block; width: 1px; height: 18px; margin-left: 1px; background: var(--text-1); }
+  .wk-palette .ssearch-list { max-height: none; }
+  .wk-pal-group { display: flex; align-items: center; gap: 6px; padding: 9px 16px 3px; font-size: 11.5px; font-weight: 650; letter-spacing: .03em;
+                  text-transform: uppercase; color: var(--text-3); }
+  .wk-pal-group .n { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-4); }
+  .wk-pal-group + .ssearch-row { margin-top: 0; }
+  .wk-palette .ssearch-row .wk-kind { margin-top: 0; }
+  .wk-palette .ssearch-row > .ic.st { font-size: 16px; margin-top: 1px; }
+  .wk-palette .ssearch-title-line .tdp-badge { margin-left: auto; }
+  .wk-palette .ssearch-meta .ok { color: var(--success); }
+  .wk-palette .wk-grp.m-mark { outline-offset: -3px; border-radius: 4px; }
+  .wk-palette .wk-grp.m-mark > .m-n { top: 4px; right: 6px; }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');const h=Math.ceil(s.getBoundingClientRect().height);document.title='05 wiki in sessions · H='+h;document.body.setAttribute('data-h',String(h))})</script>
+</head>
+<body class="m">
+<script src="wiki-desktop-icons.js"></script>
+<div class="m-sheet wide">
+  <h1 class="m-h1 zh">05 · 会话里的四个接触点：agent 读到了什么、引用了什么、你怎么随手记一条、怎么搜到它</h1>
+  <p class="m-sub zh">Web · 会话页。四块都是在已有组件上加一点：任务启动卡、Orbit 链接卡、消息悬停行、⌘K 面板。虚线框 = 改动点，其余照现在的样子画。</p>
+
+  <div class="s05">
+    <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">a</span>任务启动卡：多一条「Wiki context · 6 entries」（展开态）</div>
+        <div class="wk-pane">
+          <div class="tsc-wrap"><div class="tsc">
+            <div class="tsc-head"><span class="tsc-mark"><svg class="ic"><use href="#i-play-circle-f"/></svg></span><span>Task started</span></div>
+            <div class="tsc-title">runner 手动停机（SIGTERM）排水不驱逐在途回合</div>
+            <div class="tsc-desc is-folded"><div class="md"><p>背景：自动更新的驱逐已由「runner 自动更新不驱逐在途回合（0.1.186）」修掉，但 SIGTERM 路径（systemctl restart/stop、手动停 runner）没变：runLoop 停止后，各运行时的排水只等引擎的消息回合（Claude 为 session.go watchShutdownDrain 的 pending；codex_appserver.go、kimi_acp.go、opencode.go 各有自己的排水计时）……</p></div></div>
+            <div class="tsc-judged"><div class="tsc-judged-line"><svg class="ic"><use href="#i-safety-cert"/></svg> Judged by · the account owner</div><div class="tsc-judged-how">You confirm it in Orbit once the run says it is done — or send it back.</div></div>
+            <div class="tsc-links"><button type="button" class="tsc-more">Show details</button><a>Open the task ↗</a></div>
+            <div class="tsc-meta">Task 34UqJaC27FLqWkyNThtDl · just now</div>
+            <div class="chat-injected m-mark"><span class="m-n">1</span>
+              <button type="button" class="chat-injected-head" aria-expanded="true">⊕ Orbit attached: <b>Wiki context · 6 entries</b></button>
+              <ul class="wkctx">
+                <li><span class="wk-dot owner"></span><span class="k">Principle</span><span class="t">Completion is adjudicated, not claimed</span></li>
+                <li><span class="wk-dot owner"></span><span class="k">Principle</span><span class="t">A clock never starts agent work</span></li>
+                <li><span class="wk-dot confirmed"></span><span class="k">Pitfall</span><span class="t">runner-go's full suite inside a session reaches production</span></li>
+                <li><span class="wk-dot confirmed"></span><span class="k">Pitfall</span><span class="t">Piping a test run into grep hides its exit code</span></li>
+                <li><span class="wk-dot confirmed"></span><span class="k">Decision</span><span class="t">Wakeups are held by the server</span></li>
+                <li><span class="wk-dot confirmed"></span><span class="k">Convention</span><span class="t">UI copy is English; code comments may be Chinese</span></li>
+              </ul>
+              <div class="wkctx-foot">Only entries you wrote or confirmed, with anchors verified at 4db4f9f · <span class="warn">1 held back: anchor changed</span></div>
+            </div>
+            <details class="tsc-raw"><summary>What the agent was told</summary></details>
+          </div></div>
+        </div>
+      </div>
+
+    <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">b</span>agent 回答里引用条目：Orbit 链接卡多一种 Wiki 类型</div>
+        <div class="wk-pane">
+          <div class="chat-user-wrap"><div class="chat-msg chat-user">The merge conflict has sat with the coordinator for 2 hours. Why hasn't it retried on its own?</div></div>
+          <div class="chat-msg chat-assistant"><div class="md">
+            <p>This is by design — a clock never starts agent work.</p>
+            <div class="orbit-link-card m-mark" data-kind="wiki"><span class="m-n">2</span>
+              <div class="olc-head"><span class="olc-kind"><span class="olc-tile"><svg class="ic"><use href="#i-book"/></svg></span>Wiki · Principle</span><span class="olc-state is-owner">Owner</span></div>
+              <div class="olc-title"><a>A clock never starts agent work</a></div>
+              <div class="olc-line"><span class="olc-line-text">Work starts from a committed fact (evidence revised, a receipt written, a turn ended); elapsed time may only reassign an open item to a person.</span></div>
+              <div class="olc-line"><span class="olc-line-text"><span class="ok">✓ 4db4f9f</span> · open-item-escalation.service.ts:84 · used 29× this week</span></div>
+            </div>
+            <p>At 2 hours the open item moved to you instead. The coordinator starts again only on a committed fact — a new push to the branch, a receipt, or a turn that ends.</p>
+          </div></div>
+        </div>
+      </div>
+
+    <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">c</span>消息悬停行多一个「Add to Wiki」，点开是一张小表单</div>
+        <div class="wk-pane">
+          <div class="chat-user-wrap"><div class="chat-msg chat-user">自动更新不能驱逐在途回合：有回合就跳过这一轮，超时也不驱逐。</div></div>
+          <div class="chat-msg chat-assistant" style="margin-bottom:0"><div class="md">
+            <p>Got it. <span class="sel">A runner update never evicts a turn in flight. If any turn is running, the update skips this round and tries again later; it does not evict on timeout either.</span> I've filed the SIGTERM path as its own task.</p>
+          </div></div>
+          <div class="wk-msg-meta m-mark"><span class="m-n">3</span>
+            <span class="chat-copy"><svg class="ic"><use href="#i-copy"/></svg></span>
+            <span class="wk-addwiki"><svg class="ic"><use href="#i-book"/></svg>Add to Wiki</span>
+            <span class="chat-time">2h ago</span>
+          </div>
+          <div class="wk-pop">
+            <div class="wk-pop-h"><svg class="ic b"><use href="#i-book"/></svg>Add to Wiki<span class="x"><svg class="ic"><use href="#i-close"/></svg></span></div>
+            <div class="wk-form">
+              <span class="k">Kind</span><span class="wk-in sel-in">Decision<svg class="ic"><use href="#i-down"/></svg></span>
+              <span class="k">Title</span><span class="wk-in focus">A runner update never evicts a turn in flight</span>
+              <span class="k top">Summary</span><span class="wk-in area">A runner update never evicts a turn in flight. If any turn is running, the update skips this round and tries again later; it does not evict on timeout either.</span>
+              <span class="k">Topic</span><span class="wk-in sel-in" style="width:190px">Runner &amp; engines<svg class="ic"><use href="#i-down"/></svg></span>
+              <span class="k">Source</span><span class="wk-src-auto"><svg class="ic"><use href="#i-message"/></svg><span class="t">This message · Orbit：给任务加优先级，让派发器尊重它</span></span>
+            </div>
+            <div class="wk-pop-foot"><span class="note"><span class="tdp-badge tone-owner">Owner</span>Written by you — live at once</span><span class="wk-btn sm" style="height:28px">Cancel</span><span class="wk-btn primary sm" style="height:28px;padding:0 14px">Add</span></div>
+          </div>
+        </div>
+      </div>
+
+    <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">d</span>⌘K：顶部多一组 Wiki，下面照旧是 Sessions</div>
+        <div class="wk-mask">
+          <div class="wk-palette">
+            <div class="ssearch-head"><svg class="ic ssearch-head-icon"><use href="#i-search"/></svg><div class="ssearch-input">exit<span class="caret"></span></div></div>
+            <div class="ssearch-list">
+              <div class="wk-grp m-mark"><span class="m-n">4</span>
+                <div class="wk-pal-group">Wiki <span class="n">3</span></div>
+                <div class="ssearch-row active"><span class="wk-kind"><svg class="ic"><use href="#i-fork"/></svg></span><div class="ssearch-body">
+                  <div class="ssearch-title-line"><span class="ssearch-title">EXECUTABLE judges by exit code and records nothing</span><span class="tdp-badge tone-blue">Confirmed</span></div>
+                  <div class="ssearch-meta"><span class="ssearch-workspace">Decision</span><span>Tasks &amp; dispatch</span><span class="ok">✓ 4db4f9f</span></div></div></div>
+                <div class="ssearch-row"><span class="wk-kind"><svg class="ic"><use href="#i-warning"/></svg></span><div class="ssearch-body">
+                  <div class="ssearch-title-line"><span class="ssearch-title">Piping a test run into grep hides its exit code</span><span class="tdp-badge tone-blue">Confirmed</span></div>
+                  <div class="ssearch-meta"><span class="ssearch-workspace">Pitfall</span><span>Testing &amp; CI</span><span class="ok">✓ 4db4f9f</span></div></div></div>
+                <div class="ssearch-row"><span class="wk-kind"><svg class="ic"><use href="#i-tool"/></svg></span><div class="ssearch-body">
+                  <div class="ssearch-title-line"><span class="ssearch-title">Deploy apiserver and web</span><span class="tdp-badge tone-blue">Confirmed</span></div>
+                  <div class="ssearch-meta"><span class="ssearch-workspace">Recipe</span><span>Deploy &amp; ops</span><span class="ssearch-in">in steps</span></div>
+                  <div class="ssearch-snippet">/upgrade; verify curl -fsS https://orbitd.io/api/health → <mark>exit</mark> 0</div></div></div>
+              </div>
+              <div class="wk-pal-group">Sessions</div>
+              <div class="ssearch-row"><svg class="ic st" style="color:var(--brand)"><use href="#i-loading"/></svg><div class="ssearch-body">
+                <div class="ssearch-title-line"><span class="ssearch-title">Orbit：给任务加优先级，让派发器尊重它</span></div>
+                <div class="ssearch-meta"><span class="ssearch-workspace">orbit</span><span>Running</span><span class="ssearch-in">in message</span></div>
+                <div class="ssearch-snippet">…The runner sends Status: SUCCEEDED, Result: "<mark>exit</mark> -1", ShellExitCode: -1 (shell.go:241-248, 345-347)…</div></div></div>
+              <div class="ssearch-row"><svg class="ic st" style="color:var(--text-3)"><use href="#i-check-circle"/></svg><div class="ssearch-body">
+                <div class="ssearch-title-line"><span class="ssearch-title">判断：Codex 多账户：一台机器上登录多个 Codex</span><span class="ssearch-badge">Completed</span></div>
+                <div class="ssearch-meta"><span class="ssearch-workspace">orbit</span><span>Ended</span><span class="ssearch-in">in message</span></div>
+                <div class="ssearch-snippet">…the command did not report a failure of its own. <mark>Exit</mark> -1 is compared literally and still derives FAILED…</div></div></div>
+              <div class="ssearch-row"><svg class="ic st" style="color:var(--error)"><use href="#i-close-circle-f"/></svg><div class="ssearch-body">
+                <div class="ssearch-title-line"><span class="ssearch-title">执行任务：worktree 回收改为压力驱动：终态不再是删的理由，并给 gc 接上周期触发</span><span class="ssearch-badge">Completed</span></div>
+                <div class="ssearch-meta"><span class="ssearch-workspace">orbit</span><span>Failed</span><span class="ssearch-in">in last reply</span></div>
+                <div class="ssearch-snippet">…FAILED 是验收超时（<mark>exit</mark> -1）而非代码问题。所以本轮是 rebase + 重跑验收…</div></div></div>
+            </div>
+            <div class="ssearch-foot"><span>Searching the wiki, then session titles, messages, workspaces and tasks</span><span class="ssearch-keys"><kbd>↑↓</kbd> navigate <kbd>↵</kbd> open <kbd>esc</kbd> close</span></div>
+          </div>
+        </div>
+      </div>
+  </div>
+
+  <ul class="m-notes zh" style="margin-top:22px">
+    <li><span class="m-n">1</span><span><b>任务启动卡多一条 Wiki context</b>：开工时平台把相关条目作为附加上下文投给 agent，卡上多一条折叠行「⊕ Orbit attached: Wiki context · 6 entries」，展开列出这 6 条（信任点 + 类型 + 标题），底下一句写明筛选规则：只含你写的或你确认过、锚点在 4db4f9f 上仍成立的条目；这次有 1 条因锚点变了被扣下。agent 读到了什么，你一眼看得见。<span class="t orbit">Orbit 一致性</span>这就是现有的 <code>ControlPlaneNote</code>（<code>.chat-injected</code>，「⊕ Orbit attached: …」），放在卡里 <code>attached</code> 的位置，和 background jobs 那条同一个组件、同一句前缀；投递方式也遵守原则「Agent-writable data never becomes a system instruction」——只作为用户级上下文。<span class="t coord">协调性</span>深点 = Owner、蓝点 = Confirmed，与 01/02 的标签同色。<span class="t xin">新词</span>Wiki context、held back。</span></li>
+    <li><span class="m-n">2</span><span><b>agent 回答里引用条目</b>：agent 把 <code>[标题](orbit-wiki:…)</code> 单独写一行，客户端画成链接卡：类型行「Wiki · Principle」，胶囊位放信任标签（Owner 深色），下面是摘要和「锚点 ✓ · 本周用了几次」。卡上的内容是实时读的，条目被退役或锚点变了，卡上立刻看得出来。<span class="t orbit">Orbit 一致性</span>OrbitLinkCard 原骨架（类型图标 + 类型名 + 状态胶囊 + 标题链接 + 状态行），只多一个 kind 和一个深色胶囊。<span class="t ref">借鉴</span>Notion 的页面 mention 卡。</span></li>
+    <li><span class="m-n">3</span><span><b>Add to Wiki</b>：悬停在回复下面出现一行「复制 · Add to Wiki · 2h ago」——用户气泡已经有这一行（<code>.chat-user-meta</code>：复制 + 时间），assistant 回复是新加的，样子照抄。点开小表单：Kind（Decision ▾）/ Title / Summary（预填你选中的那两句）/ Topic，出处自动带上这条消息。你亲手写的直接生效、信任 Owner，不进 Review。示例用的是你今天定的规则「自动更新不驱逐在途回合」（任务 34UqJZa…/34UqJaC… 的来由）。<span class="t xin">新词</span>Add to Wiki。</span></li>
+    <li><span class="m-n">4</span><span><b>⌘K 多一组 Wiki</b>：最上面 Wiki 组（3 条命中：类型图标 + 标题 + 信任标签；第二行类型 · 主题 · 锚点；命中在正文时照会话那样给一行高亮片段），下面 Sessions 组的行完全不变。占位符改成「Search sessions and the wiki…」，底栏说明改成先搜 Wiki。<span class="t ref">借鉴</span>Linear / Notion 全局搜索的分组。<span class="t orbit">Orbit 一致性</span><code>.ssearch-*</code> 全部沿用（选中行蓝底、<code>mark</code> 高亮、Completed 小标、底栏按键提示），新样式只有分组头一行。</span></li>
+  </ul>
+</div>
+</body>
+</html>

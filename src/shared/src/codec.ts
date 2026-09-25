@@ -451,6 +451,24 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'observerSessionId',
   'targetResourceId',
   'snapshotSourceId',
+  // Orbit Wiki (migration 0307). Every one is an address a reader follows: the space an entry,
+  // topic, binding or changeset lives in, the lineage (`orbit-wiki:<id>`) a revision, op or exposure
+  // is about, the revision a source supports, the changeset an op belongs to and the op a revision
+  // came from, the lineage a supersession points at, and the user and tool call that authored a
+  // revision or submitted a changeset. None is a fence: a wiki write's compare-and-set is on
+  // `baseRevision`, an integer, and nothing echoes one of these back to be compared byte for byte.
+  // `toolCallId`, `authorToolCallId`, `authorUserId` and `changesetOpId` carry no foreign key by
+  // design — history snapshots — which makes them addresses that may 404, not tokens.
+  'spaceId',
+  'entryId',
+  'revisionId',
+  'changesetId',
+  'changesetOpId',
+  'resultEntryId',
+  'supersedesId',
+  'toolCallId',
+  'authorUserId',
+  'authorToolCallId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

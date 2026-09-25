@@ -303,6 +303,10 @@ model User {
   /// Public links this account made, ended ones included (migration 0306).
   shareLinks       ShareLink[]
 
+  /// This account's wikis, one per codebase (migration 0307). Every other wiki row reaches the
+  /// account through its space.
+  wikiSpaces       WikiSpace[]
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -769,7 +773,12 @@ model Workspace {
   serviceTokens ServiceToken[]
   // What this workspace always allows without asking again (see WorkspacePermissionRule).
   permissionRules WorkspacePermissionRule[]
+  /// The wiki space this workspace's sessions read, at most one (see WikiSpaceWorkspace).
+  wikiSpaceBindings WikiSpaceWorkspace[]
 
+  /// The key a wiki binding's composite foreign key names (migration 0307), so a space can only be
+  /// bound to its own owner's workspaces. `id` alone is already unique.
+  @@unique([id, ownerId], map: "workspace_id_owner_id_key")
   @@index([ownerId])
   @@index([runnerId])
   @@map("workspace")
@@ -5384,4 +5393,310 @@ model WatchDelivery {
   /// on IN_FLIGHT like the claim's index is on PENDING).
   @@index([leaseDeadlineAt], map: "watch_delivery_lease_expiry_idx")
   @@map("watch_delivery")
+}
+
+// ── Orbit Wiki (migration 0307; docs/wiki-design.md §3, contracts/wiki.contract.json) ────────────
+//
+// The canonical store is the entry. Pages, the decision log, the timeline and the agent's slice are
+// views of entries, and none of them is a model. Closed sets are TEXT held by CHECK constraints
+// whose values the contract lists; the migration's header explains each one. Only WikiSpace points
+// at User: every other wiki row reaches its owner through its parent's (id, owner_id) key, so a
+// child can never belong to another owner than its parent, and no wiki write takes a lock on the
+// user row. Ids that point at Orbit's history (sessions, tool calls, authors, source refs) carry no
+// foreign key: they are snapshots, and a deleted record leaves them behind as tombstones.
+
+/// One owner's wiki for one codebase (design §2.1). `ownerId` is the hard boundary: nothing is read,
+/// written, listed or counted across owners.
+model WikiSpace {
+  id      String @id @default(uuid(7)) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "wiki_space_owner_id_fkey")
+
+  /// `^[a-z0-9]+(-[a-z0-9]+)*$`, at most 64 characters, unique per owner.
+  slug  String
+  title String
+  /// The repository's remote URL without its scheme, userinfo, trailing `.git` or trailing `/`, so
+  /// `git@github.com:a/b.git` and `https://github.com/a/b` both read `github.com/a/b`. Unique per
+  /// owner; NULL for a space with no repository behind it (any number of those).
+  repoUrlNorm   String? @map("repo_url_norm")
+  /// The repository's first root commit, once a runner reports it: two repositories behind one URL
+  /// are told apart by it.
+  rootCommitSha String? @map("root_commit_sha") @db.Char(40)
+  /// `{ push, autoAcceptReinforce }` (contract `space.settings`). An absent key reads as its default:
+  /// both are on.
+  settings      Json    @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspaces WikiSpaceWorkspace[]
+  topics     WikiTopic[]
+  entries    WikiEntry[]
+  changesets WikiChangeset[]
+
+  /// The key every child's composite foreign key names.
+  @@unique([id, ownerId], map: "wiki_space_id_owner_id_key")
+  @@unique([ownerId, slug], map: "wiki_space_owner_id_slug_key")
+  @@unique([ownerId, repoUrlNorm], map: "wiki_space_owner_id_repo_url_norm_key")
+  @@map("wiki_space")
+}
+
+/// A workspace whose sessions read a space. Binding one is the owner agreeing to share confirmed
+/// entries across the space's workspaces. A workspace is bound to at most one space, and only to one
+/// of its own owner's: it is reached through (workspace_id, owner_id).
+model WikiSpaceWorkspace {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  spaceId     String    @map("space_id") @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  space       WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_space_workspace_space_fkey")
+  workspaceId String    @unique(map: "wiki_space_workspace_workspace_id_key") @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_space_workspace_workspace_fkey")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([spaceId], map: "wiki_space_workspace_space_id_idx")
+  @@map("wiki_space_workspace")
+}
+
+/// A named group of a space's entries. An entry belongs to a topic when it names the topic's slug in
+/// `topics`, or when one of its anchors sits under one of `pathPrefixes`.
+model WikiTopic {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  spaceId      String    @map("space_id") @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  space        WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_topic_space_fkey")
+  /// Same shape as a space's slug; unique within the space.
+  slug         String
+  title        String
+  description  String?
+  pathPrefixes String[]  @default([]) @map("path_prefixes")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([spaceId, slug], map: "wiki_topic_space_id_slug_key")
+  @@map("wiki_topic")
+}
+
+/// One lineage: its id never changes across revisions, and it is what `orbit-wiki:<id>` names. The
+/// content columns are a copy of the current revision; `status`, `trust`, `challenged` and
+/// `unsupported` are written only by WikiService.applyOp and WikiService.recomputeFlags.
+///
+/// Three indexes live in the migration only: `wiki_entry_search_trgm`, GIN over
+/// `wiki_entry_search_text(title, summary, aliases, fields)` — keyword search reaches it only by
+/// calling that same function — and the two partial indexes on the supersession columns.
+model WikiEntry {
+  id      String    @id @default(uuid(7)) @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  spaceId String    @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_entry_space_fkey")
+
+  /// `principle` | `convention` | `decision` | `pitfall` | `recipe` | `concept` | `assumption`. The last
+  /// is phase 3's: storage admits the word, and every phase-1 door refuses it.
+  kind            String
+  /// `proposed` | `active` | `superseded` | `retired` | `rejected`; the last three are terminal. A
+  /// rejected entry stays, as the counter-example the next proposal's `similar` shows.
+  status          String
+  /// `owner` | `confirmed` | `proposed` | `external`. `proposed` exactly while the status is
+  /// `proposed` or `rejected`; only `owner` and `confirmed` are pushed.
+  trust           String
+  currentRevision Int    @map("current_revision")
+  /// At most 120 characters.
+  title           String
+  /// One sentence, at most 280 characters: what cards and the agent's slice show.
+  summary         String
+  /// The kind's own fields, shaped by KIND_SPECS in @orbit/shared.
+  fields          Json
+  /// At most 3 topic slugs.
+  topics          String[] @default([])
+  /// At most 8 synonyms, Chinese and English, for keyword search.
+  aliases         String[] @default([])
+  /// Every anchor with its last check. A CHECK holds each one's `type` to the contract's anchor types.
+  anchors         Json     @default("[]")
+  /// `unchecked` | `verified` | `changed` | `missing`: the entry's anchors taken together. `changed`
+  /// and `missing` take the entry out of the push.
+  anchorState      String    @default("unchecked") @map("anchor_state")
+  anchorCheckedRef String?   @map("anchor_checked_ref")
+  anchorCheckedAt  DateTime? @map("anchor_checked_at") @db.Timestamptz(3)
+  /// Web-derived content is among its sources.
+  tainted     Boolean @default(false)
+  /// A challenge is open against it; it is out of the push until the owner answers.
+  challenged  Boolean @default(false)
+  /// Every first-hand source it had was deleted.
+  unsupported Boolean @default(false)
+  pinned      Boolean @default(false)
+
+  /// The lineage this one replaced. Both ends of a supersession live in one space.
+  supersedesId   String?    @map("supersedes_id") @db.Uuid
+  supersedes     WikiEntry? @relation("WikiEntrySupersedes", fields: [supersedesId, ownerId], references: [id, ownerId], onDelete: NoAction, map: "wiki_entry_supersedes_fkey")
+  /// Set exactly when the status is `superseded`: the lineage that replaced this one.
+  supersededById String?    @map("superseded_by_id") @db.Uuid
+  supersededBy   WikiEntry? @relation("WikiEntrySupersededBy", fields: [supersededById, ownerId], references: [id, ownerId], onDelete: NoAction, map: "wiki_entry_superseded_by_fkey")
+
+  /// World time: when what it says became, and stopped being, true.
+  validFrom  DateTime  @default(now()) @map("valid_from") @db.Timestamptz(3)
+  validTo    DateTime? @map("valid_to") @db.Timestamptz(3)
+  /// System time: when it was recorded, and when it left the live set (set exactly when the status
+  /// is terminal).
+  recordedAt DateTime  @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  retiredAt  DateTime? @map("retired_at") @db.Timestamptz(3)
+  /// Aggregated use: pushCount, lastPushedAt, searchHits, gets.
+  stats      Json      @default("{}")
+
+  replacedBy WikiEntry[]         @relation("WikiEntrySupersedes")
+  replaced   WikiEntry[]         @relation("WikiEntrySupersededBy")
+  revisions  WikiEntryRevision[]
+  exposures  WikiExposure[]
+  ops        WikiChangesetOp[]   @relation("WikiChangesetOpEntry")
+  resultOps  WikiChangesetOp[]   @relation("WikiChangesetOpResultEntry")
+
+  @@unique([id, ownerId], map: "wiki_entry_id_owner_id_key")
+  @@index([spaceId, status, kind], map: "wiki_entry_space_status_kind_idx")
+  @@map("wiki_entry")
+}
+
+/// Every revision of every entry, only ever inserted: a change is a new revision. Who wrote it is a
+/// snapshot, never a foreign key.
+model WikiEntryRevision {
+  id       String    @id @default(uuid(7)) @db.Uuid
+  entryId  String    @map("entry_id") @db.Uuid
+  ownerId  String    @map("owner_id") @db.Uuid
+  entry    WikiEntry @relation(fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_entry_revision_entry_fkey")
+  /// From 1, unique per entry.
+  revision Int
+  title    String
+  summary  String
+  fields   Json
+  topics   String[] @default([])
+  aliases  String[] @default([])
+  anchors  Json     @default("[]")
+  contentSha256 String @map("content_sha256") @db.Char(64)
+
+  /// `owner` | `agent` | `maintenance` | `system`. An owner-authored revision names its user.
+  authorKind       String  @map("author_kind")
+  authorUserId     String? @map("author_user_id") @db.Uuid
+  authorSessionId  String? @map("author_session_id") @db.Uuid
+  authorToolCallId String? @map("author_tool_call_id") @db.Uuid
+  /// The op that produced it.
+  changesetOpId    String? @map("changeset_op_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sources WikiSource[]
+
+  @@unique([id, ownerId], map: "wiki_entry_revision_id_owner_id_key")
+  @@unique([entryId, revision], map: "wiki_entry_revision_entry_revision_key")
+  @@map("wiki_entry_revision")
+}
+
+/// A first-hand record a revision cites, and at most 300 redacted characters quoted from it. A wiki
+/// entry or any view of entries is never a source. `ref` is an id or a commit sha with no foreign
+/// key: when the record is deleted the row stays with `state` `deleted` and no quote.
+model WikiSource {
+  id         String            @id @default(uuid(7)) @db.Uuid
+  revisionId String            @map("revision_id") @db.Uuid
+  ownerId    String            @map("owner_id") @db.Uuid
+  revision   WikiEntryRevision @relation(fields: [revisionId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_source_revision_fkey")
+
+  /// `turn` | `event` | `tool_call` | `task` | `task_comment` | `approval` | `evidence` |
+  /// `owner_decision` | `merge_receipt` | `criterion` | `commit` | `note` | `url` (an assumption's
+  /// only, and always tainted).
+  kind          String
+  ref           String
+  /// Where in the record: a sequence range, a field name.
+  locator       Json    @default("{}")
+  quote         String?
+  /// Present exactly when `quote` is.
+  quoteSha256   String? @map("quote_sha256") @db.Char(64)
+  quoteVerified Boolean @default(false) @map("quote_verified")
+  /// `live` | `trashed` | `deleted`.
+  state         String  @default("live")
+  tainted       Boolean @default(false)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([revisionId], map: "wiki_source_revision_id_idx")
+  @@index([ownerId, kind, ref], map: "wiki_source_ref_idx")
+  @@map("wiki_source")
+}
+
+/// One submission to WikiService.submitChangeset, the only door anything is written through: an
+/// agent's proposal or the owner's edit. `pending` while any op of it waits for the owner (and then
+/// it has an `expiresAt`), `settled` once none does.
+model WikiChangeset {
+  id      String    @id @default(uuid(7)) @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  spaceId String    @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_changeset_space_fkey")
+
+  /// `owner` | `agent` | `maintenance` | `import` | `watch`.
+  origin     String
+  sessionId  String? @map("session_id") @db.Uuid
+  toolCallId String? @map("tool_call_id") @db.Uuid
+  rationale  String?
+  /// The owner's key and the digest of the normalized request, set together: the same key with the
+  /// same digest is a replay, with another digest a refusal.
+  idempotencyKey String? @map("idempotency_key")
+  requestSha256  String? @map("request_sha256") @db.Char(64)
+  /// `pending` | `settled`.
+  status    String
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Set exactly when the changeset is settled.
+  decidedAt DateTime? @map("decided_at") @db.Timestamptz(3)
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(3)
+
+  ops WikiChangesetOp[]
+
+  @@unique([id, ownerId], map: "wiki_changeset_id_owner_id_key")
+  @@unique([ownerId, idempotencyKey], map: "wiki_changeset_owner_idempotency_key")
+  @@index([spaceId, status], map: "wiki_changeset_space_status_idx")
+  @@map("wiki_changeset")
+}
+
+/// One op of a changeset, numbered from 0 by its place in the request, and the owner's decision on
+/// it. An add names no entry; every other op names the one it is about. amend, supersede and retire
+/// carry the revision they were written against, and nothing else does.
+model WikiChangesetOp {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  changesetId String        @map("changeset_id") @db.Uuid
+  ownerId     String        @map("owner_id") @db.Uuid
+  changeset   WikiChangeset @relation(fields: [changesetId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_changeset_op_changeset_fkey")
+  seq         Int
+  /// `add` | `reinforce` | `amend` | `supersede` | `retire` | `challenge`.
+  op          String
+
+  entryId      String?    @map("entry_id") @db.Uuid
+  entry        WikiEntry? @relation("WikiChangesetOpEntry", fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_changeset_op_entry_fkey")
+  baseRevision Int?       @map("base_revision")
+  payload      Json
+  /// Near neighbours found when it was proposed, shown on its Review card.
+  similar      Json       @default("[]")
+  tainted      Boolean    @default(false)
+
+  /// `pending` | `accepted` | `edited` | `rejected` | `auto_applied` | `conflict` | `expired` |
+  /// `withdrawn`. Only `pending` is not final.
+  decision       String  @default("pending")
+  /// `not_true` | `not_useful` | `duplicate` | `too_specific`: set exactly when rejected.
+  decisionReason String? @map("decision_reason")
+  decisionNote   String? @map("decision_note")
+  resultEntryId  String?    @map("result_entry_id") @db.Uuid
+  resultEntry    WikiEntry? @relation("WikiChangesetOpResultEntry", fields: [resultEntryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_changeset_op_result_entry_fkey")
+  resultRevision Int?       @map("result_revision")
+  /// Set exactly when the decision is not `pending`.
+  decidedAt      DateTime?  @map("decided_at") @db.Timestamptz(3)
+
+  @@unique([changesetId, seq], map: "wiki_changeset_op_changeset_seq_key")
+  @@map("wiki_changeset_op")
+}
+
+/// Which session was given which revision of which entry, and how: a push always names its session,
+/// a search or get from a runner with no session names none. Kept 90 days.
+model WikiExposure {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  ownerId          String    @map("owner_id") @db.Uuid
+  entryId          String    @map("entry_id") @db.Uuid
+  entry            WikiEntry @relation(fields: [entryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_exposure_entry_fkey")
+  revision         Int
+  sessionId        String?   @map("session_id") @db.Uuid
+  /// `push` | `search` | `get`.
+  channel          String
+  at               DateTime  @default(now()) @db.Timestamptz(3)
+  retractionSentAt DateTime? @map("retraction_sent_at") @db.Timestamptz(3)
+
+  @@index([entryId, at], map: "wiki_exposure_entry_at_idx")
+  @@map("wiki_exposure")
 }

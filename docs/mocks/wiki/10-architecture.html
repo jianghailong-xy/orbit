@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>10 architecture</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .arch { display: grid; grid-template-columns: 300px 38px 330px 38px 1fr; gap: 0; align-items: stretch; }
+  .col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .col-h { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 0 0 2px; }
+  .col-s { font-size: 12px; color: var(--text-3); margin: -6px 0 4px; }
+  .box { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; }
+  .box h4 { margin: 0 0 4px; font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+  .box p { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+  .box .a-mono { font-size: 11px; color: var(--text-2); }
+  .box.core { border: 1.5px solid var(--brand); background: var(--brand-tint); }
+  .box.core h4 { color: var(--brand-strong); }
+  .box.gate { border: 1.5px solid var(--warning-solid); background: var(--warning-bg); }
+  .box.truth { border: 2px solid var(--text-1); }
+  .box.p2 { border-style: dashed; }
+  .box.p3 { border-style: dotted; border-width: 2px; }
+  .ph { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; white-space: nowrap; }
+  .ph.p1 { background: #e8f5e9; color: #2e7d32; }
+  .ph.p2 { background: #fff3e0; color: #b35c00; }
+  .ph.p3 { background: #f3e5f5; color: #6a1b9a; }
+  .chk { margin: 4px 0 0; padding: 0; list-style: none; font-size: 11.5px; color: var(--text-1); line-height: 1.6; }
+  .chk li::before { content: "✓ "; color: var(--success); font-weight: 700; }
+  .arrow { display: flex; align-items: center; justify-content: center; color: var(--text-4); font-size: 22px; }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .sub { font-size: 11.5px; font-weight: 650; color: var(--text-3); margin: 4px 0 -2px; }
+  .flow { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); flex-wrap: wrap; }
+  .flow .n { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 5px 9px; color: var(--text-1); }
+  .flow .n.warn { border-color: var(--warning-border); background: var(--warning-bg); }
+  .flow .n.bad { border-color: var(--error-border); background: var(--error-bg); }
+  .flow .to { color: var(--text-4); }
+  .bands { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  .band { border-radius: 10px; padding: 10px 12px; background: var(--bg-subtle); border: 1px solid var(--border-subtle); }
+  .band h5 { margin: 0 0 8px; font-size: 13px; font-weight: 650; }
+  .legend { display: flex; gap: 14px; align-items: center; font-size: 12px; color: var(--text-2); margin: 0 0 14px; flex-wrap: wrap; }
+  .lg { display: inline-block; width: 26px; height: 14px; border-radius: 4px; border: 1.5px solid var(--text-3); vertical-align: -2px; margin-right: 6px; background: var(--bg-raised); }
+  .lg.d { border-style: dashed; } .lg.o { border-style: dotted; border-width: 2px; }
+  .lg.core { border-color: var(--brand); background: var(--brand-tint); }
+  .lg.gate { border-color: var(--warning-solid); background: var(--warning-bg); }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.title='H='+Math.ceil(s.getBoundingClientRect().height)})</script>
+</head>
+<body class="m">
+<div class="m-sheet zh">
+  <h1 class="m-h1">10 · 技术架构：一个写入口，条目是唯一真源，所有视图都能重建</h1>
+  <p class="m-sub">左边是 Orbit 里已有的一手记录；中间是唯一的写入口和 owner 审阅；右边是给人和给 agent 的投影。底部两条环路负责新鲜度和遗忘。</p>
+
+  <div class="legend">
+    <span><span class="ph p1">P1</span> 阶段 1 · MVP</span>
+    <span><span class="lg d"></span><span class="ph p2">P2</span> 阶段 2 · 维护作业 / 语义检索</span>
+    <span><span class="lg o"></span><span class="ph p3">P3</span> 阶段 3 · 外部巡检 / 建议</span>
+    <span><span class="lg core"></span>apiserver 单一写入口</span>
+    <span><span class="lg gate"></span>只在 owner 通道（JWT 门）</span>
+  </div>
+
+  <div class="m-stage">
+  <div class="arch">
+    <!-- 左：原料 -->
+    <div class="col">
+      <div class="col-h">一手原料（已在 Orbit）</div>
+      <div class="col-s">只能被引用，不被复制；删除即遗忘</div>
+      <div class="box"><h4>Sessions · turns</h4><p>owner 原话、steer（984）、agent 回答；<span class="a-mono">conversation_turn</span> · <span class="a-mono">run_event</span></p></div>
+      <div class="box"><h4>Approvals</h4><p>AskUserQuestion 回答（506）= owner 的产品决定；带理由的 DENIED；批准的计划</p></div>
+      <div class="box"><h4>Tasks · comments · evidence</h4><p>agent 评论（3,474）、判据、verdict、owner 决定</p></div>
+      <div class="box"><h4>tool_call errors</h4><p><span class="a-mono">is_error</span> 按「工具 + 首行」聚簇，跨 ≥3 个会话</p></div>
+      <div class="box"><h4>Merge receipts · criteria</h4><p>落到了哪个 sha；判据 semanticHash——锚点的来源</p></div>
+      <div class="box p3"><h4>External <span class="ph p3">P3</span></h4><p>OSV · releases/CHANGELOG · endoflife · models.dev（按依赖指纹，白名单，确定性抓取）</p></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <!-- 中：写路径 -->
+    <div class="col">
+      <div class="col-h">写路径</div>
+      <div class="col-s">谁来写：全部走同一个入口</div>
+      <div class="stack">
+        <div class="box"><h4>工作中的会话 <span class="ph p1">P1</span></h4><p><span class="a-mono">wiki_propose</span>（MCP / CLI）· 出处 = 本会话的 turn / tool call</p></div>
+        <div class="box"><h4>Owner <span class="ph p1">P1</span></h4><p>web / iOS 编辑、消息菜单 <b>Add to Wiki</b>——直接生效，trust = Owner</p></div>
+        <div class="box p2"><h4>Wiki maintenance <span class="ph p2">P2</span></h4><p>由事实触发的任务，跑在 owner 的 runner 上：<span class="a-mono">dossier → propose → anchors verify → cursor</span>；截断 = 失败、不推进游标</p></div>
+        <div class="box p2"><h4>Import <span class="ph p2">P2</span></h4><p>CLAUDE.md / AGENTS.md / 记忆目录 → 待审提议</p></div>
+      </div>
+      <div class="box core" style="margin-top:4px">
+        <h4>submitChangeset() · 单一写入口</h4>
+        <ul class="chk">
+          <li>KIND_SPECS schema（字段级报错回给 agent）</li>
+          <li>出处在本 owner 内可解析；引文逐字存在</li>
+          <li>脱敏（修掉 <span class="a-mono">\b</span> 漏洞，50+ 夹具 0 泄漏）</li>
+          <li>CAS <span class="a-mono">baseRevision</span> · 幂等键 · 配额 · 探针拒收</li>
+          <li>污染标记（读过网页）· 去重候选 <span class="a-mono">similar[]</span></li>
+        </ul>
+      </div>
+      <div class="box gate">
+        <h4>Review · 只在 owner 通道</h4>
+        <p>逐 op 执行 Accept / Edit / Reject（带理由）；<b>reinforce / challenge</b> 自动生效；带会话头的 decide 一律拒绝</p>
+      </div>
+      <div class="box truth">
+        <h4>wiki_entry + revisions · 条目为真</h4>
+        <p>原则 · 约定 · 决策 · 坑 · 配方 · 概念 · 假设 <span class="ph p3">P3</span></p><p>出处 · 锚点 · 双时态 · 只取代不改写 · owner × 代码库</p>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+
+    <!-- 右：投影 -->
+    <div class="col">
+      <div class="col-h">读路径 · 投影（可丢弃、可重建）</div>
+      <div class="col-s">同一个源，按读者分别挑选、分别渲染</div>
+      <div class="sub">给人</div>
+      <div class="box"><h4>Wiki 首页 · 主题页 · 条目详情 <span class="ph p1">P1</span></h4><p>web + iOS 逐区块一致；主题 Summary 按需生成、每句带脚注、按条目集合哈希缓存 <span class="ph p2">P2</span></p></div>
+      <div class="box"><h4>决策日志 · 时间线 · ⌘K <span class="ph p1">P1</span></h4><p>ADR 形态的取代链；周摘要编译一次后冻结；⌘K 走独立 Wiki 分区</p></div>
+      <div class="box"><h4>会话里带引用的回答 <span class="ph p1">P1</span></h4><p><span class="a-mono">orbit-wiki:</span> 链接卡——人读知识的主渠道</p></div>
+      <div class="sub">给 agent</div>
+      <div class="box core"><h4>推：&lt;orbit_wiki_context&gt; <span class="ph p1">P1</span></h4><p>在 <span class="a-mono">dequeueTurn</span> 交付时追加，user 级，≤1.5k token；只放 Owner / Confirmed、未污染、锚点有效的条目；启动卡可见；verifier / foreman 不发</p></div>
+      <div class="box"><h4>拉：wiki_search · wiki_get <span class="ph p1">P1</span></h4><p>混合召回：pg_trgm + 路径 +（语义 <span class="ph p2">P2</span>）→ RRF → <b>返回的永远是条目</b>，并注明按什么命中</p></div>
+      <div class="box"><h4>Exposure log → 撤回通知 <span class="ph p2">P2</span></h4><p>记下谁收到了哪条的哪一版；条目撤回时，给 12h 内仍开着的会话补发更正</p></div>
+      <div class="box p3"><h4>需求建议 <span class="ph p3">P3</span></h4><p>带证据、改动草稿、判据草稿；owner 采纳后才建任务</p></div>
+    </div>
+  </div>
+
+  <div class="bands">
+    <div class="band">
+      <h5>新鲜度环路 <span class="ph p2">P2</span></h5>
+      <div class="flow">
+        <span class="n">merge receipt / 晋升到 main</span><span class="to">→</span>
+        <span class="n">anchors_due</span><span class="to">→</span>
+        <span class="n">维护作业在 runner 上用 git 复验</span><span class="to">→</span>
+        <span class="n warn">changed / missing</span><span class="to">→</span>
+        <span class="n">立刻退出推送 + 进 Review</span>
+      </div>
+      <p class="m-cap" style="margin-top:8px">热文件用 symbol 锚点（符号 + 区域哈希），不用整文件 blob——否则作业全绿、推送块却被掏空。</p>
+    </div>
+    <div class="band">
+      <h5>遗忘环路 <span class="ph p1">P1</span></h5>
+      <div class="flow">
+        <span class="n">进 Trash</span><span class="to">→</span>
+        <span class="n warn">出处 trashed：条目退出推送</span>
+        <span class="to">·</span>
+        <span class="n">purgeTrash / 硬删</span><span class="to">→</span>
+        <span class="n bad">出处 deleted、引文置空</span><span class="to">→</span>
+        <span class="n">只由它支撑的条目 unsupported → Review</span>
+      </div>
+      <p class="m-cap" style="margin-top:8px">挂在已有的删除路径上同步处理，不另起时钟——「时钟不得启动 agent 工作」保持不破。</p>
+    </div>
+  </div>
+  </div>
+
+  <ul class="m-notes">
+    <li><span class="m-n">1</span><span><b>为什么不存页面</b>：人问的问题 56% 关于「现在」（可推导）；该存的决策、坑、约定是小颗粒，而且各自寿命不同。页面只是视图，否则会出现 Wikova 那种页级 last_updated 和整页重写坍缩。</span></li>
+    <li><span class="m-n">2</span><span><b>为什么 agent 不能确认</b>：现有确认卡只在 runner 里弹，服务端不校验，headless 调用直接放行；而 <span class="a-mono">mcp__orbit__*</span> 全部免权限提示。所以「人审」必须是服务端状态，decide 只在 JWT 门上开放。</span></li>
+    <li><span class="m-n">3</span><span><b>为什么推送走交付时追加</b>：任务启动卡用重建的 brief 与 turn.content 逐字比对；在 dequeueTurn 追加不改 turn.content，启动卡照常出，追加段显示为「⊕ Orbit attached: wiki context」。</span></li>
+    <li><span class="m-n">4</span><span><b>向量</b>：语义腿藏在 <span class="a-mono">wiki_search</span> 后面，接口不变；线上 <span class="a-mono">postgres:16-alpine</span> 没有 pgvector，所以先存 <span class="a-mono">real[]</span>，在内存里做精确余弦；embedding 由 owner 配置的 provider 计算，默认关闭。</span></li>
+  </ul>
+</div>
+</body>
+</html>
