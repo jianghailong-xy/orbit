@@ -104,6 +104,8 @@ import {
   MAX_DAG_OPS,
   TASK_BATCH_CREATE_MAX,
   TASK_BATCH_PIN_CHUNK,
+  TASK_PRIORITY_MAX,
+  TASK_PRIORITY_MIN,
   type TaskVerificationDto,
   UpdateTaskDto,
 } from './dto';
@@ -1164,6 +1166,11 @@ function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
     const wanted = labels.hasEvery as string[];
     if (wanted.length) clauses.push(Prisma.sql`t.labels @> ARRAY[${Prisma.join(wanted)}]::text[]`);
   }
+  // Mirror of listPage's `priority.gte` scope, for the same reason as the labels above.
+  const priority = scope.priority;
+  if (priority && typeof priority === 'object' && 'gte' in priority && typeof priority.gte === 'number') {
+    clauses.push(Prisma.sql`t.priority >= ${priority.gte}::int`);
+  }
   return Prisma.join(clauses, ' AND ');
 }
 
@@ -1477,6 +1484,13 @@ export interface ListTasksPageQuery {
    * row's reading, and this page lists tasks.
    */
   creatorSessionId?: string;
+  /**
+   * Tasks whose `priority` is at least this — "the tasks somebody raised" is `1`. A scope like
+   * `labels`, so the tab badges count the same tasks the page lists: "how far along are the ones I
+   * put first" reads off one response. An integer in the column's range; it arrives as text on a
+   * query string, and a blank one is refused rather than read as 0.
+   */
+  minPriority?: string | number;
 }
 
 /** The scope-wide tallies: identical for every tab, because none of them reads a filter. */
@@ -6126,6 +6140,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       query.q,
       query.counts,
       query.creatorSessionId,
+      query.minPriority,
     ]);
     return this.listPageSingleFlight.run(key, () =>
       this.serializeListPage(ownerId, () => this.loadListPage(ownerId, query)),
@@ -6202,6 +6217,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // make adding a second label widen the result, which reads backwards.
     const labelFilter = parseLabelsQuery(query.labels);
     if (labelFilter.length) scopedWhere.labels = { hasEvery: labelFilter };
+    // Scope for the label's reason: "how are the tasks I raised doing" is a question about those
+    // tasks, badges included. `1` is "raised at all"; a negative floor reaches the lowered ones.
+    if (query.minPriority !== undefined) {
+      const text = String(query.minPriority).trim();
+      const minPriority = Number(text);
+      if (text === '' || !Number.isInteger(minPriority)
+        || minPriority < TASK_PRIORITY_MIN || minPriority > TASK_PRIORITY_MAX) {
+        throw new BadRequestException(
+          `minPriority must be an integer from ${TASK_PRIORITY_MIN} to ${TASK_PRIORITY_MAX}`,
+        );
+      }
+      scopedWhere.priority = { gte: minPriority };
+    }
 
     // The Ready tab is served by RUNNABLE_TASK_SQL, not a Prisma where — see that constant for
     // why. Every other tab keeps its Prisma filter.

@@ -14,6 +14,7 @@ import OrbitKit
 /// proved against the browser's in `SessionCreatedTasksCopyParityTests`.
 struct CreatedTasksCard: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.opensPagesOverConsole) private var overConsole
     let console: ConsoleModel
     @State private var open = false
 
@@ -23,6 +24,13 @@ struct CreatedTasksCard: View {
     /// is what says it scrolls — and scrolls inside, so opening it never pushes the conversation off.
     private static let rowsShownWhole = 5
     private static let listCap: CGFloat = 170
+    /// However little room the band leaves — a Watching strip opened above takes it first — an open
+    /// list keeps two rows on screen (its one, if that is all it has), so it never draws as a header
+    /// and a footer with nothing between them.
+    private static let rowHeight: CGFloat = 31
+    private static func listFloor(_ items: [SessionCreatedTaskRow]) -> CGFloat {
+        CGFloat(min(items.count, 2)) * rowHeight
+    }
 
     var body: some View {
         if let tasks = console.createdTasks.snapshot {
@@ -110,13 +118,15 @@ struct CreatedTasksCard: View {
     @ViewBuilder
     private func list(_ items: [SessionCreatedTaskRow]) -> some View {
         if items.count > Self.rowsShownWhole {
-            ScrollView { rows(items) }.frame(maxHeight: Self.listCap)
+            ScrollView { rows(items) }
+                .frame(minHeight: Self.listFloor(items), maxHeight: Self.listCap)
         } else {
             // A short list keeps its natural height and scrolls inside only where the screen can't
             // fit it — `BackgroundTrayView`'s arrangement.
             ViewThatFits(in: .vertical) {
                 rows(items)
-                ScrollView { rows(items) }.frame(maxHeight: Self.listCap)
+                ScrollView { rows(items) }
+                    .frame(minHeight: Self.listFloor(items), maxHeight: Self.listCap)
             }
         }
     }
@@ -133,9 +143,9 @@ struct CreatedTasksCard: View {
     }
 
     /// One task: its pill in a column of its own, its title (and the task it took over), when it was
-    /// created. A tap opens the task — where an Orbit link to it goes.
+    /// created. A tap opens the task (see `openPage`).
     private func taskRow(_ row: SessionCreatedTaskRow) -> some View {
-        Button { app.route(to: .task(row.id)) } label: {
+        Button { openPage(.taskDetail(taskID: row.id)) { app.route(to: .task(row.id)) } } label: {
             HStack(spacing: 8) {
                 TaskStatusPill(pill: row.pill)
                     .fixedSize()
@@ -177,12 +187,16 @@ struct CreatedTasksCard: View {
     private func footer(_ projects: [SessionCreatedTasks.Named]) -> some View {
         HStack(spacing: 18) {
             footerLink(SessionCreatedTasksCopy.viewAll) {
-                app.showTasksCreated(inSession: console.sessionID, title: sessionTitle)
+                openPage(.createdTasks(sessionID: console.sessionID)) {
+                    app.showTasksCreated(inSession: console.sessionID, title: sessionTitle)
+                }
             }
             ForEach(projects) { project in
-                footerLink(SessionCreatedTasksCopy.openProject) { app.openProject(project.id) }
-                    .help(project.title)
-                    .accessibilityLabel("Open project \(project.title)")
+                footerLink(SessionCreatedTasksCopy.openProject) {
+                    openPage(.projectDetail(projectID: project.id)) { app.openProject(project.id) }
+                }
+                .help(project.title)
+                .accessibilityLabel("Open project \(project.title)")
             }
             Spacer(minLength: 0)
         }
@@ -201,6 +215,15 @@ struct CreatedTasksCard: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Where a press on the card goes. On a phone the page opens over this console — pushed on the
+    /// console's own stack — so the back swipe comes straight back to the conversation; a move to the
+    /// section the page belongs to would leave the swipe that section's list. The three-column shells
+    /// keep that move: their sidebar is the way back, and the page belongs in the section's pane.
+    /// The console's environment says which (`opensPagesOverConsole`); the model is told only the page.
+    private func openPage(_ page: NavNode, elsewhere: () -> Void) {
+        if overConsole { app.push(page) } else { elsewhere() }
     }
 
     /// What the Tasks page's chip calls the session: its title, as the console's own header says it.

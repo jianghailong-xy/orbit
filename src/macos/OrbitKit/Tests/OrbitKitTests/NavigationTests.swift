@@ -27,6 +27,40 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav, NavState(section: .agents), "an emptied stack leaves nothing behind")
     }
 
+    /// A console's "Tasks created here" card on a phone opens its task, its project and its View all
+    /// over the console, on the Agents stack — so the back swipe is a pop that lands on the
+    /// conversation, and the Tasks and Projects stacks are left exactly as they were. The task page
+    /// on top is what the detail store follows while it is up (`taskDetailOnTop`), and the console
+    /// under it is not the one streaming until it is on top again.
+    func testACardsPagesOpenOverTheConsoleAndBackOutToIt() {
+        var nav = NavState(section: .tasks, stacks: [.tasks: [.taskDetail(taskID: "t-elsewhere")]])
+        nav.section = .agents
+        nav.push(.console(sessionID: "s1", origin: .list))
+
+        for page in [NavNode.taskDetail(taskID: "t1"), .projectDetail(projectID: "p1"),
+                     .createdTasks(sessionID: "s1"), .watches, .watchDetail(watchID: "w1"),
+                     .console(sessionID: "s2", origin: .conversation)] {
+            nav.push(page)
+            XCTAssertEqual(nav.path, [.console(sessionID: "s1", origin: .list), page])
+            XCTAssertNotEqual(nav.focusedConsoleSessionID, "s1", "the console is under the page, not on screen")
+            XCTAssertFalse(nav.consoleFromRecents, "the left edge on the page is a plain back")
+
+            nav.pop()
+
+            XCTAssertEqual(nav.focusedConsoleSessionID, "s1", "the swipe back lands on the conversation")
+            XCTAssertEqual(nav.section, .agents, "in the section it was opened from")
+        }
+
+        nav.push(.taskDetail(taskID: "t1"))
+        XCTAssertEqual(nav.taskDetailOnTop, "t1", "the task page on screen is the one the store follows")
+        nav.pop()
+        XCTAssertNil(nav.taskDetailOnTop)
+
+        nav.section = .tasks
+        XCTAssertEqual(nav.taskDetailOnTop, "t-elsewhere", "the Tasks stack was never touched")
+        XCTAssertNil(nav.stacks[.projects], "nor was the Projects stack")
+    }
+
     /// Re-opening the same session after backing out — the dead tap today, since the value the
     /// binding receives equals the one it holds.
     func testReopeningTheSameSessionAfterBackingOutEntersItAgain() {

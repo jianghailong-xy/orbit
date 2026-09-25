@@ -20,6 +20,8 @@ struct OrbitLinkCardView: View {
     var inBubble: Bool = false
 
     @Environment(AppModel.self) private var app: AppModel?
+    /// In a phone's conversation, what the card opens is pushed over it (see `opensPagesOverConsole`).
+    @Environment(\.opensPagesOverConsole) private var overConsole
 
     private var cards: OrbitLinkCards? { app?.linkCards }
     private var content: OrbitLinkCardContent {
@@ -174,7 +176,7 @@ struct OrbitLinkCardView: View {
         // Nothing to route through means nothing drew the card in the first place; a tap there has
         // nowhere to go and no store to ask.
         guard let app, let cards else { return }
-        app.open(cards.destination(for: ref))
+        app.open(cards.destination(for: ref), overConsole: overConsole)
     }
 
     @ViewBuilder private var menu: some View {

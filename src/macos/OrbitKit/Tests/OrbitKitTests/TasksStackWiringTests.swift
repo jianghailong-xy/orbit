@@ -179,13 +179,20 @@ final class TasksStackWiringTests: XCTestCase {
                       "the detail store's single slot mirrors the stack, nothing else")
 
         // A row pushes by hand now (`AppModel.push`) rather than through the binding, so that door
-        // has to follow the store too — and only for this stack: the store is read off the stack on
-        // screen, so syncing under another section would name nil and strand this one's page.
+        // has to follow the store too — for this stack, and for a task page a console pushes over
+        // itself on a phone (its "Tasks created here" rows), which reads the same store as it lands.
+        // Any other push under another section stays unsynced: the store is read off the stack on
+        // screen, so naming nil there would strand this section's page — and the section switch
+        // is what re-points the store when this section comes back.
         let push = code(try slice(app, from: "func push(_ node: NavNode) {", to: "\n    }"))
         XCTAssertTrue(push.contains("nav.push(node)"),
                       "a compact row's tap is a stack transition like any other")
-        XCTAssertTrue(push.contains("if nav.section == .tasks { syncTaskDetailStore() }"),
+        XCTAssertTrue(push.contains("if nav.section == .tasks || nav.taskDetailOnTop != nil { syncTaskDetailStore() }"),
                       "and the task page it puts up names itself in the store as it lands")
+        let switchSection = code(try slice(app, from: "var selectedSection: AppSection {",
+                                           to: "/// Latches the one-shot default-landing"))
+        XCTAssertTrue(switchSection.contains("syncTaskDetailStore()"),
+                      "a switch re-points the store at the task page on the stack now on screen")
 
         let root = code(try slice(app, from: "var sectionAtRoot: Bool {",
                                   to: "/// ⌘D: complete the open"))

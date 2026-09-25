@@ -68,6 +68,11 @@ final class AppModel {
             // setter writes which section is showing and nothing else, and no push has to be
             // registered with it by hand.
             tasks?.setSectionActive(newValue == .tasks)   // the data layer's poll, not navigation
+            // The detail store names the task page on top of the stack on screen, and a switch
+            // changes which stack that is: a task page a console opened over itself (its card's
+            // rows), or the Tasks stack's own. Without this, coming back to a Tasks page left while
+            // a console's task page held the slot is that page refused its load — a spinner.
+            syncTaskDetailStore()
         }
     }
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
@@ -1722,10 +1727,19 @@ final class AppModel {
     func push(_ node: NavNode) {
         nav.push(node)
         // Every write to the Tasks stack keeps its detail store in step (see `taskStack`), and a
-        // frame a row pushed by hand is still a write to it. Guarded by the section because that
-        // store is read off the stack *on screen*: syncing while another section is up would name
-        // nil and drop the detail the still-pushed task page is about to read.
-        if nav.section == .tasks { syncTaskDetailStore() }
+        // frame a row pushed by hand is still a write to it — as is a task page a console pushes
+        // over itself on a phone (its "Tasks created here" rows), which reads the same store the
+        // moment it appears. Otherwise guarded, because that store is read off the stack *on
+        // screen*: syncing while another section's non-task page goes up would name nil and drop
+        // the detail a still-pushed Tasks page is about to read (the section switch re-syncs it).
+        if nav.section == .tasks || nav.taskDetailOnTop != nil { syncTaskDetailStore() }
+    }
+
+    /// One page of every task `sessionID`'s agent created — the list a console's `View all in
+    /// Tasks ›` pushes over itself on a phone. Nil before sign-in.
+    func tasksCreated(inSession sessionID: String, cursor: String?) async throws -> TaskPage? {
+        guard let api else { return nil }
+        return try await api.taskPage(cursor: cursor, limit: 50, counts: .none, creatorSessionId: sessionID)
     }
 
     /// Open one project's page from outside the Projects list — the drawer's project rows: the
@@ -1830,9 +1844,39 @@ final class AppModel {
         // "select this session" act as a list row, so the three-column shells land exactly where
         // they did when this was a selection write.
         show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id))
-        // The Open snapshot is already control-plane refreshed. Everything else (including an old
-        // detail-cache hit) gets an exact refresh so repeated search/deep-link navigation cannot
-        // resurrect stale lifecycle or capability state.
+        refreshUnlistedSession(id, adoptingAgent: true)
+    }
+
+    /// Another session's conversation over the one on screen — a link in a conversation, on a phone —
+    /// so the back swipe returns to the conversation the link was in rather than to a session list.
+    /// Its record is refreshed as a route's is; the agent whose sessions the stack's root lists is
+    /// left alone, since that list is under both conversations.
+    func pushConsole(_ id: String) {
+        let id = PublicID.toPublic(id)
+        guard nav.focusedConsoleSessionID != id else { return }
+        push(.console(sessionID: id, origin: .conversation))
+        refreshUnlistedSession(id, adoptingAgent: false)
+    }
+
+    /// What a page opened from inside a conversation does — a link in it, a row of its Watching or
+    /// Tasks created here card. On a phone (`overConsole`, which the console's own environment says;
+    /// the model is not told its shell) a task or another session is pushed over the console, so the
+    /// back swipe returns to the conversation. Anything else, and every page on the wide shells,
+    /// goes where ``route(to:)`` sends it: their sidebar is the way back.
+    func openFromConversation(_ route: Route, overConsole: Bool) {
+        guard overConsole else { return self.route(to: route) }
+        switch route {
+        case .task(let id):    push(.taskDetail(taskID: id))
+        case .session(let id): pushConsole(id)
+        default:               self.route(to: route)
+        }
+    }
+
+    /// The exact refresh a session opened from outside its list gets. The Open snapshot is already
+    /// control-plane refreshed; everything else (including an old detail-cache hit) is read again so
+    /// repeated search/deep-link navigation cannot resurrect stale lifecycle or capability state.
+    /// `adoptingAgent`: a route also makes the session's agent the one whose sessions are listed.
+    private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool) {
         guard !sessions.contains(where: { $0.id == id }), let api else { return }
         // Capture this instance synchronously. Reading `self.api` only after the Task starts could
         // send an old route's id to a newly configured instance before the identity guard exists.
@@ -1847,7 +1891,7 @@ final class AppModel {
                 // Feed an already-hydrated console immediately too; ComposerView observes the
                 // same cache, while this closes the race where its initial observation ran first.
                 self.consoleRegistry?.peek(id)?.adoptServerSnapshot(resolved)
-                guard self.selectedSection == .agents,
+                guard adoptingAgent, self.selectedSection == .agents,
                       self.selectedAgentSessionID == id else { return } // stale navigation resolve
                 self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
             } catch APIError.http(let status, _) where status == 404 {

@@ -25,6 +25,8 @@
  *       pass, the higher first: a pass's own releases do not outrank each other out of the slot.
  *   (5) The edit door writes the column (a number sets it, null returns it to 0, omission keeps it)
  *       and the list page reads it back.
+ *   (6) The list page's minPriority floor holds on every tab — the Ready tab too, which reaches the
+ *       database through its own SQL — and scopes the badges the way a label does.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/tasks/task-dispatch-priority.pg.spec.ts
  *
@@ -401,5 +403,30 @@ suite('a list\'s free slot goes to its highest priority, and nothing moves while
 
     await tasks.update(ids.ownerId, task, { priority: null });
     assert.equal(await stored(), 0, 'null did not return the task to the default');
+  });
+
+  await t.test('(6) minPriority scopes the list page on every tab, the Ready tab and its badges included', async () => {
+    // Five READY tasks — runnable, since their prerequisite is DONE and nothing has run them — two
+    // of them raised. No sweep runs in this case, so all five stay exactly where they are.
+    const f = await fiveReady('min-priority-scope', 1);
+    await tasks.update(f.ids.ownerId, f.ready[1], { priority: 2 });
+    await tasks.update(f.ids.ownerId, f.ready[3], { priority: 5 });
+    const raised = [f.ready[1], f.ready[3]].sort();
+    const ids = (page: { items: Array<{ id: string }> }) => page.items.map((row) => row.id).sort();
+
+    // The Ready tab is answered by its own SQL (taskScopeSql), not the Prisma where the other tabs
+    // share, so it is the one that could quietly ignore the floor.
+    const ready = await tasks.listPage(f.ids.ownerId, { listId: f.listId, status: 'RUNNABLE', minPriority: 1 });
+    assert.deepEqual(ids(ready), raised, 'the Ready tab ignored minPriority');
+    // A scope, like labels: the badges count the same two tasks the page lists.
+    const counts = (ready as { counts?: { total: number; runnable: number } }).counts;
+    assert.deepEqual([counts?.total, counts?.runnable], [2, 2], 'the badges did not count the raised tasks alone');
+
+    const open = await tasks.listPage(f.ids.ownerId, { listId: f.listId, status: 'OPEN', minPriority: '1', counts: 'none' });
+    assert.deepEqual(ids(open), raised, 'the OPEN tab ignored minPriority');
+
+    // The control: without the floor the same tab lists all five.
+    const everything = await tasks.listPage(f.ids.ownerId, { listId: f.listId, status: 'RUNNABLE', counts: 'none' });
+    assert.deepEqual(ids(everything), [...f.ready].sort());
   });
 });

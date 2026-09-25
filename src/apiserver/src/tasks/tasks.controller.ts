@@ -80,6 +80,8 @@ export class TasksController {
     @Query('q') q?: string,
     @Query('counts') counts?: string,
     @Query('creatorSessionId', PublicIdPipe) creatorSessionId?: string,
+    // A number, never an id: no PublicIdPipe.
+    @Query('minPriority') minPriority?: string,
   ) {
     return this.tasks.listPage(user.userId, {
       cursor,
@@ -91,6 +93,7 @@ export class TasksController {
       q,
       counts,
       creatorSessionId,
+      minPriority,
     });
   }
 

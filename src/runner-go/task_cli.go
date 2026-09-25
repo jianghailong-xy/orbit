@@ -21,7 +21,7 @@ const (
 const taskHelp = `orbit task — manage Orbit tasks
 
 Usage:
-  orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
+  orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--min-priority N] [--limit N | --all [--cursor C]] [--json]
   orbit task labels [--list-id ID] [--json]
   orbit task get [task-id] [--json]
   orbit task evidence-list [task-id] [--json]
@@ -64,10 +64,16 @@ var taskActionHelp = map[string]string{
 	"list": `orbit task list — list tasks
 
 Usage:
-  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
+  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED] [--list-id ID] [--project-id ID] [--label L] [--min-priority N] [--limit N | --all [--cursor C]] [--json]
 
 Returns the newest tasks first, without their descriptions (use ` + "`orbit task get`" + ` for one
 task in full). --limit defaults to 100 and may not exceed 200.
+
+--min-priority keeps only the tasks whose priority is at least N: 1 is "the ones somebody raised"
+with ` + "`orbit task update --priority`" + `, so --list-id L --status OPEN --min-priority 1 is the
+list's raised queue in one request instead of an --all walk of the whole list. Every row carries
+its priority either way. A negative floor reaches the tasks somebody lowered, and 0 includes
+everything nobody touched.
 
 --project-id narrows to the tasks filed under one project — the read a project coordinator
 wants, since every other filter here answers across all of them. The id is the one in the web UI
@@ -1077,13 +1083,13 @@ const (
 	taskListRetryInitialWait = 2 * time.Second
 )
 
-func listTaskPageWithRetry(t *Transport, status, listID, projectID string, labels []string, cursor string) (json.RawMessage, string, error) {
+func listTaskPageWithRetry(t *Transport, status, listID, projectID string, labels []string, cursor string, minPriority *int) (json.RawMessage, string, error) {
 	wait := taskListRetryInitialWait
 	var err error
 	for attempt := 1; ; attempt++ {
 		var page json.RawMessage
 		var next string
-		page, next, err = t.listTaskPage(status, listID, projectID, labels, maxTaskListLimit, cursor)
+		page, next, err = t.listTaskPage(status, listID, projectID, labels, maxTaskListLimit, cursor, minPriority)
 		if err == nil {
 			return page, next, nil
 		}
@@ -1104,10 +1110,10 @@ func listTaskPageWithRetry(t *Transport, status, listID, projectID string, label
 // `jq -s` puts them back into an array for anyone who wants one.
 //
 // Returns the cursor the walk died on, so the caller can tell the user where to resume.
-func streamAllTasks(t *Transport, status, listID, projectID string, labels []string, cursor string, out io.Writer) (written int, failedAt string, err error) {
+func streamAllTasks(t *Transport, status, listID, projectID string, labels []string, cursor string, minPriority *int, out io.Writer) (written int, failedAt string, err error) {
 	encoder := json.NewEncoder(out)
 	for {
-		page, next, pageErr := listTaskPageWithRetry(t, status, listID, projectID, labels, cursor)
+		page, next, pageErr := listTaskPageWithRetry(t, status, listID, projectID, labels, cursor, minPriority)
 		if pageErr != nil {
 			return written, cursor, pageErr
 		}
@@ -1139,6 +1145,7 @@ func cliTaskList(args []string, out io.Writer) error {
 	limit := fs.Int("limit", defaultTaskListLimit, "maximum tasks to return")
 	all := fs.Bool("all", false, "fetch every matching task, paging until the list is exhausted")
 	cursor := fs.String("cursor", "", "resume an interrupted --all walk from this cursor")
+	minPriorityFlag := fs.Int("min-priority", 0, "only tasks whose priority is at least this (1 = the ones somebody raised)")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1151,6 +1158,15 @@ func cliTaskList(args []string, out io.Writer) error {
 	}
 	if flagWasSet(fs, "status") && *status == "" {
 		return fmt.Errorf("--status cannot be empty")
+	}
+	// Sent only when named: 0 is a floor a caller can mean, so the flag's zero value cannot stand
+	// for "no floor".
+	var minPriority *int
+	if flagWasSet(fs, "min-priority") {
+		if *minPriorityFlag < taskPriorityMin || *minPriorityFlag > taskPriorityMax {
+			return fmt.Errorf("--min-priority must be between %d and %d", taskPriorityMin, taskPriorityMax)
+		}
+		minPriority = minPriorityFlag
 	}
 	// A cap on an answer that is by definition uncapped would only be ambiguous about which of
 	// the two the caller meant.
@@ -1169,7 +1185,7 @@ func cliTaskList(args []string, out io.Writer) error {
 		return err
 	}
 	if *all {
-		written, failedAt, err := streamAllTasks(t, *status, *listID, *projectID, labels, *cursor, out)
+		written, failedAt, err := streamAllTasks(t, *status, *listID, *projectID, labels, *cursor, minPriority, out)
 		if err != nil {
 			// Whatever was already printed is on stdout and stays valid; stderr carries the one
 			// thing needed to continue rather than start over.
@@ -1182,14 +1198,14 @@ func cliTaskList(args []string, out io.Writer) error {
 		}
 		return nil
 	}
-	raw, err := t.listTasks(*status, *listID, *projectID, labels, *limit)
+	raw, err := t.listTasks(*status, *listID, *projectID, labels, *limit, minPriority)
 	if err != nil {
 		return fmt.Errorf("list tasks: %w", err)
 	}
 	// A full page is the one case where the answer is silently partial, and stdout has to stay
 	// parseable — so say so on stderr instead.
 	if countJSONArray(raw) >= *limit {
-		fmt.Fprintf(os.Stderr, "orbit task list: showing the newest %d tasks; narrow with --status/--list-id/--project-id/--label, raise --limit, or pass --all for every match\n", *limit)
+		fmt.Fprintf(os.Stderr, "orbit task list: showing the newest %d tasks; narrow with --status/--list-id/--project-id/--label/--min-priority, raise --limit, or pass --all for every match\n", *limit)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -2700,7 +2716,7 @@ type cliCapabilitySpec struct {
 }
 
 var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
-	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
+	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--min-priority N] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--min-priority <int> (minPriority: only tasks whose priority is at least this; 1 = the ones somebody raised)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_evidence_list", Argv: []string{"orbit", "task", "evidence-list"}, Usage: "orbit task evidence-list [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "List immutable structured completion-evidence revisions in task-local order. Reads no comments and depends on no Session lifecycle state."},

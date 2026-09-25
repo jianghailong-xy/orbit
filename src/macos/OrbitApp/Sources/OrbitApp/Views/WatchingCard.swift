@@ -13,6 +13,8 @@ import OrbitKit
 /// `SessionWatchStrip`).
 struct WatchingCardStack: View {
     @Environment(AppModel.self) private var model
+    /// In a phone's conversation, the Following page opens over it (see `opensPagesOverConsole`).
+    @Environment(\.opensPagesOverConsole) private var overConsole
     let sessionID: String
     @State private var open = false
 
@@ -25,11 +27,15 @@ struct WatchingCardStack: View {
                     stripRow(summary, now: context.date)
                     if open {
                         Divider().opacity(0.5)
-                        ForEach(Array(summary.watches.enumerated()), id: \.element.id) { index, watch in
-                            if index > 0 {
-                                Divider().opacity(0.5)
-                            }
-                            WatchingCard(watch: watch, now: context.date, showsThen: index == 0)
+                        // One card among the band's, so its facts stop at about 240pt and scroll
+                        // inside — the browser caps the opened strip the same way (`.watch-strip-list`).
+                        // Uncapped, a strip opened over a Tasks created here card that was open took
+                        // the band's whole share and left that card's rows at no height at all. At least
+                        // 120pt stays on screen however little room is left.
+                        ViewThatFits(in: .vertical) {
+                            watchFacts(summary, now: context.date)
+                            ScrollView { watchFacts(summary, now: context.date) }
+                                .frame(minHeight: Self.factsFloor, maxHeight: Self.factsCap)
                         }
                         Divider().opacity(0.5)
                         manageRow
@@ -103,9 +109,27 @@ struct WatchingCardStack: View {
         return summary.lineTargetWord
     }
 
-    /// The way to the Following page, where Pause and Stop live: the strip itself is read-only.
+    private static let factsCap: CGFloat = 240
+    private static let factsFloor: CGFloat = 120
+
+    /// Each watch's read-only facts, a hairline between them.
+    private func watchFacts(_ summary: WatchSessionSummary, now: Date) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(summary.watches.enumerated()), id: \.element.id) { index, watch in
+                if index > 0 {
+                    Divider().opacity(0.5)
+                }
+                WatchingCard(watch: watch, now: now, showsThen: index == 0)
+            }
+        }
+    }
+
+    /// The way to the Following page, where Pause and Stop live: the strip itself is read-only. In a
+    /// phone's conversation the page is pushed over it, so the back swipe returns to the conversation.
     private var manageRow: some View {
-        Button { model.selectedSection = .following } label: {
+        Button {
+            if overConsole { model.push(.watches) } else { model.selectedSection = .following }
+        } label: {
             HStack {
                 Text(WatchProjection.stripManage)
                     .font(.orbitMeta)
@@ -149,6 +173,7 @@ private func targetPill(_ target: WatchTarget, model: AppModel) -> TaskPill? {
 /// the first.
 private struct WatchingCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.opensPagesOverConsole) private var overConsole
     let watch: Watch
     let now: Date
     let showsThen: Bool
@@ -215,7 +240,7 @@ private struct WatchingCard: View {
                                                 name: targetName(target, model: model))
         HStack(spacing: 6) {
             if let destination = route(for: target) {
-                Button { model.route(to: destination) } label: {
+                Button { model.openFromConversation(destination, overConsole: overConsole) } label: {
                     Text(title).font(.orbitMeta).foregroundStyle(.tint).lineLimit(1)
                 }
                 .buttonStyle(.plain)

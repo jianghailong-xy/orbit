@@ -239,17 +239,20 @@ final class OrbitLinkDestinationTests: XCTestCase {
     /// lands somewhere — a route in this app, or out to the system for the one that leaves it.
     func testTheOneDoorResolvesThroughTheDestinationRule() throws {
         let cards = try source("src/macos/OrbitApp/Sources/OrbitApp/OrbitLinkCards.swift")
-        let door = code(try slice(cards, from: "func openOrbitLink(_ ref: OrbitLinkRef) {",
+        let door = code(try slice(cards, from: "func openOrbitLink(_ ref: OrbitLinkRef, overConsole: Bool = false) {",
                                   to: "\n    }"))
         XCTAssertTrue(door.contains("OrbitLinkDestination.inApp(for:"),
                       "the door spends this rule's answer for a task, a session and a list")
         XCTAssertTrue(door.contains("OrbitLinkDestination.tap(for:"),
                       "and its read-first answer for a project")
 
-        let open = code(try slice(cards, from: "func open(_ destination: OrbitLinkDestination) {",
+        // A task or a session goes through the conversation's door, which routes exactly as before
+        // unless the link is in a phone's conversation — then it is pushed over that console, so the
+        // back swipe returns to it (`CreatedTasksWiringTests.testEveryDoorOutOfAConversationPushes…`).
+        let open = code(try slice(cards, from: "func open(_ destination: OrbitLinkDestination, overConsole: Bool = false) {",
                                   to: "\n    }"))
-        let landings = [("case .task(let id):", "route(to: .task(id))"),
-                        ("case .session(let id):", "route(to: .session(id))"),
+        let landings = [("case .task(let id):", "openFromConversation(.task(id), overConsole: overConsole)"),
+                        ("case .session(let id):", "openFromConversation(.session(id), overConsole: overConsole)"),
                         ("case .list(let id):", "route(to: .list(id))"),
                         ("case .web(let url):", "openExternal(url)")]
         for (arm, landing) in landings {
