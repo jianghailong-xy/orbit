@@ -38,3 +38,4 @@ echo "==> stub log:"
 cat "$OUT/stub.log"
 echo "==> shots:"
 ls -la "$OUT"
+ls "$OUT"/*.png > /dev/null 2>&1 || { echo "==> no captures"; exit 1; }

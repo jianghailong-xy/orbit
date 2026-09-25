@@ -43,10 +43,33 @@ struct TranscriptStandIn: View {
     }
 }
 
+/// The window a SwiftUI `WindowGroup` would open — built by hand, because an unbundled executable's
+/// SwiftUI app opened none on the runner. `sceneBridgingOptions` hands the view's `.toolbar` and
+/// title to this NSWindow, as the app's own scene does.
 final class ProbeDelegate: NSObject, NSApplicationDelegate {
+    private var window: NSWindow?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        let root = NavigationSplitView {
+            List {
+                Label("Share links · T3", systemImage: "bubble.left")
+                Label("Copy Link in the project menu", systemImage: "bubble.left")
+            }
+            .navigationSplitViewColumnWidth(220)
+        } detail: {
+            SessionPageStandIn(sessionID: Probe.session, appModel: Probe.appModel)
+        }
+        let host = NSHostingController(rootView: root)
+        host.sceneBridgingOptions = [.toolbars, .title]
+        let window = NSWindow(contentViewController: host)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.toolbarStyle = .unified
+        window.setContentSize(NSSize(width: 980, height: 640))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        self.window = window
         NSApp.activate(ignoringOtherApps: true)
+
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 8_000_000_000)
             Capture.all()
@@ -59,33 +82,19 @@ final class ProbeDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-@main
-struct ShareProbeApp: App {
-    @NSApplicationDelegateAdaptor(ProbeDelegate.self) private var delegate
-
-    var body: some Scene {
-        WindowGroup("Orbit") {
-            NavigationSplitView {
-                List {
-                    Label("Share links · T3", systemImage: "bubble.left")
-                    Label("Copy Link in the project menu", systemImage: "bubble.left")
-                }
-                .navigationSplitViewColumnWidth(220)
-            } detail: {
-                SessionPageStandIn(sessionID: Probe.session, appModel: Probe.appModel)
-            }
-            .frame(width: 980, height: 640)
-        }
-        .windowResizability(.contentSize)
-    }
-}
+let app = NSApplication.shared
+app.setActivationPolicy(.regular)
+let delegate = ProbeDelegate()
+app.delegate = delegate
+app.run()
 
 @MainActor
 enum Capture {
     static func all() {
+        Probe.log("all windows: " + NSApp.windows.map {
+            "#\($0.windowNumber) '\($0.title)' \($0.frame) visible=\($0.isVisible) sheet=\($0.isSheet)"
+        }.joined(separator: " | "))
         let windows = NSApp.windows.filter(\.isVisible)
-        Probe.log("windows: " + windows.map { "#\($0.windowNumber) '\($0.title)' \($0.frame) sheet=\($0.isSheet)" }
-            .joined(separator: " | "))
         guard let main = windows.first(where: { $0.attachedSheet != nil }) ?? windows.first(where: { !$0.isSheet })
         else {
             Probe.log("no window")
