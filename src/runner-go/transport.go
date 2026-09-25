@@ -883,7 +883,7 @@ func (t *Transport) sessionEvents(ctx context.Context, sessionID string, after, 
 // listTasks filters and caps server-side. Fetching every task to filter here means downloading
 // the owner's whole task history — descriptions included — on each call, which is slow enough to
 // time out mid-body on a large account and lands in an agent's context as tens of megabytes.
-func (t *Transport) listTasks(status, listID, projectID string, labels []string, limit int) (json.RawMessage, error) {
+func (t *Transport) listTasks(status, listID, projectID string, labels []string, limit int, minPriority *int) (json.RawMessage, error) {
 	q := url.Values{}
 	if status != "" {
 		q.Set("status", status)
@@ -901,6 +901,10 @@ func (t *Transport) listTasks(status, listID, projectID string, labels []string,
 	}
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))
+	}
+	// A pointer because 0 is a floor a caller can mean; nil is "no floor", and sends nothing.
+	if minPriority != nil {
+		q.Set("minPriority", strconv.Itoa(*minPriority))
 	}
 	path := "/runner/tasks"
 	if len(q) > 0 {
@@ -986,7 +990,7 @@ func (t *Transport) scheduleWakeup(sessionID string, body map[string]interface{}
 // listTaskPage returns one page of tasks plus the cursor that continues it — an empty cursor
 // means this was the last page. listTasks above can only ever answer with the newest `limit`
 // rows, so this is what makes walking an entire account possible.
-func (t *Transport) listTaskPage(status, listID, projectID string, labels []string, limit int, cursor string) (json.RawMessage, string, error) {
+func (t *Transport) listTaskPage(status, listID, projectID string, labels []string, limit int, cursor string, minPriority *int) (json.RawMessage, string, error) {
 	q := url.Values{}
 	if status != "" {
 		q.Set("status", status)
@@ -1001,6 +1005,9 @@ func (t *Transport) listTaskPage(status, listID, projectID string, labels []stri
 	}
 	for _, label := range labels {
 		q.Add("labels", label)
+	}
+	if minPriority != nil {
+		q.Set("minPriority", strconv.Itoa(*minPriority))
 	}
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))

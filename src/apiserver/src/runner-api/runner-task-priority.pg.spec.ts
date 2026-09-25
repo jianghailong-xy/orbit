@@ -12,7 +12,10 @@
  *   (1) PATCH tasks/:id with a priority stores it;
  *   (2) PATCH tasks/:id with priority null returns the task to 0;
  *   (3) a priority that is not an integer in the column's range is refused 400 and stores nothing;
- *   (4) GET tasks — the filtered page and the unfiltered list both — carries each row's priority.
+ *   (4) GET tasks — the filtered page and the unfiltered list both — carries each row's priority;
+ *   (5) GET tasks and GET tasks/page with minPriority answer only the tasks at or above it — alone
+ *       or beside other filters, on every page of a cursor walk — and refuse a floor that is not an
+ *       integer in the column's range.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/runner-task-priority.pg.spec.ts
  *
@@ -213,5 +216,64 @@ test('the runner task door stores, clears and reads back a task priority', { ski
     assert.equal(all.status, 200, all.text);
     const ours = (all.body as Array<{ id: string; priority: number }>).filter((row) => wanted.has(row.id));
     assert.deepEqual(ours.map((row) => row.priority), [7], 'the unfiltered list does not carry the priority');
+  });
+
+  // ═══ (5) minPriority ═════════════════════════════════════════════════════════════════════════
+
+  await t.test('(5) GET tasks and tasks/page answer only the tasks at or above minPriority', async () => {
+    // A third task between the two: 7 (case 3 left it there), 3, and the one nobody raised.
+    const midTitle = `raised a little through the runner door ${randomUUID()}`;
+    assert.equal((await send('POST', 'tasks', { title: midTitle, listId: uuidToBase62(listId), ...EXECUTABLE })).status, 201);
+    const idByTitle = async (text: string) => (await sql.query<{ id: string }>(
+      `SELECT "id" FROM "task" WHERE "owner_id" = $1::uuid AND "title" = $2`, [owner, text],
+    )).rows[0].id;
+    const mid = await idByTitle(midTitle);
+    const unraised = await idByTitle(other);
+    assert.equal((await send('PATCH', `tasks/${uuidToBase62(mid)}`, { priority: 3 })).status, 200);
+    assert.equal(await priorityOf(task), 7, 'case (3) did not leave the raised task at 7');
+
+    const ids = (rows: Array<{ id: string }>) => rows.map((row) => row.id).sort();
+    const b62 = (...uuids: string[]) => uuids.map((id) => uuidToBase62(id)).sort();
+    const list = uuidToBase62(listId);
+
+    for (const [floor, expected] of [
+      ['1', b62(task, mid)],
+      ['4', b62(task)],
+      ['8', []],
+      // Everything is at or above 0 and above -1: a floor is a floor, not "raised only".
+      ['0', b62(task, mid, unraised)],
+      ['-1', b62(task, mid, unraised)],
+    ] as const) {
+      const page = await send('GET', `tasks?listId=${list}&minPriority=${floor}`);
+      assert.equal(page.status, 200, page.text);
+      assert.deepEqual(ids(page.body), expected, `minPriority=${floor} within the list`);
+    }
+
+    // On its own it still filters: a request carrying nothing else must not fall through to the
+    // unfiltered list, which knows no priority and would answer with every task the owner has.
+    const alone = await send('GET', 'tasks?minPriority=1');
+    assert.equal(alone.status, 200, alone.text);
+    assert.deepEqual(ids(alone.body), b62(task, mid), 'minPriority alone answered the unfiltered list');
+
+    // Every page of a walk carries it: one row a page, cursor to cursor, each raised task once.
+    const walked: string[] = [];
+    let cursor: string | null = null;
+    for (let pages = 0; pages < 10; pages += 1) {
+      const next: Reply = await send(
+        'GET',
+        `tasks/page?listId=${list}&minPriority=1&limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      );
+      assert.equal(next.status, 200, next.text);
+      walked.push(...(next.body.items as Array<{ id: string }>).map((row) => row.id));
+      cursor = next.body.nextCursor ?? null;
+      if (!cursor) break;
+    }
+    assert.deepEqual([...walked].sort(), b62(task, mid), 'the walk lost or repeated a raised task');
+
+    for (const bad of ['1.5', 'abc', '', '2147483648', '-2147483649']) {
+      const refused = await send('GET', `tasks?listId=${list}&minPriority=${encodeURIComponent(bad)}`);
+      assert.equal(refused.status, 400, `minPriority=${JSON.stringify(bad)}: ${refused.text}`);
+      assert.match(refused.text, /minPriority/, `the refusal of ${JSON.stringify(bad)} does not name the parameter`);
+    }
   });
 });

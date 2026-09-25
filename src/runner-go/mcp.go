@@ -251,13 +251,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if limit == 0 {
 			limit = defaultTaskListLimit
 		}
-		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit)
+		minPriority, err := getOptionalPriority(args, "minPriority")
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit, minPriority)
 		if err != nil {
 			return toolResult("list tasks failed: "+err.Error(), true)
 		}
 		body := prettyJSON(raw)
 		if countJSONArray(raw) >= limit {
-			body = fmt.Sprintf("Showing the newest %d tasks; narrow with status/listId/projectId/labels or raise limit.\n%s", limit, body)
+			body = fmt.Sprintf("Showing the newest %d tasks; narrow with status/listId/projectId/labels/minPriority or raise limit.\n%s", limit, body)
 		}
 		return toolResult(body, false)
 
@@ -2151,7 +2155,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	tools := []map[string]interface{}{
 		{
 			"name":        "task_list",
-			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId, projectId or labels. Rows carry projectId, parentTaskId and acceptanceCriteria, so which project a task belongs to, what it is part of, and what would settle it are readable without fetching each task.",
+			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId, projectId, labels or minPriority. Rows carry projectId, parentTaskId, acceptanceCriteria and priority, so which project a task belongs to, what it is part of, what would settle it and where it stands in its list's queue are readable without fetching each task.",
 			"inputSchema": obj(map[string]interface{}{
 				"status": status,
 				"listId": str,
@@ -2167,6 +2171,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type":        "array",
 					"items":       str,
 					"description": "Only tasks carrying ALL of these labels. Matched exactly, case included. Use task_labels first when the exact spelling of a label is not already known.",
+				},
+				"minPriority": map[string]interface{}{
+					"type":        "integer",
+					"minimum":     taskPriorityMin,
+					"maximum":     taskPriorityMax,
+					"description": "Only tasks whose priority is at least this. 1 is \"the ones somebody raised\" with task_update's priority, so listId + status OPEN + minPriority 1 is a list's raised queue in one call — where finding them otherwise means paging through the whole list. 0 includes everything nobody touched, and a negative floor reaches the tasks somebody lowered. Omit for no floor.",
 				},
 				"limit": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": maxTaskListLimit, "description": fmt.Sprintf("Maximum tasks to return (default %d, server cap %d).", defaultTaskListLimit, maxTaskListLimit)},
 			}),
@@ -3394,6 +3404,34 @@ func getBoundedOptionalNumber(args map[string]interface{}, key string, maximum i
 		return 0, fmt.Errorf("%s must be an integer from 1 to %d", key, maximum)
 	}
 	return n, nil
+}
+
+// getOptionalPriority reads an optional priority floor. Absent or null is no floor — and a
+// pointer, because 0 is a floor a caller can mean. Anything that is not an integer in the column's
+// range is refused here, before it becomes a query parameter the server would only refuse.
+func getOptionalPriority(args map[string]interface{}, key string) (*int, error) {
+	raw, present := args[key]
+	if !present || raw == nil {
+		return nil, nil
+	}
+	bad := fmt.Errorf("%s must be an integer from %d to %d", key, taskPriorityMin, taskPriorityMax)
+	var n int
+	switch value := raw.(type) {
+	case float64:
+		if value < taskPriorityMin || value > taskPriorityMax || value != float64(int(value)) {
+			return nil, bad
+		}
+		n = int(value)
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || parsed < taskPriorityMin || parsed > taskPriorityMax {
+			return nil, bad
+		}
+		n = parsed
+	default:
+		return nil, bad
+	}
+	return &n, nil
 }
 
 func getString(args map[string]interface{}, key string) string {

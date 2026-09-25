@@ -192,3 +192,161 @@ func TestTaskCLIPriorityRefusesContradictionsAndOutOfRangeBeforeTheRoundTrip(t *
 		t.Fatalf("requests = %d, want every one caught before the round trip", requests)
 	}
 }
+
+// ── minPriority on the read doors ───────────────────────────────────────────────────────────────
+//
+// `task_list` / `orbit task list` with a floor: sent as the `minPriority` query parameter when it
+// was named — 0 included, since 0 is a floor a caller can mean — and on EVERY page of an --all walk,
+// because a filter dropped after page one silently widens the walk to the whole list. A floor that
+// is not an integer in the column's range is refused here, before any request.
+
+// captureTaskListQueries answers the two list routes and records the query of every request.
+// The page route answers two pages, so a walk has to carry its filters across a cursor.
+func captureTaskListQueries(t *testing.T) (*httptest.Server, *[]map[string][]string) {
+	t.Helper()
+	var queries []map[string][]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queries = append(queries, map[string][]string(r.URL.Query()))
+		switch r.URL.Path {
+		case "/api/runner/tasks":
+			_, _ = w.Write([]byte(`[{"id":"t1","priority":7}]`))
+		case "/api/runner/tasks/page":
+			if r.URL.Query().Get("cursor") == "" {
+				_, _ = w.Write([]byte(`{"items":[{"id":"t1","priority":7}],"nextCursor":"c2"}`))
+			} else {
+				_, _ = w.Write([]byte(`{"items":[{"id":"t2","priority":3}],"nextCursor":null}`))
+			}
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &queries
+}
+
+func TestMCPTaskListSendsMinPriorityOnlyWhenNamed(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args map[string]interface{}
+		want []string // nil = the parameter must be absent
+	}{
+		{name: "absent", args: map[string]interface{}{"listId": "L1"}},
+		{name: "null", args: map[string]interface{}{"listId": "L1", "minPriority": nil}},
+		{name: "raised only", args: map[string]interface{}{"listId": "L1", "minPriority": float64(1)}, want: []string{"1"}},
+		{name: "zero is a floor", args: map[string]interface{}{"minPriority": float64(0)}, want: []string{"0"}},
+		{name: "negative", args: map[string]interface{}{"minPriority": float64(-5)}, want: []string{"-5"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, queries := captureTaskListQueries(t)
+			mcp := &mcpServer{agentID: "agent-1", t: NewTransport(srv.URL, "tok")}
+			res := mcp.callTool("task_list", tc.args)
+			if res["isError"] == true {
+				t.Fatalf("task_list returned an error: %#v", res["content"])
+			}
+			if len(*queries) != 1 {
+				t.Fatalf("requests = %d", len(*queries))
+			}
+			got, present := (*queries)[0]["minPriority"]
+			if (tc.want == nil) == present || (tc.want != nil && strings.Join(got, ",") != strings.Join(tc.want, ",")) {
+				t.Fatalf("minPriority = %v (present %v), want %v; query = %v", got, present, tc.want, (*queries)[0])
+			}
+		})
+	}
+}
+
+func TestMCPTaskListRefusesAFloorOutsideTheColumnBeforeAnyRequest(t *testing.T) {
+	srv, queries := captureTaskListQueries(t)
+	mcp := &mcpServer{agentID: "agent-1", t: NewTransport(srv.URL, "tok")}
+	for _, bad := range []interface{}{1.5, float64(2147483648), float64(-2147483649), "high", true} {
+		res := mcp.callTool("task_list", map[string]interface{}{"minPriority": bad})
+		if res["isError"] != true {
+			t.Fatalf("minPriority %#v was accepted: %#v", bad, res["content"])
+		}
+	}
+	if len(*queries) != 0 {
+		t.Fatalf("requests = %d, want every refusal before the round trip", len(*queries))
+	}
+}
+
+func TestMCPTaskListDeclaresMinPriority(t *testing.T) {
+	props := mcpToolProps(toolDescriptors(false, false), "task_list")
+	floor, ok := props["minPriority"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("task_list declares no minPriority: %#v", props["minPriority"])
+	}
+	if floor["type"] != "integer" || floor["minimum"] != taskPriorityMin || floor["maximum"] != taskPriorityMax {
+		t.Fatalf("minPriority = %#v, want an integer in the column's range", floor)
+	}
+	description, _ := floor["description"].(string)
+	for _, phrase := range []string{"at least", "1 is", "somebody raised", "negative", "Omit"} {
+		if !strings.Contains(description, phrase) {
+			t.Errorf("minPriority description does not state %q: %q", phrase, description)
+		}
+	}
+}
+
+func TestTaskCLIListSendsMinPriorityOnEveryPage(t *testing.T) {
+	t.Run("one page", func(t *testing.T) {
+		srv, queries := captureTaskListQueries(t)
+		configureCLITestRunner(t, srv.URL)
+		var out bytes.Buffer
+		if err := cmdTaskCLI([]string{"list", "--list-id", "L1", "--status", "OPEN", "--min-priority", "1", "--json"}, strings.NewReader(""), &out); err != nil {
+			t.Fatal(err)
+		}
+		if len(*queries) != 1 || strings.Join((*queries)[0]["minPriority"], ",") != "1" {
+			t.Fatalf("queries = %v, want one request with minPriority=1", *queries)
+		}
+	})
+	t.Run("an --all walk carries it across the cursor", func(t *testing.T) {
+		srv, queries := captureTaskListQueries(t)
+		configureCLITestRunner(t, srv.URL)
+		var out bytes.Buffer
+		if err := cmdTaskCLI([]string{"list", "--list-id", "L1", "--min-priority", "0", "--all"}, strings.NewReader(""), &out); err != nil {
+			t.Fatal(err)
+		}
+		if len(*queries) != 2 {
+			t.Fatalf("requests = %d, want two pages", len(*queries))
+		}
+		for i, q := range *queries {
+			if strings.Join(q["minPriority"], ",") != "0" {
+				t.Fatalf("page %d query = %v, want minPriority=0 on every page", i+1, q)
+			}
+		}
+		if lines := strings.Count(strings.TrimSpace(out.String()), "\n") + 1; lines != 2 {
+			t.Fatalf("output = %q, want both pages' rows", out.String())
+		}
+	})
+	t.Run("not named, not sent", func(t *testing.T) {
+		srv, queries := captureTaskListQueries(t)
+		configureCLITestRunner(t, srv.URL)
+		var out bytes.Buffer
+		if err := cmdTaskCLI([]string{"list", "--list-id", "L1", "--json"}, strings.NewReader(""), &out); err != nil {
+			t.Fatal(err)
+		}
+		if _, present := (*queries)[0]["minPriority"]; present {
+			t.Fatalf("query = %v, want no minPriority", (*queries)[0])
+		}
+	})
+}
+
+func TestTaskCLIListRefusesAFloorOutsideTheColumnBeforeAnyRequest(t *testing.T) {
+	srv, queries := captureTaskListQueries(t)
+	configureCLITestRunner(t, srv.URL)
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"list", "--min-priority", "2147483648", "--json"}, "--min-priority must be between -2147483648 and 2147483647"},
+		{[]string{"list", "--min-priority", "high", "--json"}, "invalid value"},
+	} {
+		var out bytes.Buffer
+		err := cmdTaskCLI(tc.args, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%v: err = %v, want %q", tc.args, err, tc.want)
+		}
+	}
+	if len(*queries) != 0 {
+		t.Fatalf("requests = %d, want every refusal before the round trip", len(*queries))
+	}
+}

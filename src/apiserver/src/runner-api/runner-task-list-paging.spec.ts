@@ -43,6 +43,7 @@ test('a filtered list is answered by the page query, not by loading every task',
       projectId: undefined,
       labels: undefined,
       limit: '50',
+      minPriority: undefined,
       counts: 'none',
     },
   ]);
@@ -73,6 +74,7 @@ test('a label alone is enough to take the page query', async () => {
       projectId: undefined,
       labels: 'CC-MAIN-2017-34',
       limit: undefined,
+      minPriority: undefined,
       counts: 'none',
     },
   ]);
@@ -97,6 +99,7 @@ test('the paged route carries the cursor through and answers with the envelope',
       projectId: undefined,
       labels: undefined,
       limit: '200',
+      minPriority: undefined,
       counts: 'none',
     },
   ]);
@@ -115,6 +118,7 @@ test('the first page of a walk asks with no cursor', async () => {
       projectId: undefined,
       labels: undefined,
       limit: undefined,
+      minPriority: undefined,
       counts: 'none',
     },
   ]);
@@ -152,6 +156,7 @@ test('a project id alone is enough to take the page query', async () => {
       projectId: 'proj-1',
       labels: undefined,
       limit: undefined,
+      minPriority: undefined,
       counts: 'none',
     },
   ]);
@@ -169,6 +174,7 @@ test('the project reaches the page query alongside every other filter', async ()
       projectId: 'proj-1',
       labels: 'shard-3',
       limit: '50',
+      minPriority: undefined,
       counts: 'none',
     },
   ]);
@@ -189,6 +195,61 @@ test('the paged route carries the project with the cursor', async () => {
       projectId: 'proj-1',
       labels: undefined,
       limit: '200',
+      minPriority: undefined,
+      counts: 'none',
+    },
+  ]);
+});
+
+// ── A priority floor ───────────────────────────────────────────────────────────────────────────
+
+// `tasks.list` knows no priority either, so a floor-only request routed to the unfiltered branch
+// would answer with every task the owner has — "these are the ones I raised" reading as all 27k.
+test('a priority floor alone is enough to take the page query', async () => {
+  const { controller, calls } = harness();
+
+  await controller.listTasks(runner, undefined, undefined, undefined, undefined, undefined, '1');
+
+  assert.equal(calls.list, 0);
+  assert.deepEqual(calls.page, [
+    {
+      status: undefined,
+      listId: undefined,
+      projectId: undefined,
+      labels: undefined,
+      limit: undefined,
+      minPriority: '1',
+      counts: 'none',
+    },
+  ]);
+});
+
+// "0" is falsy only as a number: it is a floor a caller can mean, and it must not be read as
+// "nothing asked" and answered with the unfiltered list.
+test('a floor of 0 is still a floor', async () => {
+  const { controller, calls } = harness();
+
+  await controller.listTasks(runner, undefined, undefined, undefined, undefined, undefined, '0');
+
+  assert.equal(calls.list, 0);
+  assert.equal(calls.page.length, 1);
+  assert.equal(calls.page[0].minPriority, '0');
+});
+
+test('the paged route carries the floor with the cursor', async () => {
+  const { controller, calls } = harness();
+
+  await controller.listTaskPage(runner, 'cursor-2', 'OPEN', 'list-1', '200', undefined, undefined, '1');
+
+  assert.deepEqual(calls.page, [
+    {
+      cursor: 'cursor-2',
+      status: 'OPEN',
+      listId: 'list-1',
+      projectId: undefined,
+      labels: undefined,
+      limit: '200',
+      minPriority: '1',
       counts: 'none',
     },
   ]);
