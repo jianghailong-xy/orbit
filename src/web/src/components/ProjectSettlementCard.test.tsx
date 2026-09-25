@@ -5,11 +5,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import {
   ProjectSettlementCard,
-  SETTLEMENT_CHAT_HINT,
   SETTLEMENT_CONFIRM_ACTION,
+  SETTLEMENT_DELEGATE_ACTION,
+  SETTLEMENT_DELEGATE_HINT,
   SETTLEMENT_HEADING,
   SETTLEMENT_PREVIEW,
   SETTLEMENT_RULE,
@@ -128,7 +128,7 @@ const card = (
     standing={null}
     settled={false}
     onConfirm={() => {}}
-    onChatAbout={() => {}}
+    onDelegate={() => {}}
     {...over}
   />,
 );
@@ -136,16 +136,18 @@ const card = (
 describe('the copy', () => {
   /** The card's sentences are a spec rather than a draft, so they are pinned as literals: a test
    *  that asserted each constant against itself would go green on any rewording at all. */
-  it('asks the question the projection answers, and names its one press', () => {
+  it('asks the question the projection answers, and names its two presses', () => {
     expect(SETTLEMENT_HEADING).toBe('Why is this project not done?');
     expect(SETTLEMENT_CONFIRM_ACTION).toBe('Confirm the criteria');
-    expect(OWNER_SEND_BACK_ACTION).toBe('Chat about this');
+    // Not `OWNER_SEND_BACK_ACTION`: this card hands the work to the agent that owns the project,
+    // and says so, rather than putting the same facts in a composer for the reader to send.
+    expect(SETTLEMENT_DELEGATE_ACTION).toBe('Ask the coordinator to handle it');
     expect(SETTLEMENT_RULE).toBe(
       'Orbit records a project done by itself — no press, no agent — when every stated criterion '
       + 'is met by work that has landed and counts, under a criteria set you have confirmed.',
     );
     expect(SETTLEMENT_SETTLED_TITLE).toBe('Orbit recorded this project done.');
-    expect(SETTLEMENT_CHAT_HINT).toContain('hands the card’s own facts to the composer below');
+    expect(SETTLEMENT_DELEGATE_HINT).toContain('sends the card’s own facts into this conversation');
   });
 
   it('says how many of those conditions do not hold, in the singular and the plural', () => {
@@ -299,12 +301,29 @@ describe('the card', () => {
     expect(markup).toContain('补自更新 E2E 配方');
   });
 
-  /** One door, and it is not "done": the press is the derivation's second input, and it is offered
-   *  only when that is the clause withholding settlement. */
-  it('offers the confirmation press only for the clause it clears', () => {
+  /** Neither press is "done": the confirmation is the derivation's second input and is offered only
+   *  when that is the clause withholding settlement, while the hand-over is offered for every
+   *  withheld clause — work is what the conversation this card is drawn in is for. */
+  it('offers the confirmation press only for the clause it clears, and the hand-over press always', () => {
     expect(card(projectOf())).toContain(SETTLEMENT_CONFIRM_ACTION);
     expect(card(unlanded())).not.toContain(SETTLEMENT_CONFIRM_ACTION);
-    expect(card(unlanded())).toContain(OWNER_SEND_BACK_ACTION);
+    expect(card(unlanded())).toContain(SETTLEMENT_DELEGATE_ACTION);
+  });
+
+  it('offers the hand-over press for the clause whose clearing is stating the goal itself', () => {
+    const markup = card(projectOf({
+      derivedDone: {
+        status: 'OPEN',
+        done: false,
+        withheld: ['NO_CRITERIA_STATED'],
+        criteria: [],
+        confirmation: 'CONFIRMED',
+      },
+    }));
+    expect(markup).toContain('this project states no criteria');
+    expect(markup).toContain(SETTLEMENT_DELEGATE_ACTION);
+    // Nothing here asks the reader for a set to confirm: this project has none to stand behind.
+    expect(markup).not.toContain(SETTLEMENT_CONFIRM_ACTION);
   });
 
   it('holds the press while the standing is unreadable or already confirmed', () => {
@@ -324,8 +343,15 @@ describe('the card', () => {
     expect(markup).toContain(SETTLEMENT_SETTLED_TITLE);
     expect(markup).toContain(SETTLEMENT_SETTLED_BODY);
     expect(markup).toContain(SETTLEMENT_SETTLED_PROVENANCE);
+    // The heading belongs to the state: a card the derivation has stopped withholding under must
+    // not go on asking why the project is not done, which is what it said on screen while its own
+    // body said the opposite.
+    expect(markup).not.toContain(SETTLEMENT_HEADING);
+    // And once, not twice: the receipt was the body's bold lead-in before it became the heading.
+    expect((markup.match(/Orbit recorded this project done/g) ?? []).length).toBe(1);
     // Nothing to press, and nothing withheld to explain.
     expect(markup).not.toContain(SETTLEMENT_CONFIRM_ACTION);
+    expect(markup).not.toContain(SETTLEMENT_DELEGATE_ACTION);
     expect(markup).not.toContain('does not hold here');
   });
 
@@ -350,7 +376,8 @@ describe('the wired card', () => {
   const writes = (): Recorded[] => recorded.filter((request) => request.method !== 'GET');
 
   const server: { document: SettlementProjectDocument | Error } = { document: projectOf() };
-  const armed: Array<{ projectId: string; projectTitle: string; facts: string }> = [];
+  /** What the press handed the conversation, in the order it did: the card writes nothing itself. */
+  const delegated: Array<{ facts: string }> = [];
 
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
@@ -359,7 +386,7 @@ describe('the wired card', () => {
   beforeEach(() => {
     server.document = projectOf();
     recorded.length = 0;
-    armed.length = 0;
+    delegated.length = 0;
     vi.mocked(api).mockImplementation((async (
       path: string,
       init?: { method?: string; body?: unknown },
@@ -414,7 +441,7 @@ describe('the wired card', () => {
         <QueryClientProvider client={qc}>
           {conversations.map((projectId, index) => (
             <section key={index}>
-              <SessionProjectSettlementCard projectId={projectId} onChatAbout={(talk) => armed.push(talk)} />
+              <SessionProjectSettlementCard projectId={projectId} onDelegate={(talk) => delegated.push(talk)} />
             </section>
           ))}
         </QueryClientProvider>,
@@ -540,31 +567,33 @@ describe('the wired card', () => {
     expect(cardsIn(node)).toHaveLength(1);
   });
 
-  it('hands the card’s own facts to the composer, and leaves the card answerable', async () => {
+  it('hands the card’s own facts to the conversation, and leaves the card answerable', async () => {
     const { node, card } = await delivered();
     await act(async () => {
-      action(card(), OWNER_SEND_BACK_ACTION).click();
+      action(card(), SETTLEMENT_DELEGATE_ACTION).click();
     });
-    expect(armed).toHaveLength(1);
-    expect(armed[0]!.projectId).toBe(PROJECT);
-    expect(armed[0]!.facts).toContain('Orbit has not recorded it done');
+    expect(delegated).toHaveLength(1);
+    // The facts ARE the message: they name the project they are about, so nothing else has to.
+    expect(delegated[0]!.facts).toContain(TITLE);
+    expect(delegated[0]!.facts).toContain('Orbit has not recorded it done');
+    // The card is not an answer to anything, so it stays — with its own press still live.
     expect(cardsIn(node)).toHaveLength(1);
+    expect(writes(), 'the press wrote something itself').toEqual([]);
   });
 
-  it('takes the keyboard: the bare key confirms at the door and the chord hands the facts over', async () => {
+  it('takes the keyboard: the bare key confirms at the door and the chord hands the work over', async () => {
     const { card } = await delivered();
 
     // One card asking, so it holds the keys — and each control says which key presses it, on the
     // control itself: a shortcut nobody can see is a shortcut nobody has.
     expect(hintOn(action(card(), SETTLEMENT_CONFIRM_ACTION))).toBe(ENTER_HINT);
-    expect(hintOn(action(card(), OWNER_SEND_BACK_ACTION))).toBe(SHORTCUT_HINT);
+    expect(hintOn(action(card(), SETTLEMENT_DELEGATE_ACTION))).toBe(SHORTCUT_HINT);
 
     // The chord first, because it leaves the card standing: it hands the facts over and writes
     // nothing, exactly as the button does.
     await key({ metaKey: true });
-    expect(armed, 'the composer was not armed, or armed more than once').toHaveLength(1);
-    expect(armed[0]!.projectId).toBe(PROJECT);
-    expect(armed[0]!.facts).toContain('Orbit has not recorded it done');
+    expect(delegated, 'the facts were not handed over, or handed over twice').toHaveLength(1);
+    expect(delegated[0]!.facts).toContain('Orbit has not recorded it done');
     expect(writes(), 'the chord wrote something').toEqual([]);
 
     // And the bare key is the press itself: the same door, and the version the card read.

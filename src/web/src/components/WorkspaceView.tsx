@@ -246,11 +246,7 @@ import {
   SessionAcceptanceConfirmationCard,
   acceptancePlanChangeContext,
 } from './AcceptanceConfirmationCard';
-import {
-  SETTLEMENT_CHAT_PLACEHOLDER,
-  SETTLEMENT_CHAT_PREFIX,
-  SessionProjectSettlementCard,
-} from './ProjectSettlementCard';
+import { SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -1571,8 +1567,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       | { kind: 'approval'; id: string }
       | { kind: 'ownerConfirmation'; taskId: string; requestId: string }
       | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string }
-      | { kind: 'planChange'; projectId: string; criteriaDigest: string }
-      | { kind: 'projectSettlement'; projectId: string };
+      | { kind: 'planChange'; projectId: string; criteriaDigest: string };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
     /** What the empty composer asks for while this is armed. */
@@ -4074,9 +4069,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
     // Nothing answers a plan change another way: no call is pending on it, so there is no question
     // that can go out from under the reader mid-sentence. It stays armed until it is sent or the
-    // chip is dismissed. The project settlement card's "Chat about this" is the same kind of armed
-    // reply — an ordinary turn at an idle agent — so it stays armed by the same rule.
-    if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') return;
+    // chip is dismissed.
+    if (replyTo.target.kind === 'planChange') return;
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
     // the card is drawn from, and only once that read has come back, for the reason below.
@@ -5377,11 +5371,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         evidenceDecision.mutate({ sessionId: selectedId, taskId, evidenceRevision, note: c });
         return;
       }
-      // Talking about a plan before it is started — and about a project whose criteria are all met —
-      // reaches no door either: both are ordinary turns at an idle agent, with the facts the card is
-      // drawn from carried in front of the message because nothing in the session holds them. The
-      // card that armed it is untouched: its own primary action is still the other way out.
-      if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') {
+      // Talking about a plan before it is started reaches no door either: it is an ordinary turn at
+      // an idle agent, with the facts the card is drawn from carried in front of the message
+      // because nothing in the session holds them. The card that armed it is untouched: its own
+      // primary action is still the other way out.
+      if (replyTo.target.kind === 'planChange') {
         if (!c) return;
         pinToBottom();
         const carried = replyTo.context;
@@ -5822,22 +5816,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // The project settlement card's "Chat about this": the next send is an ordinary turn saying what
-  // is still missing, with the card's own facts — the criteria and the two facts beside each —
-  // carried in front of it. Like the plan change above it answers nothing, so no door is named
-  // here. The card stays, with its own Confirm still live.
-  const startProjectSettlementChat = (talk: {
-    projectId: string;
-    projectTitle: string;
-    facts: string;
-  }): void => {
-    setReplyTo({
-      target: { kind: 'projectSettlement', projectId: talk.projectId },
-      banner: SETTLEMENT_CHAT_PREFIX + talk.projectTitle,
-      placeholder: SETTLEMENT_CHAT_PLACEHOLDER,
-      context: talk.facts,
-    });
-    setTimeout(() => taRef.current?.focus(), 0);
+  // The project settlement card's "Ask the coordinator to handle it": the card's own facts — the
+  // blocked criteria, what each is waiting on and what would clear them — go out as one ordinary
+  // turn. Ordinary because nothing is waiting on an answer: the card explains a projection, and the
+  // work that would clear it is this agent's. The facts ARE the message, so unlike the armed
+  // replies above there is nothing to type first; the composer stays free for anything they leave
+  // out. The card stays where it is, with its own Confirm still live.
+  const delegateProjectSettlement = (talk: { facts: string }): void => {
+    if (send.isPending) return;
+    send.mutate({ content: talk.facts, images: [], intent: defaultSendIntent });
   };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
@@ -7397,7 +7384,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <SessionProjectSettlementCard
                   key={`settlement:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
-                  onChatAbout={startProjectSettlementChat}
+                  onDelegate={delegateProjectSettlement}
                 />
               )}
               {selected &&
