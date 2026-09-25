@@ -149,6 +149,7 @@ import {
   sameRuntimeChoices,
 } from '../lib/sessionProviderChoices';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
+import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeCard } from './WatchWakeCard';
 import { BackgroundWakeCard } from './BackgroundWakeCard';
@@ -7275,6 +7276,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         {selectedId && !selectedTrashed && (
           <BackgroundShellsTray events={events} live={live} serverShells={serverBgShells} />
         )}
+        {/* The tasks this session's agent created, beside the branch below: the conversation's two
+            kinds of output next to each other. Hidden until it has created one. */}
+        {selectedId && !selectedTrashed && <SessionCreatedTasksStrip sessionId={selectedId} />}
         <SessionOutputs
           // Only the open session has a worktree to show. With nothing selected (new-session
           // draft, empty list) `keepPreviousData` still holds the previously-open session's

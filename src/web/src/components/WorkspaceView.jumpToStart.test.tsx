@@ -165,6 +165,7 @@ beforeEach(() => {
     if (path.startsWith(`/sessions/${SESSION_PUBLIC}`)) {
       if (path.includes('/diff')) return reply({ files: [] });
       if (path.includes('/turns') || path.includes('/approvals') || path.includes('/background')) return reply([]);
+      if (path.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
       return reply(SESSION);
     }
     if (path.startsWith('/sessions')) return reply([SESSION]);

@@ -206,6 +206,21 @@ const maxTaskLabels = 16
 // the cap the write would be rejected against, rather than letting a model discover it by 400.
 const maxTaskAcceptanceCriteriaChars = 4000
 
+// The range of a task's priority: the server's TASK_PRIORITY_MIN/MAX, which are the INTEGER
+// column's own, stated in the schema for the same reason as the bounds above.
+const (
+	taskPriorityMin = -2147483648
+	taskPriorityMax = 2147483647
+)
+
+// What `priority` does, stated once for task_update and `orbit task update --priority`, so the two
+// doors cannot come to describe different fields. The server decides all of it (TasksService); this
+// is the sentence a caller reads before choosing a number.
+const taskPriorityDescription = "Where this task stands in its list's queue. When the list has more ready tasks than free slots (its maxConcurrent), the server's automatic dispatch — the once-a-minute scan, and the start that follows a prerequisite finishing — gives the next slot to the highest priority first; a coordinated project's concurrency budget is dealt the same way. " +
+	"An integer: higher goes first, 0 is what every task has until somebody sets it, and a negative value goes after everything left at 0. Equal priorities keep the order they already had, so tasks nobody sets are dispatched exactly as before. " +
+	"It only orders tasks that are ready: it starts nothing by itself, gets past no gate (a paused list's dispatchHold, prerequisites, a future runAt, the list's cap), and does not move the list ahead of other lists. task_start ignores it. " +
+	"Omit to leave it as it is; null returns the task to 0."
+
 // Audit explanation for deliberately keeping a criterion after the server questions its shape.
 // Mirrors MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS.
 const maxTaskCriterionOverrideReasonChars = 2000
@@ -767,7 +782,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -2782,6 +2797,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"autoRunWhenReady": map[string]interface{}{
 					"type":        "boolean",
 					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
+				},
+				"priority": map[string]interface{}{
+					"type":        []string{"integer", "null"},
+					"minimum":     taskPriorityMin,
+					"maximum":     taskPriorityMax,
+					"description": taskPriorityDescription,
 				},
 				"completionPolicy": map[string]interface{}{
 					"type":        "string",

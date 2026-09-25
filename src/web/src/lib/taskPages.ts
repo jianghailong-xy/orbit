@@ -27,6 +27,8 @@ export interface TaskPageParams {
   /** Tasks carrying ALL of these labels. Sent as repeated params so a label may contain a comma. */
   labels?: string[];
   q?: string;
+  /** Only the tasks this session created (`task.creatorSessionId`). */
+  creatorSessionId?: string;
   /**
    * How much of the aggregate block to compute.
    *
@@ -47,6 +49,7 @@ export function taskPagePath(params: TaskPageParams = {}): string {
   if (params.assigneeId) search.set('assigneeId', params.assigneeId);
   for (const label of params.labels ?? []) search.append('labels', label);
   if (params.q?.trim()) search.set('q', params.q.trim());
+  if (params.creatorSessionId) search.set('creatorSessionId', params.creatorSessionId);
   if (params.counts) search.set('counts', params.counts);
   const suffix = search.toString();
   return `/tasks/page${suffix ? `?${suffix}` : ''}`;
@@ -90,10 +93,11 @@ export function activeTasksPath(listId?: string): string {
   return `/tasks/active${listId ? `?listId=${encodeURIComponent(listId)}` : ''}`;
 }
 
-export function taskCountsPath(listId?: string, labels: string[] = []): string {
+export function taskCountsPath(listId?: string, labels: string[] = [], creatorSessionId?: string): string {
   const search = new URLSearchParams();
   if (listId) search.set('listId', listId);
   for (const label of labels) search.append('labels', label);
+  if (creatorSessionId) search.set('creatorSessionId', creatorSessionId);
   const suffix = search.toString();
   return `/tasks/counts${suffix ? `?${suffix}` : ''}`;
 }

@@ -5,6 +5,7 @@ import type {
   LinkPreviewsResponse,
   ProjectIntegrationView,
   ProjectPromotionView,
+  SessionCreatedTasks,
   SessionSearchResponse,
   WatchView,
 } from '@orbit/shared';
@@ -347,11 +348,33 @@ export const activeTasksQuery = (listId?: string) =>
  * search term, so every tab sees the same numbers. Keyed this way, switching tab is a cache hit
  * and the four aggregates behind them run once per scope instead of once per tab.
  */
-export const taskCountsQuery = (listId?: string, labels: string[] = []) =>
+export const taskCountsQuery = (listId?: string, labels: string[] = [], creatorSessionId?: string) =>
   queryOptions({
-    queryKey: ['tasks', 'counts', listId ?? null, labels] as const,
-    queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels)),
+    // The session scope enters the key only when there is one, so every other scope keeps the key
+    // it had before that scope existed.
+    queryKey: [
+      'tasks',
+      'counts',
+      listId ?? null,
+      labels,
+      ...(creatorSessionId ? [{ creatorSessionId }] : []),
+    ] as const,
+    queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels, creatorSessionId)),
     staleTime: 10_000,
+  });
+
+/**
+ * The tasks a session's agent created, as the "Tasks created here" row above its composer draws
+ * them. Under `['tasks']`, so the refresh `useControlPlane` runs on every `task.*` event reaches it
+ * with no entry of its own. Polled while a row is running or queued besides: a queued task starting
+ * is a session event, not a `task.changed`, and nothing else would redraw its pill.
+ */
+export const sessionCreatedTasksQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ['tasks', 'created-by-session', sessionId] as const,
+    queryFn: () => api<SessionCreatedTasks>(`/sessions/${sessionId}/created-tasks`),
+    refetchInterval: (q) =>
+      q.state.data?.items.some((row) => row.running || row.queued) ? 15_000 : false,
   });
 
 /**

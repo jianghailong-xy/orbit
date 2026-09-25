@@ -710,6 +710,7 @@ final class AppModel {
                         // keep fresh (they have no poll at all) alongside the session snapshot.
                         scheduleLibraryRefresh(.agents)
                         scheduleLibraryRefresh(.tasks)
+                        nudgeCreatedTasks()
                         // No event carries a watch either: re-read the list the stream can't replay.
                         if let watches { Task { await watches.load() } }
                         // Runners has neither push nor poll: a list that failed while offline
@@ -781,6 +782,8 @@ final class AppModel {
         // A task event carries the changed row ids. Fold those exact rows into the loaded page;
         // only an explicit coarse invalidation (or an older/malformed payload) needs a snapshot.
         case .taskChanged:
+            // The focused session may have just created the task, or one its card draws moved.
+            nudgeCreatedTasks()
             guard let changed = ev.payload(ControlTaskChanged.self),
                   // A legacy server sends only taskId and has no /tasks/:id/row route. Treat that
                   // wire shape as a coarse nudge so a new app remains correct against an older
@@ -820,7 +823,10 @@ final class AppModel {
                 // Session state is the authority for a task row's running/queued overlays. The
                 // summary names that task on current servers, so starting, claiming and settling a
                 // run update one lightweight row instead of waiting for the minute reconciliation.
-                if let taskID = summary.taskId { scheduleTaskRefresh([taskID]) }
+                if let taskID = summary.taskId {
+                    scheduleTaskRefresh([taskID])
+                    nudgeCreatedTasks(taskID: taskID)
+                }
                 if mergeSessionSummary(summary) { return }
             }
             scheduleControlRefresh()

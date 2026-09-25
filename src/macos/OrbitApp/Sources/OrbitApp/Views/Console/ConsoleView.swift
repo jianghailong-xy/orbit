@@ -140,6 +140,9 @@ struct ConsoleView: View {
                         // What this session waits on — a watch, not a process — above the real shells.
                         WatchingCardStack(sessionID: console.sessionID)
                         BackgroundTrayView(procs: console.state.background)
+                        // The tasks this session's agent created, beside the code the bar below
+                        // carries — the session's two kinds of output, together.
+                        CreatedTasksCard(console: console)
                         WorktreeBar(console: console)
                         ComposerView(console: console)
                         // What the provider pick standing in the composer will do, and WHEN — the

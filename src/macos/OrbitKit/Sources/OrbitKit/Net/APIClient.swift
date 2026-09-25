@@ -184,6 +184,15 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/background")
     }
 
+    /// The tasks this session's agent created, as its "Tasks created here" card draws them
+    /// (`SessionCreatedTasks`): rows already in the card's order, a replaced task already drawn as
+    /// the one that took it over. `limit` caps `items` and nothing else — nil leaves it to the
+    /// server (20, at most 50). Another account's session is a 404, like a missing one.
+    public func sessionCreatedTasks(sessionID: String, limit: Int? = nil) async throws -> SessionCreatedTasks {
+        try await get("sessions/\(sessionID)/created-tasks",
+                      query: limit.map { [URLQueryItem(name: "limit", value: String($0))] } ?? [])
+    }
+
     public func createSession(_ req: CreateSessionRequest) async throws -> Session {
         try await post("sessions", body: req)
     }
@@ -613,22 +622,28 @@ public final class APIClient: @unchecked Sendable {
 
     // MARK: tasks
     public func tasks() async throws -> [TaskItem] { try await get("tasks") }
+    /// `creatorSessionId` scopes the page to the tasks one session created — where that session's
+    /// "Tasks created here" card sends View all. A scope like `listId`, so it narrows the counts
+    /// (`taskCounts`) too.
     public func taskPage(cursor: String? = nil, limit: Int = 200, status: String? = nil,
                          listId: String? = nil, query: String? = nil,
-                         counts: TaskPageCountsMode = .full) async throws -> TaskPage {
+                         counts: TaskPageCountsMode = .full,
+                         creatorSessionId: String? = nil) async throws -> TaskPage {
         var q = [URLQueryItem(name: "limit", value: String(limit))]
         if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let status { q.append(URLQueryItem(name: "status", value: status)) }
         if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
+        if let creatorSessionId { q.append(URLQueryItem(name: "creatorSessionId", value: creatorSessionId)) }
         if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
         if counts != .full { q.append(URLQueryItem(name: "counts", value: counts.rawValue)) }
         return try await getCancellable("tasks/page", query: q)
     }
     /// Scope-wide tab/progress totals are independent from page filter/search. Keeping them on
     /// their own cancellable request lets rapid query changes reuse one in-flight scope read.
-    public func taskCounts(listId: String? = nil) async throws -> TaskPageCounts {
+    public func taskCounts(listId: String? = nil, creatorSessionId: String? = nil) async throws -> TaskPageCounts {
         var q: [URLQueryItem] = []
         if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
+        if let creatorSessionId { q.append(URLQueryItem(name: "creatorSessionId", value: creatorSessionId)) }
         return try await getCancellable("tasks/counts", query: q)
     }
     public func task(_ id: String) async throws -> TaskItem { try await get("tasks/\(id)") }

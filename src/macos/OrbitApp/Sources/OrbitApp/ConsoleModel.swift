@@ -257,6 +257,8 @@ final class ConsoleModel {
     /// The worktree status bar's own model (detail snapshot + diffs + commit/merge actions) —
     /// see `WorktreeModel`. Wired back to this console for the live status + the status line.
     let worktree: WorktreeModel
+    /// The "Tasks created here" card's own model — see `CreatedTasksModel`. Polled with the stream.
+    let createdTasks: CreatedTasksModel
 
     /// The sticky error line above the composer. Errors only — it's about the message you just tried
     /// to send, so it belongs next to the input and stays until the ✕. Fleeting confirmations must
@@ -303,6 +305,7 @@ final class ConsoleModel {
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.api = api
         self.worktree = WorktreeModel(sessionID: sessionID, api: api)
+        self.createdTasks = CreatedTasksModel(sessionID: sessionID, api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
         // stream, so the value there is inert.
@@ -334,6 +337,7 @@ final class ConsoleModel {
         // Inert for a draft (its guards see the empty sessionID); real work starts once the created
         // session's live console replaces this one.
         self.worktree = WorktreeModel(sessionID: "", api: api)
+        self.createdTasks = CreatedTasksModel(sessionID: "", api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
         // stream, so the value there is inert.
@@ -402,6 +406,8 @@ final class ConsoleModel {
     /// fresh fetch landed. Anchoring the poll to focus (exactly as the SSE stream already is) keeps the
     /// runner's merge/commit outcome flowing into the bar without a remount.
     private var worktreePollTask: Task<Void, Never>?
+    /// The "Tasks created here" card's poll, started and stopped with the stream for the same reason.
+    private var createdTasksPollTask: Task<Void, Never>?
 
     /// Begin the live SSE loop if it isn't already running. Idempotent (re-focusing the same session
     /// is a no-op) and inert for a draft/session-less console.
@@ -409,6 +415,7 @@ final class ConsoleModel {
         guard streamTask == nil, !isDraft, !sessionID.isEmpty else { return }
         streamTask = Task { [weak self] in await self?.run() }
         worktreePollTask = Task { [weak self] in await self?.worktree.startPolling() }
+        createdTasksPollTask = Task { [weak self] in await self?.createdTasks.startPolling() }
     }
 
     /// Cancel the live SSE loop and drop its connection. The reducer state stays cached, so a later
@@ -421,6 +428,8 @@ final class ConsoleModel {
         streamTask = nil
         worktreePollTask?.cancel()
         worktreePollTask = nil
+        createdTasksPollTask?.cancel()
+        createdTasksPollTask = nil
     }
 
     func run() async {

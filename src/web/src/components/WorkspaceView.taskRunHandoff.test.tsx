@@ -278,12 +278,14 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
         if (p.includes('/events/page')) return reply({ events: TAIL, hasMore: false });
         if (p.includes('/diff')) return reply({ files: [] });
         if (p.includes('/turns') || p.includes('/approvals') || p.includes('/background')) return reply([]);
+        if (p.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
         return reply(DEAD_SESSION);
       }
       if (p.startsWith(`/sessions/${LIVE_PUBLIC}`)) {
         if (p.includes('/events/page')) return reply({ events: [], hasMore: false });
         if (p.includes('/diff')) return reply({ files: [] });
         if (p.includes('/turns') || p.includes('/approvals') || p.includes('/background')) return reply([]);
+        if (p.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
         return reply(LIVE_SESSION);
       }
       if (p.startsWith('/sessions')) return reply([DEAD_SESSION, LIVE_SESSION]);

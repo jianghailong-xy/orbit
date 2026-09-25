@@ -1297,6 +1297,18 @@ body {
   padding: 2px 8px;
   white-space: nowrap;
 }
+/* The session scope `?createdIn=` puts on the page: named, so it can be taken off, and cut short
+   rather than letting a long session title push the rest of the toolbar around. */
+.tasks-toolbar .tasks-createdin {
+  display: inline-flex;
+  align-items: center;
+  max-width: 320px;
+}
+.tasks-createdin-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* Inline bar with batch actions, shown only while rows are selected. */
 .tasks-bulkbar {
   display: flex;
@@ -3219,6 +3231,89 @@ html[data-theme='dark'] .session-tag-chip {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* "Tasks created here" (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
+   only what a task list adds to it. Collapsed, the sentence never gives way — a lone task's name
+   truncates instead — and its failed count is red. Opened, one row per task: a fixed status column,
+   the title (with what it replaces, in grey), its age; then the links to the rest. */
+.ct-count {
+  white-space: nowrap;
+}
+.ct-failed {
+  color: var(--error-solid);
+}
+.ct-one {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--brand);
+}
+.ct-one + .status-pill,
+.ct-row .status-pill {
+  height: 20px;
+  font-size: 11.5px;
+}
+.ct-list {
+  border-top: 1px solid var(--border-subtle);
+  max-height: 320px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.ct-row {
+  /* Natural height, so a list past its cap scrolls rather than squashing its rows to fit. */
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 31px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--text-1);
+  text-decoration: none;
+}
+.ct-row + .ct-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.ct-row:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.ct-pill {
+  flex: none;
+  width: 82px;
+  display: flex;
+}
+.ct-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-replaces {
+  color: var(--text-3);
+}
+.ct-age {
+  flex: none;
+  color: var(--text-3);
+}
+.ct-caret {
+  flex: none;
+  color: var(--text-4);
+}
+.ct-foot {
+  display: flex;
+  gap: 18px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+.ct-foot a {
+  color: var(--brand);
+  text-decoration: none;
 }
 
 /* Worktree status bar above the composer (SessionOutputs.tsx): the branch this session's
@@ -11243,6 +11338,9 @@ button.chat-jump-start:hover {
   border-radius: 12px;
   background: var(--bg-raised);
   overflow: hidden;
+  /* Its rows fit the card, not the viewport: the sidebar beside the page is user-resizable, so one
+     window width is many card widths. */
+  container: re-card / inline-size;
 }
 .re-card + .re-card {
   margin-top: 10px;
@@ -11331,7 +11429,13 @@ button.chat-jump-start:hover {
 
 .re-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 108px 190px 110px;
+  /* The last column is sized for two small buttons side by side: `+ Account` beside `Re-sign in` on
+     a one-account Codex row, `Re-sign in` beside `Remove` on an added account's. At 110px the pair
+     ran left over the quota's percentage.
+     On a narrow card the quota's bar gives way before the name does. The name keeps 137px, what it
+     had at 110px on a 617px card (a 961px window beside the default sidebar): an engine's name on
+     one line, DEFAULT clear of the status beside it. The bar pays for the wider buttons instead. */
+  grid-template-columns: minmax(137px, 1fr) 108px minmax(128px, 190px) 172px;
   align-items: center;
   gap: 14px;
   padding: 11px 14px;
@@ -11344,6 +11448,24 @@ button.chat-jump-start:hover {
 .re-row.focused {
   background: var(--brand-tint);
   box-shadow: inset 3px 0 0 var(--brand);
+}
+/* A card too narrow for those floors (617px, 615 inside its border: the sidebar dragged wider, or a
+   scrollbar that takes up room) takes each row on two lines rather than cut its buttons off at the
+   card's edge: name and status, then quota and actions. The phone layout below is its own. */
+@media (min-width: 701px) {
+  @container re-card (max-width: 614px) {
+    .re-row {
+      grid-template-columns: minmax(0, 1fr) 172px;
+    }
+    /* The status over the actions, both against the card's right edge. */
+    .re-row > :nth-child(2) {
+      justify-self: end;
+    }
+    /* Under the name it belongs to, clear of the tile and of an account's rail. */
+    .re-quota {
+      margin-left: 38px;
+    }
+  }
 }
 @media (max-width: 700px) {
   /* Status and action stay together on the second line; the quota gauge is the one part

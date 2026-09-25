@@ -253,6 +253,10 @@ function EngineRow({
   // More than one Codex account: this row heads their group, and each account is a row of its own
   // below it (AccountRow), with its own state.
   const grouped = accounts.length > 0;
+  // "+ Account" is how a machine gets from one account to two, so it is not the group's to hold:
+  // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
+  // or not.
+  const addsAccounts = engine === 'codex' && (kind === 'in' || kind === 'out' || kind === 'unknown');
 
   // An offline machine isn't updating anything, and the header already says so — repeating it
   // per row as a warning would put three alarms on one fact the user has already read.
@@ -338,15 +342,6 @@ function EngineRow({
         <>
           <div />
           <div className="re-quota" />
-          <div className="re-act">
-            <Button
-              size="small"
-              disabled={offline}
-              onClick={() => onSignIn(signIn === ADD_ACCOUNT_PANEL ? null : ADD_ACCOUNT_PANEL)}
-            >
-              + Account
-            </Button>
-          </div>
         </>
       ) : (
         <>
@@ -354,9 +349,21 @@ function EngineRow({
             <Tag color={STATUS_TAG[kind].color}>{STATUS_TAG[kind].label}</Tag>
           </div>
           <QuotaCell kind={kind} quota={quota} />
-          <div className="re-act">{action()}</div>
         </>
       )}
+      <div className="re-act">
+        {addsAccounts && (
+          <Button
+            size="small"
+            disabled={offline}
+            onClick={() => onSignIn(signIn === ADD_ACCOUNT_PANEL ? null : ADD_ACCOUNT_PANEL)}
+          >
+            + Account
+          </Button>
+        )}
+        {/* A group's sign-ins are its accounts', each on its own row. */}
+        {!grouped && action()}
+      </div>
 
       {/* The relay panels. Each one is the row's own news, so it opens under the row it belongs
           to rather than as a page-level banner. */}
@@ -414,7 +421,7 @@ function EngineRow({
           <RunnerSignIn runnerId={runner.id} engine={engine} />
         </div>
       )}
-      {grouped && signIn === ADD_ACCOUNT_PANEL && (
+      {addsAccounts && signIn === ADD_ACCOUNT_PANEL && (
         <div className="re-panel">
           <AddCodexAccount runnerId={runner.id} onCancel={() => onSignIn(null)} />
         </div>

@@ -3802,6 +3802,16 @@ model Task {
   /// single flag write. It is a separate column from `autoRunWhenReady` so resuming restores each
   /// task's own setting instead of overwriting it with a guess.
   dispatchHold     Boolean     @default(false) @map("dispatch_hold")
+  /// Which of a list's ready tasks takes the list's next free slot: higher first (migration 0304).
+  /// An ORDER, not a permission — it starts nothing, and a task nobody raised keeps 0.
+  ///
+  /// Only the automatic doors read it, and each reads it among the candidates it already had: the
+  /// ready and scheduled sweeps deal a list's slots to its tasks by priority without moving the
+  /// list's own place in the pass, a coordinated project's budget goes to its higher-priority tasks
+  /// first, and the completion edge leaves a released task to the sweep while its list holds ready
+  /// work that outranks it. Equal priorities keep the order the pass read them in, so while every
+  /// task says 0 every door dispatches exactly what it did before the column existed.
+  priority         Int         @default(0)
   // Derived by database triggers from (project_id, project.coordinator_enabled). No service may
   // use this as a second policy knob; it is the mixed-version dispatch brake.
   dispatchAuthority TaskDispatchAuthority @default(LEGACY) @map("dispatch_authority")
@@ -3992,6 +4002,12 @@ model Task {
   /// whole list plus a top-N heapsort of it — measured at 27,468 rows read for a 2,000-row page,
   /// which is the O(list) per statement this migration exists to remove. Subsumes `task_list_id_idx`.
   @@index([listId, id], map: "task_list_id_id_idx")
+  /// The completion edge's one question about `priority`: does this list hold OPEN work that
+  /// outranks the task it is about to start (`list_id = $1 AND priority > $2`). Created PARTIAL
+  /// (`WHERE priority > 0 AND status = 'OPEN'`, migration 0304), which this schema cannot spell —
+  /// the same trade 0108's pair and `task_run_at_idx` carry. The predicate is the point: the index
+  /// holds only the open tasks somebody raised, so a list where nobody did is an empty range of it.
+  @@index([listId, priority], map: "task_list_priority_idx")
   /// "What is in this project" and "what are this task's subtasks" are the only two questions the
   /// new columns are read by, and each is one indexed lookup. Both are also the FKs' own lookup
   /// indexes, which is what keeps a project or parent delete from scanning the task table.
@@ -4054,6 +4070,10 @@ model Task {
   @@index([discoveredFromProjectId], map: "task_discovered_from_project_idx")
   @@index([sourceTaskId], map: "task_source_task_idx")
   @@index([sourceSessionId], map: "task_source_session_idx")
+  /// "Which tasks did this session create": a session's "Tasks created here" row and the task
+  /// list's `?creatorSessionId=` scope, plus the lookup side of the column's SET NULL on session
+  /// purge (migration 0305). Plain, not partial — nearly every task has a creator session.
+  @@index([creatorSessionId], map: "task_creator_session_idx")
   /// The criterion declaration's lookup index, and the referencing side of its foreign key. Both
   /// directions need it: "which work serves this criterion" is the read, and without it every
   /// criterion delete scans `task` to find the rows its SET NULL applies to.

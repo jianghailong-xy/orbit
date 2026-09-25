@@ -1,0 +1,25 @@
+-- "Which tasks did this session create" — `task.creator_session_id = $1` — had no index to answer
+-- it, so every read of it was a scan of the whole `task` table (~111k rows on this deployment,
+-- 160 MB of heap). Three reads ask it now:
+--
+--   * `GET /sessions/:id/created-tasks`, the "Tasks created here" row above a session's composer,
+--     read every time a session page opens;
+--   * `GET /tasks`, `GET /tasks/page` and `GET /tasks/counts` with `?creatorSessionId=`, where that
+--     row's "View all in Tasks ›" lands;
+--   * and the one that has been asking all along: the column's own foreign key is `ON DELETE SET
+--     NULL`, so purging a session has to find the tasks that name it, and without this index that
+--     is the same full scan per purged session.
+--
+-- The sizes it has to serve are lopsided (2026-09-25: 338 of 6,017 sessions created a task; median
+-- 1, p90 12, p99 118, and one pipeline session 109,874), which is exactly the case a btree is for:
+-- the median session reads a handful of index entries instead of the table.
+--
+-- Plain rather than PARTIAL, unlike the three provenance indexes 0150 added beside it: those skip
+-- the tasks that carry no provenance, which is most of the table, while almost every task here was
+-- created from a session. A `WHERE creator_session_id IS NOT NULL` predicate would save next to
+-- nothing and cost the schema's ability to spell the index.
+--
+-- Deliberately not CONCURRENTLY because Prisma runs the migration in a transaction, as with 0283:
+-- a normal build is one pass over a table this size. A deployment with a much larger `task` table
+-- may pre-create the identical index CONCURRENTLY, after which IF NOT EXISTS makes this a no-op.
+CREATE INDEX IF NOT EXISTS "task_creator_session_idx" ON "task" ("creator_session_id");

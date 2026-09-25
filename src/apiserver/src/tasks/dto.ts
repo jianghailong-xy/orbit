@@ -65,6 +65,13 @@ export const MAX_TASK_ACCEPTANCE_CRITERIA_CHARS = 4_000;
  */
 export const MAX_TASK_ACCEPTANCE_TIMEOUT_SECONDS = 86_400;
 
+/**
+ * `task.priority`'s bounds: the INTEGER column's own. Not a scale anybody chose — a value past them
+ * is one PostgreSQL would refuse as a 500, so it is refused here as a 400 instead.
+ */
+export const TASK_PRIORITY_MIN = -2_147_483_648;
+export const TASK_PRIORITY_MAX = 2_147_483_647;
+
 /** One explicit completion-evidence submission. The source is caller identity, never payload prose. */
 export class SubmitTaskCompletionEvidenceDto {
   @IsPublicId()
@@ -646,6 +653,11 @@ export class UpdateTaskDto {
   dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
+  // Which of its list's ready tasks takes the list's next free slot: higher first, equal priorities
+  // in the order they already had (see Task.priority). Omit to keep it; null returns it to the
+  // default, 0, which is also what an explicit 0 does — the column is never empty.
+  @IsOptional() @IsInt() @Min(TASK_PRIORITY_MIN) @Max(TASK_PRIORITY_MAX)
+  priority?: number | null;
   // How this task's completion is decided. Switching to MANUAL stops aggregation without undoing
   // whatever it last concluded; switching away from it hands the status to the subtasks.
   @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;

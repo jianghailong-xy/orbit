@@ -2,10 +2,11 @@ import Foundation
 
 /// Applies one authoritative task-row read to a loaded filtered page without refetching the page.
 ///
-/// The reducer mirrors `GET /tasks/page` membership (scope, status filter and title search) and its
-/// `(createdAt DESC, id DESC)` order. It deliberately reports an optional total delta: when a page
-/// has a next cursor and the changed task was not loaded, the previous membership of that task is
-/// unknowable from the current window, so claiming either zero or one would corrupt the total.
+/// The reducer mirrors `GET /tasks/page` membership (scope, creator session, status filter and title
+/// search) and its `(createdAt DESC, id DESC)` order. It deliberately reports an optional total
+/// delta: when a page has a next cursor and the changed task was not loaded, the previous membership
+/// of that task is unknowable from the current window, so claiming either zero or one would corrupt
+/// the total.
 public enum TaskPageIncrementalReducer {
     public struct Result: Equatable, Sendable {
         public let items: [TaskItem]
@@ -30,13 +31,16 @@ public enum TaskPageIncrementalReducer {
     /// - A matching row absent from a complete result is inserted locally. For a partial window,
     ///   rows older than the tail stay off-page and rows before the tail request a cheap page/cursor
     ///   reconciliation from the caller.
+    /// - `creatorSessionID` is the page's `creatorSessionId` scope: a task another session (or no
+    ///   session) created is not on such a page, however well it matches the rest.
     public static func reduce(items: [TaskItem],
                               changed: TaskItem?,
                               taskID: String,
                               scope: TaskScope,
                               filter: TaskFilter,
                               search: String,
-                              hasMore: Bool) -> Result {
+                              hasMore: Bool,
+                              creatorSessionID: String? = nil) -> Result {
         let taskKey = PublicID.storageKey(taskID)
         let existingIndex = items.firstIndex { PublicID.storageKey($0.id) == taskKey }
 
@@ -50,6 +54,7 @@ public enum TaskPageIncrementalReducer {
         }
 
         let belongs = matches(changed, scope: scope, filter: filter, search: search)
+            && matchesCreator(changed, creatorSessionID)
         if let existingIndex {
             var next = items
             if belongs {
@@ -104,6 +109,12 @@ public enum TaskPageIncrementalReducer {
             guard let listID = task.listId else { return false }
             return PublicID.storageKey(listID) == PublicID.storageKey(id)
         }
+    }
+
+    private static func matchesCreator(_ task: TaskItem, _ creatorSessionID: String?) -> Bool {
+        guard let creatorSessionID else { return true }
+        guard let creator = task.creatorSessionId else { return false }
+        return PublicID.storageKey(creator) == PublicID.storageKey(creatorSessionID)
     }
 
     /// PostgreSQL's page cursor order: newest creation first, UUID descending as the deterministic

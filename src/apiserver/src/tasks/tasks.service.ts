@@ -665,6 +665,9 @@ export const TASK_LIST_SELECT = {
   labels: true,
   creatorSessionId: true,
   autoRunWhenReady: true,
+  // Where the row stands in its list's queue, which a coordinator setting it needs to read back
+  // from the same page it chose the rows on.
+  priority: true,
   provider: true,
   model: true,
   // Two enum columns and the relation they are about, in for the same reason parentTaskId is: a
@@ -1149,6 +1152,9 @@ function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
   if (typeof scope.assigneeId === 'string') {
     clauses.push(Prisma.sql`t.assignee_id = ${scope.assigneeId}::uuid`);
   }
+  if (typeof scope.creatorSessionId === 'string') {
+    clauses.push(Prisma.sql`t.creator_session_id = ${scope.creatorSessionId}::uuid`);
+  }
   // Mirror of the `labels.hasEvery` filter listPage puts on every other tab. The Ready tab is the
   // one scope that reaches the database as SQL rather than as a Prisma where, so a filter added
   // to the object form and not here is not a type error anywhere — it just silently stops
@@ -1355,6 +1361,41 @@ export function takeListBudget(budget: MaterialisationBudget, listId: string | n
   return true;
 }
 
+/**
+ * A pass's candidates in the order it offers them slots: within each list, higher `priority`
+ * first, and everything else exactly where the pass read it.
+ *
+ * Each list keeps the positions its candidates already held, and its tasks are dealt out over those
+ * positions — nothing moves between lists. That is what keeps a priority inside the list it is set
+ * in: `takeBudget` spends a RUNNER's slots in pass order, so a list that jumped the queue would take
+ * runner slots from lists nobody reprioritised. Here the lists reach the runner in the order they
+ * always did, and only WHICH of a list's tasks takes the list's turn changes. A task in no list has
+ * no queue to be ahead in, and stays where it is.
+ *
+ * The sort is stable, as `Array.prototype.sort` is required to be, so equal priorities keep the
+ * pass's own order. While every task carries the default this is therefore the identity: each pass
+ * hands out its slots exactly as it did before the column existed.
+ */
+export function orderWithinLists<T extends { listId: string | null; priority: number }>(
+  candidates: readonly T[],
+): T[] {
+  const queues = new Map<string, T[]>();
+  for (const candidate of candidates) {
+    if (candidate.listId === null) continue;
+    const queue = queues.get(candidate.listId);
+    if (queue) queue.push(candidate);
+    else queues.set(candidate.listId, [candidate]);
+  }
+  for (const queue of queues.values()) queue.sort((a, b) => b.priority - a.priority);
+  const dealt = new Map<string, number>();
+  return candidates.map((candidate) => {
+    if (candidate.listId === null) return candidate;
+    const turn = dealt.get(candidate.listId) ?? 0;
+    dealt.set(candidate.listId, turn + 1);
+    return queues.get(candidate.listId)![turn];
+  });
+}
+
 export const FOREMAN_RETRY_BACKOFF_MS = [30 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000];
 export const MAX_CONSECUTIVE_FOREMEN = FOREMAN_RETRY_BACKOFF_MS.length + 1;
 
@@ -1428,6 +1469,14 @@ export interface ListTasksPageQuery {
   q?: string;
   /** `'none'` drops the aggregate block (and `total`) from the response. Omitted = include it. */
   counts?: string;
+  /**
+   * Tasks created from exactly this session (`creator_session_id`) — where a session's "Tasks
+   * created here" row sends "View all". A scope like `projectId`, and like it never checked
+   * against the session table: an id that names nothing, or another owner's session, narrows to
+   * nothing. The tasks as created, not followed along their supersession chains — that is the
+   * row's reading, and this page lists tasks.
+   */
+  creatorSessionId?: string;
 }
 
 /** The scope-wide tallies: identical for every tab, because none of them reads a filter. */
@@ -1447,6 +1496,10 @@ export interface LabelSummaryQuery {
   listId?: string;
   assigneeId?: string;
 }
+
+/** The scope `GET /tasks/counts` takes: the same one the paged list's tallies are read over. */
+export type TaskCountsQuery = LabelSummaryQuery &
+  Pick<ListTasksPageQuery, 'labels' | 'creatorSessionId'>;
 
 /** How many labels one summary reports. See labelSummary for why it is capped at all. */
 export const TASK_LABEL_SUMMARY_MAX = 500;
@@ -5982,9 +6035,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
   }
 
-  async list(ownerId: string) {
+  async list(ownerId: string, query: Pick<ListTasksPageQuery, 'creatorSessionId'> = {}) {
+    const where: Prisma.TaskWhereInput = { ownerId };
+    // The paged list's scope of the same name, for the native task list, which reads this one.
+    if (query.creatorSessionId) {
+      if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');
+      where.creatorSessionId = query.creatorSessionId;
+    }
     const tasks = await this.prisma.task.findMany({
-      where: { ownerId },
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         // runner is included so the batch-run modal can show which runners back the
@@ -6066,6 +6125,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       query.labels,
       query.q,
       query.counts,
+      query.creatorSessionId,
     ]);
     return this.listPageSingleFlight.run(key, () =>
       this.serializeListPage(ownerId, () => this.loadListPage(ownerId, query)),
@@ -6129,6 +6189,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (query.assigneeId) {
       if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');
       scopedWhere.assigneeId = query.assigneeId;
+    }
+    // Scope too: the tab badges then say how the session's own tasks are doing.
+    if (query.creatorSessionId) {
+      if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');
+      scopedWhere.creatorSessionId = query.creatorSessionId;
     }
     // Scope, not filter: unlike `q` below, a label narrows the tab badges too. The question a
     // label filter is asked is "how far along is this batch", and counts that answered it for the
@@ -6270,12 +6335,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * every tab — asking for them again with each tab's first page was recomputing a constant.
    * Given their own request they are fetched once per scope and read from cache thereafter.
    */
-  taskCounts(ownerId: string, query: LabelSummaryQuery & { labels?: string | string[] } = {}) {
+  taskCounts(ownerId: string, query: TaskCountsQuery = {}) {
     const key = JSON.stringify([
       ownerId,
       query.listId,
       query.assigneeId,
       query.labels,
+      query.creatorSessionId,
     ]);
     return this.taskCountsSingleFlight.run(key, () =>
       // Counts and page rows are two views of the same owner's task library. Serialize them on the
@@ -6284,10 +6350,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private async loadTaskCounts(
-    ownerId: string,
-    query: LabelSummaryQuery & { labels?: string | string[] },
-  ) {
+  private async loadTaskCounts(ownerId: string, query: TaskCountsQuery) {
     const scope: Prisma.TaskWhereInput = { ownerId };
     if (query.listId === 'none') scope.listId = null;
     else if (query.listId) {
@@ -6297,6 +6360,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (query.assigneeId) {
       if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');
       scope.assigneeId = query.assigneeId;
+    }
+    if (query.creatorSessionId) {
+      if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');
+      scope.creatorSessionId = query.creatorSessionId;
     }
     const labelFilter = parseLabelsQuery(query.labels);
     if (labelFilter.length) scope.labels = { hasEvery: labelFilter };
@@ -7960,6 +8027,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             : (dto.acceptanceTimeoutSeconds ?? null),
       completionCriterion: touchesCompletionDeclaration ? completionCriterion : undefined,
       autoRunWhenReady: dto.autoRunWhenReady,
+      // Three-state on the wire, two on the row: omitted keeps it, null goes back to the default.
+      // Nothing is dispatched or fenced by this write — the doors read the column the next time
+      // they have more ready tasks than room (see Task.priority).
+      priority: dto.priority === undefined ? undefined : (dto.priority ?? 0),
       completionPolicy: touchesCompletionDeclaration ? completionPolicy : undefined,
       // A role declaration is not a criterion exception.  In particular, attaching an old task
       // must not preserve a EVIDENCE_JUDGMENT override reason that no longer describes the row.
@@ -8834,6 +8905,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // The list this candidate belongs to, because that is the batch whose budget the dispatch
         // below spends — read in the same statement as the rest of what decides the candidate.
         listId: true,
+        // Its place in that list's queue: what decides whether it may take the slot now or has to
+        // leave it to work the list ranks higher (readyPriorityAbove).
+        priority: true,
         assignee: { select: { id: true, runnerId: true } },
         // The moment this unlock IS (0137), read here because it is what NAMES this dispatch: two
         // passes — a second apiserver, or this one after a restart — over the same moment are one
@@ -8861,7 +8935,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const budget = await this.materialisationBudget();
     const now = new Date();
     const undecided: string[] = [];
-    for (const dep of dependents) {
+    // One completion can release several tasks of one list; the list's slots go to them by priority
+    // as the sweep would deal them, and in the order they were read while nothing is raised.
+    const released = orderWithinLists(dependents);
+    // What each of their lists holds ready that could outrank them — read at most once for the
+    // pass, and only once one of them is about to take a slot (readyPriorityAbove).
+    let ranked: Map<string, number> | undefined;
+    for (const dep of released) {
       if ((states.get(dep.id) ?? 'NONE') !== 'READY') continue;
       if (dep.status !== 'OPEN') continue; // already running/done/cancelled — leave it
       if (!dep.autoRunWhenReady) {
@@ -8876,6 +8956,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // the later of the two is the one that fires.
       if (dep.runAt && dep.runAt > now) continue;
       if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
+      // Its list holds ready work that outranks it: the slot this edge would fill is that work's,
+      // and the sweep is what deals the list's slots by priority. Left OPEN and READY, like a
+      // refusal by the budget below — this edge is the sweep's latency, never its order. Below the
+      // default everything nobody raised outranks it, so a lowered task is left to the sweep
+      // without asking.
+      if (dep.listId != null) {
+        if (dep.priority < 0) continue;
+        ranked ??= await this.readyPriorityAbove(released);
+        if ((ranked.get(dep.listId) ?? 0) > dep.priority) continue;
+      }
       if (!takeBudget(budget, dep.assignee.runnerId, dep.listId)) continue; // left to the sweep
       const epoch = dep.dispatchEpoch?.epoch ?? 0n;
       try {
@@ -8891,6 +8981,70 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return undecided;
+  }
+
+  /**
+   * For each list these tasks are in, the highest priority among the OTHER tasks of the list that
+   * are ready to start and rank above the lowest of these — the completion edge's one question
+   * about priority.
+   *
+   * It has to ask one because it starts a task the moment its last prerequisite finishes, which is
+   * also the moment a slot of its list is most likely to be free: without asking, the task that
+   * happened to be released would take that slot from a higher-priority one that has been waiting
+   * for it, and on a list fed by another list's completions that is most of its slots. A task below
+   * its list's answer is left to the sweep, which deals the list's slots by priority within the
+   * minute (orderWithinLists). A list with no answer holds nothing that outranks them. The tasks
+   * asked about are left out of the answer: they are one pass's releases, dealt among themselves by
+   * that pass's own order.
+   *
+   * "Ready to start" is the three automatic starters' own predicates, so a raised task that is
+   * blocked, held, running or scheduled for later stands in nobody's way. What those three cannot
+   * see — a spent quota, the disk floor, the failure backoff — can put a task in the answer that the
+   * sweep then does not start; the sweep starts the one left to it instead, and the cost of the
+   * mistake is that minute, never the order.
+   *
+   * One statement for the pass, however many tasks it released, and it reads only what somebody
+   * raised: from the default up, every task that could outrank one of these carries a priority above
+   * 0, which is what the partial index `task_list_priority_idx` holds and nothing else.
+   * `priority > 0` and the OPEN clause are implied by the rest and spelled out because they are that
+   * index's predicate; a list where nobody raised anything is an empty range of it. Each list is
+   * walked from its highest priority down and stops at the first ready task, or at the lowest
+   * priority among the released ones, below which nothing can outrank anybody. A lowered task never
+   * reaches here (the caller leaves it to the sweep), which is what keeps that floor at 0 or above.
+   */
+  private async readyPriorityAbove(
+    tasks: ReadonlyArray<{ id: string; listId: string | null; priority: number }>,
+  ): Promise<Map<string, number>> {
+    const floor = new Map<string, number>();
+    for (const task of tasks) {
+      if (task.listId == null || task.priority < 0) continue;
+      floor.set(task.listId, Math.min(floor.get(task.listId) ?? task.priority, task.priority));
+    }
+    if (floor.size === 0) return new Map();
+    const rows = await this.prisma.$queryRaw<Array<{ listId: string; priority: number }>>`
+      SELECT q.list_id AS "listId", top.priority AS "priority"
+        FROM unnest(${[...floor.keys()]}::uuid[], ${[...floor.values()]}::int[])
+             AS q(list_id, min_priority)
+       CROSS JOIN LATERAL (
+         SELECT t.priority FROM task t
+          WHERE t.list_id = q.list_id
+            AND t.priority > q.min_priority
+            AND t.priority > 0
+            AND t.status = 'OPEN'::task_status
+            AND NOT (t.id = ANY(${tasks.map((task) => task.id)}::uuid[]))
+            AND (
+              (${AUTO_RUN_READY_SQL})
+              OR (${SCHEDULED_DUE_SQL})
+              OR (${PROJECT_INDEPENDENT_READY_SQL}
+                  AND EXISTS (
+                    SELECT 1 FROM project p
+                     WHERE p.id = t.project_id AND p.coordinator_enabled = true
+                  ))
+            )
+          ORDER BY t.priority DESC
+          LIMIT 1
+       ) top`;
+    return new Map(rows.map((row) => [row.listId, Number(row.priority)]));
   }
 
   /**
@@ -8977,8 +9131,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          WHERE t.project_id = ${projectId}::uuid
            AND t.owner_id = ${ownerId}::uuid
            AND ${PROJECT_INDEPENDENT_READY_SQL}
-         -- Oldest first: with more ready tasks than budget, the one that has waited longest goes.
-         ORDER BY t.created_at, t.id
+         -- With more ready tasks than budget, the ones the project raised go first, and among
+         -- equals the one that has waited longest — the sweep's own project rank, spelled the same.
+         ORDER BY t.priority DESC, t.created_at, t.id
          LIMIT ${room.free}`);
       // The LIST's ceiling, read once outside the loop as the sweep reads it — and that dimension
       // alone, for the reason `takeListBudget` states: this pass releases tasks that depend on
@@ -9153,11 +9308,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         minFreeDiskMb: number | null;
         listId: string | null;
         dispatchEpoch: bigint | null;
+        priority: number;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
-             t.list_id AS "listId", e.epoch AS "dispatchEpoch"
+             t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
@@ -9198,14 +9354,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     rows.push(...(await this.prisma.$queryRaw<typeof rows>`
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
-             c.list_id AS "listId", e.epoch AS "dispatchEpoch"
+             c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority"
       FROM (
-        SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at,
+        SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority,
                -- The project's own budget, which nothing else on this path enforces: takeBudget
                -- below spends the RUNNER's cap and a paused list's, and neither of them knows what
-               -- one project may run at once. Ranked oldest first, so a project with more ready
-               -- tasks than room releases the one that has waited longest.
-               row_number() OVER (PARTITION BY t.project_id ORDER BY t.created_at, t.id) AS "rank",
+               -- one project may run at once. Ranked by priority and then oldest first, so a
+               -- project with more ready tasks than room releases the one it raised, and among
+               -- equals the one that has waited longest — which, with nothing raised, is the whole
+               -- of the order, exactly as it was.
+               row_number() OVER (
+                 PARTITION BY t.project_id ORDER BY t.priority DESC, t.created_at, t.id
+               ) AS "rank",
                -- Counted exactly as the completion edge counts it, down to the skipped statuses: a
                -- slot is held by work that is still OUTSTANDING, so the parked AWAITING_INPUT run
                -- of a task that has just finished does not fill the budget it was released into.
@@ -9245,7 +9405,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Re-nest into the shape the quota gate and the dispatch loop below read. The join above
     // can only match (the predicate requires an assignee with a runner), so assignee is never
     // null here — unlike the Prisma `select` this replaced, which typed it as nullable.
-    const ready = rows.map((row) => ({
+    //
+    // In the order the loop below offers slots: each list's candidates re-dealt by priority over
+    // the positions the two scans gave that list, everything else where the scans put it. The
+    // dependency scan states no ORDER BY, so "where the scan put it" is the plan's order — the one
+    // this loop has always consumed, and kept exactly while nothing is raised (orderWithinLists).
+    const ready = orderWithinLists(rows).map((row) => ({
       id: row.id,
       ownerId: row.ownerId,
       assignee: {
@@ -9440,11 +9605,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const due = await this.prisma.$queryRaw<
       {
         id: string; ownerId: string; runnerId: string; listId: string | null;
-        dispatchEpoch: bigint | null;
+        dispatchEpoch: bigint | null; priority: number;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.runner_id AS "runnerId", t.list_id AS "listId",
-             e.epoch AS "dispatchEpoch"
+             e.epoch AS "dispatchEpoch", t.priority AS "priority"
       FROM task t
       JOIN workspace a ON a.id = t.assignee_id
       -- 0137's dispatch epoch: WHICH appointment this pass is keeping. Not the run_at instant,
@@ -9463,7 +9628,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let dispatched = 0;
     let atCapacity = 0;
     let overtaken = 0;
-    for (const t of due) {
+    // Longest-overdue first across lists, as ordered above; within a list, the one it raised
+    // (orderWithinLists — the same dealing the ready sweep does, and the identity while nothing is).
+    for (const t of orderWithinLists(due)) {
       // The same brake the auto-run sweep takes, for the same reason: materialising past what the
       // runner can claim produces sessions that sit PENDING and buy nothing. Here it is also what
       // makes "left for a later sweep" true rather than a hope — the task keeps its `run_at`, so

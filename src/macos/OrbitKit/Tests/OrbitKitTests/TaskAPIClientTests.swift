@@ -179,6 +179,58 @@ final class TaskAPIClientTests: XCTestCase {
                        [URLQueryItem(name: "listId", value: "none")])
     }
 
+    /// A session's "Tasks created here" card reads its own route, and leaves `limit` to the server
+    /// unless it names one.
+    func testSessionCreatedTasksReadsTheSessionsCreatedTasksRoute() async throws {
+        let recorder = TaskRequestRecorder()
+        TaskAPIURLProtocol.handler = { request in
+            recorder.append(request)
+            return (200, Data(#"{"total":0,"running":0,"failed":0,"done":0,"items":[],"projects":[]}"#.utf8))
+        }
+
+        let tasks = try await client().sessionCreatedTasks(sessionID: "34Ufyv4TQVdD5gtYW7Oza")
+        _ = try await client().sessionCreatedTasks(sessionID: "34Ufyv4TQVdD5gtYW7Oza", limit: 50)
+
+        XCTAssertEqual(tasks.total, 0)
+        XCTAssertEqual(recorder.urls.map(\.path),
+                       ["/api/sessions/34Ufyv4TQVdD5gtYW7Oza/created-tasks",
+                        "/api/sessions/34Ufyv4TQVdD5gtYW7Oza/created-tasks"])
+        XCTAssertNil(URLComponents(url: recorder.urls[0], resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(URLComponents(url: recorder.urls[1], resolvingAgainstBaseURL: false)?.queryItems,
+                       [URLQueryItem(name: "limit", value: "50")])
+    }
+
+    /// View all: the page and its counts are both scoped to the session, the way `listId` scopes
+    /// both — so the tab badges count that session's tasks, not the account's.
+    func testTaskPageAndCountsCarryTheCreatorSessionScope() async throws {
+        let recorder = TaskRequestRecorder()
+        TaskAPIURLProtocol.handler = { request in
+            recorder.append(request)
+            if request.url?.path == "/api/tasks/counts" {
+                return (200, Data(#"{"total":3,"open":1,"inProgress":0,"done":1,"failed":1,"cancelled":0,"running":0,"queued":0,"runnable":1}"#.utf8))
+            }
+            return (200, Data(#"{"items":[],"nextCursor":null}"#.utf8))
+        }
+
+        _ = try await client().taskPage(limit: 200, status: "FAILED", counts: .none,
+                                        creatorSessionId: "34Ufyv4TQVdD5gtYW7Oza")
+        let counts = try await client().taskCounts(creatorSessionId: "34Ufyv4TQVdD5gtYW7Oza")
+
+        XCTAssertEqual(counts.total, 3)
+        let page = try XCTUnwrap(recorder.urls.first)
+        XCTAssertEqual(page.path, "/api/tasks/page")
+        XCTAssertEqual(
+            Dictionary(uniqueKeysWithValues:
+                (URLComponents(url: page, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+                    .map { ($0.name, $0.value) }),
+            ["limit": "200", "status": "FAILED", "counts": "none",
+             "creatorSessionId": "34Ufyv4TQVdD5gtYW7Oza"])
+        let scope = try XCTUnwrap(recorder.urls.last)
+        XCTAssertEqual(scope.path, "/api/tasks/counts")
+        XCTAssertEqual(URLComponents(url: scope, resolvingAgainstBaseURL: false)?.queryItems,
+                       [URLQueryItem(name: "creatorSessionId", value: "34Ufyv4TQVdD5gtYW7Oza")])
+    }
+
     func testTaskPageLegacyCallStillOmitsCountsQuery() async throws {
         let recorder = TaskRequestRecorder()
         TaskAPIURLProtocol.handler = { request in

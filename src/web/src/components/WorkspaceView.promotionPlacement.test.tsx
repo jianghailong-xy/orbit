@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
 import type { Runner } from './TasksSidePanel';
-import { MERGED_HEADING } from './ProjectPromotionCard';
+import { MERGED_HEADING, RESOLVING } from './ProjectPromotionCard';
 
 /**
  * WHERE A PROMOTION'S CARD IS DRAWN IN THE CONVERSATION, WHICH IS A QUESTION ABOUT A MOMENT.
@@ -295,6 +295,7 @@ beforeEach(() => {
         if (path.includes('/turns')) return reply([]);
         if (path.includes('/approvals')) return reply([]);
         if (path.includes('/background')) return reply([]);
+        if (path.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
         if (path.includes('/diff')) return reply({ files: [] });
         return reply(session);
       }
@@ -514,9 +515,10 @@ describe('the card a blocked candidate leaves, in the conversation it happened i
     openItemRows = { needsYou: [], withCoordinator: [blockedItem()] };
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     // The card is a RECORD of the block and still a LIVE reading of it: the row it reads names who
-    // is resolving the candidate, which is nowhere on the candidate itself.
+    // is resolving the candidate, which is nowhere on the candidate itself. The press says it now,
+    // with how long they have had it — and the wait is the row's to know.
     await waitForUi(() => {
-      expect(blockedCard()?.textContent).toContain('The coordinator is resolving it on the project branch');
+      expect(blockedCard()?.textContent).toContain(`${RESOLVING} · `);
     });
   });
 
