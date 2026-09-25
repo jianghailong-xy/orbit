@@ -24,8 +24,9 @@ import { answerFor, WikiService, type WikiPrincipal } from './wiki.service';
  * The owner is taken from the credential, never from a body or a query: every id below is an address
  * of one of this account's own rows, and another account's is a plain 404.
  *
- * NOT HERE YET, and whose it is: the topic view, the timeline and pin/unpin — all three read what
- * T8's pages will ask for, and none of them is a write path.
+ * The topic view and the timeline are here (the two contract routes the pages read); pin/unpin is
+ * still not, and it is the one wiki write this door will have whose outcome is not a decision: an
+ * entry's `pinned` flag is the owner arranging their own home page, and it is read by no push rule.
  */
 @UseGuards(JwtAuthGuard)
 @Controller('wiki')
@@ -88,9 +89,20 @@ export class WikiController {
     return this.wiki.createSpace(user.userId, dto);
   }
 
+  /**
+   * One space. `?include=usage` adds the rolling window the home page's "Agents used the wiki" block
+   * reads — the four aggregates over `wiki_exposure` that no other read of the document pays for
+   * (see `WikiService.getSpaceView`).
+   */
   @Get('spaces/:id')
-  getSpace(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.wiki.requireSpace(user.userId, id);
+  getSpace(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('include') include?: string,
+  ) {
+    return this.wiki.getSpaceView(user.userId, id, {
+      usage: askedFor(include).has('usage'),
+    });
   }
 
   /** What the space does on its own: whether it pushes, and whether a reinforce applies at once. */
@@ -117,10 +129,37 @@ export class WikiController {
     return this.wiki.listEntries(user.userId, id, { kind, status, limit: limit ? Number(limit) : undefined });
   }
 
+  /**
+   * One topic's page: the entries that carry the topic's slug, newest change first. See
+   * `WikiService.getTopicView` for why the name is derived from the slug.
+   *
+   * A `:slug`, not a `PublicIdPipe`: a topic is named by the same slug pattern a space is
+   * (`WIKI_SLUG_PATTERN`), and it is not a row this door could hand back an id for.
+   */
+  @Get('spaces/:id/topics/:slug')
+  getTopic(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('slug') slug: string,
+  ) {
+    return this.wiki.getTopicView(user.userId, id, slug);
+  }
+
+  /** What changed in this space lately, newest first — the home page's timeline. */
+  @Get('spaces/:id/timeline')
+  timeline(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('limit') limit?: string,
+  ) {
+    const asked = Number(limit);
+    return this.wiki.getTimeline(user.userId, id, Number.isFinite(asked) && asked >= 1 ? asked : undefined);
+  }
+
   /** One entry, with the sources of its current revision, its history, and who was shown it. */
   @Get('entries/:id')
   getEntry(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Query('include') include?: string) {
-    const asked = new Set((include ?? '').split(',').map((part) => part.trim()).filter(Boolean));
+    const asked = askedFor(include);
     return this.wiki.getEntry(user.userId, id, {
       sources: asked.has('sources'),
       history: asked.has('history'),
@@ -168,6 +207,11 @@ export class WikiController {
   ) {
     return this.wiki.decide(user.userId, user.userId, id, dto.decisions, actingSession(request.headers));
   }
+}
+
+/** `?include=a,b` as a set, the way both routes that take one read it. */
+function askedFor(include: string | undefined): Set<string> {
+  return new Set((include ?? '').split(',').map((part) => part.trim()).filter(Boolean));
 }
 
 /**
