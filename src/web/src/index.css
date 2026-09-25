@@ -11701,13 +11701,15 @@ button.chat-jump-start:hover {
 /* ============================================================================
    Providers → "Account pools": several Claude subscriptions under one name. The
    runner cards' skeleton (fold, head, three-column rows), with a status column
-   wide enough for "Unavailable · key refused" and "Spent · resets Mon 14:05".
+   wide enough for "Unavailable · key refused" (151px measured) and "Spent ·
+   resets Mon 14:05", and no wider: at the narrowest desktop card (617px, the
+   default sidebar at a 961px window) the name column is what pays for it.
    ========================================================================== */
 .pool-sec .re-card + .re-card {
   margin-top: 10px;
 }
 .pool-row {
-  grid-template-columns: minmax(0, 1fr) 176px 150px 110px;
+  grid-template-columns: minmax(0, 1fr) 160px 140px 110px;
 }
 .pool-status {
   min-width: 0;
@@ -11719,14 +11721,31 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   vertical-align: middle;
 }
+/* The NEXT chip goes under a name it has no room beside, rather than eat into it. */
 .pool-row .re-name {
-  white-space: nowrap;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 2px;
+  min-width: 0;
+}
+.pool-member-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-/* The pool's page takes accounts out, so its rows carry up to two actions. */
+.pool-row .re-chip {
+  flex: none;
+}
+/* Most accounts have nothing to press; on a phone their empty action cell would still take a line. */
+.pool-row .re-act:empty {
+  display: none;
+}
+/* The pool's page takes accounts out, so its rows carry up to two actions: Re-add key and the
+   remove mark (88 + 8 + 24px measured). */
 .pool-detail .pool-row {
-  grid-template-columns: minmax(0, 1fr) 176px 150px 170px;
+  grid-template-columns: minmax(0, 1fr) 160px 130px 124px;
 }
 /* The head's gauge: the account the next session runs on, never an average of them. */
 .pool-gauge {
@@ -11783,7 +11802,8 @@ button.chat-jump-start:hover {
   }
   .pool-card .re-head-sp,
   .pool-gauge-name,
-  .pool-gauge-none {
+  .pool-gauge-none,
+  .pool-wide {
     display: none;
   }
   .pool-gauge .runner-util {

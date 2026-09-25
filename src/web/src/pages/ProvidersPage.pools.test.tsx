@@ -396,6 +396,10 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     expect(text()).toContain('2 of 2 accounts available');
 
     await click(button('Add account'));
+    // Joinable first, then the refusals the dialog is there to explain, then what is in already.
+    expect(
+      Array.from(document.body.querySelectorAll('.pool-pick .pool-pick-name')).map((el) => el.textContent),
+    ).toEqual(['Spare', 'Team API key', 'Gateway', 'Work', 'Home']);
     for (const [row, why] of [
       [METERED, 'Metered API key — no 5-hour window'],
       [GATEWAY, 'Endpoint is not api.anthropic.com'],
@@ -418,7 +422,7 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     keys = [WORK, HOME];
     pools = [pool([member(WORK, { state: 'AVAILABLE', next: true }), member(HOME, { state: 'AVAILABLE' })])];
     await mount(`/providers/pools/${POOL_ID}`);
-    await click(button('Remove', rowOf('Home')!));
+    await click(rowOf('Home')!.querySelector('button[aria-label="Remove Home from this pool"]'));
     expect(posted).toEqual([{ method: 'DELETE', path: `/providers/pools/${POOL_ID}/members/${HOME.id}`, body: undefined }]);
   });
 

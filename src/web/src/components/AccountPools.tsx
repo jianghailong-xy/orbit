@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button, Checkbox, Input, Modal, Tag } from 'antd';
+import { DeleteOutlined } from '@ant-design/icons';
+import { Button, Checkbox, Input, Modal, Tag, Tooltip } from 'antd';
 import { api } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import {
@@ -38,6 +39,17 @@ const accounts = (n: number) => `${n} account${n === 1 ? '' : 's'}`;
 export const availabilityOf = (pool: ProviderPool): string =>
   `${pool.members.filter(canTakeWork).length} of ${accounts(pool.members.length)} available`;
 
+/** The same words for a head line, where a phone drops "accounts" to keep the pool's name. */
+function Availability({ pool }: { pool: ProviderPool }) {
+  const total = pool.members.length;
+  return (
+    <span className="re-summary">
+      {pool.members.filter(canTakeWork).length} of {total}
+      <span className="pool-wide"> account{total === 1 ? '' : 's'}</span> available
+    </span>
+  );
+}
+
 /**
  * The head's gauge: the member the next session runs on, by name, with its own 5-hour bar — the
  * pool's real answer, where an average would show half a quota no account has. With no member to
@@ -48,7 +60,14 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
   if (head.kind === 'spent') {
     return (
       <span className="pool-gauge spent">
-        {head.resetsAt ? `All spent · resets ${formatResetTime(head.resetsAt)}` : 'All spent'}
+        {head.resetsAt ? (
+          // One inline run, so the gauge's flex gap doesn't open up inside the sentence.
+          <span>
+            <span className="pool-wide">All spent · </span>resets {formatResetTime(head.resetsAt)}
+          </span>
+        ) : (
+          'All spent'
+        )}
       </span>
     );
   }
@@ -82,7 +101,7 @@ function MemberRow({ member, onRemove }: { member: PoolMember; onRemove?: () => 
         <ProviderTile slug={member.presetSlug ?? member.slug} label={member.label} size={28} />
         <div style={{ minWidth: 0 }}>
           <div className="re-name" title={member.label}>
-            {member.label}
+            <span className="pool-member-label">{member.label}</span>
             {member.next && <span className="re-chip">NEXT</span>}
           </div>
         </div>
@@ -115,10 +134,19 @@ function MemberRow({ member, onRemove }: { member: PoolMember; onRemove?: () => 
             Re-add key
           </Button>
         )}
+        {/* A mark rather than a word: beside Re-add key the pair would outgrow the column, and
+            taking an account out is undone by adding it back. */}
         {onRemove && (
-          <Button size="small" type="text" danger onClick={onRemove} aria-label={`Remove ${member.label}`}>
-            Remove
-          </Button>
+          <Tooltip title="Remove from this pool">
+            <Button
+              size="small"
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={onRemove}
+              aria-label={`Remove ${member.label} from this pool`}
+            />
+          </Tooltip>
         )}
       </div>
     </div>
@@ -158,12 +186,12 @@ function PoolCard({ pool, collapsed, onToggle }: { pool: ProviderPool; collapsed
             ▸
           </span>
           <span className="re-runner">{pool.label}</span>
-          <span className="re-summary">{availabilityOf(pool)}</span>
+          <Availability pool={pool} />
         </button>
         <span className="re-head-sp" />
         <PoolGauge pool={pool} />
-        <Link className="re-manage" to={`/providers/pools/${encodeId(pool.id)}`}>
-          Manage →
+        <Link className="re-manage" to={`/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
+          <span className="pool-wide">Manage </span>→
         </Link>
       </div>
       {!collapsed && <PoolMembers pool={pool} />}
@@ -235,10 +263,14 @@ export function PoolAccountsModal({
   const qc = useQueryClient();
   // Both lists carry public ids, but compared canonically: a pool member is a key row by identity.
   const members = new Set(pool?.members.map((member) => routeId(member.id)) ?? []);
-  // Joinable first: the rows this dialog is for lead, the ones it explains follow.
+  // Joinable first, then the refusals this dialog exists to explain, then what is in already.
+  const rank = (entry: { ok: boolean; member: boolean }) => (entry.ok ? 0 : entry.member ? 2 : 1);
   const listed = rows
-    .map((row) => ({ row, ...admissionOf(row, members.has(routeId(row.id))) }))
-    .sort((a, b) => Number(b.ok) - Number(a.ok));
+    .map((row) => {
+      const member = members.has(routeId(row.id));
+      return { row, member, ...admissionOf(row, member) };
+    })
+    .sort((a, b) => rank(a) - rank(b));
   const [label, setLabel] = useState('Claude accounts');
   // A new pool starts with every account that can join; adding to one starts from none.
   const [picked, setPicked] = useState<string[]>(() =>
@@ -283,27 +315,24 @@ export function PoolAccountsModal({
         </label>
       )}
       <div className="pool-pick-list">
-        {listed.map(({ row, ok, why }) => {
-          const member = members.has(routeId(row.id));
-          return (
-            <label key={row.id} className={`pool-pick${ok ? '' : ' off'}`} data-provider={row.id}>
-              <Checkbox
-                checked={member || picked.includes(row.id)}
-                disabled={!ok}
-                onChange={(e) =>
-                  setPicked((prev) =>
-                    e.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id),
-                  )
-                }
-              />
-              <ProviderTile slug={row.presetSlug ?? row.slug} label={row.label} size={24} />
-              <span className="pool-pick-text">
-                <span className="pool-pick-name">{row.label}</span>
-                <span className={`pool-pick-why${ok || member ? '' : ' refused'}`}>{why}</span>
-              </span>
-            </label>
-          );
-        })}
+        {listed.map(({ row, member, ok, why }) => (
+          <label key={row.id} className={`pool-pick${ok ? '' : ' off'}`} data-provider={row.id}>
+            <Checkbox
+              checked={member || picked.includes(row.id)}
+              disabled={!ok}
+              onChange={(e) =>
+                setPicked((prev) =>
+                  e.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id),
+                )
+              }
+            />
+            <ProviderTile slug={row.presetSlug ?? row.slug} label={row.label} size={24} />
+            <span className="pool-pick-text">
+              <span className="pool-pick-name">{row.label}</span>
+              <span className={`pool-pick-why${ok || member ? '' : ' refused'}`}>{why}</span>
+            </span>
+          </label>
+        ))}
       </div>
     </Modal>
   );

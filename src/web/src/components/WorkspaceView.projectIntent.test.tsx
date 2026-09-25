@@ -72,7 +72,7 @@ beforeEach(() => {
         preferences: { defaultEffort: 'high' },
       }) as Promise<never>;
     }
-    if (path === '/providers' || path === '/session-tags') {
+    if (path === '/providers' || path === '/providers/pools' || path === '/session-tags') {
       return Promise.resolve([]) as Promise<never>;
     }
     if (path === '/workspaces') {
