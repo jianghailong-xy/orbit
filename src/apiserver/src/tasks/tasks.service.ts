@@ -200,6 +200,7 @@ import {
   canRun,
   computeDependencyState,
   dependenciesSatisfiedSql,
+  everyPrerequisiteDoneOrRetiredSql,
   prerequisiteLanded,
   PREREQUISITE_NOT_LANDED_MESSAGE,
   dependencyEpochGate,
@@ -737,7 +738,12 @@ function isTaskRunClaimConflict(error: unknown): boolean {
     || /task_id/.test(named) || /\bid\b/.test(named);
 }
 
-const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(manualRunnableTaskSql('t'))}`;
+// The guard goes first and changes no row: it is a necessary condition for the execute predicate's
+// dependency walk (see `everyPrerequisiteDoneOrRetiredSql`). What it changes is where the walk
+// runs. The owner-wide Ready badge walked every OPEN row, 7.4s on the 109,875-task project; with the
+// guard it walks the ~400 rows that pass, in 0.8s, and counts the same 354.
+const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(everyPrerequisiteDoneOrRetiredSql('t'))}
+  AND ${Prisma.raw(manualRunnableTaskSql('t'))}`;
 
 /**
  * This task's CURRENT dispatch moment has already had its automatic run: a condition on a
