@@ -11,6 +11,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { withSessionState } from '../sessions/session-state';
 import type { PutShareLinkDto } from './dto';
 import {
+  type PublicTask,
+  readPublicTask,
+  readPublicTaskAttachment,
+  readPublicTaskRun,
+  taskShareCounts,
+  type TaskShareCounts,
+} from './public-task';
+import {
   linkNotFound,
   linkState,
   mergeInclude,
@@ -132,18 +140,19 @@ export class ShareLinksService {
   // ── the owner's half ───────────────────────────────────────────────────────────────────────
 
   /** The root's link that has not ended — ACTIVE, PAUSED, or past its expiry and not yet settled —
-   *  or null when it has none. A session root also says how much each of its layers holds, so the
-   *  dialog can show what a link exposes before anyone opens it (contract §1). */
+   *  or null when it has none. A session or task root also says how much each of its layers holds,
+   *  so the dialog can show what a link exposes before anyone opens it (contract §1). */
   async current(
     ownerId: string,
     kind: ShareRootKind,
     rootId: string,
-  ): Promise<{ link: ShareLinkView | null; counts?: SessionShareCounts }> {
+  ): Promise<{ link: ShareLinkView | null; counts?: SessionShareCounts | TaskShareCounts }> {
     await this.ownedRoot(ownerId, kind, rootId);
     const row = await this.openRow(ownerId, kind, rootId);
     const link = row ? this.view(row, new Date()) : null;
-    if (kind !== 'SESSION') return { link };
-    return { link, counts: await this.sessionCounts(rootId) };
+    if (kind === 'SESSION') return { link, counts: await this.sessionCounts(rootId) };
+    if (kind === 'TASK') return { link, counts: await taskShareCounts(this.prisma, rootId) };
+    return { link };
   }
 
   /** The session's Messages layer is what you and the agent wrote (its `user` and `assistant`
@@ -256,6 +265,31 @@ export class ShareLinksService {
       sessionId: row.sessionId,
       root: kind === 'SESSION' || !root ? null : { id: root.id, title: root.title, status: root.status },
     };
+  }
+
+  /** A task link's root page: the task, with the layers the link includes (public-task.ts). The
+   *  link shares the task itself and nothing else a task can name. */
+  taskPage(link: OpenLink): Promise<PublicTask> {
+    const taskId = this.taskRootOf(link);
+    return readPublicTask(this.prisma, taskId, link.include, (id) => id === taskId);
+  }
+
+  /** The run `sessionId` of a task link's task, when the link includes Conversations — with the
+   *  task it is a run of, for its page — or the one 404. */
+  taskRun(link: OpenLink, sessionId: string): Promise<{ id: string; title: string; runs: { sessionId: string }[] }> {
+    const taskId = this.taskRootOf(link);
+    if (!link.include.conversations) throw linkNotFound();
+    return readPublicTaskRun(this.prisma, taskId, sessionId);
+  }
+
+  /** An attachment a task link's layers include (its input files, its runs' images), or the one 404. */
+  taskAttachment(link: OpenLink, id: string): Promise<{ data: Buffer; mimeType: string }> {
+    return readPublicTaskAttachment(this.prisma, this.taskRootOf(link), link.include, id);
+  }
+
+  private taskRootOf(link: OpenLink): string {
+    if (link.kind !== 'TASK' || !link.root) throw linkNotFound();
+    return link.root.id;
   }
 
   /** One more open of the link's root page, and when. Pages, attachments and nested pages do not

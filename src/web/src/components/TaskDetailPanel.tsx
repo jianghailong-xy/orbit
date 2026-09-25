@@ -1,14 +1,26 @@
-import { ArrowRightOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, PlayCircleOutlined, SafetyOutlined } from '@ant-design/icons';
+import {
+  ArrowRightOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  FileMarkdownOutlined,
+  GlobalOutlined,
+  LinkOutlined,
+  MoreOutlined,
+  PlayCircleOutlined,
+  SafetyOutlined,
+} from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Alert, Avatar, Button, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
+import { Alert, Avatar, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
 import { lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
-import { api } from '../api';
+import { api, getShareLink } from '../api';
+import { copyText } from '../lib/clipboard';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { reportTaskRunConflict, type TaskRunConflictToast } from './TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
@@ -48,7 +60,8 @@ import { MD } from './Transcript';
 import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
-import { TaskAcceptance } from '../pages/TaskDetailPage';
+import { ACCEPTANCE_EMPTY, TaskAcceptance } from '../pages/TaskDetailPage';
+import { ShareModal, shareLinkQueryKey } from './ShareModal';
 import { TaskFollowedBy } from './WatchRelations';
 import {
   OWNER_CONFIRM_ACTION,
@@ -72,7 +85,8 @@ const TDP_WIDTH_MAX = 1000;
 const TDP_WIDTH_DEFAULT = 600;
 
 // A run's outcome badge is independent of whether its session is Open, Completed or in Trash.
-const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: string }> = {
+// Exported for the public task page's Runs, which says it in the same words.
+export const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: string }> = {
   // This badge is keyed on run state alone and has no queued-gate fields to read, so it says
   // the state rather than guessing at a cause. Capacity is named where it is known (see
   // queuedLabel), not here.
@@ -98,6 +112,48 @@ const fmt = (d?: string | null): string =>
     : '—';
 
 const initial = (name?: string | null): string => (name ?? '?').trim().charAt(0).toUpperCase();
+
+/** The signed-in address of a task — what Copy link hands its owner, never the public one. */
+export const taskAppUrl = (taskId: string): string => `${window.location.origin}/tasks/${encodeId(taskId)}`;
+
+/** How many runs the Markdown lists one by one before it only counts the rest. */
+const MARKDOWN_RUNS = 10;
+
+/**
+ * The task as Markdown, for pasting into a chat or a PR (docs/share-links-design.md §8, Copy as
+ * Markdown): its title, how it stands and how that is judged, what settles it, its dependencies,
+ * its runs in brief, and the signed-in link back to it — in the words this panel uses. It is the
+ * owner's own read, for the owner's own use: nothing is made public by copying it.
+ */
+export function taskMarkdown(task: any, link: string): string {
+  const judged = COMPLETION_CRITERION_CHIP[task.completionCriterion ?? ''];
+  const status = [taskOutcomeChip(task).label, judged?.replace(' · ', ' ')].filter(Boolean).join(' · ');
+  const supersession = supersessionNote(task);
+  const out = [`# ${task.title}`, '', `**Status:** ${status}`];
+  if (supersession) out.push(`**Outcome:** ${supersession}`);
+  out.push(`**Link:** ${link}`, '', '## Acceptance', '', task.acceptanceCriteria?.trim() || ACCEPTANCE_EMPTY);
+  if (task.acceptanceCommand && task.acceptanceExpectedExitCode != null) {
+    out.push('', `Command: \`${task.acceptanceCommand}\` — done when it exits \`${task.acceptanceExpectedExitCode}\``);
+  }
+
+  const needs: any[] = (task.dependsOn ?? []).map((d: any) => d.dependsOnTask).filter(Boolean);
+  const unblocks: any[] = (task.dependedOnBy ?? []).map((d: any) => d.task).filter(Boolean);
+  out.push('', '## Dependencies', '');
+  if (needs.length + unblocks.length === 0) out.push('No dependencies');
+  for (const t of needs) out.push(`- Needs: ${t.title} — ${taskOutcomeChip(t).label}`);
+  for (const t of unblocks) out.push(`- Unblocks: ${t.title} — ${taskOutcomeChip(t).label}`);
+
+  // Newest first, as the panel lists them; one in the Trash is not a run anybody should be sent to.
+  const runs: any[] = (task.sessions ?? []).filter((s: any) => s.deletedAt == null);
+  out.push('', '## Runs', '');
+  if (runs.length === 0) out.push('No runs yet');
+  else out.push(`${runs.length} run${runs.length === 1 ? '' : 's'}`, '');
+  for (const s of runs.slice(0, MARKDOWN_RUNS)) {
+    out.push(`- ${sessionStatusMeta(s).label} · ${fmt(s.createdAt)}${s.workspace?.name ? ` · ${s.workspace.name}` : ''}`);
+  }
+  if (runs.length > MARKDOWN_RUNS) out.push(`- …and ${runs.length - MARKDOWN_RUNS} earlier`);
+  return `${out.join('\n')}\n`;
+}
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -477,6 +533,16 @@ export function TaskDetailPanel({
   const message = useToast();
   const [draft, setDraft] = useState('');
   const [reopening, setReopening] = useState(false);
+  // The ⋯ menu, and the Share dialog it opens. Whether a public link is open is read when the menu
+  // opens, under the dialog's own key — so the panel itself asks nothing more on the way in.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareQ = useQuery({
+    queryKey: shareLinkQueryKey('TASK', taskId),
+    queryFn: () => getShareLink('TASK', taskId),
+    enabled: menuOpen,
+  });
+  const liveLink = shareQ.data?.link != null && shareQ.data.link.state !== 'ENDED';
   // Drag-resizable panel width (null until the user resizes — see TDP_WIDTH_* + startResize).
   const asideRef = useRef<HTMLElement>(null);
   const [width, setWidth] = useState<number | null>(() => {
@@ -1133,6 +1199,59 @@ export function TaskDetailPanel({
         >
           <Button type="text" danger icon={<DeleteOutlined />} loading={deleting} aria-label="Delete task" />
         </Popconfirm>
+        {/* Two words for two links (docs/share-links-design.md §8): Copy link is the signed-in
+            address, for yourself; Share… is the public one. Copy as Markdown needs neither. */}
+        <Dropdown
+          trigger={['click']}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          menu={{
+            className: 'tdp-more-menu',
+            items: [
+              {
+                key: 'copy-link',
+                icon: <LinkOutlined />,
+                label: 'Copy link',
+                onClick: () => {
+                  setMenuOpen(false);
+                  void copyText(taskAppUrl(taskId)).then((ok) =>
+                    ok ? message.success('Link copied') : message.error('Could not copy'),
+                  );
+                },
+              },
+              {
+                key: 'share',
+                icon: <GlobalOutlined className={liveLink ? 'session-share-icon-live' : undefined} />,
+                label: liveLink ? (
+                  <span className="scope-menu-row">
+                    Share…<span className="scope-menu-value">Live link</span>
+                  </span>
+                ) : (
+                  'Share…'
+                ),
+                onClick: () => {
+                  setMenuOpen(false);
+                  setShareOpen(true);
+                },
+              },
+              {
+                key: 'copy-markdown',
+                icon: <FileMarkdownOutlined />,
+                label: 'Copy as Markdown',
+                disabled: !q.data,
+                onClick: () => {
+                  setMenuOpen(false);
+                  if (!q.data) return;
+                  void copyText(taskMarkdown(q.data, taskAppUrl(taskId))).then((ok) =>
+                    ok ? message.success('Markdown copied') : message.error('Could not copy'),
+                  );
+                },
+              },
+            ],
+          }}
+        >
+          <Button type="text" icon={<MoreOutlined />} aria-label="More actions" />
+        </Dropdown>
         <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
       </div>
 
@@ -1589,6 +1708,7 @@ export function TaskDetailPanel({
           />
         ) : null}
       </Modal>
+      <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} kind="TASK" rootId={taskId} />
     </aside>
   );
 }

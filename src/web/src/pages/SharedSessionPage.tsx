@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryKey } from '@tanstack/react-query';
 import { LoadingOutlined } from '@ant-design/icons';
 import {
   fetchSharedArtifactObjectUrl,
@@ -21,12 +21,15 @@ import {
   Transcript,
 } from '../components/Transcript';
 import { memoizeEventFull } from '../lib/eventFull';
+import { routeId } from '../lib/idCodec';
+import { taskLinkResolver } from '../lib/publicLinks';
 import {
   sessionLifecycleStateOf,
   sessionRunStateOf,
   sessionStateWord,
   type SessionRunState,
 } from '../lib/sessionState';
+import { shortDate } from '../lib/shareLinks';
 import { titleFirstLine } from '../lib/title';
 
 // Tail-first, like the app's own transcript (WorkspaceView): the page opens on the newest page and
@@ -37,9 +40,45 @@ const LOAD_OLDER_AT = 400;
 // Download HTML reads the transcript whole, in the largest pages the share serves.
 const EXPORT_PAGE = 500;
 
+/**
+ * The read of a link's root page — `/s/<token>`, whatever it opens. The page that decides what to
+ * draw (SharedLinkPage) and a session link's page make the same read, so the second finds the first
+ * one's answer and nothing is asked twice. `preview` is the owner's Preview, which is not a view.
+ */
+export const sharedRootQuery = (token: string, preview = false) => ({
+  queryKey: ['shared', token] as QueryKey,
+  queryFn: () => getSharedSession(token, { limit: TAIL_PAGE, preview }),
+  enabled: !!token,
+  retry: false,
+  // The pages scrolled in above sit right before the tail this page opened with; a tail read
+  // again later could have moved on past it and leave a hole between the two.
+  staleTime: Infinity,
+});
+
 /** A session link shares the conversation and nothing it names: a task, project or other session
  *  it links to is outside the link, so each of those links is drawn as its words. */
 const NOTHING_ELSE_SHARED: PublicLinkResolver = () => null;
+
+/** What a public page shows while its link is being read. */
+export function SharedLoading() {
+  return (
+    <div className="share-page">
+      <div className="share-state">Loading…</div>
+    </div>
+  );
+}
+
+/** What a public page shows for a link that opens nothing — the same whatever the reason. */
+export function SharedUnavailable() {
+  return (
+    <div className="share-page">
+      <div className="share-state">
+        <div className="share-state-title">This shared link isn’t available</div>
+        <div className="share-state-desc">It may have been revoked, or the link is incorrect.</div>
+      </div>
+    </div>
+  );
+}
 
 /** The status pill's colour for each run state, as the app's pills use them (index.css `.status-pill`). */
 const RUN_TONE: Record<SessionRunState, string> = {
@@ -53,11 +92,11 @@ const RUN_TONE: Record<SessionRunState, string> = {
 };
 
 /** Every event of the shared transcript, unclipped: from the newest page back to the first. */
-async function wholeTranscript(token: string): Promise<SharedEvent[]> {
+async function wholeTranscript(token: string, sessionId?: string): Promise<SharedEvent[]> {
   const pages: SharedEvent[][] = [];
   let before: number | undefined;
   for (;;) {
-    const page = await getSharedEventPage(token, { before, limit: EXPORT_PAGE, whole: true });
+    const page = await getSharedEventPage(token, { before, limit: EXPORT_PAGE, whole: true, sessionId });
     pages.unshift(page.events);
     if (!page.hasMore || page.events.length === 0) return pages.flat();
     before = page.events[0].seq;
@@ -65,27 +104,60 @@ async function wholeTranscript(token: string): Promise<SharedEvent[]> {
 }
 
 /**
- * Public, read-only view of a session shared via its token (`/s/<token>`). No auth, no app
+ * Public, read-only view of a conversation a link shares: a session link's own (`/s/<token>`), or
+ * one the link opens besides its root — a task link's run (`/s/<token>/c/<id>`). No auth, no app
  * shell — anyone with the link sees the transcript only, in the frame every public page shares
- * (PublicShell). Images load through the public share-attachment route (AttachmentResolverContext),
- * so a logged-out viewer still sees them; links to anything the session names are words
- * (PublicLinkResolverCtx), since none of it is shared.
+ * (PublicShell), whose breadcrumb is the link's scope: the task › this run, under a task link.
+ * Images load through the public share-attachment route (AttachmentResolverContext), so a
+ * logged-out viewer still sees them. Links to anything the conversation names go where the link's
+ * scope sends them (PublicLinkResolverCtx): under a task link, the task and its runs to their pages
+ * here; everything else, and everything a session link's conversation names, is words.
+ *
+ * One page per conversation: a link from one run to another is the same route with another id, so
+ * the page is keyed by it — the pages scrolled in above, the cursor to the next one and where the
+ * reader landed all belong to the conversation they were read from.
  */
 export function SharedSessionPage() {
-  const { token = '' } = useParams();
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['shared', token],
-    queryFn: () => getSharedSession(token, { limit: TAIL_PAGE }),
-    enabled: !!token,
-    retry: false,
-    // The pages scrolled in above sit right before the tail this page opened with; a tail read
-    // again later could have moved on past it and leave a hole between the two.
-    staleTime: Infinity,
-  });
+  const { token = '', sessionId } = useParams();
+  return <SharedConversation key={`${token}/${sessionId ?? ''}`} />;
+}
+
+function SharedConversation() {
+  const { token = '', sessionId: sessionParam } = useParams();
+  // A conversation under the link rather than its root, in the spelling every id here has.
+  const sessionId = sessionParam ? routeId(sessionParam) ?? undefined : undefined;
+  const { data, isLoading, isError } = useQuery(
+    sessionId
+      ? {
+          queryKey: ['shared', token, 'c', sessionId] as QueryKey,
+          queryFn: () => getSharedSession(token, { limit: TAIL_PAGE, sessionId }),
+          enabled: !!token,
+          retry: false,
+          staleTime: Infinity,
+        }
+      : sharedRootQuery(token),
+  );
   const resolve = useMemo(() => (id: string) => fetchSharedAttachmentObjectUrl(token, id), [token]);
-  const resolveArtifact = useMemo(() => (artifactPath: string) => fetchSharedArtifactObjectUrl(token, artifactPath), [token]);
+  // Stored artifacts are served for a session link's own transcript; a run under a task link draws
+  // a legacy artifact path as its chip.
+  const resolveArtifact = useMemo(
+    () => (sessionId ? null : (artifactPath: string) => fetchSharedArtifactObjectUrl(token, artifactPath)),
+    [token, sessionId],
+  );
   // A card that arrived clipped fetches its whole payload when it is opened, once (lib/eventFull).
-  const fetchFull = useMemo(() => memoizeEventFull((seq: number) => getSharedEventFull(token, seq)), [token]);
+  const fetchFull = useMemo(
+    () => memoizeEventFull((seq: number) => getSharedEventFull(token, seq, sessionId)),
+    [token, sessionId],
+  );
+  // Where the conversation's links go: a run's task and the task's other runs, under a task link.
+  const task = data?.task;
+  const scope = useMemo(
+    () =>
+      task
+        ? taskLinkResolver(token, { taskId: task.id, runSessionIds: task.runs.map((run) => run.sessionId) })
+        : NOTHING_ELSE_SHARED,
+    [token, task],
+  );
   const [downloading, setDownloading] = useState(false);
 
   // The pages scrolled in above the tail, oldest first.
@@ -109,7 +181,7 @@ export function SharedSessionPage() {
     if (inFlightRef.current || !cursor?.hasMore) return;
     inFlightRef.current = true;
     setLoadingOlder(true);
-    getSharedEventPage(token, { before: cursor.before, limit: OLDER_PAGE })
+    getSharedEventPage(token, { before: cursor.before, limit: OLDER_PAGE, sessionId })
       .then((page) => {
         cursorRef.current = {
           before: page.events.length ? page.events[0].seq : cursor.before,
@@ -124,7 +196,7 @@ export function SharedSessionPage() {
         inFlightRef.current = false;
         setLoadingOlder(false);
       });
-  }, [token, data]);
+  }, [token, sessionId, data]);
 
   // Open where the conversation is read from: its first message when all of it is here, and its
   // latest when the page holds only the newest part of it.
@@ -172,7 +244,7 @@ export function SharedSessionPage() {
     setDownloading(true);
     try {
       const [whole, { exportSessionHtml }] = await Promise.all([
-        wholeTranscript(token),
+        wholeTranscript(token, sessionId),
         import('../lib/sessionExport'),
       ]);
       await exportSessionHtml(
@@ -185,7 +257,7 @@ export function SharedSessionPage() {
         },
         whole,
         (id) => fetchSharedAttachmentDataUrl(token, id),
-        NOTHING_ELSE_SHARED,
+        scope,
       );
     } catch (e) {
       console.error('Download failed', e);
@@ -194,28 +266,20 @@ export function SharedSessionPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="share-page">
-        <div className="share-state">Loading…</div>
-      </div>
-    );
-  }
-  if (isError || !data) {
-    return (
-      <div className="share-page">
-        <div className="share-state">
-          <div className="share-state-title">This shared link isn’t available</div>
-          <div className="share-state-desc">It may have been revoked, or the link is incorrect.</div>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return <SharedLoading />;
+  if (isError || !data) return <SharedUnavailable />;
   const tone =
     sessionLifecycleStateOf(data) === 'COMPLETED' ? 'done' : RUN_TONE[sessionRunStateOf(data)];
   return (
     <PublicShell
-      crumbs={[{ label: titleFirstLine(data.title) }]}
+      crumbs={
+        task
+          ? [
+              { label: titleFirstLine(task.title), to: `/s/${encodeURIComponent(token)}` },
+              { label: `Run · ${shortDate(data.createdAt)}` },
+            ]
+          : [{ label: titleFirstLine(data.title) }]
+      }
       status={
         <span className={`status-pill ${tone}`}>
           {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
@@ -263,7 +327,7 @@ export function SharedSessionPage() {
           <span className="chat-older-pill">Loading earlier messages…</span>
         </div>
       )}
-      <PublicLinkResolverCtx.Provider value={NOTHING_ELSE_SHARED}>
+      <PublicLinkResolverCtx.Provider value={scope}>
         <AttachmentResolverContext.Provider value={resolve}>
           <ArtifactResolverContext.Provider value={resolveArtifact}>
             <EventFullCtx.Provider value={fetchFull}>
