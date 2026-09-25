@@ -78,8 +78,8 @@ jobs:
 
   macos:
     name: macOS (build + test)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY, shots branch only: the task branch's own dispatch is the compile gate for this code.
+    if: false
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -104,8 +104,8 @@ jobs:
 
   ios:
     name: iOS (generate + build)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY, shots branch only: the task branch's own dispatch is the compile gate for this code.
+    if: false
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -132,3 +132,32 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY — an evidence run, not a gate, and this branch is never merged. Task
+  # 34UuATXITdpa10srM1WgK (T10, Orbit Wiki) asks for iOS pictures of the Wiki beside mocks 06–09, and a
+  # Linux session cannot draw SwiftUI; `.wiki-probe/` builds the app's own Wiki pages and drawer rows
+  # into a throwaway iPhone app and photographs them (see .wiki-probe/README.md).
+  wiki-shots-ios:
+    name: Wiki probe (iOS screenshots)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, test and capture
+        run: bash .wiki-probe/ios/run.sh
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wiki-shots-ios
+          path: .wiki-probe/ios/shots
+          if-no-files-found: error
