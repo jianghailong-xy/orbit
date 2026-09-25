@@ -21,10 +21,29 @@ import { encodeId } from './idCodec';
  * replace the evidence with a summary of it.
  */
 
-export type OrbitLinkKind = 'task' | 'session' | 'project' | 'list';
+export type OrbitLinkKind = 'task' | 'session' | 'project' | 'list' | 'wiki';
 
-/** The four kinds, in the order `@orbit/shared`'s `LINK_PREVIEW_KINDS` lists them. */
-export const ORBIT_LINK_KINDS: readonly OrbitLinkKind[] = ['project', 'task', 'session', 'list'];
+/** The kinds, in the order `@orbit/shared`'s `LINK_PREVIEW_KINDS` lists them. */
+export const ORBIT_LINK_KINDS: readonly OrbitLinkKind[] = ['project', 'task', 'session', 'list', 'wiki'];
+
+/**
+ * The kinds a pasted PAGE URL can name, and the path each lives under.
+ *
+ * `wiki` is deliberately absent. Every other kind is one segment plus an id (`/tasks/<id>`), while an
+ * entry's page is `/wiki/<space>/e/<id>` — it takes a space as well, and the id in a link names only
+ * the entry. So a wiki card is reached from the reference an agent writes, `orbit-wiki:<id>`, and
+ * from the slug the server answers with; a person pasting a `/wiki/…` URL gets the URL back, exactly
+ * as they do for any other page this table does not cover.
+ */
+export const ORBIT_LINK_PATH: Record<Exclude<OrbitLinkKind, 'wiki'>, string> = {
+  task: 'tasks',
+  session: 'sessions',
+  project: 'projects',
+  list: 'lists',
+};
+
+/** The kinds whose page is one path segment and an id — everything `ORBIT_LINK_PATH` holds. */
+export type OrbitPageKind = Exclude<OrbitLinkKind, 'wiki'>;
 
 /** Which object a link names. */
 export interface OrbitLinkTarget {
@@ -52,14 +71,6 @@ export interface OrbitLinkRef {
   target: OrbitLinkTarget;
   source: OrbitLinkSource;
 }
-
-/** The page path each kind lives under. */
-export const ORBIT_LINK_PATH: Record<OrbitLinkKind, string> = {
-  task: 'tasks',
-  session: 'sessions',
-  project: 'projects',
-  list: 'lists',
-};
 
 /** The key a preview is cached and compared under — `kind:uuid`. */
 export function linkKey(target: OrbitLinkTarget): string {
@@ -91,9 +102,27 @@ export function publicId(target: OrbitLinkTarget): string {
   return encodeId(target.id);
 }
 
-/** The app's own page for an object — where a card's title and its click go. */
-export function pageHref(target: OrbitLinkTarget): string {
+/** The app's own page for an object — where a card's title and its click go.
+ *
+ *  A PAGE kind's, and only a page kind's: a wiki entry is addressed by its space's slug and its own
+ *  id together, so its href is built from the server's answer instead (`targetHref` below). The
+ *  parameter is narrowed rather than the return widened, so a caller holding a wiki link does not
+ *  compile until it has said where that entry's page is. */
+export function pageHref(target: { kind: OrbitPageKind; id: string }): string {
   return `/${ORBIT_LINK_PATH[target.kind]}/${encodeURIComponent(publicId(target))}`;
+}
+
+/**
+ * Where a card's title leads: the object's own page, or null when there is none to lead to.
+ *
+ * Null is a card drawn before (or instead of) an answer, and for a wiki entry with no answer there
+ * is nothing else to go on — `/wiki/<id>` is not a page this deployment serves, and a title that
+ * led to a 404 would be worse than a title that does not lead.
+ */
+export function targetHref(target: OrbitLinkTarget, wiki: { spaceSlug: string } | undefined): string | null {
+  const { kind, id } = target;
+  if (isPageKind(kind)) return pageHref({ kind, id });
+  return wiki ? `/wiki/${encodeURIComponent(wiki.spaceSlug)}/e/${encodeURIComponent(publicId(target))}` : null;
 }
 
 /**
@@ -102,12 +131,23 @@ export function pageHref(target: OrbitLinkTarget): string {
  * to show.
  */
 export function pathLabel(ref: OrbitLinkRef, host: string): string {
+  // A wiki entry has no page URL to imitate — the reference IS its address — so the hint is the
+  // reference as it was written, which is also what Copy hands back.
+  const { kind } = ref.target;
+  if (!isPageKind(kind)) {
+    return ref.source.kind === 'ref' ? ref.source.ref : writtenId(ref);
+  }
   let label = host.trim();
   const scheme = label.indexOf('://');
   if (scheme !== -1) label = label.slice(scheme + 3);
   label = label.split(/[/?#]/)[0];
   const written = writtenId(ref);
-  return `${label}/${ORBIT_LINK_PATH[ref.target.kind]}/${written || publicId(ref.target)}`;
+  return `${label}/${ORBIT_LINK_PATH[kind]}/${written || publicId(ref.target)}`;
+}
+
+/** Whether a kind's page is one path segment and an id, which is what `ORBIT_LINK_PATH` holds. */
+function isPageKind(kind: OrbitLinkKind): kind is OrbitPageKind {
+  return kind in ORBIT_LINK_PATH;
 }
 
 // MARK: - reading a link
@@ -335,8 +375,14 @@ export type OrbitLinkPart =
    *  as it was written, already trimmed of the whitespace the card's removal left at the edges. */
   | { kind: 'text'; text: string; start: number; end: number };
 
-/** The paragraph that is nothing but a reference link, and the destination it points at. */
-const LONE_REFERENCE = /^\[([^\]]*)\]\((orbit-(?:task|session|project|list):[^)\s]+)\)$/;
+/** The paragraph that is nothing but a reference link, and the destination it points at.
+ *
+ *  Built from `ORBIT_LINK_KINDS`, which `targetForReference` answers from: a kind added there and
+ *  not here would be a reference the parser never offers to the rule that could take it, which is
+ *  the kind of silence neither half of this file would report. */
+const LONE_REFERENCE = new RegExp(
+  String.raw`^\[([^\]]*)\]\((orbit-(?:${ORBIT_LINK_KINDS.join('|')}):[^)\s]+)\)$`,
+);
 
 /**
  * A paragraph's links, as parts to draw in order — or null when nothing in it becomes a card.
