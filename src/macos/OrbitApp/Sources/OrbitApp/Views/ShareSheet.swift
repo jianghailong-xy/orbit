@@ -1,9 +1,9 @@
-#if os(iOS)
 import SwiftUI
 import OrbitKit
 
-/// A public, read-only link to one session's transcript — the iOS port of web's `ShareModal`
-/// (the "Share…" item in `AgentView`'s session menu). Presented as a sheet from the console nav bar.
+/// A public, read-only link to one session's transcript — the native port of web's `ShareModal`
+/// (the "Share…" item in `AgentView`'s session menu). Presented as a sheet from the console: from
+/// its nav bar on iOS, from the window toolbar on macOS.
 ///
 /// Owns a fresh `APIClient` (built from the app's baseURL + tokenStore, exactly like `ConsoleModel`)
 /// and mirrors the web dialog's states: create → copy / share / revoke. The link resolves to the
@@ -44,15 +44,29 @@ struct ShareSheet: View {
                     Text(errorText).font(.footnote).foregroundStyle(.red)
                 }
             }
+            // A Mac form lays its rows out in columns unless told otherwise; grouped reads as the
+            // phone's sections do (and is already the phone's default).
+            .formStyle(.grouped)
             .navigationTitle("Share")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
+                #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
+                #else
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+                #endif
             }
         }
         .task { await load() }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 360)
+        #endif
     }
 
     private var createSection: some View {
@@ -137,4 +151,3 @@ struct ShareSheet: View {
         busy = false
     }
 }
-#endif

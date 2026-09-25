@@ -2952,13 +2952,18 @@ export class SessionsService {
    * Enable a public read-only share link for this session: mint an unguessable `shareToken`
    * (idempotent — returns the existing one if already shared). The token alone is the
    * capability; anyone with the link can read the transcript with no login (see getShared).
+   * A session in the trash is refused before anything is written: trash pauses a link, and
+   * minting (or handing back) one there would promise a page that answers 404.
    */
   async enableShare(ownerId: string, id: string): Promise<{ shareToken: string; sharedAt: Date }> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { shareToken: true, sharedAt: true },
+      select: { shareToken: true, sharedAt: true, deletedAt: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    if (session.deletedAt) {
+      throw new ConflictException('this session is in the trash — restore it before sharing it');
+    }
     if (session.shareToken && session.sharedAt) {
       return { shareToken: session.shareToken, sharedAt: session.sharedAt };
     }
@@ -3094,8 +3099,12 @@ export class SessionsService {
    * unguessable token IS the capability. Returns only what a viewer needs to render the
    * conversation (title, workspace name, status, the event stream); never ownership, billing,
    * runner internals, or worktree/merge state. A trashed (deletedAt) session stops resolving.
+   *
+   * `events` is the transcript's TAIL page — the newest `limit` (default 200) — with `hasMore`,
+   * not the whole history: a coordinator's transcript is megabytes, and the anonymous door was
+   * handing all of it to whoever asked. Older events page in over getSharedEventPage.
    */
-  async getShared(token: string) {
+  async getShared(token: string, opts: { limit?: number; maxPayload?: number } = {}) {
     const session = await this.prisma.session.findFirst({
       where: { shareToken: token, deletedAt: null },
       select: {
@@ -3115,16 +3124,8 @@ export class SessionsService {
     // A share is another historical transcript reader, so it observes the same replay contract as
     // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
     // persisted by an older API during a rolling deployment (or spend a public response on their
-    // repeated foreground-shell snapshots).
-    const events = await this.prisma.$queryRaw<
-      { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
-    >`
-      SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
-      FROM run_event
-      WHERE session_id = ${session.id}::uuid
-        AND ${replayableEventSql}
-      ORDER BY seq ASC
-    `;
+    // repeated foreground-shell snapshots). The page query is the owner's own (eventPage).
+    const { events, hasMore } = await this.eventPage(session.id, opts);
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
@@ -3135,14 +3136,51 @@ export class SessionsService {
       lifecycleState: stateful.lifecycleState,
       filingState: stateful.filingState,
       createdAt: session.createdAt,
-      events: events.map((e) => ({
-        seq: e.seq,
-        type: e.type,
-        payload: e.payload,
-        turnId: e.turnId ?? null,
-        ts: e.createdAt,
-      })),
+      events,
+      hasMore,
     };
+  }
+
+  /** getEventPage for a share link: an older page of the shared transcript (`before`/`limit`),
+   *  or its tail when `before` is absent. Same query, cap and truncation as the owner's page. */
+  async getSharedEventPage(
+    token: string,
+    opts: { before?: number; limit?: number; maxPayload?: number },
+  ) {
+    return this.eventPage(await this.sharedSessionId(token), opts);
+  }
+
+  /**
+   * getEventFull for a share link: one event's untrimmed payload, for a card that came back
+   * `truncated`. Behind the same replay fence as the shared pages, so a seq the transcript does
+   * not show (a progress ping, a live-only row) is not reachable by asking for it directly.
+   */
+  async getSharedEventFull(
+    token: string,
+    seq: number,
+  ): Promise<{ seq: number; type: string; payload: unknown; turnId: string | null; ts: Date }> {
+    const sessionId = await this.sharedSessionId(token);
+    const [row] = await this.prisma.$queryRaw<
+      { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
+    >`
+      SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+      FROM run_event
+      WHERE session_id = ${sessionId}::uuid
+        AND seq = ${seq}
+        AND ${replayableEventSql}
+    `;
+    if (!row) throw new NotFoundException('event not found');
+    return { seq: row.seq, type: row.type, payload: row.payload, turnId: row.turnId ?? null, ts: row.createdAt };
+  }
+
+  /** The session a share token opens, by the rule getShared applies: shared, and not in the trash. */
+  private async sharedSessionId(token: string): Promise<string> {
+    const session = await this.prisma.session.findFirst({
+      where: { shareToken: token, deletedAt: null },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('shared session not found');
+    return session.id;
   }
 
   /**
@@ -3179,6 +3217,25 @@ export class SessionsService {
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    return this.eventPage(id, opts);
+  }
+
+  /** getEventPage's query, for a session the caller has already resolved — by owner there, by
+   *  share token in getShared / getSharedEventPage. */
+  private async eventPage(
+    id: string,
+    opts: { tail?: number; before?: number; limit?: number; maxPayload?: number },
+  ): Promise<{
+    events: {
+      seq: number;
+      type: string;
+      payload: unknown;
+      turnId: string | null;
+      ts: Date;
+      truncated?: true;
+    }[];
+    hasMore: boolean;
+  }> {
     const take = Math.min(Math.max(Math.trunc(opts.limit ?? opts.tail ?? 200), 1), 500);
     const before =
       typeof opts.before === 'number' && Number.isFinite(opts.before)
@@ -3494,6 +3551,12 @@ export class SessionsService {
     return this.getLegacyArtifact(session.id, rawPath);
   }
 
+  /**
+   * The share link's artifact door serves only what is already stored. Everything else
+   * getLegacyArtifact does is the owner's: asking the runner (a turn in the owner's session and a
+   * request held up to 40s) and proving the path was mentioned (the whole run_event history read
+   * into memory) — neither is something an anonymous visitor should be able to start.
+   */
   async getLegacyArtifactForShared(
     token: string,
     rawPath: string | undefined,
@@ -3503,7 +3566,10 @@ export class SessionsService {
       select: { id: true },
     });
     if (!session) throw new NotFoundException('artifact not found');
-    return this.getLegacyArtifact(session.id, rawPath);
+    const resolved = await this.resolveLegacyArtifactPath(session.id, rawPath);
+    const attached = await this.getLegacyArtifactAttachment(session.id, path.basename(resolved.file));
+    if (!attached) throw new NotFoundException('artifact not found');
+    return attached;
   }
 
   private async getLegacyArtifact(
