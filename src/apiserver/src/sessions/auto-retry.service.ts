@@ -9,6 +9,8 @@ import {
 import { Prisma, RunStatus } from '@prisma/client';
 import {
   RunEventType,
+  isRetryableApiErrorText,
+  isUsageLimitErrorText,
   planUsageBlockedUntil,
   type PlanUsage,
 } from '@orbit/shared';
@@ -679,9 +681,17 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       where: { sessionId, type: RunEventType.USER },
       orderBy: { seq: 'desc' },
       take: 20,
-      select: { type: true, payload: true, turnId: true },
+      select: { type: true, payload: true, turnId: true, seq: true },
     });
     const events = recent.reverse();
+    // A turn nobody sent — a background agent or workflow reporting in — failing is not the
+    // person's message failing. When theirs had already been answered there is nothing to re-send,
+    // for the reason a background job's wake has none (below): stepping past it re-sends a
+    // question already answered. The runtime still holds the notification that woke that turn and
+    // hands it over with the next message it is sent.
+    if (await this.failureFollowsAnsweredMessage(sessionId, events[events.length - 1])) {
+      return { content: '', attachmentsOf: null };
+    }
 
     // A provider's user event echoes exactly what the runner received, including delivery-time
     // #reference/list expansion and a promoted coordinator's standing role. The durable turn is
@@ -798,6 +808,47 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       // on the seeded first turn.
       attachmentsOf: chosenDurable?.id ?? (chosen ? chosen.turnId : seeded?.id ?? null),
     };
+  }
+
+  /**
+   * Is the reply a retry would answer a turn the runtime started for itself, failing after the
+   * person's latest message had been answered?
+   *
+   * Read off the workspace's own replies (sub-agents' reports carry parentToolUseId and are not
+   * replies to anyone): the newest one belongs to no turn — the "turn nobody delivered" the spend
+   * fuse also reads — while the latest message's own turn got an answer that is not one of the
+   * self-healing failures. Both halves matter: when that message's turn itself died on the quota
+   * or an outage, it is still owed its retry however many background turns failed after it. A
+   * message with no turn id predates turn attribution, which leaves nothing to compare, so it
+   * keeps the old reading.
+   */
+  private async failureFollowsAnsweredMessage(
+    sessionId: string,
+    latest: { turnId: string | null; seq: number } | undefined,
+  ): Promise<boolean> {
+    if (!latest?.turnId) return false;
+    const replyText = (row: { payload: unknown }): string => {
+      const payload = (row.payload ?? {}) as { text?: unknown; parentToolUseId?: unknown };
+      if (payload.parentToolUseId) return '';
+      return typeof payload.text === 'string' ? payload.text.trim() : '';
+    };
+    const select = { payload: true, turnId: true, seq: true } as const;
+    const after = await this.prisma.runEvent.findMany({
+      where: { sessionId, type: RunEventType.ASSISTANT, seq: { gt: latest.seq } },
+      orderBy: { seq: 'desc' },
+      take: 50,
+      select,
+    });
+    const newest = after.find((row) => replyText(row));
+    if (!newest || newest.turnId != null) return false;
+    const own = await this.prisma.runEvent.findMany({
+      where: { sessionId, type: RunEventType.ASSISTANT, turnId: latest.turnId },
+      orderBy: { seq: 'desc' },
+      take: 50,
+      select,
+    });
+    const answer = own.map(replyText).find((text) => text);
+    return !!answer && !isRetryableApiErrorText(answer) && !isUsageLimitErrorText(answer);
   }
 
   /** The opening turn, found by the fixed seed id. */

@@ -7,6 +7,7 @@ import {
   isRetryableApiErrorText,
   isUsageLimitErrorText,
   toolResultText,
+  workflowLaunchReceipt,
 } from './events';
 
 describe('toolResultText', () => {
@@ -48,6 +49,28 @@ describe('isAsyncAgentLaunchAck', () => {
   it('does not flag an ordinary tool result', () => {
     expect(isAsyncAgentLaunchAck('/path/to/file.swift')).toBe(false);
     expect(isAsyncAgentLaunchAck(null)).toBe(false);
+  });
+});
+
+describe('workflowLaunchReceipt', () => {
+  // Verbatim from a production session (claude 2.1.282), transcript dir shortened.
+  const RECEIPT =
+    'Workflow launched in background. Task ID: w2f3yv1s8\n' +
+    'Summary: First-principles + web research on the right artifact form; 3 competing designs; 2 judges\n' +
+    'Transcript dir: /root/.claude/projects/x/subagents/workflows/wf_37d4e19e-c97';
+
+  it('reads the task id and summary off a launch receipt', () => {
+    expect(workflowLaunchReceipt(RECEIPT)).toEqual({
+      taskId: 'w2f3yv1s8',
+      summary: 'First-principles + web research on the right artifact form; 3 competing designs; 2 judges',
+    });
+    expect(workflowLaunchReceipt([{ type: 'text', text: RECEIPT }])?.taskId).toBe('w2f3yv1s8');
+  });
+
+  it('is null for anything that is not the receipt itself', () => {
+    expect(workflowLaunchReceipt('Error: script must begin with export const meta')).toBeNull();
+    expect(workflowLaunchReceipt(`The tool said: ${RECEIPT}`)).toBeNull();
+    expect(workflowLaunchReceipt(null)).toBeNull();
   });
 });
 

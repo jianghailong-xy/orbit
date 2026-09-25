@@ -28,6 +28,8 @@ const RUNNER_ID = '01a0b1c1-0000-7000-8000-00000000e003';
 const WORKSPACE_ID = '01a0b1c1-0000-7000-8000-00000000e004';
 const BURIED_SESSION = '01a0b1c1-0000-7000-8000-00000000e005';
 const WORDLESS_SESSION = '01a0b1c1-0000-7000-8000-00000000e006';
+const ANSWERED_SESSION = '01a0b1c1-0000-7000-8000-00000000e007';
+const UNANSWERED_SESSION = '01a0b1c1-0000-7000-8000-00000000e008';
 
 /** What the person actually said, at seq 1. Never the session's `prompt`, which is seeded with
  *  different text below so a fallback to it cannot pass for having found this. */
@@ -162,4 +164,43 @@ scenario("someone else's session is not a session this door knows", async () => 
     /session not found/,
     'the message a retry would re-send is the owner\'s to read',
   );
+});
+
+/**
+ * The person's message on its own turn, the workspace's reply on the same turn, and then a turn
+ * the runtime started for itself — a background workflow reporting in, whose events carry no turn
+ * id — failing on a rate limit. Production, 2026-09-25: that failure re-sent the answered message
+ * four times over. Turn ids are written into run_event exactly as the ingest writes them.
+ */
+async function answeredThenBackgroundFailure(sessionId: string, reply: string): Promise<void> {
+  await seedSession(sessionId, OWNER_ID);
+  const { rows } = await admin.query<{ id: string }>(
+    `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","content")
+     VALUES (gen_random_uuid(),$1::uuid,1,'turn-the-question',$2::text) RETURNING id`,
+    [sessionId, BURIED_MESSAGE],
+  );
+  const turnId = rows[0].id;
+  await admin.query(
+    `INSERT INTO "run_event"("id","session_id","seq","type","payload","turn_id") VALUES
+       (gen_random_uuid(),$1::uuid,1,'user',jsonb_build_object('text',$2::text),$3::uuid),
+       (gen_random_uuid(),$1::uuid,2,'assistant',jsonb_build_object('text',$4::text),$3::uuid),
+       (gen_random_uuid(),$1::uuid,3,'assistant',jsonb_build_object('text','I sent back the report.','parentToolUseId','toolu_agent'),NULL),
+       (gen_random_uuid(),$1::uuid,4,'assistant',jsonb_build_object('text',$5::text),NULL)`,
+    [sessionId, BURIED_MESSAGE, turnId, reply,
+     "API Error: Request rejected (429) · This request would exceed your account's rate limit."],
+  );
+}
+
+scenario('a background turn failing after the message was answered offers nothing to re-send', async () => {
+  await answeredThenBackgroundFailure(ANSWERED_SESSION, 'Here is the review you asked for.');
+
+  const answer = await autoRetry.retryMessage(OWNER_ID, ANSWERED_SESSION);
+  assert.equal(answer.text, '', 'the message was answered; re-sending it repeats a settled question');
+});
+
+scenario('a message whose own turn failed is still re-sent after a background turn fails too', async () => {
+  await answeredThenBackgroundFailure(UNANSWERED_SESSION, "You've hit your session limit · resets 6:20pm (Europe/Berlin)");
+
+  const answer = await autoRetry.retryMessage(OWNER_ID, UNANSWERED_SESSION);
+  assert.equal(answer.text, BURIED_MESSAGE);
 });

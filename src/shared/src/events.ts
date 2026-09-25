@@ -252,6 +252,21 @@ export function isAsyncAgentLaunchAck(content: unknown): boolean {
 }
 
 /**
+ * The receipt Claude Code's Workflow tool returns the instant a workflow starts: "Workflow
+ * launched in background. Task ID: <id>\nSummary: <text>\n…". A workflow always runs in the
+ * background — this is the only top-level tool_result it ever gets — and it reports its end later
+ * through a <task-notification> (a background_task event carrying the Workflow call's tool_use
+ * id), exactly like an async sub-agent. Null for anything else, including a call the tool refused.
+ */
+export function workflowLaunchReceipt(content: unknown): { taskId: string; summary?: string } | null {
+  const text = toolResultText(content);
+  const launched = /^Workflow launched in background\. Task ID: (\S+)/.exec(text.trimStart());
+  if (!launched) return null;
+  const summary = /^Summary: (.+)$/m.exec(text)?.[1]?.trim();
+  return { taskId: launched[1], ...(summary ? { summary } : {}) };
+}
+
+/**
  * What a failed run's error text says was actually wrong.
  *
  * The point is routing, not labelling. Each cause has a different lever, and the expensive
