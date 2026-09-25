@@ -11698,6 +11698,188 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 
+/* ============================================================================
+   Providers → "Account pools": several Claude subscriptions under one name. The
+   runner cards' skeleton (fold, head, three-column rows), with a status column
+   wide enough for "Unavailable · key refused" and "Spent · resets Mon 14:05".
+   ========================================================================== */
+.pool-sec .re-card + .re-card {
+  margin-top: 10px;
+}
+.pool-row {
+  grid-template-columns: minmax(0, 1fr) 176px 150px 110px;
+}
+.pool-status {
+  min-width: 0;
+}
+.pool-status .ant-tag {
+  max-width: 100%;
+  margin-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.pool-row .re-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The pool's page takes accounts out, so its rows carry up to two actions. */
+.pool-detail .pool-row {
+  grid-template-columns: minmax(0, 1fr) 176px 150px 170px;
+}
+/* The head's gauge: the account the next session runs on, never an average of them. */
+.pool-gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.pool-gauge-name {
+  color: var(--text-2);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pool-gauge .runner-util {
+  flex: none;
+  width: 80px;
+  margin-top: 0;
+}
+.pool-gauge-pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.pool-gauge.spent {
+  color: var(--warning);
+  font-weight: 500;
+}
+.pool-note {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pool-note b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+@media (max-width: 700px) {
+  /* Folded to one line: the name gives way first, then the next account's name — its gauge stays. */
+  .pool-card .re-head {
+    gap: 8px;
+  }
+  .pool-card .re-toggle {
+    flex: 1 1 auto;
+  }
+  .pool-card .re-runner {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pool-card .re-head-sp,
+  .pool-gauge-name,
+  .pool-gauge-none {
+    display: none;
+  }
+  .pool-gauge .runner-util {
+    width: 40px;
+  }
+  .pool-row,
+  .pool-detail .pool-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+/* At the top of the keys list while there is something to pool and no pool yet. */
+.pool-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--brand-tint);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.pool-hint > span {
+  flex: 1;
+  min-width: 0;
+}
+.pool-hint b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+/* Add account / Create a pool: every key, with the server's verdict on it. */
+.pool-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.pool-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pool-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.pool-pick:hover {
+  background: var(--bg-hover);
+}
+.pool-pick.off {
+  cursor: default;
+}
+.pool-pick.off:hover {
+  background: none;
+}
+.pool-pick.off .provider-tile {
+  opacity: 0.5;
+}
+.pool-pick-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pool-pick-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.pool-pick.off .pool-pick-name {
+  color: var(--text-3);
+}
+.pool-pick-why {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.pool-pick-why.refused {
+  color: var(--error);
+}
+.pool-page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 10px 0 16px;
+}
+.pool-danger {
+  margin-top: 16px;
+}
+
 /* The connect page (/providers/new/:slug, /providers/:id): a narrow, numbered walkthrough. */
 .provider-form {
   max-width: 680px;
@@ -12131,6 +12313,57 @@ button.chat-jump-start:hover {
   background: var(--fill-muted);
   color: var(--text-3);
   font-size: 12px;
+}
+/* An account pool: its vendor's mark, with how many accounts it holds in the corner. */
+.np-mark-wrap {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+}
+.np-pool-badge {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  min-width: 1.6em;
+  padding: 0 0.35em;
+  border-radius: 999px;
+  border: 1.5px solid var(--bg-raised);
+  background: var(--text-1);
+  color: var(--bg-raised);
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* "Pin a specific account": the accounts a pool runs on, one click further away than the pool. */
+.np-pin-toggle {
+  color: var(--text-3);
+}
+.np-pin-chev {
+  display: inline-block;
+  width: 20px;
+  text-align: center;
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.np-pin-chev.open {
+  transform: rotate(90deg);
+}
+.np-pinned {
+  padding-left: 14px;
+}
+/* The composer's account pill: which of a pool's accounts this session is spending. */
+.composer-account {
+  padding-right: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: default;
+}
+.composer-account-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Project identity stays visually quiet; the command centre and then the goal beneath it own the

@@ -306,3 +306,58 @@ describe('sameRuntimeChoices', () => {
     expect(choices.map((c) => c.slug)).toContain('anthropic');
   });
 });
+
+describe('account pools among the choices', () => {
+  const work: ConfiguredProvider = {
+    slug: 'anthropic',
+    label: 'Work',
+    runtime: 'claude',
+    models: [],
+    presetSlug: 'anthropic',
+    modelsFromRuntime: true,
+  };
+  const home: ConfiguredProvider = { ...work, slug: 'anthropic-2', label: 'Home' };
+  const pool = { slug: 'claude-accounts', label: 'Claude accounts', members: [{ slug: 'anthropic' }, { slug: 'anthropic-2' }] };
+  // What WorkspaceView hands in: the catalogue with the pools appended (poolsAsProviders).
+  const configured: ConfiguredProvider[] = [
+    work,
+    home,
+    deepseek,
+    { slug: pool.slug, label: pool.label, runtime: 'claude', models: [], presetSlug: 'anthropic', modelsFromRuntime: true },
+  ];
+
+  it('offers a pool once, after the engines, as its own kind with its account count', () => {
+    const choices = providerChoices(configured, catalog, undefined, undefined, [pool]);
+    expect(choices.map((c) => c.slug)).toEqual([
+      'claude',
+      'codex',
+      'kimi',
+      'claude-accounts',
+      'anthropic',
+      'anthropic-2',
+      'deepseek',
+    ]);
+    const tile = choices.find((c) => c.slug === 'claude-accounts')!;
+    expect(tile).toMatchObject({ kind: 'pool', label: 'Claude accounts', poolSize: 2, glyphKey: 'anthropic' });
+    // Its model is the Claude CLI's own, named as the catalogue names it.
+    expect(tile.modelLabel).toBe('Claude Opus 5');
+  });
+
+  it("keeps the pool's accounts pickable on their own, marked for the picker to fold away", () => {
+    const choices = providerChoices(configured, catalog, undefined, undefined, [pool]);
+    const inPool = choices.filter((c) => c.inPool).map((c) => c.slug);
+    expect(inPool).toEqual(['anthropic', 'anthropic-2']);
+    expect(choices.find((c) => c.slug === 'deepseek')?.inPool).toBeUndefined();
+  });
+
+  it('holds a pool to the Claude CLI being there, as a configured provider is', () => {
+    const choices = providerChoices(configured, catalog, undefined, [{ engine: 'claude', installed: false, auth: 'unknown' }], [pool]);
+    expect(choices.find((c) => c.slug === 'claude-accounts')).toMatchObject({ unavailable: 'Not installed', fixEngine: 'claude' });
+  });
+
+  it('lets a claude session move onto the pool and back, since it runs on the same CLI', () => {
+    const choices = providerChoices(configured, catalog, undefined, undefined, [pool]);
+    const moves = sameRuntimeChoices('claude-accounts', choices, configured, catalog).map((c) => c.slug);
+    expect(moves).toEqual(['claude', 'claude-accounts', 'anthropic', 'anthropic-2', 'deepseek']);
+  });
+});

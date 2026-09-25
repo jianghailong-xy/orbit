@@ -135,6 +135,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
+import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { configPillHints } from '../lib/configApply';
 import {
   decideContextSeed,
@@ -1362,8 +1363,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // model list + context-window sizing when the open session/workspace uses one. Cached/deduped
   // app-wide by React Query; empty until it loads (then the model pill's options fill in).
   const configuredProvidersQuery = useQuery(providersQuery());
-  const configuredProviders = configuredProvidersQuery.data ?? [];
-  const configuredProvidersLoaded = configuredProvidersQuery.data !== undefined;
+  // The user's account pools, which that catalogue doesn't list: each is one more provider to pick
+  // and run on, with the Claude CLI's own models (poolsAsProviders), and each session on one runs on
+  // one of its accounts — the account the status bar names.
+  const accountPoolsQuery = useQuery(providerPoolsQuery());
+  const configuredProviders = useMemo(
+    () => [...(configuredProvidersQuery.data ?? []), ...poolsAsProviders(accountPoolsQuery.data ?? [])],
+    [configuredProvidersQuery.data, accountPoolsQuery.data],
+  );
+  const configuredProvidersLoaded =
+    configuredProvidersQuery.data !== undefined && !accountPoolsQuery.isPending;
   // The picked session lives in the URL (/sessions/:id, a base62 public id) so
   // it deep-links and survives a refresh; selecting a session = navigation.
   // Decode once here; everything downstream works with the raw session UUID.
@@ -2530,8 +2539,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.modelCatalog,
         runner.runtimeDefaultModels,
         runner.engines,
+        accountPoolsQuery.data,
       ),
-    [configuredProviders, runner.modelCatalog, runner.runtimeDefaultModels, runner.engines],
+    [
+      configuredProviders,
+      runner.modelCatalog,
+      runner.runtimeDefaultModels,
+      runner.engines,
+      accountPoolsQuery.data,
+    ],
   );
   const currentProviderChoiceForDraft = useMemo(
     () =>
@@ -5706,7 +5722,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         },
         ...catalogModelOptions,
       ];
-  const shownPlanUsage = sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
+  // A session on an account pool spends one account at a time, so the status bar names that
+  // account and shows its quota — not the pool's name, which says nothing about whose quota it is.
+  // On a draft that is the account the claim will pick. On a session it is the one the detail row
+  // recorded (the pick, until its first claim), and nobody until that row is in: a session still
+  // loading must not borrow the draft's answer.
+  const shownPool = accountPoolsQuery.data?.find((pool) => pool.slug === shownProvider) ?? null;
+  const shownPoolAccount =
+    shownPool && (!selectedId || detailForSelected)
+      ? sessionPoolAccount(shownPool, selectedId ? detailForSelected?.poolMemberProviderId : null)
+      : null;
+  const shownPlanUsage = shownPool
+    ? (shownPoolAccount?.member.planUsage ?? null)
+    : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
   // Where this session could move without changing CLI. Offered on the two routes that actually
   // carry a provider: a live session's config PATCH, and the resume that revives an ended one. A
   // draft picks in the hero above instead (which offers every runtime, not one), and a terminal
@@ -8049,6 +8077,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   disabled={!configEditable}
                   popupMatchSelectWidth={false}
                 />
+              </span>
+            </Tooltip>
+          )}
+          {shownPool && shownPoolAccount && (
+            <Tooltip
+              title={
+                shownPoolAccount.current
+                  ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
+                  : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — the account with the most room right now`
+              }
+            >
+              <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
+                <span className="composer-account-name">{shownPoolAccount.member.label}</span>
               </span>
             </Tooltip>
           )}
