@@ -1,0 +1,57 @@
+# TEMPORARY evidence probe (see ../README.md).
+name: ShareProbe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  OrbitKit:
+    path: ../../src/macos/OrbitKit
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    # Simulator only: ad-hoc "sign to run locally", no team, no profile.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+targets:
+  ShareProbe:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: OrbitKit
+    # The stub server is plain http on 127.0.0.1.
+    info:
+      path: Generated/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.shareprobe
+        PRODUCT_NAME: ShareProbe
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+  ShareProbeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: ShareProbe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.shareprobe.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ShareProbe:
+    build:
+      targets:
+        ShareProbe: all
+        ShareProbeUITests: [test]
+    test:
+      targets:
+        - ShareProbeUITests

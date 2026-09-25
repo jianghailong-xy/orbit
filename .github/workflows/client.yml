@@ -78,8 +78,8 @@ jobs:
 
   macos:
     name: macOS (build + test)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY, shots branch only: the task branch's own dispatch is the compile gate for this code.
+    if: false
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -104,8 +104,8 @@ jobs:
 
   ios:
     name: iOS (generate + build)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY, shots branch only: the task branch's own dispatch is the compile gate for this code.
+    if: false
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -132,3 +132,55 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY — an evidence run, not a gate, and this branch is never merged. Task
+  # 34UozoiaJIsxCZj728bfe (T8, share links) asks for pictures of the iOS Share panel and the ⋯ menus
+  # beside docs/mocks/share-links/07-mobile, and a Linux session cannot draw SwiftUI; `.share-probe/`
+  # builds the app's own code into throwaway apps and captures it (see .share-probe/README.md).
+  share-shots-ios:
+    name: Share probe (iOS panel and menus)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, test and capture
+        run: bash .share-probe/ios/run.sh
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: share-shots-ios
+          path: .share-probe/ios/shots
+          if-no-files-found: error
+
+  share-shots-macos:
+    name: Share probe (macOS sheet)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && sw_vers
+      - name: Build, launch and capture
+        run: bash .share-probe/mac/run.sh
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: share-shots-macos
+          path: .share-probe/mac/shots
+          if-no-files-found: error
