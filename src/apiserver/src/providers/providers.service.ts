@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AgentProvider, providerPreset, RunEventType, type ProviderPreset } from '@orbit/shared';
+import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
@@ -8,6 +9,7 @@ import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
 import { subscriptionUsageRefusal, type SubscriptionUsageRefusal } from './plan-usage';
 import { ProviderPlanUsageService } from './plan-usage.service';
+import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
@@ -39,6 +41,23 @@ const POOL_MEMBER_REFUSALS: Record<PoolMemberRefusal, string> = {
   NOT_ANTHROPIC_ENDPOINT: 'Endpoint is not api.anthropic.com',
 };
 
+/** Why this provider may not join an account pool, or null when it may. One test for both places that
+ *  ask: the write that refuses a member (assertPoolMembers) and the list that warns before it is tried
+ *  (listMine), so the form can never offer a row the write then turns away, or grey out one it takes. */
+function poolMemberRefusal(row: {
+  ownerId: string | null;
+  runtime: string;
+  baseUrl: string;
+  apiKeyEnc: string;
+}): PoolMemberRefusal | null {
+  if (row.ownerId === null) return 'SHARED_PROVIDER';
+  try {
+    return subscriptionUsageRefusal(row, decryptSecret(row.apiKeyEnc));
+  } catch {
+    return 'KEY_UNREADABLE';
+  }
+}
+
 /** A pool as its owner reads it: the providers in it, keyless and endpointless, in the order the
  *  provider lists use. */
 const POOL_SELECT = {
@@ -60,6 +79,38 @@ const POOL_SELECT = {
 function poolView({ members, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
   return { ...pool, members: members.map((member) => member.provider) };
 }
+
+/** The same pools, read with what asking each member's credential for its quota takes (poolViews). The key
+ *  and the endpoint are selected for that and nothing else: no view built from this carries them. Only the
+ *  list reads it — a write answers with the membership it wrote, and never asks after a quota. */
+const POOL_QUOTA_SELECT = {
+  ...POOL_SELECT,
+  members: {
+    ...POOL_SELECT.members,
+    select: {
+      provider: {
+        select: {
+          ...POOL_SELECT.members.select.provider.select,
+          presetSlug: true,
+          enabled: true,
+          ownerId: true,
+          runtime: true,
+          baseUrl: true,
+          apiKeyEnc: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.ProviderPoolSelect;
+
+type PoolRow = Prisma.ProviderPoolGetPayload<{ select: typeof POOL_QUOTA_SELECT }>;
+
+/**
+ * Where one member of a pool stands, in the order the claim reads a member: a refused key and a disabled
+ * row are no candidates at all, a spent one waits for its reset, and of the rest one with no 5-hour
+ * reading is last in line — not idle at 0%.
+ */
+export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA';
 
 @Injectable()
 export class ProvidersService {
@@ -181,13 +232,21 @@ export class ProvidersService {
     return presetCatalog();
   }
 
-  /** The caller's personal (BYOK) providers, disabled ones included. */
+  /** The caller's personal (BYOK) providers, disabled ones included — each with why it may not join an
+   *  account pool (`poolRefusal`, null when it may). The browser never sees a key, so this verdict is
+   *  the only way the pool form can say which rows it will turn away, and why, before anyone asks. */
   async listMine(ownerId: string) {
     const rows = await this.prisma.modelProvider.findMany({
       where: { ownerId, slug: { not: AgentProvider.OPENCODE } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
     });
-    return rows.map((r) => this.desensitize(r));
+    return rows.map((r) => {
+      const reason = poolMemberRefusal(r);
+      return {
+        ...this.desensitize(r),
+        poolRefusal: reason && { reason, message: POOL_MEMBER_REFUSALS[reason] },
+      };
+    });
   }
 
   /** The stored key itself, decrypted — the one payload here that carries a key back to a browser,
@@ -295,14 +354,15 @@ export class ProvidersService {
     return { ok: true };
   }
 
-  /** The caller's account pools, each with the providers in it. */
+  /** The caller's account pools, each with the providers in it and where each of them stands — the one
+   *  pool read that asks after quota (poolViews). */
   async listPools(ownerId: string) {
     const rows = await this.prisma.providerPool.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'asc' },
-      select: POOL_SELECT,
+      select: POOL_QUOTA_SELECT,
     });
-    return rows.map(poolView);
+    return this.poolViews(ownerId, rows);
   }
 
   /** An account pool of the caller's own providers: one more slug to dispatch with, taken from the
@@ -457,6 +517,103 @@ export class ProvidersService {
   }
 
   /**
+   * Pools as their owner reads them: each member keyless and endpointless, with its own quota and where
+   * it stands (PoolMemberState), and the pool's answer to "what would a session starting now run on".
+   *
+   * That answer is `selectPoolMember`'s, asked exactly as a claim asks it — the enabled members, their
+   * quota and refusals as the cache has them, no session to stay on — so the member marked `next` is the
+   * one the next claim picks, not an average of the members, which would read 50% for one spent account
+   * beside one untouched. `resetsAt` on the pool is set only when every member that can run is spent, and
+   * is the EARLIEST of their resets: one account freeing up is enough for work to continue. A spent
+   * member's own `resetsAt` is the latest of its windows, as for any single account.
+   */
+  private async poolViews(ownerId: string, pools: PoolRow[]) {
+    const now = new Date();
+    const running = await this.runningMemberIds(
+      ownerId,
+      pools.flatMap((pool) => pool.members.map((member) => member.provider)),
+    );
+    return pools.map(({ members, ...pool }) => {
+      const quota = members.map(({ provider: row }) => ({
+        row,
+        usage: this.planUsage.snapshot(row),
+        refused: this.planUsage.refused(row),
+      }));
+      const selection = selectPoolMember(
+        quota.filter((member) => member.row.enabled),
+        null,
+        now,
+      );
+      return {
+        ...pool,
+        resetsAt: selection.kind === 'EXHAUSTED' ? (selection.resetsAt?.toISOString() ?? null) : null,
+        members: quota.map(({ row, usage, refused }) => {
+          const spent = spentUntil(usage, now);
+          const state: PoolMemberState = refused
+            ? 'REFUSED'
+            : !row.enabled
+              ? 'DISABLED'
+              : spent !== undefined
+                ? 'SPENT'
+                : running.has(row.id)
+                  ? 'RUNNING'
+                  : usage?.fiveHour
+                    ? 'AVAILABLE'
+                    : 'NO_QUOTA';
+          // Named field by field: the row also holds the key and the endpoint, and neither leaves here.
+          return {
+            id: row.id,
+            slug: row.slug,
+            label: row.label,
+            presetSlug: row.presetSlug,
+            enabled: row.enabled,
+            planUsage: usage,
+            state,
+            resetsAt: state === 'SPENT' ? (spent?.toISOString() ?? null) : null,
+            next: selection.kind === 'SELECTED' && selection.row.id === row.id,
+          };
+        }),
+      };
+    });
+  }
+
+  /**
+   * The members some session of this owner is generating on right now: through a pool, the member its
+   * last claim chose, and pinned to a member's own slug, that member. A session's recorded member counts
+   * only while its provider is still a pool — one switched to a single provider keeps the stale column.
+   */
+  private async runningMemberIds(ownerId: string, members: { id: string; slug: string }[]): Promise<Set<string>> {
+    if (members.length === 0) return new Set();
+    const pools = await this.prisma.providerPool.findMany({ where: { ownerId }, select: { slug: true } });
+    const sessions = await this.prisma.session.findMany({
+      where: {
+        ownerId,
+        deletedAt: null,
+        AND: [
+          GENERATING_SESSION_FILTER,
+          {
+            OR: [
+              {
+                provider: { in: pools.map((pool) => pool.slug) },
+                poolMemberProviderId: { in: members.map((member) => member.id) },
+              },
+              { provider: { in: members.map((member) => member.slug) } },
+            ],
+          },
+        ],
+      },
+      select: { provider: true, poolMemberProviderId: true },
+    });
+    const bySlug = new Map(members.map((member) => [member.slug, member.id]));
+    return new Set(
+      sessions.flatMap((session) => {
+        const id = bySlug.get(session.provider) ?? session.poolMemberProviderId;
+        return id ? [id] : [];
+      }),
+    );
+  }
+
+  /**
    * Refuse, with the reason, a provider that could never be chosen from a pool. Another owner's reads
    * as not-found, as it does on every owner-scoped write here. A shared one is refused outright: a
    * pool spends its owner's own quota, and nothing could show whose a shared key's was. One whose
@@ -477,14 +634,7 @@ export class ProvidersService {
     for (const providerId of providerIds) {
       const row = rows.find((candidate) => candidate.id === providerId);
       if (!row) throw new NotFoundException('provider not found');
-      let reason: PoolMemberRefusal | null = row.ownerId === null ? 'SHARED_PROVIDER' : null;
-      if (!reason) {
-        try {
-          reason = subscriptionUsageRefusal(row, decryptSecret(row.apiKeyEnc));
-        } catch {
-          reason = 'KEY_UNREADABLE';
-        }
-      }
+      const reason = poolMemberRefusal(row);
       if (reason) {
         throw new BadRequestException({
           code: 'PROVIDER_POOL_MEMBER_REFUSED',

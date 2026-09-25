@@ -23,7 +23,14 @@ export const ENGINE_SLUGS = [
   AgentProvider.KIMI,
 ] as const;
 
-export type ProviderChoiceKind = 'engine' | 'byok';
+export type ProviderChoiceKind = 'engine' | 'byok' | 'pool';
+
+/** An account pool as the picker needs it: its slug, its name, and which providers it holds. */
+export interface PoolChoiceSource {
+  slug: string;
+  label: string;
+  members: { slug: string }[];
+}
 
 export interface ProviderChoice {
   slug: string;
@@ -44,6 +51,12 @@ export interface ProviderChoice {
    *  runs on, which for a BYOK provider is not its own slug — a Moonshot row is fixed on the Kimi
    *  engine row. Set whenever `unavailable` is. */
   fixEngine?: string;
+  /** An account pool: how many accounts it holds, counted on its tile. */
+  poolSize?: number;
+  /** A configured provider that is also an account in one of the user's pools. Still pickable on
+   *  its own — pinning one account is a real need — but offered behind "Pin a specific account",
+   *  since the pool beside it already runs on it. */
+  inPool?: boolean;
 }
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -140,12 +153,18 @@ function byokBlocker(health?: RunnerEngineHealth): string | undefined {
  * A configured provider is judged the same way through the engine it borrows, since that CLI is
  * what actually runs it — a Moonshot row on a machine without the Kimi CLI reads "Not installed"
  * just as the Kimi engine does, and points at the same install.
+ *
+ * The user's account pools come after the engines, each one choice that runs on Claude with its
+ * accounts' own keys. The providers in a pool stay pickable, marked `inPool` for the picker to fold
+ * away. `configured` is expected to carry the pools too (poolsAsProviders), since that is where a
+ * pool's models and runtime are resolved from; `pools` says which of its entries are pools.
  */
 export function providerChoices(
   configured: ConfiguredProvider[],
   modelCatalog?: RunnerModelCatalog | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
   engineHealth?: RunnerEngineHealth[] | null,
+  pools: readonly PoolChoiceSource[] = [],
 ): ProviderChoice[] {
   const engines: ProviderChoice[] = ENGINE_SLUGS.map((slug) => {
     const blocker = engineBlocker(engineHealth?.find((e) => e.engine === slug));
@@ -158,10 +177,24 @@ export function providerChoices(
       ...(blocker ? { unavailable: blocker, fixEngine: slug } : {}),
     };
   });
+  // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
+  // carries one of its accounts' keys.
+  const claudeBlocker = byokBlocker(engineHealth?.find((e) => e.engine === AgentProvider.CLAUDE));
+  const accountPools: ProviderChoice[] = pools.map((pool) => ({
+    slug: pool.slug,
+    label: pool.label,
+    kind: 'pool' as const,
+    ...brandForProvider(pool.slug, pool.label, 'anthropic'),
+    modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
+    poolSize: pool.members.length,
+    ...(claudeBlocker ? { unavailable: claudeBlocker, fixEngine: AgentProvider.CLAUDE } : {}),
+  }));
+  const poolSlugs = new Set(pools.map((pool) => pool.slug));
+  const pooled = new Set(pools.flatMap((pool) => pool.members.map((member) => member.slug)));
   // A configured row that shadows a built-in slug would give the picker two rows that dispatch
   // the same identity; the engine entry above already covers it.
   const byok: ProviderChoice[] = configured
-    .filter((p) => !ENGINE_SLUGS.some((slug) => slug === p.slug))
+    .filter((p) => !ENGINE_SLUGS.some((slug) => slug === p.slug) && !poolSlugs.has(p.slug))
     .map((p) => {
       const runtime = runtimeForProvider(p.slug, configured);
       const blocker = byokBlocker(engineHealth?.find((e) => e.engine === runtime));
@@ -172,9 +205,10 @@ export function providerChoices(
         ...brandForProvider(p.slug, p.label, p.presetSlug),
         modelLabel: defaultModelLabel(p.slug, modelCatalog, configured, runtimeDefaultModels),
         ...(blocker ? { unavailable: blocker, fixEngine: runtime } : {}),
+        ...(pooled.has(p.slug) ? { inPool: true } : {}),
       };
     });
-  return [...engines, ...byok];
+  return [...engines, ...accountPools, ...byok];
 }
 
 /**

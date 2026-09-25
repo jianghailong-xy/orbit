@@ -13,6 +13,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { ProvidersPage } from './pages/ProvidersPage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
+import { ProviderPoolPage } from './pages/ProviderPoolPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
@@ -175,6 +176,14 @@ export function App() {
               element={
                 <DocView>
                   <ProviderConnectPage />
+                </DocView>
+              }
+            />
+            <Route
+              path="providers/pools/:id"
+              element={
+                <DocView>
+                  <ProviderPoolPage />
                 </DocView>
               }
             />

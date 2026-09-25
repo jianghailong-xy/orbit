@@ -182,7 +182,7 @@ beforeEach(() => {
       return reply([]);
     }
     if (path.startsWith('/sessions')) return reply([sessionRow()]);
-    if (path === '/providers' || path === '/session-tags' || path === '/runners' || path === '/task-lists') {
+    if (path === '/providers' || path === '/providers/pools' || path === '/session-tags' || path === '/runners' || path === '/task-lists') {
       return reply([]);
     }
     // The decision strip renders from this queue and has nothing to draw here; it must still be a

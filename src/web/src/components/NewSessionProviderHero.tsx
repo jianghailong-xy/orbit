@@ -6,8 +6,25 @@ import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import type { ProviderChoice } from '../lib/sessionProviderChoices';
 
 /** The brand mark. Same construction as the /providers tile (gradient + white glyph), sized up:
- *  at hero size it carries a soft shadow in its own brand colour, which a 24px chip can't. */
+ *  at hero size it carries a soft shadow in its own brand colour, which a 24px chip can't. An
+ *  account pool wears its vendor's mark with the number of accounts in its corner. */
 function ProviderMark({ choice, size }: { choice: ProviderChoice; size: number }) {
+  if (choice.poolSize === undefined) return <BrandMark choice={choice} size={size} />;
+  return (
+    <span className="np-mark-wrap">
+      <BrandMark choice={choice} size={size} />
+      <span
+        className="np-pool-badge"
+        style={{ fontSize: Math.max(9, Math.round(size * 0.2)) }}
+        aria-label={`${choice.poolSize} account${choice.poolSize === 1 ? '' : 's'}`}
+      >
+        {choice.poolSize}
+      </span>
+    </span>
+  );
+}
+
+function BrandMark({ choice, size }: { choice: ProviderChoice; size: number }) {
   const glyph = choice.glyphKey ? PROVIDER_GLYPHS[choice.glyphKey] : undefined;
   return (
     <span
@@ -74,6 +91,9 @@ export function NewSessionProviderHero({
   projectIntent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const pinnable = choices.filter((choice) => choice.inPool);
+  // Open from the start when the pick already is one of those accounts, so its tick is in view.
+  const [pinOpen, setPinOpen] = useState(() => pinnable.some((choice) => choice.slug === current.slug));
 
   // Naming the runner and the engine, so the Providers page can unfold that machine's card and
   // point at the row — where its Install and Sign in buttons are — instead of leaving the user to
@@ -117,10 +137,29 @@ export function NewSessionProviderHero({
 
   // One flat list: whose subscription or key each row spends is already carried by its brand mark
   // and by the summary under the card, so section headers would only be chrome between the user
-  // and the pick. Engines still come first (that's the order `choices` arrives in).
+  // and the pick. Engines still come first (that's the order `choices` arrives in). The accounts
+  // an account pool runs on fold away under it: picking the pool is the usual answer, and one of
+  // them on its own is the exception.
   const list = (
     <div className="np-list">
-      {choices.map(row)}
+      {choices.filter((choice) => !choice.inPool).map(row)}
+      {pinnable.length > 0 && (
+        <>
+          <button
+            type="button"
+            className="np-row np-pin-toggle"
+            aria-expanded={pinOpen}
+            onClick={() => setPinOpen((was) => !was)}
+          >
+            <span className={`np-pin-chev${pinOpen ? ' open' : ''}`} aria-hidden="true">
+              ▸
+            </span>
+            <span className="np-row-name">Pin a specific account</span>
+            <span className="np-row-model">{pinnable.length}</span>
+          </button>
+          {pinOpen && <div className="np-pinned">{pinnable.map(row)}</div>}
+        </>
+      )}
       <div className="np-sep" />
       <Link to="/providers" className="np-row np-connect" onClick={() => setOpen(false)}>
         <span className="np-plus">+</span>

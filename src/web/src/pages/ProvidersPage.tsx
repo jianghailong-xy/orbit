@@ -5,6 +5,8 @@ import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'an
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
+import { poolEligibleCount, providerPoolsQuery } from '../lib/providerPools';
+import { AccountPools, PoolHint } from '../components/AccountPools';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -18,6 +20,10 @@ import { useToast } from '../lib/toast';
  * Then their personal (BYOK) providers — an API key on the account, usable from every runner and
  * billed per token. Adding or editing one of those happens on its own page (ProviderConnectPage),
  * so a vendor's setup stays deep-linkable.
+ *
+ * Between the two, once there is one, the account pools (AccountPools): several of those keys'
+ * Claude subscriptions dispatched under one name. Before there is one, the keys list opens with the
+ * offer to make it — but only when at least two keys could join, since a pool of one is the key.
  */
 export function ProvidersPage() {
   const message = useToast();
@@ -25,6 +31,11 @@ export function ProvidersPage() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
+  // Which account is busy moves with sessions, not with provider edits, so nothing pushes it: read
+  // again while the page is open.
+  const pools = useQuery({ ...providerPoolsQuery(), refetchInterval: 60_000 });
+  const poolList = pools.data ?? [];
+  const eligible = poolEligibleCount(providers.data ?? []);
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api(`${PROVIDERS_BASE}/${id}`, { method: 'DELETE' }),
@@ -142,12 +153,20 @@ export function ProvidersPage() {
 
       <RunnerEngines />
 
+      {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
+          leave sessions dispatching to something the page no longer lets you see or delete. */}
+      {poolList.length > 0 && <AccountPools pools={poolList} />}
+
       <div className="re-sec-head" style={{ marginTop: 28 }}>
         <h3>Your API keys</h3>
         <span className="re-sec-sub">
           On your account and usable from every runner — billed per token.
         </span>
       </div>
+
+      {pools.isSuccess && poolList.length === 0 && eligible >= 2 && (
+        <PoolHint rows={providers.data ?? []} eligible={eligible} />
+      )}
 
       {providers.isLoading ? (
         <Table

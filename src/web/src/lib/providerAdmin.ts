@@ -25,6 +25,9 @@ export interface ProviderRow {
   followsPreset: boolean;
   enabled: boolean;
   hasApiKey: boolean;
+  /** Why this key may not join an account pool — the server's own admission test, since the key
+   *  itself never reaches the browser — or null when it may. */
+  poolRefusal?: { reason: string; message: string } | null;
 }
 
 /** The signed-in user's own (BYOK) provider list — the only one the UI manages. */
