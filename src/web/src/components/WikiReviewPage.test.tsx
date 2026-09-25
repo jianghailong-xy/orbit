@@ -112,14 +112,26 @@ const THREE: WikiChangeset[] = [
   changeset({ id: 'changeset-three', ops: [RETIRE] }),
 ];
 
-function paint(changesets: WikiChangeset[] = THREE): string {
+function paint(changesets: WikiChangeset[] = THREE, spaceSlug: string | null = null): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(['wiki', 'review', null], changesets);
-  client.setQueryData(['wiki', 'spaces'], []);
+  const spaceId = spaceSlug ? '0196b000-0000-7000-8000-0000000000dd' : null;
+  client.setQueryData(['wiki', 'review', spaceId], changesets);
+  client.setQueryData(
+    ['wiki', 'spaces'],
+    spaceSlug ? [{ id: spaceId, slug: spaceSlug, title: 'Orbit', pendingOps: changesets.length }] : [],
+  );
+  // Ninety-six entries is the corpus the mock's own card says `similar[]` was computed against. Only
+  // seeded when there IS a space: with none, the same key holds nothing and the card must say so.
+  if (spaceId) {
+    client.setQueryData(
+      ['wiki', 'space', spaceId, 'entries'],
+      Array.from({ length: 96 }, (_, index) => ({ id: `entry-${index}` })),
+    );
+  }
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <WikiReviewPage spaceSlug={null} />
+        <WikiReviewPage spaceSlug={spaceSlug} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -171,11 +183,20 @@ describe('Review — one card per op', () => {
     expect(html).toContain('Agents stop getting this entry');
   });
 
-  it('says what an add differs from, and that it differs from nothing', () => {
+  it('says what an add was compared against, and that it collided with nothing', () => {
+    const html = paint([changeset({ ops: [ADD] })], 'orbit');
+    expect(html).toContain('Similar entries');
+    expect(html).toContain('None');
+    expect(html).toContain('compared with 96 entries');
+  });
+
+  it('leaves the corpus out of it when the queue spans every space', () => {
+    // Review's own route has no space, so there is no one corpus to name — and saying "compared with
+    // 0 entries" there would be a number that means "unknown" wearing the word for "none".
     const html = paint([changeset({ ops: [ADD] })]);
     expect(html).toContain('Similar entries');
     expect(html).toContain('None');
-    expect(html).toContain('compared with 0 entries');
+    expect(html).not.toContain('compared with');
   });
 
   it('counts the queue by the tab each op falls under', () => {

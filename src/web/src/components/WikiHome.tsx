@@ -68,7 +68,13 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
     writeWikiSeen(wikiSeenKey(space.slug, 'home'));
   }, [space.slug]);
 
-  const principles = useMemo(() => wikiEntriesOfKind(all, 'principle'), [all]);
+  // Oldest first, unlike every other list on this page: the principles are a pinned set a reader
+  // reads top to bottom, and a new one appends to the bottom of it rather than pushing the rest
+  // down. The blue dot is what says which is new.
+  const principles = useMemo(
+    () => [...wikiEntriesOfKind(all, 'principle')].sort((a, b) => Date.parse(a.recordedAt) - Date.parse(b.recordedAt)),
+    [all],
+  );
   const decisions = useMemo(() => wikiEntriesOfKind(all, 'decision'), [all]);
   const topics = useMemo(() => wikiTopicSummaries(all), [all]);
   const pending = useMemo(() => reviewOps(review.data ?? []), [review.data]);
