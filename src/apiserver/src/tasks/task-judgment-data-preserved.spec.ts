@@ -1236,7 +1236,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `session.shared_at` are left exactly as they were; no UPDATE and no DELETE anywhere. The 0177
       // pair, `task_executable_acceptance_pair`, `task_completion_criterion` and every
       // `project_acceptance_*` object are not named.
-      '0306_share_link'],
+      '0306_share_link',
+      // Orbit Wiki: nine new `wiki_*` tables with their CHECKs, foreign keys and indexes, two new
+      // functions and one new index outside them. Read against every claim above: its two
+      // `CREATE OR REPLACE FUNCTION`s are `wiki_anchors_valid` and `wiki_entry_search_text`, the
+      // wiki's own and created here for the first time (a CHECK's helper and a search index's
+      // expression), so it is not another writer of the DONE fence and names none of the six
+      // preserved objects; no trigger, type or enum is created, replaced or dropped. The index is
+      // `workspace_id_owner_id_key` on `workspace` (id, owner_id) — the key a binding's composite
+      // foreign key names; `id` alone is already unique, so it adds no column and refuses no stored
+      // row. `user` and `workspace` are otherwise named only as the tables foreign keys reference,
+      // and no `task`, `session`, `project` or `project_acceptance_*` object is named at all: the
+      // wiki's history ids (session, tool call, author, source ref) are deliberately not foreign
+      // keys. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
+      '0307_wiki'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

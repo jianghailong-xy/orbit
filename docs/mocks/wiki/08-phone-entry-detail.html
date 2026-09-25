@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>08 phone entry detail</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="phone-mock.css">
+<style>
+  .menu-stage-web { position: relative; height: 236px; }
+  .menu-stage-ios { position: relative; height: 262px; background: #F2F2F7; }
+  .io-src-date { margin-left: auto; font-size: 13px; font-weight: 400; color: #8A8A8D; }
+</style>
+</head>
+<body class="m">
+<script src="phone-mock-antd.js"></script>
+<script src="phone-mock.js"></script>
+<div class="m-sheet pb-sheet">
+  <h1 class="m-h1 zh">08 · 条目详情（web 手机 ｜ iOS ｜ 说明）</h1>
+  <p class="pb-lede zh">同一条 Pitfall <b>“runner-go's full suite inside a session reaches production”</b>，字与桌面图 03（右侧抽屉）逐字相同，只是排成手机的样子。区块顺序两端相同：<b>头（类型 · 所属主题 · 标题 · 信任 / 锚点 / 置顶）→ Details → Detector → Sources → Anchors → Where it's used → History</b>，右上 <b>Edit</b> 与 <b>⋯</b>（Supersede… / Retire… / Copy link）。
+    iOS 用 insetGrouped 卡片（这是详情页，列表页不用卡片）；web 手机是桌面抽屉在 ≤960px 下的全屏形态（与任务详情面板同一规则）。时间写成 Orbit 的格式（9/23），桌面稿会统一过来。红虚线 = 首屏底边。</p>
+  <div class="pb-legend zh"><span class="pb-tag sys">iOS 系统</span>系统控件与习惯 <span class="pb-tag con">Orbit 一致性</span>沿用现成组件 / 用词 <span class="pb-tag co">协调性</span>同一个词、同一个数在各处口径一致 <span class="pb-tag new">新词</span>要你拍板 <span class="pb-tag ref">借鉴</span>参考产品 <span class="pb-tag done">已定</span>owner 已拍板 <span class="pb-tag later">另议</span>不在这次范围</div>
+
+  <div class="pb-grid">
+    <div class="pb-colhead">web 手机 <span>· 390 CSS px · 全屏条目面板</span></div>
+    <div class="pb-colhead">iOS <span>· 402×874pt · push 进来的详情页</span></div>
+    <div class="pb-colhead zh">说明</div>
+
+    <!-- ① head + details -->
+    <div class="pb-band zh"><span class="pb-bn">1</span>头 · Details</div>
+
+    <div class="pb-web" data-name="web-head" data-flow="web" data-fold="844" data-fold-label="首屏<br>844">
+      <div class="wp-dhead">
+        <div class="main">
+          <div class="wp-kind" style="flex-wrap:wrap"><i data-ant="warning"></i>Pitfall<span class="dim">· Runner &amp; engines · Tasks &amp; dispatch</span></div>
+          <div class="tdp-title" style="margin-top:6px;font-size:17px">runner-go's full suite inside a session reaches production</div>
+          <div class="tdp-meta">
+            <span class="tdp-badge tone-blue">Confirmed</span>
+            <span class="tdp-badge tone-green"><i data-ant="check"></i>Verified at 4db4f9f</span>
+            <span class="tdp-badge tone-muted"><i data-ant="pushpin"></i>Pinned</span>
+          </div>
+        </div>
+        <div class="win"><span class="wp-iconbtn"><i data-ant="ellipsis"></i></span><span class="wp-iconbtn"><i data-ant="close"></i></span></div>
+        <div class="acts"><span class="wp-btn" style="height:40px"><i data-ant="edit"></i>Edit</span></div>
+      </div>
+      <div class="wp-dsec">
+        <div class="wp-dsech"><h4>Details</h4></div>
+        <div class="wp-field"><div class="k">Trigger</div><div class="v"><code>go test ./...</code> in <code>src/runner-go</code> with <code>ORBIT_*</code> set</div></div>
+        <div class="wp-field"><div class="k">Symptom</div><div class="v">11 CLI tests fail and one hangs until <code class="nb">-timeout</code> panics. The errors name your own session: <code>POST /runner/sessions/…/approvals → 403 PROJECT_SCOPE_MISMATCH</code></div></div>
+        <div class="wp-field"><div class="k">Cause</div><div class="v">The tests point the CLI at an httptest server, but it still reads the session's <code>ORBIT_*</code> variables and takes the real approval path to the live control plane.</div></div>
+        <div class="wp-field"><div class="k">Fix</div><div class="md"><div class="md-codeblock"><span class="md-copy"><i data-ant="copy"></i></span><pre><code>env -u ORBIT_SESSION_ID -u ORBIT_AGENT_ID \
+    -u ORBIT_TASK_ID -u ORBIT_HOME \
+    -u ORBIT_ALLOW_ORCHESTRATION \
+    -u ORBIT_WATCHES -u ORBIT_BG_SOCKET \
+    -u ORBIT_BG_TOKEN -u ORBIT_SPAWN_DEPTH \
+    go test ./...</code></pre></div></div></div>
+      </div>
+    </div>
+
+    <div class="pb-ios top grouped" data-name="ios-head" data-flow="ios" data-fold="874" data-fold-label="首屏<br>874">
+      <div data-ios="status"></div>
+      <div class="io-nav"><span class="io-glass l"><i data-sf="back"></i></span><span class="io-glass r cap"><span class="slot">Edit</span><span class="slot"><i data-sf="dots"></i></span></span></div>
+      <div class="io-hero">
+        <div class="io-kind"><i data-sf="warn"></i>Pitfall<span style="font-weight:400">· Runner &amp; engines · Tasks &amp; dispatch</span></div>
+        <h2>runner-go's full suite inside a session reaches production</h2>
+        <div class="io-pills"><span class="io-pill tint">Confirmed</span><span class="io-pill green"><i data-sf="check"></i>Verified at 4db4f9f</span><span class="io-pill gray"><i data-sf="pin"></i>Pinned</span></div>
+      </div>
+      <div class="io-gh"><b>Details</b></div>
+      <div class="io-card">
+        <div class="io-cr"><div class="io-lbl">Trigger</div><div class="io-val"><code>go test ./...</code> in <code>src/runner-go</code> with <code>ORBIT_*</code> set</div></div>
+        <div class="io-cr"><div class="io-lbl">Symptom</div><div class="io-val">11 CLI tests fail and one hangs until <code class="nb">-timeout</code> panics. The errors name your own session: <code>POST /runner/sessions/…/approvals → 403 PROJECT_SCOPE_MISMATCH</code></div></div>
+        <div class="io-cr"><div class="io-lbl">Cause</div><div class="io-val">The tests point the CLI at an httptest server, but it still reads the session's <code>ORBIT_*</code> variables and takes the real approval path to the live control plane.</div></div>
+        <div class="io-cr"><div class="io-lbl" style="display:flex;align-items:center">Fix<i data-sf="copy" style="margin-left:auto;font-size:17px;color:#2E6AFF;stroke-width:1.8"></i></div><div class="io-code pre">env -u ORBIT_SESSION_ID -u ORBIT_AGENT_ID \
+    -u ORBIT_TASK_ID -u ORBIT_HOME \
+    -u ORBIT_ALLOW_ORCHESTRATION \
+    -u ORBIT_WATCHES -u ORBIT_BG_SOCKET \
+    -u ORBIT_BG_TOKEN -u ORBIT_SPAWN_DEPTH \
+    go test ./...</div></div>
+      </div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span><b>字与桌面 03 逐字相同</b>：类型行 <span class="en">Pitfall · Runner &amp; engines · Tasks &amp; dispatch</span>、三个标签 <span class="en">Confirmed</span>（蓝）· <span class="en">✓ Verified at 4db4f9f</span>（绿）· <span class="en">Pinned</span>（灰），Symptom / Cause 两句、Fix 的整条命令连折行都照抄。信任色全站一套：<span class="en">Owner</span> 黑、<span class="en">Confirmed</span> 蓝、<span class="en">Proposed</span> 灰；锚点 ✓ 绿 / <span class="en">Changed</span> 琥珀 / <span class="en">Missing</span> 红。</p>
+      <p><span class="pb-tag sys">iOS 系统</span>push 进来的详情页：左上返回，右上一块玻璃里放 <span class="en">Edit</span> 与 <span class="en">⋯</span>（iOS 26 把相邻的两个 trailing 项并进同一块玻璃）；标题往上滑收进导航栏，与项目详情页同一个走法。头部不装进卡片，与项目详情页一样直接放在分组底色上（规格写的「头卡」按现有详情页处理）。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>web 手机沿用任务详情面板在 ≤960px 的做法：面板铺满屏、⋯ 与 ✕ 留在标题旁（40px），动作 <span class="en">Edit</span> 单独一行（<code>.tdp-head</code> 的手机规则）；标题、标签是现成的 <code>.tdp-title / .tdp-meta / .tdp-badge</code>。关闭用 ✕、iOS 用返回，是两端各自的导航习惯。</p>
+      <p><span class="pb-tag sys">iOS 系统</span><b>Details</b>：多行值用「小标签在上、正文在下」的行（Contacts 的多行字段），不用左右两栏的 <code>LabeledContent</code>——370pt 里放不下一句话。命令块不自动换行（桌面的反斜杠折行照留），iOS 用 12pt 等宽，最长一行 43 个字正好放得下；拷贝按钮挪到 <span class="en">Fix</span> 标签那一行，不压字。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>web 的命令块就是会话 markdown 的 <code>.md-codeblock</code>（同桌面 03）。手机没有 hover，<code>.md-copy</code> 今天只在悬停时出现，在手机上要常显，否则等于没有拷贝键。</p>
+      <p><span class="pb-tag co">协调性</span>字段名 <span class="en">Trigger / Symptom / Cause / Fix</span> 与 Review 提议卡（图 09）完全相同：提议和它变成的条目读起来是同一张卡。</p>
+      <p><span class="pb-tag ref">借鉴</span>Notion verified pages（“已验证”标签 + 验证于何时）；Guru card 的信任状态。</p>
+    </div>
+
+    <!-- ② Detector -->
+    <div class="pb-band zh"><span class="pb-bn">2</span>Detector <small>· 这条知识有没有用的读数</small></div>
+
+    <div class="pb-web" data-name="web-detector" data-flow="web">
+      <div class="wp-dsec">
+        <div class="wp-dsech"><h4>Detector</h4></div>
+        <div class="wk-det-head"><span class="lbl">Compliance</span><span class="big">32% → 88%</span><span class="lbl">since confirmed</span></div>
+        <div class="wk-det-sub">34 sessions hit the trigger · compliance = ran the suite with <code>ORBIT_*</code> unset</div>
+        <div class="wk-det-bars">
+          <span class="l">Before it was confirmed</span><span class="bar"><i style="width:32%"></i></span><span class="v">32%</span>
+          <span class="l">Since confirmed · 9/23</span><span class="bar after"><i style="width:88%"></i></span><span class="v">88%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios grouped" data-name="ios-detector" data-flow="ios">
+      <div class="io-gh" style="padding-top:12px"><b>Detector</b></div>
+      <div class="io-card">
+        <div class="io-cr">
+          <div class="io-lbl">Compliance</div>
+          <div class="io-dethead"><span class="io-big">32% → 88%</span><span class="lbl">since confirmed</span></div>
+          <div class="io-lbl" style="margin-top:2px">34 sessions hit the trigger · compliance = ran the suite with <code class="io-code-in" style="font-size:12px">ORBIT_*</code> unset</div>
+          <div class="io-meter" style="grid-template-columns:172px minmax(0,1fr) 40px"><span class="k">Before it was confirmed</span><span class="bar"><i style="width:32%;background:#AEAEB2"></i></span><b>32%</b></div>
+          <div class="io-meter" style="grid-template-columns:172px minmax(0,1fr) 40px"><span class="k">Since confirmed · 9/23</span><span class="bar" style="background:rgba(46,106,255,.14)"><i style="width:88%;background:#2E6AFF"></i></span><b>88%</b></div>
+        </div>
+      </div>
+      <div style="height:4px"></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag new">新词</span><span class="en">Detector</span>、<span class="en">compliance</span>：确认之后有 34 个会话碰上了触发条件（在 <code>src/runner-go</code> 里带着 <code>ORBIT_*</code> 跑整包），其中 88% 是把 <code>ORBIT_*</code> 清掉再跑的；确认之前是 32%。这是「知识有没有被照做」的读数，不是「被看了几次」。</p>
+      <p><span class="pb-tag co">协调性</span>字、数、颜色与桌面 03 相同：确认前灰条、确认后主色条，数值写在条尾；标签 <span class="en">Before it was confirmed</span> / <span class="en">Since confirmed · 9/23</span>。</p>
+      <p><span class="pb-tag sys">iOS 系统</span>两条横向条形（Swift Charts 的 <code>BarMark</code>），不靠颜色读数；VoiceOver 读 <span class="en">“Compliance 32 percent before it was confirmed, 88 percent since”</span>。</p>
+      <p><span class="pb-tag ref">借鉴</span>Guru 卡片上的验证与使用读数，改成数「照做了没有」。</p>
+    </div>
+
+    <!-- ③ Sources -->
+    <div class="pb-band zh"><span class="pb-bn">3</span>Sources <small>· 3 条，每条带逐字引文</small></div>
+
+    <div class="pb-web" data-name="web-sources" data-flow="web">
+      <div class="wp-dsec" style="padding-bottom:14px">
+        <div class="wp-dsech"><h4>Sources</h4><span class="hint">3</span></div>
+        <div class="wk-dsrc">
+          <div class="orbit-link-card">
+            <div class="olc-head"><span class="olc-kind"><span class="olc-tile"><i data-ant="message"></i></span>Session</span><span class="olc-state is-done">Succeeded</span></div>
+            <div class="olc-title"><a>runner-go suite hit prod</a></div>
+            <div class="olc-line"><span class="olc-line-text">orbit · claude-opus-5 · 9/23</span></div>
+            <div class="olc-quote"><span class="wk-mono">POST /runner/sessions/4X5lUuVWWEnCac52nlGitt/approvals -&gt; 403 refused: PROJECT_SCOPE_MISMATCH</span><div class="who"><span class="src">Tool output · <span class="wk-mono">go test ./...</span></span><span class="ver">quote verified ✓</span></div></div>
+          </div>
+          <div class="orbit-link-card">
+            <div class="olc-head"><span class="olc-kind"><span class="olc-tile"><i data-ant="check-square"></i></span>Task</span><span class="status-pill todo"><span class="status-dot"></span>Open</span></div>
+            <div class="olc-title"><a>runner-go 的 task/project CLI 测试会串到线上:在 Orbit 会话里跑整包,11 个红、其中 1 个永远挂住</a></div>
+            <div class="olc-line"><span class="olc-line-text">orbit · never run · 9/23</span></div>
+            <div class="olc-quote">“把 ORBIT_* 变量 env -u 掉之后同样的命令 0.6s 全绿”<div class="who"><span class="src">From the task · 9/23</span><span class="ver">quote verified ✓</span></div></div>
+          </div>
+          <div class="wk-commit">
+            <div class="h" style="display:block;line-height:20px"><i data-ant="branches" style="margin-right:6px"></i><span class="sha">864cad31c</span> <span style="margin-left:4px">reproduced on a clean copy of main</span> <span class="dim nb">· 9/23</span></div>
+            <div class="olc-quote"><span class="wk-mono">ok  orbit  0.588s</span> — the same 11 tests, with <span class="wk-mono">ORBIT_*</span> unset<div class="who"><span class="src">Controlled run on that tree</span><span class="ver">quote verified ✓</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios grouped" data-name="ios-sources" data-flow="ios">
+      <div class="io-gh" style="padding-top:12px"><b>Sources</b><span>3</span></div>
+      <div class="io-card">
+        <div class="io-cr link"><div class="tx">
+          <div class="io-lk"><span class="io-tile"><i data-sf="bubble"></i></span>Session<span class="io-lpill green">Succeeded</span></div>
+          <div class="io-lkt">runner-go suite hit prod</div>
+          <div class="io-lline">orbit · claude-opus-5 · 9/23</div>
+          <div class="io-quote"><span class="mono">POST /runner/sessions/4X5lUuVWWEnCac52nlGitt/approvals -&gt; 403 refused: PROJECT_SCOPE_MISMATCH</span><div class="who"><span class="src">Tool output · <span class="mono">go test ./...</span></span><span class="ver">quote verified ✓</span></div></div>
+        </div><i data-sf="chev-r chev"></i></div>
+        <div class="io-cr link"><div class="tx">
+          <div class="io-lk"><span class="io-tile"><i data-sf="task"></i></span>Task<span class="io-lpill gray"><span class="o"></span>Open</span></div>
+          <div class="io-lkt">runner-go 的 task/project CLI 测试会串到线上:在 Orbit 会话里跑整包,11 个红、其中 1 个永远挂住</div>
+          <div class="io-lline">orbit · never run · 9/23</div>
+          <div class="io-quote">“把 ORBIT_* 变量 env -u 掉之后同样的命令 0.6s 全绿”<div class="who"><span class="src">From the task · 9/23</span><span class="ver">quote verified ✓</span></div></div>
+        </div><i data-sf="chev-r chev"></i></div>
+        <div class="io-cr link"><div class="tx">
+          <div class="io-lk"><span class="io-tile"><i data-sf="commit"></i></span>Commit <span style="font:600 13px 'DejaVu Sans Mono',monospace;color:#2E6AFF">864cad31c</span><span class="io-src-date">9/23</span></div>
+          <div class="io-lkt">reproduced on a clean copy of main</div>
+          <div class="io-quote"><span class="mono">ok  orbit  0.588s</span> — the same 11 tests, with <span class="mono">ORBIT_*</span> unset<div class="who"><span class="src">Controlled run on that tree</span><span class="ver">quote verified ✓</span></div></div>
+        </div><i data-sf="chev-r chev"></i></div>
+      </div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span>三条出处与桌面 03 相同：会话 <span class="en">runner-go suite hit prod</span>（引文是那次 <code>go test</code> 的输出 <span class="en">POST …/approvals -&gt; 403</span>）、任务 <span class="en">runner-go 的 task/project CLI 测试会串到线上…</span>（Open，引文取自任务正文——这张任务没有评论）、提交 <code>864cad31c</code>（在干净的 main 上复现：清掉 <code>ORBIT_*</code> 后 <span class="en">ok orbit 0.588s</span>）。</p>
+      <p><span class="pb-tag sys">iOS 系统</span>卡片里不再套卡片：Orbit 链接卡的骨架（20pt 类型 tile + 类型名 + 右侧状态胶囊 + 标题 + 一行说明）直接做成 insetGrouped 的一行，整行可点、行尾 chevron，点进去 push 到会话 / 任务 / 提交。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>web 用现成的 <code>.orbit-link-card</code>（状态胶囊：会话用 <code>.olc-state</code>，任务用 <code>.status-pill</code>），引文框与桌面同一个 <code>.olc-quote</code>：原文在上，下一行「从哪来 · <span class="en">quote verified ✓</span>」。iOS 的引文框是同样两层，灰底圆角。</p>
+      <p><span class="pb-tag co">协调性</span><span class="en">quote verified ✓</span> 在详情、Review 提议卡（图 09）、桌面各处同一个写法、同一个绿：系统核对过原文确实出现在出处里，不是 agent 转述。引文保留原文语言，这是出处本身，不算 UI 文案。</p>
+      <p><span class="pb-tag ref">借鉴</span>Wikipedia 的脚注：每句知识都能点回原话。</p>
+    </div>
+
+    <!-- ④ Anchors -->
+    <div class="pb-band zh"><span class="pb-bn">4</span>Anchors <small>· 代码路径 @ sha，自动复验</small></div>
+
+    <div class="pb-web" data-name="web-anchors" data-flow="web">
+      <div class="wp-dsec" style="padding-bottom:12px">
+        <div class="wp-dsech"><h4>Anchors</h4><span class="hint">2</span></div>
+        <div class="wk-anchors">
+          <div class="wk-anc"><i data-ant="aim aim"></i><div class="tx"><div class="p">src/runner-go/<wbr>mcp.go <span class="nb">· askBeforeCreate</span></div><span class="wk-anchor ok"><i data-ant="check"></i><span class="wk-mono">4db4f9f</span></span></div></div>
+          <div class="wk-anc"><i data-ant="aim aim"></i><div class="tx"><div class="p">src/runner-go/<wbr>task_completion_criterion_test.go</div><span class="wk-anchor ok"><i data-ant="check"></i><span class="wk-mono">4db4f9f</span></span></div></div>
+        </div>
+        <div class="wk-anc-note">Checked again after every commit to main. If the anchored code changes, agents stop getting this entry until someone re-checks it.</div>
+      </div>
+    </div>
+
+    <div class="pb-ios grouped" data-name="ios-anchors" data-flow="ios">
+      <div class="io-gh" style="padding-top:12px"><b>Anchors</b><span>2</span></div>
+      <div class="io-card">
+        <div class="io-cr link"><div class="io-anc"><i data-sf="scope"></i><div class="tx"><div class="io-path wrap">src/runner-go/<wbr>mcp.go <span class="nb">· askBeforeCreate</span></div><div class="io-ok" style="margin-top:3px"><i data-sf="check"></i><code>4db4f9f</code></div></div></div><i data-sf="chev-r chev"></i></div>
+        <div class="io-cr link"><div class="io-anc"><i data-sf="scope"></i><div class="tx"><div class="io-path wrap">src/runner-go/<wbr>task_completion_criterion_test.go</div><div class="io-ok" style="margin-top:3px"><i data-sf="check"></i><code>4db4f9f</code></div></div></div><i data-sf="chev-r chev"></i></div>
+      </div>
+      <div class="io-foot">Checked again after every commit to main. If the anchored code changes, agents stop getting this entry until someone re-checks it.</div>
+      <div style="height:6px"></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span>两个锚点与桌面 03 相同：<code>src/runner-go/mcp.go · askBeforeCreate</code>（符号锚点，就是它看到 <code>ORBIT_SESSION_ID</code> 后走真审批路径）和 <code>src/runner-go/task_completion_criterion_test.go</code>，都是 <span class="en">✓ 4db4f9f</span>。下面那句规则说明逐字照抄。锚点三态 <span class="en">✓ / Changed / Missing</span> 在列表、详情、任务启动卡口径一致。</p>
+      <p><span class="pb-tag sys">iOS 系统</span>一行放不下「路径 + sha」，两端都分两行：等宽路径（只在 <code>/</code> 处折行）/ <span class="en">✓ 4db4f9f</span>；图标用 <code>scope</code>，对应桌面的 <code>AimOutlined</code>。规则说明放在卡片下方的 section footer（系统脚注位置）。点一行打开该文件在这个 sha 的内容，符号锚点直接跳到函数。</p>
+      <p><span class="pb-tag ref">借鉴</span>Wikidata 的 reference：一条陈述挂着可复查的出处与取证时间。</p>
+    </div>
+
+    <!-- ⑤ Where it's used -->
+    <div class="pb-band zh"><span class="pb-bn">5</span>Where it's used <small>· 本周</small></div>
+
+    <div class="pb-web" data-name="web-used" data-flow="web">
+      <div class="wp-dsec" style="padding-bottom:10px">
+        <div class="wp-dsech"><h4>Where it's used</h4></div>
+        <div class="wk-used-h">Pushed to <b>41</b> sessions this week · fetched <b>6×</b></div>
+        <div class="tdp-session"><span class="tdp-dot RUNNING"></span><div class="tdp-session-main"><div class="tdp-session-title">执行任务：runner 自动更新不驱逐在途回合（发布 0.1.186）</div><div class="tdp-session-sub">orbit · in its Wiki context at start · 3h ago</div></div><span class="tdp-badge tone-muted">Pushed</span></div>
+        <div class="tdp-session"><span class="tdp-dot RUNNING"></span><div class="tdp-session-main"><div class="tdp-session-title">Orbit：给任务加优先级，让派发器尊重它</div><div class="tdp-session-sub">orbit · wiki_get before running go test · 5h ago</div></div><span class="tdp-badge tone-blue">Fetched</span></div>
+        <div class="tdp-session"><span class="tdp-dot SUCCEEDED"></span><div class="tdp-session-main"><div class="tdp-session-title">执行任务：T6b 准入闭环：编辑成员同样过准入、入口拒绝无可用成员的池、回落不再静默、会话载荷不外泄</div><div class="tdp-session-sub">orbit · in its Wiki context at start · 6h ago</div></div><span class="tdp-badge tone-muted">Pushed</span></div>
+      </div>
+    </div>
+
+    <div class="pb-ios grouped" data-name="ios-used" data-flow="ios">
+      <div class="io-gh" style="padding-top:12px"><b>Where it's used</b></div>
+      <div class="io-card">
+        <div class="io-cr"><div class="io-val" style="margin:0">Pushed to <b>41</b> sessions this week <span class="nb">· fetched <b>6×</b></span></div></div>
+        <div class="io-cr link"><div class="tx"><div class="io-l1"><span class="t">执行任务：runner 自动更新不驱逐在途回合（发布 0.1.186）</span><span class="sp"></span><span class="io-spin"></span><span class="io-lpill gray" style="margin-left:0">Pushed</span></div><div class="io-l2">orbit · in its Wiki context at start · 3h ago</div></div><i data-sf="chev-r chev"></i></div>
+        <div class="io-cr link"><div class="tx"><div class="io-l1"><span class="t">Orbit：给任务加优先级，让派发器尊重它</span><span class="sp"></span><span class="io-spin"></span><span class="io-lpill tint" style="margin-left:0">Fetched</span></div><div class="io-l2">orbit · wiki_get before running go test · 5h ago</div></div><i data-sf="chev-r chev"></i></div>
+        <div class="io-cr link"><div class="tx"><div class="io-l1"><span class="t">执行任务：T6b 准入闭环：编辑成员同样过准入、入口拒绝无可用成员的池、回落不再静默、会话载荷不外泄</span><span class="sp"></span><span class="io-lpill gray" style="margin-left:0">Pushed</span></div><div class="io-l2">orbit · in its Wiki context at start · 6h ago</div></div><i data-sf="chev-r chev"></i></div>
+      </div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span>三个会话、时间、<span class="en">Pushed / Fetched</span> 标记都照桌面 03：开工时随 Wiki context 推过去的写 <span class="en">Pushed</span>（灰），agent 自己用 <code>wiki_get</code> 取的写 <span class="en">Fetched</span>（蓝）。<span class="en">41</span> 与首页 <span class="en">Agents used the wiki</span> 的 <span class="en">41×</span>、主题页的 <span class="en">Used 41× this week</span> 是同一个数；<span class="en">fetched 6×</span> 单独写。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>web 行就是任务详情 Runs 区的 <code>.tdp-session</code>（状态圆点 + 标题 + 小字 + 右侧标签）；iOS 行照会话列表：在跑的会话画转圈（<code>SessionLiveIndicator</code>），跑完的不画，右侧同一个 <span class="en">Pushed / Fetched</span> 标签。</p>
+      <p><span class="pb-tag co">协调性</span><span class="en">in its Wiki context at start</span> 就是任务启动卡上那一行 <span class="en">“Wiki context · 6 entries”</span>（图 05a）；点会话行跳到那张启动卡。<span class="en">Wiki context</span><span class="pb-new">新词</span></p>
+    </div>
+
+    <!-- ⑥ History -->
+    <div class="pb-band zh"><span class="pb-bn">6</span>History <small>· 修订 r1 → r2，新的在上</small></div>
+
+    <div class="pb-web" data-name="web-history" data-flow="web">
+      <div class="wp-dsec" style="padding-bottom:8px">
+        <div class="wp-dsech"><h4>History</h4></div>
+        <div class="wp-tl"><span class="o done"></span><div class="h"><span class="wp-rev">r2</span><b>Amended</b> · fix now also unsets <code>ORBIT_BG_SOCKET</code> / <code>ORBIT_BG_TOKEN</code></div><div class="s">Confirmed by you · 9/24 · <a style="color:var(--brand)">Compare with r1</a></div></div>
+        <div class="wp-tl"><span class="o done"></span><div class="h"><span class="wp-rev">r1</span><b>Confirmed by you</b></div><div class="s">9/23</div></div>
+        <div class="wp-tl"><span class="o grey"></span><div class="h"><span class="wp-rev">r1</span><b>Proposed</b> by session <a style="color:var(--brand)">“runner-go suite hit prod”</a></div><div class="s">9/23</div></div>
+      </div>
+    </div>
+
+    <div class="pb-ios grouped" data-name="ios-history" data-flow="ios">
+      <div class="io-gh" style="padding-top:12px"><b>History</b></div>
+      <div class="io-card">
+        <div class="io-tl"><span class="o done"></span><span class="ln"></span><div class="h"><span class="io-rev">r2</span><b style="font-weight:600">Amended</b> · fix now also unsets <span class="io-code-in">ORBIT_BG_SOCKET</span> / <span class="io-code-in">ORBIT_BG_TOKEN</span></div><div class="s">Confirmed by you · 9/24 · <span class="io-tint">Compare with r1</span></div></div>
+        <div class="io-tl"><span class="o done"></span><span class="ln"></span><div class="h"><span class="io-rev">r1</span><b style="font-weight:600">Confirmed by you</b></div><div class="s">9/23</div></div>
+        <div class="io-tl"><span class="o grey"></span><div class="h"><span class="io-rev">r1</span><b style="font-weight:600">Proposed</b> by session <span class="io-tint">“runner-go suite hit prod”</span></div><div class="s">9/23</div></div>
+      </div>
+      <div style="height:18px"></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag ref">借鉴</span>Wikipedia 的历史页（cur / prev 对比）、Notion page history：每次修订一行，谁、做了什么、何时；r2 带 <span class="en">Compare with r1</span>。</p>
+      <p><span class="pb-tag co">协调性</span>三行与桌面 03 逐字相同；动词 <span class="en">Proposed / Confirmed by you / Amended</span> 与首页 <span class="en">Recently changed</span>、Review 卡头同一组。修订号用等宽小标签，Review 的 AMEND 卡写 <span class="en">r3 → proposed r4</span> 也是这套编号。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>日期用 <code>relTime</code> 一周以上的写法（<span class="en">9/24</span>），与会话列表相同。</p>
+    </div>
+
+    <!-- ⑦ the ⋯ menu -->
+    <div class="pb-band zh"><span class="pb-bn">7</span>⋯ 菜单 <small>· Supersede… / Retire… / Copy link</small></div>
+
+    <div class="pb-web" data-name="web-menu">
+      <div class="menu-stage-web">
+        <div class="wp-dhead" style="border-bottom:0">
+          <div class="main"><div class="wp-kind" style="flex-wrap:wrap"><i data-ant="warning"></i>Pitfall<span class="dim">· Runner &amp; engines · Tasks &amp; dispatch</span></div><div class="tdp-title" style="margin-top:6px;font-size:17px">runner-go's full suite inside a session reaches production</div></div>
+          <div class="win"><span class="wp-iconbtn" style="background:var(--bg-hover-strong);color:var(--text-1)"><i data-ant="ellipsis"></i></span><span class="wp-iconbtn"><i data-ant="close"></i></span></div>
+        </div>
+        <div class="wp-dropdown" style="right:14px;top:62px;width:190px">
+          <div><i data-ant="swap"></i>Supersede…</div>
+          <div class="danger"><i data-ant="stop"></i>Retire…</div>
+          <hr>
+          <div><i data-ant="link"></i>Copy link</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios grouped" data-name="ios-menu">
+      <div class="menu-stage-ios">
+        <div class="io-nav" style="margin-top:8px"><span class="io-glass l"><i data-sf="back"></i></span><span class="io-glass r cap"><span class="slot">Edit</span><span class="slot" style="background:rgba(0,0,0,.06);border-radius:20px"><i data-sf="dots"></i></span></span></div>
+        <div class="io-menu" style="right:16px;top:66px">
+          <div class="io-mi">Supersede…<i data-sf="swap"></i></div>
+          <div class="io-msep"></div>
+          <div class="io-mi red">Retire…<i data-sf="archive"></i></div>
+          <div class="io-mdiv"></div>
+          <div class="io-mi">Copy link<i data-sf="link"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span>三项与桌面 03 相同，<span class="en">Retire…</span> 用红字（它把条目从 agent 那里撤掉）；要再输入内容的两项带 <span class="en">…</span>（Supersede 选接替条目、Retire 写原因）。</p>
+      <p><span class="pb-tag sys">iOS 系统</span>⋯ 是下拉 <code>Menu</code>，图标在右；<span class="en">Retire…</span> 用 <code>role: .destructive</code> 的红；<span class="en">Copy link</span> 单独一组。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span><span class="en">Copy link</span> 与项目详情页 ⋯ 菜单里的 <span class="en">Copy link</span> 同一个动作（<code>809641ec5</code> 刚给原生项目菜单加上）；web 用 AntD 下拉，危险项红字（<code>.wk-menu .danger</code> 同桌面）。</p>
+      <p><span class="pb-tag co">协调性</span><span class="en">Supersede / Retire</span> 就是 Review 队列里 <span class="en">Amend / Retire</span> 两类提议的 owner 手动版：owner 手动做直接生效，agent 做就变成一张提议卡。<span class="en">Edit</span> 打开与提议卡同一套字段的表单。</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
