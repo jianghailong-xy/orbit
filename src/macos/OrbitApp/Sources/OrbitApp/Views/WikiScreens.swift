@@ -108,16 +108,33 @@ struct WikiEntryView: View {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 if let detail = wiki.detail(entryID) {
                     WikiEntryPage(detail: detail, now: context.date,
-                                  sessionTitle: { model.session(id: PublicID.toPublic($0))?.title },
+                                  sessionTitle: { id in
+                                      Self.card(.session, id).flatMap(title(of:))
+                                          ?? model.session(id: PublicID.toPublic(id))?.title
+                                  },
+                                  sourceTitle: { source in Self.card(for: source).flatMap(title(of:)) },
                                   busy: wiki.busy, actions: actions(wiki, detail))
                 } else if wiki.isMissing(entryID) {
                     ContentUnavailableView(WikiCopy.noEntrySelected, systemImage: AppSection.wiki.systemImage)
+                } else if wiki.loadFailed(entryID) {
+                    ContentUnavailableView {
+                        Label("The entry couldn't be loaded", systemImage: AppSection.wiki.systemImage)
+                    } description: {
+                        Text("Check the connection, then try again.")
+                    } actions: {
+                        Button("Retry") { Task { await wiki.loadEntry(entryID) } }
+                    }
                 } else {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .task { await wiki.loadEntry(entryID) }
             .refreshable { await wiki.loadEntry(entryID) }
+            // The cards this page names are asked for whenever what it names changes — on the first
+            // read and after every re-read — in one batch.
+            .task(id: wiki.detail(entryID)) { noteCards(wiki) }
+            .onAppear { wiki.entryAppeared(entryID) }
+            .onDisappear { wiki.entryDisappeared(entryID) }
             .sheet(item: $form) { form in
                 if let detail = wiki.detail(entryID) {
                     WikiEntryForm(mode: form == .edit ? .edit : .supersede, entry: detail.entry) { title, summary in
@@ -138,6 +155,8 @@ struct WikiEntryView: View {
                     guard let entry = wiki.detail(entryID)?.entry, !why.isEmpty else { return }
                     Task { finish(await wiki.retire(entry, reason: why), done: WikiCopy.retired) }
                 }
+                // A retirement says why, as the web's does: no reason, no Retire.
+                .disabled(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             } message: {
                 Text(WikiCopy.retireNote)
             }
@@ -160,6 +179,40 @@ struct WikiEntryView: View {
             copyLink: { copyLink(wiki, detail.entry) },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
             openTask: { id in model.route(to: .task(PublicID.toPublic(id))) })
+    }
+
+    // MARK: the titles a card read gives
+
+    /// The task or session a source cites, as an Orbit link — the two kinds the web draws as the
+    /// conversation's own link cards. A turn names its session.
+    private static func card(for source: WikiSource) -> OrbitLinkRef? {
+        guard let ref = source.ref else { return nil }
+        switch source.kind {
+        case .task?: return card(.task, ref)
+        case .turn?: return source.locator?["turnId"] == nil ? nil : card(.session, ref)
+        default:     return nil
+        }
+    }
+
+    private static func card(_ kind: OrbitLinkKind, _ id: String) -> OrbitLinkRef? {
+        guard let uuid = PublicID.toUUID(id) else { return nil }
+        return OrbitLinkRef(target: OrbitLinkTarget(kind: kind, id: uuid),
+                            source: .reference("orbit-\(kind.rawValue):\(PublicID.toPublic(uuid))"))
+    }
+
+    /// The title its card read gave, once one has.
+    private func title(of ref: OrbitLinkRef) -> String? {
+        guard let content = model.linkCards?.content(for: ref), content.state == .ready else { return nil }
+        return content.title
+    }
+
+    /// Ask the app's one card store for the objects this page names — one batched read, the one the
+    /// web's page makes (`link-previews`), and nothing re-read that is still current.
+    private func noteCards(_ wiki: WikiModel) {
+        guard let detail = wiki.detail(entryID) else { return }
+        let sources = detail.sources.compactMap(Self.card(for:))
+        let sessions = detail.exposure.compactMap(\.sessionId).compactMap { Self.card(.session, $0) }
+        model.linkCards?.note(sources + sessions)
     }
 
     /// The entry's page on the web — `/wiki/<space>/e/<id>` — the drawer's own Copy link.
@@ -272,10 +325,10 @@ struct WikiReviewView: View {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .task {
-                await wiki.loadReview()
-                await wiki.loadEntriesNamed(by: wiki.reviewCards)
-            }
+            .task { await wiki.loadReview() }
+            // The entries the waiting ops name — an amend's "before", a retire's title — read as the
+            // queue changes, not only when the page first appears.
+            .task(id: wiki.review.map(\.id)) { await wiki.loadEntriesNamed(by: wiki.reviewCards) }
             .refreshable { await wiki.loadReview() }
             .sheet(item: $editing) { card in
                 WikiProposalForm(card: card, entry: card.op.entryId.flatMap { wiki.detail($0)?.entry }) { edited in
@@ -347,7 +400,8 @@ private struct WikiProposalForm: View {
             changes.fields = proposed["fields"]
             if case .array(let topics)? = proposed["topics"] { changes.topics = topics.compactMap(\.stringValue) }
             if case .array(let aliases)? = proposed["aliases"] { changes.aliases = aliases.compactMap(\.stringValue) }
-            if case .array(let anchors)? = proposed["anchors"] { changes.anchors = anchors }
+            // As written, not as echoed: the server's copy carries keys an anchor is refused with.
+            if case .array(let anchors)? = proposed["anchors"] { changes.anchors = anchors.map(WikiLogic.anchorInput) }
         }
         return changes
     }

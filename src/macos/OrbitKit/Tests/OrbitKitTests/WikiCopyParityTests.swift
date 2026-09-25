@@ -290,6 +290,8 @@ final class WikiCopyParityTests: XCTestCase {
             .map { $0 == .reviewBanner ? WikiCopy.reviewTitle : ($0.title ?? "") }
         XCTAssertEqual(native, webPhone, "the native bands are the web phone's, block for block")
 
+        // The Review card counts the space on screen; the sidebar's row counts every space.
+        assertSays(home, "wikiReviewQuery(space.id)", in: Self.home)
         // The search is under the title on the web phone, and first on the native page.
         let page = try source(Self.page)
         assertOrder(page, ["<h1 className=\"page-title\">{WIKI_TITLE}</h1>", "<div className=\"wk-search\" role=\"search\">"],
@@ -332,6 +334,11 @@ final class WikiCopyParityTests: XCTestCase {
                              "<Section title={WIKI_SECTION_HISTORY}>"], "the entry's sections")
         XCTAssertEqual(WikiLogic.EntrySection.allCases.map(\.title),
                        [WikiCopy.details, WikiCopy.sources, WikiCopy.anchors, WikiCopy.whereUsed, WikiCopy.history])
+        // The anchors' footnote is said only when there are anchors to re-check.
+        let anchors = try slice(drawer, from: "<Section title={WIKI_SECTION_ANCHORS}", to: "</Section>")
+        assertOrder(anchors, ["(data.anchors?.length ?? 0) === 0 ? (", "No anchor: nothing in the repository",
+                              ") : (", "<div className=\"wk-anc-note\">{WIKI_ANCHORS_NOTE}</div>"],
+                    "the anchors section")
         // Only Sources and Anchors carry a count.
         assertSays(drawer, "<Section title={WIKI_SECTION_SOURCES} count={data.sources?.length ?? 0}>", in: Self.drawer)
         assertSays(drawer, "<Section title={WIKI_SECTION_ANCHORS} count={data.anchors?.length ?? 0}>", in: Self.drawer)
@@ -425,6 +432,15 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(review, "op === 'supersede' ? 'AMEND' : op.toUpperCase()", in: Self.review)
         assertSays(review, "message.success(decision.action === 'reject' ? '\(WikiCopy.rejected)' : '\(WikiCopy.decided)');",
                    in: Self.review)
+        // What a card is about, and the anchors it lists: the draft's, else the named entry's.
+        assertSays(review, "const draft = (payload.entry ?? {}) as Record<string, unknown>;", in: Self.review)
+        assertSays(review, "typeof draft.title === 'string' ? draft.title : (target.data?.title ?? null);", in: Self.review)
+        assertSays(review, "const raw = Array.isArray(draft.anchors) ? draft.anchors : Array.isArray(fallback) ? fallback : [];",
+                   in: Self.review)
+        assertSays(review, "if (typeof row.sha === 'string') return [row.sha];", in: Self.review)
+        // The diff is the web's: one hunk per change, in the order the changes arrive.
+        let lib = try source(Self.lib)
+        assertSays(lib, "return Object.entries(changes).flatMap(([key, value]) => {", in: Self.lib)
         // Under 600px the answers are one full-width column, Accept first.
         let css = try source(Self.css)
         assertSays(css, "@media (max-width: 600px) { .card-actions { flex-direction: column; align-items: stretch; }",

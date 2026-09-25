@@ -21,14 +21,19 @@ final class WikiModel {
     /// Every changeset with an op still waiting, across the spaces — the queue Review pages through.
     private(set) var review: [WikiChangeset] = []
     private(set) var reviewState = ListLoadState()
-    /// The entry pages read so far, and the ones the server would not show.
+    /// The entry pages read so far, the ones the server would not show, and the ones whose last read
+    /// failed with nothing in hand.
     private(set) var details: [String: WikiEntryDetail] = [:]
     private(set) var missing: Set<String> = []
+    private(set) var failed: Set<String> = []
     /// A write in flight, so its controls do not take a second press.
     private(set) var busy = false
 
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
+    /// The entry pages on screen, by how many views show each — what a nudge re-reads. A page off
+    /// screen is read again when it next appears.
+    @ObservationIgnored private var onScreen: [String: Int] = [:]
 
     /// The space the home page shows, by slug — the last one picked, kept across launches.
     var selectedSlug: String? {
@@ -62,6 +67,16 @@ final class WikiModel {
 
     func isMissing(_ id: String) -> Bool { missing.contains(PublicID.storageKey(id)) }
 
+    func loadFailed(_ id: String) -> Bool { failed.contains(PublicID.storageKey(id)) }
+
+    func entryAppeared(_ id: String) { onScreen[PublicID.storageKey(id), default: 0] += 1 }
+
+    func entryDisappeared(_ id: String) {
+        let key = PublicID.storageKey(id)
+        guard let count = onScreen[key] else { return }
+        onScreen[key] = count > 1 ? count - 1 : nil
+    }
+
     // MARK: reads
 
     func loadSpaces() async {
@@ -92,11 +107,14 @@ final class WikiModel {
             let entries = try await entriesRead
             // The timeline is one band of six; the page still draws without it.
             let timeline = try? await timelineRead
+            // Another space was picked while this one was reading: its own read owns the page.
+            guard currentSpace?.id == space.id else { return }
             let content = WikiHomeContent(space: document, spaces: spaces, entries: entries,
-                                          timeline: timeline?.items ?? [], proposals: proposalsToReview)
+                                          timeline: timeline?.items ?? [], proposals: space.pendingOps ?? 0)
             if content != home { home = content }
             homeState.succeed()
         } catch {
+            guard currentSpace?.id == space.id else { return }
             homeState.fail()
         }
     }
@@ -113,17 +131,19 @@ final class WikiModel {
         }
     }
 
-    /// One entry's page. A 404 is an entry the server will not show — deleted, or not this account's.
+    /// One entry's page. A 404 is an entry the server will not show — deleted, or not this account's;
+    /// any other failure keeps what is on screen, and says so only when there is nothing on screen.
     func loadEntry(_ id: String) async {
         let key = PublicID.storageKey(id)
         do {
             let detail = try await api.wikiEntry(id)
             missing.remove(key)
+            failed.remove(key)
             if details[key] != detail { details[key] = detail }
         } catch APIError.http(let status, _) where status == 404 {
             missing.insert(key)
         } catch {
-            // Keep what is on screen; the next appearance or nudge reads again.
+            failed.insert(key)
         }
     }
 
@@ -145,7 +165,8 @@ final class WikiModel {
         }
     }
 
-    /// Everything a page has read, read again — what the control plane's reconnect asks for too.
+    /// What is loaded, read again — what the control plane's reconnect asks for too. Of the entry pages,
+    /// only the ones on screen: the others are read when they next appear.
     func reloadLoaded() async {
         if home != nil || homeState.hasLoaded {
             await loadHome()
@@ -153,7 +174,7 @@ final class WikiModel {
             await loadSpaces()
         }
         if reviewState.hasLoaded { await loadReview() }
-        for key in Array(details.keys) { await loadEntry(key) }
+        for key in Array(onScreen.keys) { await loadEntry(key) }
     }
 
     // MARK: Review
@@ -172,7 +193,7 @@ final class WikiModel {
             return nil
         } catch {
             await reloadAfterWrite()
-            return WikiCopy.refused
+            return Self.refusal(error)
         }
     }
 
@@ -234,8 +255,19 @@ final class WikiModel {
             return refusal
         } catch {
             await loadEntry(entry.id)
-            return WikiCopy.refused
+            return Self.refusal(error)
         }
+    }
+
+    /// What the server said when it refused a write — its own sentence, as the web shows it — or the
+    /// web's fallback when it said nothing readable.
+    private static func refusal(_ error: Error) -> String {
+        if case APIError.http(_, let body?) = error, let data = body.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let message = object["message"] as? String, !message.isEmpty {
+            return message
+        }
+        return WikiCopy.refused
     }
 
     private func reloadAfterWrite() async {

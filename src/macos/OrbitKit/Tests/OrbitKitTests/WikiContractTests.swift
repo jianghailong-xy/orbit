@@ -132,6 +132,16 @@ final class WikiContractTests: XCTestCase {
                        [WikiTrust.owner.rawValue, WikiTrust.confirmed.rawValue])
     }
 
+    /// What an anchor is written with is exactly what the contract's anchor types name, and `type`.
+    func testAnAnchorIsWrittenWithTheContractsKeys() throws {
+        let types = try object(contract()["anchorTypes"], "anchorTypes")
+        var keys: Set<String> = ["type"]
+        for (type, spec) in types {
+            keys.formUnion(try object(try object(spec, "anchorTypes.\(type)")["fields"], "anchorTypes.\(type).fields").keys)
+        }
+        XCTAssertEqual(WikiLogic.anchorInputKeys, keys)
+    }
+
     // MARK: the event
 
     /// The contract names the event Swift decodes, and the one field it carries.
