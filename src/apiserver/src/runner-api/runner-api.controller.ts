@@ -145,6 +145,7 @@ import {
   hasCoordinatorOpening,
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
+import { appendWikiContext } from '../wiki/wiki-push';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -2905,6 +2906,12 @@ export class RunnerApiController {
             coordinatorContextEpoch: true,
             coordinatorContextAckKey: true,
             coordinatorForProject: { select: { id: true } },
+            // What the wiki context below is decided from: which space this session's workspace is
+            // bound to, and the three things about a run that take it out of the push entirely —
+            // a verifier, a foreman, or a judgment session (design §7.3).
+            workspaceId: true,
+            dispatchOrigin: true,
+            task: { select: { verifiesTaskId: true, isForeman: true } },
           },
         });
         // A message turn that already produced runtime output is a lease re-delivery.
@@ -3035,6 +3042,34 @@ export class RunnerApiController {
                   data: { coordinatorContextKey: contextKey },
                 });
               }
+            }
+          }
+          // The wiki's opening context for this session: the notes the owner has confirmed for the
+          // codebase it works in (design §7.1). Beside the coordinator block and on the same rule —
+          // delivery-time context, appended to what the person wrote and never written over it, so
+          // `turn.content` and the task start card built from it are untouched. Said once per engine
+          // process rather than once per turn, which is why it asks the lease generation.
+          //
+          // Best-effort, exactly like the list conditions and the background jobs above: a note
+          // ABOUT the work must never be the reason the turn carrying it fails to be delivered.
+          if (t.kind !== 'steer') {
+            try {
+              content = (await appendWikiContext(tx, {
+                sessionId,
+                turnId: t.id,
+                leaseGeneration,
+                ownerId: sessionContext.ownerId,
+                workspaceId: sessionContext.workspaceId,
+                taskId: owned[0].taskId,
+                task: sessionContext.task,
+                dispatchOrigin: sessionContext.dispatchOrigin,
+                content,
+              })) ?? content;
+            } catch (e) {
+              this.logger.warn(
+                `could not attach wiki context to session ${sessionId}: `
+                + `${e instanceof Error ? e.message : e}`,
+              );
             }
           }
         }
