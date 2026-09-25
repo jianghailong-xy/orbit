@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>03 share dialog</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+  .mask { background: #8f8f8f; border-radius: 10px; padding: 26px 0; display: flex; justify-content: center; }
+  .dlg { width: 520px; }
+  .mk { position: relative; }
+  .mk > .m-n { position: absolute; left: -30px; top: 2px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .popc { position: absolute; background: #fff; border-radius: 8px; box-shadow: 0 6px 16px rgba(0,0,0,.08), 0 3px 6px -4px rgba(0,0,0,.12), 0 9px 28px 8px rgba(0,0,0,.05); padding: 12px 14px; width: 300px; font-size: 13.5px; }
+  .popc b { display: block; font-size: 14px; margin-bottom: 4px; }
+  .popc .a { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+  .opt { display: grid; grid-template-columns: 22px minmax(0, 1fr) 16px; gap: 8px; align-items: start; padding: 8px 10px; border-radius: 6px; }
+  .opt.on { background: #eef3ff; }
+  .opt .t { font-size: 13.5px; font-weight: 500; }
+  .opt .d { font-size: 12px; color: var(--text-3); }
+  .opt .ck { color: var(--brand); font-weight: 700; }
+  .opt.dis .t, .opt.dis .d { color: var(--text-4); }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet" id="sheet">
+  <h1 class="m-h1">3 · 一个对话框，三种对象</h1>
+  <p class="m-sub">Web 的 antd Modal（宽 520，比现在的 460 宽一点）。iOS/macOS 用同样的分段、同样的词（见图 7）。每个对象只多出它自己有的那几层。数字取自真实项目「Claude 账号池」和它的任务 T6；访问次数是示意。</p>
+
+  <div class="grid2">
+    <!-- A: project -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">新</span> 项目 · 默认勾选（Task pages 开，另外两层关）</div>
+      <div class="mask">
+        <div class="dlg">
+          <span class="dlg-x">×</span>
+          <div class="dlg-t">Share project</div>
+          <div class="mk"><span class="m-n">1</span>
+            <div class="acc">
+              <span class="acc-ic on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+              <div><div class="sel">Anyone with the link <span class="cv">▾</span></div>
+                <div class="acc-d">Anyone with the link can view — no sign-in. They can’t change anything.</div></div>
+            </div>
+          </div>
+          <div class="url"><div class="in">https://orbitd.io/s/Qm4kT9vR2mT7wLp4sYb8nZc1eHf6uJd0</div><span class="btn primary"><svg class="ic-s" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span></div>
+
+          <div class="dlg-lbl mk"><span class="m-n">2</span>Includes</div>
+          <div class="chk"><span class="cb lock"></span><div><div class="n">Overview</div><div class="d">Goal, work overview, acceptance criteria and task graph</div></div><span class="c">Always</span></div>
+          <div class="chk"><span class="cb on"></span><div><div class="n">Task pages</div><div class="d">Description, acceptance and runs for each task</div></div><span class="c">12 tasks</span></div>
+          <div class="chk indent"><span class="cb"></span><div><div class="n">Comments &amp; files</div><div class="d">Written by agents and people</div></div><span class="c">29 comments</span></div>
+          <div class="chk indent mk"><span class="m-n">3</span><span class="cb"></span><div><div class="n">Conversations</div><div class="d">13 runs and the coordinator. Can include command output and file contents.</div></div><span class="c">14 transcripts</span></div>
+
+          <div class="set-row mk" style="margin-top:8px"><span class="m-n">4</span><span class="k">Updates</span><span class="seg"><span class="on">Live</span><span>Snapshot</span></span><span class="h">Viewers see changes as they happen</span></div>
+          <div class="set-row mk"><span class="m-n">5</span><span class="k">Expires</span><span class="dd">Never <span class="cv">▾</span></span></div>
+
+          <div class="dlg-foot mk"><span class="m-n">6</span><span class="stat">Viewed 14 times · last 2h ago</span><span class="btn">Preview ↗</span><span class="btn primary">Done</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B: task -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">最满</span> 任务 T6 · 三层全开，另设 7 天过期</div>
+      <div class="mask">
+        <div class="dlg">
+          <span class="dlg-x">×</span>
+          <div class="dlg-t">Share task</div>
+          <div class="acc">
+            <span class="acc-ic on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+            <div><div class="sel">Anyone with the link <span class="cv">▾</span></div>
+              <div class="acc-d">Anyone with the link can view — no sign-in. They can’t change anything.</div></div>
+          </div>
+          <div class="url"><div class="in">https://orbitd.io/s/Hs2Lq8Vn0bXw3tPz6KcR1mY7uDe4Ja9F</div><span class="btn primary"><svg class="ic-s" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span></div>
+          <div class="dlg-lbl">Includes</div>
+          <div class="chk"><span class="cb lock"></span><div><div class="n">Overview</div><div class="d">Description, acceptance, dependencies and runs</div></div><span class="c">Always</span></div>
+          <div class="chk"><span class="cb on"></span><div><div class="n">Comments &amp; files</div><div class="d">Written by agents and people</div></div><span class="c">3 comments</span></div>
+          <div class="chk"><span class="cb on"></span><div><div class="n">Conversations</div><div class="d warn">Can include command output and file contents.</div></div><span class="c">1 transcript</span></div>
+          <div class="set-row" style="margin-top:8px"><span class="k">Updates</span><span class="seg"><span class="on">Live</span><span>Snapshot</span></span><span class="h">Viewers see changes as they happen</span></div>
+          <div class="set-row"><span class="k">Expires</span><span class="dd">7 days <span class="cv">▾</span></span><span class="h">Stops working Oct 2</span></div>
+          <div class="dlg-foot"><span class="stat">Viewed 3 times · last 12m ago</span><span class="btn">Preview ↗</span><span class="btn primary">Done</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- C: session -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">快照</span> 会话（T6 的那次 Run）· 冻结在分享那一刻</div>
+      <div class="mask">
+        <div class="dlg">
+          <span class="dlg-x">×</span>
+          <div class="dlg-t">Share session</div>
+          <div class="acc">
+            <span class="acc-ic on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+            <div><div class="sel">Anyone with the link <span class="cv">▾</span></div>
+              <div class="acc-d">Anyone with the link can view — no sign-in. They can’t reply or change anything.</div></div>
+          </div>
+          <div class="url"><div class="in">https://orbitd.io/s/k3Qx9vR2mT7wLp4sYb8nZc1eHf6uJd0a</div><span class="btn primary"><svg class="ic-s" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span></div>
+          <div class="dlg-lbl">Includes</div>
+          <div class="chk"><span class="cb lock"></span><div><div class="n">Messages</div><div class="d">What you and the agent wrote</div></div><span class="c">77 messages</span></div>
+          <div class="chk"><span class="cb on"></span><div><div class="n">Tool calls and output</div><div class="d">Commands, file reads and what they returned. Off shows only which tools ran.</div></div><span class="c">196 calls</span></div>
+          <div class="set-row" style="margin-top:8px"><span class="k">Updates</span><span class="seg"><span>Live</span><span class="on">Snapshot</span></span><span class="h">As of Sep 25, 11:23 · <span class="lnk">Update snapshot</span></span></div>
+          <div class="set-row"><span class="k">Expires</span><span class="dd">Never <span class="cv">▾</span></span></div>
+          <div class="dlg-foot"><span class="stat">Not opened yet</span><span class="btn">Preview ↗</span><span class="btn primary">Done</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- D: off + access menu + turn-off confirm -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k">关闭 / 撤销</span> 还没分享时的样子，以及怎么关掉一个链接</div>
+      <div class="mask" style="position:relative;padding-bottom:150px">
+        <div class="dlg">
+          <span class="dlg-x">×</span>
+          <div class="dlg-t">Share task</div>
+          <div class="acc">
+            <span class="acc-ic off"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+            <div><div class="sel">Only you <span class="cv">▾</span></div>
+              <div class="acc-d">Only you can open it, signed in. Choose “Anyone with the link” to make a public link.</div></div>
+          </div>
+          <div style="margin:10px 0 0 42px;width:330px" class="menu">
+            <div class="opt"><span style="color:var(--text-2)"><svg class="ic-s" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span><div><div class="t">Only you</div><div class="d">Turns the link off. Turning it on again makes a new link.</div></div><span></span></div>
+            <div class="opt on"><span style="color:var(--success)"><svg class="ic-s" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span><div><div class="t">Anyone with the link</div><div class="d">No sign-in needed to view.</div></div><span class="ck">✓</span></div>
+          </div>
+          <div class="dlg-foot" style="margin-top:12px"><span class="stat">Copy link <span class="muted">— the signed-in link, for yourself</span></span><span class="btn"><svg class="ic-s" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy link</span></div>
+        </div>
+        <div class="popc" style="left:50%;margin-left:-40px;bottom:14px">
+          <b>Turn off this link?</b>
+          Anyone who has it loses access right away. It was opened 3 times in the last 7 days.
+          <div class="a"><span class="btn sm">Cancel</span><span class="btn sm primary" style="background:var(--error);border-color:var(--error)">Turn off</span></div>
+        </div>
+      </div>
+      <p class="m-cap">从「Anyone with the link」切回「Only you」就是撤销，会先弹这个确认。「Copy link」一直在，复制的是要登录的那个地址，和公开链接分开。</p>
+    </div>
+  </div>
+
+  <ul class="m-notes">
+    <li><span class="m-n">1</span><span><b>Access 下拉</b>换掉「Create share link / Revoke link」两个按钮，开和关是同一个控件的两个值 <span class="ref">借鉴 Google Docs「General access」</span>。多账号部署以后可以加第三项「People signed in to this Orbit」，模型不用改。</span></li>
+    <li><span class="m-n">2</span><span><b>Includes 按层勾选，每层都写数量。</b>Overview 锁定不能取消。项目里的「Comments &amp; files」和「Conversations」缩进在「Task pages」下面，关掉 Task pages 它们就一起置灰。</span></li>
+    <li><span class="m-n">3</span><span><b>风险写在选项旁边，不另开警告框。</b>Conversations 永远带一句「Can include command output and file contents.」；一旦勾上，这句变成琥珀色。</span></li>
+    <li><span class="m-n">4</span><span><b>Updates：Live 或 Snapshot。</b>项目和任务默认 Live（给人看进度）。会话也默认 Live，保持现在的行为，但会明说出来；选 Snapshot 就冻结在此刻，可以随时「Update snapshot」<span class="ref">借鉴 ChatGPT / Claude</span>。</span></li>
+    <li><span class="m-n">5</span><span><b>Expires</b> 可选 Never、1 day、7 days、30 days。到期自动撤销，清单里留一行「Expired」，可以一键「Share again」<span class="ref">借鉴 Notion / Figma</span>。</span></li>
+    <li><span class="m-n">6</span><span><b>访问次数和 Preview。</b>公开接口每次被打开都计一次数。「Preview ↗」用访客身份打开公开页，所有者发出去之前能先看一眼到底露出了什么。</span></li>
+  </ul>
+</div>
+</body>
+</html>
