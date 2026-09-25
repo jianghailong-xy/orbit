@@ -26,6 +26,15 @@ enum ProbeData {
         proposals: WikiLogic.proposalsToReview(spaces))
     static let detail = try! WikiFixtures.decode(WikiEntryDetail.self, WikiFixtures.entryDetail)
     static let cards = WikiLogic.reviewCards(try! WikiFixtures.decode([WikiChangeset].self, WikiFixtures.review))
+    /// What the app's card store answers for the task and sessions the entry names (mock 08 ③ ⑤).
+    static let sourceTitles: [String: String] = [
+        "0196e000-0000-7000-8000-0000000000c1": "runner-go suite hit prod",
+        "0196e000-0000-7000-8000-0000000000c2": "runner-go 的 task/project CLI 测试会串到线上：在 Orbit 会话里跑整包，11 个红、其中 1 个永远挂",
+    ]
+    static let sessionTitles: [String: String] = [
+        "34TYUP5wb87XfuYCInJRY": "执行任务：runner 自动更新不得驱逐在跑回合",
+        "34TcwNgAIo6tGUiIKjqnQ": "Orbit：给任务加优先级，让派发器看它",
+    ]
     /// The entries the RETIRE and the AMEND name, as Review reads them.
     static let named: [String: WikiEntry] = [
         "34UDFnrgM4q5oWakeLost": WikiEntry(
@@ -54,7 +63,11 @@ struct ProbeRoot: View {
         case "drawer":        DrawerScreen()
         case "drawer-states": DrawerStatesScreen()
         case "entry":
-            Pushed { WikiEntryPage(detail: ProbeData.detail, now: ProbeData.now) }
+            Pushed {
+                WikiEntryPage(detail: ProbeData.detail, now: ProbeData.now,
+                              sessionTitle: { ProbeData.sessionTitles[$0] },
+                              sourceTitle: { source in source.ref.flatMap { ProbeData.sourceTitles[$0] } })
+            }
         case "review":
             Pushed {
                 WikiReviewPage(cards: ProbeData.cards, entry: { ProbeData.named[$0] }, now: ProbeData.now)
