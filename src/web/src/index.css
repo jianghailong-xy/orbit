@@ -12220,8 +12220,10 @@ button.chat-jump-start:hover {
   width: 12px;
   border-left: 1px solid var(--border);
 }
-/* The elbow into this row, rounded where it turns: it ends 35px below the rail's top, which is
-   22px into the row — level with where the rail's own bottom used to sit. */
+/* The elbow into this row: it starts 28px below the rail's top and turns right, so its horizontal
+   lands 22px into the row — level with where the rail's own bottom used to sit. The turn is a
+   quarter circle, and a spine passing straight through it (every row but the last) leaves its
+   corner showing as the branch it is. */
 .re-rail::after {
   content: '';
   position: absolute;
@@ -12233,11 +12235,12 @@ button.chat-jump-start:hover {
   border-bottom: 1px solid var(--border);
   border-bottom-left-radius: 7px;
 }
-/* The last account under an engine is where the tree ends: its spine stops at its own elbow
-   instead of carrying on past it. */
+/* The last account under an engine is where the tree ends: the spine stops where its own elbow
+   begins, so the turn is the last thing drawn. Carrying it to the elbow's end instead would leave
+   a 5px tail hanging under the curve — the straight border doesn't know the corner curved away. */
 .re-acct-end .re-rail {
   bottom: auto;
-  height: 35px;
+  height: 28px;
 }
 /* DEFAULT: the machine's own ~/.codex, the one a terminal's `codex` shares. */
 .re-chip {
