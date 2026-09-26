@@ -60,7 +60,7 @@ struct FollowingListView: View {
 
 /// One watch as a Following row: what it's doing and for what, then how fresh that is — or, once
 /// it ended, what its delivery did. A reason it needs attention takes that last line, in orange.
-private struct FollowingRow: View {
+struct FollowingRow: View {
     @Environment(AppModel.self) private var model
     let watch: Watch
     let now: Date

@@ -273,6 +273,14 @@ final class TaskDetailLogicTests: XCTestCase {
         XCTAssertTrue(TaskDetailLogic.graphMarks(dangling).edges.isEmpty, "an edge to a task not drawn is not drawn")
     }
 
+    func testAComponentTasksPillIsTheListsRule() {
+        XCTAssertEqual(TaskDetailLogic.pill(.init(id: "A", title: "a", status: "DONE")).label, "Done")
+        XCTAssertEqual(TaskDetailLogic.pill(.init(id: "A", title: "a", status: "FAILED", running: true)).kind, .running,
+                       "a live run wins over the status that lags")
+        XCTAssertEqual(TaskDetailLogic.pill(.init(id: "A", title: "a", status: "OPEN", queued: true)).label, "Queued")
+        XCTAssertEqual(TaskDetailLogic.pill(.init(id: "A", title: "a", status: "SOMETHING_NEW")).kind, .open)
+    }
+
     func testABlockedTaskSaysHowFarItsPrerequisitesGot() {
         let waiting = task("""
         {"id":"T","title":"t","status":"OPEN","dependencyState":"BLOCKED",

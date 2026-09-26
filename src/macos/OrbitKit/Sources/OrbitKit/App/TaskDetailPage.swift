@@ -467,6 +467,20 @@ public enum TaskDetailLogic {
         return (TaskDetailCopy.completedPrerequisites(done, of: prerequisites.count), false)
     }
 
+    /// A component task's pill, by the list's own rule (`TaskListLogic.pill`): a live run wins over
+    /// the status.
+    public static func pill(_ node: TaskDependencyGraph.Node) -> TaskPill {
+        if node.running { return TaskPill(kind: .running, label: "Running") }
+        if node.queued { return TaskPill(kind: .queued, label: "Queued") }
+        switch TaskStatus(rawValue: node.status) {
+        case .done:       return TaskPill(kind: .done, label: "Done")
+        case .inProgress: return TaskPill(kind: .inProgress, label: "In progress")
+        case .failed:     return TaskPill(kind: .failed, label: "Failed")
+        case .cancelled:  return TaskPill(kind: .cancelled, label: "Cancelled")
+        case .open, nil:  return TaskPill(kind: .open, label: "Open")
+        }
+    }
+
     /// Graph when the component has an edge, the list otherwise (`dependencyView`'s default).
     public static func prefersGraph(_ graph: TaskDependencyGraph) -> Bool { !graph.edges.isEmpty }
 
