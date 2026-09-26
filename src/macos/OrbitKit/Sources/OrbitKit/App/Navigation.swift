@@ -47,9 +47,8 @@ public enum NavNode: Hashable, Sendable {
     /// the third, and it is the *same* ``runnerDetail(runnerID:)`` frame the Runners section pushes —
     /// what tells the two apart is the stack a frame rides, not the frame.
     case settingsRunners
-    /// Every other page Settings' list opens — Notifications, Session orchestration, Providers,
-    /// Shared links, Change password, Admin — each a frame of Settings' own stack like the runners
-    /// list above it.
+    /// Every other page Settings' list opens — Notifications, Providers, Shared links, Change
+    /// password, Admin — each a frame of Settings' own stack like the runners list above it.
     case settingsPage(SettingsPage)
     case userDetail(userID: String)
     /// One project's page, pushed from the Projects list or from the drawer's project rows.

@@ -111,30 +111,6 @@ export class WikiController {
     });
   }
 
-  /**
-   * The space a session's workspace is bound to — what Add to Wiki files into, and the topics its
-   * form offers.
-   *
-   * RESOLVED BY THE SESSION'S OWN RULE, deliberately: this is `resolveSpaceForCall`, the same call a
-   * `wiki_propose` from that session goes through, so the owner adding a note from a conversation and
-   * the agent that conversation is running land in one codebase's wiki. The alternative — the client
-   * picking a space out of the owner's list — is how a note about one repository comes to be filed
-   * under another, and it would have no way to tell that it had.
-   *
-   * A GET that can create a space, which is a real thing to do here: a workspace with a repository
-   * URL binds on first use (`bindOnFirstUse`), which is what makes an Add to Wiki in a brand-new
-   * workspace work rather than refusing with instructions to go and configure something. The runner
-   * door's `GET runner/wiki/search` resolves the same way for the same reason.
-   *
-   * Two segments deep, so it is not a space the route below could answer for: `spaces/:id` has two
-   * segments and this has three, and no space id is the word `for-session`.
-   */
-  @Get('spaces/for-session/:id')
-  async spaceForSession(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    const spaceId = await this.wiki.resolveSpaceForCall(user.userId, id, null);
-    return this.wiki.getSpaceView(user.userId, spaceId, { usage: false });
-  }
-
   /** What the space does on its own: whether it pushes, and whether a reinforce applies at once. */
   @Patch('spaces/:id')
   updateSpace(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateWikiSpaceDto) {

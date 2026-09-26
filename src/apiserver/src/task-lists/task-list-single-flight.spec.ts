@@ -44,10 +44,11 @@ test('concurrent task-list indexes for one owner execute one query group', async
   lists.resolve([]);
   assert.deepEqual(await first, []);
   assert.deepEqual(await second, []);
-  // One aggregate, not two: `runningTasks` is the only statement this read still makes against
-  // `task`. The DONE group-by that used to be the second one is gone (0287) — the `completed`
-  // number now rides on the list row — so a restored second `groupBy` shows up here as 2.
-  assert.deepEqual(calls, { lists: 1, aggregates: 1 });
+  // Two aggregates, run side by side: `runningTasks`, and `tasksOutsideProjects` — which reads
+  // only the project_id index's NULL entries, the few hundred standalone tasks. The DONE group-by
+  // that used to be a third is gone (0287) — the `completed` number now rides on the list row —
+  // so a restored DONE `groupBy` shows up here as 3.
+  assert.deepEqual(calls, { lists: 1, aggregates: 2 });
 });
 
 test('task-list index single-flight isolates owners', async () => {

@@ -68,14 +68,14 @@ export class UpdatePreferencesDto {
   notifyAgentMessage?: boolean;
 
   /**
-   * Whether a workspace created from here on starts with session orchestration granted. A seed
-   * for the new row only — never an authority the orchestration authorizer consults, which keeps
-   * the enforced bit on the workspace and revocable one workspace at a time. Absent = off, so a
-   * capability is only ever handed out by an explicit act.
+   * Whether this account's sessions may orchestrate — spawn and drive other sessions via the
+   * orbit MCP session tools. One switch for every workspace, read live on each claim, spawn and
+   * call (common/orchestration-switch.ts), so turning it off revokes the grant everywhere at once.
+   * Default on (absent = on), so the switch is only ever written to turn it off.
    */
   @IsOptional()
   @IsBoolean()
-  defaultEnableOrchestration?: boolean;
+  enableOrchestration?: boolean;
 }
 
 /** Set a user's access role (admin area). */

@@ -1504,7 +1504,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "workspaces/workspaces.service.ts#create", class: "INSERT", statements: 1 },
   { at: "workspaces/workspaces.service.ts#removePermissionRule", class: "ONE_ROW_CAS", statements: 1 },
   { at: "workspaces/workspaces.service.ts#requestRepoCleanup", class: "ONE_ROW_CAS", statements: 1 },
-  { at: "workspaces/workspaces.service.ts#setOrchestrationForAll", class: "MANY_ROWS", statements: 1, note: "A whole-owner sweep. It is the widest single statement here and the one most able to be a deadlock victim; there is no ordering to impose because it names no ids." },
   { at: "workspaces/workspaces.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1 },
   // The wiki's two owner-settings writes (0307). Both are deliberately outside a transaction: each
   // touches one row of one of the owner's own spaces, neither is part of anybody else's fact, and a

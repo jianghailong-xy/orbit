@@ -1356,6 +1356,29 @@ body {
 }
 
 /* Progress overview under the list title: done (green) + in-progress (blue) over the total. */
+/* The one sentence the Tasks page says about the work it does not list: the tasks on project pages. */
+.tasks-scope-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.tasks-scope-note b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.tasks-scope-note a {
+  color: var(--brand);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tasks-scope-note .anticon {
+  font-size: 13px;
+  flex: none;
+}
+
 .task-progress {
   display: flex;
   align-items: center;
@@ -9317,6 +9340,28 @@ button.chat-jump-start:hover {
   color: var(--warning);
   border-color: var(--warning-border);
 }
+/* The project a task is filed under, above its title in the detail panel. */
+.tdp-project-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  min-width: 0;
+}
+.tdp-project-line a {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tdp-project-line a:hover {
+  color: var(--brand);
+}
+.tdp-project-line .tdp-badge {
+  flex: none;
+}
 /* How this row is judged, under its title. One pill either way: the judgment method on a row that
    has its own work, and the plain statement that a gate row has none. */
 .tdp-judgment {
@@ -14893,96 +14938,39 @@ button.chat-jump-start:hover {
 .watch-chip.is-action:hover {
   color: var(--brand);
 }
-.watch-strip {
-  margin: 0 0 8px;
-  overflow: hidden;
-  border: 1px solid var(--brand-border);
-  border-left: 3px solid var(--brand);
-  border-radius: 8px;
-  background: var(--bg-raised);
-}
-.watch-strip-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 30px;
-  padding: 2px 10px;
-  border: 0;
-  background: none;
-  color: var(--text-2);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-.watch-strip-row:hover {
-  background: var(--bg-hover);
-}
-.watch-strip-ico {
-  flex: none;
-  color: var(--brand);
-}
-.watch-strip-title {
-  flex: none;
-  color: var(--text-1);
-  font-weight: 600;
-}
+/* The Watching strip (WatchRelations.tsx `SessionWatchStrip`) is drawn in the Background processes
+   tray's own shell (.bg-tray) with Tasks created here's rows and links (.ct-*); these are only what a
+   wait adds to them. Folded, what the wait needs (a threshold, a count) sits where a lone target's name
+   would, and truncates before the sentence beside it does. Opened, each watch is one sentence in the
+   list's grey, over the targets it waits on; the line under it is the one said only while nobody is
+   checking the watch. */
 .watch-strip-target {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--brand);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.watch-strip-time {
-  flex: none;
-  color: var(--text-3);
-}
-/* How far the wait has got, beside how long it has left: the one number on the folded line. */
-.watch-strip-met {
-  color: var(--text-1);
-  font-weight: 600;
-}
-.watch-strip-caret {
-  flex: none;
-  color: var(--text-3);
-}
-.watch-strip-list {
-  display: flex;
-  flex-direction: column;
-  max-height: 360px;
-  overflow: auto;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-subtle);
-}
-/* The opened strip is one card of read-only fact rows: hairline between the watches, the manage
-   link pinned to the bottom of the whole. */
-.watch-strip-block {
-  padding: 8px 10px;
-}
-.watch-strip-block + .watch-strip-block {
-  border-top: 1px solid var(--border-subtle);
-}
-/* The cap's fold, beside the targets it hides: quieter than them, and a link rather than the card's
-   button — the strip is read-only, and what is behind it is the watch itself. */
-.watch-strip-more {
-  flex: none;
-  color: var(--text-2);
-  font-size: 12px;
-  text-decoration: none;
-}
-.watch-strip-more:hover {
   color: var(--brand);
 }
-.watch-strip-manage {
+.watch-strip-watch {
+  /* Natural height, so a list past its cap scrolls rather than squashing a watch to fit. */
   flex: none;
-  padding: 8px 10px;
-  border-top: 1px solid var(--border-subtle);
-  color: var(--brand);
-  font-size: 12px;
 }
+.watch-strip-watch + .watch-strip-watch,
+.watch-say + .ct-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.watch-say {
+  padding: 7px 10px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.watch-say-stale {
+  display: block;
+  color: var(--warning);
+}
+
 /* Carries its own vertical margin rather than living off its neighbour's: two wakes in a row —
    one watch firing twice, or two watches at once — have no message bubble between them to lend
    theirs, and used to touch. 8px is what .chat-msg uses, and adjacent margins collapse, so a wake
@@ -16478,11 +16466,11 @@ button.chat-jump-start:hover {
   .wk-seg { margin-left: 0; }
 }
 
-/* ── The wiki in a conversation: the context a session was handed, and what you add to it ──────
-   Mock 05 (docs/mocks/wiki/05-session-touchpoints). Two of its four panels need rules of their
-   own: the entries under the task start card's folded Wiki context line, and the Add to Wiki row
-   and its form. The link card borrows the Wiki's own marks and the search palette borrows
-   `.ssearch-*`, so neither has a block here beyond the group heading. */
+/* ── The wiki in a conversation: the context a session was handed ──────────────────────────────
+   Mock 05 (docs/mocks/wiki/05-session-touchpoints). One of its panels needs rules of its own: the
+   entries under the task start card's folded Wiki context line. The link card borrows the Wiki's
+   own marks and the search palette borrows `.ssearch-*`, so neither has a block here beyond the
+   group heading. */
 
 .wkctx { margin-top: 6px; }
 .wkctx-list {
@@ -16506,93 +16494,6 @@ button.chat-jump-start:hover {
 a.wkctx-title:hover { text-decoration: underline; }
 .wkctx-foot { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
 
-/* The row under an assistant reply: the copy button the user bubble already had, plus Add to Wiki
-   and the reply's time. Revealed on hover like the user bubble's, and for the same reason — it is
-   a set of actions on a message, not part of reading it. It lives INSIDE the reply's own box (see
-   AssistantBubble): the reply is a plain block, so the row is drawn under its text, and hovering
-   the text the row belongs to is what reveals it. */
-.wk-msg-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 20px;
-  margin-top: 3px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-.chat-msg:hover > .wk-msg-meta,
-.wk-msg-meta:focus-within { opacity: 1; pointer-events: auto; }
-.wk-addwiki {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 18px;
-  padding: 0 7px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-3);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  transition: color 0.12s ease, background 0.12s ease;
-}
-.wk-addwiki:hover { color: var(--text-1); background: var(--bg-hover); }
-.wk-addwiki .ic { font-size: 12.5px; color: var(--brand); }
-
-/* The form, anchored under the row it was opened from with a caret pointing back at it. */
-.wk-pop {
-  position: relative;
-  z-index: 4;
-  width: min(452px, 100%);
-  margin: 8px 0 4px; 
-  padding: 12px 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05);
-}
-.wk-pop::before {
-  content: '';
-  position: absolute;
-  top: -6px;
-  left: 66px;
-  width: 12px;
-  height: 12px;
-  background: var(--bg-raised);
-  border-left: 1px solid var(--border-subtle);
-  border-top: 1px solid var(--border-subtle);
-  transform: rotate(45deg);
-}
-.wk-pop-h { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-1); }
-.wk-pop-h .ic.b { color: var(--brand); }
-.wk-pop-h .x {
-  margin-left: auto;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-3);
-  font-size: 13px;
-  cursor: pointer;
-}
-.wk-pop-h .x:hover { color: var(--text-1); }
-
-.wk-src-auto { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; color: var(--text-2); }
-.wk-src-auto .ic { color: var(--brand); flex: none; }
-.wk-src-auto .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wk-pop-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-subtle);
-}
-.wk-pop-foot .note { flex: 1; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
-.wk-pop-foot .note.warn { color: var(--warning); }
-
 /* The ⌘K palette's Wiki group: one heading, then rows that are `.ssearch-row`s like any other, so
    the cursor, the title line and the meta line stay the palette's rather than a second palette's. */
 .wk-pal-group {
@@ -16614,8 +16515,6 @@ a.wkctx-title:hover { text-decoration: underline; }
 .ssearch-meta .ok { color: var(--success); }
 
 @media (max-width: 600px) {
-  .wk-pop { width: 100%; }
-  .wk-pop::before { display: none; }
   .wkctx-kind { width: 58px; }
 }
 

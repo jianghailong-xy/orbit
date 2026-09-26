@@ -1240,7 +1240,7 @@ export interface ClaimedSession {
   agentId?: string;
   /** DB id of the parent Task this session runs under, if any (ORBIT_TASK_ID). */
   taskId?: string;
-  /** Whether this session's agent may orchestrate other sessions (Agent.enableOrchestration).
+  /** Whether this session may orchestrate other sessions (the owner's Session orchestration switch).
    *  Injected as ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes session_* tools. */
   allowOrchestration?: boolean;
   /** Present, and true, only when Watch is not switched on for this session's owner (the apiserver's ORBIT_WATCHES,

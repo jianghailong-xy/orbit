@@ -5,6 +5,7 @@ import {
   DeleteOutlined,
   LockOutlined,
   PlayCircleOutlined,
+  ProjectOutlined,
   ReloadOutlined,
   SearchOutlined,
   StopOutlined,
@@ -360,10 +361,20 @@ export interface TaskListRow {
   runningTasks?: number;
   /** Every task DONE; the dot turns green once nothing is running either. */
   completed?: boolean;
+  /** How many of its tasks are filed under no project. A list with tasks and none of them outside a
+   *  project is that project's list: it is reached from the project's page, not offered here. */
+  tasksOutsideProjects?: number;
+}
+
+/** A list whose every task belongs to a project — reached from that project's page, not from Tasks. */
+export function isProjectOnlyList(list: { _count?: { tasks: number }; tasksOutsideProjects?: number }): boolean {
+  // An older server that does not report the split lists everything, as it always did.
+  if (list.tasksOutsideProjects === undefined) return false;
+  return (list._count?.tasks ?? 0) > 0 && list.tasksOutsideProjects === 0;
 }
 
 /**
- * What the Tasks page's title offers: every task, the tasks in no list, then the lists — the groups
+ * What the Tasks page's title offers: all tasks, the tasks in no list, then the lists — the groups
  * the sidebar held before its foot became the open projects, with the same dots and counts, the way
  * the iPhone's Tasks page offers them under `List:`. Each key is the address it opens.
  *
@@ -389,13 +400,15 @@ export function taskScopeMenuItems(
       label: row(list.title, list._count?.tasks, running ? 'running' : list.completed ? 'done' : ''),
     };
   };
+  // The tasks outside projects, like the page itself: a project's list is on the project's page.
+  const own = lists.filter((list) => !isProjectOnlyList(list));
   // A list lands in Completed only once every task is DONE and nothing is still running.
   const finished = (list: TaskListRow) => !!list.completed && (list.runningTasks ?? 0) === 0;
-  const active = lists.filter((list) => !finished(list));
-  const done = lists.filter(finished);
+  const active = own.filter((list) => !finished(list));
+  const done = own.filter(finished);
   const showUnlisted = unlisted === undefined || unlisted > 0 || current === '/lists/none';
   return [
-    { key: '/tasks', label: row('Active') },
+    { key: '/tasks', label: row('All tasks') },
     ...(showUnlisted ? [{ key: '/lists/none', label: row('No list', unlisted) }] : []),
     ...(active.length || done.length ? [{ type: 'divider' as const }] : []),
     ...(active.length
@@ -499,6 +512,11 @@ export function TaskListView() {
   // under a session's "Tasks created here" row lands. A scope like the list's, so the server narrows
   // the rows and the tallies alike; the chip in the toolbar names it and takes it off.
   const createdIn = routeId(searchParams.get('createdIn')) ?? undefined;
+  // The browsing views — every task, and the tasks in no list — are the owner's own work: the tasks
+  // filed under no project. A project's tasks are on that project's page, where the project decides
+  // whether they run. A list the reader opened, or one conversation's tasks, is a scope somebody
+  // picked, so it shows its members whoever filed them.
+  const scopeProjectId = isListView || createdIn ? undefined : 'none';
   const createdInSession = useQuery(sessionQuery(createdIn));
   const createdInTitle = createdInSession.data?.title?.trim() || 'this session';
 
@@ -520,6 +538,7 @@ export function TaskListView() {
         filter,
         query,
         listId: scopeListId ?? null,
+        ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
         labels: labels.length ? labels : undefined,
         creatorSessionId: createdIn,
       },
@@ -531,6 +550,7 @@ export function TaskListView() {
           limit: 200,
           status: filter,
           listId: scopeListId,
+          projectId: scopeProjectId,
           labels,
           q: query,
           creatorSessionId: createdIn,
@@ -563,7 +583,7 @@ export function TaskListView() {
   // The tallies have their own request, keyed by the scope they describe rather than by the tab.
   // They survive a tab change because nothing about them changed — no carrying, no cache trick,
   // just a query whose key says what it depends on.
-  const taskCounts = useQuery(taskCountsQuery(scopeListId, labels, createdIn));
+  const taskCounts = useQuery(taskCountsQuery(scopeListId, labels, createdIn, scopeProjectId));
   const taskPageCounts = taskCounts.data;
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
   // Feeds both the Batches table and the picker's options, so opening the picker costs no
@@ -575,20 +595,23 @@ export function TaskListView() {
   // exists to show it is just showing it twice. Nor in one session's scope: `/tasks/active` cannot
   // be narrowed to it, so it would pin other conversations' work over this one's — and the tasks a
   // session created are few enough to all be on the first page anyway.
+  // Nor under a label filter, for the same reason: the strip is not narrowed by label, so it would
+  // pin every live task in scope over a page that shows one batch.
+  const pinStrip = view === 'tasks' && filter === 'ALL' && !createdIn && labels.length === 0;
   const activeTasks = useQuery({
-    ...activeTasksQuery(scopeListId),
-    enabled: view === 'tasks' && filter === 'ALL' && !createdIn,
+    ...activeTasksQuery(scopeListId, scopeProjectId),
+    enabled: pinStrip,
   });
   // Ranked by live state here, which is the one place that ranking is honest: the strip is the
   // complete set in scope (capped at 50 and reporting when it capped), not a page of it, so
   // "running first" is a statement about all of it rather than about what happened to load.
   const activeRows = useMemo(() => {
     // Checked here as well as in `enabled`: a disabled query still hands back what it cached.
-    if (filter !== 'ALL' || createdIn) return [];
+    if (!pinStrip) return [];
     const items = activeTasks.data?.items ?? [];
     return [...items].sort((a: any, b: any) => compareTasksBy(a, b, 'status'));
-  }, [activeTasks.data, filter, createdIn]);
-  const labelSummary = useQuery(labelSummaryQuery(scopeListId));
+  }, [activeTasks.data, pinStrip]);
+  const labelSummary = useQuery(labelSummaryQuery(scopeListId, scopeProjectId));
   const labelRows = labelSummary.data?.items ?? [];
   const hasLabels = labelRows.length > 0 || labels.length > 0;
 
@@ -605,7 +628,8 @@ export function TaskListView() {
   const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
   const unlistedCount = useQuery({
     queryKey: ['tasks', 'unlisted-count'],
-    queryFn: () => api<TaskPage>(taskPagePath({ limit: 1, listId: 'none' })),
+    // Over the tasks outside projects, the scope the No list page lists.
+    queryFn: () => api<TaskPage>(taskPagePath({ limit: 1, listId: 'none', projectId: 'none' })),
     enabled: scopeMenuOpen,
   });
   const scopePath = isListView ? `/lists/${listId}` : isUnlisted ? '/lists/none' : '/tasks';
@@ -657,7 +681,7 @@ export function TaskListView() {
   // Re-sorting or re-searching keeps the selection — the rows are still there — but voids
   // the anchor: a range is defined by two rows' positions, which just moved under it.
   useEffect(() => setSelection(dropAnchor), [sortField, sortDir, query]);
-  const pageTitle = isListView ? (listRow?.title ?? '') : isUnlisted ? 'No list' : 'Active';
+  const pageTitle = isListView ? (listRow?.title ?? '') : isUnlisted ? 'No list' : 'All tasks';
 
   // ── The list's console ────────────────────────────────────────────────────────────────────
   //
@@ -1320,6 +1344,17 @@ export function TaskListView() {
                     </>
                   )}
                 </div>
+              </div>
+            )}
+
+            {scopeProjectId && (counts.inProjects?.tasks ?? 0) > 0 && (
+              <div className="tasks-scope-note">
+                <ProjectOutlined />
+                <span>
+                  Tasks outside projects. <b>{counts.inProjects!.tasks.toLocaleString()}</b> tasks in{' '}
+                  {counts.inProjects!.projects.toLocaleString()} projects are on their project pages.
+                </span>
+                <a onClick={() => navigate('/projects')}>Projects ›</a>
               </div>
             )}
 

@@ -161,7 +161,12 @@ test('a lost claim is recovered without the session ever going silent', {
       { provide: SessionsService, useValue: sessions },
       { provide: RealtimeService, useValue: realtime },
       { provide: PushService, useValue: silent() },
-      { provide: RunnerOrchestrationAuthorizer, useValue: {} },
+      // Session orchestration is on unless the owner turned it off, and this runner declares the
+      // credential capability, so the claim and the reclaim both hand it a proof.
+      {
+        provide: RunnerOrchestrationAuthorizer,
+        useValue: { issue: async (_runnerId: string, sessionId: string) => `credential-for-${sessionId}` },
+      },
       { provide: ReferenceExpansionService, useValue: { expand: async (_owner: string, content?: string) => content } },
       { provide: ListEventsService, useValue: { appendFor: async (_tx: unknown, _id: string, content?: string) => content } },
       { provide: AttemptBudgetMeterService, useValue: {} },

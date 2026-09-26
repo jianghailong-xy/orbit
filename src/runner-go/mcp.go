@@ -49,7 +49,7 @@ type mcpServer struct {
 	taskID                string // the "current task" default for get/update/comment
 	orchestrationToken    string // signed proof binding orchestration calls to sessionID
 	allowPermissionPrompt bool   // Claude-only live approval bridge
-	allowOrchestration    bool   // L3: expose session_* tools (Agent.enableOrchestration)
+	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
 }
@@ -69,7 +69,8 @@ const envMCPOrchestration = "ORBIT_ALLOW_ORCHESTRATION"
 const envOrchestrationToken = "ORBIT_ORCHESTRATION_TOKEN"
 
 // mcpOrchestrationEnabled gates the session_* tools. Unlike the permission prompt it defaults
-// OFF: only an agent whose enableOrchestration is set (surfaced via this env) may orchestrate.
+// OFF: only a session whose account has Session orchestration on (surfaced via this env) may
+// orchestrate.
 func mcpOrchestrationEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(envMCPOrchestration))) {
 	case "1", "true", "yes", "on":
@@ -79,7 +80,7 @@ func mcpOrchestrationEnabled() bool {
 	}
 }
 
-// orchestrationEnabled requires the agent opt-in and an exact session context.
+// orchestrationEnabled requires the account's switch and an exact session context.
 // The credential is read (or, if absent/invalid, refreshed) lazily by Transport,
 // so a long-lived MCP process never depends on its startup environment snapshot.
 func (s *mcpServer) orchestrationEnabled() bool {
@@ -196,7 +197,7 @@ func (s *mcpServer) err(id json.RawMessage, code int, msg string) rpcResponse {
 
 const noTaskMsg = "no taskId given and no current task in context (ORBIT_TASK_ID unset)"
 
-const orchestrationOffMsg = "session orchestration is not enabled for this agent"
+const orchestrationOffMsg = "session orchestration is turned off for this account (Settings → Session orchestration)"
 
 // How many tasks one task_create_batch call may create. Mirrors the server's
 // TASK_BATCH_CREATE_MAX so the tool rejects an oversized batch before the round-trip.

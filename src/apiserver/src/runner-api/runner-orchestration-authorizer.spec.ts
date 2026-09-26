@@ -36,7 +36,7 @@ function isCredentialError(
 }
 
 function makeAuthorizer(options: {
-  result?: { id: string } | null;
+  result?: { id: string; owner: { preferences: unknown } } | null;
   claims?: Record<string, unknown>;
   verifyError?: Error;
 } = {}) {
@@ -49,7 +49,9 @@ function makeAuthorizer(options: {
       findFirst: async ({ where }: { where: Record<string, unknown> }) => {
         events.push('database');
         lookups.push(where);
-        return options.result === undefined ? { id: SESSION_ID } : options.result;
+        return options.result === undefined
+          ? { id: SESSION_ID, owner: { preferences: {} } }
+          : options.result;
       },
     },
   };
@@ -195,10 +197,22 @@ test('reissue signs only after the runner still owns an eligible live session', 
           RunStatus.INTERRUPTED,
         ],
       },
-      workspace: { enableOrchestration: true, deletedAt: null },
+      workspace: { deletedAt: null },
     },
   ]);
   assert.equal(signCalls.length, 1);
+});
+
+test("reissue and assert refuse a live session whose owner turned Session orchestration off", async () => {
+  const off = { id: SESSION_ID, owner: { preferences: { enableOrchestration: false } } };
+  const refused = (error: unknown) =>
+    error instanceof ForbiddenException &&
+    error.message === 'orchestration is not enabled for this session';
+  const reissuing = makeAuthorizer({ result: off });
+  await assert.rejects(() => reissuing.authorizer.reissue(RUNNER, SESSION_ID), refused);
+  assert.deepEqual(reissuing.signCalls, []);
+  const asserting = makeAuthorizer({ result: off });
+  await assert.rejects(() => asserting.authorizer.assert(RUNNER, SESSION_ID, CREDENTIAL), refused);
 });
 
 test('reissue denies a session that fails any live ownership or workspace guard', async () => {
@@ -237,7 +251,7 @@ test('assert verifies the credential before applying the open-session database p
           RunStatus.INTERRUPTED,
         ],
       },
-      workspace: { enableOrchestration: true, deletedAt: null },
+      workspace: { deletedAt: null },
     },
   ]);
 });

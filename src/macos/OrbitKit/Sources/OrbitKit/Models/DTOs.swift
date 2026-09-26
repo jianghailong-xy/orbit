@@ -78,10 +78,6 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let env: [String: String]?
     public let enabled: Bool?
     public let autoInitGit: Bool?
-    /// Whether this agent's sessions may spawn and drive other sessions via the orbit MCP session
-    /// tools. Granted per agent and enforced server-side on every claim and every spawn; the app
-    /// only reports it. Absent on an older server's payload, which reads as not granted.
-    public let enableOrchestration: Bool?
 }
 
 extension Agent {
@@ -651,16 +647,21 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
     public let projectStarted: JSONValue?
     public var startedCard: ProjectStarted? { ProjectStarted.parseCard(projectStarted) }
+    /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
+    /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
+    /// predates the field.
+    public let authoredByOrbit: Bool?
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
-                projectStarted: JSONValue? = nil) {
+                projectStarted: JSONValue? = nil, authoredByOrbit: Bool? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
         self.projectStarted = projectStarted
+        self.authoredByOrbit = authoredByOrbit
     }
 }
 

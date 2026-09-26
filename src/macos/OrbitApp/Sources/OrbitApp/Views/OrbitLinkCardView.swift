@@ -94,7 +94,7 @@ struct OrbitLinkCardView: View {
             if let pill = content.pill {
                 TaskStatusPill(pill: pill)
             } else if let glyph = content.sessionGlyph {
-                OrbitLinkStatusPill(glyph: glyph)
+                SessionStatusPill(glyph: glyph)
             } else if let trust = content.wikiTrust, trust != .unknown {
                 WikiBadge(text: WikiCopy.trustLabel(trust), tone: WikiLogic.trustTone(trust))
             }
@@ -220,7 +220,7 @@ struct OrbitLinkCardView: View {
 
 /// A session's status, as the card's right-hand capsule: the shape `SessionStatusGlyph` draws
 /// everywhere else in the app, in its own tone, with the words it already says.
-private struct OrbitLinkStatusPill: View {
+struct SessionStatusPill: View {
     let glyph: SessionStatusGlyph
 
     var body: some View {

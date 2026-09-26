@@ -1249,7 +1249,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and no `task`, `session`, `project` or `project_acceptance_*` object is named at all: the
       // wiki's history ids (session, tool call, author, source ref) are deliberately not foreign
       // keys. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
-      '0307_wiki'],
+      '0307_wiki',
+      // `workspace.enable_orchestration` dropped: session orchestration is one switch per account
+      // now, kept in `user.preferences`, so the per-workspace grant has no reader left. Read
+      // against every claim above: one `ALTER TABLE "workspace" DROP COLUMN` and nothing else — no
+      // function, trigger, type, index or constraint is created, replaced or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects; `workspace`
+      // is not a preserved relation, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach. No INSERT, UPDATE or DELETE: the dropped column held
+      // nothing any preserved row refers to.
+      '0308_orchestration_account_switch'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

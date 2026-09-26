@@ -4,8 +4,9 @@ import { ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { SessionsService } from './sessions.service';
 
-/** What a session carries about the spawn tree it belongs to: which tree, and how deep in it. */
-type SessionRow = { rootSessionId: string | null; spawnDepth: number };
+/** What a session carries about the spawn tree it belongs to: which tree, and how deep in it —
+ *  plus, when a test says so, its owner's preferences (absent: Session orchestration on). */
+type SessionRow = { rootSessionId: string | null; spawnDepth: number; ownerPreferences?: unknown };
 
 function makeService(
   rows: Record<string, SessionRow>,
@@ -19,7 +20,12 @@ function makeService(
     session: {
       findFirst: async ({ where }: { where: { id: string } }) =>
         rows[where.id]
-          ? { id: where.id, ...rows[where.id], workspace: { enableOrchestration: true } }
+          ? {
+              id: where.id,
+              ...rows[where.id],
+              workspaceId: 'workspace-1',
+              owner: { preferences: rows[where.id].ownerPreferences ?? {} },
+            }
           : null,
       update: async ({
         where,
@@ -109,6 +115,21 @@ test('a session at the depth limit cannot delegate further', async () => {
     () => service.spawnFromSession('owner', 'deep', { prompt: 'too deep' }),
     (error: unknown) =>
       error instanceof ForbiddenException && error.message === 'spawn depth limit (5) reached',
+  );
+  assert.deepEqual(createdFrom, []);
+});
+
+// One switch for the whole account: off, and no session of it spawns, whichever workspace it is in.
+test("a session cannot spawn once its owner turned Session orchestration off", async () => {
+  const { service, createdFrom } = makeService({
+    root: { rootSessionId: null, spawnDepth: 0, ownerPreferences: { enableOrchestration: false } },
+  });
+
+  await assert.rejects(
+    () => service.spawnFromSession('owner', 'root', { prompt: 'work' }),
+    (error: unknown) =>
+      error instanceof ForbiddenException &&
+      error.message === 'orchestration is not enabled for this account',
   );
   assert.deepEqual(createdFrom, []);
 });

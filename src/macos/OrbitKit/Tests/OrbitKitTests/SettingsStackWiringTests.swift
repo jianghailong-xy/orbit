@@ -161,6 +161,10 @@ final class SettingsStackWiringTests: XCTestCase {
         // shape, where every row that goes somewhere says so.
         XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsRunners)"))
         XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(page))"))
+        // Session orchestration is one switch for the whole account, so its row is the switch, and
+        // it is written the moment it flips.
+        XCTAssertTrue(rows.contains("Toggle(isOn: $orchestration) { label }"))
+        XCTAssertTrue(list.contains("UpdatePreferencesRequest(enableOrchestration: value)"))
         // Signing out asks first.
         XCTAssertTrue(list.contains("Button(role: .destructive) { confirmingSignOut = true }"))
         XCTAssertTrue(list.contains("Button(SettingsCopy.signOut, role: .destructive) { model.logout() }"))

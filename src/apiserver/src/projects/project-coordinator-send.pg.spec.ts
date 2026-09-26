@@ -141,7 +141,7 @@ interface World {
  * One account, two runners, two workspaces, the acting session and the project under test.
  *
  * The acting session is the shape `orchestration.assert` demands of a caller — live, on this
- * runner, in a workspace with orchestration on — and deliberately NOT the project's coordinator:
+ * runner, for an owner with orchestration on — and deliberately NOT the project's coordinator:
  * this door exists for an agent handing something to a coordinator, which is normally a different
  * conversation. A project is bound to its conversation only after that conversation exists
  * (COORDINATOR_POINTER_INVALID guards the pointer), which is the order below.
@@ -181,7 +181,6 @@ async function world(
   await db.workspace.create({
     data: {
       id: actingWorkspaceId, ownerId, runnerId, name: `${label}-acting`, enabled: true,
-      enableOrchestration: true,
     },
   });
   await db.workspace.create({

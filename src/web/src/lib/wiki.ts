@@ -162,7 +162,7 @@ export function isWikiDisabled(error: unknown): boolean {
 }
 
 /**
- * Whether the wiki's entry points are drawn at all — the sidebar's Wiki, ⌘K's Wiki group, Add to Wiki —
+ * Whether the wiki's entry points are drawn at all — the sidebar's Wiki and ⌘K's Wiki group —
  * read off the owner's spaces (`wikiSpacesQuery`, whose `null` is the server's WIKI_DISABLED).
  *
  * Drawn once that read has answered anything but WIKI_DISABLED, and when it failed for any other

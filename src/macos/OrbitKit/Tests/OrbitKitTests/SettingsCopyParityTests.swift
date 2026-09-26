@@ -75,19 +75,11 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "hint=\"\(SettingsCopy.agentMessageHint)\"", in: Self.settings)
     }
 
-    /// Session orchestration: the web card, as a page.
+    /// Session orchestration: the web card's one switch, with its label and hint.
     func testOrchestrationSaysWhatTheWebPageSays() throws {
         let page = try web(Self.settings)
-        assertSays(page, "label=\"\(SettingsCopy.grantToNew)\"", in: Self.settings)
-        assertSays(page, "hint=\"\(SettingsCopy.grantToNewHint)\"", in: Self.settings)
-        assertSays(page, "label=\"\(SettingsCopy.applyToExisting)\"", in: Self.settings)
-        assertSays(page, "okText=\"\(SettingsCopy.turnOnForAll)\"", in: Self.settings)
-        assertSays(page, "> \(SettingsCopy.turnOffForAll) </Button>", in: Self.settings)
-        assertSays(page, "'\(SettingsCopy.loadingAgents)'", in: Self.settings)
-        assertSays(page, "of ${agents.length} \(SettingsCopy.grantedTail)", in: Self.settings)
-        assertSays(page, "description=\"\(SettingsCopy.confirmAllDetail)\"", in: Self.settings)
-        let title = SettingsCopy.confirmAllTitle(total: 23).replacingOccurrences(of: "23", with: "${agents.length}")
-        assertSays(page, "`\(title)`", in: Self.settings)
+        assertSays(page, "label=\"\(SettingsCopy.letSessionsOrchestrate)\"", in: Self.settings)
+        assertSays(page, "hint=\"\(SettingsCopy.letSessionsOrchestrateHint)\"", in: Self.settings)
     }
 
     /// Change password: the web Profile page's form.

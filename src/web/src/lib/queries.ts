@@ -138,9 +138,10 @@ export interface UserPreferences {
   /** Whether an agent may push a line of its own (the `notify` tool / `orbit notify`) to this
    *  account's devices. Absent means on; only opting out is ever written. */
   notifyAgentMessage?: boolean;
-  /** Whether a newly created agent starts with session orchestration granted. Seeds the new
-   *  agent's own switch — the grant that gets enforced stays on the agent. Absent means off. */
-  defaultEnableOrchestration?: boolean;
+  /** Whether this account's sessions may orchestrate other sessions — one switch for every
+   *  workspace, enforced by the server on each claim, spawn and call. Absent means on; only
+   *  opting out is ever written. */
+  enableOrchestration?: boolean;
 }
 
 export interface Me {
@@ -336,10 +337,11 @@ export const sessionDiffQuery = (id: string | null | undefined) =>
  * loop this endpoint exists to remove. Polled on the same cadence as an idle task list; the
  * numbers move when runs settle, not continuously.
  */
-export const labelSummaryQuery = (listId?: string) =>
+export const labelSummaryQuery = (listId?: string, projectId?: string) =>
   queryOptions({
-    queryKey: ['task-labels', listId ?? null] as const,
-    queryFn: () => api<LabelSummary>(labelSummaryPath(listId)),
+    // The project scope enters the key only when there is one, so every other scope keeps its key.
+    queryKey: ['task-labels', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
+    queryFn: () => api<LabelSummary>(labelSummaryPath(listId, projectId)),
     staleTime: 10_000,
   });
 
@@ -349,10 +351,10 @@ export const labelSummaryQuery = (listId?: string) =>
  * Polled faster than the list it sits above: this is the part of the page that is supposed to be
  * moving, and it is bounded, so the refresh costs a small query rather than a page of rows.
  */
-export const activeTasksQuery = (listId?: string) =>
+export const activeTasksQuery = (listId?: string, projectId?: string) =>
   queryOptions({
-    queryKey: ['tasks', 'active', listId ?? null] as const,
-    queryFn: () => api<ActiveTasks>(activeTasksPath(listId)),
+    queryKey: ['tasks', 'active', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
+    queryFn: () => api<ActiveTasks>(activeTasksPath(listId, projectId)),
     refetchInterval: 5_000,
   });
 
@@ -363,18 +365,24 @@ export const activeTasksQuery = (listId?: string) =>
  * search term, so every tab sees the same numbers. Keyed this way, switching tab is a cache hit
  * and the four aggregates behind them run once per scope instead of once per tab.
  */
-export const taskCountsQuery = (listId?: string, labels: string[] = [], creatorSessionId?: string) =>
+export const taskCountsQuery = (
+  listId?: string,
+  labels: string[] = [],
+  creatorSessionId?: string,
+  projectId?: string,
+) =>
   queryOptions({
-    // The session scope enters the key only when there is one, so every other scope keeps the key
-    // it had before that scope existed.
+    // The session and project scopes enter the key only when there is one, so every other scope
+    // keeps the key it had before those scopes existed.
     queryKey: [
       'tasks',
       'counts',
       listId ?? null,
       labels,
       ...(creatorSessionId ? [{ creatorSessionId }] : []),
+      ...(projectId ? [{ projectId }] : []),
     ] as const,
-    queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels, creatorSessionId)),
+    queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels, creatorSessionId, projectId)),
     staleTime: 10_000,
   });
 
@@ -917,23 +925,6 @@ export const wikiSearchQuery = (q: string) =>
     // The same minute the session search keeps: a result set is a snapshot of a corpus that moves
     // when somebody writes, and one palette session is not a reason to re-read it per keystroke.
     staleTime: 60_000,
-  });
-
-/**
- * The space a session's workspace is bound to: the codebase Add to Wiki files a note into, and whose
- * topics its form offers.
- *
- * A read of its own rather than a lookup in the owner's space list, because which space a session
- * belongs to is the server's rule (`resolveSpaceForCall`) and not a guess the client is entitled to
- * make: an owner with two codebases would otherwise file a note into whichever the list happened to
- * put first. Under the `['wiki']` prefix like every other wiki read, so a `wiki.changed` re-reads it.
- */
-export const wikiSpaceForSessionQuery = (sessionId: string | null) =>
-  queryOptions({
-    queryKey: ['wiki', 'session-space', sessionId] as const,
-    queryFn: () => api<WikiSpaceRow>(`/wiki/spaces/for-session/${encodeURIComponent(sessionId!)}`),
-    enabled: sessionId !== null,
-    staleTime: 30_000,
   });
 
 /**

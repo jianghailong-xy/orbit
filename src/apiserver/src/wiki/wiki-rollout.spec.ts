@@ -175,7 +175,7 @@ function routesOf(controller: new (...args: never[]) => unknown): string[] {
 
 test('both doors are closed by the flag on every route, after the credential guard', () => {
   for (const [controller, credential, atLeast] of [
-    [WikiController, JwtAuthGuard, 14],
+    [WikiController, JwtAuthGuard, 13],
     [RunnerWikiController, RunnerAuthGuard, 3],
   ] as const) {
     // On the CLASS: a guard on the class runs before every handler, and a handler's own guards can only add to it,

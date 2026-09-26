@@ -7,12 +7,13 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
-import { TaskListView, taskScopeMenuItems, type TaskListRow } from './TaskListView';
+import { isProjectOnlyList, TaskListView, taskScopeMenuItems, type TaskListRow } from './TaskListView';
 
 /**
- * The Tasks page's title is where the task lists are picked now: every task, the tasks in no list,
+ * The Tasks page's title is where the task lists are picked now: all tasks, the tasks in no list,
  * then the lists and the finished ones — the groups the sidebar held before its foot became the
- * open projects, as the iPhone's Tasks page offers them under `List:`.
+ * open projects, as the iPhone's Tasks page offers them under `List:`. Like the page, it offers the
+ * work outside projects: a list whose every task is some project's is on that project's page.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -27,12 +28,16 @@ vi.mock('../api', async (importOriginal) => {
 });
 
 const MERGE = encodeId('0196b000-0000-7000-8000-000000000001');
-const PARQUET = encodeId('0196b000-0000-7000-8000-000000000002');
+const RELEASE = encodeId('0196b000-0000-7000-8000-000000000002');
+const PLAN = encodeId('0196b000-0000-7000-8000-000000000004');
 const NCE3 = encodeId('0196b000-0000-7000-8000-000000000003');
 const LISTS: TaskListRow[] = [
-  { id: MERGE, title: 'FineWeb + WARC → RocksDB 合并（自动接力）', _count: { tasks: 27468 }, runningTasks: 1, completed: false },
-  { id: PARQUET, title: 'FineWeb Parquet 文件下载（手动启动）', _count: { tasks: 27470 }, runningTasks: 0, completed: false },
-  { id: NCE3, title: 'NCE3 缺失课程实现', _count: { tasks: 32 }, runningTasks: 0, completed: true },
+  // Every task of it is the FineWeb project's: that project's page is where it is reached.
+  { id: MERGE, title: 'FineWeb + WARC → RocksDB 合并（自动接力）', _count: { tasks: 27468 }, runningTasks: 1, completed: false, tasksOutsideProjects: 0 },
+  { id: RELEASE, title: 'Release 0.1.190 验收', _count: { tasks: 6 }, runningTasks: 1, completed: false, tasksOutsideProjects: 6 },
+  // Empty: somebody's plan for work, not a project's.
+  { id: PLAN, title: '下周计划', _count: { tasks: 0 }, runningTasks: 0, completed: false, tasksOutsideProjects: 0 },
+  { id: NCE3, title: 'NCE3 缺失课程实现', _count: { tasks: 32 }, runningTasks: 0, completed: true, tasksOutsideProjects: 32 },
 ];
 const UNLISTED = 1500;
 
@@ -148,44 +153,63 @@ const menuItem = (text: string) =>
 describe('the Tasks page’s title', () => {
   it('opens every scope the sidebar used to hold, and counts the tasks in no list only once open', async () => {
     await visit('/tasks');
-    expect(trigger()?.textContent).toBe('Active');
-    expect(requested.filter((p) => p.includes('listId=none'))).toEqual([]);
+    expect(trigger()?.textContent).toBe('All tasks');
+    expect(requested.filter((p) => p.startsWith('/tasks/page?limit=1&'))).toEqual([]);
 
     await click(trigger());
 
-    expect(requested.filter((p) => p.includes('listId=none'))).toEqual(['/tasks/page?limit=1&listId=none']);
+    // Counted over the tasks outside projects, the scope the No list page itself lists.
+    expect(requested.filter((p) => p.startsWith('/tasks/page?limit=1&'))).toEqual([
+      '/tasks/page?limit=1&listId=none&projectId=none',
+    ]);
     expect(menuLines()).toEqual([
-      'Active',
+      'All tasks',
       `No list${UNLISTED}`,
       'Task List · 2',
-      'FineWeb + WARC → RocksDB 合并（自动接力）27468',
-      'FineWeb Parquet 文件下载（手动启动）27470',
+      'Release 0.1.190 验收6',
+      '下周计划0',
       'Completed · 1',
       'NCE3 缺失课程实现32',
     ]);
     // The dots the sidebar drew: a list with a task executing breathes, a finished one is green.
-    expect(menuItem('合并')?.querySelector('.tp-list-dot')?.className).toBe('tp-list-dot running');
-    expect(menuItem('Parquet')?.querySelector('.tp-list-dot')?.className).toBe('tp-list-dot ');
+    expect(menuItem('Release')?.querySelector('.tp-list-dot')?.className).toBe('tp-list-dot running');
+    expect(menuItem('下周计划')?.querySelector('.tp-list-dot')?.className).toBe('tp-list-dot ');
     expect(menuItem('NCE3')?.querySelector('.tp-list-dot')?.className).toBe('tp-list-dot done');
-    expect(menuItem('Active')?.classList.contains('ant-dropdown-menu-item-selected')).toBe(true);
+    expect(menuItem('All tasks')?.classList.contains('ant-dropdown-menu-item-selected')).toBe(true);
   });
 
   it('opens a picked list, whose name the title then carries', async () => {
     await visit('/tasks');
     await click(trigger());
-    await click(menuItem('Parquet'));
+    await click(menuItem('Release'));
 
-    expect(window.location.pathname).toBe(`/lists/${PARQUET}`);
-    expect(trigger()?.textContent).toBe('FineWeb Parquet 文件下载（手动启动）');
+    expect(window.location.pathname).toBe(`/lists/${RELEASE}`);
+    expect(trigger()?.textContent).toBe('Release 0.1.190 验收');
   });
 
   it('goes back to every task from a list', async () => {
     await visit(`/lists/${NCE3}`);
     await click(trigger());
     expect(menuItem('NCE3')?.classList.contains('ant-dropdown-menu-item-selected')).toBe(true);
-    await click(menuItem('Active'));
+    await click(menuItem('All tasks'));
     expect(window.location.pathname).toBe('/tasks');
-    expect(trigger()?.textContent).toBe('Active');
+    expect(trigger()?.textContent).toBe('All tasks');
+  });
+});
+
+// A list whose every task is some project's is reached from that project's page.
+describe('isProjectOnlyList', () => {
+  it('leaves out a list whose every task is filed under a project', () => {
+    expect(isProjectOnlyList({ _count: { tasks: 27_468 }, tasksOutsideProjects: 0 })).toBe(true);
+    expect(isProjectOnlyList({ _count: { tasks: 32 }, tasksOutsideProjects: 32 })).toBe(false);
+    expect(isProjectOnlyList({ _count: { tasks: 3 }, tasksOutsideProjects: 1 })).toBe(false);
+  });
+
+  // An empty list is somebody's plan for work, not a project's; and a server that does not report
+  // the split lists everything, as it always did.
+  it('keeps an empty list, and every list when the server does not say', () => {
+    expect(isProjectOnlyList({ _count: { tasks: 0 }, tasksOutsideProjects: 0 })).toBe(false);
+    expect(isProjectOnlyList({ _count: { tasks: 27_468 } })).toBe(false);
   });
 });
 

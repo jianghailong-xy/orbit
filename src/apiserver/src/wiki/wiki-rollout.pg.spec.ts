@@ -294,14 +294,13 @@ test('the wiki rollout flag, over both doors and the runner\'s claim', { skip, c
       ...routesOf(RunnerWikiController).map((route) => ({ ...route, door: 'runner' as const })),
     ];
     // What both controllers serve today; the walk above is what makes a later route part of this case.
-    assert.ok(routes.filter((r) => r.door === 'user').length >= 14, `the user door lost routes: ${JSON.stringify(routes)}`);
+    assert.ok(routes.filter((r) => r.door === 'user').length >= 13, `the user door lost routes: ${JSON.stringify(routes)}`);
     assert.ok(routes.filter((r) => r.door === 'runner').length >= 3, `the runner door lost routes: ${JSON.stringify(routes)}`);
 
     // Every address is one of this account's own rows, so a route that answered would have had something to answer
     // with: the 404 below is the flag's, not a missing row's, and its code is what says so.
     const address = (path: string): string =>
       path
-        .replace('for-session/:id', `for-session/${uuidToBase62(a.sessionId)}`)
         .replace('entries/:id', `entries/${uuidToBase62(aWiki.entryId)}`)
         .replace('changesets/:id', `changesets/${uuidToBase62(randomUUID())}`)
         .replace(':id', uuidToBase62(aWiki.spaceId))

@@ -161,6 +161,7 @@ import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
+import { returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 import {
@@ -207,8 +208,6 @@ import {
   uploadAttachment,
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
-import { AddToWikiCtx } from './AddToWiki';
-import { useWikiShown } from '../lib/useWikiShown';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
   SessionDecisionStrip,
@@ -406,6 +405,8 @@ export interface QueuedTurn {
   openItemDelivery?: OpenItemDelivery;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStarted;
+  /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
+  authoredByOrbit?: true;
 }
 
 /** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is
@@ -2060,16 +2061,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             : undefined,
       }
     : null;
-  // What Add to Wiki writes as: this conversation, which is both where the entry's provenance comes
-  // from (the turn a message belongs to) and what decides which codebase's wiki it is filed into
-  // (`wikiSpaceForSessionQuery`). Memoised because it is a context value: a fresh object each render
-  // would re-render every message row in the transcript on every token of a streaming reply. None at
-  // all for an account the server has not switched the wiki on for: the row keeps its copy button.
-  const wikiOn = useWikiShown();
-  const addToWikiConversation = useMemo(
-    () => (selectedId && wikiOn ? { sessionId: selectedId, title: selectedSession?.title ?? '' } : null),
-    [selectedId, selectedSession?.title, wikiOn],
-  );
   // What this conversation is waiting on, when a watch is what will bring it back: the same read the
   // Watching strip above the composer makes (one cache entry between them), so the header's word and
   // the strip under it cannot disagree about the same wait.
@@ -4576,8 +4567,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // empty composer), so this never clobbers an in-progress draft. Their attachments come
       // back the same way: the messages are already being merged into one draft, so the files
       // they were sent with are staged together under it.
-      const restored = visibleQueuedTurns
-        .filter((q) => !parseWatchWake(q.content)) // a wake is the watch's words, never theirs
+      // Only what somebody typed: a wake, a delivery or an acceptance round was never theirs.
+      const theirs = visibleQueuedTurns.filter(returnsToComposer);
+      const restored = theirs
         .map((q) => {
           const body = q.content.trim();
           return body && q.shell ? `!${body}` : body; // a `!cmd` comes back as one
@@ -4585,7 +4577,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         .filter(Boolean)
         .join('\n\n');
       if (restored) setText(restored);
-      stageRestored(visibleQueuedTurns.flatMap((q) => q.attachments ?? []));
+      stageRestored(theirs.flatMap((q) => q.attachments ?? []));
       setQueued([]);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
@@ -4605,7 +4597,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // in the transcript and restoring would duplicate it. Unlike Stop (offered only with an
       // empty composer), Cancel is reachable mid-draft, so an in-progress draft always wins —
       // read through textRef, since the awaited gap may have outdated this render's `text`.
-      const body = withdrawn?.content.trim();
+      // Nor does a turn nobody typed come back (`returnsToComposer`).
+      const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
       if (body && !textRef.current.trim()) {
         setText(withdrawn?.shell ? `!${body}` : body);
         // The files follow the words: restoring them under a draft that kept its place would stage
@@ -7316,11 +7309,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
                           <TaskActivityCtx.Provider value={taskActivity}>
                           <StreamingDraftsCtx.Provider value={streamingDrafts}>
-                            {/* What Add to Wiki writes as, and into which codebase's wiki. Mounted
-                                here and by nothing else: the shared page and the static export
-                                leave it null, which is what keeps a write button off a page its
-                                reader cannot write from. */}
-                            <AddToWikiCtx.Provider value={addToWikiConversation}>
                             {/* The links in this conversation, drawn as cards. The provider is
                                 what makes a card possible at all — the shared page and the export
                                 mount none — and it re-reads the links when the detail above is
@@ -7338,7 +7326,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 inserts={transcriptInserts}
                               />
                             </OrbitLinkCardsProvider>
-                            </AddToWikiCtx.Provider>
                           </StreamingDraftsCtx.Provider>
                           </TaskActivityCtx.Provider>
                         </LiveToolOutputsCtx.Provider>

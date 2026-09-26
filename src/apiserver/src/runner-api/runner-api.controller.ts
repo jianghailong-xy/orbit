@@ -263,6 +263,7 @@ import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
+import { orchestrationEnabled } from '../common/orchestration-switch';
 import {
   AUTO_ALLOWED_MESSAGE,
   dispatchAllowedTools,
@@ -1932,7 +1933,8 @@ export class RunnerApiController {
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
         // `engines` for the Codex account the workspace chose, resolved as the claim resolves it.
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
-        // The account-level permission default, which replaced the per-workspace one.
+        // The account-level permission default and orchestration switch, which replaced the
+        // per-workspace ones.
         owner: { select: { preferences: true } },
       },
     });
@@ -2115,7 +2117,7 @@ export class RunnerApiController {
         s.cancelRequestedAt === null &&
         OPEN.includes(s.status) &&
         workspace?.deletedAt === null &&
-        workspace.enableOrchestration;
+        orchestrationEnabled(s.owner);
       out.push({
         sessionId: s.id,
         status: s.status as SharedRunStatus,

@@ -23,6 +23,7 @@ import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
+import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -80,6 +81,7 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
 import {
   batchActiveTurns,
@@ -219,6 +221,10 @@ interface ListedQueuedTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (project-started.ts). */
   projectStarted?: ProjectStartedCard;
+  /** The control plane wrote this turn itself (`isOrbitAuthoredTurn`): nobody typed its words, so a
+   *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
+   *  turn somebody sent. */
+  authoredByOrbit?: true;
 }
 
 interface ListedActiveTurn extends ListedQueuedTurn {
@@ -1497,12 +1503,13 @@ export class SessionsService {
         id: true,
         rootSessionId: true,
         spawnDepth: true,
-        workspace: { select: { enableOrchestration: true } },
+        workspaceId: true,
+        owner: { select: { preferences: true } },
       },
     });
     if (!parent) throw new NotFoundException('parent session not found');
-    if (!parent.workspace?.enableOrchestration) {
-      throw new ForbiddenException('orchestration is not enabled for this workspace');
+    if (!parent.workspaceId || !orchestrationEnabled(parent.owner)) {
+      throw new ForbiddenException('orchestration is not enabled for this account');
     }
     if (parent.spawnDepth >= SessionsService.MAX_SPAWN_DEPTH) {
       throw new ForbiddenException(`spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`);
@@ -4814,6 +4821,7 @@ export class SessionsService {
           })),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
     }
@@ -4886,6 +4894,7 @@ export class SessionsService {
             : {}),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({

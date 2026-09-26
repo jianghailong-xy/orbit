@@ -641,40 +641,56 @@ public final class APIClient: @unchecked Sendable {
     public func updateAgent(_ id: String, _ req: UpdateAgentRequest) async throws -> Agent { try await patch("agents/\(id)", body: req) }
     public func deleteAgent(_ id: String) async throws { try await deleteRaw("agents/\(id)") }
     public func reorderAgents(_ ids: [String]) async throws { try await postRaw("agents/reorder", body: ReorderAgentsRequest(ids: ids)) }
-    /// Grant or revoke session orchestration on every agent this account owns, and answer with how
-    /// many rows that wrote. Still a per-agent grant — the server writes each agent's own switch —
-    /// so one can be turned back off on its own afterwards; this only spares a visit per agent.
-    public func setOrchestrationForAllAgents(enabled: Bool) async throws -> Int {
-        let result: BulkOrchestrationResult = try await post("agents/orchestration",
-                                                             body: ["enabled": enabled])
-        return result.updated
-    }
 
     // MARK: tasks
     public func tasks() async throws -> [TaskItem] { try await get("tasks") }
     /// `creatorSessionId` scopes the page to the tasks one session created — where that session's
     /// "Tasks created here" card sends View all. A scope like `listId`, so it narrows the counts
     /// (`taskCounts`) too.
+    /// `projectId` is a project's tasks, or `"none"` for the tasks filed under no project — the
+    /// Tasks page's scope. `labels` narrows to the tasks carrying all of them, counts included; sent
+    /// repeated so a label may contain a comma.
     public func taskPage(cursor: String? = nil, limit: Int = 200, status: String? = nil,
                          listId: String? = nil, query: String? = nil,
                          counts: TaskPageCountsMode = .full,
-                         creatorSessionId: String? = nil) async throws -> TaskPage {
+                         creatorSessionId: String? = nil,
+                         projectId: String? = nil,
+                         labels: [String] = []) async throws -> TaskPage {
         var q = [URLQueryItem(name: "limit", value: String(limit))]
         if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let status { q.append(URLQueryItem(name: "status", value: status)) }
         if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
         if let creatorSessionId { q.append(URLQueryItem(name: "creatorSessionId", value: creatorSessionId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        for label in labels { q.append(URLQueryItem(name: "labels", value: label)) }
         if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
         if counts != .full { q.append(URLQueryItem(name: "counts", value: counts.rawValue)) }
         return try await getCancellable("tasks/page", query: q)
     }
     /// Scope-wide tab/progress totals are independent from page filter/search. Keeping them on
     /// their own cancellable request lets rapid query changes reuse one in-flight scope read.
-    public func taskCounts(listId: String? = nil, creatorSessionId: String? = nil) async throws -> TaskPageCounts {
+    public func taskCounts(listId: String? = nil, creatorSessionId: String? = nil,
+                           projectId: String? = nil, labels: [String] = []) async throws -> TaskPageCounts {
         var q: [URLQueryItem] = []
         if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
         if let creatorSessionId { q.append(URLQueryItem(name: "creatorSessionId", value: creatorSessionId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        for label in labels { q.append(URLQueryItem(name: "labels", value: label)) }
         return try await getCancellable("tasks/counts", query: q)
+    }
+    /// Happening now: running, queued, in progress and failed, in scope — bounded, with its total.
+    public func activeTasks(listId: String? = nil, projectId: String? = nil) async throws -> ActiveTasksPage {
+        var q: [URLQueryItem] = []
+        if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        return try await getCancellable("tasks/active", query: q)
+    }
+    /// Every label in scope with its tallies — the web's Batches table.
+    public func taskLabels(listId: String? = nil, projectId: String? = nil) async throws -> TaskLabelSummary {
+        var q: [URLQueryItem] = []
+        if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        return try await getCancellable("tasks/labels", query: q)
     }
     public func task(_ id: String) async throws -> TaskItem { try await get("tasks/\(id)") }
     /// One list-row-shaped task for a `task.changed` event. Unlike `task(_:)`, this deliberately
@@ -728,16 +744,34 @@ public final class APIClient: @unchecked Sendable {
         // control plane kept saying "being answered right now" has to be told that.
         throw lastError ?? APIError.invalidResponse
     }
-    /// AUDIT (H2H): no shell calls this — neither macOS nor iOS has a bulk-Run surface — so it
-    /// carries no press id. Whoever adds that surface must add `triggerId` to
-    /// `BatchExecuteRequest` and draw it at the gesture, exactly as `executeTask` does.
+    /// The iPhone's Select Tasks › Run. The press is named in the request (`triggerId`), drawn at
+    /// the gesture exactly as `executeTask`'s is, so the 401 refresh-and-retry resends one press.
     public func batchExecute(_ req: BatchExecuteRequest) async throws { try await postRaw("tasks/batch-execute", body: req) }
     public func batchStop(_ req: BatchStopRequest) async throws { try await postRaw("tasks/batch-stop", body: req) }
     public func batchAssign(_ req: BatchAssignRequest) async throws { try await postRaw("tasks/batch-assign", body: req) }
+    public func batchDelete(_ req: BatchDeleteRequest) async throws { try await postRaw("tasks/batch-delete", body: req) }
+    /// A list's steering session: the one durable conversation the list is steered from, resolved
+    /// or created by the server. Answers the session id.
+    public func openTaskListConsole(_ id: String) async throws -> String {
+        let console: TaskListConsole = try await post("task-lists/\(id)/console", body: [String: String]())
+        return console.sessionId
+    }
     public func addTaskComment(taskID: String, _ req: CreateTaskCommentRequest) async throws { try await postRaw("tasks/\(taskID)/comments", body: req) }
     public func removeTaskComment(taskID: String, commentID: String) async throws { try await deleteRaw("tasks/\(taskID)/comments/\(commentID)") }
     public func addTaskDependency(taskID: String, _ req: AddDependencyRequest) async throws { try await postRaw("tasks/\(taskID)/dependencies", body: req) }
     public func removeTaskDependency(taskID: String, dependsOnTaskID: String) async throws { try await deleteRaw("tasks/\(taskID)/dependencies/\(dependsOnTaskID)") }
+    /// `GET /tasks/:id/attribution`: where this work counts, where it was noticed, which crossing
+    /// touches it and what blocks it — the detail page's Attribution block.
+    public func taskAttribution(_ id: String) async throws -> TaskAttribution { try await get("tasks/\(id)/attribution") }
+    /// `GET /tasks/:id/dependency-graph`, asked the way the browser's panel asks it: both directions,
+    /// up to 500 tasks, unary chains paired.
+    public func taskDependencyGraph(_ id: String) async throws -> TaskDependencyGraph {
+        try await get("tasks/\(id)/dependency-graph", query: [
+            URLQueryItem(name: "direction", value: "both"),
+            URLQueryItem(name: "maxNodes", value: "500"),
+            URLQueryItem(name: "pairUnary", value: "true"),
+        ])
+    }
 
     // MARK: watches (docs/watch-contract.md)
 
@@ -768,6 +802,8 @@ public final class APIClient: @unchecked Sendable {
     public func resumeWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/resume") }
     /// Stop: the contract's CANCELLED.
     public func cancelWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/cancel") }
+    /// Follow: create a watch; answers with it as it stands (already MATCHED when the condition held).
+    public func createWatch(_ req: CreateWatchRequest) async throws -> Watch { try await post("watches", body: req) }
 
     // MARK: wiki (docs/wiki-contract.md) — the user door, `/api/wiki`
 
@@ -938,6 +974,24 @@ public final class APIClient: @unchecked Sendable {
         let respData = try await send(req)
         return try decoder.decode(AttachmentRef.self, from: respData).id
     }
+
+    /// Upload one of a task's inputs (`POST /attachments?taskId=`): a blob that belongs to the work
+    /// rather than to a conversation, copied into every run of it. The server refuses a blob named
+    /// for both, so this never sends a session.
+    @discardableResult
+    public func uploadTaskInput(taskID: String, filename: String, mimeType: String, data: Data) async throws -> String {
+        let boundary = "orbit.\(UUID().uuidString)"
+        var req = try makeRequest("attachments", method: "POST", query: [URLQueryItem(name: "taskId", value: taskID)],
+                                  body: Optional<Empty>.none)
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Multipart.body(boundary: boundary, fieldName: "file",
+                                      filename: filename, mimeType: mimeType, fileData: data)
+        let respData = try await send(req)
+        return try decoder.decode(AttachmentRef.self, from: respData).id
+    }
+
+    /// `DELETE /attachments/:id` — removing a task input. Runs already started keep their copy.
+    public func deleteAttachment(_ id: String) async throws { try await deleteRaw("attachments/\(id)") }
 
     /// Fetch an attachment's raw bytes (GET /attachments/:id). Bearer-guarded, so an `<img src>`
     /// can't carry the token — the transcript fetches the blob and decodes it client-side.

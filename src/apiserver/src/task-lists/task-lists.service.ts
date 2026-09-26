@@ -133,15 +133,27 @@ export class TaskListsService {
     // detail panel uses for its 执行中 state — IN_PROGRESS is just a label, not a live
     // run. One grouped query keeps this O(1) regardless of list count.
     const listIds = lists.map((l) => l.id);
-    const grouped = await this.prisma.task.groupBy({
-      by: ['listId'],
-      where: {
-        listId: { in: listIds },
-        sessions: { some: { status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } } },
-      },
-      _count: { _all: true },
-    });
+    const [grouped, outside] = await Promise.all([
+      this.prisma.task.groupBy({
+        by: ['listId'],
+        where: {
+          listId: { in: listIds },
+          sessions: { some: { status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } } },
+        },
+        _count: { _all: true },
+      }),
+      // How many of each list's tasks are filed under no project. The Tasks page lists only those,
+      // so a list whose every task is some project's belongs on that project's page instead. Read
+      // through the project_id index's NULL entries — the few hundred standalone tasks, not the
+      // hundred thousand a project's lists can hold.
+      this.prisma.task.groupBy({
+        by: ['listId'],
+        where: { listId: { in: listIds }, projectId: null },
+        _count: { _all: true },
+      }),
+    ]);
     const running = new Map(grouped.map((g) => [g.listId, g._count._all]));
+    const outsideProjects = new Map(outside.map((g) => [g.listId, g._count._all]));
     // `completed` = the whole list is finished: it has at least one task and every
     // task is DONE. Both numbers are maintained columns on the list row, so the
     // comparison is free and exact — the same expression as before, with the
@@ -152,6 +164,7 @@ export class TaskListsService {
         ...l,
         _count: { tasks: total },
         runningTasks: running.get(l.id) ?? 0,
+        tasksOutsideProjects: outsideProjects.get(l.id) ?? 0,
         completed: total > 0 && taskDoneCount === total,
       };
     });
