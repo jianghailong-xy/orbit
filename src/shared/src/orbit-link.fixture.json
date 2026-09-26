@@ -8,7 +8,7 @@
     "signed in to; the file's own `host` when absent), and `blocks` — the rendered blocks the text",
     "must become, in order. A block is either a card or a markdown block:",
     "",
-    "  {\"card\": {\"kind\": \"task|session|project|list\", \"id\": \"<canonical uuid>\",",
+    "  {\"card\": {\"kind\": \"task|session|project|list|wiki\", \"id\": \"<canonical uuid>\",",
     "             \"url\": \"<the page URL as written>\"}}      — from a pasted page URL",
     "  {\"card\": {\"kind\": \"...\", \"id\": \"<canonical uuid>\", \"ref\": \"orbit-task:<publicId>\"}}",
     "                                                        — from an agent's reference",
@@ -28,7 +28,12 @@
     "exists to prevent. `url` / `ref` keeps what was written verbatim, because that is what the card",
     "replaced and what Copy link hands back.",
     "",
-    "The ids are production rows from 2026-09-23 (the same conversation the iOS mock is drawn from)."
+    "A wiki entry is the one kind with no page URL of its own: its page is `/wiki/<space>/e/<id>` — a",
+    "space AND an entry — while the id a link carries names only the entry. So `orbit-wiki:<id>` is the",
+    "whole of how an entry is referenced, and a `/wiki/…` URL a person pastes stays the URL it is.",
+    "",
+    "The ids are production rows from 2026-09-23 (the same conversation the iOS mock is drawn from),",
+    "except the two wiki entries, which are from the note those same sessions were handed."
   ],
   "host": "orbitd.io",
   "cases": [
@@ -260,6 +265,34 @@
       "text": "[一个别的东西](orbit-attachment:34TcwNgAIo6tGUiIKjqnQ)",
       "blocks": [
         {"markdown": {"type": "paragraph", "text": "[一个别的东西](orbit-attachment:34TcwNgAIo6tGUiIKjqnQ)"}}
+      ]
+    },
+    {
+      "name": "a wiki reference alone in a paragraph is a card",
+      "text": "[A clock never starts agent work](orbit-wiki:34UDFnrgM4q5oGQloG3uq)",
+      "blocks": [
+        {"card": {"kind": "wiki", "id": "01a0d1f2-3a44-7c11-9b02-5f6e7d8c9a10", "ref": "orbit-wiki:34UDFnrgM4q5oGQloG3uq"}}
+      ]
+    },
+    {
+      "name": "…and the next wiki entry in the same paragraph is its own card",
+      "text": "[Piping a test run into grep hides its exit code](orbit-wiki:34UDFnrgM4q5odj4MVdXD)",
+      "blocks": [
+        {"card": {"kind": "wiki", "id": "01a0d1f2-3a44-7c11-9b02-aa0b1c2d3e4f", "ref": "orbit-wiki:34UDFnrgM4q5odj4MVdXD"}}
+      ]
+    },
+    {
+      "name": "a wiki reference written into a sentence stays the name link it is today",
+      "text": "这正是 [A clock never starts agent work](orbit-wiki:34UDFnrgM4q5oGQloG3uq) 说的。",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "这正是 [A clock never starts agent work](orbit-wiki:34UDFnrgM4q5oGQloG3uq) 说的。"}}
+      ]
+    },
+    {
+      "name": "excluded: a wiki page URL names no object — an entry is /wiki/<space>/e/<id>",
+      "text": "https://orbitd.io/wiki/orbit/e/34UDFnrgM4q5oGQloG3uq",
+      "blocks": [
+        {"markdown": {"type": "paragraph", "text": "https://orbitd.io/wiki/orbit/e/34UDFnrgM4q5oGQloG3uq"}}
       ]
     }
   ]

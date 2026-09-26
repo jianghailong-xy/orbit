@@ -64,7 +64,7 @@ enum SidebarSelection: Hashable {
     case agent(String)
 }
 
-/// The leftmost rail, now a source list. iPad leads with the work (Projects, Tasks), then grouped,
+/// The leftmost rail, now a source list. iPad leads with the work (Projects, Tasks, Wiki), then grouped,
 /// first-level Workspace rows, and keeps Following and the administrative destinations under Manage;
 /// macOS retains its expandable, runner-grouped Workspaces section. Admin is role-gated on both.
 struct SectionSidebar: View {
@@ -275,6 +275,8 @@ struct SectionContent: View {
             ProjectsListView()
         case .tasks:
             TasksListView()
+        case .wiki:
+            WikiHomeView()
         case .following:
             FollowingListView()
         case .agents:
@@ -309,6 +311,8 @@ struct SectionDetail: View {
             ProjectDetailPane()
         case .tasks:
             TaskDetailView()
+        case .wiki:
+            WikiDetailPane()
         case .following:
             WatchDetailView()
         case .agents:

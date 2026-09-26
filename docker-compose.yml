@@ -140,6 +140,12 @@ services:
       # `docker compose up -d apiserver`; no migration and no runner release either way.
       ORBIT_WATCHES: "${ORBIT_WATCHES:-on}"
       ORBIT_WATCHES_CANARY_OWNERS: "${ORBIT_WATCHES_CANARY_OWNERS:-}"
+      # Optional: how far the Orbit Wiki is switched on (src/apiserver/src/wiki/wiki-rollout.ts): on (default),
+      # canary (only the accounts ORBIT_WIKI_CANARY_OWNERS lists, comma-separated ids) or off. An account without it
+      # gets 404 WIKI_DISABLED on every wiki route, its sessions no wiki tools and no wiki context, and the web hides
+      # the Wiki entry points. Takes effect on `docker compose up -d apiserver`; no migration and no runner release.
+      ORBIT_WIKI: "${ORBIT_WIKI:-on}"
+      ORBIT_WIKI_CANARY_OWNERS: "${ORBIT_WIKI_CANARY_OWNERS:-}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
       # Optional: DeepSeek (OpenAI-compatible) for asynchronously improving prompt-derived

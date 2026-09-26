@@ -2864,6 +2864,13 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	if watches {
 		specs = append(specs, watchCLICapabilities...)
 	}
+	// Ungated in the orchestration sense — reading what your own workspace shares and proposing what
+	// you learned is not a power over anybody else's session — but SessionOnly: what a session may
+	// read is what its bound workspace is bound to, and a terminal outside one has nothing to act
+	// for. Neither is it listed in a session spawned with the wiki off (wiki_tools.go).
+	if wikiEnabledFromEnv() {
+		specs = append(specs, wikiCLICapabilities...)
+	}
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:

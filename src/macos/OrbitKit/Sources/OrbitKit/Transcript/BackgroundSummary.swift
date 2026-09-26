@@ -4,9 +4,9 @@ import Foundation
 /// wording verbatim (claude 2.1.282), and each is matched the way the other readers of it match:
 /// the shell receipt as web's `BG_ID_RE`, the workflow receipt as `workflowLaunchReceipt` in
 /// @orbit/shared.
-enum BackgroundSummary {
+public enum BackgroundSummary {
     /// "Command running in background with ID: <id>. …" → the shell's id.
-    static func shellID(_ result: String) -> String? {
+    public static func shellID(_ result: String) -> String? {
         guard let r = result.range(of: "running in background with ID:", options: .caseInsensitive) else { return nil }
         let id = result[r.upperBound...].drop(while: { $0.isWhitespace })
             .prefix(while: { !$0.isWhitespace && $0 != "." })
@@ -15,7 +15,7 @@ enum BackgroundSummary {
 
     /// "Async agent launched successfully. (…) agentId: <id> …" → the agent's id. Nil for a result
     /// that is not that receipt: an Agent run inline answers with its report here instead.
-    static func agentID(_ result: String) -> String? {
+    public static func agentID(_ result: String) -> String? {
         guard result.contains("Async agent launched"),
               let r = result.range(of: "agentId:") else { return nil }
         let id = result[r.upperBound...].drop(while: { $0.isWhitespace })
@@ -24,7 +24,7 @@ enum BackgroundSummary {
     }
 
     /// "Workflow launched in background. Task ID: <id>\nSummary: <text>\n…" → its task id and title.
-    static func workflow(_ result: String) -> (taskID: String, summary: String?)? {
+    public static func workflow(_ result: String) -> (taskID: String, summary: String?)? {
         let text = result.drop(while: { $0.isWhitespace })
         let prefix = "Workflow launched in background. Task ID: "
         guard text.hasPrefix(prefix) else { return nil }
@@ -38,7 +38,7 @@ enum BackgroundSummary {
     /// A completion notification's summary — `Agent "<description>" finished`, `Dynamic workflow
     /// "<title>" completed` — read back into what finished and what it was called, for a row whose
     /// launch this client never loaded.
-    static func parse(_ summary: String?) -> (kind: String, title: String)? {
+    public static func parse(_ summary: String?) -> (kind: String, title: String)? {
         guard let summary else { return nil }
         let kind: String
         if summary.hasPrefix("Agent \"") { kind = "agent" }

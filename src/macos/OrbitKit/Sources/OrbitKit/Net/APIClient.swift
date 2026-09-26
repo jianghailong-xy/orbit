@@ -265,12 +265,6 @@ public final class APIClient: @unchecked Sendable {
     public func setSessionTags(_ sessionID: String, tagIDs: [String]) async throws -> [SessionTag] {
         try await put("sessions/\(sessionID)/tags", body: SetSessionTagsRequest(tagIds: tagIDs))
     }
-    /// Share/unshare: mint (or clear) a public read-only link to this session's transcript, served
-    /// at `<baseURL>/s/<shareToken>` with no auth. `enableShare` is idempotent server-side (returns
-    /// the existing token if already shared); `disableShare` makes any live link 404 immediately.
-    public func enableShare(_ id: String) async throws -> ShareInfo { try await postEmpty("sessions/\(id)/share") }
-    public func disableShare(_ id: String) async throws { try await deleteRaw("sessions/\(id)/share") }
-
     /// What this session's Retry button would re-send. Asked when the loaded event window holds no
     /// user message — a run's message sits thousands of events behind its tail — so the card offers
     /// the server's own choice rather than nothing at all. Web parity: `getSessionRetryMessage`.
@@ -295,6 +289,27 @@ public final class APIClient: @unchecked Sendable {
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
+
+    // MARK: public links — one per session, task or project (docs/share-links-design.md §5)
+
+    /// The root's link that has not ended (nil when it has none), with how much each of its layers
+    /// holds. Web parity: `getShareLink`.
+    public func shareLink(_ kind: ShareRootKind, _ id: String) async throws -> ShareLinkRead {
+        try await get("\(kind.pathSegment)/\(id)/share")
+    }
+
+    /// Open the root's link, or change the open one; answers the link as it now stands. Web parity:
+    /// `putShareLink`.
+    public func putShareLink(_ kind: ShareRootKind, _ id: String,
+                             _ body: PutShareLinkRequest) async throws -> ShareLink {
+        try await put("\(kind.pathSegment)/\(id)/share", body: body)
+    }
+
+    /// Access → Only you: its token stops opening at once, and opening the link again makes a new
+    /// one. Nothing to turn off is not an error. Web parity: `turnOffShareLink`.
+    public func turnOffShareLink(_ kind: ShareRootKind, _ id: String) async throws {
+        try await deleteRaw("\(kind.pathSegment)/\(id)/share")
+    }
 
     // MARK: approvals
 
@@ -738,6 +753,48 @@ public final class APIClient: @unchecked Sendable {
     public func resumeWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/resume") }
     /// Stop: the contract's CANCELLED.
     public func cancelWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/cancel") }
+
+    // MARK: wiki (docs/wiki-contract.md) — the user door, `/api/wiki`
+
+    /// `GET /wiki/spaces`: every space, by slug, each with the proposals waiting in it (`pendingOps`)
+    /// — what the drawer's amber number sums.
+    public func wikiSpaces() async throws -> [WikiSpace] { try await get("wiki/spaces") }
+    /// `GET /wiki/spaces/:id?include=usage`: one space, with the rolling window its usage band reads.
+    public func wikiSpace(_ id: String) async throws -> WikiSpace {
+        try await get("wiki/spaces/\(id)", query: [URLQueryItem(name: "include", value: "usage")])
+    }
+    /// `GET /wiki/spaces/:id/entries`: a space's entries of every status, newest recorded first.
+    public func wikiEntries(spaceID: String, limit: Int = 200) async throws -> [WikiEntry] {
+        try await get("wiki/spaces/\(spaceID)/entries", query: [URLQueryItem(name: "limit", value: String(limit))])
+    }
+    /// `GET /wiki/spaces/:id/timeline`: what changed, newest first.
+    public func wikiTimeline(spaceID: String) async throws -> WikiTimeline {
+        try await get("wiki/spaces/\(spaceID)/timeline")
+    }
+    /// `GET /wiki/review`: the changesets with an op still waiting for the owner, across every space,
+    /// or one space's when `spaceID` is given. Their decided ops ride along; Review keeps the pending.
+    public func wikiReview(spaceID: String? = nil) async throws -> [WikiChangeset] {
+        try await get("wiki/review", query: spaceID.map { [URLQueryItem(name: "space", value: $0)] } ?? [])
+    }
+    /// `GET /wiki/entries/:id?include=sources,history,exposure`: one entry and what its page draws.
+    public func wikiEntry(_ id: String) async throws -> WikiEntryDetail {
+        try await get("wiki/entries/\(id)", query: [URLQueryItem(name: "include", value: "sources,history,exposure")])
+    }
+    /// `GET /wiki/search`: the active entries a query finds in a space, each with why it matched.
+    public func wikiSearch(_ query: String, spaceID: String?) async throws -> WikiSearchResponse {
+        var items = [URLQueryItem(name: "q", value: query), URLQueryItem(name: "include", value: "topics")]
+        if let spaceID { items.append(URLQueryItem(name: "space", value: spaceID)) }
+        return try await getCancellable("wiki/search", query: items)
+    }
+    /// `POST /wiki/changesets/:id/decide`: the owner's answers to pending ops, one transaction;
+    /// answers with the changeset as it now stands. Only this door decides — the runner door has none.
+    public func decideWikiChangeset(_ id: String, _ req: WikiDecideRequest) async throws -> WikiChangeset {
+        try await post("wiki/changesets/\(id)/decide", body: req)
+    }
+    /// `POST /wiki/spaces/:id/changesets`: the owner's own write, which applies at once.
+    public func submitWikiChangeset(spaceID: String, _ req: WikiChangesetRequest) async throws -> WikiChangeResult {
+        try await post("wiki/spaces/\(spaceID)/changesets", body: req)
+    }
 
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.

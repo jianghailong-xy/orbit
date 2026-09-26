@@ -524,7 +524,10 @@ test('0223 cannot reach the ruler it stops protecting', () => {
 
 test('the removal adds no compose service and no resident process', () => {
   const compose = read('docker-compose.yml');
-  const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
+  // Top-level `x-*` blocks are Compose extension fields (the `x-logging` anchor), never services.
+  const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
+  const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)]
+    .map((match) => match[1]);
   assert.deepEqual(services.sort(),
     ['apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web'],
     'the deployment is exactly the services it already had');

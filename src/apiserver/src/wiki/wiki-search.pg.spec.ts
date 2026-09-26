@@ -176,6 +176,10 @@ interface Hit {
   anchorState: string;
   match: string[];
   score: number;
+  /** Present only when the caller asked (`?include=space,topics,anchor`). */
+  spaceSlug?: string;
+  topics?: string[];
+  anchorCheckedRef?: string | null;
 }
 
 const hitsOf = (answer: Answer): Hit[] => answer.body.hits as Hit[];
@@ -618,6 +622,48 @@ test('0307 · the wiki search path', { skip, concurrency: 1, timeout: 300_000 },
     assert.deepEqual(askedFor.body, answer.body, 'asking for the semantic leg answers identically');
     const declined = await ownerSearch(h, owner, { q: '闭集', space: here, semantic: 'false' });
     assert.deepEqual(declined.body, answer.body, 'declining it answers identically too');
+  });
+
+  await t.test('a hit asked for its space, topics and anchor carries them — and nothing more', async () => {
+    // The owner's ⌘K OPENS what it finds: an entry's page is `/wiki/<space>/e/<id>`, and the row
+    // under the title names the topic and the last anchor check. None of it is part of a hit's
+    // answer, which is why it arrives only when named (`include`).
+    const asked = await ownerSearch(h, owner, { q: '闭集', space: here, include: 'space,topics,anchor' });
+    assert.equal(asked.status, 200, asked.body);
+    const hit = hitFor(asked, closedSets, 'the convention, asked about in full');
+    assert.deepEqual(
+      Object.keys(hit).sort(),
+      [
+        'anchorCheckedRef', 'anchorState', 'id', 'kind', 'match', 'publicId', 'score', 'spaceSlug',
+        'summary', 'title', 'topics', 'trust',
+      ],
+      'asking adds exactly the three named fields',
+    );
+    // The slug is the space's own spelling — the one `/wiki/<space>/e/<id>` takes — read back off
+    // the space document rather than restated here.
+    const spaceDoc = (await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${here}`)).body;
+    assert.equal(hit.spaceSlug, spaceDoc.slug, "the slug is the space's own spelling");
+    assert.deepEqual(hit.topics, [], 'the convention is filed under no topic');
+    assert.deepEqual(
+      hitFor(await ownerSearch(h, owner, { q: 'run-pg-spec.sh', space: here, include: 'topics' }), recipe, 'the recipe')
+        .topics,
+      ['testing'],
+      "the entry's topics, as the Wiki pages spell them",
+    );
+
+    // One name at a time, and a name that is not a field: neither adds anything.
+    const one = await ownerSearch(h, owner, { q: '闭集', space: here, include: 'space' });
+    assert.deepEqual(
+      Object.keys(hitFor(one, closedSets, 'the convention, asked about its space')).sort(),
+      ['anchorState', 'id', 'kind', 'match', 'publicId', 'score', 'spaceSlug', 'summary', 'title', 'trust'],
+      'only what was asked for',
+    );
+    const none = await ownerSearch(h, owner, { q: '闭集', space: here, include: 'nonsense' });
+    assert.deepEqual(
+      none.body.hits,
+      (await ownerSearch(h, owner, { q: '闭集', space: here })).body.hits,
+      'a name that is not a field is not an answer',
+    );
   });
 
   await t.test("the filters narrow within the reader's own boundary and cannot widen it", async () => {

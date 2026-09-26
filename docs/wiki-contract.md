@@ -353,7 +353,10 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
   `refuseSessionAuthoredConfirmation`）。runner 里弹的确认卡不是闸门：服务端不校验它，headless 调用直接放行。
 - **读的边界**：只有绑在 space 上的 workspace 里的会话能读这个 space 的条目；把 workspace 绑进来就是 owner 同意在这些
   workspace 之间共享**已确认**的条目。待审提议只有提出它的会话看得见。
-- **灰度**：`ORBIT_WIKI=off|canary|on`；关闭时 apiserver 回 404 `WIKI_DISABLED`，claim 下发 `wikiDisabled`，runner 不挂这组工具。
+- **灰度**：`ORBIT_WIKI=off|canary|on`，默认 `on`；`canary` 只给 `ORBIT_WIKI_CANARY_OWNERS` 列出的账号（逗号分隔的 id），其余账号同 `off`。
+  对没开 wiki 的账号：两道门的所有路由都回 404 `WIKI_DISABLED`，claim 下发 `wikiDisabled`，runner 不挂这组工具，不推送
+  `<orbit_wiki_context>`，`orbit-wiki:` 链接卡读作 unavailable；web 收到 `WIKI_DISABLED` 就藏起侧栏入口、⌘K 的 Wiki 分区和
+  Add to Wiki。实现见 `src/apiserver/src/wiki/wiki-rollout.ts`。
   runner 比 apiserver 新、门还不存在时，照 `watch_tools.go` 的 `watchDoorMissing` 翻译成一句人话。
 
 ---
@@ -408,6 +411,13 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
 7. **提议时 add / supersede 就建出 `proposed` 的条目行和第 1 版修订**，好让 `orbit-wiki:<id>` 与 `similar[]` 能指向它；
    pending 的 amend 内容只存在 op 的 payload 里，被接受时才写新一版。
 8. **`wiki.changed` 的 id 是 space 的 id**：每次写都落在一个 space 里，客户端按 space 重读。
+
+9. **主题名由 slug 反推**（T8）：阶段 1 没有任何写入点写 `wiki_topic`，条目只按 slug 记自己的主题，所以
+   `GET /api/wiki/spaces/:id/topics/:slug` 的名字取自 slug（`tasks-dispatch` → "Tasks dispatch"），
+   `declared: false` 明说这不是 owner 起的名字；阶段 2 的维护作业写下 `wiki_topic` 行之后，名字改由那一行决定。
+10. **用量读数是 `GET /api/wiki/spaces/:id?include=usage`**（T8）：首页右栏「Agents used the wiki」要的是
+   `wiki_exposure` 上的四个聚合，属于按需付钱的那一类，所以不新开路由，按 `entries/:id` 已有的 `include` 写法挂在
+   space 文档上；窗口是滚动的 7 天，否则「this week」名不副实。
 
 尚待后续任务确认的一点：没有对应 space 的 workspace 第一次使用时，是自动为它的仓库建一个 space，还是回 `WIKI_SPACE_UNBOUND`
 等 owner 手动建，设计只写了「自动绑到对应 space」。本契约只规定了绑定到已有 space 的情形，建与不建由 T3 与 owner 定。

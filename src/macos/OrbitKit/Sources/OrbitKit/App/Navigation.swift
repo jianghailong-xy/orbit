@@ -57,6 +57,12 @@ public enum NavNode: Hashable, Sendable {
     /// The Following page's list of watches: a console's Watching card's `Manage in Watches ›` on a
     /// phone, pushed over that console for the same reason — a row opens its watch on this stack.
     case watches
+    /// One wiki entry's page, pushed from the Wiki home's rows — or over a phone's conversation, from
+    /// an `orbit-wiki:` link in it, so the back swipe returns to the conversation.
+    case wikiEntry(entryID: String)
+    /// Review: the proposals waiting for the owner, one card at a time. Pushed from the Wiki home's
+    /// amber banner.
+    case wikiReview
 }
 
 /// Which section is showing, and every section's stack.
@@ -134,6 +140,18 @@ public struct NavState: Equatable, Sendable {
     public var selectedProjectID: String? {
         guard case .projectDetail(let id) = path.last else { return nil }
         return id
+    }
+
+    /// `AppModel.selectedWikiEntryID` — the entry the Wiki pane shows.
+    public var selectedWikiEntryID: String? {
+        guard case .wikiEntry(let id) = path.last else { return nil }
+        return id
+    }
+
+    /// Whether Review is the page on top of the Wiki section's stack.
+    public var wikiReviewOnTop: Bool {
+        if case .wikiReview = path.last { return true }
+        return false
     }
 
     /// `AppModel.selectedUserID` — the account the Admin pane shows.

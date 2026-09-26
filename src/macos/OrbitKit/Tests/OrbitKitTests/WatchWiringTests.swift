@@ -49,7 +49,7 @@ final class WatchWiringTests: XCTestCase {
         let band = try slice(source("Views/Console/ConsoleView.swift"),
                              from: "ComposerBand {", to: "ComposerView(console: console)")
         let card = try XCTUnwrap(band.range(of: "WatchingCardStack(sessionID: console.sessionID)"))
-        let tray = try XCTUnwrap(band.range(of: "BackgroundTrayView(procs: console.state.background)"))
+        let tray = try XCTUnwrap(band.range(of: "BackgroundTrayView(procs: console.state.background"))
         XCTAssertLessThan(card.lowerBound, tray.lowerBound)
     }
 

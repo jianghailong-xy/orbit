@@ -261,6 +261,9 @@ export class RunnerTasksController {
    * the id of THIS tool invocation, which the runner reuses across every transport retry of it, so
    * a call whose answer was lost is the same request rather than a second run. Optional, because a
    * runner predating the field sends no body.
+   *
+   * Refused for a task whose project its owner has not started (`projectAwaitingStart`); the
+   * owner's own Run is `TasksController.execute`, which is not.
    */
   @Post('tasks/:id/execute')
   executeTask(
@@ -273,7 +276,7 @@ export class RunnerTasksController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: RunTaskDto,
   ) {
-    return this.tasks.execute(runner.ownerId, id, undefined, dto?.triggerId, sessionId);
+    return this.tasks.execute(runner.ownerId, id, undefined, dto?.triggerId, sessionId, true);
   }
 
   @Post('tasks/:id/dependencies')

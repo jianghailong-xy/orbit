@@ -21,10 +21,11 @@ import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
-import { SharedLinkPage } from './pages/SharedLinkPage';
+import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
 import { FollowingPage } from './pages/FollowingPage';
+import { WikiPage } from './pages/WikiPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
 // (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
@@ -89,9 +90,11 @@ export function App() {
     <Routes>
       {/* Public read-only share link — works signed-out, so it sits outside the auth gate. The root
           page is drawn for what the link opens; a conversation the link opens besides its root (a
-          task link's run) has a page of its own under it. */}
+          task or project link's run, a project's coordinator) and a project link's task have pages
+          of their own under it. */}
       <Route path="/s/:token" element={<SharedLinkPage />} />
       <Route path="/s/:token/c/:sessionId" element={<SharedSessionPage />} />
+      <Route path="/s/:token/t/:taskId" element={<SharedProjectTaskRoute />} />
       <Route path="/login" element={authed ? <Navigate to="/" /> : <LoginPage />} />
       {/* First-run setup. Signed-out only; once a user exists SetupPage itself bounces to
           login, and a signed-in visitor (so users exist) is sent to the app. */}
@@ -225,6 +228,58 @@ export function App() {
               element={
                 <DocView>
                   <ProjectDetailPage />
+                </DocView>
+              }
+            />
+            {/* The Wiki: one page component, five routes. `/wiki/review` is declared before
+                `/wiki/:space` for the reader's sake rather than the router's — a static segment
+                already outranks a dynamic one, but the two together are what the design's URL
+                scheme means (a space is a codebase; Review is the account's queue). */}
+            <Route
+              path="wiki"
+              element={
+                <DocView>
+                  <WikiPage route="home" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/review"
+              element={
+                <DocView>
+                  <WikiPage route="review" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/review"
+              element={
+                <DocView>
+                  <WikiPage route="review" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space"
+              element={
+                <DocView>
+                  <WikiPage route="home" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/t/:topic"
+              element={
+                <DocView>
+                  <WikiPage route="topic" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/e/:entry"
+              element={
+                <DocView>
+                  <WikiPage route="entry" />
                 </DocView>
               }
             />

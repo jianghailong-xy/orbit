@@ -83,6 +83,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		"do not create it another way.\n\n" +
 		"When you mention a task, session, project or task list to the user, link it by name instead of pasting its bare id: " +
 		"`[Fix login redirect](orbit-task:<id>)`, and likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`. " +
+		"Cite a wiki entry the same way, as `[title](orbit-wiki:<id>)`. " +
 		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
@@ -227,6 +228,13 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// command the instructions send an agent to instead of a sleep loop.
 		for _, action := range []string{"create", "get", "list", "update", "cancel"} {
 			rules = append(rules, "Bash("+command+" watch "+action+" *)")
+		}
+		// Every wiki verb: reading what the session's own workspace shares and proposing what it
+		// learned is not a power over anybody else's session, so it needs no orchestration grant —
+		// and the agent most likely to learn something worth recording is the plain single-session
+		// one. The commands themselves need ORBIT_SESSION_ID, which a session has.
+		for _, action := range []string{"search", "get", "propose"} {
+			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// The two single-command families: `orbit notify` is how a session reaches the human the
 		// runner works for — the reader most likely to be stuck without one is the plain

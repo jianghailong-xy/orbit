@@ -37,6 +37,7 @@ func cmdMcp() {
 		allowPermissionPrompt: mcpPermissionPromptEnabled(),
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
+		wikiOff:               !wikiEnabledFromEnv(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
@@ -50,6 +51,7 @@ type mcpServer struct {
 	allowPermissionPrompt bool   // Claude-only live approval bridge
 	allowOrchestration    bool   // L3: expose session_* tools (Agent.enableOrchestration)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
+	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
@@ -161,6 +163,9 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if s.watchesOff {
 			tools = withoutWatchTools(tools)
 		}
+		if s.wikiOff {
+			tools = withoutWikiTools(tools)
+		}
 		return s.ok(req.ID, map[string]interface{}{"tools": tools}), true
 	case "tools/call":
 		var p struct {
@@ -240,6 +245,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	// Watches are control-plane calls, but they act for this session and share their argument
 	// handling with `orbit watch` (watch_tools.go).
 	if result, handled := s.callWatchTool(name, args); handled {
+		return result
+	}
+	// The wiki tools are the same kind of call: they act for this session, and `orbit wiki` runs the
+	// same runWikiTool (wiki_tools.go).
+	if result, handled := s.callWikiTool(name, args); handled {
 		return result
 	}
 	switch name {
@@ -3232,6 +3242,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		tools = append(tools, sessionAwaitDescriptor(obj))
 	}
 	tools = append(tools, watchToolDescriptors(obj)...)
+	// Reading what your own workspace shares and proposing what you learned is not a power over
+	// anybody else's session, so the wiki tools are offered to every agent, as the task tools are
+	// (wiki_tools.go; they are left out entirely when the wiki is off).
+	tools = append(tools, wikiToolDescriptors(obj)...)
 	// Always advertised: an agent that cannot see the tool falls back to
 	// Bash(run_in_background), and a session without the runner socket gets a
 	// refusal that says why rather than a silently engine-owned process.
@@ -3446,6 +3460,10 @@ func getString(args map[string]interface{}, key string) string {
 // getStringSlice reads an array-of-strings argument, tolerating the single string a model
 // sometimes sends when the schema says array. Non-string entries are skipped rather than
 // failing the call: one malformed element should not lose a filter the caller did express.
+//
+// []string is read as well, and not only []interface{}: the arguments of a tool reached from the
+// CLI are built by this binary rather than decoded from JSON, and a caller that hands over the
+// natural Go type must not have its values silently dropped for it.
 func getStringSlice(args map[string]interface{}, key string) []string {
 	switch v := args[key].(type) {
 	case string:
@@ -3453,6 +3471,14 @@ func getStringSlice(args map[string]interface{}, key string) []string {
 			return nil
 		}
 		return []string{v}
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if item != "" {
+				out = append(out, item)
+			}
+		}
+		return out
 	case []interface{}:
 		out := make([]string, 0, len(v))
 		for _, item := range v {

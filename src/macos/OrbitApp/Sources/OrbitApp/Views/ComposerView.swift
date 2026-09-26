@@ -628,6 +628,29 @@ struct ComposerView: View {
                 Text("Effort")
                 Text(console.effort.label)
             }
+            // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
+            // tier both exist on some models and not others, so a row drawn regardless would be a
+            // control whose only outcome is being ignored — the server clamps it at dispatch either
+            // way. A session that stored `true` and then moved to a model without a lane keeps the
+            // stored value while the row is away, so going back to a model that has one restores
+            // what was asked for rather than silently dropping it. Web parity: same gate, same two
+            // rows (Standard / Fast), same `fastMode` field on the config.
+            if fastModeUsable {
+                Menu {
+                    ForEach([false, true], id: \.self) { on in
+                        Button {
+                            console.fastMode = on
+                            Task { await console.applyConfig(fastMode: on) }
+                        } label: {
+                            menuItemLabel(on ? "Fast" : "Standard",
+                                          selected: on == console.fastMode)
+                        }
+                    }
+                } label: {
+                    Text("Speed")
+                    Text(console.fastMode ? "Fast" : "Standard")
+                }
+            }
         } label: {
             modelChipLabel
         }
@@ -659,7 +682,7 @@ struct ComposerView: View {
                 .foregroundStyle(Color.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Text(console.effort.label)
+            Text(chipEffortLabel)
                 .foregroundStyle(Color.secondary)
                 .lineLimit(1)
                 .fixedSize()
@@ -668,9 +691,32 @@ struct ComposerView: View {
         #else
         (Text(modelDisplayName).fontWeight(.semibold).foregroundStyle(Color.primary)
             + Text(" ")
-            + Text(console.effort.label).foregroundStyle(Color.secondary))
+            + Text(chipEffortLabel).foregroundStyle(Color.secondary))
             .lineLimit(1)
         #endif
+    }
+
+    /// The effort half of the chip, with the fast lane appended while the session is in one —
+    /// "Max · Fast". Web parity (`.composer-model-effort`); the lane is named there too rather than
+    /// given a pill of its own, so the chip keeps saying one thing about the model.
+    private var chipEffortLabel: String {
+        fastModeUsable && console.fastMode ? "\(console.effort.label) · Fast" : console.effort.label
+    }
+
+    /// Whether this session has a fast lane to offer at all — Claude Code's `/fast` on the models
+    /// that carry it, Codex's "Fast" service tier on a model whose row in this runner's catalogue
+    /// advertises it. Asked of the RUNTIME, never the provider slug, for the same reason the other
+    /// capability questions ask that way: a configured (BYOK) identity borrows one. Unresolved
+    /// means no, which is the safe direction — a row that appears and then vanishes is worse than
+    /// one that appears a moment late, and the server polices the same fact at dispatch.
+    /// Web parity (`fastModeUsable`).
+    private var fastModeUsable: Bool {
+        console.providerCapabilitiesResolved
+            && AgentDefaults.fastModeAvailable(
+                runtime: AgentDefaults.runtime(for: console.provider,
+                                               configured: console.configuredProviders),
+                model: console.modelID,
+                catalog: console.modelCatalog)
     }
 
     // MARK: + menu (mirrors the web composer's `+` dropdown)
@@ -766,11 +812,18 @@ struct ComposerView: View {
             .contentShape(Rectangle())
     }
 
-    /// A menu row with a leading checkmark on the current selection — a Picker draws this for free,
-    /// a Menu of Buttons has to render it explicitly.
+    /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
+    /// a Menu of Buttons has to render it explicitly. Trailing, not leading (`Label(_:systemImage:)`,
+    /// the natural spelling): a leading icon takes a column on the selected row only, so that row's
+    /// text starts one checkmark to the right of every sibling's, which is what the phone report
+    /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
-        if selected { Label(text, systemImage: "checkmark") } else { Text(text) }
+        HStack(spacing: 8) {
+            Text(text)
+            Spacer(minLength: 12)
+            if selected { Image(systemName: "checkmark") }
+        }
     }
 
     // MARK: `/` autocomplete menu

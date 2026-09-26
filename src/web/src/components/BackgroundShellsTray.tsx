@@ -14,6 +14,9 @@ import { Pre } from './Transcript';
 import type { BgShell, BgShellStatus } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 import { useToast } from '../lib/toast';
+import { progressTrayLine, type TaskProgress } from '@orbit/shared';
+import { EMPTY_LIVE_TASK_PROGRESS, type LiveTaskProgress } from '../lib/liveTaskProgress';
+import { TaskProgressBlock } from './TaskProgressBlock';
 
 /**
  * "Background processes" tray, shown above the composer like the worktree status bar. It
@@ -34,10 +37,13 @@ export function BackgroundShellsTray({
   events,
   live,
   serverShells,
+  liveProgress = EMPTY_LIVE_TASK_PROGRESS,
 }: {
   events: RunEvent[];
   live?: boolean;
   serverShells?: BgShell[];
+  /** The live progress frames of the background agents and workflows, by launching call. */
+  liveProgress?: LiveTaskProgress;
 }) {
   const message = useToast();
   const shells = useMemo(
@@ -98,6 +104,7 @@ export function BackgroundShellsTray({
             <BgShellRow
               key={s.shellId}
               shell={s}
+              progress={liveProgress.get(s.toolUseId) ?? s.progress}
               expanded={expandedId === s.shellId}
               onToggle={() => setExpandedId((id) => (id === s.shellId ? null : s.shellId))}
             />
@@ -110,26 +117,42 @@ export function BackgroundShellsTray({
 
 function BgShellRow({
   shell,
+  progress,
   expanded,
   onToggle,
 }: {
   shell: BgShell;
+  progress?: TaskProgress;
   expanded: boolean;
   onToggle: () => void;
 }) {
   const title = shell.description || shell.command;
+  const task = shell.kind === 'agent' || shell.kind === 'workflow';
+  // Where a running workflow is, or what a running agent is on — the second line of its row.
+  const line = task && shell.status === 'running' && progress ? progressTrayLine(progress) : null;
   return (
     <div className={`bg-shell bg-shell-${shell.status}${expanded ? ' bg-shell-open' : ''}`}>
       <div className="bg-shell-head" onClick={onToggle}>
         <BgStatusIcon status={shell.status} />
-        <span className="bg-shell-cmd" title={shell.command}>
+        {task && <span className="bg-shell-kind">{shell.kind === 'workflow' ? 'Workflow' : 'Agent'}</span>}
+        <span className="bg-shell-cmd" title={shell.command || title}>
           {title}
         </span>
         <span className="bg-shell-id">{shell.shellId}</span>
         {shell.startedTs && <span className="bg-shell-age">{relAge(shell.startedTs)}</span>}
         <span className="bg-shell-caret">{expanded ? <DownOutlined /> : <RightOutlined />}</span>
       </div>
-      {expanded && (
+      {line && <div className="bg-shell-sub">{line}</div>}
+      {expanded && task && (
+        <div className="bg-shell-detail">
+          {progress ? (
+            <TaskProgressBlock progress={progress} />
+          ) : (
+            <div className="bg-shell-empty">No progress reported yet.</div>
+          )}
+        </div>
+      )}
+      {expanded && !task && (
         <div className="bg-shell-detail">
           {/* When the title is the description, still show the actual command. */}
           {shell.description && shell.command && <Pre text={shell.command} prompt />}

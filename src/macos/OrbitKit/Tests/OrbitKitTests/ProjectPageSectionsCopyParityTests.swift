@@ -57,6 +57,20 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         assertSays(web, "settled. The project stays open until its outcome is confirmed.", in: Self.panorama)
     }
 
+    /// The landing row's words, and the two decisions its clock makes: minutes AND seconds at every
+    /// length, and the count in the name slot when more than one job is in flight. The row is the
+    /// one the owner approved on 2026-09-25; both clients draw it from the same three facts.
+    func testTheLandingRowsWords() throws {
+        let web = try source(Self.panorama)
+        assertSays(web, "export const LANDING_WORD = '\(ProjectPage.landingWord)';", in: Self.panorama)
+        // The two state words, as the web spells them for the job state the server sends.
+        assertSays(web, "state: running ? 'checking' : 'queued'", in: Self.panorama)
+        // The clock: the same expression on both sides, unit for unit.
+        assertSays(web, "return `${Math.floor(whole / 60)}m ${whole % 60}s`;", in: Self.panorama)
+        // The name slot's second answer, so one task's title cannot stand in for several jobs.
+        assertSays(web, "what: jobs > 1 ? `${jobs} jobs` : inFlight.taskTitle,", in: Self.panorama)
+    }
+
     func testTheCoordinatorCardsWords() throws {
         let web = try source(Self.coordinator)
         assertSays(web, "'Open coordinator' : 'Reply to coordinator'", in: Self.coordinator)

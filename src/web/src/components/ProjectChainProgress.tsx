@@ -197,12 +197,32 @@ export function ProjectChainProgress({ projectId }: { projectId: string }) {
 
   if (!panorama.data || !isChain) return null;
 
-  const position = chainPosition(panorama.data.buckets, panorama.data.shape);
+  const items = ranking.data?.items ?? [];
+  return <ChainProgressStrip panorama={panorama.data} current={items[0] ?? null} next={items[1] ?? null} />;
+}
+
+/**
+ * The strip itself, from a panorama and the two names already in hand — the section above once its
+ * reads answer, and a public project page from what its link carries. Nothing for a mesh or an
+ * empty project, as above.
+ */
+export function ChainProgressStrip({
+  panorama,
+  current: head,
+  next: after,
+}: {
+  panorama: ProjectPanorama;
+  /** The step in progress and the one after it: the two unfinished tasks holding up the most. */
+  current: { title: string } | null;
+  next: { title: string } | null;
+}) {
+  if (panorama.shape.form !== 'chain' || panorama.shape.taskCount === 0) return null;
+
+  const position = chainPosition(panorama.buckets, panorama.shape);
   // Only while there is a frontier to name: a finished chain has no current step, and the ranking
   // of a finished project is empty anyway.
-  const items = position.complete ? [] : (ranking.data?.items ?? []);
-  const current = items[0];
-  const next = items[1];
+  const current = position.complete ? null : head;
+  const next = position.complete ? null : after;
 
   return (
     <section aria-label="Chain progress" style={{ marginBottom: 24 }}>

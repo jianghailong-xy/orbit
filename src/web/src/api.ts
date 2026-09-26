@@ -7,6 +7,9 @@ import type {
   SessionTurnIntent,
   SessionTurnPlacement,
 } from '@orbit/shared';
+// Types only, so the public project page's payload is typed by the cards that draw it.
+import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
+import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import { compatibleUuid as uuid } from './lib/uuid';
 
@@ -821,8 +824,18 @@ export interface TaskShareCounts {
   transcripts: number;
 }
 
+/** How much a project link's layers hold: its tasks, their comments and input files, and the
+ *  transcripts — its tasks' runs, and its coordinator's conversation when it has one. */
+export interface ProjectShareCounts {
+  tasks: number;
+  comments: number;
+  files: number;
+  runs: number;
+  transcripts: number;
+}
+
 /** A root's layer counts, whichever kind of root it is. */
-export type ShareCounts = Partial<SessionShareCounts & TaskShareCounts>;
+export type ShareCounts = Partial<SessionShareCounts & TaskShareCounts & ProjectShareCounts>;
 
 const SHARE_ROOT_PATH: Record<ShareRootKind, string> = {
   SESSION: 'sessions',
@@ -884,9 +897,79 @@ export interface SharedSession {
   hasMore?: boolean;
   /** What the link is — `SESSION` here; a task link's root page is a SharedTaskPage instead. */
   kind?: ShareRootKind;
-  /** A conversation opened under a task link (`/s/<token>/c/<id>`): the task it is a run of, and the
-   *  task's runs the link opens — the page's breadcrumb and the links it may follow. */
-  task?: { id: string; title: string; runs: { sessionId: string }[] };
+  /** A conversation opened under a task or project link (`/s/<token>/c/<id>`): the task it is a run
+   *  of, and the task's runs the link opens — the page's breadcrumb and the links it may follow.
+   *  Null for a project's coordinator. */
+  task?: { id: string; title: string; runs: { sessionId: string }[] } | null;
+  /** Under a project link: the project, for the breadcrumb, and what the link opens. */
+  project?: { title: string };
+  scope?: SharedScope;
+}
+
+/** What a project link opens besides its root page — its tasks with Task pages, its conversations
+ *  (its tasks' runs and its coordinator) with Conversations — for the page's links to go to. */
+export interface SharedScope {
+  /** The project itself: the link's root page. */
+  projectId: string;
+  tasks: { id: string }[];
+  conversations: { id: string }[];
+}
+
+/** A task the project page names: which, and how it stands. */
+export interface SharedTaskRef {
+  id: string;
+  title: string;
+  status: string;
+}
+
+/** One stated criterion, as a project link shows it: its words and how it is checked, whether its
+ *  work has met it (null: the read did not answer), where that work is — on main, on the project
+ *  branch and so not on main yet, or no receipt either way — and what holds an unmet one. */
+export interface SharedProjectCriterion {
+  ordinal: number;
+  text: string;
+  verificationMethod: string | null;
+  satisfied: boolean | null;
+  landing: 'ON_MAIN' | 'NOT_ON_MAIN_YET' | 'NO_MERGE_RECEIPT';
+  heldUpBy: SharedTaskRef[];
+}
+
+/** One row of a shared project's Tasks block: what the app's banding and row read. */
+export interface SharedProjectTaskRow {
+  id: string;
+  title: string;
+  status: string;
+  workState: string;
+  /** Between done and on main: the platform has it in hand, it is on the project branch, or on main. */
+  landing: 'INTEGRATING' | 'ON_PROJECT_BRANCH' | 'ON_MAIN' | null;
+  dependencyState: string;
+  landingWaitCount: number;
+  topoLevel: number;
+  unmetCount: number;
+  blocksCount: number;
+  childCount: number;
+}
+
+/** A project as its public link shows it: the seven blocks of the app's project page
+ *  (docs/share-links-design.md §7). `coordinator` only with Conversations. */
+export interface SharedProject {
+  id: string;
+  title: string;
+  status: 'OPEN' | 'DONE' | 'CANCELLED';
+  createdAt: string;
+  lastActivityAt: string | null;
+  taskCount: number;
+  overview: {
+    buckets: ProjectPanoramaBuckets;
+    shape: ProjectPanoramaShape;
+    integrationLine: 'MAIN' | 'PROJECT_BRANCH' | null;
+  };
+  coordinator?: { sessionId: string };
+  goal: string | null;
+  graph: ProjectDependencyGraphResponse;
+  chain: { current: SharedTaskRef | null; next: SharedTaskRef | null } | null;
+  criteria: SharedProjectCriterion[];
+  tasks: { items: SharedProjectTaskRow[]; hasMore: boolean };
 }
 
 /** A task as its public link shows it (docs/share-links-design.md §1, §7). Comments and input files
@@ -934,7 +1017,16 @@ export interface SharedTaskRun {
 /** What `/s/<token>` opens: a session link's transcript page, or another root's page. */
 export type SharedRoot =
   | (SharedSession & { kind?: 'SESSION' })
-  | { kind: 'TASK'; include: ShareInclude; sharedAt: string; root: SharedTask };
+  | { kind: 'TASK'; include: ShareInclude; sharedAt: string; root: SharedTask }
+  | { kind: 'PROJECT'; include: ShareInclude; sharedAt: string; root: SharedProject; scope: SharedScope };
+
+/** One of a project link's tasks (`/s/<token>/t/<id>`): the task as a task link shows its task,
+ *  with the link's layers and what it opens. */
+export interface SharedProjectTaskPage {
+  include: ShareInclude;
+  root: SharedTask;
+  scope: SharedScope;
+}
 
 /** GET a public share route. No auth — the token is the capability; a revoked/unknown token
  *  404s. Bypasses the bearer `api()` helper so a logged-out viewer isn't bounced to /login. */
@@ -963,6 +1055,11 @@ export const getSharedSession = (
     token,
     `${sharedConversation(opts.sessionId)}?limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}${opts.preview ? '&preview=1' : ''}`,
   );
+
+/** One task of a project link, by its public id — only with Task pages and only the project's own;
+ *  anything else is the dead link's 404. Not counted as a view. */
+export const getSharedProjectTask = (token: string, taskId: string): Promise<SharedProjectTaskPage> =>
+  sharedGet<SharedProjectTaskPage>(token, `/tasks/${encodeURIComponent(taskId)}`);
 
 /** A page of a shared transcript: the `limit` events just older than `before` (or the newest
  *  when it is absent). Clipped like the rest unless `whole`, which the Download HTML walk asks

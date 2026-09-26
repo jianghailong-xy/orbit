@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>未结算卡：已结算那半张为什么在问问题，以及「交给 coordinator」这个按钮</title>
+<style>
+  :root {
+    --bg-base: #ffffff; --bg-raised: #ffffff; --bg-subtle: #fafbfc; --bg-sunken: #f7f8fa;
+    --bg-hover: #f5f6f7;
+    --border: #dee0e3; --border-subtle: #eceef1;
+    --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e; --text-4: #a8acb3;
+    --brand: #3370ff; --brand-strong: #245ae0; --brand-tint: #eaf1ff; --brand-border: #bcd3ff;
+    --success: #1a7f37; --warning: #c2710c; --warning-bg: #fff4e6; --warning-border: #ffd591;
+    --warning-solid: #fa8c16;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 36px 40px 56px; background: #ececef; color: #16161a;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans CJK SC',
+          'Liberation Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 23px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1240px; margin: 0 0 22px; }
+  .lede code, .anno code, figcaption code {
+    font: 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; margin-bottom: 34px; }
+  figure { margin: 0; }
+  figcaption { margin-top: 14px; width: 1180px; font-size: 13px; line-height: 1.6; color: #55555e; }
+  figcaption b { color: #16161a; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 2px 9px; margin-bottom: 7px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+  .tag.alt { background: #ffe9c7; color: #7a4a03; }
+  .mark { outline: 1.5px dashed rgba(255,59,48,.85); outline-offset: 3px; border-radius: 8px; }
+  .panel { width: 1180px; background: var(--bg-base); border: 1px solid #d7d9dd; border-radius: 12px;
+           padding: 18px 20px 20px; }
+
+  /* ── the card, exactly as src/web/src/index.css draws it ───────────────────────────────── */
+  .approval-card {
+    border: 1px solid var(--brand);
+    border-radius: 10px;
+    background: var(--brand-tint);
+    margin: 10px 0;
+    overflow: hidden;
+  }
+  .approval-head {
+    padding: 10px 14px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-1);
+    background: var(--brand-tint);
+    border-bottom: 1px solid var(--brand-border);
+  }
+  .approval-body {
+    padding: 4px 14px;
+    max-height: 360px;
+    overflow: auto;
+    font-size: 13.5px;
+    color: var(--text-1);
+  }
+  .approval-body.is-questions { max-height: none; overflow: visible; }
+  .criteria-provenance {
+    flex: none;
+    margin-left: auto;
+    padding: 2px 7px;
+    border: 1px solid var(--warning-border);
+    border-radius: 4px;
+    background: var(--bg-raised);
+    color: var(--warning);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .card-actions { display: flex; align-items: center; gap: 10px; }
+  .approval-actions { padding: 10px 14px; border-top: 1px solid var(--brand-border); }
+  .card-action {
+    padding: 6px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;
+    border: 1px solid transparent; font-family: inherit;
+  }
+  .card-action--primary { background: var(--brand); color: var(--bg-raised); }
+  .card-action--secondary { background: var(--bg-raised); color: var(--text-2); border-color: var(--border); }
+  .card-action--outline { background: var(--bg-raised); color: var(--brand); border-color: var(--brand-border); }
+  .approval-kbd { margin-left: 8px; font-size: 11px; opacity: .75; }
+
+  .project-settlement .approval-head { display: flex; align-items: center; gap: 10px; }
+  .project-settlement-heading { min-width: 0; }
+  .project-settlement-body { padding-top: 10px; padding-bottom: 10px; }
+  .project-settlement-meta { font-size: 12px; line-height: 1.6; color: var(--text-3); }
+  .project-settlement-rule { margin: 10px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+  .project-settlement-block {
+    margin: 12px 0 0; padding: 10px 12px; border-radius: 8px;
+    background: var(--bg-raised); border: 1px solid var(--brand-border);
+  }
+  .project-settlement-block-title {
+    display: flex; gap: 8px; align-items: baseline;
+    font-size: 13px; font-weight: 600; color: var(--text-1);
+  }
+  .project-settlement-block-count {
+    flex: none; min-width: 18px; padding: 1px 6px; border-radius: 20px;
+    background: var(--text-1); color: var(--bg-raised);
+    font-size: 11px; font-weight: 700; text-align: center;
+  }
+  .project-settlement-rows { margin: 8px 0 0; padding: 0; list-style: none; }
+  .project-settlement-rows li {
+    display: flex; gap: 8px; align-items: baseline; padding: 4px 0;
+    border-top: 1px solid var(--border-subtle); font-size: 12.5px;
+  }
+  .project-settlement-rows li:first-child { border-top: none; }
+  .project-settlement-no {
+    flex: none; width: 17px; height: 17px; border-radius: 50%;
+    background: var(--text-1); color: var(--bg-raised);
+    font-size: 10px; font-weight: 600; line-height: 17px; text-align: center;
+  }
+  .project-settlement-text {
+    flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    color: var(--text-1);
+  }
+  .project-settlement-facts { flex: none; font-size: 11px; color: var(--text-2); white-space: nowrap; }
+  .project-settlement-read {
+    margin-top: 6px; padding: 0; border: none; background: none;
+    font-size: 12.5px; color: var(--brand); cursor: pointer; font-family: inherit;
+  }
+  .project-settlement-why { margin: 8px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+  .project-settlement-clears { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text-1); }
+  .project-settlement-tally { margin: 12px 0 0; font-size: 12px; line-height: 1.6; color: var(--text-3); }
+  .project-settlement-settled { margin: 10px 0 0; font-size: 13px; line-height: 1.6; color: var(--text-1); }
+  .project-settlement-settled-provenance { margin: 8px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text-3); }
+  .project-settlement-hint { flex-basis: 100%; margin: 2px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
+  /* 只有「改后」那一栏带这个作用域：真实改动是给 `.project-settlement-actions` 加上这三条
+     （`.card-actions` 上本来就有），hint 因此独占一行。今天这一行不是 flex，hint 跟按钮挤在一起。 */
+  .panel.is-after .project-settlement-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+  /* ── the project page's open-items row (Panel E) ───────────────────────────────────────── */
+  .project-open-items {
+    margin-bottom: 14px; padding: 14px 18px 12px; background: var(--bg-raised);
+    border: 1px solid var(--border-subtle); border-radius: 10px;
+  }
+  .project-open-items-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .project-open-items-title { font-size: 16px; font-weight: 600; color: var(--text-1); }
+  .project-open-items-group {
+    margin: 10px 2px 0; font-size: 11.5px; font-weight: 650; letter-spacing: .03em;
+    text-transform: uppercase; color: var(--text-3);
+  }
+  .project-open-items-list { margin: 0; padding: 0; list-style: none; }
+  .project-open-item-row {
+    display: grid; grid-template-columns: 10px minmax(0, 1fr) 210px auto;
+    gap: 12px; align-items: center; padding: 10px 2px; border-top: 1px solid var(--border-subtle);
+  }
+  .project-open-items-group + .project-open-items-list .project-open-item-row:first-child { border-top: 0; }
+  .project-open-item-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning-solid); }
+  .project-open-item-row.is-coordinator .project-open-item-dot { background: var(--brand); }
+  .project-open-item-title {
+    font-size: 13.5px; font-weight: 600; color: var(--text-1);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .project-open-item-line {
+    font-size: 12.5px; color: var(--text-3);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .project-open-item-who { font-size: 12.5px; line-height: 1.4; color: var(--text-2); }
+  .project-open-item-age { display: block; font-size: 11.5px; color: var(--text-3); }
+  .project-open-item-press { text-align: right; }
+  .project-open-item-link { font-size: 12.5px; color: var(--brand); text-decoration: none; }
+  .anno { margin-top: 12px; font-size: 13px; line-height: 1.65; color: #55555e; width: 1180px; }
+  .anno b { color: #16161a; }
+  .anno ul { margin: 6px 0 0; padding-left: 20px; }
+  .anno li { margin: 3px 0; }
+</style>
+
+<h1>未结算卡：已结算那一半在问一个它自己已经回答的问题，以及「交给 coordinator」这个按钮</h1>
+<p class="lede">
+  左边是今天线上跑的样子（照 <code>ProjectSettlementCard.tsx</code> + <code>index.css</code> 逐字重画，判据文字用了真实的项目数据形状）；右边是改后。
+  虚线框 = 改动处。第三块是「不用按钮」的那条备选路，画出来是为了让你比。
+</p>
+
+<!-- ────────────────────────── ROW 1 · 已结算 ────────────────────────── -->
+<div class="row">
+
+  <figure>
+    <span class="tag now">今天 · 已结算</span>
+    <div class="panel">
+      <div class="approval-card project-settlement">
+        <div class="approval-head project-settlement-head">
+          <span class="project-settlement-heading mark">Why is this project not done?</span>
+          <span class="criteria-provenance">FROM ORBIT</span>
+        </div>
+        <div class="approval-body is-questions project-settlement-body">
+          <div class="project-settlement-meta">Claude 账号池：按订阅配额均衡派发 · every stated criterion is met by work that has landed, under the set you confirmed</div>
+          <p class="project-settlement-settled"><b>Orbit recorded this project done.</b> Every stated criterion is met by work that has landed and counts, under a criteria set you have confirmed — so nothing here was left to ask.</p>
+          <p class="project-settlement-settled-provenance">Recorded by the derivation, not by a press. Nothing on this card was pressed, and there is nothing here to press.</p>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>问题就是这个标题。</b>它是卡的固定抬头（<code>SETTLEMENT_HEADING</code>），结算之后不换，于是标题问「为什么没做完」，正文回答「已经记成做完了」。
+      你在这张卡上停住，是因为它自相矛盾 —— 不是因为没有按钮。
+      <br>另外：<code>settled</code> 只在被投放过的那次挂载里成立（<code>delivered</code> 是 <code>useState</code>），离开会话再回来这张卡就没了。所以它既不是稳定的回执，也不是一个在等你的东西。
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">改后 · 已结算</span>
+    <div class="panel">
+      <div class="approval-card project-settlement">
+        <div class="approval-head project-settlement-head">
+          <span class="project-settlement-heading mark">Orbit recorded this project done.</span>
+          <span class="criteria-provenance">FROM ORBIT</span>
+        </div>
+        <div class="approval-body is-questions project-settlement-body">
+          <div class="project-settlement-meta">Claude 账号池：按订阅配额均衡派发 · every stated criterion is met by work that has landed, under the set you confirmed</div>
+          <p class="project-settlement-settled mark">Every stated criterion is met by work that has landed and counts, under a criteria set you have confirmed — so nothing here was left to ask.</p>
+          <p class="project-settlement-settled-provenance">Recorded by the derivation, not by a press. Nothing on this card was pressed, and there is nothing here to press.</p>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>换掉抬头，不新增元素。</b>用的就是卡里现成的那句 <code>SETTLEMENT_SETTLED_TITLE</code>（<code>Orbit recorded this project done.</code>），从正文搬上标题位，正文里那句加粗重复随之去掉 —— 一句话只说一次。
+      标题不再提问，就没有「为什么没按钮」这一问；<code>FROM ORBIT</code> 留着，它才是这张卡要说的重点（没人按过，是派生记的）。
+      <br>它仍然不是回执：不绿、不打勾（0229 删掉的正是判定机器）。
+    </figcaption>
+  </figure>
+
+</div>
+
+<!-- ────────────────────────── ROW 2 · 未结算 ────────────────────────── -->
+<div class="row">
+
+  <figure>
+    <span class="tag now">今天 · 未结算</span>
+    <div class="panel">
+      <div class="approval-card project-settlement">
+        <div class="approval-head project-settlement-head">
+          <span class="project-settlement-heading">Why is this project not done?</span>
+          <span class="criteria-provenance">FROM ORBIT</span>
+        </div>
+        <div class="approval-body is-questions project-settlement-body">
+          <div class="project-settlement-meta">Claude 账号池：按订阅配额均衡派发 · every stated criterion has been met by the work filed under it, and Orbit has not recorded it done</div>
+          <p class="project-settlement-rule">Orbit records a project done by itself — no press, no agent — when every stated criterion is met by work that has landed and counts, under a criteria set you have confirmed. 3 of those do not hold here.</p>
+
+          <div class="project-settlement-block">
+            <div class="project-settlement-block-title">
+              <span class="project-settlement-block-count">1</span>
+              <span>1 criterion has not been met by the work filed under it</span>
+            </div>
+            <ul class="project-settlement-rows">
+              <li>
+                <span class="project-settlement-no">5</span>
+                <span class="project-settlement-text">回落路径有回归用例覆盖</span>
+                <span class="project-settlement-facts">Not settled · No receipt</span>
+              </li>
+            </ul>
+            <p class="project-settlement-why">These are the criteria the work filed under them has not met. The card is here because the rest of the set reads met — this is what the derivation is left waiting on.</p>
+            <p class="project-settlement-clears"><b>What clears it: </b>finish the work each criterion is measured by, and let it settle in its own session</p>
+          </div>
+
+          <div class="project-settlement-block">
+            <div class="project-settlement-block-title">
+              <span class="project-settlement-block-count">4</span>
+              <span>4 criteria have no merge receipt proving they landed</span>
+            </div>
+            <ul class="project-settlement-rows">
+              <li>
+                <span class="project-settlement-no">1</span>
+                <span class="project-settlement-text">配额耗尽时一次任务只在一个账号上排队</span>
+                <span class="project-settlement-facts">Settled · No receipt</span>
+              </li>
+              <li>
+                <span class="project-settlement-no">2</span>
+                <span class="project-settlement-text">派发按订阅剩余额度加权，不再轮询</span>
+                <span class="project-settlement-facts">Settled · On the integration line</span>
+              </li>
+              <li>
+                <span class="project-settlement-no">3</span>
+                <span class="project-settlement-text">账号池状态在项目页可见</span>
+                <span class="project-settlement-facts">Settled · On the integration line</span>
+              </li>
+            </ul>
+            <button class="project-settlement-read">Show all 4</button>
+            <p class="project-settlement-why">Settling is decided inside each task’s own worktree, so it says nothing about the default branch. Orbit holds no receipt for these — a merge it never saw leaves none behind, so this is the absence of evidence, not a finding about where the work is.</p>
+            <p class="project-settlement-clears"><b>What clears it: </b>land the branch, or record the merge with merge_receipt where it happened outside Orbit</p>
+          </div>
+
+          <div class="project-settlement-block">
+            <div class="project-settlement-block-title">
+              <span class="project-settlement-block-count">!</span>
+              <span>the criteria on record have not been confirmed in their current wording</span>
+            </div>
+            <p class="project-settlement-why">Orbit settles against the set you confirmed. Editing any criterion moves its digest, so a confirmation of the older wording stops counting — with no flag anybody has to clear. Nothing else on this card asks you for anything; this one does.</p>
+          </div>
+
+          <p class="project-settlement-tally">5 stated criteria · 4 settled by the work filed under them · 2 with no merge receipt · 1 task still unsettled, 0 ended FAILED</p>
+        </div>
+        <div class="approval-actions project-settlement-actions">
+          <button class="card-action card-action--primary">Confirm the criteria<span class="approval-kbd">Enter</span></button>
+          <button class="card-action card-action--secondary">Chat about this<span class="approval-kbd">⌘ + Enter</span></button>
+          <span class="project-settlement-hint">“Chat about this” hands the card’s own facts to the composer below — the blocked criteria, what Orbit says each is waiting on, and what would clear them.</span>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>今天：三条「活」字句只有一句话，没有人能按的东西。</b>「把它们带回对话」要靠人自己打字 —— 卡把 coordinator 该做的事写在卡面上，再由人转述给它。
+      这是 09-20 定的（<code>docs/mocks/project-settlement-why-states.html</code>：「那些是活，不是决定，交给 <code>Chat about this</code> 带回对话」），当时的理由是「按钮 = 决定」；但你今天问的正是这半步。
+      <br><b>要对齐的就是这个 <code>Chat about this</code>：</b>右栏把它原位置换掉（虚线框就是那一行），不是再加一个。
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">改后 · 未结算</span>
+    <div class="panel is-after">
+      <div class="approval-card project-settlement">
+        <div class="approval-head project-settlement-head">
+          <span class="project-settlement-heading">Why is this project not done?</span>
+          <span class="criteria-provenance">FROM ORBIT</span>
+        </div>
+        <div class="approval-body is-questions project-settlement-body">
+          <div class="project-settlement-meta">Claude 账号池：按订阅配额均衡派发 · every stated criterion has been met by the work filed under it, and Orbit has not recorded it done</div>
+          <p class="project-settlement-rule">Orbit records a project done by itself — no press, no agent — when every stated criterion is met by work that has landed and counts, under a criteria set you have confirmed. 3 of those do not hold here.</p>
+
+          <div class="project-settlement-block">
+            <div class="project-settlement-block-title">
+              <span class="project-settlement-block-count">1</span>
+              <span>1 criterion has not been met by the work filed under it</span>
+            </div>
+            <ul class="project-settlement-rows">
+              <li>
+                <span class="project-settlement-no">5</span>
+                <span class="project-settlement-text">回落路径有回归用例覆盖</span>
+                <span class="project-settlement-facts">Not settled · No receipt</span>
+              </li>
+            </ul>
+            <p class="project-settlement-why">These are the criteria the work filed under them has not met. The card is here because the rest of the set reads met — this is what the derivation is left waiting on.</p>
+            <p class="project-settlement-clears"><b>What clears it: </b>finish the work each criterion is measured by, and let it settle in its own session</p>
+          </div>
+
+          <div class="project-settlement-block">
+            <div class="project-settlement-block-title">
+              <span class="project-settlement-block-count">4</span>
+              <span>4 criteria have no merge receipt proving they landed</span>
+            </div>
+            <ul class="project-settlement-rows">
+              <li>
+                <span class="project-settlement-no">1</span>
+                <span class="project-settlement-text">配额耗尽时一次任务只在一个账号上排队</span>
+                <span class="project-settlement-facts">Settled · No receipt</span>
+              </li>
+              <li>
+                <span class="project-settlement-no">2</span>
+                <span class="project-settlement-text">派发按订阅剩余额度加权，不再轮询</span>
+                <span class="project-settlement-facts">Settled · On the integration line</span>
+              </li>
+              <li>
+                <span class="project-settlement-no">3</span>
+                <span class="project-settlement-text">账号池状态在项目页可见</span>
+                <span class="project-settlement-facts">Settled · On the integration line</span>
+              </li>
+            </ul>
+            <button class="project-settlement-read">Show all 4</button>
+            <p class="project-settlement-why">Settling is decided inside each task’s own worktree, so it says nothing about the default branch. Orbit holds no receipt for these — a merge it never saw leaves none behind, so this is the absence of evidence, not a finding about where the work is.</p>
+            <p class="project-settlement-clears"><b>What clears it: </b>land the branch, or record the merge with merge_receipt where it happened outside Orbit</p>
+          </div>
+
+          <div class="project-settlement-block">
+            <div class="project-settlement-block-title">
+              <span class="project-settlement-block-count">!</span>
+              <span>the criteria on record have not been confirmed in their current wording</span>
+            </div>
+            <p class="project-settlement-why">Orbit settles against the set you confirmed. Editing any criterion moves its digest, so a confirmation of the older wording stops counting — with no flag anybody has to clear. Nothing else on this card asks you for anything; this one does.</p>
+          </div>
+
+          <p class="project-settlement-tally">5 stated criteria · 4 settled by the work filed under them · 2 with no merge receipt · 1 task still unsettled, 0 ended FAILED</p>
+        </div>
+        <div class="approval-actions project-settlement-actions mark">
+          <button class="card-action card-action--primary">Confirm the criteria<span class="approval-kbd">Enter</span></button>
+          <button class="card-action card-action--secondary">Ask the coordinator to handle it<span class="approval-kbd">⌘ + Enter</span></button>
+          <span class="project-settlement-hint">“Ask the coordinator to handle it” sends the card’s own facts into this conversation — the blocked criteria, what Orbit says each is waiting on, and what would clear them — and the coordinator picks it up from there.</span>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>换掉原位那个词，不并列第三个。</b><code>Chat about this</code> 和它做的是同一件事 —— 都把卡面事实交给协调会话，区别只是要不要先打字。两个标签说同一件事，就要教一条「什么时候用哪个」；所以这个词直接从原位置换掉：<b>按钮数不变（还是两个）、位置不变、⌘+Enter 跟着这个按钮走</b>。
+      <ul>
+        <li><b>能力没丢：</b>想自己补两句，输入框一直在下面；卡片只是不再提供「先放进输入框、等你打字」那半步。事实件也不再改口径 —— 用的就是现成的 <code>projectSettlementContext()</code>。</li>
+        <li><b>行为：</b>把那段当一条消息发进这个会话（走现成的 <code>send.mutate</code>，<code>WorkspaceView.tsx:4047</code>）。这张卡只画在项目的协调会话里（会话的 <code>projectId</code> 只对 <code>Project.coordinatorSessionId</code> 那一条非空），所以发进这个会话就是发给 coordinator。<b>纯前端改动，不动服务端。</b></li>
+        <li><b>权重：</b>先按它替换掉的那格（<code>secondary</code>），不新增规则。若你想让它在「纯活字句」（没有 <code>STANDARD_SET_UNCONFIRMED</code>）时升为 <code>primary</code>，那是异常项卡上现成的惯例（「a card leads with the next step for its kind」），不是我新定的。</li>
+        <li><b>顺带修一处布局（可以不要）：</b>这一行今天只挂了 <code>approval-actions</code>（没有 <code>display:flex</code>），hint 那句说明是跟按钮<b>挤在同一行</b>往后流的 —— 而它自己写着 <code>flex-basis:100%</code>，作者本意就是要它独占一行。左边「今天」那栏画的正是现在这个挤法；要修就加 <code>display:flex; flex-wrap:wrap; gap:10px</code>（<code>.card-actions</code> 上本来就有这三条）。</li>
+        <li><b>新造的词（要你拍板）：</b><code>Ask the coordinator to handle it</code>。备选：<code>Ask the coordinator</code>（最短，和升级卡上的 <code>Ask the coordinator again</code> 同族）、<code>Hand this to the coordinator</code>。</li>
+        <li><b>协调性：</b>项目页那边已经有「谁在做」这套词 —— <code>With the coordinator</code>、<code>Coordinator · waiting 12m · goes to you in 48m</code>。这个按钮是同一套话在会话里的入口。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+</div>
+
+<!-- ────────────────────────── ROW 3 · 备选 ────────────────────────── -->
+<div class="row">
+  <figure>
+    <span class="tag alt">备选 · 不用按按钮：派生一扣住就进 coordinator 的待办（项目页示意）</span>
+    <div class="panel">
+      <div class="project-open-items">
+        <div class="project-open-items-head">
+          <span class="project-open-items-title">Open items</span>
+        </div>
+        <div class="project-open-items-group">With the coordinator</div>
+        <ul class="project-open-items-list">
+          <li class="project-open-item-row is-coordinator">
+            <span class="project-open-item-dot"></span>
+            <div class="project-open-item-main">
+              <div class="project-open-item-title">Settlement withheld: 4 criteria have no merge receipt</div>
+              <div class="project-open-item-line">Claude 账号池：按订阅配额均衡派发 · the derivation is holding this project open</div>
+            </div>
+            <div class="project-open-item-who">
+              <span>Coordinator</span>
+              <time class="project-open-item-age">waiting 12m · goes to you in 48m</time>
+            </div>
+            <div class="project-open-item-press">
+              <a class="project-open-item-link" href="#">Open coordinator</a>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <figcaption>
+      <b>这条路才是「直接用 coordinator 处理」：不需要任何人按按钮。</b>派生一扣住结算，就把它作为一条异常项交给协调会话（现有的那条流水线：<code>assignee=COORDINATOR</code> + 升级时钟 + 升级后的 <code>Ask the coordinator again</code>），人只在它超时后才出现。会话里的卡则变成这条交付的呈现（和别的异常项一样）。
+      <br><b>我没先建议它，代价是真实的：</b>最后一单刚落、<code>LAND_TASK</code> 还在飞的那一两分钟里，派生就已经在扣住了 —— 我的经验里这个快照必然早于落地。要么接受每次收尾都先冒一条、几十秒后自己消失的待办，要么给它加一个「等一下」的条件；后者就是一条要教的规则。所以：<b>先做按钮（1 处 UI + 1 段文案 + 测试），确认这个盒子真的不够用，再动待办那条线。</b>
+      <br><b>另外两件事不属于这个按钮，是同一个投影的另外两头：</b>① 结算之后那张卡只在被投放过的那次挂载里存在（<code>delivered</code> 是内存态），刷新就没了 —— 要让回执真的留住，得让服务端说（09-20 的设计稿就提过给「派生扣住 DONE」开一个会话级待决 kinds，好让会话列表左侧那行也能出现）；② <code>NO_CRITERIA_STATED</code>（项目没写判据）今天同样只有一句话，它和「确认判据」一样是人门，要不要给按钮请你定。
+    </figcaption>
+  </figure>
+</div>
+
+</html>

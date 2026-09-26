@@ -50,7 +50,8 @@ const TASK_SELECT = {
   acceptanceExpectedExitCode: true,
   createdAt: true,
   project: { select: { title: true } },
-  supersededBy: { select: { id: true, title: true } },
+  // Its project decides whether the link shares the successor (a project link with Task pages).
+  supersededBy: { select: { id: true, title: true, projectId: true } },
   dependsOn: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { dependsOnTask: { select: EDGE_TASK } } },
   dependedOnBy: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { task: { select: EDGE_TASK } } },
   // Its runs, newest first as the app lists them. One in the Trash is paused, like a session link
@@ -147,7 +148,7 @@ export async function readPublicTask(
   prisma: PrismaService,
   taskId: string,
   include: Required<ShareInclude>,
-  inScope: (taskId: string) => boolean,
+  inScope: (task: { id: string; projectId: string | null }) => boolean,
 ): Promise<PublicTask> {
   const task = await prisma.task.findUnique({ where: { id: taskId }, select: TASK_SELECT });
   if (!task) throw linkNotFound();
@@ -168,7 +169,7 @@ export async function readPublicTask(
     status: task.status,
     outcome: taskOutcome(task),
     supersededBy: task.supersededBy
-      ? inScope(task.supersededBy.id)
+      ? inScope(task.supersededBy)
         ? { id: task.supersededBy.id, title: task.supersededBy.title }
         : { title: task.supersededBy.title }
       : null,

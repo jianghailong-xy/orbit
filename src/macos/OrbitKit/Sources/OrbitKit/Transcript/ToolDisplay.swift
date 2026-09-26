@@ -159,6 +159,16 @@ public struct ToolDisplay: Equatable, Sendable {
                                summary: input["description"]?.stringValue, summaryMono: false, path: nil, meta: nil,
                                body: (prompt?.isEmpty == false) ? .markdown(prompt!) : .none, autoOpen: false)
 
+        case "Workflow":
+            // A team of agents the runtime runs in the background. Named here by its script's own
+            // meta; the card prefers the launch receipt's summary once that lands (a resumed run
+            // carries no script at all). It opens to its progress; the script stays folded below.
+            let script = input["script"]?.stringValue
+            return ToolDisplay(label: "Workflow", symbol: "square.stack.3d.up", tone: .agent,
+                               summary: TaskProgressCopy.workflowTitle(input: input, result: nil, progress: nil),
+                               summaryMono: false, path: nil, meta: nil,
+                               body: (script?.isEmpty == false) ? .code(script!) : .none, autoOpen: false)
+
         case "ExitPlanMode":
             let plan = input["plan"]?.stringValue
             return ToolDisplay(label: "Plan", symbol: "list.clipboard", tone: .agent,

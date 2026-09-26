@@ -68,6 +68,34 @@ export interface ProjectIntegrationView<Instant = string> extends ProjectIntegra
   integratingCount: number;
   queuedCount: number;
   mergeCheckOnTip: MergeCheckTipState;
+  /**
+   * The OLDEST of those jobs, described — or null when there is none, which is also the answer a
+   * project with no line gives.
+   *
+   * The two counts above say how much is in flight; a project page whose only live signal was a
+   * number read as stopped (owner report, 2026-09-25: Running 0 · Ready 0 · Integrating 1 for the
+   * four minutes a landing takes), so the Work overview card draws what the queue is actually
+   * doing from this: which task, whether it is checking or still queued, and since when.
+   *
+   * The OLDEST rather than the newest, because that is the one the counts are waiting on: a row
+   * that named the job that just started would reset its own clock every time another landed.
+   */
+  inFlight: ProjectIntegrationInFlight<Instant> | null;
+}
+
+/**
+ * One integration job in flight, as the Work overview card's live line reads it.
+ *
+ * `taskTitle` is null for the kinds that land no single task — a promotion of the project's own
+ * branch, a merge check — because the title is a fact only the task's row has and inventing one for
+ * those would name work that is not what is being pushed. The row draws what it is given.
+ */
+export interface ProjectIntegrationInFlight<Instant = string> {
+  taskTitle: string | null;
+  /** `RUNNING` while the combined-tree checks are running; `QUEUED` while it waits its turn. */
+  state: 'RUNNING' | 'QUEUED';
+  /** What "for how long" counts from: the claim for a running job, the enqueue for a queued one. */
+  startedAt: Instant;
 }
 
 /**

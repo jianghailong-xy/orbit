@@ -162,6 +162,12 @@ import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import type { BgShell } from '../lib/backgroundShells';
+import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
+import {
+  EMPTY_LIVE_TASK_PROGRESS,
+  reduceLiveTaskProgress,
+  type SessionLiveTaskProgress,
+} from '../lib/liveTaskProgress';
 import {
   api,
   ApiError,
@@ -200,7 +206,9 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AddToWikiCtx } from './AddToWiki';
+import { useWikiShown } from '../lib/useWikiShown';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
   SessionDecisionStrip,
@@ -239,11 +247,7 @@ import {
   SessionAcceptanceConfirmationCard,
   acceptancePlanChangeContext,
 } from './AcceptanceConfirmationCard';
-import {
-  SETTLEMENT_CHAT_PLACEHOLDER,
-  SETTLEMENT_CHAT_PREFIX,
-  SessionProjectSettlementCard,
-} from './ProjectSettlementCard';
+import { SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -1461,7 +1465,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // that dismisses it — the bubble lingers on screen (e.g. an "Unpin" tip stuck after a
   // pin tap, or a composer pill's tip stacked over the Select it just opened). Suppress
   // these tooltips where hover is unavailable; every gated control already labels itself.
-  const hoverTipOpen = useMediaQuery('(hover: hover)') ? undefined : false;
+  // The same reading decides how a menu opens a level down: on hover where the pointer can
+  // hover, on a tap where it cannot (the composer model menu's `triggerSubMenuAction`).
+  const canHover = useMediaQuery('(hover: hover)');
+  const hoverTipOpen = canHover ? undefined : false;
   const [text, setText] = useState('');
   // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
   // draft rather than in the URL or the server, because it only has to survive as long as the
@@ -1564,8 +1571,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       | { kind: 'approval'; id: string }
       | { kind: 'ownerConfirmation'; taskId: string; requestId: string }
       | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string }
-      | { kind: 'planChange'; projectId: string; criteriaDigest: string }
-      | { kind: 'projectSettlement'; projectId: string };
+      | { kind: 'planChange'; projectId: string; criteriaDigest: string };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
     /** What the empty composer asks for while this is armed. */
@@ -1586,6 +1592,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [liveToolOutputState, setLiveToolOutputState] = useState<SessionLiveToolOutputs>({
     sessionId: selectedId,
     outputs: EMPTY_LIVE_TOOL_OUTPUTS,
+  });
+  // Broadcast-only progress of the workspace's background agents and workflows — the same kind of
+  // side channel as the shell snapshots above, and scoped to its session the same way.
+  const [liveTaskProgressState, setLiveTaskProgressState] = useState<SessionLiveTaskProgress>({
+    sessionId: selectedId,
+    progress: EMPTY_LIVE_TASK_PROGRESS,
   });
   // The seq the stream was at when the current stretch of generation began, so the transcript can
   // render the drafts where they started rather than always last. A ref, not state: it only ever
@@ -2046,6 +2058,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             : undefined,
       }
     : null;
+  // What Add to Wiki writes as: this conversation, which is both where the entry's provenance comes
+  // from (the turn a message belongs to) and what decides which codebase's wiki it is filed into
+  // (`wikiSpaceForSessionQuery`). Memoised because it is a context value: a fresh object each render
+  // would re-render every message row in the transcript on every token of a streaming reply. None at
+  // all for an account the server has not switched the wiki on for: the row keeps its copy button.
+  const wikiOn = useWikiShown();
+  const addToWikiConversation = useMemo(
+    () => (selectedId && wikiOn ? { sessionId: selectedId, title: selectedSession?.title ?? '' } : null),
+    [selectedId, selectedSession?.title, wikiOn],
+  );
   // What this conversation is waiting on, when a watch is what will bring it back: the same read the
   // Watching strip above the composer makes (one cache entry between them), so the header's word and
   // the strip under it cannot disagree about the same wait.
@@ -2825,6 +2847,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     liveToolOutputState.sessionId === selectedId
       ? liveToolOutputState.outputs
       : EMPTY_LIVE_TOOL_OUTPUTS;
+  const scopedLiveTaskProgress =
+    liveTaskProgressState.sessionId === selectedId
+      ? liveTaskProgressState.progress
+      : EMPTY_LIVE_TASK_PROGRESS;
+  // Which of the workspace's Agent/Workflow calls are still at work — the tray's own list, read the
+  // same way, so a card's spinner and its tray row always agree.
+  const runningTasks = useMemo(() => {
+    const running = new Set<string>();
+    const shells = mergeBackgroundShells(serverBgShells, deriveBackgroundShells(events, { sessionLive: live }));
+    for (const s of shells) {
+      if ((s.kind === 'agent' || s.kind === 'workflow') && s.status === 'running') running.add(s.toolUseId);
+    }
+    return running;
+  }, [events, live, serverBgShells]);
+  const taskActivity = useMemo<TaskActivity>(
+    () => ({ live: scopedLiveTaskProgress, running: runningTasks }),
+    [scopedLiveTaskProgress, runningTasks],
+  );
   const visibleAcceptedUserTurns = useMemo(
     () =>
       acceptedUserTurns.filter(
@@ -2938,6 +2978,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       current.sessionId === selectedId && current.outputs.size === 0
         ? current
         : { sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS },
+    );
+    setLiveTaskProgressState((current) =>
+      current.sessionId === selectedId && current.progress.size === 0
+        ? current
+        : { sessionId: selectedId, progress: EMPTY_LIVE_TASK_PROGRESS },
     );
     streamAnchorRef.current = null;
     setApprovals([]);
@@ -3106,6 +3151,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       writeCache();
       setEvents(accRef.current);
     };
+    const applyLiveTaskEvent = (ev: RunEvent): void => {
+      setLiveTaskProgressState((current) => {
+        const base = current.sessionId === selectedId ? current.progress : EMPTY_LIVE_TASK_PROGRESS;
+        const progress = reduceLiveTaskProgress(base, ev);
+        return current.sessionId === selectedId && progress === current.progress
+          ? current
+          : { sessionId: selectedId, progress };
+      });
+    };
     const applyLiveToolEvent = (ev: RunEvent): void => {
       setLiveToolOutputState((current) => {
         const base =
@@ -3132,6 +3186,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       accRef.current = [];
       seen.current = new Set();
       setLiveToolOutputState({ sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS });
+      setLiveTaskProgressState({ sessionId: selectedId, progress: EMPTY_LIVE_TASK_PROGRESS });
       oldestSeqRef.current = null;
       hasMoreOlderRef.current = false;
       lastSeq = 0;
@@ -3193,6 +3248,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         if (ev.type === 'tool_output') {
           applyLiveToolEvent(ev);
           return;
+        }
+        // How far a background agent or workflow has got: animation like the snapshot above — the
+        // task's end (a durable background_task) carries the last of it into the transcript.
+        if (ev.type === 'task_progress') {
+          applyLiveTaskEvent(ev);
+          return;
+        }
+        if (ev.type === 'background_task' || (ev.type === 'system' && ev.payload?.subtype === 'resumed')) {
+          applyLiveTaskEvent(ev);
         }
         // The durable result wins in the same render that appends it. Clearing here also releases
         // the potentially large snapshot once the result has entered the ordinary transcript.
@@ -4011,9 +4075,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
     // Nothing answers a plan change another way: no call is pending on it, so there is no question
     // that can go out from under the reader mid-sentence. It stays armed until it is sent or the
-    // chip is dismissed. The project settlement card's "Chat about this" is the same kind of armed
-    // reply — an ordinary turn at an idle agent — so it stays armed by the same rule.
-    if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') return;
+    // chip is dismissed.
+    if (replyTo.target.kind === 'planChange') return;
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
     // the card is drawn from, and only once that read has come back, for the reason below.
@@ -5314,11 +5377,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         evidenceDecision.mutate({ sessionId: selectedId, taskId, evidenceRevision, note: c });
         return;
       }
-      // Talking about a plan before it is started — and about a project whose criteria are all met —
-      // reaches no door either: both are ordinary turns at an idle agent, with the facts the card is
-      // drawn from carried in front of the message because nothing in the session holds them. The
-      // card that armed it is untouched: its own primary action is still the other way out.
-      if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') {
+      // Talking about a plan before it is started reaches no door either: it is an ordinary turn at
+      // an idle agent, with the facts the card is drawn from carried in front of the message
+      // because nothing in the session holds them. The card that armed it is untouched: its own
+      // primary action is still the other way out.
+      if (replyTo.target.kind === 'planChange') {
         if (!c) return;
         pinToBottom();
         const carried = replyTo.context;
@@ -5759,22 +5822,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // The project settlement card's "Chat about this": the next send is an ordinary turn saying what
-  // is still missing, with the card's own facts — the criteria and the two facts beside each —
-  // carried in front of it. Like the plan change above it answers nothing, so no door is named
-  // here. The card stays, with its own Confirm still live.
-  const startProjectSettlementChat = (talk: {
-    projectId: string;
-    projectTitle: string;
-    facts: string;
-  }): void => {
-    setReplyTo({
-      target: { kind: 'projectSettlement', projectId: talk.projectId },
-      banner: SETTLEMENT_CHAT_PREFIX + talk.projectTitle,
-      placeholder: SETTLEMENT_CHAT_PLACEHOLDER,
-      context: talk.facts,
-    });
-    setTimeout(() => taRef.current?.focus(), 0);
+  // The project settlement card's "Ask the coordinator to handle it": the card's own facts — the
+  // blocked criteria, what each is waiting on and what would clear them — go out as one ordinary
+  // turn. Ordinary because nothing is waiting on an answer: the card explains a projection, and the
+  // work that would clear it is this agent's. The facts ARE the message, so unlike the armed
+  // replies above there is nothing to type first; the composer stays free for anything they leave
+  // out. The card stays where it is, with its own Confirm still live.
+  const delegateProjectSettlement = (talk: { facts: string }): void => {
+    if (send.isPending) return;
+    send.mutate({ content: talk.facts, images: [], intent: defaultSendIntent });
   };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
@@ -7194,7 +7250,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     <AutoRetryCtx.Provider value={autoRetryHelp}>
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
                         <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
+                          <TaskActivityCtx.Provider value={taskActivity}>
                           <StreamingDraftsCtx.Provider value={streamingDrafts}>
+                            {/* What Add to Wiki writes as, and into which codebase's wiki. Mounted
+                                here and by nothing else: the shared page and the static export
+                                leave it null, which is what keeps a write button off a page its
+                                reader cannot write from. */}
+                            <AddToWikiCtx.Provider value={addToWikiConversation}>
                             {/* The links in this conversation, drawn as cards. The provider is
                                 what makes a card possible at all — the shared page and the export
                                 mount none — and it re-reads the links when the detail above is
@@ -7212,7 +7274,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 inserts={transcriptInserts}
                               />
                             </OrbitLinkCardsProvider>
+                            </AddToWikiCtx.Provider>
                           </StreamingDraftsCtx.Provider>
+                          </TaskActivityCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
                       </UndeliveredCtx.Provider>
                     </AutoRetryCtx.Provider>
@@ -7326,7 +7390,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <SessionProjectSettlementCard
                   key={`settlement:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
-                  onChatAbout={startProjectSettlementChat}
+                  onDelegate={delegateProjectSettlement}
                 />
               )}
               {selected &&
@@ -7592,7 +7656,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         {/* Background processes the workspace launched (Bash run_in_background) — invisible
             otherwise. Derived from this session's events; hidden when there are none. */}
         {selectedId && !selectedTrashed && (
-          <BackgroundShellsTray events={events} live={live} serverShells={serverBgShells} />
+          <BackgroundShellsTray
+            events={events}
+            live={live}
+            serverShells={serverBgShells}
+            liveProgress={scopedLiveTaskProgress}
+          />
         )}
         {/* The tasks this session's agent created, beside the branch below: the conversation's two
             kinds of output next to each other. Hidden until it has created one. */}
@@ -8201,15 +8270,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   trigger={['click']}
                   placement="topRight"
                   disabled={!configEditable}
-                  // Rows that open a level down open on a click, not a hover: the pointer
-                  // crosses them on its way to the model list, and on a phone there is no hover.
+                  // Rows that open a level down open on hover where the pointer can hover, the way
+                  // the browser's own menus do — and on a tap where it cannot, because a phone has
+                  // no hover to give: one row, two gestures, decided by the pointer.
                   // They open to the right — and on a phone, where the control sits near the
                   // right edge, there is no right: shift the level back inside the screen rather
                   // than let it hang off the edge (and widen the page with it).
                   menu={{
                     className: 'composer-model-menu',
                     items: modelMenuItems,
-                    triggerSubMenuAction: 'click',
+                    triggerSubMenuAction: canHover ? 'hover' : 'click',
                     builtinPlacements: {
                       rightTop: {
                         points: ['tl', 'tr'],

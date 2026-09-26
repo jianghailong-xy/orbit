@@ -230,7 +230,8 @@ final class ControlEventCodableTests: XCTestCase {
         // is still PRESENT, which is what keeps them decodable while the ping (no field) isn't.
         for (raw, expected) in [("task.list.changed", ControlEventType.taskListChanged),
                                 ("tag.changed", .tagChanged),
-                                ("provider.changed", .providerChanged)] {
+                                ("provider.changed", .providerChanged),
+                                ("wiki.changed", .wikiChanged)] {
             let ev = try decode("""
             {"type":"\(raw)","sessionId":"","agentId":null,"ts":"t","data":{"id":"x1"}}
             """)

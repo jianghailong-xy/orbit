@@ -50,7 +50,7 @@ final class CreatedTasksWiringTests: XCTestCase {
     func testTheCardStandsBetweenTheBackgroundTrayAndTheBranchBar() throws {
         let band = code(try slice(source("Views/Console/ConsoleView.swift"),
                                   from: "ComposerBand {", to: "ComposerView(console: console)"))
-        let tray = try XCTUnwrap(band.range(of: "BackgroundTrayView(procs: console.state.background)"))
+        let tray = try XCTUnwrap(band.range(of: "BackgroundTrayView(procs: console.state.background"))
         let card = try XCTUnwrap(band.range(of: "CreatedTasksCard(console: console)"))
         let bar = try XCTUnwrap(band.range(of: "WorktreeBar(console: console)"))
         XCTAssertLessThan(tray.lowerBound, card.lowerBound)

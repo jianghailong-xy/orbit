@@ -361,7 +361,7 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // tools would report the transport as unavailable on a session that is serving
 // it perfectly well. ORBIT_WATCHES is here for the same reason: without it `orbit mcp` would list the
 // watch tools in a session whose owner has Watch off (watch_rollout.go).
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN"]`
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN"]`
 
 // codexOrbitMCPServer is the name the config keys below register Orbit's own MCP server under —
 // the `serverName` Codex then reports on an elicitation, which is how an approval tells Orbit's
@@ -427,6 +427,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 		"ORBIT_TASK_ID="+publicID(job.TaskID),
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
+		envWiki+"="+wikiEnv(job.WikiDisabled),
 		envMCPPermissionPrompt+"=0",
 	)
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)

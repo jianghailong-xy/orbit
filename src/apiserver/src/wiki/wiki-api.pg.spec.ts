@@ -546,6 +546,57 @@ test('0307 · the wiki write path', { skip, concurrency: 1, timeout: 300_000 }, 
     assert.equal(decidedOps[2].decisionReason, 'too_specific');
   });
 
+  await t.test("the owner's edit of an amend is laid over it: what they left alone is still the proposal's", async () => {
+    const owner = await account(h, 'amend editor');
+    const machine = await runner(h, owner.id);
+    const ws = await workspace(h, owner.id, { repoUrl: 'github.com/orbit/amend-edit.git' });
+    const mine = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id });
+    const tool = await toolCall(h, mine, 'Bash', 'the watch stored the value unredacted');
+    const propose = (body: Record<string, unknown>) =>
+      call(h, { runner: machine.token, headers: { 'x-orbit-session-id': mine } }, 'POST', '/runner/wiki/changesets', body);
+
+    const seeded = await propose({
+      rationale: 'the entry the amend is about',
+      ops: [addOp({ title: 'Watch errors keep secrets' }, [{ kind: 'tool_call', ref: tool, quote: 'stored the value' }])],
+    });
+    const entryId = seeded.body.ops[0].entryId as string;
+    await call(h, { bearer: owner.bearer }, 'POST', `/wiki/changesets/${seeded.body.changesetId}/decide`, {
+      decisions: [{ opId: seeded.body.ops[0].opId, action: 'accept' }],
+    });
+
+    const amend = await propose({
+      rationale: 'the summary says too little',
+      ops: [
+        {
+          op: 'amend',
+          entryId,
+          baseRevision: 1,
+          changes: { summary: 'A watch delivery stored the value unredacted.' },
+          sources: [{ kind: 'tool_call', ref: tool, quote: 'unredacted' }],
+        },
+      ],
+    });
+    expectStatus(amend, 200, 'the agent proposes an amend');
+    assert.equal(amend.body.ops[0].status, 'pending');
+
+    // Review's Edit sends only what the owner changed: here the title, and not the summary they read.
+    const decided = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/changesets/${amend.body.changesetId}/decide`, {
+      decisions: [{ opId: amend.body.ops[0].opId, action: 'edit', edited: { title: 'Watch errors carried secrets' } }],
+    });
+    expectStatus(decided, 200, 'an edited amend is decided, not refused');
+
+    const entry = await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: toUuid(entryId) } });
+    assert.equal(entry.currentRevision, 2);
+    assert.equal(entry.title, 'Watch errors carried secrets', "the owner's title");
+    assert.equal(entry.summary, 'A watch delivery stored the value unredacted.', "the proposal's summary, which the owner left alone");
+    assert.equal(entry.unsupported, false, 'the edited revision still rests on a source');
+    const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: entry.id, revision: 2 } });
+    assert.equal(revision.authorKind, 'owner', 'the owner edited it, so the owner authored the revision');
+    assert.equal(await h.prisma.wikiSource.count({ where: { revisionId: revision.id } }), 1, "the proposal's source is on it");
+    const op = await h.prisma.wikiChangesetOp.findFirstOrThrow({ where: { id: toUuid(amend.body.ops[0].opId) } });
+    assert.equal(op.decision, 'edited');
+  });
+
   await t.test("the owner's own write applies at once and is trusted as theirs", async () => {
     const owner = await account(h, 'author');
     const made = await space(h, owner, 'github.com/orbit/author.git');

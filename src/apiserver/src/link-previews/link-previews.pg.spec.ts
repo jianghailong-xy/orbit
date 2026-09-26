@@ -5,8 +5,8 @@
  * matched against a UUID pattern whole, with a runtime session id and a reply quoting a uuid sitting
  * in the fixtures as bait), and the three ways an object can be out of reach answer identically.
  * PostgreSQL, because each card is the read its own page makes — the session list row's raw SQL,
- * `readProjectPanorama`'s lanes, the task page's tallies — and a fake store could only agree with
- * itself about any of them.
+ * `readProjectPanorama`'s lanes, the task page's tallies, and `wiki_entry`'s own row — and a fake
+ * store could only agree with itself about any of them.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/link-previews/link-previews.pg.spec.ts
  *
@@ -55,11 +55,11 @@ const UUID_ANYWHERE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 type Json = Record<string, any>;
 type Sent = { status: number; body: string; json: Json };
-type Ref = { kind: 'project' | 'task' | 'session' | 'list'; id: string };
+type Ref = { kind: 'project' | 'task' | 'session' | 'list' | 'wiki'; id: string };
 
 const HOUR = 3_600_000;
 
-test('link previews: four kinds of card, one answer for everything out of reach, base62 only', {
+test('link previews: five kinds of card, one answer for everything out of reach, base62 only', {
   skip: !URL, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const url = URL!;
@@ -273,6 +273,51 @@ test('link previews: four kinds of card, one answer for everything out of reach,
   const bareProjectId = randomUUID();
   await db.project.create({ data: { id: bareProjectId, ownerId: me.ownerId, title: 'Nothing yet' } });
 
+  // A wiki entry, in a space of its own: the one kind whose card is its own row rather than a page's
+  // read, and the one whose page takes a space's slug as well as its id.
+  const spaceId = randomUUID();
+  await db.wikiSpace.create({
+    data: { id: spaceId, ownerId: me.ownerId, slug: `orbit-${RUN}`, title: 'Orbit' },
+  });
+  const entryId = randomUUID();
+  const checkRef = '4db4f9f0c1a2b3d4e5f60718293a4b5c6d7e8f90';
+  await db.wikiEntry.create({
+    data: {
+      id: entryId,
+      ownerId: me.ownerId,
+      spaceId,
+      kind: 'principle',
+      status: 'active',
+      trust: 'owner',
+      currentRevision: 1,
+      title: 'A clock never starts agent work',
+      summary: 'Work starts from a committed fact.',
+      fields: { statement: 'Work starts from a committed fact.' },
+      anchors: [{ type: 'path', path: 'open-item-escalation.service.ts' }],
+      anchorState: 'verified',
+      anchorCheckedRef: checkRef,
+    },
+  });
+  const theirEntryId = randomUUID();
+  const theirSpaceId = randomUUID();
+  await db.wikiSpace.create({
+    data: { id: theirSpaceId, ownerId: stranger.ownerId, slug: `theirs-${RUN}`, title: 'Theirs' },
+  });
+  await db.wikiEntry.create({
+    data: {
+      id: theirEntryId,
+      ownerId: stranger.ownerId,
+      spaceId: theirSpaceId,
+      kind: 'pitfall',
+      status: 'active',
+      trust: 'owner',
+      currentRevision: 1,
+      title: 'Their note',
+      summary: 'Theirs.',
+      fields: { statement: 'Theirs.' },
+    },
+  });
+
   // Out of reach, three ways. Somebody else's…
   const theirs = {
     session: randomUUID(),
@@ -358,6 +403,7 @@ test('link previews: four kinds of card, one answer for everything out of reach,
     { kind: 'project', id: pub(projectId) },
     { kind: 'project', id: pub(bareProjectId) },
     { kind: 'list', id: pub(listId) },
+    { kind: 'wiki', id: pub(entryId) },
   ];
   const kinds = ['session', 'task', 'project', 'list'] as const;
   const outOfReach: Array<Ref & { why: string }> = [
@@ -365,6 +411,12 @@ test('link previews: four kinds of card, one answer for everything out of reach,
     ...kinds.map((kind) => ({ kind, id: pub(deleted[kind]), why: `a deleted ${kind}` })),
     ...kinds.flatMap((kind) => MALFORMED.map((id) => ({ kind, id, why: `a ${kind} id ${JSON.stringify(id)}` }))),
     ...kinds.map((kind) => ({ kind, id: pub(randomUUID()), why: `a ${kind} id that names nothing` })),
+    // A wiki entry has no deleted state — a lineage is retired, not removed — so the two ways an
+    // entry can be out of reach are somebody else's and an id that names nothing. An id that is no
+    // id at all is asked for below, with the rest of the malformed ones.
+    { kind: 'wiki', id: pub(theirEntryId), why: "another account's wiki entry" },
+    { kind: 'wiki', id: pub(randomUUID()), why: 'a wiki id that names nothing' },
+    ...MALFORMED.map((id) => ({ kind: 'wiki' as const, id, why: `a wiki id ${JSON.stringify(id)}` })),
   ];
   const answer = await ask([...mine, ...outOfReach.map(({ kind, id }) => ({ kind, id }))]);
   assert.equal(answer.status, 200, answer.body);
@@ -482,6 +534,27 @@ test('link previews: four kinds of card, one answer for everything out of reach,
     assert.equal(card.counts.running, 1);
   });
 
+  await t.test('a wiki card: the entry’s own row, its space’s slug, and the anchor it stands on', () => {
+    const card = byId(pub(entryId)).wiki;
+    assert.equal(card.title, 'A clock never starts agent work');
+    assert.equal(card.summary, 'Work starts from a committed fact.');
+    assert.equal(card.kind, 'principle');
+    assert.equal(card.status, 'active');
+    assert.equal(card.trust, 'owner');
+    assert.equal(card.anchorState, 'verified');
+    assert.equal(card.anchorCheckedRef, checkRef);
+    // The record, not a sentence: which words a path and a symbol get is the client's.
+    assert.deepEqual(card.anchor, { type: 'path', path: 'open-item-escalation.service.ts' });
+    // An entry's page takes its space as well as its id, so the card carries the slug — base62 id,
+    // and the slug as the space spells it.
+    assert.equal(card.spaceId, pub(spaceId));
+    assert.equal(card.spaceSlug, `orbit-${RUN}`);
+    assert.equal(card.currentRevision, undefined, 'the card is not the record');
+    for (const leak of ['fields', 'anchors', 'topics', 'aliases', 'stats']) {
+      assert.equal(leak in card, false, `${leak} is not on a card`);
+    }
+  });
+
   await t.test('another account’s, deleted, and malformed ids are all the same bare `unavailable`', () => {
     const asked = [...mine, ...outOfReach];
     for (const [i, ref] of outOfReach.entries()) {
@@ -507,6 +580,7 @@ test('link previews: four kinds of card, one answer for everything out of reach,
       { kind: 'task', id: taskId },
       { kind: 'project', id: projectId },
       { kind: 'list', id: listId },
+      { kind: 'wiki', id: entryId },
     ] as const;
     const byPublicId = await ask(objects.map(({ kind, id }) => ({ kind, id: pub(id) })));
     const byUuid = await ask(objects.map(({ kind, id }) => ({ kind, id })));
@@ -515,7 +589,7 @@ test('link previews: four kinds of card, one answer for everything out of reach,
     assert.equal(byUuid.status, 200, byUuid.body);
     assert.deepEqual(byUuid.json, byPublicId.json);
     assert.deepEqual(byUpperUuid.json, byPublicId.json);
-    assert.deepEqual(byUuid.json.previews.map((preview: Json) => preview.state), ['ok', 'ok', 'ok', 'ok']);
+    assert.deepEqual(byUuid.json.previews.map((preview: Json) => preview.state), ['ok', 'ok', 'ok', 'ok', 'ok']);
   });
 
   await t.test(`${LINK_PREVIEW_MAX_REFS} refs are read; one more is refused`, async () => {
