@@ -138,13 +138,18 @@ services:
       # accounts ORBIT_WATCHES_CANARY_OWNERS lists, comma-separated ids), drain (no new watches; the ones made
       # keep running) or off (drain, and this apiserver runs no Watch evaluation or delivery). Takes effect on
       # `docker compose up -d apiserver`; no migration and no runner release either way.
-      ORBIT_WATCHES: "${ORBIT_WATCHES:-on}"
+      # Set it on the host as ORBIT_WATCHES_MODE, not ORBIT_WATCHES: every agent session carries ORBIT_WATCHES (the
+      # runner injects it for `orbit mcp`), and Compose prefers the shell's environment to .env, so a deploy run from a
+      # session would take the session's value. The canary list keeps its name: no session carries it.
+      # (src/apiserver/src/wiki/wiki-compose-env.spec.ts)
+      ORBIT_WATCHES: "${ORBIT_WATCHES_MODE:-on}"
       ORBIT_WATCHES_CANARY_OWNERS: "${ORBIT_WATCHES_CANARY_OWNERS:-}"
       # Optional: how far the Orbit Wiki is switched on (src/apiserver/src/wiki/wiki-rollout.ts): on (default),
       # canary (only the accounts ORBIT_WIKI_CANARY_OWNERS lists, comma-separated ids) or off. An account without it
       # gets 404 WIKI_DISABLED on every wiki route, its sessions no wiki tools and no wiki context, and the web hides
       # the Wiki entry points. Takes effect on `docker compose up -d apiserver`; no migration and no runner release.
-      ORBIT_WIKI: "${ORBIT_WIKI:-on}"
+      # Set it on the host as ORBIT_WIKI_MODE, not ORBIT_WIKI, for the reason ORBIT_WATCHES_MODE gives above.
+      ORBIT_WIKI: "${ORBIT_WIKI_MODE:-on}"
       ORBIT_WIKI_CANARY_OWNERS: "${ORBIT_WIKI_CANARY_OWNERS:-}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"

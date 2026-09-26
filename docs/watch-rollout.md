@@ -57,11 +57,14 @@
 - **切换之前已经 spawn 的引擎保持原样**，直到它被回收（warm TTL 最长 4 小时）。它调 watch 工具会被服务端拒绝，工具回话写明
   「Watch 没开，不要退回轮询」。想让所有会话立刻按新值走，只能等引擎重新 spawn；不要为此重启 runner，那会杀掉会话的后台作业。
 
-**在 Compose 部署上怎么改**：`docker-compose.yml` 的 apiserver 已经透传这两个变量（默认 `on` 与空）。
+**在 Compose 部署上怎么改**：`docker-compose.yml` 把宿主上的 `ORBIT_WATCHES_MODE` 传给 apiserver，作为它的 `ORBIT_WATCHES`（默认 `on`），
+`ORBIT_WATCHES_CANARY_OWNERS` 原名透传（默认空）。宿主侧不用 `ORBIT_WATCHES` 这个名字，是因为 runner 往每个 agent 会话的环境里都注入了
+`ORBIT_WATCHES`，而 Compose 插值时 shell 环境优先于 `.env`：从会话里跑部署，`.env` 里的值会被会话带的 `on` 悄悄盖掉
+（`src/apiserver/src/wiki/wiki-compose-env.spec.ts` 锁住这一点）。
 
 ```bash
 # 部署目录的 .env
-ORBIT_WATCHES=canary
+ORBIT_WATCHES_MODE=canary
 ORBIT_WATCHES_CANARY_OWNERS=<账号 public id>
 
 docker compose up -d apiserver    # 只重建 apiserver；web、postgres、gateway 不动
@@ -209,7 +212,7 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ORBIT/api/metrics" \
 
 **第 1 步：canary**
 
-1. `.env` 设 `ORBIT_WATCHES=canary`、`ORBIT_WATCHES_CANARY_OWNERS=<账号>`，执行 `docker compose up -d apiserver`。
+1. `.env` 设 `ORBIT_WATCHES_MODE=canary`、`ORBIT_WATCHES_CANARY_OWNERS=<账号>`，执行 `docker compose up -d apiserver`。
 2. 确认：
    ```bash
    curl -s -H "Authorization: Bearer $TOKEN" "$ORBIT/api/metrics" | grep '^orbit_watch_rollout'
@@ -222,7 +225,7 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ORBIT/api/metrics" \
 
 **第 2 步：观察**第 5 节门槛 G1–G7。
 
-**第 3 步：放量**：`ORBIT_WATCHES=on`（或删掉这一行），`docker compose up -d apiserver`，确认 `orbit_watch_rollout{mode="on"} 1`。
+**第 3 步：放量**：`.env` 设 `ORBIT_WATCHES_MODE=on`（或删掉这一行），`docker compose up -d apiserver`，确认 `orbit_watch_rollout{mode="on"} 1`。
 
 **第 4 步：runner 发版**：新 runner 带来工具开关和轮询拦截，和 apiserver 谁先谁后都行。发版后用第 4 节的 SQL 看轮询数下降、await 调用上升。
 
@@ -230,7 +233,7 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ORBIT/api/metrics" \
 
 ### R1 drain（默认先做这一步）
 
-1. `.env` 设 `ORBIT_WATCHES=drain`，`docker compose up -d apiserver`。
+1. `.env` 设 `ORBIT_WATCHES_MODE=drain`，`docker compose up -d apiserver`。
 2. 确认：
    - `orbit_watch_rollout{mode="drain"} 1`，日志里有 `Watch is drain`；
    - 建 watch 得到 404 `WATCHES_DISABLED`，`orbit_watch_rollout_refusals_total{write="create"}` 增长；
@@ -241,7 +244,7 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ORBIT/api/metrics" \
 
 ### R2 off（Watch 本身出问题：风暴、错误唤醒、数据库压力）
 
-1. `.env` 设 `ORBIT_WATCHES=off`，`docker compose up -d apiserver`。
+1. `.env` 设 `ORBIT_WATCHES_MODE=off`，`docker compose up -d apiserver`。
 2. 确认：`orbit_watch_rollout{mode="off"} 1`；日志两行 `this replica evaluates no watch` 与 `this replica delivers no watch wake or notification`；
    `orbit_watch_gauges_up` 仍为 1。
 3. 预期的副作用：
