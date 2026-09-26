@@ -464,6 +464,56 @@ public enum AgentDefaults {
         return normalizedEffort(candidate, for: provider, model: model, catalog: catalog)
     }
 
+    /// Whether fast mode — the runtime's own fast lane: Claude Code's `/fast`, Codex's "Fast"
+    /// service tier — is something this runtime and model actually have. Parity with
+    /// `fastModeAvailable` in `src/shared/src/models.ts`, which is also what the server polices
+    /// dispatch with, so a control drawn here cannot promise a lane the runner would drop.
+    ///
+    /// `runtime` is the built-in runtime that executes the session, never the persisted provider
+    /// slug: resolve a configured (BYOK) identity with `runtime(for:configured:)` first, exactly as
+    /// `autoAvailable` asks, so a second account on the same vendor is answered like the runtime it
+    /// borrows.
+    ///
+    /// - Claude: the model's row in the ASSIGNED runner's catalogue decides, because the CLI that
+    ///   will run it is the one that knows. Only a row that did not answer (nil) falls back to
+    ///   `fastModeCapableClaudeModels`, so a model the runner reports as fast-less stays fast-less
+    ///   even while the table still lists it.
+    /// - Codex: the same row must advertise the priority tier. A row that says nothing means no —
+    ///   codex drops a tier the model does not advertise without a word, so "unknown" must not draw
+    ///   a control whose only possible outcome is being ignored.
+    /// - Kimi and OpenCode have no fast lane.
+    ///
+    /// True means "there is a lane for this runtime and model", never "this account is allowed
+    /// it": an organisation setting or data residency is the CLI's to refuse when the request goes
+    /// out.
+    public static func fastModeAvailable(runtime: String, model: String,
+                                         catalog: RunnerModelCatalog?) -> Bool {
+        if runtime == "claude" {
+            if let reported = catalog?.modelInfo(for: runtime, model: model)?.fastMode {
+                return reported
+            }
+            return fastModeCapableClaudeModels.contains(model)
+        }
+        guard runtime == "codex",
+              let tiers = catalog?.modelInfo(for: runtime, model: model)?.serviceTiers else {
+            return false
+        }
+        return tiers.contains(codexFastServiceTier)
+    }
+
+    /// The Claude models whose CLI carries `/fast`, used only where the runner's catalogue has no
+    /// row to answer with — a row always wins, including when it says no. Keep in sync with web's
+    /// FAST_MODE_CAPABLE_CLAUDE_MODELS.
+    public static let fastModeCapableClaudeModels: Set<String> = [
+        "claude-opus-5-5",
+        "claude-opus-5",
+        "claude-opus-4-8",
+    ]
+
+    /// The tier Codex calls "Fast" (`codex debug models` → `service_tiers: [{id: "priority"}]`).
+    /// Mirrors web's CODEX_FAST_SERVICE_TIER and runner-go's codexFastServiceTier.
+    public static let codexFastServiceTier = "priority"
+
     /// Last-resort context windows for the composer's gauge, for a runner too old to report one of
     /// its own. Not the source of truth and not maintained as if it were: the window belongs to the
     /// engine that runs the model, and a table keyed on a model id cannot express it — Claude Code
