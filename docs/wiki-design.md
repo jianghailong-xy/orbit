@@ -340,6 +340,8 @@ POST   /runner/wiki/spaces/:id/cursor          只在运行成功结束时推进
   > 「Record only what someone could not read from the code: a decision and what was rejected, a pitfall and its fix, a convention. Cite the turns or records it came from; a claim you cannot cite is not ready. What you propose waits for the owner's review — do not tell the user it is saved.」
 - **版本错配**：runner 比 apiserver 新的时候，门可能还不存在，要翻译成人话（照抄 `watch_tools.go` 的 `watchDoorMissing`）。
 - **灰度**：`ORBIT_WIKI=off|canary|on`（照抄 `watch-rollout.ts`）；关闭时 claim 下发 `wikiDisabled`，runner 不挂这组工具。
+  Compose 部署在 `.env` 里写 `ORBIT_WIKI_MODE`（容器里仍叫 `ORBIT_WIKI`）：agent 会话的环境里带着 runner 注入的同名变量，而 Compose
+  插值时 shell 环境优先于 `.env`，宿主侧若也叫 `ORBIT_WIKI`，从会话里跑的部署会把灰度悄悄换成 `on`。
 - 所有结果都带 `outputSchema` / `structuredContent`，同时保留文本回退。
 
 ### 5.3 CLI
