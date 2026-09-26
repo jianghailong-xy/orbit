@@ -41,6 +41,7 @@ import type {
   WikiTimeline,
   WikiTopicView,
 } from './wiki';
+import { isWikiDisabled } from './wiki';
 import {
   activeTasksPath,
   labelSummaryPath,
@@ -790,11 +791,24 @@ export const taskRowQuery = (taskId: string) =>
  * are the only places that spelling changes.
  */
 
-/** Every space this owner has, each with the count of proposals waiting — the sidebar's number. */
+/**
+ * Every space this owner has, each with the count of proposals waiting — the sidebar's number.
+ *
+ * `null` is the server saying the wiki is not switched on for this account (404 WIKI_DISABLED, the
+ * apiserver's ORBIT_WIKI). It is an answer rather than a failure, so it is kept as data — nothing
+ * retries it — and it is what every entry point the wiki has reads to draw nothing (`wikiShown`).
+ */
 export const wikiSpacesQuery = () =>
   queryOptions({
     queryKey: ['wiki', 'spaces'] as const,
-    queryFn: () => api<WikiSpaceRow[]>('/wiki/spaces'),
+    queryFn: async (): Promise<WikiSpaceRow[] | null> => {
+      try {
+        return await api<WikiSpaceRow[]>('/wiki/spaces');
+      } catch (error) {
+        if (isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
     staleTime: 30_000,
   });
 

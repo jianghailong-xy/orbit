@@ -42,7 +42,7 @@ import {
 } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
-import { wikiProposalsToReview } from '../lib/wiki';
+import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -276,16 +276,19 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
   const { mode, setMode } = useThemeMode();
-  // Admins get an extra top-nav entry: user management.
-  const navItems: TopNavItem[] =
-    me.data?.role === 'ADMIN'
-      ? [...TOP, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
-      : TOP;
   // The Wiki's amber count: the proposals waiting for the owner, summed over every space (a wiki
   // belongs to the account, and Review's own page asks across all of them). Its own key root, so the
   // control plane's `wiki.changed` refresh reaches it and nothing else has to.
   const wikiSpaces = useQuery({ ...wikiSpacesQuery(), enabled: !!me.data });
   const wikiPending = (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0);
+  // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
+  // an entry that led to a refusal would be worse than none.
+  const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
+  // Admins get an extra top-nav entry: user management.
+  const navItems: TopNavItem[] =
+    me.data?.role === 'ADMIN'
+      ? [...topItems, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
+      : topItems;
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -640,7 +643,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           task lists) have no icon form, so they fold away — expand to bring them back. The
           workspaces themselves stay as monogram avatars below. Shown only when collapsed, on desktop. */}
       <div className="tp-rail">
-        {TOP.map((t) => (
+        {topItems.map((t) => (
           <div
             key={t.key}
             className={`tp-rail-item ${sel === t.key ? 'active' : ''}`}

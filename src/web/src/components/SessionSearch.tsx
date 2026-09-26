@@ -9,6 +9,7 @@ import { sessionSearchQuery, wikiSearchQuery } from '../lib/queries';
 import { splitHighlight } from '../lib/searchHighlight';
 import { sessionLifecycleStateOf } from '../lib/sessionState';
 import { wikiAnchorMark, wikiKindWord, WIKI_TRUST_LABELS, WIKI_TITLE } from '../lib/wiki';
+import { useWikiShown } from '../lib/useWikiShown';
 import { WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
 import { StatusIcon, statusLabel } from './WorkspaceView';
 
@@ -57,10 +58,14 @@ const MATCH_LABEL: Partial<Record<SessionSearchHit['matchField'], string>> = {
 
 /** The placeholder: what this palette searches. Both, since the wiki group comes first. */
 export const SEARCH_PLACEHOLDER = 'Search sessions and the wiki…';
+/** The same, for an account the server has not switched the wiki on for: the palette it was before the wiki. */
+export const SEARCH_PLACEHOLDER_SESSIONS = 'Search sessions…';
 /** The foot, when nothing is typed. */
 export const SEARCH_FOOT_IDLE = 'Recent sessions';
 /** The foot, when something is. Says which side is being searched first. */
 export const SEARCH_FOOT_SEARCHING = 'Searching the wiki, then session titles, messages, workspaces and tasks';
+/** The same, without the wiki. */
+export const SEARCH_FOOT_SEARCHING_SESSIONS = 'Searching IDs, titles, messages, workspaces and tasks';
 /** The two group headings: the wiki's, with the count of hits under it, and the sessions'. */
 export const SEARCH_WIKI_GROUP = WIKI_TITLE;
 export const SEARCH_GROUP_SESSIONS = 'Sessions';
@@ -204,14 +209,16 @@ export function SessionSearch() {
   });
 
   // The wiki answers the same keystrokes: one debounce, two requests, two draws. Without a query
-  // there is nothing to look up, and the palette stays the session switcher it has always been.
+  // there is nothing to look up, and the palette stays the session switcher it has always been —
+  // as it does for an account the server has not switched the wiki on for, which is never asked.
+  const wikiOn = useWikiShown();
   const wiki = useQuery({
     ...wikiSearchQuery(debounced.trim()),
-    enabled: open && debounced.trim() !== '',
+    enabled: open && debounced.trim() !== '' && wikiOn,
   });
 
   const hits = useMemo(() => search.data?.hits ?? [], [search.data]);
-  const wikiHits = useMemo(() => wiki.data?.hits ?? [], [wiki.data]);
+  const wikiHits = useMemo(() => (wikiOn ? (wiki.data?.hits ?? []) : []), [wikiOn, wiki.data]);
   // One cursor over both groups: the wiki is drawn first, so it is walked first.
   const rows = useMemo<SearchRow[]>(
     () => [
@@ -301,7 +308,7 @@ export function SessionSearch() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onInputKey}
           onBlur={onInputBlur}
-          placeholder={SEARCH_PLACEHOLDER}
+          placeholder={wikiOn ? SEARCH_PLACEHOLDER : SEARCH_PLACEHOLDER_SESSIONS}
           spellCheck={false}
           autoComplete="off"
         />
@@ -393,7 +400,9 @@ export function SessionSearch() {
               ? SEARCH_FOOT_IDLE
               : capped
                 ? `Top ${hits.length} of ${total} matching sessions`
-                : SEARCH_FOOT_SEARCHING}
+                : wikiOn
+                  ? SEARCH_FOOT_SEARCHING
+                  : SEARCH_FOOT_SEARCHING_SESSIONS}
           </span>
         )}
         <span className="ssearch-keys">

@@ -32,6 +32,7 @@ import {
   type WikiSpace,
   type WikiTrust,
 } from '@orbit/shared';
+import { ApiError } from '../api';
 import { encodeId } from './idCodec';
 
 export type {
@@ -147,6 +148,32 @@ export interface WikiEntryDetail extends WikiEntry {
   exposure?: WikiExposureRow[];
 }
 
+// ── Whether this account has the wiki ───────────────────────────────────────────────────────────
+
+/**
+ * The refusal every wiki route answers an account the server has not switched the wiki on for — the
+ * apiserver's ORBIT_WIKI (`off`, or a `canary` that does not list the account), contract `refusals`.
+ */
+export const WIKI_DISABLED = 'WIKI_DISABLED';
+
+/** Whether an error is that answer: a 404 carrying WIKI_DISABLED, which says the wiki is off, not that it failed. */
+export function isWikiDisabled(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404 && error.code === WIKI_DISABLED;
+}
+
+/**
+ * Whether the wiki's entry points are drawn at all — the sidebar's Wiki, ⌘K's Wiki group, Add to Wiki —
+ * read off the owner's spaces (`wikiSpacesQuery`, whose `null` is the server's WIKI_DISABLED).
+ *
+ * Drawn once that read has answered anything but WIKI_DISABLED, and when it failed for any other
+ * reason: a read that failed is not the server saying there is no wiki. Not while it is still on its
+ * way, so an account the wiki is off for is never offered an entry to press — one appearing a moment
+ * late is the gentler of the two.
+ */
+export function wikiShown(spaces: { data?: unknown; isError: boolean }): boolean {
+  return spaces.data !== undefined ? spaces.data !== null : spaces.isError;
+}
+
 // ── Routes ──────────────────────────────────────────────────────────────────────────────────────
 
 /** A space is addressed by its slug — `/wiki/orbit` reads as the codebase it is. */
@@ -199,6 +226,8 @@ export const wikiAnchorsVerified = (ref: string, ago: string): string =>
 /** The two states a page can be in before it has anything to draw. */
 export const WIKI_NO_SPACES = 'No wiki space yet. A space is a codebase, and the first one is made when a session proposes into it.';
 export const WIKI_NO_SUCH_SPACE = 'No wiki space by that name.';
+/** What the Wiki's own page says to an account the server has not switched the wiki on for. */
+export const WIKI_DISABLED_NOTE = 'The wiki is not switched on for this account.';
 export const WIKI_SPACE_PICKER_HINT = 'The codebase this wiki describes';
 
 /** The two numbers of the usage block, and the bar rows under them. */
