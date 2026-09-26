@@ -156,6 +156,7 @@ import {
   APPROVAL_ABANDONED_STATUS,
   reapApprovalsOfEndedTurns,
   reapApprovalsOfReplacedSupervisor,
+  reapApprovalsOfReturnedCalls,
 } from '../sessions/abandoned-approvals';
 import {
   CURRENT_WORK_RUNTIME_REJECTED,
@@ -4884,6 +4885,14 @@ export class RunnerApiController {
           }),
         );
       }
+      // A card whose call has now returned can never be answered, and a self-driven stretch never
+      // reaches /turn-complete, where the other collections run — so it is collected here, by the
+      // write that records the return (see reapApprovalsOfReturnedCalls).
+      const abandonedApprovals = await reapApprovalsOfReturnedCalls(
+        tx,
+        sessionId,
+        toolResults.map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId)),
+      );
 
       // Maintain the running background-shell set (Session.runningBgShells), which drives the
       // "Background running" status on the list + header. Added on a background launch (keyed by
@@ -5114,8 +5123,19 @@ export class RunnerApiController {
       if (Object.keys(sessionData).length > 0) {
         await tx.session.update({ where: { id: sessionId }, data: sessionData });
       }
-      return { session, currentWorkAcknowledged };
+      return { session, currentWorkAcknowledged, abandonedApprovals };
     }, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
+
+    // One frame per collected card, as a takeover sends: the clients re-read the conversation's
+    // count on it, and one still drawing the card drops it.
+    for (const id of eventOutcome.abandonedApprovals) {
+      this.realtime.publish(sessionId, {
+        seq: 0,
+        type: RunEventType.APPROVAL_RESOLVED,
+        payload: { id, status: APPROVAL_ABANDONED_STATUS },
+        ts: new Date().toISOString(),
+      });
+    }
 
     // Broadcast to live subscribers while the session is open;
     // once finalized, don't let late/replayed events spam the live stream — they

@@ -22,8 +22,10 @@
  *   (3) An approval raised where the engine was running with no turn in flight — the shape a
  *       self-driven stretch leaves (`turn_id` null, no job) — is collected on the card's OWN fact:
  *       its call has returned, which is what the result the engine writes when it stops polling
- *       records. The turn rule can never reach such a row, and before this it kept the badge lit
- *       forever with no card on any surface to press.
+ *       records. The turn rule can never reach such a row, and a self-driven stretch never reaches
+ *       /turn-complete either, so it is collected by the very batch that records the result — before
+ *       that, the badge stayed lit for as long as the stretch ran, with no card on any surface to
+ *       press.
  *   (4) An approval whose opener is unknown and whose call has said nothing is never collected. The
  *       predicate needs a fact, and "we do not know who raised it" is not one.
  *
@@ -69,17 +71,29 @@ interface Stack {
   db: PrismaClient;
   api: RunnerApiController;
   sessions: SessionsService;
+  /** Every live frame published, in order: what the clients are told. */
+  published: Array<{ sessionId: string; type: string; payload: unknown }>;
 }
 
 /** The production wiring, over one client and with no seam in the paths under test. */
 function connect(url: string): Stack {
   const db = prismaClientFor(url);
   const prisma = db as unknown as PrismaService;
-  const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
+  const published: Stack['published'] = [];
+  // Silent, except that `publish` is recorded: its frames are what a client re-reads a count on.
+  const realtime = new Proxy({}, {
+    get: (_target, name) =>
+      name === 'publish'
+        ? (sessionId: string, event: { type: string; payload: unknown }) => {
+            published.push({ sessionId, type: event.type, payload: event.payload });
+          }
+        : () => undefined,
+  }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const push = { notifyApprovalRequest: async () => undefined } as never;
   return {
     db,
+    published,
     sessions: new SessionsService(prisma, queue, realtime),
     api: new RunnerApiController(
       prisma,
@@ -320,6 +334,7 @@ test('an approval whose turn ended stops counting, and says so in the row', {
     assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 0,
       'a call that has STARTED is not a call that has returned — the row is still a live question');
     assert.equal((await approval(turnless.id)).status, 'PENDING', 'and it is untouched');
+    assert.equal(await pendingApprovals(), 1, 'so it is counted: somebody really is being asked');
 
     // The three-hour poll dies the way this one did — `context deadline exceeded` — and the engine
     // writes the result it got and runs on. This is the ONLY trace it leaves, and the same fact
@@ -336,19 +351,31 @@ test('an approval whose turn ended stops counting, and says so in the row', {
         },
       }],
     });
-    assert.equal(await pendingApprovals(), 1,
-      'the count is lit — this is the row that reads "Waiting for approval" with no card to press');
-    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 1,
-      'and the reaper is what puts it out, on the card’s own fact rather than a turn it never had');
-
+    // No reap and no turn boundary in between: the batch that recorded the result is what
+    // collected the row. Before, the count stayed lit here — the row that reads "Waiting for
+    // approval" with no card to press — until some later /turn-complete ran the reaper.
     const after = await approval(turnless.id);
-    assert.equal(after.status, APPROVAL_ABANDONED_STATUS, 'the row is collected');
+    assert.equal(after.status, APPROVAL_ABANDONED_STATUS,
+      'the row is collected by the batch that recorded its call returning');
     assert.equal(after.message, APPROVAL_ABANDONED_CALL_MESSAGE,
       'with the sentence for the reader it actually lost — neither a turn nor a job');
     assert.equal(after.decidedAt, null, 'nobody decided anything');
     assert.equal(after.decidedById, null, 'so it names no decider');
     assert.equal(after.turnId, null, 'and it still names no turn: there never was one');
     assert.equal(await pendingApprovals(), 0, 'the badge is dark: nothing is waiting on anybody');
+    assert.deepEqual(
+      stack.published.filter((frame) =>
+        frame.type === RunEventType.APPROVAL_RESOLVED
+        && (frame.payload as { id?: string }).id === turnless.id),
+      [{
+        sessionId: f.sessionId,
+        type: RunEventType.APPROVAL_RESOLVED,
+        payload: { id: turnless.id, status: APPROVAL_ABANDONED_STATUS },
+      }],
+      'and the clients are told once, so the row stops saying it now rather than on its next poll',
+    );
+    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 0,
+      'the reaper finds nothing left to collect');
     assert.equal(await db.approval.count({ where: { sessionId: f.sessionId } }), 3,
       'the question stays in the record with the other two');
   });
@@ -381,6 +408,114 @@ test('an approval whose turn ended stops counting, and says so in the row', {
     assert.equal(row.status, 'PENDING', 'an unknown opener is not a dead one');
     assert.equal(row.message, null, 'and nothing was written about it');
   });
+});
+
+/**
+ * A CARD RAISED INSIDE A TURN IS OVER WHEN ITS CALL RETURNS, NOT WHEN THE TURN DOES.
+ *
+ * The same failed poll lands mid-turn as easily as mid-stretch: the engine is handed it as the
+ * call's result, asks again, and works on inside the same turn — which may run for hours more.
+ * The loop that would carry an answer to the first card went with its call, so the card is
+ * collected when that result is recorded, with its turn still in flight. The card beside it, whose
+ * call is still running, is the control: it stays a live question, and the count keeps it.
+ */
+test('a card whose call returns mid-turn is collected then, while its turn runs on', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const stack = connect(url);
+  t.after(async () => {
+    await stack.db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  const db = stack.db;
+  const f = await fixture(db, 'mid-turn');
+  const pendingApprovals = async (): Promise<number> => {
+    const rows = await stack.sessions.list(f.ownerId, {});
+    const row = rows.find((s: { id: string }) => s.id === f.sessionId) as
+      | { pendingApprovals: number }
+      | undefined;
+    assert.ok(row, 'the conversation is in this owner’s Open list');
+    return row.pendingApprovals;
+  };
+  const approval = (id: string) =>
+    db.approval.findUniqueOrThrow({
+      where: { id },
+      select: { status: true, message: true, decidedAt: true, turnId: true },
+    });
+
+  const returning = `toolu_${randomUUID()}`;
+  const running = `toolu_${randomUUID()}`;
+  const first = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {
+    toolName: 'ExitPlanMode',
+    input: { plan: '# the first draft' },
+    toolUseId: returning,
+  });
+  const control = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {
+    toolName: 'AskUserQuestion',
+    input: { questions: [{ question: 'which way?', header: 'Way', options: [] }] },
+    toolUseId: running,
+  });
+  await stack.api.events({ id: f.runnerId }, f.sessionId, {
+    events: [
+      {
+        seq: 1,
+        type: RunEventType.TOOL_USE,
+        ts: new Date().toISOString(),
+        turnId: f.turnId,
+        payload: { id: returning, name: 'ExitPlanMode', input: { plan: '# the first draft' } },
+      },
+      {
+        seq: 2,
+        type: RunEventType.TOOL_USE,
+        ts: new Date().toISOString(),
+        turnId: f.turnId,
+        payload: { id: running, name: 'AskUserQuestion', input: { questions: [] } },
+      },
+    ],
+  });
+  assert.equal((await approval(first.id)).turnId, f.turnId, 'the card names the turn that raised it');
+  assert.equal(await pendingApprovals(), 2, 'two calls are waiting on the owner inside one turn');
+
+  // The deploy's 502, as the engine records it, and the turn runs on.
+  await stack.api.events({ id: f.runnerId }, f.sessionId, {
+    events: [{
+      seq: 3,
+      type: RunEventType.TOOL_RESULT,
+      ts: new Date().toISOString(),
+      turnId: f.turnId,
+      payload: {
+        toolUseId: returning,
+        content: 'approval poll failed: GET /runner/sessions/…/approvals/… -> 502 error code: 502',
+        isError: true,
+      },
+    }],
+  });
+
+  assert.equal(
+    (await db.conversationTurn.findUniqueOrThrow({ where: { id: f.turnId } })).status,
+    'IN_FLIGHT',
+    'the turn is still running — this collection cannot be explained by the turn ending',
+  );
+  const collected = await approval(first.id);
+  assert.equal(collected.status, APPROVAL_ABANDONED_STATUS, 'the card whose call returned is collected');
+  assert.equal(collected.message, APPROVAL_ABANDONED_CALL_MESSAGE,
+    'with the sentence for the call, which is the reader it lost — its turn is still there');
+  assert.equal(collected.decidedAt, null, 'nobody decided anything');
+  assert.equal((await approval(control.id)).status, 'PENDING',
+    'the card whose call is still running is untouched: a returned call collects its own card only');
+  assert.equal(await pendingApprovals(), 1, 'and the count keeps the one question still being asked');
+  assert.deepEqual(
+    stack.published
+      .filter((frame) => frame.type === RunEventType.APPROVAL_RESOLVED)
+      .map((frame) => (frame.payload as { id?: string }).id),
+    [first.id],
+    'one frame, for the collected card and not for the live one',
+  );
 });
 
 /**

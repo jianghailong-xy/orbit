@@ -229,6 +229,41 @@ export async function reapApprovalsOfEndedTurns(
 }
 
 /**
+ * Collect the cards whose own call has just returned. Returns the ids collected.
+ *
+ * The third reader's fact, acted on where it is written rather than only where a turn ends: the
+ * reaper above runs from /turn-complete and finalize, and a self-driven stretch reaches neither.
+ * 2026-09-26: an `ExitPlanMode` card was raised at 15:07 in a stretch three finished sub-agents had
+ * woken, its poll died on a deploy's 502 at 15:22, the engine asked again and was approved — and
+ * the first row sat PENDING while the stretch went on coding, the conversation's row reading
+ * "Waiting for approval" with nothing on any surface to press.
+ *
+ * So `RunnerApiController.events` calls this with the calls whose results it has just recorded.
+ * A card that names a turn is taken too: its turn may run on for hours, but the loop that would
+ * carry an answer back ran inside the call, and the listing already stopped offering the card on
+ * this same fact (`SessionsService.stillBeingAsked`). A card that names a job is left to its job,
+ * for the reason the module note gives. A replayed batch finds nothing PENDING left to collect.
+ */
+export async function reapApprovalsOfReturnedCalls(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  toolUseIds: readonly string[],
+): Promise<string[]> {
+  if (toolUseIds.length === 0) return [];
+  const collected = await tx.approval.updateManyAndReturn({
+    where: {
+      sessionId,
+      status: 'PENDING',
+      backgroundJobId: null,
+      toolUseId: { in: [...toolUseIds] },
+    },
+    data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_CALL_MESSAGE },
+    select: { id: true },
+  });
+  return collected.map((row) => row.id);
+}
+
+/**
  * Whether the runner-hosted job a card names is still there to read an answer.
  *
  * The read side of the rule the reaper above collects on, and the same expression on purpose: a

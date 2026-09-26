@@ -488,12 +488,12 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-api.controller.ts#events',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then run_event / tool_call child rows (rank 60), then ONE session UPDATE (I3).',
-    identity: 'The batch itself: `run_event` is unique on `(sessionId, seq)` with skipDuplicates, tool_call outcomes are keyed by tool_use id, and the running sets are set-valued.',
+    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then run_event / tool_call / approval child rows (rank 60), then ONE session UPDATE (I3).',
+    identity: 'The batch itself: `run_event` is unique on `(sessionId, seq)` with skipDuplicates, tool_call outcomes — and the PENDING approvals a returned call collects — are keyed by tool_use id, and the running sets are set-valued.',
     isolation: '',
     attempts: 4,
     replay: 'Every write in it is already idempotent, `durable` and `events` are derived from the request body above the closure, and the single Session write is accumulated from a row re-read under its lock on every attempt.',
-    effects: 'The live broadcast, outside the loop — so a retried batch is published once, after the attempt that committed.',
+    effects: 'The live broadcast, outside the loop — so a retried batch is published once, after the attempt that committed. That includes one approval_resolved frame per card the batch collected.',
     answer: 'Typed 503; the runner re-sends the batch, which is idempotent.',
   },
   {
@@ -1136,6 +1136,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'sessions/current-work-delivery.ts#requeueUnreadCurrentWorkSteers', under: 'runnerApi turn-complete — inside the same rank-30 Session transaction that settles the target turn; it converts only that target\'s unacknowledged steer children, so it adds no row outside the lock its caller already holds' },
   { at: 'sessions/current-work-delivery.ts#terminalizePendingCurrentWorkSteers', under: 'runnerApi turn-complete/finalize/release, sessions interrupt/end and realtime reaper — each caller already owns the rank-30 Session transaction; this participant settles only matching unacknowledged turn children' },
   { at: 'sessions/abandoned-approvals.ts#reapApprovalsOfEndedTurns', under: "runnerApi turn-complete/finalize — each caller already owns the rank-30 Session transaction that just settled the turns this reads, and it writes only that session's approval children that can no longer be answered — the turn that asked them is no longer live, or, for a card that names no turn at all, the call that asked it has returned — so it adds no row and no lock outside the one its caller holds. It is a participant and not a unit on purpose: what it collects has to be decided by the same transaction that ended the turn, or a reader could see a turn ANSWERED with the calls it can no longer answer still counted" },
+  { at: 'sessions/abandoned-approvals.ts#reapApprovalsOfReturnedCalls', under: "runnerApi.events — inside the same rank-30 Session transaction that records the tool results it is handed, and after them; it writes only that session's own PENDING approval children whose call is among those results and that name no background job, so it adds no row and no lock outside the one its caller holds. A participant for the same reason as the reapers beside it: a card stops being answerable exactly when its call returns, so a reader that could see the call finished with its card still PENDING would count a question nothing can hear" },
   { at: 'sessions/abandoned-approvals.ts#reapApprovalsOfReplacedSupervisor', under: "runnerApi.takeoverLeases — inside the same rank-30 Session transaction that rotates the inbox lease, which is holding that session's row FOR UPDATE; it writes only that session's own approval children that are still PENDING, so it adds no row and no lock outside the one its caller holds. A participant for the same reason as the reaper above: a card stops being answerable exactly when the process that was reading it is replaced, so a reader that could see the rotation without the collection would see cards it can still press and nothing can hear" },
   { at: 'task-lists/list-events.service.ts#blockFor', under: 'taskLists.writePolicy' },
   // The exception items of the integration-line contract (§4.3, §4.4 X-D5). Each writes only through
