@@ -1460,10 +1460,16 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 const drainPollInterval = 150 * time.Millisecond
 
 // watchShutdownDrain is one claude supervisor's runner-shutdown watcher. It stops the inbox
-// poller (no new turns), gives whatever was already fed to claude `timeout` to finish and ack
-// — `pending` empties as the stdout reader acks each `result` — and then tears the process
-// down via procCancel. The caller detaches without finalizing, so the next runner reclaims and
-// --resumes. An idle session (`pending` empty) detaches at once.
+// poller (no new turns), gives whatever is already in flight `timeout` to finish and ack, and
+// then tears the process down via procCancel. In flight is what was fed to claude — `pending`
+// empties as the stdout reader acks each `result` — and a shell turn the runner is running
+// itself, a `!cmd` or an EXECUTABLE acceptance command, counted in `shells` until its
+// turn-complete is sent. The caller detaches without finalizing, so the next runner reclaims
+// and --resumes. An idle session (nothing in flight) detaches at once.
+//
+// A shell turn used to count for nothing here: the drain found `pending` empty and tore the
+// process down at once, killing the command mid-run. It reported exit -1, and an acceptance
+// command's -1 is a FAILED task. It gets the same budget as a turn in the engine.
 //
 // A turn still unfinished at the deadline loses its process without a result of its own, so it
 // is marked interrupted in the transcript first. Otherwise the reply simply stops: the last
@@ -1474,7 +1480,7 @@ const drainPollInterval = 150 * time.Millisecond
 //
 // Returns as soon as the process is gone on its own (procCtx done): there is nothing left to
 // tear down, and that turn's own crash path — not this one — owns what to report.
-func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan string,
+func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan string, shells *atomic.Int32,
 	timeout time.Duration, pollCancel, procCancel context.CancelFunc,
 	emit emitFn, sessionID string) {
 	select {
@@ -1486,7 +1492,7 @@ func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan str
 	tk := time.NewTicker(drainPollInterval)
 	defer tk.Stop()
 	deadline := time.After(timeout)
-	for len(pending) > 0 {
+	for len(pending) > 0 || shells.Load() > 0 {
 		select {
 		case <-tk.C:
 		case <-procCtx.Done():
@@ -1578,6 +1584,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	}()
 
 	pending := make(chan string, 8) // message turnIds fed but not yet resulted (FIFO)
+	var shellsInFlight atomic.Int32 // runner shell turns running, until their turn-complete is sent
 	inflight := map[string]bool{}   // turnIds being processed (dedup lease re-delivery)
 	var inflightMu sync.Mutex
 	// Exact Orbit executable turn owned by this Claude generation. It is separate from the
@@ -1945,6 +1952,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
 				} else {
+					// In flight for the shutdown drain until its result is sent (watchShutdownDrain).
+					shellsInFlight.Add(1)
 					req, shellErr := runSynchronousShellTurn(procCtx, t, job, execDir, resp, emit)
 					if shellErr != nil {
 						logln("executable shell start failed for", job.SessionID+":", shellErr)
@@ -1959,6 +1968,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					if err := completeTurn(req); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
+					shellsInFlight.Add(-1)
 				}
 				inflightMu.Lock()
 				delete(inflight, resp.TurnID)
@@ -2186,7 +2196,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		}
 	}()
 
-	go watchShutdownDrain(procCtx, shutdownCtx, pending, shutdownDrainTimeout,
+	go watchShutdownDrain(procCtx, shutdownCtx, pending, &shellsInFlight, shutdownDrainTimeout,
 		pollCancel, procCancel, emit, job.SessionID)
 
 	// Stdout reader (this goroutine): normalize messages; on each per-turn `result`

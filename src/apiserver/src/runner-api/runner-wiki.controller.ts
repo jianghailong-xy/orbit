@@ -6,6 +6,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiProposeDto } from '../wiki/dto';
 import { flagParam, listParam, WikiRetrieval } from '../wiki/wiki-retrieval';
+import { WikiRolloutGuard } from '../wiki/wiki-rollout';
 import { answerFor, WikiService, WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -29,8 +30,12 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  * NO SERVICE TOKEN. The guard is the machine's runner credential; a service token authenticates
  * nothing here (contract `refusalRules.serviceToken`), which is why this controller does not use
  * `RunnerSessionAuthGuard` the way the session routes do.
+ *
+ * NOT FOR AN ACCOUNT THE WIKI IS OFF FOR. Such a runner's owner is answered 404 WIKI_DISABLED on every
+ * route here (ORBIT_WIKI, `wiki-rollout.ts`) — which a runner that knows the flag reports as the wiki
+ * being off, and one that predates the wiki reads as the door not being there.
  */
-@UseGuards(RunnerAuthGuard)
+@UseGuards(RunnerAuthGuard, WikiRolloutGuard)
 @Controller('runner/wiki')
 export class RunnerWikiController {
   constructor(

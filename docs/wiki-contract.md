@@ -353,7 +353,10 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
   `refuseSessionAuthoredConfirmation`）。runner 里弹的确认卡不是闸门：服务端不校验它，headless 调用直接放行。
 - **读的边界**：只有绑在 space 上的 workspace 里的会话能读这个 space 的条目；把 workspace 绑进来就是 owner 同意在这些
   workspace 之间共享**已确认**的条目。待审提议只有提出它的会话看得见。
-- **灰度**：`ORBIT_WIKI=off|canary|on`；关闭时 apiserver 回 404 `WIKI_DISABLED`，claim 下发 `wikiDisabled`，runner 不挂这组工具。
+- **灰度**：`ORBIT_WIKI=off|canary|on`，默认 `on`；`canary` 只给 `ORBIT_WIKI_CANARY_OWNERS` 列出的账号（逗号分隔的 id），其余账号同 `off`。
+  对没开 wiki 的账号：两道门的所有路由都回 404 `WIKI_DISABLED`，claim 下发 `wikiDisabled`，runner 不挂这组工具，不推送
+  `<orbit_wiki_context>`，`orbit-wiki:` 链接卡读作 unavailable；web 收到 `WIKI_DISABLED` 就藏起侧栏入口、⌘K 的 Wiki 分区和
+  Add to Wiki。实现见 `src/apiserver/src/wiki/wiki-rollout.ts`。
   runner 比 apiserver 新、门还不存在时，照 `watch_tools.go` 的 `watchDoorMissing` 翻译成一句人话。
 
 ---

@@ -772,7 +772,10 @@ export class SessionsService {
         borrowedRuntime = configured
           ? configured.runtime
           : await accountPoolRuntime(this.prisma, ownerId, dto.provider);
-        if (!configured && !borrowedRuntime) throw new BadRequestException('provider not available');
+        // The slug is named: a command-line caller typed it, and no picker checked it first.
+        if (!configured && !borrowedRuntime) {
+          throw new BadRequestException(`provider not available: "${dto.provider}"`);
+        }
         if (!configured) await this.assertUsablePool(ownerId, dto.provider);
       }
     } else if (!providerBuiltin) {
@@ -1661,7 +1664,7 @@ export class SessionsService {
   async spawnForServiceToken(
     ownerId: string,
     scope: { assignedRunnerId: string; workspaceId: string; tokenId: string },
-    dto: { prompt: string; title?: string; model?: string; permissionMode?: string },
+    dto: { prompt: string; title?: string; model?: string; provider?: string; permissionMode?: string },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     assertKnownPermissionMode(dto.permissionMode);
@@ -1679,11 +1682,14 @@ export class SessionsService {
     const effort = await this.resolveDefaultEffort(ownerId, workspace.id);
     const created = await this.create(
       ownerId,
+      // As with spawnFromSession: an explicit provider is the session's binding and create() checks
+      // the caller can dispatch it, refusing one it cannot rather than starting on the default.
       {
         prompt: dto.prompt,
         title: dto.title,
         workspaceId: workspace.id,
         model: dto.model,
+        provider: dto.provider,
         permissionMode: dto.permissionMode,
         effort,
       },

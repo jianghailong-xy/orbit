@@ -270,6 +270,10 @@ public struct ComposerStatusSnapshot: Equatable, Sendable {
     public let model: String?
     public let permissionMode: String?
     public let effort: String?
+    /// Whether the session is in the runtime's fast lane. Nil and false both draw no row: off is
+    /// what every session without a lane also reads as, so the readout names the lane only when it
+    /// is on (see `statusRows`).
+    public let fastMode: Bool?
     public let contextTokens: Int?
     public let contextWindow: Int?
     public let planUsageLabel: String?
@@ -277,7 +281,7 @@ public struct ComposerStatusSnapshot: Equatable, Sendable {
 
     public init(surface: String, sessionTitle: String? = nil, sessionStatus: String? = nil,
                 agentName: String? = nil, provider: String? = nil, model: String? = nil,
-                permissionMode: String? = nil, effort: String? = nil,
+                permissionMode: String? = nil, effort: String? = nil, fastMode: Bool? = nil,
                 contextTokens: Int? = nil, contextWindow: Int? = nil,
                 planUsageLabel: String? = nil, planUsagePercent: Int? = nil) {
         self.surface = surface
@@ -288,6 +292,7 @@ public struct ComposerStatusSnapshot: Equatable, Sendable {
         self.model = model
         self.permissionMode = permissionMode
         self.effort = effort
+        self.fastMode = fastMode
         self.contextTokens = contextTokens
         self.contextWindow = contextWindow
         self.planUsageLabel = planUsageLabel
@@ -356,6 +361,12 @@ public enum ComposerHostCommand {
         }
         let effort = s.effort ?? ""
         rows.append(ComposerStatusRow(label: "Reasoning", value: effort.isEmpty ? "Default" : effort))
+        // Only when it is on. Off is what every session that has no fast lane at all also reads
+        // as, so a row saying so would appear on Kimi and on every Claude model without one — a
+        // setting named where it does not exist. Web parity (`localStatusRows`).
+        if s.fastMode == true {
+            rows.append(ComposerStatusRow(label: "Fast mode", value: "on"))
+        }
         if let tokens = s.contextTokens, tokens > 0, let window = s.contextWindow, window > 0 {
             let pct = min(100, Int((Double(tokens) / Double(window) * 100).rounded()))
             rows.append(ComposerStatusRow(label: "Context",

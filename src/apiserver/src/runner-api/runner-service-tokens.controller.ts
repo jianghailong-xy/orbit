@@ -20,9 +20,18 @@ export class RunnerServiceTokensController {
   @Post()
   mint(
     @CurrentRunner() runner: Runner,
-    @Body() dto: { scopes?: string[]; workspaceId?: string; label?: string; ttlSeconds?: number },
+    @Body(PublicIdPipe.forFields('workspaceId', 'agentId'))
+    dto: {
+      scopes?: string[];
+      workspaceId?: string;
+      /** @deprecated Pre-rename name, still sent by `orbit token mint --agent-id` on every shipped runner. */
+      agentId?: string;
+      label?: string;
+      ttlSeconds?: number;
+    },
   ) {
-    return this.serviceTokens.mint(runner, dto ?? {});
+    const body = dto ?? {};
+    return this.serviceTokens.mint(runner, { ...body, workspaceId: body.workspaceId ?? body.agentId });
   }
 
   @Get()

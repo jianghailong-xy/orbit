@@ -45,6 +45,7 @@ import {
 import { RealtimeService } from '../realtime/realtime.service';
 import { sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
+import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -512,6 +513,9 @@ export class QueueService {
       // Absent while Watch is on for the owner, the payload runners have always had; `watchesDisabled` otherwise, so
       // the runner spawns the session without the watch tools (docs/watch-rollout.md).
       ...watchClaimFields(currentWatchRollout(), session.ownerId),
+      // The same for the wiki (ORBIT_WIKI, wiki/wiki-rollout.ts): `wikiDisabled` when it is not on for the owner, so
+      // the runner spawns the session without the wiki tools.
+      ...wikiClaimFields(currentWikiRollout(), session.ownerId),
       // Lets `orbit mcp` shrink its wait budget with depth, so a nested session_create(wait)
       // cannot outlast the one waiting on it.
       spawnDepth: session.spawnDepth,

@@ -11,6 +11,7 @@ import {
   type WikiTrust,
 } from '@orbit/shared';
 import { JUDGMENT_DISPATCH_ORIGIN } from '../projects/coordinator-authority';
+import { currentWikiRollout, wikiOnFor, type WikiRollout } from './wiki-rollout';
 
 /**
  * The wiki context a session is handed when it starts: `<orbit_wiki_context>` (design §7.1,
@@ -134,16 +135,21 @@ interface PushCandidate {
 /**
  * Append this session's wiki context to the content being delivered, or return it unchanged.
  *
- * Returns `content` — the very value it was handed — whenever there is nothing to say: no lease
- * generation, an excluded session, no bound space, the space's push off, no eligible entry, or a
- * block that would carry no line. Throws on a database failure; the caller decides whether a note
- * for the agent is worth costing the turn it was going to ride along with (it is not — see the
- * call site in dequeueTurn).
+ * Returns `content` — the very value it was handed — whenever there is nothing to say: the wiki not
+ * switched on for the owner (ORBIT_WIKI, `wiki-rollout.ts`; `rollout` is that flag, the environment's
+ * when omitted), no lease generation, an excluded session, no bound space, the space's push off, no
+ * eligible entry, or a block that would carry no line. Throws on a database failure; the caller
+ * decides whether a note for the agent is worth costing the turn it was going to ride along with (it
+ * is not — see the call site in dequeueTurn).
  */
 export async function appendWikiContext(
   tx: Prisma.TransactionClient,
   subject: WikiPushSubject,
+  rollout: WikiRollout = currentWikiRollout(),
 ): Promise<string | null | undefined> {
+  // First, and before any read: an account the wiki is off for is handed what a server without the
+  // wiki would hand it.
+  if (!wikiOnFor(rollout, subject.ownerId)) return subject.content;
   if (!subject.leaseGeneration) return subject.content;
   // Knowledge is not evidence: a session that verifies, forems or judges work is handed nothing
   // (§7.3). The same three conditions refuse it the wiki tools (`runner-wiki.controller.ts`

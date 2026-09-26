@@ -294,6 +294,58 @@ final class AgentDefaultsTests: XCTestCase {
             "claude-opus-5", provider: "deepseek", configured: [deepseek], catalog: catalog))
     }
 
+    /// Fast mode is a lane the runner's CLI either has for a model or does not, and the catalogue
+    /// row is what answers: the static table fills a silence the same way the Auto set does, and
+    /// can no more contradict a row than that one can. Web parity: `fastModeAvailable` in
+    /// `src/shared/src/models.ts`, which is also what the server polices dispatch with.
+    func testFastModeComesFromTheAssignedRunnersCatalog() {
+        let catalog = RunnerModelCatalog(claude: [
+            RunnerModelInfo(value: "claude-opus-5-5", label: "Opus 5.5", fastMode: true),
+            RunnerModelInfo(value: "claude-opus-5", label: "Opus 5", fastMode: false),
+        ])
+        XCTAssertTrue(AgentDefaults.fastModeAvailable(
+            runtime: "claude", model: "claude-opus-5-5", catalog: catalog))
+        // A row that says no wins over the fallback table, which still lists Opus 5.
+        XCTAssertFalse(AgentDefaults.fastModeAvailable(
+            runtime: "claude", model: "claude-opus-5", catalog: catalog))
+
+        // Silence in its shapes — no catalog, no row for this model, a row from a runner too old
+        // to answer — keeps the table's answer for the models it names, and no for the rest: a
+        // lane nobody reported is not a lane this composer may offer.
+        let stale = RunnerModelCatalog(claude: [
+            RunnerModelInfo(value: "claude-sonnet-5", label: "Sonnet 5"),
+        ])
+        for candidate in [nil, stale] as [RunnerModelCatalog?] {
+            XCTAssertTrue(AgentDefaults.fastModeAvailable(
+                runtime: "claude", model: "claude-opus-4-8", catalog: candidate))
+            XCTAssertFalse(AgentDefaults.fastModeAvailable(
+                runtime: "claude", model: "claude-sonnet-5", catalog: candidate))
+        }
+
+        // Codex's lane is its priority service tier, and a catalogue that does not advertise it
+        // means no rather than "try anyway": codex drops an unadvertised tier without a word.
+        let codex = RunnerModelCatalog(codex: [
+            RunnerModelInfo(value: "gpt-5.2-codex", label: "GPT-5.2 Codex", serviceTiers: ["priority"]),
+            RunnerModelInfo(value: "gpt-5.1-codex", label: "GPT-5.1 Codex", serviceTiers: ["flex"]),
+            RunnerModelInfo(value: "gpt-5-codex", label: "GPT-5 Codex"),
+        ])
+        XCTAssertTrue(AgentDefaults.fastModeAvailable(
+            runtime: "codex", model: "gpt-5.2-codex", catalog: codex))
+        XCTAssertFalse(AgentDefaults.fastModeAvailable(
+            runtime: "codex", model: "gpt-5.1-codex", catalog: codex))
+        XCTAssertFalse(AgentDefaults.fastModeAvailable(
+            runtime: "codex", model: "gpt-5-codex", catalog: codex))
+
+        // The catalogue is keyed by runtime, so a Claude row says nothing about a Codex session;
+        // and the two runtimes with no fast lane of their own never get one from it.
+        XCTAssertFalse(AgentDefaults.fastModeAvailable(
+            runtime: "codex", model: "claude-opus-5-5", catalog: catalog))
+        XCTAssertFalse(AgentDefaults.fastModeAvailable(
+            runtime: "kimi", model: "claude-opus-5-5", catalog: catalog))
+        XCTAssertFalse(AgentDefaults.fastModeAvailable(
+            runtime: "opencode", model: "claude-opus-5-5", catalog: codex))
+    }
+
     // MARK: configured providers (control-plane custom slugs — GET /api/providers)
 
     private let deepseek = ConfiguredProvider(

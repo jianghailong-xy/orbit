@@ -222,7 +222,9 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
 			} else {
-				shellCtx, stopShell := contextUntilEither(ctx, shutdownCtx)
+				// A runner stop leaves the command the drain budget an active turn gets, not an
+				// immediate kill that reports it as exit -1 (a FAILED task, for an acceptance command).
+				shellCtx, stopShell := contextWithStopGrace(ctx, shutdownCtx, shutdownDrainTimeout)
 				req, shellErr := runSynchronousShellTurn(shellCtx, t, job, execDir, resp, emit)
 				stopShell()
 				if shellErr != nil {
