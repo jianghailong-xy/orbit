@@ -369,6 +369,8 @@ export const WIKI_SUMMARY_PHASE_2 = 'A generated summary arrives with the mainte
 export const WIKI_TRUST_LABELS: Record<WikiTrust, string> = {
   owner: 'Owner',
   confirmed: 'Confirmed',
+  auto: 'Auto',
+  unreviewed: 'Unreviewed',
   proposed: 'Proposed',
   external: 'Web-derived',
 };
@@ -379,6 +381,8 @@ export type WikiTone = 'owner' | 'blue' | 'muted' | 'green' | 'amber' | 'red';
 export const WIKI_TRUST_TONE: Record<WikiTrust, WikiTone> = {
   owner: 'owner',
   confirmed: 'blue',
+  auto: 'green',
+  unreviewed: 'muted',
   proposed: 'muted',
   external: 'amber',
 };

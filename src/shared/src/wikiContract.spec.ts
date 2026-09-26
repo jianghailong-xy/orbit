@@ -25,14 +25,20 @@ import {
   WIKI_REJECT_REASONS,
   WIKI_REJECT_REASON_LABELS,
   WIKI_RESERVED_KINDS,
+  WIKI_REVIEW_MODES,
+  WIKI_REVIEW_RULES,
   WIKI_SEARCH_MATCHES,
   WIKI_SLUG_PATTERN,
   WIKI_SOURCE_KINDS,
   WIKI_SOURCE_STATES,
   WIKI_TRUST_LEVELS,
+  WIKI_UNSET_REVIEW_MODE,
   validateWikiEntryDraft,
   validateWikiSources,
   wikiOpEffect,
+  wikiReviewEffect,
+  wikiSpaceSettings,
+  wikiTieredBasis,
 } from './wiki';
 
 /**
@@ -54,7 +60,7 @@ describe('wiki contract', () => {
     expect(CONTRACT.name).toBe('orbit.wiki');
     expect(CONTRACT.contractVersion).toBe(WIKI_CONTRACT_VERSION);
     expect(CONTRACT.phase).toBe(1);
-    for (const file of [CONTRACT.doc, CONTRACT.design, CONTRACT.storage.migration]) {
+    for (const file of [CONTRACT.doc, CONTRACT.design, CONTRACT.storage.migration, CONTRACT.storage.reviewModeMigration]) {
       expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
     }
   });
@@ -111,6 +117,7 @@ describe('wiki contract', () => {
       quoteMaxChars: 300,
       opsPerTurn: 5,
       opsPerSession: 15,
+      opsPerChangeset: 30,
       pendingOpsPerSpace: 30,
       pendingExpiryDays: 14,
     });
@@ -191,6 +198,90 @@ describe('wiki contract', () => {
     expect(CONTRACT.space.settings.push.default).toBe(WIKI_DEFAULT_SPACE_SETTINGS.push);
   });
 
+  it('ships the review modes the contract states, and none of them loosens a floor', () => {
+    const modes = CONTRACT.reviewModes;
+    expect(modes.values).toEqual([...WIKI_REVIEW_MODES]);
+    expect(keysOf(modes.meaning)).toEqual([...WIKI_REVIEW_MODES]);
+    expect(modes.rules).toEqual(WIKI_REVIEW_RULES);
+    // Criterion 7's numbers: decided, not tuned.
+    expect(WIKI_REVIEW_RULES).toEqual({
+      pitfallMinSessions: 2,
+      spotCheckEvery: 10,
+      spotCheckWindow: 10,
+      spotCheckMaxRejectPercent: 30,
+      breakerMaxChangedPercent: 10,
+      breakerMinActiveEntries: 100,
+    });
+    // A new space is Tiered; a stored one that names no mode predates the setting and stays Manual.
+    const setting = CONTRACT.space.settings.reviewMode;
+    expect(setting.default).toBe(WIKI_DEFAULT_SPACE_SETTINGS.reviewMode);
+    expect(setting.default).toBe('tiered');
+    expect(setting.unset).toBe(WIKI_UNSET_REVIEW_MODE);
+    expect(setting.unset).toBe('manual');
+    expect(wikiSpaceSettings({}).reviewMode).toBe('manual');
+    expect(wikiSpaceSettings({ reviewMode: 'sometimes' }).reviewMode).toBe('manual');
+    expect(wikiSpaceSettings({ ...WIKI_DEFAULT_SPACE_SETTINGS }).reviewMode).toBe('tiered');
+    expect(wikiSpaceSettings({ reviewMode: 'automatic', push: false })).toMatchObject({ reviewMode: 'automatic', push: false, autoAcceptReinforce: true });
+
+    const effect = (over: Partial<Parameters<typeof wikiReviewEffect>[0]>) =>
+      wikiReviewEffect({
+        mode: 'automatic', origin: 'agent', op: 'add', tainted: false, autoAcceptReinforce: true, target: null, basis: null, ...over,
+      });
+    const machine = { ownerVouched: false, machineWritten: true };
+    for (const origin of WIKI_CHANGESET_ORIGINS.filter((o) => o !== 'owner')) {
+      // Manual is the effect policy, word for word.
+      for (const op of WIKI_OPS) {
+        const expected = wikiOpEffect({ origin, op, tainted: false, autoAcceptReinforce: true });
+        expect(effect({ mode: 'manual', origin, op, target: machine }), `manual ${origin} ${op}`).toEqual({ effect: expected, byMode: null });
+      }
+      // What the modes apply: an add, and an amend of an entry the machine wrote.
+      expect(effect({ origin, mode: 'automatic' })).toEqual({ effect: 'applied', byMode: { mode: 'automatic', trust: 'auto' } });
+      expect(effect({ origin, mode: 'tiered' })).toEqual({ effect: 'applied', byMode: { mode: 'tiered', trust: 'unreviewed' } });
+      expect(effect({ origin, mode: 'tiered', basis: 'owner_words' })).toEqual({ effect: 'applied', byMode: { mode: 'tiered', trust: 'auto' } });
+      expect(effect({ origin, op: 'amend', target: machine })).toEqual({ effect: 'applied', byMode: { mode: 'automatic', trust: 'auto' } });
+      for (const mode of ['tiered', 'automatic'] as const) {
+        // The floors, in every mode: a tainted op, and a change to what the owner wrote or confirmed.
+        expect(effect({ origin, mode, tainted: true }).effect, `${mode}: tainted`).toBe('pending');
+        expect(effect({ origin, mode, op: 'amend', target: { ownerVouched: true, machineWritten: false } }).effect).toBe('pending');
+        expect(effect({ origin, mode, op: 'amend', target: { ownerVouched: true, machineWritten: true } }).effect).toBe('pending');
+        // A lineage-ender can be undone by nothing, so it always waits.
+        for (const op of ['supersede', 'retire'] as const) {
+          expect(effect({ origin, mode, op, target: machine }).effect, `${mode}: ${op}`).toBe('pending');
+        }
+        // And what the effect policy already applies, it applies as before: no mode is recorded against it.
+        expect(effect({ origin, mode, op: 'reinforce', target: machine })).toEqual({ effect: 'applied', byMode: null });
+        expect(effect({ origin, mode, op: 'challenge', target: machine })).toEqual({ effect: 'applied', byMode: null });
+        expect(effect({ origin, mode, op: 'reinforce', autoAcceptReinforce: false }).effect).toBe('pending');
+      }
+    }
+    // The owner's own write is the effect policy's in every mode, and the mode records nothing against it.
+    for (const mode of WIKI_REVIEW_MODES) {
+      for (const op of WIKI_OPS) expect(effect({ mode, origin: 'owner', op, tainted: true })).toEqual({ effect: 'applied', byMode: null });
+    }
+
+    // Tiered's classification: the owner's words for a decision or a convention, a verification for the other two.
+    const basis = (over: Partial<Parameters<typeof wikiTieredBasis>[0]>) =>
+      wikiTieredBasis({ kind: 'pitfall', ownerWords: false, anchorState: 'unchecked', sessions: 0, recipeVerified: false, ...over });
+    for (const kind of WIKI_KINDS) {
+      const words = ['decision', 'convention'].includes(kind) ? 'owner_words' : null;
+      expect(basis({ kind, ownerWords: true }), `${kind} in the owner's words`).toBe(words);
+    }
+    expect(basis({ kind: 'recipe', recipeVerified: true })).toBe('machine_verified');
+    expect(basis({ kind: 'recipe', recipeVerified: false, anchorState: 'verified', sessions: 5 })).toBeNull();
+    expect(basis({ kind: 'pitfall', anchorState: 'verified', sessions: 2 })).toBe('machine_verified');
+    expect(basis({ kind: 'pitfall', anchorState: 'verified', sessions: 1 })).toBeNull();
+    expect(basis({ kind: 'pitfall', anchorState: 'unchecked', sessions: 3 })).toBeNull();
+    expect(basis({ kind: 'concept', ownerWords: true, anchorState: 'verified', sessions: 3, recipeVerified: true })).toBeNull();
+    // The floors the contract names are the five criterion 7 names.
+    expect(keysOf(modes.floors).filter((key) => key !== 'why')).toEqual([
+      'principleOwnerOnly', 'taintedWaits', 'ownerVouchedWaits', 'circuitBreaker', 'opsPerChangeset',
+    ]);
+    expect(KIND_SPECS.principle.ownerOnlyOps).toEqual(['add', 'amend', 'supersede']);
+    // The two owner actions are routes of the owner's door, and of no other.
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(modes.revert.route);
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(modes.entryReject.route);
+  });
+
   it.each(['entry', 'op', 'changeset', 'source'])('has a consistent %s state machine', (name) => {
     const sm = name === 'source' ? CONTRACT.sourceStates : CONTRACT.states[name];
     const values: string[] = sm.values;
@@ -215,16 +306,21 @@ describe('wiki contract', () => {
   it('pins the entry lifecycle the design draws, and how an op is decided', () => {
     const entry = CONTRACT.states.entry;
     const edges = entry.transitions.map((t: { from: string; to: string }) => `${t.from}->${t.to}`);
-    expect(edges).toEqual(['proposed->active', 'proposed->rejected', 'active->superseded', 'active->retired']);
+    expect(edges).toEqual(['proposed->active', 'proposed->rejected', 'active->superseded', 'active->retired', 'active->rejected']);
     expect(keysOf(entry.born)).toEqual(entry.initial);
-    // Only pending waits; every other decision is final, and the two an op is recorded with are the initial ones.
+    // Only pending waits, and auto_applied is left only by the owner's Reject of an add the review mode applied;
+    // every other decision is final, and the two an op is recorded with are the initial ones.
     const op = CONTRACT.states.op;
-    expect(op.values.filter((v: string) => !op.terminal.includes(v))).toEqual(['pending']);
+    expect(op.values.filter((v: string) => !op.terminal.includes(v))).toEqual(['pending', 'auto_applied']);
+    expect(op.transitions.filter((t: { from: string }) => t.from === 'auto_applied').map((t: { to: string }) => t.to)).toEqual(['rejected']);
     expect(op.initial).toEqual(['pending', 'auto_applied']);
     // Pushable trust is what the push reads, and proposed never is.
     expect(CONTRACT.trust.pushable).toEqual([...WIKI_PUSHABLE_TRUST]);
     expect(CONTRACT.push.eligible.trust).toEqual([...WIKI_PUSHABLE_TRUST]);
     expect(WIKI_PUSHABLE_TRUST).not.toContain('proposed');
+    // What a review mode applies is pushed as auto, and never as unreviewed.
+    expect(WIKI_PUSHABLE_TRUST).toContain('auto');
+    expect(WIKI_PUSHABLE_TRUST).not.toContain('unreviewed');
   });
 
   it('declares every refusal once, with a status and a scope, and names no code it does not declare', () => {

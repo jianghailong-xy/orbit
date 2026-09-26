@@ -36,7 +36,9 @@ public enum WikiEntryStatus: String, Codable, Sendable, CaseIterable {
 
 /// Who stands behind an entry (contract `trust`). Only `owner` and `confirmed` are handed to agents.
 public enum WikiTrust: String, Codable, Sendable, CaseIterable {
-    case owner, confirmed, proposed, external
+    /// `auto` and `unreviewed` are what a space's review mode leaves an entry it applied at once:
+    /// `auto` is pushed, `unreviewed` is shown and never pushed (contract `reviewModes`).
+    case owner, confirmed, auto, unreviewed, proposed, external
     case unknown
 
     public init(from decoder: Decoder) throws {

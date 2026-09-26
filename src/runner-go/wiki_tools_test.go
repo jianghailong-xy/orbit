@@ -197,6 +197,20 @@ func TestWikiAgentSurfaceIsTheContracts(t *testing.T) {
 			t.Errorf("the contract has a %s match this binary cannot report", match)
 		}
 	}
+	// Trust is an ordered list in the contract, and a hit's trust is one of it: the review modes' `auto`
+	// and `unreviewed` included, or a search that found one would answer outside its own schema.
+	var trust []string
+	for _, value := range wikiContract(t)["trust"].(map[string]interface{})["values"].([]interface{}) {
+		trust = append(trust, value.(string))
+	}
+	if !reflect.DeepEqual(trust, wikiTrustLevels) {
+		t.Errorf("this binary names trust %v, the contract %v", wikiTrustLevels, trust)
+	}
+	hits := wikiDescriptor(t, "wiki_search")["outputSchema"].(map[string]interface{})["properties"].(map[string]interface{})["hits"]
+	hitTrust := hits.(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})["trust"]
+	if got := hitTrust.(map[string]interface{})["enum"]; !reflect.DeepEqual(got, wikiTrustLevels) {
+		t.Errorf("wiki_search's hits say trust is one of %v, the contract %v", got, wikiTrustLevels)
+	}
 
 	// The limits a schema states are the contract's, or the tool promises a request the server
 	// refuses with a code the caller was never warned about.

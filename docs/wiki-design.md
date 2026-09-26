@@ -261,6 +261,8 @@ agent（MCP / CLI）、owner（web / iOS / CLI）、维护作业、导入，全�
 - **服务端强制「只有人能确认」**：`decide` 只在 JWT 门上开放，任何带会话头的请求一律拒绝（先例：`coordinator-authority.ts:351` 的 `refuseSessionAuthoredConfirmation`）。
   - 现有的确认卡**不是闸门**：它只在 runner 二进制里弹，服务端不校验，headless 调用时直接放行（`mcp.go:1273-1278`，`runner-tasks.controller.ts:67-76`）。所以「人审」必须做成服务端状态。
 - **过期**：待审 14 天后变成 `expired`。被拒的条目保留，作为反例：以后 agent 的 `similar[]` 会看到「曾被拒：理由」。
+- **审阅模式（阶段 2，owner 2026-09-26 定）**：上表是 Manual 模式。space 可切到 Tiered 或 Automatic，由模式直接应用上表扣下的
+  add / amend（标 Auto 或 Unreviewed），安全底线任何模式都不放开；规则、抽检与整次撤回见契约 `reviewModes`（`docs/wiki-contract.md` §7.3）。
 
 ### 4.3 出处（sources）
 
@@ -509,9 +511,9 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
 
 ### 8.3 导入（阶段 2）
 
-- `orbit wiki import --from ~/.claude/projects/<p>/memory`（或 CLAUDE.md、AGENTS.md）。每个文件成为一个 `note` 出处，由导入会话提议条目，全部进 Review。
+- `orbit wiki import --from ~/.claude/projects/<p>/memory`（或 CLAUDE.md、AGENTS.md）。每个文件成为一个 `note` 出处，由导入会话提议条目，是否进 Review 由 space 的审阅模式决定（见下）。
 - owner 的 1,075 条记忆笔记可以作为冷启动种子。
-- 导入的是 agent 写的二手内容，所以 trust 只到 proposed，不能自动生效。
+- 导入的是 agent 写的二手内容：Manual 模式下全部进 Review；Tiered 与 Automatic 模式下按审阅模式生效（§4.2 末条），安全底线照常。
 
 ### 8.4 互联网巡检（阶段 3，见 §11）
 
