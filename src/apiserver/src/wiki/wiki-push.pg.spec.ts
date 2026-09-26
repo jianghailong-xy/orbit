@@ -585,6 +585,47 @@ test('the wiki context a session is handed when it starts', {
     assert.equal((await exposureRows(sessionId)).length, 0, 'a push that did not happen was recorded');
   });
 
+  // ── 3b. an account the wiki is not switched on for (ORBIT_WIKI, wiki-rollout.ts) ────────────────────────────────
+
+  await t.test('an account the wiki is not switched on for is handed nothing', async () => {
+    const { spaceId, workspaceId } = await boundSpace();
+    const noteId = await entry(spaceId, { title: 'Eligible in every way but the flag' });
+    // The delivery reads the flag from this process's environment, as the apiserver does; put back after.
+    const saved = { mode: process.env.ORBIT_WIKI, owners: process.env.ORBIT_WIKI_CANARY_OWNERS };
+    const flag = (mode: string, owners?: string): void => {
+      process.env.ORBIT_WIKI = mode;
+      if (owners === undefined) delete process.env.ORBIT_WIKI_CANARY_OWNERS;
+      else process.env.ORBIT_WIKI_CANARY_OWNERS = owners;
+    };
+    try {
+      for (const [why, mode, owners] of [
+        ['ORBIT_WIKI=off', 'off', undefined],
+        ['a canary that lists another account', 'canary', uuidToBase62(randomUUID())],
+      ] as const) {
+        flag(mode, owners);
+        const sessionId = await session({ workspaceId });
+        await messageTurn(sessionId, 'anything to know here?');
+        const delivered = await deliver(sessionId);
+        assert.equal(blockOf(delivered.content), null, `${why}: something was sent:\n${delivered.content}`);
+        assert.equal(delivered.content, 'anything to know here?', `${why}: the delivered turn is not what was queued`);
+        assert.equal((await exposureRows(sessionId)).length, 0, `${why}: a push that did not happen was recorded`);
+      }
+
+      // The paired positive: a canary that lists this account hands the same note to the same kind of session.
+      flag('canary', uuidToBase62(ownerId));
+      const sessionId = await session({ workspaceId });
+      await messageTurn(sessionId, 'anything to know here?');
+      const block = blockOf((await deliver(sessionId)).content);
+      assert.ok(block?.text.includes(uuidToBase62(noteId)), `the listed account was not handed its note:\n${block?.text}`);
+      assert.deepEqual((await exposureRows(sessionId)).map((row) => row.entryId), [noteId]);
+    } finally {
+      if (saved.mode === undefined) delete process.env.ORBIT_WIKI;
+      else process.env.ORBIT_WIKI = saved.mode;
+      if (saved.owners === undefined) delete process.env.ORBIT_WIKI_CANARY_OWNERS;
+      else process.env.ORBIT_WIKI_CANARY_OWNERS = saved.owners;
+    }
+  });
+
   // ── 4. knowledge is not evidence ───────────────────────────────────────────────────────────────
 
   await t.test('a run that verifies, forems or judges is handed nothing', async () => {

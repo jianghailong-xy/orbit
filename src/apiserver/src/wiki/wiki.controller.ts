@@ -10,6 +10,7 @@ import {
   WikiProposeDto,
 } from './dto';
 import { flagParam, listParam, WikiRetrieval } from './wiki-retrieval';
+import { WikiRolloutGuard } from './wiki-rollout';
 import { answerFor, WikiService, type WikiPrincipal } from './wiki.service';
 
 /**
@@ -27,8 +28,11 @@ import { answerFor, WikiService, type WikiPrincipal } from './wiki.service';
  * The topic view and the timeline are here (the two contract routes the pages read); pin/unpin is
  * still not, and it is the one wiki write this door will have whose outcome is not a decision: an
  * entry's `pinned` flag is the owner arranging their own home page, and it is read by no push rule.
+ *
+ * An account the wiki is not switched on for (ORBIT_WIKI, `wiki-rollout.ts`) is answered 404
+ * WIKI_DISABLED on every route here, before anything is read.
  */
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WikiRolloutGuard)
 @Controller('wiki')
 export class WikiController {
   constructor(

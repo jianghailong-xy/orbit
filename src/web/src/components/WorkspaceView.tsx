@@ -208,6 +208,7 @@ import {
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { AddToWikiCtx } from './AddToWiki';
+import { useWikiShown } from '../lib/useWikiShown';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
   SessionDecisionStrip,
@@ -2060,10 +2061,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // What Add to Wiki writes as: this conversation, which is both where the entry's provenance comes
   // from (the turn a message belongs to) and what decides which codebase's wiki it is filed into
   // (`wikiSpaceForSessionQuery`). Memoised because it is a context value: a fresh object each render
-  // would re-render every message row in the transcript on every token of a streaming reply.
+  // would re-render every message row in the transcript on every token of a streaming reply. None at
+  // all for an account the server has not switched the wiki on for: the row keeps its copy button.
+  const wikiOn = useWikiShown();
   const addToWikiConversation = useMemo(
-    () => (selectedId ? { sessionId: selectedId, title: selectedSession?.title ?? '' } : null),
-    [selectedId, selectedSession?.title],
+    () => (selectedId && wikiOn ? { sessionId: selectedId, title: selectedSession?.title ?? '' } : null),
+    [selectedId, selectedSession?.title, wikiOn],
   );
   // What this conversation is waiting on, when a watch is what will bring it back: the same read the
   // Watching strip above the composer makes (one cache entry between them), so the header's word and

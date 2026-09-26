@@ -168,6 +168,7 @@ import {
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
+import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import {
   type TaskFailure,
   openItemIdOfTurn,
@@ -1951,6 +1952,7 @@ export class RunnerApiController {
     // unset-only model snapshot, which prevents a rolling-upgrade session from drifting again, and
     // the account-pool member a pool session is rebuilt on, recorded as the claim records it.
     const watchRollout = currentWatchRollout();
+    const wikiRollout = currentWikiRollout();
     const out: ReclaimSession[] = [];
     for (const s of reclaimable) {
       if (!supportsTerminalHandoff && isTerminalResumeHandoffOwner(s.inboxLeaseOwner)) {
@@ -2110,6 +2112,8 @@ export class RunnerApiController {
           : undefined,
         // cf. the claim path: a reclaimed session is spawned again, and Watch may have been switched since its claim.
         ...watchClaimFields(watchRollout, s.ownerId),
+        // And the wiki, on the same rule (wiki/wiki-rollout.ts).
+        ...wikiClaimFields(wikiRollout, s.ownerId),
         // Read, never re-derived (SR29). A session already PINNED comes back on the SHA its first
         // claim froze, whatever the binding's configuration or the ref's tip have done since —
         // that is what makes a runner restart a continuation of the same run rather than a new one

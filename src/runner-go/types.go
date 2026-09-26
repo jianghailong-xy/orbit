@@ -1026,6 +1026,11 @@ type ReclaimSession struct {
 	TaskID  string `json:"taskId,omitempty"`
 	// AllowOrchestration, cf. ClaimedSession.AllowOrchestration.
 	AllowOrchestration bool `json:"allowOrchestration,omitempty"`
+	// WatchesDisabled and WikiDisabled, cf. ClaimedSession: the apiserver says them on reclaim as on
+	// claim, because a reclaimed session's engine is spawned again from this row and either switch
+	// may have moved since the session was first claimed.
+	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
+	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
 	// OrchestrationToken is freshly persisted for the reclaimed runtime, cf. ClaimedSession.
 	OrchestrationToken string `json:"orchestrationToken,omitempty"`
 	// Branch is the session's worktree branch, cf. ClaimedSession.Branch.

@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { readProjectPanorama } from '../projects/project-panorama';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
+import { currentWikiRollout, wikiOnFor } from '../wiki/wiki-rollout';
 
 /** A project's card before its coordinator's card is attached. */
 type ProjectRead = Omit<LinkPreviewProject<Date>, 'coordinator'>;
@@ -323,7 +324,9 @@ export class LinkPreviewsService {
    * being handed this note.
    */
   private async wikiCards(ownerId: string, ids: string[]): Promise<Map<string, LinkPreviewWiki>> {
-    if (ids.length === 0) return new Map();
+    // An account the wiki is not switched on for (ORBIT_WIKI) is answered as a server without the
+    // wiki would answer it: every entry card is `unavailable`, and nothing is read.
+    if (ids.length === 0 || !wikiOnFor(currentWikiRollout(), ownerId)) return new Map();
     const rows = await this.prisma.wikiEntry.findMany({
       where: { id: { in: ids }, ownerId },
       select: {
