@@ -349,9 +349,9 @@ extension SelectableText {
                     self.app?.openFromConversation(route, overConsole: self.opensOverConsole)
                 }
             }
-            // Everything else this app can open — a project or task list reference, whose destination
-            // may need a read first, and a page URL of this deployment written as a markdown link —
-            // goes through the app's own link door, the same one a card's tap uses.
+            // Everything else this app can open — a project reference, whose page is not a `Route`,
+            // and a page URL of this deployment written as a markdown link — goes through the app's
+            // own link door, the same one a card's tap uses.
             if app?.orbitRef(for: url) != nil {
                 return UIAction(title: "Open") { [weak self] _ in
                     guard let self else { return }

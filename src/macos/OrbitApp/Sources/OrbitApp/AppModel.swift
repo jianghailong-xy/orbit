@@ -1784,13 +1784,27 @@ final class AppModel {
         nav.path = [.projectDetail(projectID: id)]
     }
 
+    /// A project's page opened from inside a conversation — a coordinator conversation's title, a
+    /// project link in a transcript. On a phone (`overConsole`) it is pushed over the console, so the
+    /// back swipe returns to the conversation; on the wide shells it opens in the Projects section,
+    /// whose sidebar is the way back.
+    func openProjectFromConversation(_ id: String, overConsole: Bool) {
+        let id = PublicID.toPublic(id)
+        guard overConsole else { return openProject(id) }
+        push(.projectDetail(projectID: id))
+    }
+
     /// Open a project's coordinator conversation, and — when a press named one of the owner's items
     /// — land on that item's card there: the same entry the needs-you banner takes, so a card is
     /// answered in one place.
+    ///
+    /// A project page a phone opened over this very conversation goes back down to it: putting the
+    /// conversation on top again would stack a second copy of it over the first.
     func openProjectCoordinator(sessionID: String, agentID: String?, focus item: SessionOwnerItem? = nil) {
         let id = PublicID.toPublic(sessionID)
         let agent = agentID.map(PublicID.toPublic) ?? self.agentID(for: id)
         if let item { consoleRegistry?.model(for: id, agentID: agent).focus(ownerItem: item) }
+        if nav.returnToConsole(id) { return }
         show(.console(sessionID: id, origin: .list), agent: agent)
     }
 

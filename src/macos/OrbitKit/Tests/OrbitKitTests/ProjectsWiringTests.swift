@@ -99,5 +99,14 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(open.contains(".focus(ownerItem: item)"),
                       "a press on an owner item lands on its card, the way the needs-you banner's does")
         XCTAssertTrue(open.contains("show(.console(sessionID: id, origin: .list), agent: agent)"))
+
+        // A project page a phone opened over this conversation goes back down to it, card focused
+        // first: putting the conversation on top again stacked a second copy of it over the first.
+        let focus = try XCTUnwrap(open.range(of: ".focus(ownerItem: item)"))
+        let back = try XCTUnwrap(open.range(of: "if nav.returnToConsole(id) { return }"),
+                                 "the coordinator door goes back to the conversation under the page")
+        let show = try XCTUnwrap(open.range(of: "show(.console(sessionID: id, origin: .list), agent: agent)"))
+        XCTAssertTrue(focus.lowerBound < back.lowerBound && back.lowerBound < show.lowerBound,
+                      "focus the card, go back if the conversation is right there, open it otherwise")
     }
 }

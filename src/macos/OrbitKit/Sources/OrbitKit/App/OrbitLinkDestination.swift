@@ -7,10 +7,11 @@ import Foundation
 // of that app unbuildable until it was merged there too. The shells map this to their own route
 // where they already map everything else.
 //
-// Four kinds have a page in the app itself. A project does not: what a card leads to is the
-// conversation that coordinates it, and the id for that comes from the read the card was drawn from
-// — without one, and for anything the server would not describe, the link opens the deployment in a
-// browser instead, which is the honest answer for an object this client cannot show.
+// Every kind has a page in the app itself. A project's is its own page — the one the web opens too.
+// It used to lead to the conversation that coordinates it, from before this client had a project
+// page; inside that conversation the tap then went nowhere. For anything the server would not
+// describe, the link opens the deployment in a browser instead, the honest answer for an object this
+// client cannot show.
 //
 // A wiki entry is the one kind whose unread card stays in the app. Its page here reads by the id
 // alone, while the deployment's page takes the entry's space too (`/wiki/<space>/e/<id>`), which only
@@ -22,26 +23,28 @@ public enum OrbitLinkDestination: Equatable, Sendable {
     case task(id: String)
     case session(id: String)
     case list(id: String)
+    /// A project's page, pushed where the link was — over a phone's conversation, or in the Projects
+    /// section.
+    case project(id: String)
     /// A wiki entry's page, pushed where the link was — the Wiki section's own, or over a phone's
     /// conversation.
     case wikiEntry(id: String)
     /// Nowhere in this app can show it: opened outside, at the link the card replaced.
     case web(URL)
 
-    /// Where a link goes with nothing read: the four kinds that are a page in this app whatever the
-    /// object turns out to be. Nil for a project — the conversation that coordinates it is an id only
-    /// a read can give — and for an id that names nothing.
+    /// Where a link goes with nothing read: every kind is a page in this app whatever the object turns
+    /// out to be, and the page is the one that says so when the object is gone.
     ///
     /// This is the answer for a link somebody wrote or pasted (`orbit-task:<id>`, or a page URL of
     /// this deployment), as opposed to ``tap(for:preview:baseURL:)``, which answers for a card that
     /// has already been read.
-    public static func inApp(for target: OrbitLinkTarget) -> OrbitLinkDestination? {
+    public static func inApp(for target: OrbitLinkTarget) -> OrbitLinkDestination {
         switch target.kind {
         case .task:    return .task(id: PublicID.toPublic(target.id))
         case .session: return .session(id: PublicID.toPublic(target.id))
         case .list:    return .list(id: PublicID.toPublic(target.id))
         case .wiki:    return .wikiEntry(id: PublicID.toPublic(target.id))
-        case .project: return nil
+        case .project: return .project(id: PublicID.toPublic(target.id))
         }
     }
 
@@ -60,12 +63,7 @@ public enum OrbitLinkDestination: Equatable, Sendable {
             case .session: return .session(id: PublicID.toPublic(target.id))
             case .list:    return .list(id: PublicID.toPublic(target.id))
             case .wiki:    return .wikiEntry(id: PublicID.toPublic(target.id))
-            case .project:
-                // The server nulls this when the coordinator is in Trash, so a project whose
-                // coordinator cannot be shown is one with no session to open.
-                if let coordinator = preview.project?.coordinatorSessionId, !coordinator.isEmpty {
-                    return .session(id: coordinator)
-                }
+            case .project: return .project(id: PublicID.toPublic(target.id))
             }
         }
         guard let url = OrbitLinkParser.pageURL(for: target, baseURL: baseURL) else { return .web(baseURL) }

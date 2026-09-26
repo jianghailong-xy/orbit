@@ -404,6 +404,54 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav, NavState(section: .tasks), "an emptied stack leaves nothing behind")
     }
 
+    /// A coordinator conversation and its project's page, back and forth on a phone: the title pushes
+    /// the project over the conversation, and the project's way back to that conversation is a pop.
+    /// Putting the conversation on top again (the old `replaceTop`) left the same conversation twice,
+    /// one over the other — a back swipe that seemed to do nothing.
+    func testGoingBackToTheConversationUnderAProjectPageIsAPop() {
+        var nav = NavState(section: .agents)
+        nav.push(.console(sessionID: "34DynS2HpGYT6T1Nf6h3U", origin: .list))
+
+        for _ in 0..<3 {
+            nav.push(.projectDetail(projectID: "p1"))
+            // The project's press may name the conversation in either spelling.
+            XCTAssertTrue(nav.returnToConsole("01a03f47-4af6-753d-9109-a4440b1a71c4"))
+            XCTAssertEqual(nav.path, [.console(sessionID: "34DynS2HpGYT6T1Nf6h3U", origin: .list)],
+                           "round trips leave one conversation, not a growing stack")
+            XCTAssertEqual(nav.focusedConsoleSessionID, "34DynS2HpGYT6T1Nf6h3U", "and it is the one streaming")
+        }
+    }
+
+    /// Only the conversation directly under the page is gone back to. Another conversation there, one
+    /// further down, a page on top that is not over a conversation, or Settings up over the section:
+    /// nothing moves, and the caller opens the conversation the way it always has.
+    func testOnlyTheConversationDirectlyUnderThePageIsGoneBackTo() {
+        var other = NavState(section: .agents)
+        other.push(.console(sessionID: "s-other", origin: .list))
+        other.push(.projectDetail(projectID: "p1"))
+
+        var deeper = NavState(section: .agents)
+        deeper.push(.console(sessionID: "s1", origin: .list))
+        deeper.push(.console(sessionID: "s2", origin: .conversation))
+        deeper.push(.projectDetail(projectID: "p1"))
+
+        let projects = NavState(section: .projects, stacks: [.projects: [.projectDetail(projectID: "p1")]])
+
+        var settings = NavState(section: .agents)
+        settings.push(.console(sessionID: "s1", origin: .list))
+        settings.push(.projectDetail(projectID: "p1"))
+        settings.openSettings()
+
+        for (label, before, session) in [("another conversation", other, "s1"),
+                                          ("one further down", deeper, "s1"),
+                                          ("the Projects section", projects, "s1"),
+                                          ("Settings up", settings, "s1")] {
+            var nav = before
+            XCTAssertFalse(nav.returnToConsole(session), label)
+            XCTAssertEqual(nav, before, "\(label): nothing moves")
+        }
+    }
+
     /// Leaving the section and coming back. The directory used to be the one push that did *not*
     /// survive this — `selectedSection`'s `didSet` dropped it by hand, because a boolean cannot ride
     /// a view being rebuilt the way a frame on a stack can. Now Tasks lands where you left it, like

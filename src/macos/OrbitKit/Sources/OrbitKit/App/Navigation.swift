@@ -241,6 +241,20 @@ public struct NavState: Equatable, Sendable {
         }
     }
 
+    /// Back to `sessionID`'s console when it is the page directly under the one on top: the
+    /// conversation a phone opened its project's page over. Going to that conversation again is a
+    /// pop, so the stack reads conversation › project page instead of growing a second copy of the
+    /// same conversation on every round trip. False, with nothing changed, when it is not there.
+    @discardableResult
+    public mutating func returnToConsole(_ sessionID: String) -> Bool {
+        let frames = path
+        guard !settingsPresented, frames.count >= 2,
+              case .console(let beneath, _) = frames[frames.count - 2],
+              PublicID.storageKey(beneath) == PublicID.storageKey(sessionID) else { return false }
+        pop()
+        return true
+    }
+
     /// The session's console is gone — completed, trashed or purged out from under it — so nothing
     /// is left on screen streaming a session the server no longer has. This is the one edit that
     /// replaced three hand-cleared optionals: the selection, the Recents marker and the compose
