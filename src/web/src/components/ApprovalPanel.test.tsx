@@ -169,6 +169,30 @@ describe('single create approval', () => {
   });
 });
 
+describe('provider write approval', () => {
+  const write = (toolName: string, input: Record<string, unknown>): ApprovalInfo =>
+    ({ id: 'p1', toolName, input }) as ApprovalInfo;
+
+  it('offers no standing yes', () => {
+    // A rule here would let the next write name any endpoint and key without anyone asked.
+    for (const toolName of ['orbit_provider_create', 'orbit_provider_update', 'orbit_provider_delete']) {
+      expect(render(write(toolName, { slug: 'local-vllm' }))).not.toContain('Always allow');
+    }
+  });
+
+  it('shows the provider as it would be written, the key only as set', () => {
+    const html = render(
+      write('orbit_provider_create', {
+        label: 'Local vLLM',
+        baseUrl: 'http://127.0.0.1:8000',
+        apiKey: '(set — not shown)',
+      }),
+    );
+    expect(html).toContain('http://127.0.0.1:8000');
+    expect(html).toContain('(set — not shown)');
+  });
+});
+
 describe('blocker resolution approval', () => {
   const resolve = (over: Record<string, unknown> = {}): ApprovalInfo =>
     ({

@@ -941,6 +941,27 @@ func (t *Transport) listProviders() (json.RawMessage, error) {
 	return out, err
 }
 
+// The provider writes reach the runner owner's own providers, keyed by the slug the list above
+// shows. The owner's part is the confirmation card the caller raises before reaching these
+// (askBeforeCreate); what comes back is the row with its key reduced to `hasApiKey`.
+func (t *Transport) createProvider(body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/providers", body, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) updateProvider(slug string, body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "PATCH", "/runner/providers/"+url.PathEscape(slug), body, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) deleteProvider(slug string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "DELETE", "/runner/providers/"+url.PathEscape(slug), nil, &out, taskOpTimeout)
+	return out, err
+}
+
 // notify pushes one line the agent wrote to its owner's devices. Plain runner auth like the task
 // routes: the recipient is the runner's owner either way, so there is nobody else it could reach.
 // sessionID (when running inside a session) gives the alert that session's title and makes a tap

@@ -465,6 +465,80 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, undefined);
   });
 
+  // A self-hosted endpoint (vLLM serving the Anthropic Messages API) has no preset and no catalogue:
+  // the row is the only description of its model there is, and the server refuses every request
+  // past the window it was started with.
+  const selfHosted = (reasoningLevels?: string[]) =>
+    row({
+      baseUrl: 'http://127.0.0.1:8000',
+      apiKeyEnc: encryptSecret('EMPTY'),
+      defaultModel: 'qwen3.8-27b-fp8',
+      models: [
+        {
+          value: 'qwen3.8-27b-fp8',
+          label: 'Qwen3.8 27B FP8',
+          contextWindow: 131072,
+          ...(reasoningLevels ? { reasoningLevels } : {}),
+        },
+      ],
+    });
+
+  await t.test("a self-hosted model's own declared window reaches the CLI", () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'local-vllm',
+      customRow: selfHosted(),
+      sessionModel: null,
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.provider, AgentProvider.CLAUDE);
+    assert.equal(exec.model, 'qwen3.8-27b-fp8');
+    assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'http://127.0.0.1:8000');
+    assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, 'EMPTY');
+    assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '131072');
+    // No declaration: effort is left exactly as it always was.
+    assert.equal(exec.reasoningLevels, undefined);
+    assert.equal(exec.env?.CLAUDE_CODE_EFFORT_LEVEL, undefined);
+  });
+
+  await t.test('the levels a model declares travel with the exec for dispatch to map onto', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'local-vllm',
+      customRow: selfHosted(['low', 'medium', 'xhigh']),
+      sessionModel: 'qwen3.8-27b-fp8',
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.deepEqual(exec.reasoningLevels, ['low', 'medium', 'xhigh']);
+    // Mapped per request by the claim, not pinned for the process: an effort frame still moves it.
+    assert.equal(exec.env?.CLAUDE_CODE_EFFORT_LEVEL, undefined);
+  });
+
+  // The CLI sends an effort for every model it does not recognise; `unset` is its own word for
+  // "send no effort parameter", and nothing else stops it.
+  await t.test('a model declared to take no effort tells the CLI to send none', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'local-vllm',
+      customRow: selfHosted([]),
+      sessionModel: 'qwen3.8-27b-fp8',
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.deepEqual(exec.reasoningLevels, []);
+    assert.equal(exec.env?.CLAUDE_CODE_EFFORT_LEVEL, 'unset');
+  });
+
+  await t.test('a declaration is read for the Claude runtime only', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'local-vllm',
+      customRow: { ...selfHosted(['low']), runtime: 'codex' },
+      sessionModel: 'qwen3.8-27b-fp8',
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.reasoningLevels, undefined);
+  });
+
   // A codex-runtime provider never launches the claude CLI, so the flag has nothing to say there.
   await t.test('codex-runtime provider gets only the OpenAI-compatible vars', () => {
     const exec = resolveProviderExec({

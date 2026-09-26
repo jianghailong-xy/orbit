@@ -48,6 +48,14 @@ public enum Approvals {
             || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
             || isBlockerResolve(toolName: toolName)
     }
+    /// A provider write — one of the owner's own providers created, changed or removed. Drawn and
+    /// refused as a plain tool card (its input is the provider as it would be written, the key
+    /// reduced to the fact that one is set), but never waived with a standing rule: that would be a
+    /// yes to whatever endpoint and key the next one names. Web keys it off `isProviderWrite`.
+    public static func isProviderWrite(toolName: String) -> Bool {
+        toolName == "orbit_provider_create" || toolName == "orbit_provider_update"
+            || toolName == "orbit_provider_delete"
+    }
 
     /// Classify an approval into the card it renders as. Keyed on `toolName` — the reliable
     /// signal the control plane always sends — because the question/plan data is nested under
@@ -182,7 +190,7 @@ public enum Approvals {
         // after it a formality. (The blocker ask could not have worked with a rule anyway — it
         // comes from the runner's own gate, which asks every time whatever the engine holds.)
         if isQuestion(toolName: toolName) || isPlan(toolName: toolName)
-            || isOrbitAsk(toolName: toolName) { return nil }
+            || isOrbitAsk(toolName: toolName) || isProviderWrite(toolName: toolName) { return nil }
         if toolName == "Bash" {
             guard let cmd = input["command"]?.stringValue, let prefix = bashPrefix(cmd) else { return nil }
             return PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*")

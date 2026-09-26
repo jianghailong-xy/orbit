@@ -170,6 +170,16 @@ export const createFoldNoun = (input: CreateInput): string => (input.isProject ?
  */
 const isBlockerResolve = (a: ApprovalInfo): boolean => a.toolName === 'orbit_blocker_resolve';
 
+/**
+ * Orbit's asks before a provider write: one of the owner's own providers created, changed or removed.
+ * Drawn as the plain card — its body is the provider as it would be written, the key reduced to the
+ * fact that one is being set — but, like every ask Orbit raises for itself, never waived by a rule.
+ */
+const isProviderWrite = (a: ApprovalInfo): boolean =>
+  a.toolName === 'orbit_provider_create' ||
+  a.toolName === 'orbit_provider_update' ||
+  a.toolName === 'orbit_provider_delete';
+
 interface BlockerResolveInput {
   projectTitle: string;
   /** What the blocker asks for — the sentence written for a person to act on. */
@@ -251,8 +261,9 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   if (a.toolName === 'AskUserQuestion' || isPlan(a) || isDagChange(a) || isBatch(a)) return [];
   // Nor does a single create: a standing yes would be the owner's rule switched off. Nor ending a
   // blocker — "always let this session clear whatever stops its project" is the one rule that would
-  // make every card after it a formality.
-  if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a)) return [];
+  // make every card after it a formality. Nor a provider write, which would be a standing yes to
+  // whatever endpoint and key the next one names.
+  if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a)) return [];
   if (a.toolName === 'Bash') {
     const cmd =
       a.input && typeof a.input === 'object'

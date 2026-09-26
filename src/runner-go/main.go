@@ -333,7 +333,7 @@ func main() {
 			os.Exit(1)
 		}
 	case "provider":
-		if err := cmdProviderCLI(args[1:], os.Stdout); err != nil {
+		if err := cmdProviderCLI(args[1:], os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit provider:", err)
 			os.Exit(1)
 		}
