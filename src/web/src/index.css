@@ -3141,9 +3141,10 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-1);
   font-weight: 500;
 }
+/* In the body face, as iOS writes both counts: in monospace the Tasks row's sentence ran wide enough
+   to leave a phone a few letters of its title. */
 .bg-tray-count {
   color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 .bg-tray-list {
   border-top: 1px solid var(--border-subtle);

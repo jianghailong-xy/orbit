@@ -135,6 +135,21 @@ const all = (selector: string): HTMLElement[] => [...container.querySelectorAll<
 const link = (text: string): HTMLAnchorElement | undefined =>
   all('a').find((a) => a.textContent === text) as HTMLAnchorElement | undefined;
 
+/** `run` with index.css applied to the document, so `style` reads what the stylesheet gives the
+ *  elements drawn. How wide they come out is a browser's to say: jsdom lays nothing out. */
+async function withStylesheet(run: () => Promise<void>): Promise<void> {
+  const sheet = document.createElement('style');
+  sheet.textContent = css;
+  document.head.append(sheet);
+  try {
+    await run();
+  } finally {
+    sheet.remove();
+  }
+}
+const style = (el: Element | null | undefined, ...props: (keyof CSSStyleDeclaration)[]) =>
+  Object.fromEntries(props.map((prop) => [prop, getComputedStyle(el!)[prop]]));
+
 describe('the collapsed row', () => {
   it('is not drawn for a session that created nothing', async () => {
     await mount(created());
@@ -178,14 +193,8 @@ describe('the collapsed row', () => {
   });
 
   it('never wraps the title: it truncates beside the sentence, stays whole beside one task', async () => {
-    // What the stylesheet gives the elements drawn; how wide they come out is a browser's to say.
-    const sheet = document.createElement('style');
-    sheet.textContent = css;
-    document.head.append(sheet);
-    const style = (el: Element | null | undefined, ...props: (keyof CSSStyleDeclaration)[]) =>
-      Object.fromEntries(props.map((prop) => [prop, getComputedStyle(el!)[prop]]));
     const title = () => all('span').find((el) => el.textContent === fixture.copy.title);
-    try {
+    await withStylesheet(async () => {
       // The longest sentence seen: a pipeline session's 109,874 tasks, on a phone.
       await mount(created({ total: 109_874, running: 1, failed: 2, done: 281, items: [row(1), row(2)] }));
       expect(style(title(), 'whiteSpace', 'minWidth', 'overflow', 'textOverflow')).toEqual({
@@ -206,9 +215,15 @@ describe('the collapsed row', () => {
         minWidth: '0px',
         textOverflow: 'ellipsis',
       });
-    } finally {
-      sheet.remove();
-    }
+    });
+  });
+
+  it('writes the sentence in the body face, as iOS does', async () => {
+    await withStylesheet(async () => {
+      await mount(created({ total: 109_874, running: 1, failed: 2, done: 281, items: [row(1), row(2)] }));
+      // In monospace this sentence left a phone's title a few letters wide.
+      expect(getComputedStyle(one('.ct-count')!).fontFamily).not.toMatch(/mono/i);
+    });
   });
 });
 
