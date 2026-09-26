@@ -4,11 +4,11 @@ import {
   BookOutlined,
   CaretDownOutlined,
   CheckOutlined,
+  CheckSquareOutlined,
   CodeOutlined,
   DesktopOutlined,
   DisconnectOutlined,
   FolderOutlined,
-  InboxOutlined,
   LoadingOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
@@ -33,7 +33,13 @@ import type {
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { wikiSpacesQuery, workspaceSessionCountsQuery, meQuery, sessionQuery } from '../lib/queries';
+import {
+  meQuery,
+  openProjectsQuery,
+  sessionQuery,
+  wikiSpacesQuery,
+  workspaceSessionCountsQuery,
+} from '../lib/queries';
 import {
   groupWorkspacesByRunner,
   orderWorkspaceGroupsByRunners,
@@ -41,7 +47,12 @@ import {
   workspaceRunnerId,
 } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
-import { taskPagePath, type TaskPage } from '../lib/taskPages';
+import {
+  projectIsWorking,
+  projectNeedsYouCount,
+  sidebarProjects,
+  type SidebarProject,
+} from '../lib/projectAttention';
 import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
 
 const IS_MAC_PLATFORM =
@@ -106,6 +117,9 @@ const TOP: TopNavItem[] = [
     label: 'Projects',
     shortcut: projectsShortcutLabel(),
   },
+  // Tasks under Projects, in the iPhone drawer's order (Projects · Tasks · Wiki). It is the way into
+  // the task lists too: they are picked from the Tasks page's title, as they are on the phone.
+  { key: 'tasks', icon: <CheckSquareOutlined />, label: 'Tasks' },
   // The Wiki sits under Projects because it is the other thing a codebase has: Projects is the work
   // in it, and the Wiki is what the work learned. Its amber count is the proposals waiting for the
   // owner, which is the same `needs-you` pill a workspace row shows — and the same rule applies with
@@ -251,18 +265,6 @@ export function workspaceRunnerIsOffline(
   return runnerId !== null && runnerOnline === false;
 }
 
-interface TaskList {
-  id: string;
-  title: string;
-  _count?: { tasks: number };
-  // How many of the list's tasks are executing right now (have a PENDING/RUNNING
-  // session). >0 turns the list's dot into a pulsing blue "running" indicator.
-  runningTasks?: number;
-  // True once the list is finished: it has tasks and every one is DONE. Turns the
-  // dot green and mutes the title.
-  completed?: boolean;
-}
-
 async function logout() {
   await logoutSession(); // revoke the refresh token server-side (best-effort) before clearing
   clearToken();
@@ -327,6 +329,18 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
       : null);
   useEffect(() => setHeldWorkspaceId(activeWorkspaceId), [activeWorkspaceId]);
 
+  // The open projects, which close the rail the way they close the iPhone drawer (below).
+  const projects = useQuery(openProjectsQuery());
+  const openProjects = useMemo(() => sidebarProjects(projects.data ?? []), [projects.data]);
+  // A project's own page lights its row in that group rather than the Projects entry, which stands
+  // for the index — the drawer's rule. A project the group does not list (a closed one) keeps the
+  // entry lit instead, so the rail still says where you are.
+  const openProjectId = routeId(useMatch('/projects/:id/*')?.params.id);
+  const projectRowKey =
+    openProjectId && openProjects.some((p) => encodeId(p.id) === openProjectId)
+      ? `project:${openProjectId}`
+      : null;
+
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
   // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
   // remains scoped to Runners.
@@ -339,19 +353,20 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
       : loc.pathname.startsWith('/runner')
         ? 'runners'
         : loc.pathname.startsWith('/projects/')
-          ? 'projects'
+          ? (projectRowKey ?? 'projects')
           // Every wiki route — a space, a topic, an entry's drawer, Review — is the Wiki's own
           // destination, so the row stays lit across all of them.
           : loc.pathname === '/wiki' || loc.pathname.startsWith('/wiki/')
             ? 'wiki'
-            : loc.pathname.startsWith('/lists/')
-              ? loc.pathname.slice('/lists/'.length)
+            // Every task route — all tasks, one task, a list, the tasks in none — is the Tasks
+            // page, whose title picks among them.
+            : loc.pathname.startsWith('/tasks/') || loc.pathname.startsWith('/lists/')
+              ? 'tasks'
               : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
-  const [listOpen, setListOpen] = useState(true);
-  const [completedOpen, setCompletedOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(true);
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -444,38 +459,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
       ).flatMap((group) => group.workspaces),
     [workspaceList, runners.data],
   );
-
-  // User-created task lists shown in the "Task List" group below. Poll so the
-  // per-list running indicator stays live: 5s while anything is running (mirrors the
-  // task detail panel's busy-poll cadence), 15s when idle (same as the runner poll).
-  const taskLists = useQuery({
-    queryKey: ['task-lists'],
-    queryFn: () => api<TaskList[]>('/task-lists'),
-    refetchInterval: (q) =>
-      (q.state.data ?? []).some((l) => (l.runningTasks ?? 0) > 0) ? 5_000 : 15_000,
-  });
-
-  // Split lists into the active "Task List" group and the finished "Completed"
-  // group. A list lands in Completed only once every task is DONE and nothing is
-  // still running — a running task means work is in flight, so it stays active.
-  const { activeLists, completedLists } = useMemo(() => {
-    const active: TaskList[] = [];
-    const completed: TaskList[] = [];
-    for (const l of taskLists.data ?? []) {
-      if (l.completed && (l.runningTasks ?? 0) === 0) completed.push(l);
-      else active.push(l);
-    }
-    return { activeLists: active, completedLists: completed };
-  }, [taskLists.data]);
-
-  // Task count for the "No list" bucket. Ask the paged endpoint for one row plus the
-  // aggregate instead of downloading every unlisted task into the sidebar.
-  const unlistedTasks = useQuery({
-    queryKey: ['tasks', 'unlisted-count'],
-    queryFn: () => api<TaskPage>(taskPagePath({ limit: 1, listId: 'none' })),
-    refetchInterval: 15_000,
-  });
-  const unlistedCount = unlistedTasks.data?.counts?.total ?? 0;
 
   // Per-workspace Open-session tallies, counted server-side. Polls faster while anything is live.
   // This used to fetch every open session and tally them here, which on an account with
@@ -574,34 +557,10 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [activeWorkspaceId, orderedWorkspaces, openWorkspace]);
 
-  const renderListRow = (l: TaskList) => {
-    const key = encodeId(l.id);
-    const running = (l.runningTasks ?? 0) > 0;
-    // A running task means work is still in flight, so it outranks the
-    // completed state even if every other task is already DONE.
-    const completed = !running && !!l.completed;
-    return (
-      <div
-        key={l.id}
-        className={`tp-item inset ${sel === key ? 'active' : ''}`}
-        onClick={() => {
-          setSel(key);
-          navigate(`/lists/${key}`);
-        }}
-      >
-        <span
-          className={`tp-list-dot ${running ? 'running' : completed ? 'done' : ''}`}
-          title={
-            running
-              ? `${l.runningTasks} task(s) running`
-              : completed
-                ? 'All tasks done'
-                : undefined
-          }
-        />
-        <span className={`tp-label ${completed ? 'done' : ''}`}>{l.title}</span>
-      </div>
-    );
+  const openProject = (project: SidebarProject) => {
+    const key = encodeId(project.id);
+    setSel(`project:${key}`);
+    navigate(`/projects/${key}`);
   };
 
   return (
@@ -640,7 +599,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
       </div>
 
       {/* Collapsed-only icon rail: the fixed top-nav as icons. The dynamic lists (workspaces,
-          task lists) have no icon form, so they fold away — expand to bring them back. The
+          projects) have no icon form, so they fold away — expand to bring them back. The
           workspaces themselves stay as monogram avatars below. Shown only when collapsed, on desktop. */}
       <div className="tp-rail">
         {topItems.map((t) => (
@@ -662,7 +621,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         ))}
         {/* The user's workspaces, kept reachable when collapsed: a monogram avatar each
             (workspaces have identity + exceptional/activity state + ⌘1‒9, so unlike the
-            text-titled task lists they read fine as icons). Same order, same shortcuts. */}
+            text-titled projects they read fine as icons). Same order, same shortcuts. */}
         {orderedWorkspaces.length > 0 && <div className="tp-rail-divider" />}
         {orderedWorkspaces.map((a, i) => {
           const runnerId = workspaceRunnerId(a);
@@ -762,55 +721,28 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           })}
         </div>
 
-        {orderedWorkspaces.length > 0 &&
-          (unlistedCount > 0 || activeLists.length > 0 || completedLists.length > 0) && (
-            <div className="tp-divider" />
-          )}
+        {orderedWorkspaces.length > 0 && openProjects.length > 0 && <div className="tp-divider" />}
 
-        {/* "No list" is the complement of the lists below — tasks in no list at all.
-            It's a peer of the Task List group, not a child of it, so it never reads
-            as "a list called No list". Only shown when such tasks actually exist
-            (workspace-created, or detached when a list was deleted); the usual case is
-            none, and then it stays out of the way entirely. An icon (not a status
-            dot) marks it as a view rather than a list. */}
-        {unlistedCount > 0 && (
+        {/* The open projects close the rail, as they close the iPhone drawer: the ones waiting on
+            you first, then by the newest activity (lib/projectAttention `sidebarProjects`). The
+            task lists that stood here are picked from the Tasks page's title now, as the phone
+            picks them from its Tasks page. Closed projects are the Projects page's to list. */}
+        {openProjects.length > 0 && (
           <div className="tp-group">
-            <div
-              className={`tp-item ${sel === 'none' ? 'active' : ''}`}
-              onClick={() => {
-                setSel('none');
-                navigate('/lists/none');
-              }}
-              title="Tasks not in any list (includes workspace-created tasks and ones detached when a list was deleted)"
-            >
-              <span className="tp-ico">
-                <InboxOutlined />
-              </span>
-              <span className="tp-label">No list</span>
-              <span className="tp-count">{unlistedCount}</span>
+            <div className="tp-group-head" onClick={() => setProjectsOpen((o) => !o)}>
+              <span className="tp-group-name">Projects</span>
+              <span className="tp-count">{openProjects.length}</span>
+              <CaretDownOutlined className={`tp-caret ${projectsOpen ? '' : 'collapsed'}`} />
             </div>
-          </div>
-        )}
-
-        {activeLists.length > 0 && (
-          <div className="tp-group">
-            <div className="tp-group-head" onClick={() => setListOpen((o) => !o)}>
-              <span className="tp-group-name">Task List</span>
-              <span className="tp-count">{activeLists.length}</span>
-              <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
-            </div>
-            {listOpen && <>{activeLists.map(renderListRow)}</>}
-          </div>
-        )}
-
-        {completedLists.length > 0 && (
-          <div className="tp-group">
-            <div className="tp-group-head" onClick={() => setCompletedOpen((o) => !o)}>
-              <span className="tp-group-name">Completed</span>
-              <span className="tp-count">{completedLists.length}</span>
-              <CaretDownOutlined className={`tp-caret ${completedOpen ? '' : 'collapsed'}`} />
-            </div>
-            {completedOpen && <>{completedLists.map(renderListRow)}</>}
+            {projectsOpen &&
+              openProjects.map((project) => (
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  active={sel === `project:${encodeId(project.id)}`}
+                  onOpen={openProject}
+                />
+              ))}
           </div>
         )}
       </div>
@@ -879,6 +811,39 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         onMouseDown={startResize}
       />
     </aside>
+  );
+}
+
+/**
+ * One open project in the rail's Projects group. The same two facts the iPhone drawer marks a
+ * project row with (OrbitKit `drawerMark`), each in the slot this rail already gives it: work in
+ * flight is the breathing dot at the head, where the task-list rows drew theirs and a Workspace
+ * draws its activity; the items waiting on you are the amber count at the far end, the pill a
+ * Workspace counts its waiting sessions with. Both can show at once — they answer different
+ * questions.
+ */
+export function ProjectRow({
+  project,
+  active,
+  onOpen,
+}: {
+  project: SidebarProject;
+  active: boolean;
+  onOpen: (project: SidebarProject) => void;
+}) {
+  const working = projectIsWorking(project);
+  const needsYou = projectNeedsYouCount(project);
+  const waiting = `${needsYou} waiting on you`;
+  return (
+    <div className={`tp-item inset ${active ? 'active' : ''}`} onClick={() => onOpen(project)}>
+      <span className={`tp-list-dot ${working ? 'running' : ''}`} title={working ? 'Running' : undefined} />
+      <span className="tp-label">{project.title}</span>
+      {needsYou > 0 && (
+        <span className="tp-count needs-you" title={waiting} aria-label={waiting}>
+          {needsYou}
+        </span>
+      )}
+    </div>
   );
 }
 

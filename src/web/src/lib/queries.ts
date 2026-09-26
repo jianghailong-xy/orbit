@@ -25,6 +25,8 @@ import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
+import type { SidebarProject } from './projectAttention';
+import type { ProjectFilter } from '../components/ProjectsToolbar';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { PendingDecisionQueue } from '../components/DecisionRail';
 import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard';
@@ -388,6 +390,38 @@ export const sessionCreatedTasksQuery = (sessionId: string) =>
     queryFn: () => api<SessionCreatedTasks>(`/sessions/${sessionId}/created-tasks`),
     refetchInterval: (q) =>
       q.state.data?.items.some((row) => row.running || row.queued) ? 15_000 : false,
+  });
+
+/**
+ * WHICH projects to ask for — the status filter goes on the wire, never over the loaded array.
+ *
+ * `?status=` has been the endpoint's own lifecycle narrowing since it was written; filtering that
+ * client-side would mean fetching every project in order to hide most of them. Running and Ready
+ * are task-rollup views of the one OPEN response, while terminal history remains server-scoped.
+ */
+export function projectsPath(filter: ProjectFilter): string {
+  return `/projects?status=${filter}`;
+}
+
+/** The cache entry `projectsPath(filter)` fills. The filter is PART OF THE KEY because it is part
+ *  of the request: two filters are two different answers, and sharing one entry between them would
+ *  show the previous filter's rows under the new filter's name. `['projects']` stays the prefix,
+ *  so one invalidation after a write still refreshes every filter's entry. */
+export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter] {
+  return ['projects', filter];
+}
+
+/**
+ * The open projects, as the sidebar's Projects group reads them — the Projects page's own Open
+ * read, same key and same URL, so the two share one request and one cache entry. Polled because
+ * the control-plane stream names no project: a task starting, or a coordinator taking a turn,
+ * reaches the group's working dot within one interval.
+ */
+export const openProjectsQuery = () =>
+  queryOptions({
+    queryKey: projectsQueryKey('OPEN'),
+    queryFn: () => api<SidebarProject[]>(projectsPath('OPEN')),
+    refetchInterval: 15_000,
   });
 
 /**

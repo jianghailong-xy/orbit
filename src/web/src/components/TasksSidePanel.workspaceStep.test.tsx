@@ -45,8 +45,7 @@ function serve(sessions: Record<string, { id: string; workspace: { id: string } 
   vi.mocked(api).mockImplementation((async (path: string) => {
     if (path === '/runners') return [{ id: RUNNER, name: 'wikova', online: true }];
     if (path === '/workspaces') return WORKSPACES;
-    if (path === '/task-lists') return [];
-    if (path.startsWith('/tasks/page')) return { items: [], counts: { total: 0 } };
+    if (path === '/projects?status=OPEN') return [];
     if (path === '/sessions/counts') return [];
     if (path === '/users/me') return { id: 'me', name: 'Me', email: 'me@example.com', role: 'USER' };
     if (path === '/wiki/spaces') return [];

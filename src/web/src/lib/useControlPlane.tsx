@@ -11,9 +11,9 @@ const REFRESH_DEBOUNCE_MS = 500;
 // down, a sweep dispatching a large list) holds it open and pins every query in the group at 2 Hz.
 // That is affordable for the task rows on screen and not for the list index, which is a per-list
 // aggregate over every task the owner has — six figures of rows on a large account, counted afresh
-// per request. What it feeds is a badge and a coloured dot, and TasksSidePanel's own refetchInterval
-// already declares 5s of staleness acceptable there, so refetching it faster than that is strictly
-// more work than the poll this stream replaced.
+// per request. What it feeds is a count and a coloured dot per list in the Tasks page's title menu,
+// where 5s of staleness costs nothing, so refetching it faster than that is strictly more work than
+// the poll this stream replaced.
 const LISTS_MIN_INTERVAL_MS = 5_000;
 // How long after a nudge the watch list is read a second time. `watch.changed` names a watch and
 // arrives AFTER the change landed, so it needs no second look — but a session or task event arrives
@@ -64,7 +64,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // list's optimistic edits can't touch them — so they need their own invalidation here.
       void qc.invalidateQueries({ queryKey: ['session-counts'] });
     };
-    // The sidebar's list index, rate-limited to one refetch per LISTS_MIN_INTERVAL_MS. Leading —
+    // The lists index, rate-limited to one refetch per LISTS_MIN_INTERVAL_MS. Leading —
     // an idle tab still reflects a single task change immediately — then at most one trailing
     // refetch per window while events keep arriving, so a bulk write costs one request per window
     // instead of one per debounce tick. See LISTS_MIN_INTERVAL_MS for why this query, alone in the
@@ -79,7 +79,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       }, wait);
     };
     // The task list/board queries: every paged view — all tasks, one list, the unlisted bucket —
-    // plus the sidebar count (['tasks']), the sidebar lists (['task-lists']), and an open detail
+    // plus the No-list count (['tasks']), the lists index (['task-lists']), and an open detail
     // (['task', id]). Refetched only on a `task.*` event (or on reconnect), so an unrelated
     // session event doesn't needlessly refetch them. This is what makes MCP-created/updated tasks
     // appear without a manual page refresh; before, tasks had no push path and rode a 5–15s poll only.

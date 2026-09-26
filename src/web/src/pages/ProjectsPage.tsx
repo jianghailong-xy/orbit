@@ -82,6 +82,8 @@ import {
 import {
   projectCoordinatorStatusQuery,
   projectIntegrationQuery,
+  projectsPath,
+  projectsQueryKey,
   runnersQuery,
   workspacesQuery,
 } from '../lib/queries';
@@ -96,6 +98,9 @@ import { useMediaQuery } from '../lib/useMediaQuery';
 // lib/taskSchedule, shared with the task panel's own Start at editor. This page keeps the name it
 // has always exported so the rows and the tests over them import it from one place.
 export { scheduledStart };
+// Declared beside the other shared reads (the sidebar asks for the same Open entry); still exported
+// from here, where the page's tests and readers have always found them.
+export { projectsPath, projectsQueryKey };
 
 interface Project {
   id: string;
@@ -193,17 +198,6 @@ function excerpt(text: string | null | undefined, empty: string): string {
   return trimmed.length > ROW_EXCERPT_LENGTH ? `${trimmed.slice(0, ROW_EXCERPT_LENGTH)}…` : trimmed;
 }
 
-/**
- * WHICH projects to ask for — the status filter goes on the wire, never over the loaded array.
- *
- * `?status=` has been the endpoint's own lifecycle narrowing since it was written; filtering that
- * client-side would mean fetching every project in order to hide most of them. Running and Ready
- * are task-rollup views of the one OPEN response, while terminal history remains server-scoped.
- */
-export function projectsPath(filter: ProjectFilter): string {
-  return `/projects?status=${filter}`;
-}
-
 /** The URL owns the lifecycle view so a refresh, shared link, or trip through project detail does
  *  not silently reset terminal history to Open. Unknown values fail closed to the default view. */
 export function projectFilterFromStatusParam(value: string | null): ProjectFilter {
@@ -255,14 +249,6 @@ export function projectsReturnPath(state: unknown): string {
   return typeof candidate === 'string' && allowed.includes(candidate)
     ? candidate
     : projectsRoutePath('OPEN');
-}
-
-/** The cache entry `projectsPath(filter)` fills. The filter is PART OF THE KEY because it is part
- *  of the request: two filters are two different answers, and sharing one entry between them would
- *  show the previous filter's rows under the new filter's name. `['projects']` stays the prefix,
- *  so one invalidation after a write still refreshes every filter's entry. */
-export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter] {
-  return ['projects', filter];
 }
 
 /**

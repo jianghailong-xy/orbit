@@ -21,8 +21,10 @@ import {
   Avatar,
   Button,
   Checkbox,
+  Dropdown,
   Input,
   InputNumber,
+  type MenuProps,
   Modal,
   Popconfirm,
   Segmented,
@@ -349,6 +351,62 @@ function BatchesTable({
   );
 }
 
+/** One row of `GET /task-lists`, as the Tasks page's title reads it. */
+export interface TaskListRow {
+  id: string;
+  title: string;
+  _count?: { tasks: number };
+  /** Tasks of the list executing right now; above zero the list's dot breathes blue. */
+  runningTasks?: number;
+  /** Every task DONE; the dot turns green once nothing is running either. */
+  completed?: boolean;
+}
+
+/**
+ * What the Tasks page's title offers: every task, the tasks in no list, then the lists — the groups
+ * the sidebar held before its foot became the open projects, with the same dots and counts, the way
+ * the iPhone's Tasks page offers them under `List:`. Each key is the address it opens.
+ *
+ * `unlisted` is undefined until counted; No list is offered meanwhile, and left out only once the
+ * count says there is nothing in it (unless it is the page on screen).
+ */
+export function taskScopeMenuItems(
+  lists: readonly TaskListRow[],
+  unlisted: number | undefined,
+  current: string,
+): NonNullable<MenuProps['items']> {
+  const row = (title: string, count?: number, dot?: string) => (
+    <span className="tasks-scope-row">
+      {dot !== undefined && <span className={`tp-list-dot ${dot}`} />}
+      <span className="tasks-scope-title">{title}</span>
+      {count !== undefined && <span className="tasks-scope-count">{count}</span>}
+    </span>
+  );
+  const listItem = (list: TaskListRow) => {
+    const running = (list.runningTasks ?? 0) > 0;
+    return {
+      key: `/lists/${encodeId(list.id)}`,
+      label: row(list.title, list._count?.tasks, running ? 'running' : list.completed ? 'done' : ''),
+    };
+  };
+  // A list lands in Completed only once every task is DONE and nothing is still running.
+  const finished = (list: TaskListRow) => !!list.completed && (list.runningTasks ?? 0) === 0;
+  const active = lists.filter((list) => !finished(list));
+  const done = lists.filter(finished);
+  const showUnlisted = unlisted === undefined || unlisted > 0 || current === '/lists/none';
+  return [
+    { key: '/tasks', label: row('Active') },
+    ...(showUnlisted ? [{ key: '/lists/none', label: row('No list', unlisted) }] : []),
+    ...(active.length || done.length ? [{ type: 'divider' as const }] : []),
+    ...(active.length
+      ? [{ type: 'group' as const, key: 'lists', label: `Task List · ${active.length}`, children: active.map(listItem) }]
+      : []),
+    ...(done.length
+      ? [{ type: 'group' as const, key: 'completed', label: `Completed · ${done.length}`, children: done.map(listItem) }]
+      : []),
+  ];
+}
+
 export function TaskListView() {
   const loc = useLocation();
   const navigate = useNavigate();
@@ -534,16 +592,26 @@ export function TaskListView() {
   const labelRows = labelSummary.data?.items ?? [];
   const hasLabels = labelRows.length > 0 || labels.length > 0;
 
-  // The open list's own row, for the page title. Read off the lists index the sidebar already
-  // holds — same key, so opening a list costs no request of its own — rather than the list
-  // detail, whose whole payload is the tasks this view now pages through.
+  // The open list's own row, for the page title. Read off the lists index the title's menu offers
+  // the lists from — one read for both — rather than the list detail, whose whole payload is the
+  // tasks this view now pages through.
   const taskLists = useQuery({
     queryKey: ['task-lists'],
-    queryFn: () => api<{ id: string; title: string }[]>('/task-lists'),
+    queryFn: () => api<TaskListRow[]>('/task-lists'),
   });
+  // The title is also where every other scope is picked (`taskScopeMenuItems`). The tasks in no
+  // list are counted only once that menu is open: nothing else on the page reads the number, and a
+  // page scoped to one conversation asks for nothing outside that scope.
+  const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
+  const unlistedCount = useQuery({
+    queryKey: ['tasks', 'unlisted-count'],
+    queryFn: () => api<TaskPage>(taskPagePath({ limit: 1, listId: 'none' })),
+    enabled: scopeMenuOpen,
+  });
+  const scopePath = isListView ? `/lists/${listId}` : isUnlisted ? '/lists/none' : '/tasks';
   const listRow = (taskLists.data ?? []).find((l) => l.id === listId);
   // An index with no such row means the list is gone — but only once it has been refetched for
-  // *this* page view. The sidebar's copy can be up to 15s stale, and calling a list that was
+  // *this* page view. A copy cached on an earlier visit can be stale, and calling a list that was
   // created a second ago (over MCP, say, and deep-linked straight into) missing would be wrong.
   const listMissing = isListView && taskLists.isFetchedAfterMount && !listRow;
   // A /tasks/:id deep link (e.g. a session header's "回到任务") opens that task's detail
@@ -1170,7 +1238,32 @@ export function TaskListView() {
             {/* Title and console share one line: `.page-title` is a block-level h1, so the
                 button needs the row or it drops beneath the heading. */}
             <div className="tasks-title-row">
-              <h1 className="page-title">{pageTitle}</h1>
+              <h1 className="page-title">
+                <Dropdown
+                  trigger={['click']}
+                  open={scopeMenuOpen}
+                  onOpenChange={setScopeMenuOpen}
+                  menu={{
+                    className: 'tasks-scope-menu',
+                    selectable: true,
+                    selectedKeys: [scopePath],
+                    items: taskScopeMenuItems(
+                      taskLists.data ?? [],
+                      unlistedCount.data?.counts?.total,
+                      scopePath,
+                    ),
+                    onClick: ({ key }) => {
+                      setScopeMenuOpen(false);
+                      navigate(key);
+                    },
+                  }}
+                >
+                  <button type="button" className="tasks-scope-trigger" title="Choose which tasks to show">
+                    {pageTitle}
+                    <CaretDownOutlined className="tasks-scope-caret" />
+                  </button>
+                </Dropdown>
+              </h1>
               {isListView && (
                 <Button
                   size="small"
