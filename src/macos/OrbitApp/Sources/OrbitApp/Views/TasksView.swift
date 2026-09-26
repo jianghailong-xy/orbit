@@ -1383,6 +1383,10 @@ private struct TaskDetailContent: View {
 
     private func header(_ task: TaskItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            // The project it is filed under — the web panel's line over the title. A project's tasks
+            // are not listed on Tasks, so a task opened from a link names its project, and says so
+            // when that project was cancelled.
+            if let project = task.project { projectLine(project) }
             Text(task.title)
                 .font(.title2.weight(.bold))
                 .fixedSize(horizontal: false, vertical: true)
@@ -1405,6 +1409,28 @@ private struct TaskDetailContent: View {
             if let chip = TaskJudgment.chip(task) { judgmentChip(chip) }
         }
         .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+    }
+
+    private func projectLine(_ project: TaskProjectRef) -> some View {
+        Button { model.openProject(project.id) } label: {
+            HStack(spacing: 5) {
+                Image(systemName: AppSection.projects.systemImage)
+                Text(project.title).lineLimit(1)
+                if project.status == ProjectStatus.cancelled.rawValue {
+                    Text(ProjectStatus.cancelled.label)
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(Color.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.secondary.opacity(0.4),
+                                                                                lineWidth: 0.5))
+                }
+            }
+            .font(.orbitLabel)
+            .foregroundStyle(Color.accentColor)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// The judgment chip: a gate row reads apart from the method chips, because it says something

@@ -130,6 +130,15 @@ final class TaskListRulesTests: XCTestCase {
         XCTAssertEqual(TaskListLogic.rowTime(unstamped, now: now), "2h ago")
     }
 
+    // MARK: a task opened from a link names its project
+
+    func testTheDetailNamesTheProjectItIsFiledUnder() {
+        let shard = task(#"{"id":"a","title":"t","status":"OPEN","project":{"id":"P","title":"FineWeb corpus","status":"CANCELLED"}}"#)
+        XCTAssertEqual(shard.project?.title, "FineWeb corpus")
+        XCTAssertEqual(shard.project?.status, ProjectStatus.cancelled.rawValue)
+        XCTAssertNil(task(#"{"id":"a","title":"t","status":"OPEN","project":null}"#).project)
+    }
+
     // MARK: which lists the title switcher offers
 
     private func list(_ json: String) -> TaskListSummary {
