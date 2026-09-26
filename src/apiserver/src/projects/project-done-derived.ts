@@ -7,6 +7,7 @@ import {
   standardSetVersion,
   type AcceptanceCriterionDefinitionLike,
   type RecordedStandardSetConfirmation,
+  type StandardSetConfirmationStanding,
   type StandardSetConfirmationState,
 } from './project-acceptance';
 import {
@@ -318,6 +319,41 @@ export async function readStandardSetConfirmationState(
     standardSetVersion(criteriaFromDefinitions([...(definitions ?? [])])),
     await latestConfirmation(prisma, projectId),
   ).state;
+}
+
+/**
+ * The confirmation half whole — the state AND the confirmation it was decided from — for a reader
+ * that has to say WHEN the standing set was confirmed rather than only whether: the message a
+ * coordinator is sent when every criterion has landed (`coordinator-delivery.service.ts`), which
+ * must not ask for a confirmation already on record.
+ *
+ * The same two reads `readDerivedProjectDone` makes and the same comparison, so the message and the
+ * column this projection writes cannot disagree about whether the version that stands was confirmed.
+ */
+export async function readStandardSetConfirmationStanding(
+  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectStandardSetConfirmation'>,
+  projectId: string,
+): Promise<StandardSetConfirmationStanding> {
+  const [definitions, confirmation] = await Promise.all([
+    prisma.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId },
+      orderBy: { ordinal: 'asc' },
+      select: {
+        id: true,
+        ordinal: true,
+        text: true,
+        verificationMethod: true,
+        completionCriterionOverrideReason: true,
+        revision: true,
+        contentHash: true,
+      },
+    }),
+    latestConfirmation(prisma, projectId),
+  ]);
+  return standardSetConfirmationStanding(
+    standardSetVersion(criteriaFromDefinitions(definitions)),
+    confirmation,
+  );
 }
 
 /**
