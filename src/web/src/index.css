@@ -3813,6 +3813,8 @@ html[data-theme='dark'] .session-tag-chip {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Inset to the row's own left edge (.wt-row), not flush with the bar's border. */
+  padding: 0 10px 8px;
 }
 .wt-commit-fail-head {
   display: flex;
