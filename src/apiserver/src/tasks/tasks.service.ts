@@ -220,6 +220,7 @@ import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { runCodexAccount } from '../providers/plan-usage-accounts';
+import { readWaitingOwnerConfirmations } from './owner-confirmation-read';
 import { accountPoolRuntime } from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
@@ -1139,6 +1140,21 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   )`;
 
 /**
+ * Narrow a task scope by project: a project id is that project's tasks, `'none'` is the tasks
+ * filed under no project. One spelling for every read that takes the parameter, so the page, its
+ * tallies, the pinned strip and the label table cannot disagree about which tasks they describe.
+ */
+function applyProjectScope(scope: Prisma.TaskWhereInput, projectId: string | undefined): void {
+  if (projectId === undefined || projectId === '') return;
+  if (projectId === 'none') {
+    scope.projectId = null;
+    return;
+  }
+  if (!UUID_RE.test(projectId)) throw new BadRequestException('invalid project id');
+  scope.projectId = projectId;
+}
+
+/**
  * SQL mirror of the `{ ownerId, listId?, projectId?, assigneeId? }` scope the Prisma queries are
  * built from. Derived from that same object rather than re-read from the query string, so the two
  * spellings of the scope cannot drift.
@@ -1149,7 +1165,8 @@ function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
   else if (typeof scope.listId === 'string') {
     clauses.push(Prisma.sql`t.list_id = ${scope.listId}::uuid`);
   }
-  if (typeof scope.projectId === 'string') {
+  if (scope.projectId === null) clauses.push(Prisma.sql`t.project_id IS NULL`);
+  else if (typeof scope.projectId === 'string') {
     clauses.push(Prisma.sql`t.project_id = ${scope.projectId}::uuid`);
   }
   if (typeof scope.assigneeId === 'string') {
@@ -1469,6 +1486,11 @@ export interface ListTasksPageQuery {
    * exist — or exists under another owner — narrows to nothing and answers as an empty list. That
    * is deliberate. Answering 404 here would make this endpoint report whether a project id exists
    * to a caller who is not allowed to read it, which is a question about somebody else's account.
+   *
+   * `'none'` is the other scope: tasks filed under no project at all — what the Tasks page lists.
+   * A project's tasks belong to its own page, where the project decides whether they run; listing
+   * them again beside the tasks nobody filed away is how 111k FineWeb shards buried the 700 tasks
+   * the page was for.
    */
   projectId?: string;
   assigneeId?: string;
@@ -1505,10 +1527,18 @@ export interface TaskCounts {
   running: number;
   queued: number;
   runnable: number;
+  /**
+   * Only on the `projectId=none` scope: how many of the owner's tasks that scope leaves out, and
+   * across how many projects — the one sentence the Tasks page says about the work it no longer
+   * lists, and where to find it.
+   */
+  inProjects?: { tasks: number; projects: number };
 }
 
 export interface LabelSummaryQuery {
   listId?: string;
+  /** A project id, or `'none'` for tasks filed under no project. See ListTasksPageQuery. */
+  projectId?: string;
   assigneeId?: string;
 }
 
@@ -6110,10 +6140,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     if (!task) throw new NotFoundException('task not found');
 
-    const [withRun, states, runnable] = await Promise.all([
+    const [withRun, states, runnable, awaitingIds] = await Promise.all([
       this.withRunning(ownerId, [task], true),
       this.dependencyStatesFor(ownerId, [id]),
       this.runnableTask(ownerId, id),
+      this.awaitingOwnerConfirmation(ownerId, [task]),
     ]);
     const dependencyState = states.get(id) ?? 'NONE';
     return {
@@ -6121,6 +6152,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dependencyState,
       blocked: !canRun(dependencyState),
       runnable,
+      awaitingOwnerConfirmation: awaitingIds.has(id),
     };
   }
 
@@ -6202,10 +6234,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     // Scope, not filter, for the same reason a label is: the tallies have to describe the project
     // being asked about, or a coordinator reads its own progress off the whole account's numbers.
-    if (query.projectId) {
-      if (!UUID_RE.test(query.projectId)) throw new BadRequestException('invalid project id');
-      scopedWhere.projectId = query.projectId;
-    }
+    // `none` is the Tasks page's scope — the tasks filed under no project.
+    applyProjectScope(scopedWhere, query.projectId);
     if (query.assigneeId) {
       if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');
       scopedWhere.assigneeId = query.assigneeId;
@@ -6300,10 +6330,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const hasMore = rows.length > limit;
     const pageTasks = hasMore ? rows.slice(0, limit) : rows;
-    const [withRun, states, runnableIds] = await Promise.all([
+    const [withRun, states, runnableIds, awaitingIds] = await Promise.all([
       this.withRunning(ownerId, pageTasks),
       this.dependencyStatesFor(ownerId, pageTasks.map((task) => task.id)),
       this.runnableTaskIds(ownerId, pageTasks.map((task) => task.id)),
+      this.awaitingOwnerConfirmation(ownerId, pageTasks),
     ]);
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
@@ -6312,6 +6343,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependencyState,
         blocked: !canRun(dependencyState),
         runnable: runnableIds.has(task.id),
+        awaitingOwnerConfirmation: awaitingIds.has(task.id),
       };
     });
     const nextCursor =
@@ -6372,6 +6404,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const key = JSON.stringify([
       ownerId,
       query.listId,
+      query.projectId,
       query.assigneeId,
       query.labels,
       query.creatorSessionId,
@@ -6398,9 +6431,49 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');
       scope.creatorSessionId = query.creatorSessionId;
     }
+    applyProjectScope(scope, query.projectId);
     const labelFilter = parseLabelsQuery(query.labels);
     if (labelFilter.length) scope.labels = { hasEvery: labelFilter };
-    return this.scopeCounts(scope);
+    if (scope.projectId !== null) return this.scopeCounts(scope);
+    const [counts, inProjects] = await Promise.all([
+      this.scopeCounts(scope),
+      this.tasksInProjects(ownerId),
+    ]);
+    return { ...counts, inProjects };
+  }
+
+  /**
+   * How much of the owner's work lives on project pages: the tasks filed under a project, and how
+   * many projects they are spread over. Owner-wide on purpose — the sentence it feeds says where
+   * the rest of the owner's tasks went, not where the rest of a list's did.
+   */
+  private async tasksInProjects(ownerId: string): Promise<{ tasks: number; projects: number }> {
+    const [tasks, projects] = await Promise.all([
+      this.prisma.task.count({ where: { ownerId, projectId: { not: null } } }),
+      this.prisma.project.count({ where: { ownerId, tasks: { some: {} } } }),
+    ]);
+    return { tasks, projects };
+  }
+
+  /**
+   * The tasks among these whose OWNER_CONFIRMED run is waiting on the owner right now — the same
+   * reading the session list's needs-you signal takes (`readWaitingOwnerConfirmations`), so a row
+   * and the conversation it points at say it together. Only a row that declares OWNER_CONFIRMED
+   * and has not settled can be waiting, so a page without one asks nothing at all.
+   */
+  private async awaitingOwnerConfirmation(
+    ownerId: string,
+    rows: ReadonlyArray<{ id: string; completionCriterion: string | null; status: string }>,
+  ): Promise<Set<string>> {
+    const wanted = new Set(
+      rows
+        .filter((row) => row.completionCriterion === 'OWNER_CONFIRMED'
+          && (row.status === 'OPEN' || row.status === 'IN_PROGRESS'))
+        .map((row) => row.id),
+    );
+    if (wanted.size === 0) return wanted;
+    const waiting = await readWaitingOwnerConfirmations(this.prisma, ownerId);
+    return new Set(waiting.map((entry) => entry.taskId).filter((id) => wanted.has(id)));
   }
 
   /**
@@ -6426,6 +6499,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!UUID_RE.test(query.listId)) throw new BadRequestException('invalid task list id');
       scope.listId = query.listId;
     }
+    applyProjectScope(scope, query.projectId);
 
     // Live execution state comes off the session table, so "has a live run" cannot be a column
     // predicate — it is the same `sessions: { some: ... }` the counts above use.
@@ -6449,10 +6523,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.prisma.task.count({ where }),
     ]);
 
-    const [withRun, states, runnableIds] = await Promise.all([
+    const [withRun, states, runnableIds, awaitingIds] = await Promise.all([
       this.withRunning(ownerId, rows, true),
       this.dependencyStatesFor(ownerId, rows.map((task) => task.id)),
       this.runnableTaskIds(ownerId, rows.map((task) => task.id)),
+      this.awaitingOwnerConfirmation(ownerId, rows),
     ]);
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
@@ -6461,6 +6536,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependencyState,
         blocked: !canRun(dependencyState),
         runnable: runnableIds.has(task.id),
+        awaitingOwnerConfirmation: awaitingIds.has(task.id),
       };
     });
     return { items, total, truncated: total > items.length };
@@ -6486,6 +6562,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!UUID_RE.test(query.listId)) throw new BadRequestException('invalid task list id');
       scope.listId = query.listId;
     }
+    applyProjectScope(scope, query.projectId);
     if (query.assigneeId) {
       if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');
       scope.assigneeId = query.assigneeId;
@@ -7505,6 +7582,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       where: { id, ownerId },
       include: {
         assignee: { select: { id: true, name: true, model: true } },
+        // The project it is filed under, named: a project's task is not listed on the Tasks page,
+        // so a task opened from a link says which project it belongs to and whether that project
+        // is still going.
+        project: { select: { id: true, title: true, status: true } },
         // author is polymorphic (no FK), so names are resolved separately below.
         comments: {
           orderBy: { createdAt: 'asc' },
