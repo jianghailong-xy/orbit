@@ -58,6 +58,10 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let acceptanceCriteria: String?
     public let acceptanceCommand: String?
     public let acceptanceExpectedExitCode: Int?
+    /// When the task starts by itself, once (`Start at`). Detail payload only; nil = not scheduled.
+    public let runAt: String?
+    /// The files every run of this task is given (`Inputs`). Detail payload only.
+    public let attachments: [TaskInput]?
     /// Why a superseded task names no successor (`SUCCESSOR_DELETED` when it was deleted).
     public let supersededByTaskIdAbsentReason: String?
     /// The attempts this task replaced.
@@ -96,7 +100,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
         case completionPolicy, verifiesTaskId, verificationState, verifier
-        case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode
+        case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode, runAt, attachments
         case supersededByTaskIdAbsentReason, supersedes, successorChain
         case running, queued, blocked, dependencyState, runnable
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
@@ -133,6 +137,26 @@ public struct TaskComment: Codable, Equatable, Sendable, Identifiable {
     /// Resolved server-side (the author is polymorphic USER|AGENT, no FK).
     public let authorName: String?
     public let createdAt: String?
+}
+
+/// One of a task's inputs: a file uploaded against the task rather than a conversation, copied into
+/// every run of it (web `TaskInputs.tsx`).
+public struct TaskInput: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let mimeType: String
+    public let sizeBytes: Int
+    public let fileName: String?
+    public let createdAt: String?
+
+    public init(id: String, mimeType: String, sizeBytes: Int, fileName: String? = nil, createdAt: String? = nil) {
+        self.id = id
+        self.mimeType = mimeType
+        self.sizeBytes = sizeBytes
+        self.fileName = fileName
+        self.createdAt = createdAt
+    }
+
+    public var isImage: Bool { mimeType.hasPrefix("image/") }
 }
 
 /// Lightweight `{id,title,status}` for a *task* (dependency edges) — `status` is a `TaskStatus`.
@@ -303,6 +327,13 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     /// exactly that; nothing else here writes either field.
     public var supersededByTaskId: FieldUpdate<String>
     public var terminalReason: FieldUpdate<String>
+    /// `Start at`: an ISO instant schedules the one start, `.clear` cancels it.
+    public var runAt: FieldUpdate<String>
+    /// The acceptance block. The command and its exit code are one field in every sense that matters
+    /// (`TaskAcceptanceDraft.patch` writes both or neither).
+    public var acceptanceCriteria: FieldUpdate<String>
+    public var acceptanceCommand: FieldUpdate<String>
+    public var acceptanceExpectedExitCode: FieldUpdate<Int>
 
     public init(title: String? = nil, description: String? = nil, status: TaskStatus? = nil,
                 assigneeId: FieldUpdate<String> = .keep, listId: FieldUpdate<String> = .keep,
@@ -310,7 +341,11 @@ public struct UpdateTaskRequest: Encodable, Sendable {
                 model: FieldUpdate<String> = .keep, dependsOnTaskIds: [String]? = nil,
                 autoRunWhenReady: Bool? = nil,
                 supersededByTaskId: FieldUpdate<String> = .keep,
-                terminalReason: FieldUpdate<String> = .keep) {
+                terminalReason: FieldUpdate<String> = .keep,
+                runAt: FieldUpdate<String> = .keep,
+                acceptanceCriteria: FieldUpdate<String> = .keep,
+                acceptanceCommand: FieldUpdate<String> = .keep,
+                acceptanceExpectedExitCode: FieldUpdate<Int> = .keep) {
         self.title = title
         self.description = description
         self.status = status
@@ -323,12 +358,17 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         self.autoRunWhenReady = autoRunWhenReady
         self.supersededByTaskId = supersededByTaskId
         self.terminalReason = terminalReason
+        self.runAt = runAt
+        self.acceptanceCriteria = acceptanceCriteria
+        self.acceptanceCommand = acceptanceCommand
+        self.acceptanceExpectedExitCode = acceptanceExpectedExitCode
     }
 
     enum CodingKeys: String, CodingKey {
         case title, description, status, assigneeId, listId, dueDate, provider, model
         case dependsOnTaskIds, autoRunWhenReady
         case supersededByTaskId, terminalReason
+        case runAt, acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -345,6 +385,10 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         try c.encodeIfPresent(autoRunWhenReady, forKey: .autoRunWhenReady)
         try supersededByTaskId.encode(into: &c, forKey: .supersededByTaskId)
         try terminalReason.encode(into: &c, forKey: .terminalReason)
+        try runAt.encode(into: &c, forKey: .runAt)
+        try acceptanceCriteria.encode(into: &c, forKey: .acceptanceCriteria)
+        try acceptanceCommand.encode(into: &c, forKey: .acceptanceCommand)
+        try acceptanceExpectedExitCode.encode(into: &c, forKey: .acceptanceExpectedExitCode)
     }
 }
 

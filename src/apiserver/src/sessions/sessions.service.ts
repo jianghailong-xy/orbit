@@ -23,6 +23,7 @@ import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
+import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -219,6 +220,10 @@ interface ListedQueuedTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (project-started.ts). */
   projectStarted?: ProjectStartedCard;
+  /** The control plane wrote this turn itself (`isOrbitAuthoredTurn`): nobody typed its words, so a
+   *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
+   *  turn somebody sent. */
+  authoredByOrbit?: true;
 }
 
 interface ListedActiveTurn extends ListedQueuedTurn {
@@ -4814,6 +4819,7 @@ export class SessionsService {
           })),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
     }
@@ -4886,6 +4892,7 @@ export class SessionsService {
             : {}),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({

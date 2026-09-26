@@ -66,3 +66,14 @@ export function derivedUuid(name: string): string {
   const hex = bytes.toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+
+/**
+ * Whether an id has the shape `derivedUuid` gives every id: version 5, variant 10x, lowercase.
+ *
+ * Nothing but this server derives ids by name. The browser, the native apps and the runner mint
+ * random ones (version 4), so a turn keyed like this is one the control plane filed itself — a
+ * coordinator's wake delivery, a criteria decision's reply (`sessions/orbit-authored-turn.ts`).
+ */
+export function isDerivedUuid(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id);
+}

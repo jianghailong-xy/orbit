@@ -738,6 +738,18 @@ public final class APIClient: @unchecked Sendable {
     public func removeTaskComment(taskID: String, commentID: String) async throws { try await deleteRaw("tasks/\(taskID)/comments/\(commentID)") }
     public func addTaskDependency(taskID: String, _ req: AddDependencyRequest) async throws { try await postRaw("tasks/\(taskID)/dependencies", body: req) }
     public func removeTaskDependency(taskID: String, dependsOnTaskID: String) async throws { try await deleteRaw("tasks/\(taskID)/dependencies/\(dependsOnTaskID)") }
+    /// `GET /tasks/:id/attribution`: where this work counts, where it was noticed, which crossing
+    /// touches it and what blocks it — the detail page's Attribution block.
+    public func taskAttribution(_ id: String) async throws -> TaskAttribution { try await get("tasks/\(id)/attribution") }
+    /// `GET /tasks/:id/dependency-graph`, asked the way the browser's panel asks it: both directions,
+    /// up to 500 tasks, unary chains paired.
+    public func taskDependencyGraph(_ id: String) async throws -> TaskDependencyGraph {
+        try await get("tasks/\(id)/dependency-graph", query: [
+            URLQueryItem(name: "direction", value: "both"),
+            URLQueryItem(name: "maxNodes", value: "500"),
+            URLQueryItem(name: "pairUnary", value: "true"),
+        ])
+    }
 
     // MARK: watches (docs/watch-contract.md)
 
@@ -768,6 +780,8 @@ public final class APIClient: @unchecked Sendable {
     public func resumeWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/resume") }
     /// Stop: the contract's CANCELLED.
     public func cancelWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/cancel") }
+    /// Follow: create a watch; answers with it as it stands (already MATCHED when the condition held).
+    public func createWatch(_ req: CreateWatchRequest) async throws -> Watch { try await post("watches", body: req) }
 
     // MARK: wiki (docs/wiki-contract.md) — the user door, `/api/wiki`
 
@@ -938,6 +952,24 @@ public final class APIClient: @unchecked Sendable {
         let respData = try await send(req)
         return try decoder.decode(AttachmentRef.self, from: respData).id
     }
+
+    /// Upload one of a task's inputs (`POST /attachments?taskId=`): a blob that belongs to the work
+    /// rather than to a conversation, copied into every run of it. The server refuses a blob named
+    /// for both, so this never sends a session.
+    @discardableResult
+    public func uploadTaskInput(taskID: String, filename: String, mimeType: String, data: Data) async throws -> String {
+        let boundary = "orbit.\(UUID().uuidString)"
+        var req = try makeRequest("attachments", method: "POST", query: [URLQueryItem(name: "taskId", value: taskID)],
+                                  body: Optional<Empty>.none)
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Multipart.body(boundary: boundary, fieldName: "file",
+                                      filename: filename, mimeType: mimeType, fileData: data)
+        let respData = try await send(req)
+        return try decoder.decode(AttachmentRef.self, from: respData).id
+    }
+
+    /// `DELETE /attachments/:id` — removing a task input. Runs already started keep their copy.
+    public func deleteAttachment(_ id: String) async throws { try await deleteRaw("attachments/\(id)") }
 
     /// Fetch an attachment's raw bytes (GET /attachments/:id). Bearer-guarded, so an `<img src>`
     /// can't carry the token — the transcript fetches the blob and decodes it client-side.
