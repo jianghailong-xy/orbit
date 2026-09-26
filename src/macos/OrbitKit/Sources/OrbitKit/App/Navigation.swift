@@ -47,6 +47,10 @@ public enum NavNode: Hashable, Sendable {
     /// the third, and it is the *same* ``runnerDetail(runnerID:)`` frame the Runners section pushes —
     /// what tells the two apart is the stack a frame rides, not the frame.
     case settingsRunners
+    /// Every other page Settings' list opens — Notifications, Session orchestration, Providers,
+    /// Shared links, Change password, Admin — each a frame of Settings' own stack like the runners
+    /// list above it.
+    case settingsPage(SettingsPage)
     case userDetail(userID: String)
     /// One project's page, pushed from the Projects list or from the drawer's project rows.
     case projectDetail(projectID: String)
@@ -73,10 +77,16 @@ public enum NavNode: Hashable, Sendable {
 public struct NavState: Equatable, Sendable {
     public var section: AppSection
     public var stacks: [AppSection: [NavNode]]
+    /// Settings is up as a sheet over the section (iOS, where it is presented rather than switched
+    /// to): its own stack is then the one on screen, so a push lands there and the section's stack
+    /// underneath is left exactly as it was — the same console, still streaming, when it closes.
+    public var settingsPresented: Bool
 
-    public init(section: AppSection = .agents, stacks: [AppSection: [NavNode]] = [:]) {
+    public init(section: AppSection = .agents, stacks: [AppSection: [NavNode]] = [:],
+                settingsPresented: Bool = false) {
         self.section = section
         self.stacks = stacks
+        self.settingsPresented = settingsPresented
     }
 
     /// The stack on screen: the current section's, which is what a `NavigationStack(path:)` binds to.
@@ -88,6 +98,22 @@ public struct NavState: Equatable, Sendable {
     public var path: [NavNode] {
         get { stacks[section] ?? [] }
         set { stacks[section] = newValue.isEmpty ? nil : newValue }
+    }
+
+    /// Settings' own stack, wherever Settings is drawn: the sheet's on iOS, the section's on macOS
+    /// (where it *is* the section's `path`). What the sheet's `NavigationStack(path:)` binds to, and
+    /// normalized the same way, so an emptied stack drops its key.
+    public var settingsPath: [NavNode] {
+        get { stacks[.settings] ?? [] }
+        set { stacks[.settings] = newValue.isEmpty ? nil : newValue }
+    }
+
+    /// Put Settings up over the section. It opens on its own list, not on whichever page it was
+    /// closed on — the stack is cleared on the way in rather than on the way out, so the page being
+    /// dismissed doesn't pop under the closing sheet.
+    public mutating func openSettings() {
+        if !settingsPresented { settingsPath = [] }
+        settingsPresented = true
     }
 
     // MARK: - Derived facts
@@ -186,8 +212,13 @@ public struct NavState: Equatable, Sendable {
 
     // MARK: - Transitions
 
-    /// Go one page deeper in the current section.
+    /// Go one page deeper in the current section — or in Settings, while it is up over the section:
+    /// a push lands on the stack on screen, never on one underneath it.
     public mutating func push(_ node: NavNode) {
+        if settingsPresented {
+            settingsPath.append(node)
+            return
+        }
         withPath { $0.append(node) }
     }
 

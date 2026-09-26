@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider, PermissionMode } from '@orbit/shared';
 import {
+  effortWithinDeclaredLevels,
   initializesRuntimeDynamically,
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
@@ -321,4 +322,49 @@ test('root does not disturb the modes it has no claim on', () => {
     ),
     PermissionMode.DEFAULT,
   );
+});
+
+// Qwen3.8's chat template, behind vLLM's Anthropic adapter, takes only these three and raises on the
+// rest — `high` included, which is what Claude Code sends when a session names no effort.
+const QWEN38 = ['xhigh', 'medium', 'low'];
+
+test('an effort is moved onto the levels a configured model declares', () => {
+  // Accepted levels pass as they are, whatever order the declaration lists them in.
+  assert.equal(effortWithinDeclaredLevels('low', QWEN38), 'low');
+  assert.equal(effortWithinDeclaredLevels('medium', QWEN38), 'medium');
+  assert.equal(effortWithinDeclaredLevels('xhigh', QWEN38), 'xhigh');
+  // A level the model lacks goes to the nearest it has; of two equally near, the higher.
+  assert.equal(effortWithinDeclaredLevels('high', QWEN38), 'xhigh');
+  assert.equal(effortWithinDeclaredLevels('max', QWEN38), 'xhigh');
+  assert.equal(effortWithinDeclaredLevels('medium', ['low', 'xhigh']), 'low');
+  assert.equal(effortWithinDeclaredLevels('low', ['high', 'max']), 'high');
+  // No effort is the CLI's own `high`, which would be sent regardless of the declaration — so it is
+  // always stated as a level rather than left to the default.
+  assert.equal(effortWithinDeclaredLevels(undefined, QWEN38), 'xhigh');
+  assert.equal(effortWithinDeclaredLevels('', QWEN38), 'xhigh');
+  assert.equal(effortWithinDeclaredLevels('', ['high', 'low']), 'high');
+  // Ultracode runs at xhigh: kept where xhigh is accepted, moved as xhigh would be elsewhere.
+  assert.equal(effortWithinDeclaredLevels('ultra', QWEN38), 'ultra');
+  assert.equal(effortWithinDeclaredLevels('ultra', ['low', 'medium', 'high']), 'high');
+  // A model that takes no effort yields none; the env tells the CLI to send none (injectedEnv).
+  assert.equal(effortWithinDeclaredLevels('high', []), '');
+});
+
+test('a declaration is the whole answer for the model it describes, and absent changes nothing', () => {
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.CLAUDE, 'high', 'qwen3.8-27b-fp8', null, QWEN38),
+    'xhigh',
+  );
+  // The session's stored effort goes through the runtime's vocabulary first: a Codex-only level
+  // is not a Claude one, so it reads as no effort — the CLI's `high` — before the list is consulted.
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.CLAUDE, 'minimal', 'qwen3.8-27b-fp8', null, QWEN38),
+    'xhigh',
+  );
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.CLAUDE, null, 'qwen3.8-27b-fp8', null, QWEN38),
+    'xhigh',
+  );
+  assert.equal(normalizeEffortForRuntimeModel(AgentProvider.CLAUDE, 'high', 'deepseek-flash', null), 'high');
+  assert.equal(normalizeEffortForRuntimeModel(AgentProvider.CLAUDE, null, 'deepseek-flash', null), undefined);
 });

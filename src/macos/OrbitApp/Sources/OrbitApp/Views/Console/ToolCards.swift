@@ -202,13 +202,20 @@ struct ToolCardView: View {
                 .font(.orbitMeta).foregroundStyle(d.tone.color)
                 .frame(width: 20, height: 20)
                 .background(d.tone.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
+            // One line, and first claim on the width (web: `.chat-tool-name` is `flex: none`). Left
+            // to the stack's even split, `Agent · general-purpose` wrapped to three lines on a phone
+            // while the summary — the part built to truncate — kept its room.
             Text(d.label)
                 .font(.orbitMono.weight(.semibold))
                 .foregroundStyle(.primary)
+                .lineLimit(1).layoutPriority(1)
             summary
             if let meta = badgeText {
+                // Never squeezed (web: `.chat-tool-meta` is `flex: none`): once the label takes its
+                // width first, a long one would otherwise leave this its minimum — `10` on two lines.
                 Text(meta)
                     .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .fixedSize()
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(Color.gray.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
             }
@@ -651,9 +658,11 @@ struct ToolGroupCardView: View {
                 .font(.orbitMeta).foregroundStyle(summary.tone.color)
                 .frame(width: 20, height: 20)
                 .background(summary.tone.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
+            // One line, first claim on the width — see ToolCardView (`orbit · task_create × 3`).
             Text(summary.title)
                 .font(.orbitMono.weight(.semibold))
                 .foregroundStyle(.primary)
+                .lineLimit(1).layoutPriority(1)
             counts
             if let breakdown = summary.breakdown {
                 Text(breakdown)

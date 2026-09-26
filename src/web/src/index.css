@@ -3141,9 +3141,10 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-1);
   font-weight: 500;
 }
+/* In the body face, as iOS writes both counts: in monospace the Tasks row's sentence ran wide enough
+   to leave a phone a few letters of its title. */
 .bg-tray-count {
   color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, monospace);
 }
 .bg-tray-list {
   border-top: 1px solid var(--border-subtle);
@@ -3219,9 +3220,19 @@ html[data-theme='dark'] .session-tag-chip {
   white-space: nowrap;
 }
 /* "Tasks created here" (SessionCreatedTasksStrip.tsx) sits in the tray's shell above; these are
-   only what a task list adds to it. Collapsed, the sentence never gives way — a lone task's name
-   truncates instead — and its failed count is red. Opened, one row per task: a fixed status column,
-   the title (with what it replaces, in grey), its age; then the links to the rest. */
+   only what a task list adds to it. Collapsed, the title never wraps and the sentence never gives
+   way: beside the sentence the title is what truncates, beside a lone task's name the name does;
+   the failed count is red. Opened, one row per task: a fixed status column, the title (with what it
+   replaces, in grey), its age; then the links to the rest. */
+.ct-head {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-head:has(+ .ct-one) {
+  flex: none;
+}
 .ct-count {
   white-space: nowrap;
 }
@@ -3795,6 +3806,63 @@ html[data-theme='dark'] .session-tag-chip {
 /* Connective text between the two halves of the by-hand merge recipe (they run in two dirs). */
 .wt-merge-where {
   color: var(--text-3, var(--text-2));
+}
+/* A failed commit (SessionOutputs CommitFailure): what happened, why and what to do, with git's own
+   words behind a toggle. */
+.wt-commit-fail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Inset to the row's own left edge (.wt-row), not flush with the bar's border. */
+  padding: 0 10px 8px;
+}
+.wt-commit-fail-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--error);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.wt-commit-fail-icon {
+  color: var(--error-solid);
+}
+.wt-commit-fail-why {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.wt-commit-fail-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 3px;
+}
+.wt-commit-fail-toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.wt-commit-fail-toggle:hover {
+  color: var(--text-1);
+}
+.wt-commit-fail-git {
+  margin: 2px 0 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
 }
 .workspace-header-count {
   font-size: 13px;

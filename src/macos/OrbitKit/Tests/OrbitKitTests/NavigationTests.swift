@@ -263,6 +263,56 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav, NavState(section: .settings), "and the root cannot be popped past")
     }
 
+    /// While Settings is up as a sheet (iOS), its own stack is the one on screen: a push lands there,
+    /// and the section underneath — a console, still streaming — is left exactly as it was.
+    func testAPushWhileSettingsIsUpLandsOnSettingsOwnStack() {
+        var nav = NavState(section: .agents)
+        nav.push(.console(sessionID: "s1", origin: .list))
+        nav.openSettings()
+
+        nav.push(.settingsRunners)
+        nav.push(.runnerDetail(runnerID: "r1"))
+        XCTAssertEqual(nav.settingsPath, [.settingsRunners, .runnerDetail(runnerID: "r1")],
+                       "the runners list and a runner's record ride Settings' stack")
+        XCTAssertEqual(nav.section, .agents, "Settings is over the section, not instead of it")
+        XCTAssertEqual(nav.path, [.console(sessionID: "s1", origin: .list)],
+                       "the section's own stack is untouched")
+        XCTAssertEqual(nav.focusedConsoleSessionID, "s1", "so its console keeps streaming under the sheet")
+        XCTAssertNil(nav.stacks[.runners], "and the Runners section's stack is not Settings'")
+
+        // Closed, pushes are the section's again.
+        nav.settingsPresented = false
+        nav.push(.console(sessionID: "s2", origin: .list))
+        XCTAssertEqual(nav.path.count, 2)
+        XCTAssertEqual(nav.settingsPath.count, 2, "closing leaves Settings' stack where it was")
+    }
+
+    /// Settings opens on its own list, whatever page it was closed on — and opening it again while it
+    /// is up changes nothing.
+    func testSettingsOpensOnItsOwnList() {
+        var nav = NavState(section: .projects)
+        nav.openSettings()
+        nav.push(.settingsPage(.notifications))
+        nav.openSettings()
+        XCTAssertEqual(nav.settingsPath, [.settingsPage(.notifications)], "already up: nothing moves")
+
+        nav.settingsPresented = false
+        nav.openSettings()
+        XCTAssertEqual(nav.settingsPath, [], "reopened: back to the list")
+        XCTAssertTrue(nav.settingsPresented)
+        XCTAssertNil(nav.stacks[.settings], "an emptied stack drops its key")
+    }
+
+    /// Settings' stack is the same key whether it is the section (macOS) or the sheet (iOS), so
+    /// `settingsPath` and `path` are one value while Settings is the section.
+    func testSettingsPathIsTheSectionsPathWhenSettingsIsTheSection() {
+        var nav = NavState(section: .settings)
+        nav.push(.settingsPage(.sharedLinks))
+        XCTAssertEqual(nav.settingsPath, nav.path)
+        nav.settingsPath = []
+        XCTAssertEqual(nav, NavState(section: .settings), "an emptied stack leaves nothing behind")
+    }
+
     /// A deep link names a watch by its UUID while the list tags rows by public id, so the frame is
     /// rekeyed in place once the watch is in hand: `replaceTop`, not a second frame stacked over the
     /// first — backing out of a watch must not walk through the same watch twice.

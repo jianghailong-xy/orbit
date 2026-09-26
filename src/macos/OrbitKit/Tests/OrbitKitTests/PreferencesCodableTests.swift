@@ -46,6 +46,30 @@ final class PreferencesCodableTests: XCTestCase {
         XCTAssertNil(old.preferences?.defaultEnableOrchestration)
     }
 
+    /// The two alert switches Settings shows on every client. Absent means on — only opting out is
+    /// ever written — so an account that never touched them decodes nil, which reads as on.
+    func testPreferencesDecodesTheAlertSwitches() throws {
+        let json = #"{"id":"u1","email":"a@b.com","preferences":{"notifySessionFinished":false,"notifyAgentMessage":true}}"#
+        let u = try JSONDecoder().decode(User.self, from: Data(json.utf8))
+        XCTAssertEqual(u.preferences?.notifySessionFinished, false)
+        XCTAssertEqual(u.preferences?.notifyAgentMessage, true)
+
+        let bare = #"{"id":"u1","email":"a@b.com","preferences":{"theme":"light"}}"#
+        let old = try JSONDecoder().decode(User.self, from: Data(bare.utf8))
+        XCTAssertNil(old.preferences?.notifySessionFinished)
+        XCTAssertNil(old.preferences?.notifyAgentMessage)
+    }
+
+    /// Flipping one switch sends that key alone, `false` included: an omitted key keeps what the
+    /// server has, so the other switch — and every other preference — is left alone.
+    func testUpdatePreferencesSendsOnlyTheSwitchThatMoved() throws {
+        let obj = try jsonObject(UpdatePreferencesRequest(notifySessionFinished: false))
+        XCTAssertEqual(obj["notifySessionFinished"] as? Bool, false)
+        XCTAssertFalse(obj.keys.contains("notifyAgentMessage"))
+        XCTAssertFalse(obj.keys.contains("theme"))
+        XCTAssertEqual(obj.count, 1)
+    }
+
     func testUpdatePreferencesIsPartial() throws {
         let obj = try jsonObject(UpdatePreferencesRequest(theme: "dark"))
         XCTAssertEqual(obj["theme"] as? String, "dark")
@@ -53,6 +77,8 @@ final class PreferencesCodableTests: XCTestCase {
         XCTAssertFalse(obj.keys.contains("defaultPermissionMode"))
         XCTAssertFalse(obj.keys.contains("defaultEffort"))
         XCTAssertFalse(obj.keys.contains("defaultEnableOrchestration"))
+        XCTAssertFalse(obj.keys.contains("notifySessionFinished"))
+        XCTAssertFalse(obj.keys.contains("notifyAgentMessage"))
     }
 
     /// Turning the seed off has to send `false`, not drop the key: an omitted key means "keep what

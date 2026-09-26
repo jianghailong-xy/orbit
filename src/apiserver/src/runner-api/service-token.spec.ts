@@ -6,8 +6,12 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { JwtService } from '@nestjs/jwt';
+import { uuidToBase62 } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
+import { PublicIdPipe } from '../common/public-id';
+import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import { ServiceTokenAuthorizer } from './service-token.authorizer';
@@ -113,6 +117,40 @@ test('a minted token carries its grant and stores no secret', async () => {
   assert.equal(claims.runnerId, 'runner-1');
   assert.equal(claims.workspaceId, 'workspace-1');
   assert.deepEqual(claims.scopes, ['session:create', 'session:get']);
+});
+
+test('the mint door pins a token named by the pre-rename agentId', async () => {
+  let stored: Record<string, unknown> | undefined;
+  const { authorizer, jwt } = makeAuthorizer({
+    workspace: { id: 'workspace-1' },
+    onCreate: (data) => (stored = data),
+  });
+  const door = new RunnerServiceTokensController(authorizer);
+  // `orbit token mint --agent-id` on every runner up to 0.1.171 sends this body. Read as no pin at
+  // all, a create token was a 400 nothing could get past, and a read token was minted UNPINNED —
+  // wider than the operator asked for, and nothing said so.
+  const minted = await door.mint(RUNNER, {
+    scopes: ['session:create', 'session:list'],
+    agentId: 'workspace-1',
+    ttlSeconds: 3600,
+  });
+  assert.equal(stored?.workspaceId, 'workspace-1');
+  const claims = jwt.verify(minted.token, { audience: 'orbit-service-token' }) as Record<string, unknown>;
+  assert.equal(claims.workspaceId, 'workspace-1');
+
+  // A workspace copied out of a client URL arrives base62, under either name.
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerServiceTokensController, 'mint') as Record<
+    string,
+    { pipes?: unknown[] }
+  >;
+  const pipe = Object.values(args)
+    .flatMap((arg) => arg.pipes ?? [])
+    .find((p): p is PublicIdPipe => p instanceof PublicIdPipe);
+  const uuid = '019fcb8b-16b5-7931-8a5b-71ac2bc7b55e';
+  assert.deepEqual(
+    pipe?.transform({ workspaceId: uuidToBase62(uuid), agentId: uuidToBase62(uuid) }),
+    { workspaceId: uuid, agentId: uuid },
+  );
 });
 
 test('verification refuses a revoked, expired or moved grant', async () => {
@@ -230,7 +268,13 @@ test('a create-scoped token starts only its own workspace, batched under the tok
     args: [
       'owner-1',
       { assignedRunnerId: 'runner-1', workspaceId: 'workspace-1', tokenId: 'token-1' },
-      { prompt: 'relay this', title: 'from the bridge', model: undefined, permissionMode: undefined },
+      {
+        prompt: 'relay this',
+        title: 'from the bridge',
+        model: undefined,
+        provider: undefined,
+        permissionMode: undefined,
+      },
     ],
   });
 
@@ -246,15 +290,24 @@ test('a create-scoped token starts only its own workspace, batched under the tok
     'dontAsk',
   );
 
-  // The pin is the authorization, so the body cannot redirect the spawn elsewhere.
-  await assert.rejects(
-    () =>
-      controller.createSession(RUNNER, CREATE_GRANT, undefined, undefined, {
-        prompt: 'relay this',
-        workspaceId: 'workspace-2',
-      }),
-    (error: unknown) => error instanceof ForbiddenException && /only start its own workspace/.test(error.message),
-  );
+  // The pin is the authorization, so the body cannot redirect the spawn elsewhere — under the
+  // pre-rename name either, which is what `orbit session create --agent-id` sends.
+  for (const redirect of [{ workspaceId: 'workspace-2' }, { agentId: 'workspace-2' }]) {
+    await assert.rejects(
+      () =>
+        controller.createSession(RUNNER, CREATE_GRANT, undefined, undefined, {
+          prompt: 'relay this',
+          ...redirect,
+        }),
+      (error: unknown) => error instanceof ForbiddenException && /only start its own workspace/.test(error.message),
+      JSON.stringify(redirect),
+    );
+  }
+  await controller.createSession(RUNNER, CREATE_GRANT, undefined, undefined, {
+    prompt: 'relay this',
+    agentId: 'workspace-1',
+  });
+  assert.equal(calls.at(-1)?.method, 'spawnForServiceToken', 'naming its own pin is not a redirect');
 });
 
 test('every headless route is confined to the scopes and the workspace its token carries', async () => {

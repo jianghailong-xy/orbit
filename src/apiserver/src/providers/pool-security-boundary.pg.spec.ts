@@ -691,6 +691,22 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(alice, 'DELETE', 'providers/pools/:id/members/:providerId', { id: scratchId, providerId: pub(work) }, undefined, 200);
     await ask(alice, 'DELETE', 'providers/pools/:id', { id: scratchId }, undefined, 200);
     await ask(alice, 'DELETE', 'providers/mine/:id', { id: spareId }, undefined, 200);
+    // The runner's doors onto the same rows (`orbit provider create|update|delete`): one of hers
+    // connected from her machine, its key rotated and the row deleted by the slug the list shows —
+    // and another owner's runner, naming that slug, turned away as if it did not exist.
+    const fromRunner = await ask(
+      aliceHome.runnerToken,
+      'POST',
+      'runner/providers',
+      {},
+      { label: 'From her runner', baseUrl: ANTHROPIC, apiKey: subscription(), models: [{ value: 'claude-opus-5', label: 'Opus 5' }] },
+      201,
+    );
+    const bySlug = { slug: String(fromRunner.json.slug) };
+    await ask(aliceHome.runnerToken, 'PATCH', 'runner/providers/:slug', bySlug, { apiKey: subscription() }, 200);
+    await ask(bobHome.runnerToken, 'PATCH', 'runner/providers/:slug', bySlug, { apiKey: subscription() }, 404);
+    await ask(bobHome.runnerToken, 'DELETE', 'runner/providers/:slug', bySlug, undefined, 404);
+    await ask(aliceHome.runnerToken, 'DELETE', 'runner/providers/:slug', bySlug, undefined, 200);
     await ask(admin, 'PATCH', 'admin/providers/:id', { id: sharedId }, { apiKey: subscription() }, 200);
     await ask(admin, 'DELETE', 'admin/providers/:id', { id: sharedId }, undefined, 200);
 

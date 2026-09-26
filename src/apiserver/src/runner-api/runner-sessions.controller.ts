@@ -147,14 +147,21 @@ export class RunnerSessionsController {
       const scope = this.headlessScope(runner, grant, 'session:create');
       // The pin is the authorization, so it is also the target: a caller cannot redirect the
       // spawn at another workspace by passing one in the body.
-      if (dto.workspaceId && dto.workspaceId !== scope.workspaceId) {
+      const requested = dto.workspaceId ?? dto.agentId;
+      if (requested && requested !== scope.workspaceId) {
         throw new ForbiddenException('this service token may only start its own workspace');
       }
       if (!scope.workspaceId) throw new ForbiddenException('this service token has no workspace to start');
       return this.sessions.spawnForServiceToken(
         runner.ownerId,
         { assignedRunnerId: runner.id, workspaceId: scope.workspaceId, tokenId: grant!.tokenId },
-        { prompt: dto.prompt, title: dto.title, model: dto.model, permissionMode: dto.permissionMode },
+        {
+          prompt: dto.prompt,
+          title: dto.title,
+          model: dto.model,
+          provider: dto.provider,
+          permissionMode: dto.permissionMode,
+        },
       );
     }
     this.assertNoServiceToken(grant);

@@ -965,6 +965,62 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "provider_create":
+		body := map[string]interface{}{}
+		copyIfPresent(body, args, "label", "runtime", "baseUrl", "apiKey", "models", "defaultModel")
+		for _, required := range []string{"label", "baseUrl", "apiKey", "models"} {
+			if _, ok := body[required]; !ok {
+				return toolResult(required+" is required", true)
+			}
+		}
+		if declined, err := askBeforeCreate(s.t, s.sessionID, providerCreateApprovalToolName, providerCard("", body)); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this provider: "+declined, false)
+		}
+		raw, err := s.t.createProvider(body)
+		if err != nil {
+			return toolResult("create provider failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "provider_update":
+		slug := getString(args, "slug")
+		if slug == "" {
+			return toolResult("slug is required", true)
+		}
+		body := map[string]interface{}{}
+		copyIfPresent(body, args, "label", "runtime", "baseUrl", "apiKey", "models", "defaultModel")
+		if len(body) == 0 {
+			return toolResult("no fields to update", true)
+		}
+		if declined, err := askBeforeCreate(s.t, s.sessionID, providerUpdateApprovalToolName, providerCard(slug, body)); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this change: "+declined, false)
+		}
+		raw, err := s.t.updateProvider(slug, body)
+		if err != nil {
+			return toolResult("update provider failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "provider_delete":
+		slug := getString(args, "slug")
+		if slug == "" {
+			return toolResult("slug is required", true)
+		}
+		if declined, err := askBeforeCreate(s.t, s.sessionID, providerDeleteApprovalToolName, providerCard(slug, nil)); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this deletion: "+declined, false)
+		}
+		raw, err := s.t.deleteProvider(slug)
+		if err != nil {
+			return toolResult("delete provider failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "notify":
 		message := getString(args, "message")
 		if message == "" {
@@ -1971,6 +2027,41 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		}
 		return schema
 	}
+	// The fields provider_create and provider_update both write.
+	providerRuntimeProp := map[string]interface{}{
+		"type": "string",
+		"enum": []string{"claude", "codex", "kimi"},
+		"description": "The coding engine that drives it: claude (the default; an endpoint serving the Anthropic " +
+			"Messages API, e.g. vLLM's /v1/messages), codex (the OpenAI Responses API) or kimi (Moonshot's API).",
+	}
+	providerBaseURLProp := map[string]interface{}{
+		"type": "string",
+		"description": "The endpoint as that engine will call it, e.g. http://127.0.0.1:8000 — resolved on the machine " +
+			"the session runs on.",
+	}
+	providerAPIKeyProp := map[string]interface{}{
+		"type":        "string",
+		"description": "The key the endpoint expects. An endpoint that checks none still needs a non-empty placeholder.",
+	}
+	providerModelsProp := map[string]interface{}{
+		"type":        "array",
+		"description": "The models it serves; on update this replaces the whole list.",
+		"items": obj(map[string]interface{}{
+			"value": map[string]interface{}{"type": "string", "description": "The model id the endpoint serves, passed to the engine as its model (e.g. qwen3.8-27b-fp8)."},
+			"label": str,
+			"contextWindow": map[string]interface{}{
+				"type":        "integer",
+				"description": "The model's real context window in tokens. Claude Code assumes 200k for a model it does not know, and an endpoint started with less refuses every request past it.",
+			},
+			"reasoningLevels": map[string]interface{}{
+				"type":  "array",
+				"items": map[string]interface{}{"type": "string", "enum": []string{"low", "medium", "high", "xhigh", "max"}},
+				"description": "claude runtime only: the efforts this model accepts. Every session's effort is moved onto " +
+					"the nearest of them — no effort counts as high, what Claude Code sends by default — and [] means the " +
+					"model takes no effort at all. Omit it and effort is passed through unchanged.",
+			},
+		}, "value"),
+	}
 	projectCriterionTextProp := map[string]interface{}{
 		"type":      "string",
 		"minLength": 1,
@@ -2976,6 +3067,54 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"slug is derived from its label, not chosen, so it cannot be guessed from the vendor's name, " +
 				"and a slug that is not on this list is refused with \"provider not available\".",
 			"inputSchema": obj(map[string]interface{}{}),
+		},
+		{
+			"name": "provider_create",
+			"description": "Configure a provider on this account — typically a self-hosted endpoint, such as a local vLLM " +
+				"serving the Anthropic Messages API — so sessions and tasks can run on it by the slug this returns " +
+				"(derived from `label`, and listed by provider_list). A provider holds a credential and is the account " +
+				"owner's to add: if they have not asked for this one, do NOT call this tool — ask them and end your turn. " +
+				"It puts the provider on a confirmation card in front of the owner, with the key shown only as set, and " +
+				"BLOCKS until they answer: nothing is written if they decline, so do not create it another way. `baseUrl` " +
+				"is resolved on the machine each session runs on, so http://127.0.0.1:8000 is that runner's own port — " +
+				"run the session on an agent whose runner hosts the endpoint. The key is stored encrypted and no read " +
+				"returns it, this tool's answer included (`hasApiKey`); like every tool input it is recorded in this " +
+				"conversation, so for a real secret prefer `orbit provider create --api-key-file -`.",
+			"inputSchema": obj(map[string]interface{}{
+				"label":        map[string]interface{}{"type": "string", "description": "Display name; the slug is derived from it."},
+				"runtime":      providerRuntimeProp,
+				"baseUrl":      providerBaseURLProp,
+				"apiKey":       providerAPIKeyProp,
+				"models":       providerModelsProp,
+				"defaultModel": map[string]interface{}{"type": "string", "description": "The model a session that names none runs on; defaults to the first of `models`."},
+			}, "label", "baseUrl", "apiKey", "models"),
+		},
+		{
+			"name": "provider_update",
+			"description": "Change one of this account's own providers, named by the slug provider_list shows — never a " +
+				"shared one. Pass only what changes: `models` REPLACES the whole list, and an omitted `apiKey` keeps the " +
+				"stored key. It puts the change on a confirmation card in front of the account owner (a new key shown " +
+				"only as set) and BLOCKS until they answer: nothing is written if they decline. A running session keeps " +
+				"the endpoint it was started with until it next restarts.",
+			"inputSchema": obj(map[string]interface{}{
+				"slug":         map[string]interface{}{"type": "string", "description": "The provider's slug, as provider_list shows it."},
+				"label":        str,
+				"runtime":      providerRuntimeProp,
+				"baseUrl":      providerBaseURLProp,
+				"apiKey":       providerAPIKeyProp,
+				"models":       providerModelsProp,
+				"defaultModel": str,
+			}, "slug"),
+		},
+		{
+			"name": "provider_delete",
+			"description": "Remove one of this account's own providers, named by the slug provider_list shows. New sessions " +
+				"and tasks can no longer name it, and one already pinned to it runs on the built-in claude engine — the " +
+				"runner's own sign-in — the next time it starts. It puts the deletion on a confirmation card in front of " +
+				"the account owner and BLOCKS until they answer: nothing is removed if they decline.",
+			"inputSchema": obj(map[string]interface{}{
+				"slug": map[string]interface{}{"type": "string", "description": "The provider's slug, as provider_list shows it."},
+			}, "slug"),
 		},
 		{
 			"name": "notify",

@@ -78,11 +78,17 @@ final class AppModel {
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
     /// agent-list load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
-    /// Which Settings category the detail column renders on a regular-width iPad. Deliberately not
-    /// a navigation frame: the categories are that section's middle-column *content*, the way
-    /// sessions are the Agents column's content — `settingsRunners` is the push, and it stays one.
-    /// The single-column shells render the whole form and never read this.
-    var settingsCategory: SettingsCategory = .account
+    /// Whether Settings is up as a sheet (iOS) — a read of the navigation state like every other
+    /// fact about what is on screen. On iOS Settings is presented over the section you are in rather
+    /// than switched to: the drawer's gear and the iPad sidebar's row both set this, so closing it
+    /// lands back on the very page it covered. Opening it starts from Settings' own list
+    /// (`NavState.openSettings`).
+    var settingsPresented: Bool {
+        get { nav.settingsPresented }
+        set {
+            if newValue { nav.openSettings() } else { nav.settingsPresented = false }
+        }
+    }
     /// The task whose detail fills the pane — and, in the three-column shell, the row drawn as
     /// selected. Kept under its old name so its readers (the pane, the deep-link route, the
     /// delete/404 guards, the scope switch) needed no change, with the difference that it is read
@@ -364,6 +370,8 @@ final class AppModel {
     private(set) var agents: AgentsModel?
     private(set) var runners: RunnersModel?
     private(set) var admin: AdminModel?
+    /// Every public link the account has made: Settings → Shared links, and the count on its row.
+    private(set) var sharedLinks: SharedLinksModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
     /// The account's projects: the Projects section and the drawer's project rows.
@@ -410,6 +418,7 @@ final class AppModel {
         agents = AgentsModel(baseURL: url, tokenStore: tokenStore)
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
+        sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
         // macOS has no APNs path, so a NOTIFY_USER watch that matched is announced from the refetch;
@@ -1827,6 +1836,9 @@ final class AppModel {
     /// needs-you banner, ⌘N, ⌘1…⌘9) call their entry point directly instead: a `Route` carries
     /// neither an origin nor an agent, and a frame pushed for a drawer row has to say both.
     func route(to route: Route) {
+        // A link or a notification goes somewhere, and Settings would cover it — and while Settings
+        // is up a push lands on its stack, not on the route's.
+        settingsPresented = false
         selectedSection = AppSection.forRoute(route)
         switch route {
         case .active:          if selectedAgentID == nil { selectedAgentID = orderedAgents.first?.id }

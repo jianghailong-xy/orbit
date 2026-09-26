@@ -866,6 +866,71 @@ final class AgentDefaultsTests: XCTestCase {
                                                       model: "project/only", catalog: catalog), ultra)
     }
 
+    // MARK: efforts a self-hosted model declares (web parity: "Efforts a self-hosted model declares")
+
+    /// A vLLM endpoint serving Qwen3.8, whose chat template refuses every level but
+    /// low/medium/xhigh: dispatch holds the session to what the row declares (apiserver
+    /// `effortWithinDeclaredLevels`), so the menu offers that and names the level it runs at.
+    private let vllm = ConfiguredProvider(
+        slug: "local-vllm", label: "Local vLLM", runtime: "claude",
+        models: [
+            ConfiguredProviderModel(value: "qwen3.8-27b-fp8", label: "Qwen3.8 27B FP8",
+                                    reasoningLevels: ["xhigh", "low", "medium"]),
+            ConfiguredProviderModel(value: "qwen3.8-9b", label: "Qwen3.8 9B",
+                                    reasoningLevels: ["low", "medium", "high"]),
+            ConfiguredProviderModel(value: "qwen3.8-mini", label: "Qwen3.8 Mini", reasoningLevels: []),
+            ConfiguredProviderModel(value: "qwen3.8-plain", label: "Qwen3.8 Plain"),
+        ])
+
+    func testDeclaredModelOffersOnlyItsLevelsWithUltraWhereXhighIs() {
+        func offered(_ model: String) -> [Effort] {
+            AgentDefaults.efforts(for: "local-vllm", model: model, catalog: nil, configured: [vllm])
+        }
+        XCTAssertEqual(offered("qwen3.8-27b-fp8"), [.default, .low, .medium, .xhigh, .ultra])
+        XCTAssertEqual(offered("qwen3.8-9b"), [.default, .low, .medium, .high])
+        // `[]` is a model that takes no effort at all.
+        XCTAssertEqual(offered("qwen3.8-mini"), [.default])
+        // No declaration leaves Claude's list, as before — and so does a provider list not yet read.
+        XCTAssertEqual(offered("qwen3.8-plain"), AgentDefaults.efforts(for: "claude"))
+        XCTAssertEqual(AgentDefaults.efforts(for: "local-vllm", model: "qwen3.8-27b-fp8", catalog: nil),
+                       AgentDefaults.efforts(for: "claude"))
+    }
+
+    func testDeclaredModelNamesTheLevelDispatchRunsAt() {
+        func shown(_ effort: Effort, _ model: String) -> Effort {
+            AgentDefaults.normalizedEffort(effort, for: "local-vllm", model: model, catalog: nil,
+                                           configured: [vllm])
+        }
+        // The session that was painted "Max": it runs at xhigh.
+        XCTAssertEqual(shown(.max, "qwen3.8-27b-fp8"), .xhigh)
+        // Of two equally near levels, the higher.
+        XCTAssertEqual(shown(.high, "qwen3.8-27b-fp8"), .xhigh)
+        XCTAssertEqual(shown(.medium, "qwen3.8-27b-fp8"), .medium)
+        XCTAssertEqual(shown(.ultra, "qwen3.8-27b-fp8"), .ultra)
+        XCTAssertEqual(shown(.ultra, "qwen3.8-9b"), .high)
+        XCTAssertEqual(shown(.max, "qwen3.8-9b"), .high)
+        // Default stays Default (dispatch resolves it), and so does a level outside Claude's vocabulary.
+        XCTAssertEqual(shown(.default, "qwen3.8-27b-fp8"), .default)
+        XCTAssertEqual(shown(.minimal, "qwen3.8-27b-fp8"), .default)
+        XCTAssertEqual(shown(.high, "qwen3.8-mini"), .default)
+        XCTAssertEqual(shown(.max, "qwen3.8-plain"), .max)
+        XCTAssertEqual(
+            AgentDefaults.newSessionEffort(accountDefault: "max", legacyWorkspaceDefault: nil,
+                                           for: "local-vllm", model: "qwen3.8-27b-fp8", catalog: nil,
+                                           configured: [vllm]),
+            .xhigh)
+    }
+
+    func testDeclarationIsReadOnlyOnTheClaudeRuntime() {
+        let codexRow = ConfiguredProvider(slug: "gateway", label: "Gateway", runtime: "codex",
+                                          models: vllm.models)
+        XCTAssertEqual(AgentDefaults.efforts(for: "gateway", model: "qwen3.8-27b-fp8", catalog: nil,
+                                             configured: [codexRow]),
+                       AgentDefaults.efforts(for: "gateway", model: "qwen3.8-27b-fp8", catalog: nil))
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.max, for: "gateway", model: "qwen3.8-27b-fp8",
+                                                      catalog: nil, configured: [codexRow]), .max)
+    }
+
     func testProviderNameResolution() {
         XCTAssertEqual(AgentDefaults.providerName("claude", configured: [deepseek]), "Claude")
         XCTAssertEqual(AgentDefaults.providerName("codex", configured: nil), "Codex")

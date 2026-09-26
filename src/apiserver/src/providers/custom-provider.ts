@@ -40,6 +40,46 @@ export interface ModelProviderRow {
   presetSlug?: string | null;
   followsPreset?: boolean;
   enabled: boolean;
+  /** The row's own model list ([{ value, label, contextWindow?, reasoningLevels? }]). A preset-backed
+   *  row's models are the catalogue's; an endpoint with no preset — a self-hosted server — has no
+   *  catalogue anywhere, so what its owner wrote here is the only description of it there is. */
+  models?: unknown;
+}
+
+/** The row's own entry for `model`, as its owner wrote it. */
+function ownModel(
+  row: ModelProviderRow,
+  model: string,
+): { value: string; contextWindow?: unknown; reasoningLevels?: unknown } | undefined {
+  if (!Array.isArray(row.models)) return undefined;
+  return row.models.find(
+    (entry): entry is { value: string; contextWindow?: unknown; reasoningLevels?: unknown } =>
+      !!entry && typeof entry === 'object' && (entry as { value?: unknown }).value === model,
+  );
+}
+
+/**
+ * The reasoning efforts a configured Claude-runtime model accepts, when its row declares them, or
+ * undefined when it declares nothing — which leaves effort exactly as it always was.
+ *
+ * Declared for an endpoint whose model refuses some of Claude Code's levels. Claude Code sends
+ * `output_config.effort` for every model id it does not recognise — `high` when the session names no
+ * effort at all (measured on 2.1.283) — and a self-hosted server passes it through to the model: vLLM
+ * turns it into `reasoning_effort`, and Qwen3.8's chat template raises on anything but
+ * xhigh/medium/low, so every request of such a session is a 400. Nothing the CLI reads can say "this
+ * model takes only these" for an Anthropic-compatible endpoint (its per-model capability variables are
+ * honoured on Bedrock/Vertex and ignored here), so the declaration lives on the row and dispatch maps
+ * the session's effort onto it (normalizeEffortForRuntimeModel). An empty list is a model that takes
+ * no effort at all (see injectedEnv).
+ */
+export function declaredReasoningLevels(
+  row: ModelProviderRow | null,
+  model: string,
+): string[] | undefined {
+  if (!row || !row.enabled || runtimeOf(row) !== AgentProvider.CLAUDE) return undefined;
+  const levels = ownModel(row, model)?.reasoningLevels;
+  if (!Array.isArray(levels)) return undefined;
+  return levels.filter((level): level is string => typeof level === 'string');
 }
 
 function runtimeOf(row: ModelProviderRow): AgentProvider {
@@ -156,13 +196,22 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
   // shim like DeepSeek's serves no /v1/models for it to ask — so the declared window travels as
   // CLAUDE_CODE_MAX_CONTEXT_TOKENS, which the CLI reads as the model's real window. Read from the
   // merged catalog rather than the shipped list: a models.dev refresh adds newer models that carry
-  // their own windows (e.g. deepseek-flash), and a preset-backed session may pin one.
+  // their own windows (e.g. deepseek-flash), and a preset-backed session may pin one. A model no
+  // catalogue describes — any model of a self-hosted endpoint — has only the window its row declares,
+  // and a server started with a smaller one (vLLM's --max-model-len) refuses every request past it.
   const preset = providerPreset(row.presetSlug);
-  const window = preset
-    ? catalogModels(preset).find((m) => m.value === model)?.contextWindow
-    : undefined;
+  const window =
+    (preset ? catalogModels(preset).find((m) => m.value === model)?.contextWindow : undefined) ??
+    ownModel(row, model)?.contextWindow;
   if (typeof window === 'number' && window > 0) {
     claudeEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(window);
+  }
+  // A model declared to take no effort at all. The CLI sends one regardless, and the only thing that
+  // stops it is this variable: `unset` is the CLI's own spelling for "send no effort parameter", and it
+  // outranks --effort and every later effort frame — which is right here, since there is no level such
+  // a model could be moved to.
+  if (declaredReasoningLevels(row, model)?.length === 0) {
+    claudeEnv.CLAUDE_CODE_EFFORT_LEVEL = 'unset';
   }
   return claudeEnv;
 }
@@ -215,6 +264,9 @@ export function resolveProviderExec(args: {
   /** The session's own model was dropped because the Runtime no longer offers it. The claim path
    *  re-materializes on this, so the row stops naming a model the session isn't running. */
   retiredPin?: boolean;
+  /** The efforts the resolved model accepts, when its configured row declares them
+   *  (declaredReasoningLevels): what every door that hands the engine an effort maps it onto. */
+  reasoningLevels?: string[];
 } {
   const { customRow, sessionModel, workspaceModel, workspaceEnv } = args;
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
@@ -231,6 +283,7 @@ export function resolveProviderExec(args: {
       runtimeCatalogDefault(customRow, runtime, args) ||
       presetDefaultModel(customRow) ||
       DEFAULT_MODEL_BY_PROVIDER[runtime];
+    const reasoningLevels = declaredReasoningLevels(customRow, model);
     return {
       provider: runtime,
       model,
@@ -239,6 +292,7 @@ export function resolveProviderExec(args: {
       // model above is resolved.
       env: { ...(workspaceEnv ?? {}), ...injectedEnv(customRow, model) },
       ...(retired ? { retiredPin: true } : {}),
+      ...(reasoningLevels ? { reasoningLevels } : {}),
     };
   }
   // Built-in (or stale/disabled custom slug → treat as claude). The runtime authenticates itself:

@@ -398,7 +398,8 @@ final class ConsoleModel {
         // the resolver deliberately preserves an explicit account "" (Default).
         self.effort = AgentDefaults.newSessionEffort(
             accountDefault: accountDefaultEffort, legacyWorkspaceDefault: agent.effort,
-            for: provider, model: defaultModel, catalog: modelCatalog)
+            for: provider, model: defaultModel, catalog: modelCatalog,
+            configured: configuredProviders)
         wireWorktree()
     }
 
@@ -994,7 +995,8 @@ final class ConsoleModel {
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
         effort = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: modelID, catalog: modelCatalog)
+            effort, for: provider, model: modelID, catalog: modelCatalog,
+            configured: configuredProviders)
         // A LIVE session pushes later pill edits to the server (PATCH /config); record the
         // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
         // A terminal session isn't live, so its pills stay local until the next resume.
@@ -1113,7 +1115,8 @@ final class ConsoleModel {
                                                 catalog: modelCatalog)
             : permissionMode
         let nextEffort = AgentDefaults.normalizedEffort(effort, for: slug, model: nextModel,
-                                                        catalog: modelCatalog)
+                                                        catalog: modelCatalog,
+                                                        configured: configuredProviders)
         providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: from, to: slug, liveRun: isLive)
         provider = slug
         if nextModel != modelID {
@@ -1151,7 +1154,8 @@ final class ConsoleModel {
                 catalog: modelCatalog)
         }
         effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
-                                                catalog: modelCatalog)
+                                                catalog: modelCatalog,
+                                                configured: configuredProviders)
     }
 
     /// Adopt a provider catalogue with the account pools folded in, each resolved like a Claude key.
@@ -1187,6 +1191,10 @@ final class ConsoleModel {
                 permissionMode, for: modelID, provider: provider,
                 configured: configuredProviders, catalog: modelCatalog)
         }
+        // The provider list is also where a configured model declares the efforts it accepts.
+        effort = AgentDefaults.normalizedEffort(
+            effort, for: provider, model: modelID, catalog: modelCatalog,
+            configured: configuredProviders)
     }
 
     /// A picker change on a LIVE session is pushed to the server immediately (PATCH /config,
@@ -1248,7 +1256,8 @@ final class ConsoleModel {
         guard isDraft, effortSelectionRevision.isPristine else { return }
         effort = AgentDefaults.newSessionEffort(
             accountDefault: accountDefault, legacyWorkspaceDefault: legacyWorkspaceDefault,
-            for: provider, model: modelID, catalog: modelCatalog)
+            for: provider, model: modelID, catalog: modelCatalog,
+            configured: configuredProviders)
     }
 
     // MARK: `/` autocomplete
@@ -1862,7 +1871,8 @@ final class ConsoleModel {
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
         effort = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: modelID, catalog: modelCatalog)
+            effort, for: provider, model: modelID, catalog: modelCatalog,
+            configured: configuredProviders)
     }
 
     func interrupt() async {

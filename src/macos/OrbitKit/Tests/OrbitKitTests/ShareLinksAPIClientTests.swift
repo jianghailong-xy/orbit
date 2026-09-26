@@ -106,6 +106,24 @@ final class ShareLinksAPIClientTests: XCTestCase {
         """
     }
 
+    /// Settings → Shared links reads every link the account has made in one call, and turns off any
+    /// number of them in another — the web page's two doors (`listShareLinks`, `turnOffShareLinks`).
+    func testTheAccountsLinksAreOneReadAndTurningThemOffIsOnePost() async throws {
+        let one = Self.link(kind: "SESSION", include: #"{"toolOutput":true}"#)
+        let listed = answer("{\"links\":[\(one)]}")
+        let links = try await client().shareLinks()
+        XCTAssertEqual(links.map(\.id), ["L1"])
+        XCTAssertEqual(links.first?.state, .active)
+        XCTAssertEqual(listed.sent, [.init(method: "GET", path: "/api/share-links", body: "")])
+
+        let turned = answer(#"{"count":2}"#)
+        let count = try await client().turnOffShareLinks(["L1", "L2"])
+        XCTAssertEqual(count, 2)
+        XCTAssertEqual(turned.sent, [
+            .init(method: "POST", path: "/api/share-links/turn-off", body: #"{"shareLinkIds":["L1","L2"]}"#),
+        ])
+    }
+
     func testEachKindIsReadAtItsOwnPath() async throws {
         let recorder = answer(#"{"link":null,"counts":{"tasks":12,"comments":29,"files":0,"runs":13,"transcripts":14}}"#)
         let api = client()

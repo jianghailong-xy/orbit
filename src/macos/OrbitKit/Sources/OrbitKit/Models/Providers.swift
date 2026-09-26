@@ -2,16 +2,21 @@ import Foundation
 
 /// One model a configured provider offers (`models[]` on GET /api/providers). `contextWindow`
 /// is optional — the context gauge falls back to the static table when a row omits it.
+/// `reasoningLevels` is what a self-hosted Claude-runtime model declares it accepts; dispatch holds
+/// the session's effort to it (see `AgentDefaults.efforts(for:model:catalog:configured:)`).
 public struct ConfiguredProviderModel: Codable, Equatable, Sendable, Identifiable {
     public let value: String
     public let label: String
     public let contextWindow: Int?
+    public let reasoningLevels: [String]?
     public var id: String { value }
 
-    public init(value: String, label: String, contextWindow: Int? = nil) {
+    public init(value: String, label: String, contextWindow: Int? = nil,
+                reasoningLevels: [String]? = nil) {
         self.value = value
         self.label = label
         self.contextWindow = contextWindow
+        self.reasoningLevels = reasoningLevels
     }
 }
 

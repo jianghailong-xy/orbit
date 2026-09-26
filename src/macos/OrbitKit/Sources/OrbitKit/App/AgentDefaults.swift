@@ -390,14 +390,55 @@ public enum AgentDefaults {
         }
     }
 
+    /// Claude Code's effort levels, lowest first: the scale a declared list is read against.
+    /// Mirrors `CLAUDE_EFFORT_ORDER` in apiserver common/runtime-provider.ts.
+    private static let claudeEffortOrder: [Effort] = [.low, .medium, .high, .xhigh, .max]
+
+    /// The efforts a configured Claude-runtime model declares it accepts (`reasoningLevels` on its
+    /// provider row), lowest first, or nil when it declares nothing. Dispatch holds the session to
+    /// exactly this list (apiserver `declaredReasoningLevels`) — a self-hosted model refuses the
+    /// rest — so the pickers offer this list rather than Claude's. Mirrors web.
+    private static func declaredEfforts(for provider: String, model: String,
+                                        configured: [ConfiguredProvider]?) -> [Effort]? {
+        guard let custom = configuredProvider(provider, in: configured),
+              runtime(for: provider, configured: configured) == "claude",
+              let levels = custom.models.first(where: { $0.value == model })?.reasoningLevels
+        else { return nil }
+        return claudeEffortOrder.filter { levels.contains($0.rawValue) }
+    }
+
+    /// The level dispatch runs `effort` at on a model that declares `levels`: the nearest one, the
+    /// higher of two equally near, with Ultra (ultracode, which runs at xhigh) kept wherever xhigh
+    /// is. Mirrors `effortWithinDeclaredLevels` (apiserver common/runtime-provider.ts), except that
+    /// Default stays Default: the picker offers it, and dispatch resolves it.
+    private static func nearestDeclaredEffort(_ effort: Effort, in levels: [Effort]) -> Effort {
+        let asked: Effort = effort == .ultra ? .xhigh : effort
+        guard let rank = claudeEffortOrder.firstIndex(of: asked), let lowest = levels.first else {
+            return .default
+        }
+        if levels.contains(asked) { return effort }
+        func distance(_ level: Effort) -> Int {
+            abs((claudeEffortOrder.firstIndex(of: level) ?? rank) - rank)
+        }
+        // `levels` runs lowest first, so `<=` leaves the higher of two equally near levels standing.
+        return levels.reduce(lowest) { distance($1) <= distance($0) ? $1 : $0 }
+    }
+
     /// Codex efforts, OpenCode variants and Kimi thinking levels are model-specific. Preserve every
     /// runner-reported key verbatim so a new runtime variant does not require a native-client release. An exact
     /// catalog row is authoritative even when its variant list is empty — Kimi's K2.7 Coding
     /// declares no levels and rejects every one of them — while only a model absent from the global
     /// heartbeat catalog falls back to the common list, because it may be project-only or come from
-    /// a runner too old to probe its CLI.
+    /// a runner too old to probe its CLI. A configured model that declares its levels is offered
+    /// exactly those (`declaredEfforts`).
     public static func efforts(for provider: String, model: String,
-                               catalog: RunnerModelCatalog?) -> [Effort] {
+                               catalog: RunnerModelCatalog?,
+                               configured: [ConfiguredProvider]? = nil) -> [Effort] {
+        if let declared = declaredEfforts(for: provider, model: model, configured: configured) {
+            return efforts(for: provider).filter {
+                $0 == .default || declared.contains($0) || ($0 == .ultra && declared.contains(.xhigh))
+            }
+        }
         guard provider == "codex" || provider == "opencode" || provider == "kimi" else {
             return efforts(for: provider)
         }
@@ -434,9 +475,15 @@ public enum AgentDefaults {
     }
 
     /// Clamp a stored/prefilled value to Default only when the provider/model data says it is
-    /// incompatible. Unknown OpenCode models deliberately preserve custom project variants.
+    /// incompatible. Unknown OpenCode models deliberately preserve custom project variants. On a
+    /// configured model that declares its levels, a level it lacks is moved, exactly as dispatch
+    /// moves it, so the pill names the level the session actually runs at.
     public static func normalizedEffort(_ effort: Effort, for provider: String, model: String,
-                                        catalog: RunnerModelCatalog?) -> Effort {
+                                        catalog: RunnerModelCatalog?,
+                                        configured: [ConfiguredProvider]? = nil) -> Effort {
+        if let declared = declaredEfforts(for: provider, model: model, configured: configured) {
+            return nearestDeclaredEffort(effort, in: declared)
+        }
         if provider == "codex" || provider == "opencode" {
             return supportsEffort(effort, for: provider, model: model, catalog: catalog)
                 ? effort : .default
@@ -458,10 +505,12 @@ public enum AgentDefaults {
     /// workspace value for older accounts; an explicit account `""` deliberately stays Default.
     public static func newSessionEffort(accountDefault: String?, legacyWorkspaceDefault: String?,
                                         for provider: String, model: String,
-                                        catalog: RunnerModelCatalog?) -> Effort {
+                                        catalog: RunnerModelCatalog?,
+                                        configured: [ConfiguredProvider]? = nil) -> Effort {
         let raw = accountDefault ?? legacyWorkspaceDefault ?? Effort.default.rawValue
         let candidate = Effort(rawValue: raw) ?? .default
-        return normalizedEffort(candidate, for: provider, model: model, catalog: catalog)
+        return normalizedEffort(candidate, for: provider, model: model, catalog: catalog,
+                                configured: configured)
     }
 
     /// Whether fast mode — the runtime's own fast lane: Claude Code's `/fast`, Codex's "Fast"

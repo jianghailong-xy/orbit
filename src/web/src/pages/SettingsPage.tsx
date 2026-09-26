@@ -76,43 +76,8 @@ export function SettingsPage() {
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <h1 className="page-title">Settings</h1>
 
-      <Card title="Appearance" style={{ marginBottom: 16 }}>
-        <Field label="Theme" hint="Synced to your account across devices.">
-          <Segmented
-            value={mode}
-            onChange={(v) => setMode(v as ThemeMode)}
-            options={[
-              { label: 'System', value: 'system' },
-              { label: 'Light', value: 'light' },
-              { label: 'Dark', value: 'dark' },
-            ]}
-          />
-        </Field>
-      </Card>
-
-      <Card title="Notifications" style={{ marginBottom: 16 }}>
-        <Field
-          label="When a session finishes"
-          hint="Alert your devices when a run finishes on its own or fails for good."
-        >
-          <Switch
-            checked={prefs.notifySessionFinished ?? true}
-            onChange={(v) => save.mutate({ notifySessionFinished: v })}
-            loading={save.isPending}
-          />
-        </Field>
-        <Field
-          label="When an agent asks for you"
-          hint="Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute."
-        >
-          <Switch
-            checked={prefs.notifyAgentMessage ?? true}
-            onChange={(v) => save.mutate({ notifyAgentMessage: v })}
-            loading={save.isPending}
-          />
-        </Field>
-      </Card>
-
+      {/* The same order as Settings on iOS: how sessions start, then the alerts and the look, then
+          what the account has shared. iOS lays these out as one list (SettingsHome in OrbitKit). */}
       <Card title="Session defaults" style={{ marginBottom: 16 }}>
         <Field
           label="Default permission mode"
@@ -128,20 +93,11 @@ export function SettingsPage() {
         </Field>
       </Card>
 
-      <Card title="Sharing" style={{ marginBottom: 16 }}>
-        <Field
-          label="Shared links"
-          hint="Everything you’ve made viewable by link: what each one includes, how often it was opened, and a way to turn it off."
-        >
-          <Button onClick={() => navigate('/settings/shared-links')}>Manage</Button>
-        </Field>
-      </Card>
-
       {/* Orchestration is granted per agent — the authorizer reads that agent's own switch on
           every claim and every spawn, so it stays revocable one agent at a time. What lives here
           is the paperwork: a default for agents you make next, and a way to set them all at once
           instead of opening every agent's editor in turn. */}
-      <Card title="Session orchestration">
+      <Card title="Session orchestration" style={{ marginBottom: 16 }}>
         <Field
           label="Grant it to new agents"
           hint="An agent you create from now on starts able to spawn and manage other sessions via the orbit MCP session tools. Existing agents are untouched."
@@ -184,6 +140,52 @@ export function SettingsPage() {
           </Space>
         </Field>
       </Card>
+      <Card title="Notifications" style={{ marginBottom: 16 }}>
+        <Field
+          label="When a session finishes"
+          hint="Alert your devices when a run finishes on its own or fails for good."
+        >
+          <Switch
+            checked={prefs.notifySessionFinished ?? true}
+            onChange={(v) => save.mutate({ notifySessionFinished: v })}
+            loading={save.isPending}
+          />
+        </Field>
+        <Field
+          label="When an agent asks for you"
+          hint="Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute."
+        >
+          <Switch
+            checked={prefs.notifyAgentMessage ?? true}
+            onChange={(v) => save.mutate({ notifyAgentMessage: v })}
+            loading={save.isPending}
+          />
+        </Field>
+      </Card>
+
+      <Card title="Appearance" style={{ marginBottom: 16 }}>
+        <Field label="Theme" hint="Synced to your account across devices.">
+          <Segmented
+            value={mode}
+            onChange={(v) => setMode(v as ThemeMode)}
+            options={[
+              { label: 'System', value: 'system' },
+              { label: 'Light', value: 'light' },
+              { label: 'Dark', value: 'dark' },
+            ]}
+          />
+        </Field>
+      </Card>
+
+      <Card title="Sharing">
+        <Field
+          label="Shared links"
+          hint="Everything you’ve made viewable by link: what each one includes, how often it was opened, and a way to turn it off."
+        >
+          <Button onClick={() => navigate('/settings/shared-links')}>Manage</Button>
+        </Field>
+      </Card>
+
     </div>
   );
 }

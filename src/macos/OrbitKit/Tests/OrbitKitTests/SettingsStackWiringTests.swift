@@ -2,16 +2,16 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the Settings
-/// section to the source it now *is*: **the section's stack in `NavState` is the only copy of how
-/// deep Settings is**.
+/// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold Settings to
+/// the source it now *is*: **on iOS a sheet over the section you are in, with a stack of its own in
+/// `NavState`**, and on macOS the one grouped form it always was.
 ///
-/// Settings is the app's deepest stack — the form → the runners list → a runner's record — and it was
-/// the last place two push mechanisms were chained on one stack: a boolean
-/// `navigationDestination(isPresented:)` for the list, and a destination-closure `NavigationLink` for
-/// the record. Every push is a `NavNode` frame now, so the back button, the left screen edge and
-/// `sectionAtRoot` all read the one value the shell moves. Each check reads the slice of the file it
-/// is about, so a match somewhere else can't pass it.
+/// Settings used to be a section on iOS — the drawer's gear switched to it, so closing it meant
+/// opening the drawer again, and the regular-width iPad split its form into category columns. It is
+/// ChatGPT's shape now: a sheet whose list names each thing and where it stands, every page one push
+/// deeper. Its stack is still a `NavNode` stack in `NavState` (Settings' own), so the back button and
+/// every push read the one value the sheet moves. Each check reads the slice of the file it is
+/// about, so a match somewhere else can't pass it.
 final class SettingsStackWiringTests: XCTestCase {
     private struct SourceMissing: Error, CustomStringConvertible {
         let path: String
@@ -75,114 +75,100 @@ final class SettingsStackWiringTests: XCTestCase {
             .joined(separator: "\n")
     }
 
-    /// Settings now fills both columns of the split shell, like every other section: its categories
-    /// in the middle one, whichever is current in the pane beside it. What stood in that pane before
-    /// was `ContentUnavailableView` — a sentence occupying the larger half of the screen to say the
-    /// content is in the smaller half, while the whole form crowded into that smaller half.
-    func testTheIPadSettingsFillsBothColumns() throws {
-        let main = code(try appSource("Views/MainView.swift"))
-        let content = try slice(main, from: "struct SectionContent: View {",
-                                to: "struct SectionDetail: View {")
-        let detail = try slice(main, from: "struct SectionDetail: View {",
-                               to: "struct ComingSoon: View {")
+    /// Choosing Settings on iOS presents it; it never becomes the section. The two ways in — the
+    /// drawer's gear on iPhone, the sidebar's row on iPad — both raise the sheet, and the section
+    /// switch itself stays what it was (`NavigationEntrancesWiringTests` holds it to that).
+    func testSettingsIsASheetOverTheSectionOnIOS() throws {
+        let root = code(try source("src/ios/Sources/OrbitiOSApp.swift"))
+        XCTAssertTrue(root.contains(".settingsSheet(model)"),
+                      "the sheet hangs off the signed-in root, so both shells share it")
 
-        XCTAssertTrue(content.contains("SettingsCategoryList()"),
-                      "the middle column lists the categories")
-        XCTAssertTrue(detail.contains("SettingsDetail()"),
-                      "and the pane beside it renders the current one")
-        // Skills keeps the placeholder: it is a browse-only list with nothing to select into, which
-        // is what that branch was always for. Splitting it out is the point — the two sections were
-        // sharing an arm for different reasons.
-        XCTAssertTrue(detail.contains("case .skills:"), "Skills keeps its own arm")
-        XCTAssertFalse(detail.contains("case .skills, .settings:"),
-                       "Settings no longer shares the single-pane placeholder")
-    }
-
-    /// Every shell that wants the whole form still gets it from a no-argument initializer — the
-    /// category is an opt-in for the one shell that has a column to put the list in.
-    func testTheWholeFormRemainsTheDefault() throws {
-        let settings = code(try appSource("Views/SettingsAdminView.swift"))
-        XCTAssertTrue(settings.contains("var category: SettingsCategory? = nil"),
-                      "whole-form mode is the default, so SettingsView() keeps meaning the form")
         let compact = code(try appSource("Views/CompactShell.swift"))
-        XCTAssertTrue(compact.contains("SettingsView().drawerToggle(open: openDrawer)"),
-                      "the iPhone drawer still renders the entire form")
+        XCTAssertTrue(compact.contains("model.settingsPresented = true"), "the drawer's gear opens it")
+        XCTAssertFalse(compact.contains("model.selectedSection = .settings"), "rather than switching to it")
+        let arm = try slice(compact, from: "case .settings:", to: "case .admin:")
+        XCTAssertTrue(arm.contains("EmptyView()"), "and the section has nothing of its own to draw")
+        XCTAssertFalse(arm.contains("NavigationStack"), "no second stack for a section that is never shown")
+
+        let main = code(try appSource("Views/MainView.swift"))
+        let sidebar = try slice(main, from: "private var selection: Binding<SidebarSelection?> {",
+                                to: "case .section(let s):")
+        let guardRange = try XCTUnwrap(sidebar.range(of: "#if os(iOS)"), "the sidebar's interception is iOS-only")
+        let present = try XCTUnwrap(sidebar.range(of: "case .section(.settings):\n                    model.settingsPresented = true"),
+                                    "choosing Settings in the iPad sidebar raises the sheet")
+        XCTAssertLessThan(guardRange.lowerBound, present.lowerBound)
+        let content = try slice(main, from: "struct SectionContent: View {", to: "struct SectionDetail: View {")
+        let contentArm = try slice(content, from: "case .settings:", to: "case .admin:")
+        XCTAssertTrue(contentArm.contains("EmptyView()") && contentArm.contains("SettingsView()"),
+                      "the iPad column is empty; macOS keeps the whole form in it")
     }
 
-    /// The column's rows are labelled with the form's own section headings. Renaming a `Section`
-    /// without renaming its category would leave the list naming a heading that no longer exists —
-    /// and nothing else would catch it, since the two live in different modules.
-    func testEachCategoryNamesASectionTheFormActuallyRenders() throws {
-        let settings = code(try appSource("Views/SettingsAdminView.swift"))
-        for category in SettingsCategory.allCases {
-            XCTAssertTrue(settings.contains("Section(\"\(category.title)\")"),
-                          "the form renders no Section(\"\(category.title)\") for .\(category.rawValue)")
-        }
+    /// A link or a notification goes somewhere the sheet would cover — and while it is up a push
+    /// lands on Settings' stack, not the route's — so the sheet goes down before anything moves.
+    func testARouteClosesSettingsBeforeItMoves() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let route = try slice(app, from: "func route(to route: Route) {", to: "switch route {")
+        let close = try XCTUnwrap(route.range(of: "settingsPresented = false"))
+        let move = try XCTUnwrap(route.range(of: "selectedSection = AppSection.forRoute(route)"))
+        XCTAssertLessThan(close.lowerBound, move.lowerBound)
     }
 
-    /// The categories gate their sections; whole-form mode must still emit all of them.
-    func testEachSectionIsGatedOnItsOwnCategory() throws {
-        let settings = code(try appSource("Views/SettingsAdminView.swift"))
-        for category in SettingsCategory.allCases {
-            XCTAssertTrue(settings.contains("if shows(.\(category.rawValue))"),
-                          "Section \(category.title) is not gated on .\(category.rawValue)")
-        }
-        XCTAssertTrue(settings.contains("category == nil || category == c"),
-                      "whole-form mode shows every section")
-    }
-
-    /// The compact Settings section moves a `NavigationStack` whose path IS the section's stack, so
-    /// both of its pushes — and the pops that come back from them — are writes to the same value the
-    /// model reads. A bare `NavigationStack` here kept the depth in a flag beside it.
-    func testTheCompactSettingsSectionIsAStackBoundToTheSectionsStack() throws {
-        let shell = try appSource("Views/CompactShell.swift")
-        let settings = code(try slice(shell, from: "case .settings:", to: "case .admin:"))
-
-        XCTAssertTrue(settings.contains("NavigationStack(path: $model.nav.path)"),
+    /// The sheet moves a `NavigationStack` whose path IS Settings' stack in `NavState`, and registers
+    /// every frame that stack carries on its root — the runners list and a runner's record, the
+    /// `SettingsPage`s, and an account's record under Admin.
+    func testTheSheetsStackIsSettingsOwnStack() throws {
+        let sheet = code(try slice(try appSource("Views/SettingsSheet.swift"),
+                                   from: "struct SettingsSheet: View {", to: "/// The page a `SettingsPage` frame names."))
+        XCTAssertTrue(sheet.contains("NavigationStack(path: $model.nav.settingsPath)"),
                       "the stack SwiftUI moves is the one NavState keeps for Settings")
-        XCTAssertTrue(settings.contains("SettingsView().drawerToggle(open: openDrawer)"),
-                      "the form is the section's root, and the only page the section itself owns")
-        XCTAssertFalse(settings.contains("navigationDestination(isPresented:"),
-                       "no boolean push left on Settings' stack")
-        XCTAssertFalse(settings.contains("settingsShowingRunners"),
-                       "and nothing outside the stack tracks how deep it is")
+        XCTAssertFalse(sheet.contains("navigationDestination(isPresented:"), "no boolean push")
+        let destinations = try slice(sheet, from: ".navigationDestination(for: NavNode.self)",
+                                     to: "default:                          EmptyView()")
+        for frame in ["case .settingsRunners:            RunnersSettingsList()",
+                      "case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
+                      "case .settingsPage(let page):     SettingsPageView(page: page)",
+                      "case .userDetail(let userID):     AdminUserDetailView(userID: userID)"] {
+            XCTAssertTrue(destinations.contains(frame), "the sheet renders \(frame)")
+        }
     }
 
-    /// The two pages the form pushes, as frames. Both destinations are registered on the form itself
-    /// because iPad regular pushes the same two pages from it — the registration has to be part of the
-    /// *outer* modifier chain, not of a `Section`, or the push from within the list couldn't resolve.
-    func testTheSettingsFormRegistersTheTwoPagesItPushes() throws {
-        let view = try appSource("Views/SettingsAdminView.swift")
-        let form = try slice(view, from: "struct SettingsView: View {", to: "// MARK: - Admin")
-        // Anchored on the modifier chain's own indentation, so the slice only matches a registration
-        // applied to the Form — one buried inside a `Section` would neither resolve nor be found here.
-        let destinations = code(try slice(form, from: "\n        .navigationDestination(for: NavNode.self)",
-                                          to: ".orbitRevealSurface()"))
-
-        let list = try XCTUnwrap(destinations.range(of: "case .settingsRunners:"),
-                                 "the runners list is a page of this stack")
-        let record = try XCTUnwrap(destinations.range(of: "case .runnerDetail(let runnerID):"),
-                                   "and a runner's record is the layer below it")
-        XCTAssertTrue(destinations.contains("RunnersSettingsList()"),
-                      "the second layer is what Settings' own row pushes")
-        XCTAssertTrue(destinations.contains("RunnerDetailView(runnerID: runnerID)"),
-                      "the third is the same record page the Runners section pushes")
-        XCTAssertLessThan(list.lowerBound, record.lowerBound,
-                          "both cases in one switch, in the order the stack pushes them")
-        XCTAssertTrue(destinations.contains("EmptyView()"),
-                      "another section's frame rides that section's stack, not this one")
-
-        // Applied to the Form, after the form's own content — an outer modifier, not a row.
-        let lastRow = try XCTUnwrap(form.range(of: "Section(\"Change password\")"), "the form's last row")
-        let registration = try XCTUnwrap(form.range(of: ".navigationDestination(for: NavNode.self)"),
-                                         "the form registers the destinations")
-        XCTAssertLessThan(lastRow.lowerBound, registration.lowerBound,
-                          "the registration is part of the form's modifier chain, not of a Section")
+    /// Every page the list can open has a view. Adding a `SettingsPage` without one would push a
+    /// frame onto a blank screen, and nothing but this would say so.
+    func testEveryPageHasItsView() throws {
+        let pages = code(try slice(try appSource("Views/SettingsSheet.swift"),
+                                   from: "private struct SettingsPageView: View {", to: "// MARK: - The list"))
+        for page in SettingsPage.allCases {
+            XCTAssertTrue(pages.contains("case .\(page.rawValue):"), "no view for .\(page.rawValue)")
+        }
+        XCTAssertTrue(pages.contains("AdminUsersView(rowNavigation: .push)"),
+                      "Admin is the same list its section shows, pushing onto the stack on screen")
     }
 
-    /// The row that used to open a page with a closure — the last `NavigationLink { }` on a navigation
-    /// stack in this app — carries the same `runnerDetail` frame the Runners section's rows do. One
-    /// frame type, two stacks: the section you are in is what decides where it lands.
+    /// The list draws `SettingsHome` — its groups, in order, and each group's rows — and has a
+    /// drawing for every row there is.
+    func testTheListDrawsSettingsHome() throws {
+        let list = code(try slice(try appSource("Views/SettingsSheet.swift"),
+                                  from: "struct SettingsHomeView: View {", to: "private struct SettingsRowLabel: View {"))
+        XCTAssertTrue(list.contains("ForEach(SettingsHome.Group.allCases, id: \\.self)"))
+        XCTAssertTrue(list.contains("SettingsHome.rows(group, isAdmin: isAdmin)"))
+        XCTAssertTrue(list.contains("SettingsHeader(SettingsHome.header(group))"))
+        let rows = try slice(list, from: "@ViewBuilder private func row(_ row: SettingsHome.Row) -> some View {",
+                             to: "private var runnersValue: String? {")
+        for row in SettingsHome.Row.allCases {
+            XCTAssertTrue(rows.contains(".\(row.rawValue)"), "the list has no drawing for .\(row.rawValue)")
+        }
+        // A form row that opens a page is a link, and draws the platform's arrow — the settings
+        // shape, where every row that goes somewhere says so.
+        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsRunners)"))
+        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(page))"))
+        // Signing out asks first.
+        XCTAssertTrue(list.contains("Button(role: .destructive) { confirmingSignOut = true }"))
+        XCTAssertTrue(list.contains("Button(SettingsCopy.signOut, role: .destructive) { model.logout() }"))
+    }
+
+    /// The runners list the sheet pushes carries the same `runnerDetail` frame the Runners section's
+    /// rows do, pushed by hand through `AppModel.push` — which lands on Settings' stack while the
+    /// sheet is up. One frame type, two stacks: the stack on screen is what decides where it lands.
     func testTheRunnersListInsideSettingsPushesTheSameFrameTheRunnersSectionDoes() throws {
         let runners = try appSource("Views/SkillsRunnersView.swift")
         let settingsList = code(try slice(runners, from: "struct RunnersSettingsList: View {",
@@ -192,8 +178,6 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertFalse(settingsList.contains("NavigationLink"),
                        "and is not a link — a disclosure indicator here would be the odd one out "
                        + "against the section's identical list")
-        XCTAssertFalse(settingsList.contains("NavigationLink {"),
-                       "a destination closure can only ever be this one page")
 
         let shell = code(try slice(try appSource("Views/CompactShell.swift"), from: "case .runners:",
                                    to: "// FOLLOWING"))
@@ -201,26 +185,31 @@ final class SettingsStackWiringTests: XCTestCase {
                       "the Runners section renders that same frame — the reuse is the frame type")
     }
 
-    /// The one row that keeps the platform's disclosure indicator, deliberately. Every *list* row
-    /// pushes its frame by hand now (see `AppModel.push`) because that arrow cannot be hidden on
-    /// iOS 17/18 — but the `Runners` row of Settings' own form sits directly above the Admin row,
-    /// which carries a hand-drawn `chevron.forward` because it switches section rather than
-    /// pushing. A pair with one arrow and one without reads worse than two arrows, so this row
-    /// stays a `NavigationLink(value:)` and keeps drawing one. Pinned here so a later sweep that
-    /// "unifies the spelling" has to argue with it rather than quietly take the arrow away.
-    func testTheSettingsFormsOwnRunnersRowKeepsThePlatformArrow() throws {
+    /// macOS keeps its one grouped form — in the Settings window and the main window's column — and
+    /// nothing on iOS reaches it any more.
+    func testMacOSKeepsTheWholeForm() throws {
         let form = code(try slice(try appSource("Views/SettingsAdminView.swift"),
-                                  from: "struct SettingsView: View {", to: "// MARK: - Admin"))
-        XCTAssertTrue(form.contains("NavigationLink(value: NavNode.settingsRunners)"),
-                      "the form's Runners row is the one push left as a link, and its arrow is kept")
-        XCTAssertTrue(form.contains("Image(systemName: \"chevron.forward\")"),
-                      "beside the section-switching Admin row that draws its own")
+                                  from: "#if os(macOS)\n/// macOS Settings", to: "// MARK: - Admin"))
+        for section in ["Account", "Preferences", "Session orchestration", "Change password", "Updates"] {
+            XCTAssertTrue(form.contains("Section(\"\(section)\")"), "the form lost its \(section) section")
+        }
+        XCTAssertTrue(form.contains("#endif"), "and the whole of it is macOS's")
+        XCTAssertFalse(form.contains("var category:"), "no categories: nothing splits the form now")
     }
 
-    /// What the acceptance for this step greps for: the flag is gone from the whole app, not just from
-    /// the two files that used to name it. The form's push and the shell's depth are one stack now, so
-    /// there is no second copy left to keep in step — including in the `selectedSection` `didSet`,
-    /// which had to register this push by hand.
+    /// The regular-width iPad's category columns went with the section: Settings is the same sheet
+    /// there, so nothing may still name them.
+    func testNothingNamesTheRetiredColumns() throws {
+        for file in try appSources() {
+            let text = code(file.text)
+            for retired in ["SettingsCategoryList", "SettingsDetail()", "settingsCategory", "SettingsCategory"] {
+                XCTAssertFalse(text.contains(retired), "\(file.path) still names \(retired)")
+            }
+        }
+    }
+
+    /// What the acceptance for the stack step greps for: the flag is gone from the whole app, not
+    /// just from the two files that used to name it — and Settings' root is still an empty stack.
     func testTheSettingsPushHasNoFlagLeftAnywhereInTheApp() throws {
         for file in try appSources() {
             XCTAssertFalse(file.text.contains("settingsShowingRunners"),

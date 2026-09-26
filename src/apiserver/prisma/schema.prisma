@@ -1268,9 +1268,10 @@ model Session {
   worktreeDirty        Boolean?  @map("worktree_dirty")
   commitStatus         String?   @map("commit_status")
   commitError          String?   @map("commit_error")
-  // What the runner said about a commit that went through ('committed' | 'nochange'), verbatim —
-  // e.g. that it evicted the session's parked engine first (migration 0256). An 'error' keeps its
-  // message in commitError, so a reported outcome's message is in exactly one of the two.
+  // What the runner said about the outcome, verbatim: for a commit that went through ('committed' |
+  // 'nochange'), what it did — e.g. that it evicted the session's parked engine first (migration
+  // 0256) or cleared an abandoned index.lock; for an 'error', its plain sentence about why and what
+  // to do, while git's own words stay in commitError.
   commitResultMessage  String?   @map("commit_result_message")
   commitRequestedAt    DateTime? @map("commit_requested_at")
   // Same ABA fence as mergeOperationId, for heartbeat-delivered commits.

@@ -93,6 +93,46 @@ public enum WorktreeBarLogic {
         return nil
     }
 
+    /// A failed commit, said the way the person who pressed Commit needs it (mirrors web's
+    /// `commitFailureCopy`): what happened, why — the runner's own sentence when it gave one, which it
+    /// sends as `commitResultMessage` on an error — and git's words for whoever is debugging. A lock
+    /// problem is named as one: git's refusal names index.lock whatever language it speaks, which is
+    /// how the runner itself tells.
+    public struct CommitFailure: Equatable {
+        public let headline: String
+        public let why: String
+        /// git's words, for "Show git output"; nil when they would only repeat `why`.
+        public let gitOutput: String?
+    }
+
+    public static func commitFailure(commitStatus: String?, commitError: String?,
+                                     commitResultMessage: String?) -> CommitFailure? {
+        guard commitStatus == "error" else { return nil }
+        let raw = trimmed(commitError) ?? ""
+        let lockBusy = raw.contains("index.lock")
+        let firstLine = raw.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty }
+        let why = trimmed(commitResultMessage)
+            ?? (lockBusy ? "Another git process holds this worktree's index lock. Retry once it finishes, or hand it to the session." : nil)
+            ?? firstLine
+            ?? "Commit failed — try again."
+        return CommitFailure(
+            headline: lockBusy ? "Couldn't commit — git is busy in this worktree" : "Couldn't commit",
+            why: why,
+            gitOutput: !raw.isEmpty && raw != why ? raw : nil)
+    }
+
+    /// What "Resolve in session" asks the session's agent to do about a failed commit — word for word
+    /// what web sends (`resolveCommitPrompt`).
+    public static func resolveCommitPrompt(branch: String, why: String) -> String {
+        "The Commit button on the worktree bar could not commit this session's work. It said: \"\(why)\"\n\n"
+            + "You're in this session's isolated git worktree, checked out on \(branch). Find out what stopped"
+            + " the commit and clear it: let a git command that is still running here finish; an index.lock"
+            + " that no process has open was left behind by a git that died and is safe to remove. Then commit"
+            + " the work on this branch with a message that describes it. Do not push."
+    }
+
     public static func manualMergeCommand(mergeTarget: String?, branch: String) -> String {
         let target = mergeTarget ?? "main"
         return "git rebase \(target) \(branch) && git checkout \(target) && git merge --ff-only \(branch)"

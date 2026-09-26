@@ -197,6 +197,21 @@ final class ModelsCodableTests: XCTestCase {
         XCTAssertEqual(list[0].modelsFromRuntime, true)
     }
 
+    /// A self-hosted row's model declares the efforts it accepts; the composer's Effort menu reads
+    /// it from here. A model that declares nothing decodes as nil, not as "accepts none".
+    func testConfiguredProviderModelDecodesDeclaredReasoningLevels() throws {
+        let json = #"""
+        [{"slug":"local-vllm","label":"Local vLLM","runtime":"claude","presetSlug":null,
+          "models":[{"value":"qwen3.8-27b-fp8","label":"Qwen3.8 27B FP8","contextWindow":131072,
+                     "reasoningLevels":["low","medium","xhigh"]},
+                    {"value":"qwen3.8-plain","label":"Qwen3.8 Plain"}],
+          "defaultModel":"qwen3.8-27b-fp8"}]
+        """#
+        let list = try JSONDecoder().decode([ConfiguredProvider].self, from: Data(json.utf8))
+        XCTAssertEqual(list[0].models[0].reasoningLevels, ["low", "medium", "xhigh"])
+        XCTAssertNil(list[0].models[1].reasoningLevels)
+    }
+
     func testLoginResponseDecodes() throws {
         let json = #"{"accessToken":"jwt.abc.def","user":{"id":"u1","email":"a@b.com","name":"A","role":"ADMIN"}}"#
         let res = try JSONDecoder().decode(LoginResponse.self, from: Data(json.utf8))
