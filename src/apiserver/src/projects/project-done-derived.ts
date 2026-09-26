@@ -232,6 +232,31 @@ export async function readDerivedProjectDone(
   ownerId: string,
   projectId: string,
 ): Promise<DerivedProjectDone> {
+  return (await readDerivedProjectDoneReading(prisma, ownerId, projectId)).derived;
+}
+
+/**
+ * The projection, with the two readings it was folded from that a reader has to QUOTE rather than
+ * only act on: the confirmation standing — when the standing set was confirmed, not only whether —
+ * and the satisfaction lane, whose `unmet` clauses say what a criterion that does not count is
+ * missing. The coordinator's `PROJECT_ACCEPTANCE_LANDED` message is that reader
+ * (`coordinator-delivery.service.ts`): it may say DONE only when this says DONE, and says why not
+ * when it does not.
+ *
+ * All three come out of `readDerivedProjectDone`'s one batch, so the message cannot describe a
+ * confirmation or a clause the projection did not fold.
+ */
+export interface DerivedProjectDoneReading {
+  derived: DerivedProjectDone;
+  standing: StandardSetConfirmationStanding;
+  satisfaction: CriterionSatisfaction[];
+}
+
+export async function readDerivedProjectDoneReading(
+  prisma: DerivationClient,
+  ownerId: string,
+  projectId: string,
+): Promise<DerivedProjectDoneReading> {
   const [definitions, satisfaction, landing, independence, confirmation] = await Promise.all([
     prisma.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId, project: { ownerId } },
@@ -252,15 +277,15 @@ export async function readDerivedProjectDone(
     latestConfirmation(prisma, projectId),
   ]);
 
-  return derivedDoneFromLanes(
-    satisfaction,
-    landing,
-    independence,
-    standardSetConfirmationStanding(
-      standardSetVersion(criteriaFromDefinitions(definitions)),
-      confirmation,
-    ).state,
+  const standing = standardSetConfirmationStanding(
+    standardSetVersion(criteriaFromDefinitions(definitions)),
+    confirmation,
   );
+  return {
+    derived: derivedDoneFromLanes(satisfaction, landing, independence, standing.state),
+    standing,
+    satisfaction,
+  };
 }
 
 /**
@@ -319,41 +344,6 @@ export async function readStandardSetConfirmationState(
     standardSetVersion(criteriaFromDefinitions([...(definitions ?? [])])),
     await latestConfirmation(prisma, projectId),
   ).state;
-}
-
-/**
- * The confirmation half whole — the state AND the confirmation it was decided from — for a reader
- * that has to say WHEN the standing set was confirmed rather than only whether: the message a
- * coordinator is sent when every criterion has landed (`coordinator-delivery.service.ts`), which
- * must not ask for a confirmation already on record.
- *
- * The same two reads `readDerivedProjectDone` makes and the same comparison, so the message and the
- * column this projection writes cannot disagree about whether the version that stands was confirmed.
- */
-export async function readStandardSetConfirmationStanding(
-  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectStandardSetConfirmation'>,
-  projectId: string,
-): Promise<StandardSetConfirmationStanding> {
-  const [definitions, confirmation] = await Promise.all([
-    prisma.projectAcceptanceCriterionDefinition.findMany({
-      where: { projectId },
-      orderBy: { ordinal: 'asc' },
-      select: {
-        id: true,
-        ordinal: true,
-        text: true,
-        verificationMethod: true,
-        completionCriterionOverrideReason: true,
-        revision: true,
-        contentHash: true,
-      },
-    }),
-    latestConfirmation(prisma, projectId),
-  ]);
-  return standardSetConfirmationStanding(
-    standardSetVersion(criteriaFromDefinitions(definitions)),
-    confirmation,
-  );
 }
 
 /**
