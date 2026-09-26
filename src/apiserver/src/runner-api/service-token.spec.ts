@@ -268,7 +268,13 @@ test('a create-scoped token starts only its own workspace, batched under the tok
     args: [
       'owner-1',
       { assignedRunnerId: 'runner-1', workspaceId: 'workspace-1', tokenId: 'token-1' },
-      { prompt: 'relay this', title: 'from the bridge', model: undefined, permissionMode: undefined },
+      {
+        prompt: 'relay this',
+        title: 'from the bridge',
+        model: undefined,
+        provider: undefined,
+        permissionMode: undefined,
+      },
     ],
   });
 

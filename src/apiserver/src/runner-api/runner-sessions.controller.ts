@@ -155,7 +155,13 @@ export class RunnerSessionsController {
       return this.sessions.spawnForServiceToken(
         runner.ownerId,
         { assignedRunnerId: runner.id, workspaceId: scope.workspaceId, tokenId: grant!.tokenId },
-        { prompt: dto.prompt, title: dto.title, model: dto.model, permissionMode: dto.permissionMode },
+        {
+          prompt: dto.prompt,
+          title: dto.title,
+          model: dto.model,
+          provider: dto.provider,
+          permissionMode: dto.permissionMode,
+        },
       );
     }
     this.assertNoServiceToken(grant);
