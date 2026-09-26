@@ -819,6 +819,29 @@ describe('the record a confirmation leaves', () => {
     expect(receiptsIn(node), 'the card kept a record of the press').toHaveLength(0);
   });
 
+  it('comes back when the set moves after a press made HERE, and not for the version it signed', async () => {
+    // 2026-09-27, the account owner: confirmed at 21:42 UTC, then said yes to an edit of criterion 7
+    // at 21:54. Their own answer moved the set, and a version nobody has confirmed asks again — the
+    // session's row said so ("Waiting for approval") while this pane had nothing left to press.
+    const { node, qc, card } = await delivered();
+    await act(async () => {
+      action(card(), ACCEPTANCE_START_LABEL).click();
+    });
+    await until(() => cardsIn(node).length === 0, 'the answered card to go');
+
+    // A read of the version the press signed is no news: the card stays given up.
+    server.standing = standingOf('CONFIRMED');
+    await reread(qc);
+    expect(cardsIn(node), 'the signed version brought its own answered card back').toHaveLength(0);
+
+    // The set moves.
+    server.standing = standingOf('STALE', MOVED);
+    await reread(qc);
+    await until(() => cardsIn(node).length === 1, 'the card to ask about the version standing now');
+    expect(metaOf(card())).toContain(shortSeal(MOVED));
+    expect(actionsOf(card())[0]?.disabled, 'and that version can be answered').toBe(false);
+  });
+
   /** The heading is the family's, so the fourth record reads as the same kind of thing as the
    *  three Orbit already draws into a conversation — and it is a record: nothing on it presses. */
   it('is headed the way the other three receipts are, with nothing pressable on it', async () => {
