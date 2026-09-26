@@ -55,3 +55,13 @@ describe('the way into Settings → Shared links', () => {
     expect(html).toMatch(/<button[^>]*><span>Manage<\/span><\/button>/);
   });
 });
+
+describe('the order of the cards', () => {
+  it('reads as Settings on iOS does: how sessions start, then the alerts and the look, then sharing', () => {
+    // iOS lays the same settings out as one list (SettingsHome in OrbitKit); a card moved here alone
+    // would put the two clients' pages in different orders.
+    const html = render({}, []);
+    const titles = [...html.matchAll(/ant-card-head-title">([^<]+)</g)].map((m) => m[1]);
+    expect(titles).toEqual(['Session defaults', 'Session orchestration', 'Notifications', 'Appearance', 'Sharing']);
+  });
+});
