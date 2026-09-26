@@ -143,6 +143,15 @@ const SERVICE_SPEC = 'src/apiserver/src/projects/project-get-criterion-satisfact
  * write). So this answer does now reach a status write, which is the half of the assertion below
  * that had to be rewritten rather than kept and made to pass.
  *
+ * AND ONE READ IT HANDS ON. `readDerivedProjectDoneReading` returns the satisfaction rows beside
+ * the projection it folded from them (`readDerivedProjectDone` keeps only the projection), and the
+ * one caller that takes the rows is the coordinator's `PROJECT_ACCEPTANCE_LANDED` message
+ * (`coordinator-delivery.service.ts`, rendered by `buildCoordinatorDeliveryMessage`): when a
+ * confirmed project is still held back, the message quotes each held criterion's `unmet` clauses
+ * as words. Neither file imports this module, which is why neither is in the census; what they do
+ * with the answer is display, the same as `ProjectsService.get` — nothing is written or refused on
+ * the strength of it.
+ *
  * WHY IT IS STILL NOT A GATE, AND WHY THAT IS CHECKED RATHER THAN SAID. A gate refuses somebody's
  * write; this refuses nobody. Everything that could set `status` before can still set it, and the
  * one rule that turns any of them away is `refuseProjectStatusWrite`, which is about who is asking

@@ -26,7 +26,6 @@ import {
   standardSetConfirmationStanding,
   type StandardSetConfirmationStanding,
 } from './project-acceptance';
-import type { CriterionUnmetClause } from './project-criterion-satisfaction';
 import { deriveProjectDone, type DerivedProjectDoneReading } from './project-done-derived';
 
 const PROJECT = randomUUID();
@@ -243,11 +242,19 @@ const CONFIRMATION = {
   confirmedById: randomUUID(),
 };
 
+/**
+ * A clause the satisfaction lane can report, spelled through the reading the message is handed
+ * rather than imported from `project-criterion-satisfaction.ts`: this file builds that reading by
+ * hand and reads nothing from the derivation, so it is not one of the readers
+ * `project-criterion-satisfaction.pg.spec.ts` counts.
+ */
+type UnmetClause = DerivedProjectDoneReading['satisfaction'][number]['unmet'][number]['clause'];
+
 /** What the delivery reads, by hand: a standing, and the projection folded over it with the one
  *  criterion answering as the satisfaction lane says. */
 function readingOf(
   standing: StandardSetConfirmationStanding,
-  unmet: CriterionUnmetClause[] = [],
+  unmet: UnmetClause[] = [],
 ): DerivedProjectDoneReading {
   const satisfied = unmet.length === 0;
   return {
