@@ -207,8 +207,6 @@ import {
   uploadAttachment,
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
-import { AddToWikiCtx } from './AddToWiki';
-import { useWikiShown } from '../lib/useWikiShown';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
   SessionDecisionStrip,
@@ -2058,16 +2056,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             : undefined,
       }
     : null;
-  // What Add to Wiki writes as: this conversation, which is both where the entry's provenance comes
-  // from (the turn a message belongs to) and what decides which codebase's wiki it is filed into
-  // (`wikiSpaceForSessionQuery`). Memoised because it is a context value: a fresh object each render
-  // would re-render every message row in the transcript on every token of a streaming reply. None at
-  // all for an account the server has not switched the wiki on for: the row keeps its copy button.
-  const wikiOn = useWikiShown();
-  const addToWikiConversation = useMemo(
-    () => (selectedId && wikiOn ? { sessionId: selectedId, title: selectedSession?.title ?? '' } : null),
-    [selectedId, selectedSession?.title, wikiOn],
-  );
   // What this conversation is waiting on, when a watch is what will bring it back: the same read the
   // Watching strip above the composer makes (one cache entry between them), so the header's word and
   // the strip under it cannot disagree about the same wait.
@@ -7252,11 +7240,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
                           <TaskActivityCtx.Provider value={taskActivity}>
                           <StreamingDraftsCtx.Provider value={streamingDrafts}>
-                            {/* What Add to Wiki writes as, and into which codebase's wiki. Mounted
-                                here and by nothing else: the shared page and the static export
-                                leave it null, which is what keeps a write button off a page its
-                                reader cannot write from. */}
-                            <AddToWikiCtx.Provider value={addToWikiConversation}>
                             {/* The links in this conversation, drawn as cards. The provider is
                                 what makes a card possible at all — the shared page and the export
                                 mount none — and it re-reads the links when the detail above is
@@ -7274,7 +7257,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 inserts={transcriptInserts}
                               />
                             </OrbitLinkCardsProvider>
-                            </AddToWikiCtx.Provider>
                           </StreamingDraftsCtx.Provider>
                           </TaskActivityCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
