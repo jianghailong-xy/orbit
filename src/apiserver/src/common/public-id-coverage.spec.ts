@@ -53,7 +53,9 @@ import { WikiController } from '../wiki/wiki.controller';
 // integer cursor), `version` (a task list revision's per-list number, guarded by ParseIntPipe),
 // `account` (a Codex account slot: `default` or four random bytes in lowercase hex — the shape
 // every Codex account route already takes, refused by the service for anything else, and named by
-// DELETE /runners/:id/codex-accounts/:account). They key by their own columns and must stay
+// DELETE /runners/:id/codex-accounts/:account), `slug` (a wiki topic's human-readable name, like
+// `tasks-dispatch`, that GET /wiki/spaces/:id/topics/:slug matches as text against
+// `wiki_topic.slug` and `wiki_entry.topics`). They key by their own columns and must stay
 // unpiped: PublicIdPipe here would translate a name that is not one, and a slot that no runner
 // added would be addressed as `00000000-0000-0000-0000-000000b52cc2`.
 // Deliberately a DENYLIST, and deliberately not replaced by PUBLIC_ID_FIELDS below: a route
@@ -61,7 +63,7 @@ import { WikiController } from '../wiki/wiki.controller';
 // says otherwise". An allowlist would let a param nobody classified through unchecked. UUID
 // exceptions are route-specific below: a generic `requestId` exemption would also silently exempt
 // future public request-row addresses.
-const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account']);
+const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug']);
 
 const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {};
 
