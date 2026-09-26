@@ -357,6 +357,9 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
   对没开 wiki 的账号：两道门的所有路由都回 404 `WIKI_DISABLED`，claim 下发 `wikiDisabled`，runner 不挂这组工具，不推送
   `<orbit_wiki_context>`，`orbit-wiki:` 链接卡读作 unavailable；web 收到 `WIKI_DISABLED` 就藏起侧栏入口、⌘K 的 Wiki 分区和
   Add to Wiki。实现见 `src/apiserver/src/wiki/wiki-rollout.ts`。
+  Compose 部署在宿主 `.env` 里写 `ORBIT_WIKI_MODE`，`docker-compose.yml` 把它传给 apiserver 作为 `ORBIT_WIKI`；`ORBIT_WIKI_CANARY_OWNERS`
+  不改名。宿主侧不用 `ORBIT_WIKI`，是因为 runner 往每个 agent 会话的环境里都注入了 `ORBIT_WIKI`，而 Compose 插值时 shell 环境优先于
+  `.env`：从会话里跑部署，`.env` 的值会被会话带的 `on` 悄悄盖掉（`src/apiserver/src/wiki/wiki-compose-env.spec.ts` 锁住这一点）。
   runner 比 apiserver 新、门还不存在时，照 `watch_tools.go` 的 `watchDoorMissing` 翻译成一句人话。
 
 ---
