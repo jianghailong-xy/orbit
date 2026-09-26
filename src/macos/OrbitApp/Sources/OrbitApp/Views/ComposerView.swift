@@ -766,11 +766,18 @@ struct ComposerView: View {
             .contentShape(Rectangle())
     }
 
-    /// A menu row with a leading checkmark on the current selection — a Picker draws this for free,
-    /// a Menu of Buttons has to render it explicitly.
+    /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
+    /// a Menu of Buttons has to render it explicitly. Trailing, not leading (`Label(_:systemImage:)`,
+    /// the natural spelling): a leading icon takes a column on the selected row only, so that row's
+    /// text starts one checkmark to the right of every sibling's, which is what the phone report
+    /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
-        if selected { Label(text, systemImage: "checkmark") } else { Text(text) }
+        HStack(spacing: 8) {
+            Text(text)
+            Spacer(minLength: 12)
+            if selected { Image(systemName: "checkmark") }
+        }
     }
 
     // MARK: `/` autocomplete menu
