@@ -357,6 +357,28 @@ func TestReclaimStatusOpenRejectsTerminalAndUnknownRows(t *testing.T) {
 	}
 }
 
+// A reclaimed session's engine is spawned from its reclaim row, so the two rollout switches the
+// apiserver says there must reach the engine's environment exactly as a claim's do: a runner
+// restart must not hand the wiki or watch tools back to an account they are switched off for.
+func TestReclaimCarriesTheWatchAndWikiSwitchesToTheSpawn(t *testing.T) {
+	var resp ReclaimResponse
+	wire := `{"sessions":[{"sessionId":"off","watchesDisabled":true,"wikiDisabled":true},{"sessionId":"on"}]}`
+	if err := json.Unmarshal([]byte(wire), &resp); err != nil {
+		t.Fatal(err)
+	}
+	off := claimedSessionFromReclaim(resp.Sessions[0])
+	if got := wikiEnv(off.WikiDisabled); got != "off" {
+		t.Errorf("reclaimed with wikiDisabled: %s=%s, want off", envWiki, got)
+	}
+	if got := watchesEnv(off.WatchesDisabled); got != "off" {
+		t.Errorf("reclaimed with watchesDisabled: %s=%s, want off", envWatches, got)
+	}
+	on := claimedSessionFromReclaim(resp.Sessions[1])
+	if wikiEnv(on.WikiDisabled) != "on" || watchesEnv(on.WatchesDisabled) != "on" {
+		t.Errorf("reclaimed with neither field: wiki=%s watches=%s, want both on", wikiEnv(on.WikiDisabled), watchesEnv(on.WatchesDisabled))
+	}
+}
+
 func TestReclaimMissingSessionsUsesStableTakeoverOrder(t *testing.T) {
 	var mu sync.Mutex
 	var takeoverOrder []string
