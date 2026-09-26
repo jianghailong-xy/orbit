@@ -19,6 +19,7 @@ import {
   type CoordinatorFuseUsage,
   type CoordinatorWakeups,
   deriveSessionLifecycleState,
+  type ProjectListCoordinatorActivity,
   RunEventType,
   SessionLifecycleState,
   type SessionFilingState,
@@ -26,6 +27,7 @@ import {
   toUuid,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
+import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -384,6 +386,15 @@ const COORDINATION_INCLUDE = {
  * client parsed and discarded. The task total is absent too: the rollup already visits every
  * scoped task and returns that count, so asking Prisma for a second aggregate only repeats work.
  */
+/** The coordinator conversation's columns `coordinatorActivityOf` reads, and nothing else of it. */
+const COORDINATOR_ACTIVITY_SELECT = {
+  status: true,
+  engineTurnActive: true,
+  runningSubagents: true,
+  lastTurnAt: true,
+  _count: { select: { approvals: { where: { status: 'PENDING' } } } },
+} satisfies Prisma.SessionSelect;
+
 const PROJECT_LIST_SELECT = {
   id: true,
   title: true,
@@ -392,6 +403,8 @@ const PROJECT_LIST_SELECT = {
   createdAt: true,
   updatedAt: true,
   ...COORDINATION_INCLUDE,
+  // At most one row apiece, joined by its own unique key, like the two above.
+  coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
 const ACCEPTANCE_DEFINITIONS_INCLUDE = {
@@ -522,6 +535,25 @@ function withCoordination<T extends WithCoordination>(
     // can only mean "nothing has rotated", and a 500 on a read would be the wrong way to say that.
     coordinatorGeneration: runtime?.coordinatorGeneration ?? 0n,
   };
+}
+
+/**
+ * What the coordinator's conversation is doing, as a list row states it.
+ *
+ * `working` is the session list's spinner, so the two cannot disagree about one conversation: a
+ * dispatched turn, a turn the runtime started for itself, or a sub-agent it started still going —
+ * and not while a card on it waits for an answer, which the list draws as waiting instead
+ * (OrbitKit's `SessionStatusGlyph`, the web's `StatusIcon`).
+ */
+function coordinatorActivityOf(
+  session: Prisma.SessionGetPayload<{ select: typeof COORDINATOR_ACTIVITY_SELECT }> | null | undefined,
+): ProjectListCoordinatorActivity<Date> | null {
+  if (!session) return null;
+  const working =
+    session._count.approvals === 0 &&
+    (isSessionGenerating(session) ||
+      (session.status === RunStatus.AWAITING_INPUT && session.runningSubagents.length > 0));
+  return { working, lastTurnAt: session.lastTurnAt };
 }
 
 type WithAcceptanceDefinitions = {
@@ -2271,7 +2303,7 @@ export class ProjectsService {
       readProjectListAttention(this.prisma, ownerId, status),
       readProjectIntegrationLines(this.prisma, projects.map((project) => project.id)),
     ]);
-    return projects.map((project) => {
+    return projects.map(({ coordinatorSession, ...project }) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, seven zero
       // buckets and no activity rather than making every client handle two shapes.
       const { taskCount, ...rollup } = rollups.get(project.id) ?? emptyProjectListRollup();
@@ -2289,6 +2321,9 @@ export class ProjectsService {
         // common case — a project nobody has decided a line for — so a client draws its row from
         // one shape, and never has to tell "no line yet" from "this server does not report lines".
         integration: integration.get(project.id) ?? null,
+        // What moves a project that its task rollup cannot see: the coordinator working. Null on a
+        // project with no coordinator bound.
+        coordinatorActivity: coordinatorActivityOf(coordinatorSession),
       };
     });
   }

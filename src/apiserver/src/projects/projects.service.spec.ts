@@ -215,6 +215,16 @@ test('the index is owner-scoped and newest first, and narrows only when asked', 
     updatedAt: true,
     members: { where: { role: 'COORDINATOR' }, select: { agentId: true } },
     runtime: { select: { coordinatorGeneration: true } },
+    // The coordinator's conversation, for what it is doing — its state columns and nothing else.
+    coordinatorSession: {
+      select: {
+        status: true,
+        engineTurnActive: true,
+        runningSubagents: true,
+        lastTurnAt: true,
+        _count: { select: { approvals: { where: { status: 'PENDING' } } } },
+      },
+    },
   });
   assert.equal(queries[0].include, undefined);
   assert.deepEqual(queries[1].where, { ownerId: OWNER_ID, status: 'DONE' });
@@ -323,6 +333,51 @@ test('the index buckets every project in one aggregate, not one query per projec
   // The established tally shape is kept, now sourced from the same aggregate. The missing group
   // for c3 means it has no tasks, so its explicit total is zero.
   assert.deepEqual(rows.map((row) => row._count.tasks), [15, 9, 0]);
+});
+
+// The sidebar's working dot and its order both read this, so it has to be the session list's own
+// spinner: a project whose coordinator the list shows spinning must not read idle, nor the reverse.
+test('the index says whether each coordinator is working, exactly when the session list spins', async () => {
+  const lastTurnAt = new Date('2026-09-26T13:46:00.000Z');
+  const conversation = (over: Record<string, unknown>) => ({
+    status: 'AWAITING_INPUT',
+    engineTurnActive: false,
+    runningSubagents: [],
+    lastTurnAt,
+    _count: { approvals: 0 },
+    ...over,
+  });
+  const cases: Array<[string, unknown, boolean | null]> = [
+    ['dispatched turn', conversation({ status: 'RUNNING' }), true],
+    ['turn the runtime started for itself', conversation({ engineTurnActive: true }), true],
+    ['sub-agent still going', conversation({ runningSubagents: ['agent-1'] }), true],
+    ['waiting for a reply', conversation({}), false],
+    ['queued, not yet dispatched', conversation({ status: 'PENDING' }), false],
+    ['finished', conversation({ status: 'SUCCEEDED' }), false],
+    ['asking somebody mid-turn', conversation({ status: 'RUNNING', _count: { approvals: 1 } }), false],
+    ['no coordinator bound', null, null],
+  ];
+  const service = serviceWith({
+    project: {
+      findMany: async () => cases.map(([title, coordinatorSession], index) => ({
+        id: `p${index}`, title, members: [], runtime: { coordinatorGeneration: 0n }, coordinatorSession,
+      })),
+    },
+    projectCodebase: { findMany: async () => [] },
+    $queryRaw: async () => [],
+  });
+
+  const rows: any[] = await service.list(OWNER_ID);
+
+  for (const [index, [title, , working]] of cases.entries()) {
+    assert.deepEqual(
+      rows[index].coordinatorActivity,
+      working === null ? null : { working, lastTurnAt },
+      title,
+    );
+    // The row carries the answer, not the session row it was read from.
+    assert.equal(rows[index].coordinatorSession, undefined, title);
+  }
 });
 
 test('concurrent identical project indexes share one aggregate without caching it', async () => {
