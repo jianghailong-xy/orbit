@@ -518,6 +518,9 @@ model Runner {
   //   NULL       — nothing in flight
   //   pending    — user asked; the next heartbeat tells the runner to remove it
   //   done | failed — terminal, codexAccountRemoveMessage explains a failure
+  // Which engine's account store the removal below is about. NULL is Codex: the meaning every row
+  // written before accounts-per-engine had, and what the codex-named columns still carry alone.
+  accountRemoveEngine       String?   @map("account_remove_engine")
   codexAccountRemoveAccount String?   @map("codex_account_remove_account")
   codexAccountRemoveStatus  String?   @map("codex_account_remove_status")
   codexAccountRemoveMessage String?   @map("codex_account_remove_message")
@@ -715,6 +718,10 @@ model Workspace {
   // CODEX_HOME from the accounts the assigned runner reports (providers/codex-account.ts); an id
   // that runner does not report runs on Default rather than failing.
   codexAccount        String?   @map("codex_account")
+  // Which Claude account this workspace's Claude sessions run on: the id of a slot the runner added
+  // (8 lowercase hex), never a path. NULL is Default, the CLAUDE_CONFIG_DIR the runner's own
+  // environment selects (providers/account.ts). Same rules as codexAccount above.
+  claudeAccount       String?   @map("claude_account")
   agentKey            String?   @map("agent_key")
   enabled             Boolean   @default(true)
   // When workDir is NOT a git repo, the runner auto-`git init`s it (default .gitignore +

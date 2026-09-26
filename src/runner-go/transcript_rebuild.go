@@ -76,7 +76,15 @@ const (
 // under the old cwd's slug, which `--resume` cannot read. Finding it there is the reason to
 // rebuild here, never a reason to skip the rebuild and resume into nothing.
 func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSession, execDir string, emit emitFn) bool {
-	path, err := claudeTranscriptPath(execDir, job.SessionUUID)
+	// The account the session runs on decides where its conversation lives: `--resume` reads the
+	// transcript out of the CLI's own config directory, so a rebuild into the runner's default one
+	// would write a file that session never reads.
+	base, err := claudeSessionAccountDir(job.Agent.Env, execDir)
+	if err != nil {
+		logln("transcript rebuild: cannot resolve the claude config dir:", err)
+		return true
+	}
+	path, err := claudeTranscriptPathIn(base, execDir, job.SessionUUID)
 	if err != nil {
 		logln("transcript rebuild: cannot resolve transcript path:", err)
 		return true
@@ -129,14 +137,17 @@ func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSessi
 // (/root/.orbit/x → -root--orbit-x). Non-ASCII path segments are the one untested corner; they
 // degrade to a directory Claude won't read, which is the same failure as not rebuilding at all.
 func claudeTranscriptPath(cwd, sessionUUID string) (string, error) {
-	base := os.Getenv("CLAUDE_CONFIG_DIR")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return "", fmt.Errorf("no home directory")
-		}
-		base = filepath.Join(home, ".claude")
+	base, err := effectiveClaudeConfigDir(os.Environ(), cwd)
+	if err != nil {
+		return "", err
 	}
+	return claudeTranscriptPathIn(base, cwd, sessionUUID)
+}
+
+// claudeTranscriptPathIn is claudeTranscriptPath for one config directory: the CLI writes a
+// session's transcript under <base>/projects/<slug>/, so a session dispatched onto an account keeps
+// its conversation in that account's directory and nowhere else.
+func claudeTranscriptPathIn(base, cwd, sessionUUID string) (string, error) {
 	// A session's cwd can be a workspace workDir straight off the claim, which is stored as the
 	// user typed it: filepath.Abs would hang a leading `~` off this process's own cwd and name a
 	// project directory that has never existed.

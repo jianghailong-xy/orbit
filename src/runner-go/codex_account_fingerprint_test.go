@@ -50,14 +50,14 @@ func readEveryCodexAccount(t *testing.T, usage *codexAccountUsage) {
 // machine, as the engine probe reports them.
 func codexAccountRowsForHeartbeat(t *testing.T) []EngineHealthReport {
 	t.Helper()
-	slots, err := listCodexAccountSlots()
+	slots, err := codexAccountKind.list()
 	if err != nil {
 		t.Fatal(err)
 	}
 	accounts := make([]EngineAccountReport, 0, len(slots))
 	for _, slot := range slots {
 		accounts = append(accounts, EngineAccountReport{
-			ID: slot.ID, Name: slot.Name, CodexHome: slot.CodexHome, Auth: "yes",
+			ID: slot.ID, Name: slot.Name, CodexHome: slot.Dir, Auth: "yes",
 		})
 	}
 	return []EngineHealthReport{{Engine: providerCodex, Installed: true, Auth: "yes", Accounts: accounts}}
@@ -77,11 +77,11 @@ func newCodexFingerprintHarness(t *testing.T, defaultAccount, workAccount, perso
 	fake := newFakeCodexBinary(t, fixture.account, codexAccountFingerprintRead(defaultAccount, 62))
 	fake.useAsRunnerDefault(t)
 	for _, slot := range []struct{ name, account string }{{"Work", workAccount}, {"Personal", personalAccount}} {
-		added, err := createCodexAccountSlot(slot.name)
+		added, err := codexAccountKind.create(slot.name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		answerInCodexHome(t, added.CodexHome, "rateLimits.json", codexAccountFingerprintRead(slot.account, 8))
+		answerInCodexHome(t, added.Dir, "rateLimits.json", codexAccountFingerprintRead(slot.account, 8))
 	}
 	usage := newCodexAccountUsage(codexResetTestLeaseOwner)
 	readEveryCodexAccount(t, usage)
@@ -124,16 +124,16 @@ func TestCodexAccountFingerprintIsTheSameForOneAccountInTwoSlots(t *testing.T) {
 	h := newCodexFingerprintHarness(t, account, account, account)
 
 	prefixes := h.prefixes(t)
-	slots, err := listCodexAccountSlots()
+	slots, err := codexAccountKind.list()
 	if err != nil {
 		t.Fatal(err)
 	}
 	work, personal := slots[1].ID, slots[2].ID
-	want := prefixes[codexAccountDefaultSlot]
+	want := prefixes[accountSlotDefaultID]
 	assertFingerprintPrefix(t, "Default", want)
 	if prefixes[work] != want || prefixes[personal] != want {
 		t.Fatalf("prefixes = Default %q, Work %q, Personal %q — one account, one fingerprint",
-			prefixes[codexAccountDefaultSlot], prefixes[work], prefixes[personal])
+			prefixes[accountSlotDefaultID], prefixes[work], prefixes[personal])
 	}
 }
 
@@ -143,7 +143,7 @@ func TestCodexAccountFingerprintDiffersForDifferentAccounts(t *testing.T) {
 	h := newCodexFingerprintHarness(t, "acct_orbit_default", "acct_orbit_work", "acct_orbit_personal")
 
 	prefixes := h.prefixes(t)
-	slots, err := listCodexAccountSlots()
+	slots, err := codexAccountKind.list()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestCodexAccountFingerprintDiffersForDifferentAccounts(t *testing.T) {
 		t.Fatalf("a slot was reported without a fingerprint: %+v", prefixes)
 	}
 	for _, pair := range [][2]string{
-		{codexAccountDefaultSlot, work}, {codexAccountDefaultSlot, personal}, {work, personal},
+		{accountSlotDefaultID, work}, {accountSlotDefaultID, personal}, {work, personal},
 	} {
 		if prefixes[pair[0]] == prefixes[pair[1]] {
 			t.Fatalf("accounts %s and %s share the fingerprint %q", pair[0], pair[1], prefixes[pair[0]])

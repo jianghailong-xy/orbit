@@ -71,12 +71,12 @@ func heartbeatEngines(t *testing.T, engines []EngineHealthReport) []map[string]i
 func TestCodexEngineHealthAccountsProbeEachSlotInItsOwnCodexHome(t *testing.T) {
 	home, _ := codexAccountSlotTestHomes(t)
 	signInCodexHome(t, filepath.Join(home, ".codex"))
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
-	signInCodexHome(t, work.CodexHome)
-	personal, err := createCodexAccountSlot("Personal")
+	signInCodexHome(t, work.Dir)
+	personal, err := codexAccountKind.create("Personal")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,15 +100,17 @@ func TestCodexEngineHealthAccountsProbeEachSlotInItsOwnCodexHome(t *testing.T) {
 		account := a.(map[string]interface{})
 		byID[account["id"].(string)] = account
 	}
-	if first := raw[0].(map[string]interface{}); first["id"] != codexAccountDefaultSlot {
+	if first := raw[0].(map[string]interface{}); first["id"] != accountSlotDefaultID {
 		t.Fatalf("first account = %#v, want Default", first)
 	}
 	want := map[string]map[string]interface{}{
-		// Default has no name of its own and lives where it always did.
-		codexAccountDefaultSlot: {"id": "default", "codexHome": filepath.Join(home, ".codex"), "auth": "yes"},
-		work.ID:                 {"id": work.ID, "name": "Work", "codexHome": work.CodexHome, "auth": "yes"},
+		// Default has no name of its own and lives where it always did. `home` is the account's
+		// directory under its engine-neutral name, and `codexHome` repeats it for a control plane
+		// older than that name (codexHomeOf in enginehealth.go).
+		accountSlotDefaultID: {"id": "default", "home": filepath.Join(home, ".codex"), "codexHome": filepath.Join(home, ".codex"), "auth": "yes"},
+		work.ID:                 {"id": work.ID, "name": "Work", "home": work.Dir, "codexHome": work.Dir, "auth": "yes"},
 		// Signed out in its own CODEX_HOME, whatever Default says.
-		personal.ID: {"id": personal.ID, "name": "Personal", "codexHome": personal.CodexHome, "auth": "no"},
+		personal.ID: {"id": personal.ID, "name": "Personal", "home": personal.Dir, "codexHome": personal.Dir, "auth": "no"},
 	}
 	if !reflect.DeepEqual(byID, want) {
 		t.Fatalf("accounts on the wire = %#v\nwant %#v", byID, want)
@@ -122,7 +124,7 @@ func TestCodexEngineHealthAccountsProbeEachSlotInItsOwnCodexHome(t *testing.T) {
 	}
 	got := strings.Fields(string(b))
 	sort.Strings(got)
-	wantCalls := []string{"<own>", work.CodexHome, personal.CodexHome}
+	wantCalls := []string{"<own>", work.Dir, personal.Dir}
 	sort.Strings(wantCalls)
 	if !reflect.DeepEqual(got, wantCalls) {
 		t.Fatalf("login status ran in %q, want once in each of %q", got, wantCalls)
@@ -133,19 +135,19 @@ func TestCodexEngineHealthAccountsFollowTheSlotsNotDefault(t *testing.T) {
 	home, _ := codexAccountSlotTestHomes(t)
 	binDir, _ := fakeCodexForAccountHealth(t)
 	// Default signed out, the added account signed in: each row speaks for its own CODEX_HOME.
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
-	signInCodexHome(t, work.CodexHome)
+	signInCodexHome(t, work.Dir)
 
 	reports := probeEngines([]engineSpec{codexSpecForTest(t)}, binDir)
 	if reports[0].Auth != "no" {
 		t.Fatalf("engine auth = %q, want Default's signed-out answer", reports[0].Auth)
 	}
 	want := []EngineAccountReport{
-		{ID: codexAccountDefaultSlot, CodexHome: filepath.Join(home, ".codex"), Auth: "no"},
-		{ID: work.ID, Name: "Work", CodexHome: work.CodexHome, Auth: "yes"},
+		{ID: accountSlotDefaultID, Dir: filepath.Join(home, ".codex"), CodexHome: filepath.Join(home, ".codex"), Auth: "no"},
+		{ID: work.ID, Name: "Work", Dir: work.Dir, CodexHome: work.Dir, Auth: "yes"},
 	}
 	if !reflect.DeepEqual(reports[0].Accounts, want) {
 		t.Fatalf("accounts = %#v\nwant %#v", reports[0].Accounts, want)
@@ -158,7 +160,7 @@ func TestCodexEngineHealthAccountsOneAccountIsJustDefault(t *testing.T) {
 	binDir, calls := fakeCodexForAccountHealth(t)
 
 	reports := probeEngines([]engineSpec{codexSpecForTest(t)}, binDir)
-	want := []EngineAccountReport{{ID: codexAccountDefaultSlot, CodexHome: filepath.Join(home, ".codex"), Auth: "yes"}}
+	want := []EngineAccountReport{{ID: accountSlotDefaultID, Dir: filepath.Join(home, ".codex"), CodexHome: filepath.Join(home, ".codex"), Auth: "yes"}}
 	if !reflect.DeepEqual(reports[0].Accounts, want) {
 		t.Fatalf("accounts = %#v, want only Default", reports[0].Accounts)
 	}
@@ -172,22 +174,33 @@ func TestCodexEngineHealthAccountsOneAccountIsJustDefault(t *testing.T) {
 	}
 }
 
-func TestCodexEngineHealthAccountsOnlyForAnInstalledCodex(t *testing.T) {
+func TestCodexEngineHealthAccountsOnlyForAnInstalledEngine(t *testing.T) {
 	home, _ := codexAccountSlotTestHomes(t)
 	signInCodexHome(t, filepath.Join(home, ".codex"))
-	if _, err := createCodexAccountSlot("Work"); err != nil {
+	if _, err := codexAccountKind.create("Work"); err != nil {
 		t.Fatal(err)
 	}
 	binDir, _ := fakeCodexForAccountHealth(t)
-	writeFakeBin(t, binDir, "claude", `echo '{"loggedIn":true}'`)
+	// Claude keeps a login per directory too now, so it reports its own Default — one account, no
+	// slot added — while an engine whose CLI has a single login for the machine reports none.
+	writeFakeBin(t, binDir, "claude", `case "$1 $2" in "auth status") echo '{"loggedIn":true}' ;; *) exit 2 ;; esac`)
+	writeFakeBin(t, binDir, "kimi", `case "$1 $2" in "auth status") echo '{"loggedIn":true}' ;; *) exit 2 ;; esac`)
 	claude, _ := specFor(providerClaude)
+	kimi, _ := specFor(providerKimi)
 
-	engines := heartbeatEngines(t, probeEngines([]engineSpec{claude, codexSpecForTest(t)}, binDir))
-	if _, ok := engines[0]["accounts"]; ok {
-		t.Fatalf("claude reported accounts: %#v", engines[0])
+	engines := heartbeatEngines(t, probeEngines([]engineSpec{claude, kimi, codexSpecForTest(t)}, binDir))
+	claudeAccounts, _ := engines[0]["accounts"].([]interface{})
+	if len(claudeAccounts) != 1 {
+		t.Fatalf("claude accounts = %#v, want just its Default", engines[0]["accounts"])
 	}
-	if accounts, _ := engines[1]["accounts"].([]interface{}); len(accounts) != 2 {
-		t.Fatalf("codex accounts = %#v, want Default and Work", engines[1]["accounts"])
+	if got := claudeAccounts[0].(map[string]interface{}); got["id"] != accountSlotDefaultID || got["home"] != filepath.Join(home, ".claude") {
+		t.Fatalf("claude account = %#v, want Default at ~/.claude", got)
+	}
+	if _, ok := engines[1]["accounts"]; ok {
+		t.Fatalf("kimi reported accounts: %#v", engines[1])
+	}
+	if accounts, _ := engines[2]["accounts"].([]interface{}); len(accounts) != 2 {
+		t.Fatalf("codex accounts = %#v, want Default and Work", engines[2]["accounts"])
 	}
 
 	// No binary, no probe — and no accounts, which the page reads as the one row it always drew.
@@ -212,7 +225,7 @@ func TestCodexEngineHealthAccountsCarryEachAccountsFingerprintPrefix(t *testing.
 	engines := []EngineHealthReport{
 		{Engine: providerClaude, Installed: true, Auth: "yes"},
 		{Engine: providerCodex, Installed: true, Auth: "yes", Accounts: []EngineAccountReport{
-			{ID: codexAccountDefaultSlot, CodexHome: "/home/u/.codex", Auth: "yes"},
+			{ID: accountSlotDefaultID, CodexHome: "/home/u/.codex", Auth: "yes"},
 			{ID: "3fa91c2e", Name: "Work", CodexHome: "/home/u/.orbit/codex-accounts/3fa91c2e", Auth: "yes"},
 			{ID: "7c21de40", Name: "Personal", CodexHome: "/home/u/.orbit/codex-accounts/7c21de40", Auth: "no"},
 		}},

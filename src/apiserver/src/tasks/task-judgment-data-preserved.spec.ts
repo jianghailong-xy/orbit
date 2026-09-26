@@ -1249,7 +1249,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and no `task`, `session`, `project` or `project_acceptance_*` object is named at all: the
       // wiki's history ids (session, tool call, author, source ref) are deliberately not foreign
       // keys. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
-      '0307_wiki'],
+      '0307_wiki',
+      '0308_workspace_claude_account',
+      '0309_runner_account_remove_engine'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

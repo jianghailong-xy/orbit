@@ -13,7 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import { CODEX_ACCOUNT_PATTERN } from '../runners/dto';
+import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 
 export class ProviderFallbackDto {
   @IsString() @MinLength(1) provider!: string;
@@ -58,7 +58,9 @@ export class CreateWorkspaceDto {
   // The Codex account this workspace's Codex sessions run on: the id of a slot its runner reports,
   // or `default`. A path is never accepted — dispatch resolves the id on the runner that runs the
   // session. null or `default` is Default, stored as NULL.
-  @IsOptional() @IsString() @Matches(CODEX_ACCOUNT_PATTERN) codexAccount?: string | null;
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) codexAccount?: string | null;
+  /** The Claude account this workspace's Claude sessions run on. Same rules as codexAccount. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) claudeAccount?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
@@ -94,7 +96,9 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsString() repoUrl?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   /** See CreateWorkspaceDto.codexAccount. Absent leaves the choice alone; null clears it. */
-  @IsOptional() @IsString() @Matches(CODEX_ACCOUNT_PATTERN) codexAccount?: string | null;
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) codexAccount?: string | null;
+  /** See CreateWorkspaceDto.claudeAccount. Absent leaves the choice alone; null clears it. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) claudeAccount?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;

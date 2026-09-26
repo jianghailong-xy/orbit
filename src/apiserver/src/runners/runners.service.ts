@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import type {
   LoginEngine,
-  RunnerCodexAccountRemoveState,
+  RunnerAccountRemoveState,
   RunnerInstallState,
   RunnerLoginState,
   SlashCommandInfo,
@@ -19,8 +19,12 @@ import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { CODEX_ACCOUNT_REMOVE_V1 } from '../runner-api/runner-api.controller';
-import { CODEX_ACCOUNT_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
+import {
+  CLAUDE_ACCOUNT_REMOVE_V1,
+  CODEX_ACCOUNT_REMOVE_V1,
+} from '../runner-api/runner-api.controller';
+import { engineKeepsAccounts } from '../common/runner-engines';
+import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
@@ -120,8 +124,9 @@ export class RunnersService {
         installCommand: true,
         installMessage: true,
         installMode: true,
-        // The account-removal relay the Providers page reads its outcome from: which slot is
-        // going, and — when the machine refused — what it said.
+        // The account-removal relay the Providers page reads its outcome from: which engine's
+        // store, which slot is going, and — when the machine refused — what it said.
+        accountRemoveEngine: true,
         codexAccountRemoveAccount: true,
         codexAccountRemoveStatus: true,
         codexAccountRemoveMessage: true,
@@ -153,6 +158,7 @@ export class RunnersService {
       installCommand,
       installMessage,
       installMode,
+      accountRemoveEngine,
       codexAccountRemoveAccount,
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
@@ -171,7 +177,8 @@ export class RunnersService {
         installMessage,
         installMode,
       }),
-      codexAccountRemove: codexAccountRemoveStateOf({
+      accountRemove: accountRemoveStateOf({
+        accountRemoveEngine,
         codexAccountRemoveAccount,
         codexAccountRemoveStatus,
         codexAccountRemoveMessage,
@@ -391,8 +398,8 @@ export class RunnersService {
     if (dto.account != null && dto.accountName != null) {
       throw new BadRequestException('Sign in an account the runner has or a new one, not both');
     }
-    if ((dto.account != null || dto.accountName != null) && engine !== 'codex') {
-      throw new BadRequestException('Only Codex signs in more than one account');
+    if ((dto.account != null || dto.accountName != null) && !engineKeepsAccounts(engine)) {
+      throw new BadRequestException('Only an engine that keeps a login per directory signs in more than one account');
     }
     // A blank name must not read as "no account": that is the runner's own login, and signing a
     // second account in there would replace it.
@@ -473,47 +480,62 @@ export class RunnersService {
   }
 
   /**
-   * Ask this runner to remove one Codex account slot: the slot's own CODEX_HOME with everything
-   * Codex keeps in it, and the record beside it. The next heartbeat picks it up and the runner
-   * reports what happened.
+   * Ask this runner to remove one account slot of `engine`: the slot's own directory with everything
+   * the CLI keeps in it — a CODEX_HOME, a CLAUDE_CONFIG_DIR — and the record beside it. The next
+   * heartbeat picks it up and the runner reports what happened.
    *
-   * `default` is refused here rather than on the runner: it is the CODEX_HOME the machine's own
-   * environment selects, and the one `codex` typed in a terminal shares, so there is nothing to
+   * `default` is refused here rather than on the runner: it is the directory the machine's own
+   * environment selects, and the one the CLI typed in a terminal shares, so there is nothing to
    * remove without taking the user's own login with it.
    *
-   * A runner that has not declared `codex-account-remove/v1` is refused in words the person who
-   * pressed the button can act on — the alternative is a request that sits pending until the
-   * relay's timeout and then fails with nothing useful in it. The heartbeat refuses it too, for a
-   * runner whose declared capabilities went stale between this call and its next check-in.
+   * A runner that has not declared that engine's account-removal capability is refused in words the
+   * person who pressed the button can act on — the alternative is a request that sits pending until
+   * the relay's timeout and then fails with nothing useful in it. The heartbeat refuses it too, for
+   * a runner whose declared capabilities went stale between this call and its next check-in.
    *
    * Removing an account the runner no longer reports is allowed and ends the same way: the runner
    * finds nothing left to remove and reports done. A workspace that had selected the slot keeps
    * pointing at it and reads as "not on this runner" — nothing here rewrites one.
    */
-  async removeCodexAccount(ownerId: string, id: string, account: string): Promise<RunnerCodexAccountRemoveState> {
-    if (!CODEX_ACCOUNT_PATTERN.test(account ?? '')) {
+  async removeAccount(
+    ownerId: string,
+    id: string,
+    engine: LoginEngine,
+    account: string,
+  ): Promise<RunnerAccountRemoveState> {
+    if (!engineKeepsAccounts(engine)) {
+      throw new BadRequestException(`Only an engine that keeps accounts can remove one`);
+    }
+    if (!ACCOUNT_ID_PATTERN.test(account ?? '')) {
       throw new BadRequestException('Unknown account');
     }
     if (account === 'default') {
       throw new BadRequestException(
-        "Default is this machine's own CODEX_HOME, which a terminal's codex shares — it cannot be removed",
+        `Default is this machine's own login, which the CLI in a terminal shares — it cannot be removed`,
       );
     }
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
-    if (!runner.capabilitiesReportedAt || !(runner.capabilities ?? []).includes(CODEX_ACCOUNT_REMOVE_V1)) {
-      throw new BadRequestException(CODEX_ACCOUNT_REMOVE_TOO_OLD);
+    const capability = ACCOUNT_REMOVE_CAPABILITIES[engine];
+    if (!runner.capabilitiesReportedAt || !(runner.capabilities ?? []).includes(capability)) {
+      throw new BadRequestException(ACCOUNT_REMOVE_TOO_OLD[engine]);
     }
     const r = await this.prisma.runner.update({
       where: { id },
       data: {
+        accountRemoveEngine: engine,
         codexAccountRemoveAccount: account,
         codexAccountRemoveStatus: 'pending',
         codexAccountRemoveMessage: null,
         codexAccountRemoveAt: new Date(),
       },
     });
-    return codexAccountRemoveStateOf(r);
+    return accountRemoveStateOf(r);
+  }
+
+  /** @deprecated Codex's route; read removeAccount. */
+  removeCodexAccount(ownerId: string, id: string, account: string): Promise<RunnerAccountRemoveState> {
+    return this.removeAccount(ownerId, id, 'codex', account);
   }
 
   /**
@@ -737,18 +759,29 @@ export function installStateOf(r: {
 /** What a runner that does not declare account removal is told: the machine cannot do this, and
  *  the only thing that changes that is updating it. The heartbeat refuses the same request in the
  *  same words — it cannot import this one, since that file already imports this module. */
-const CODEX_ACCOUNT_REMOVE_TOO_OLD =
-  'This runner is too old to remove a Codex account — update it, then try again.';
+const ACCOUNT_REMOVE_TOO_OLD: Record<string, string> = {
+  codex: 'This runner is too old to remove a Codex account — update it, then try again.',
+  claude: 'This runner is too old to remove a Claude account — update it, then try again.',
+};
+
+/** The capability each engine's removal needs the runner to declare. */
+const ACCOUNT_REMOVE_CAPABILITIES: Record<string, string> = {
+  codex: CODEX_ACCOUNT_REMOVE_V1,
+  claude: CLAUDE_ACCOUNT_REMOVE_V1,
+};
 
 /** Project a runner row onto the browser-facing account-removal view. */
-export function codexAccountRemoveStateOf(r: {
+export function accountRemoveStateOf(r: {
+  accountRemoveEngine?: string | null;
   codexAccountRemoveAccount?: string | null;
   codexAccountRemoveStatus?: string | null;
   codexAccountRemoveMessage?: string | null;
-}): RunnerCodexAccountRemoveState {
+}): RunnerAccountRemoveState {
   return {
+    // A row written before accounts-per-engine meant Codex.
+    engine: (r.accountRemoveEngine as LoginEngine) ?? 'codex',
     account: r.codexAccountRemoveStatus ? (r.codexAccountRemoveAccount ?? null) : null,
-    status: (r.codexAccountRemoveStatus as RunnerCodexAccountRemoveState['status']) ?? null,
+    status: (r.codexAccountRemoveStatus as RunnerAccountRemoveState['status']) ?? null,
     message: r.codexAccountRemoveStatus ? (r.codexAccountRemoveMessage ?? null) : null,
   };
 }

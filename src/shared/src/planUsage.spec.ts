@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount } from './dto';
 import {
+  accountOfEnv,
   codexAccountOfEnv,
   codexAccountSnapshot,
   planUsageBlockedUntil,
@@ -141,6 +142,31 @@ describe('a runner with more than one Codex account', () => {
     expect(codexAccountSnapshot(usage, 'constructor')).toBeUndefined();
     // A snapshot from before accounts is Default's whole.
     expect(codexAccountSnapshot(codexExhausted, 'default')).toBe(codexExhausted);
+  });
+});
+
+describe('accountOfEnv', () => {
+  // The same rule for every engine whose CLI keeps one login per directory.
+  const claudeAccounts: RunnerEngineAccount[] = [
+    { id: 'default', home: '/root/.claude', auth: 'yes' },
+    { id: WORK, name: 'Work', home: '/root/.orbit/claude-accounts/3fa91c2e', auth: 'yes' },
+  ];
+
+  it('names the Claude account a session\'s CLAUDE_CONFIG_DIR selects', () => {
+    expect(accountOfEnv('claude', null, claudeAccounts)).toBe('default');
+    expect(accountOfEnv('claude', { HOME: '/root' }, claudeAccounts)).toBe('default');
+    expect(accountOfEnv('claude', { CLAUDE_CONFIG_DIR: '/root/.orbit/claude-accounts/3fa91c2e' }, claudeAccounts)).toBe(WORK);
+    // One engine's variable says nothing about another's account.
+    expect(accountOfEnv('claude', { CODEX_HOME: '/root/.orbit/claude-accounts/3fa91c2e' }, claudeAccounts)).toBe('default');
+    expect(accountOfEnv('codex', { CLAUDE_CONFIG_DIR: '/root/.orbit/claude-accounts/3fa91c2e' }, claudeAccounts)).toBe('default');
+  });
+
+  it('is no account for a login of the session\'s own, or an engine that keeps none', () => {
+    expect(accountOfEnv('claude', { ANTHROPIC_AUTH_TOKEN: 'tok' }, claudeAccounts)).toBeNull();
+    expect(accountOfEnv('claude', { ANTHROPIC_BASE_URL: 'https://x.invalid' }, claudeAccounts)).toBeNull();
+    expect(accountOfEnv('claude', { CLAUDE_CONFIG_DIR: '/srv/claude' }, claudeAccounts)).toBeNull();
+    // Kimi keeps one login for the whole machine: nothing to name.
+    expect(accountOfEnv('kimi', { KIMI_CODE_HOME: '/root/.kimi-code' }, claudeAccounts)).toBeNull();
   });
 });
 

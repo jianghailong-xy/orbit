@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,6 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { isLoginEngine } from '../common/runner-engines';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -91,10 +93,23 @@ export class RunnersController {
     return this.runners.cancelLogin(user.userId, id);
   }
 
-  // Removing one Codex account from a runner: the slot's own CODEX_HOME and the record beside it.
-  // Owner-scoped in the service like the relay above, because it deletes credentials on that
+  // Removing one account of `engine` from a runner: the slot's own directory and the record beside
+  // it. Owner-scoped in the service like the relay above, because it deletes credentials on that
   // machine. The account is a slot id or 'default'; the service refuses anything else, and refuses
-  // Default itself — that is the CODEX_HOME a terminal's `codex` shares.
+  // Default itself — that is the login the CLI in a terminal shares.
+  @Delete(':id/accounts/:engine/:account')
+  removeAccount(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('engine') engine: string,
+    @Param('account') account: string,
+  ) {
+    if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
+    return this.runners.removeAccount(user.userId, id, engine, account);
+  }
+
+  // The same removal on Codex's own route, which is what a client older than accounts-per-engine
+  // calls. Kept for as long as such a client can reach this build.
   @Delete(':id/codex-accounts/:account')
   removeCodexAccount(
     @CurrentUser() user: AuthUser,

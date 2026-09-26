@@ -45,7 +45,7 @@ import { routeId, encodeId } from '../lib/idCodec';
 import { meQuery, providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
-import { CodexAccountSelect, offersCodexAccount } from '../components/CodexAccountSelect';
+import { AccountSelect, offersAccount } from '../components/AccountSelect';
 import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
 import { useToast } from '../lib/toast';
@@ -66,6 +66,7 @@ interface Workspace {
   /** Which Codex account on its runner this workspace's Codex sessions run on: the id of a slot the
    *  runner added. null = Default, the runner's own CODEX_HOME. */
   codexAccount?: string | null;
+  claudeAccount?: string | null;
   runnerId?: string | null;
   enabled?: boolean;
   enableWorktree?: boolean;
@@ -179,6 +180,7 @@ export function RunnerDetailPage() {
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
   // null = Default, the runner's own Codex account.
   const [fCodexAccount, setFCodexAccount] = useState<string | null>(null);
+  const [fClaudeAccount, setFClaudeAccount] = useState<string | null>(null);
   // The Claude session id the Import section carries (edit mode only — importing needs the
   // workspace to exist). Reset with the rest of the form so a stale id can't leak across picks.
   const [importId, setImportId] = useState('');
@@ -208,6 +210,7 @@ export function RunnerDetailPage() {
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
         ),
         codexAccount: fCodexAccount,
+        claudeAccount: fClaudeAccount,
       };
       return editing
         ? api<Workspace>(`/workspaces/${editing.id}`, { method: 'PATCH', body })
@@ -275,6 +278,7 @@ export function RunnerDetailPage() {
           // Same machine, so the same account: a copy that fell back to Default would spend another
           // account's quota without anyone having chosen that.
           codexAccount: a.codexAccount ?? null,
+          claudeAccount: a.claudeAccount ?? null,
           runnerId,
         },
       }),
@@ -387,6 +391,7 @@ export function RunnerDetailPage() {
     setFEnableOrchestration(a ? (a.enableOrchestration ?? false) : orchestrationDefault);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setFCodexAccount(a?.codexAccount ?? null);
+    setFClaudeAccount(a?.claudeAccount ?? null);
     setImportId('');
     setHistory(null);
     setImportMode('none');
@@ -449,7 +454,11 @@ export function RunnerDetailPage() {
       runner?.runtimeDefaultModels,
     );
     // Folded away, the disclosure still has to say whether anything is hidden behind it.
-    const advCount = (fEnv.length ? 1 : 0) + (fAppend.trim() ? 1 : 0) + (fCodexAccount ? 1 : 0);
+    const advCount =
+      (fEnv.length ? 1 : 0) +
+      (fAppend.trim() ? 1 : 0) +
+      (fCodexAccount ? 1 : 0) +
+      (fClaudeAccount ? 1 : 0);
     // What the runner last found at this path. It answers for the *saved* path, so an edited
     // field says so instead of showing a verdict about a directory that is no longer named
     // here — a stale ✓ against a typo would be worse than no answer at all.
@@ -662,15 +671,28 @@ export function RunnerDetailPage() {
       </div>
       {advOpen && (
         <div className="rd-adv-body">
-          {runner && offersCodexAccount(runner, fCodexAccount) && (
-            <CodexAccountSelect
+          {runner && offersAccount(runner, 'codex', fCodexAccount) && (
+            <AccountSelect
+              engine="codex"
               runner={runner}
               value={fCodexAccount}
               onChange={(next) => {
                 setFCodexAccount(next);
                 setDirty(true);
               }}
-              envCodexHome={fEnv.find((r) => r.key.trim() === 'CODEX_HOME')?.value}
+              envDir={fEnv.find((r) => r.key.trim() === 'CODEX_HOME')?.value}
+            />
+          )}
+          {runner && offersAccount(runner, 'claude', fClaudeAccount) && (
+            <AccountSelect
+              engine="claude"
+              runner={runner}
+              value={fClaudeAccount}
+              onChange={(next) => {
+                setFClaudeAccount(next);
+                setDirty(true);
+              }}
+              envDir={fEnv.find((r) => r.key.trim() === 'CLAUDE_CONFIG_DIR')?.value}
             />
           )}
           <div className="rd-form-field">

@@ -203,7 +203,7 @@ func TestLateNotificationDoesNotRelitigateAKilledShell(t *testing.T) {
 func TestWatchJSONLStopsOnStopAll(t *testing.T) {
 	emit, _ := bgCollector()
 	bg := newBgTailer(context.Background(), emit, nil)
-	bg.startTranscriptWatcher("no-such-session-uuid")
+	bg.startTranscriptWatcher("no-such-session-uuid", "")
 	bg.stopAll()
 }
 

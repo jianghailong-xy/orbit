@@ -9,6 +9,7 @@ import { ENGINE_ACCOUNTS_MAX, sanitizeRunnerEngines } from './runner-engines';
 
 const DEFAULT: RunnerEngineAccount = {
   id: 'default',
+  home: '/home/ada/.codex',
   codexHome: '/home/ada/.codex',
   auth: 'yes',
   fingerprintPrefix: 'cxa1_9f3a41c7',
@@ -16,6 +17,7 @@ const DEFAULT: RunnerEngineAccount = {
 const WORK: RunnerEngineAccount = {
   id: '3fa91c2e',
   name: 'Work',
+  home: '/home/ada/.orbit/codex-accounts/3fa91c2e',
   codexHome: '/home/ada/.orbit/codex-accounts/3fa91c2e',
   auth: 'no',
 };
@@ -37,6 +39,7 @@ test('a legal account list comes through exactly as the runner sent it', () => {
   const unknown: RunnerEngineAccount = {
     id: '0b05070e',
     name: 'Personal',
+    home: '/home/ada/.orbit/codex-accounts/0b05070e',
     codexHome: '/home/ada/.orbit/codex-accounts/0b05070e',
     auth: 'unknown',
   };
@@ -63,15 +66,28 @@ test('an account it cannot read is dropped whole, and its readable siblings stay
     { ...WORK, id: '../../etc' },
     { ...WORK, id: 7 },
     { ...WORK, id: undefined },
-    // No CODEX_HOME is not an account on a machine.
-    { ...WORK, codexHome: undefined },
-    { ...WORK, codexHome: '   ' },
-    { ...WORK, codexHome: ['/home/ada/.codex'] },
+    // No directory AT ALL is not an account on a machine: `home` is the name a current runner
+    // sends and `codexHome` the one an older one does, and neither present means there is no
+    // login here to report.
+    { ...WORK, home: undefined, codexHome: undefined },
+    { ...WORK, home: '   ', codexHome: '   ' },
+    { ...WORK, home: ['/home/ada/.codex'], codexHome: undefined },
     DEFAULT,
     WORK,
   ]);
 
   assert.deepEqual(kept, [DEFAULT, WORK]);
+});
+
+test('an older runner that only knows the codex-named field still reads', () => {
+  // The field a runner older than `home` sends: it is read, and comes back out under both names.
+  const older = {
+    id: '3fa91c2e',
+    name: 'Work',
+    codexHome: '/home/ada/.orbit/codex-accounts/3fa91c2e',
+    auth: 'no',
+  };
+  assert.deepEqual(accountsOf([older]), [{ ...older, home: older.codexHome }]);
 });
 
 test('an account whose sign-in state is not one of the three is dropped, not rounded to unknown', () => {
@@ -90,6 +106,7 @@ test('a second report for the same account loses to the first', () => {
 test('no more accounts than the cap are kept, in the order the runner listed them', () => {
   const many = Array.from({ length: ENGINE_ACCOUNTS_MAX + 24 }, (_, i) => ({
     id: i.toString(16).padStart(8, '0'),
+    home: `/home/ada/.orbit/codex-accounts/${i.toString(16).padStart(8, '0')}`,
     codexHome: `/home/ada/.orbit/codex-accounts/${i.toString(16).padStart(8, '0')}`,
     auth: 'no',
   }));
@@ -106,8 +123,8 @@ test('names and paths are trimmed and truncated, never stored runaway', () => {
   assert.equal(account.name, 'n'.repeat(60));
   assert.equal(account.codexHome, `/${'p'.repeat(399)}`);
   // A blank or non-string name is no name: the page falls back to its own label, not to "   ".
-  assert.deepEqual(accountsOf([{ ...WORK, name: '   ' }]), [{ id: WORK.id, codexHome: WORK.codexHome, auth: 'no' }]);
-  assert.deepEqual(accountsOf([{ ...WORK, name: 17 }]), [{ id: WORK.id, codexHome: WORK.codexHome, auth: 'no' }]);
+  assert.deepEqual(accountsOf([{ ...WORK, name: '   ' }]), [{ id: WORK.id, home: WORK.codexHome, codexHome: WORK.codexHome, auth: 'no' }]);
+  assert.deepEqual(accountsOf([{ ...WORK, name: 17 }]), [{ id: WORK.id, home: WORK.codexHome, codexHome: WORK.codexHome, auth: 'no' }]);
 });
 
 test('only a fingerprint prefix passes as one — anything else is dropped, the account kept', () => {
@@ -140,15 +157,30 @@ test('an older runner, or a list with nothing readable, reads as the one account
   }
 });
 
-test('only Codex carries accounts', () => {
+test('only an engine whose CLI keeps a login per directory carries accounts', () => {
+  // Claude Code and Codex each keep one login per config directory; Kimi keeps a single one for the
+  // machine, so a claude- or kimi-shaped account list is not a report about anything.
+  const CLAUDE_DEFAULT: RunnerEngineAccount = { id: 'default', home: '/home/ada/.claude', auth: 'yes' };
   const engines = sanitizeRunnerEngines([
-    { engine: 'claude', installed: true, auth: 'yes', accounts: [DEFAULT] },
+    { engine: 'claude', installed: true, auth: 'yes', accounts: [CLAUDE_DEFAULT] },
     { engine: 'kimi', installed: true, auth: 'no', accounts: [WORK] },
     codex([DEFAULT, WORK]),
   ])!;
   const byEngine = new Map<string, RunnerEngineHealth>(engines.map((e) => [e.engine, e]));
 
-  assert.equal('accounts' in byEngine.get('claude')!, false);
+  assert.deepEqual(byEngine.get('claude')!.accounts, [CLAUDE_DEFAULT]);
   assert.equal('accounts' in byEngine.get('kimi')!, false);
   assert.deepEqual(byEngine.get('codex')!.accounts, [DEFAULT, WORK]);
+});
+
+test('a Codex account keeps reporting its directory under the codex-named field as well', () => {
+  // An older control plane drops an account whose `codexHome` is empty, so the name keeps
+  // travelling for as long as such a replica can serve a read (codexHomeOf in enginehealth.go).
+  const [account] = accountsOf([DEFAULT])!;
+  assert.equal(account.codexHome, DEFAULT.home);
+  // No other engine has that name to send.
+  const [claude] = sanitizeRunnerEngines([
+    { engine: 'claude', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/home/ada/.claude', auth: 'yes' }] },
+  ])![0].accounts!;
+  assert.equal('codexHome' in claude, false);
 });

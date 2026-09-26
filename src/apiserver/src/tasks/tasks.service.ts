@@ -219,7 +219,7 @@ import { loadVerificationEpochGates } from './verification-epoch-read';
 import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
-import { runCodexAccount } from '../providers/plan-usage-accounts';
+import { runAccount } from '../providers/plan-usage-accounts';
 import { accountPoolRuntime } from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
@@ -10044,10 +10044,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const runner = runnerById.get(assignee.runnerId);
       const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
       const workspace = workspaceById.get(assignee.workspaceId);
-      const account = runCodexAccount(
+      const account = runAccount(
         assignee.provider,
         workspace?.env,
-        workspace?.codexAccount,
+        workspace,
         runner?.engines,
       );
       if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);

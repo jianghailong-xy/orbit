@@ -340,8 +340,8 @@ test('the quota gate judges the Codex account the workspace runs on, never Defau
       installed: true,
       auth: 'yes',
       accounts: [
-        { id: 'default', codexHome: '/root/.codex', auth: 'yes' },
-        { id: '3fa91c2e', name: 'Work', codexHome: workHome, auth: 'yes' },
+        { id: 'default', home: '/root/.codex', codexHome: '/root/.codex', auth: 'yes' },
+        { id: '3fa91c2e', name: 'Work', home: workHome, codexHome: workHome, auth: 'yes' },
       ],
     },
   ];

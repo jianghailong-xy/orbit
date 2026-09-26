@@ -24,9 +24,9 @@ const inFlight = (s: RunnerLoginState['status'] | null | undefined) =>
 type ProbedRunner = { id: string; engines?: RunnerEngineHealth[] | null };
 
 /** Does the runner's own probe now say this engine is signed in? "unknown" is not a yes — the
- *  wait below is bounded precisely because a CLI that won't answer never becomes one. Given a
- *  Codex account, it is that account's own answer: the engine's is Default's, and says nothing
- *  about any other. */
+ *  wait below is bounded precisely because a CLI that won't answer never becomes one. Given an
+ *  account of an engine that keeps them, it is that account's own answer: the engine's is Default's,
+ *  and says nothing about any other. */
 export function probeReportsSignedIn(
   runners: ProbedRunner[] | undefined,
   runnerId: string,
@@ -87,11 +87,11 @@ export function RunnerSignIn({
 }: {
   runnerId: string;
   engine?: LoginEngine;
-  /** Codex only: sign in this account the runner already has — `default` or a slot id. Absent:
-   *  the runner's own login, exactly as before accounts. */
+  /** Sign in this account the runner already has — `default` or a slot id — of an engine that
+   *  keeps accounts. Absent: the runner's own login, exactly as before accounts. */
   account?: string;
-  /** Codex only: sign in a NEW account, which the runner adds under this name. The button waits
-   *  for one: a blank name would read as no account at all, which is the runner's own login. */
+  /** Sign in a NEW account, which the runner adds under this name. The button waits for one: a
+   *  blank name would read as no account at all, which is the runner's own login. */
   accountName?: string;
   onDone?: () => void;
   /** Take the other route out: a key on the account, good for every runner. Offered beside the
@@ -184,8 +184,8 @@ export function RunnerSignIn({
   const s = state.data;
   // A runner runs one relay at a time. If the one in flight is for the other engine (another card,
   // another tab), this card has nothing to report — show it as idle so pressing it takes over.
-  // The same goes for the other Codex accounts: a card for one says nothing about another's
-  // sign-in. A card adding an account owns only the sign-in it started, because until the runner
+  // The same goes for the other accounts of this engine: a card for one says nothing about
+  // another's sign-in. A card adding an account owns only the sign-in it started, because until the runner
   // names the slot it added, that sign-in names no account at all.
   const ownAccount = adding ? startedHere : account === undefined || s?.account === account;
   const mine = !s?.engine || (s.engine === engine && ownAccount);

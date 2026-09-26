@@ -635,10 +635,13 @@ export interface RunnerHeartbeatResponse {
   /** One step of a browser-less runtime login the user started from the web. Absent on
    *  older control planes, and whenever no sign-in is in flight for this runner. */
   loginRequest?: LoginCommand;
-  /** A Codex account slot to remove from this machine. Absent on older control planes, and whenever
-   *  no removal is in flight for this runner. Only a runner that declares
-   *  `codex-account-remove/v1` is ever handed one: a runner that ignored it would leave the account
-   *  the page has already said goodbye to. */
+  /** An account slot to remove from this machine, naming its engine. Only a runner that declares
+   *  the engine's account-removal capability is ever handed one: a runner that ignored it would
+   *  leave the account the page has already said goodbye to, and one that read a Claude request as
+   *  a Codex one would announce a removal it never carried out. */
+  accountRemoveRequest?: AccountRemoveCommand;
+  /** The same request on Codex's historical field, which is all a control plane older than
+   *  accounts-per-engine knows how to send. Absent from current control planes. */
   codexAccountRemoveRequest?: CodexAccountRemoveCommand;
   /** An engine install the user started from the web. Absent on older control planes, and
    *  whenever no install is in flight for this runner. */
@@ -937,7 +940,10 @@ export interface LoginCommand {
  * the same as carrying it out once. `default` is never removable: it is the CODEX_HOME the runner's
  * own environment selects, the one `codex` typed in a terminal shares.
  */
-export interface CodexAccountRemoveCommand {
+export interface AccountRemoveCommand {
+  /** The engine whose account store holds the slot: `codex`, `claude`. Absent on the codex-named
+   *  field older control planes hand over, which only ever meant Codex. */
+  engine?: LoginEngine;
   /** `default`, or the id of a slot the runner added. */
   account: string;
   /** Identifies this removal (Runner.codexAccountRemoveAt), so a report can be matched to the
@@ -945,8 +951,14 @@ export interface CodexAccountRemoveCommand {
   attempt?: string;
 }
 
+/** @deprecated The same command on the codex-named field; read AccountRemoveCommand, whose `engine`
+ *  is absent there and so reads as Codex. */
+export type CodexAccountRemoveCommand = AccountRemoveCommand;
+
 /** Runner → control plane: what one removal came to. */
-export interface CodexAccountRemoveResult {
+export interface AccountRemoveResult {
+  /** The engine the removal was for; absent when it was answered on the codex-named route. */
+  engine?: LoginEngine;
   account: string;
   /** `done` once the slot's directory and record are gone; `failed` with the machine's own reason
    *  — Default, a slot a live session is in, or a directory that would not go away. */
@@ -955,6 +967,9 @@ export interface CodexAccountRemoveResult {
   /** The `attempt` of the request this reports on. */
   attempt?: string;
 }
+
+/** @deprecated The same result on the codex-named route; read AccountRemoveResult. */
+export type CodexAccountRemoveResult = AccountRemoveResult;
 
 /** Runner → control plane: progress of a sign-in relay. */
 export interface LoginResult {
@@ -998,25 +1013,31 @@ export interface RunnerEngineHealth {
 }
 
 /**
- * One Codex account on a runner: a CODEX_HOME the runner signs in and runs sessions on.
+ * One account on a runner: a directory the CLI keeps that login in — a Codex CODEX_HOME, a Claude
+ * Code's CLAUDE_CONFIG_DIR — which the runner signs in and runs sessions on.
  *
  * Nothing here names the account itself. Neither its email nor its account id leaves the machine
  * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and
- * `fingerprintPrefix` is the start of the non-reversible fingerprint the rate-limit reset already
- * reports for it.
+ * `fingerprintPrefix`, where an engine reports one, is the start of a non-reversible fingerprint
+ * the runner computed locally.
  */
 export interface RunnerEngineAccount {
-  /** `default` — the CODEX_HOME the runner's own environment selects — or the id of a slot the
+  /** `default` — the directory the runner's own environment selects — or the id of a slot the
    *  runner added: the same value LoginCommand.account names. */
   id: string;
   /** What the user called the account. Absent for Default, and for a slot whose record was lost. */
   name?: string;
-  /** Its CODEX_HOME on that machine, absolute. */
-  codexHome: string;
+  /** The account's directory on that machine, absolute: a CODEX_HOME or a CLAUDE_CONFIG_DIR. */
+  home: string;
+  /** The same directory under Codex's historical field name. Emitted for Codex accounts only, for
+   *  a control plane older than `home` — whose sanitizer drops an account without it and would then
+   *  report no accounts at all. Read `home ?? codexHome`. */
+  codexHome?: string;
   /** The CLI's own answer for this account, with `unknown` for anything ambiguous. */
   auth: 'yes' | 'no' | 'unknown';
   /** `cxa1_` and the first 8 hex digits of the account's fingerprint. Absent until the runner has
-   *  read one for this account. Two accounts showing the same one are the same account. */
+   *  read one for this account, and for engines that report none. Two accounts showing the same one
+   *  are the same account. */
   fingerprintPrefix?: string;
 }
 
@@ -1125,7 +1146,10 @@ export interface RunnerLoginState {
  *
  * Nothing about the account itself is here — only which slot is going, and what the machine said.
  */
-export interface RunnerCodexAccountRemoveState {
+export interface RunnerAccountRemoveState {
+  /** The engine whose account store the removal is about (`codex` on a row written before
+   *  accounts-per-engine). */
+  engine: LoginEngine;
   /** The slot being removed (`default` is never it), or null when nothing is in flight. */
   account: string | null;
   status: 'pending' | 'done' | 'failed' | null;
@@ -1133,6 +1157,10 @@ export interface RunnerCodexAccountRemoveState {
    *  old to remove accounts at all, or the directory would not go away. */
   message: string | null;
 }
+
+/** @deprecated Codex's name for the same state; read RunnerAccountRemoveState, whose `engine` says
+ *  which account store it is about. */
+export type RunnerCodexAccountRemoveState = RunnerAccountRemoveState;
 
 /** Control plane → runner: merge one session's worktree branch into a target branch. */
 export interface MergeCommand {

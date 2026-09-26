@@ -36,7 +36,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { runCodexAccount } from '../providers/plan-usage-accounts';
+import { runAccount } from '../providers/plan-usage-accounts';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
   INTEGRATION_RESULT_REFUSAL_STATUS,
@@ -79,11 +79,13 @@ import {
   RunInboxResponse,
   RunnerHeartbeatRequest,
   RunnerHeartbeatResponse,
-  CodexAccountRemoveCommand,
+  AccountRemoveCommand,
+  AccountRemoveResult,
   CodexAccountRemoveResult,
   InstallCommand,
   InstallResult,
   LoginCommand,
+  LoginEngine,
   LoginResult,
   OrchestrationCredentialResponse,
   RepoCleanupCommand,
@@ -137,7 +139,7 @@ import {
 } from '../common/transaction-retry';
 import { TransactionSurface } from '../common/prisma-transaction-surface';
 import { PrismaService } from '../prisma/prisma.service';
-import { CODEX_ACCOUNT_PATTERN } from '../runners/dto';
+import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import {
@@ -378,6 +380,10 @@ export const CODEX_ACCOUNT_LOGIN_V1 = 'codex-account-login/v1';
  *  beside it, and nothing else. One that does not would ignore the request and leave the account
  *  the page has already said goodbye to. */
 export const CODEX_ACCOUNT_REMOVE_V1 = 'codex-account-remove/v1';
+/** Claude Code's, the sibling of the two above: a runner that declares it signs in, and removes,
+ *  a Claude account named by the control plane rather than the machine's one login. */
+export const CLAUDE_ACCOUNT_LOGIN_V1 = 'claude-account-login/v1';
+export const CLAUDE_ACCOUNT_REMOVE_V1 = 'claude-account-remove/v1';
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -1137,6 +1143,7 @@ export class RunnerApiController {
     let artifactRequests: RunnerHeartbeatResponse['artifactRequests'] = [];
     let loginRequest: RunnerHeartbeatResponse['loginRequest'];
     let codexAccountRemoveRequest: RunnerHeartbeatResponse['codexAccountRemoveRequest'];
+    let accountRemoveRequest: RunnerHeartbeatResponse['accountRemoveRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
@@ -1161,14 +1168,19 @@ export class RunnerApiController {
         }
       }
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
-      loginRequest = await this.drainLoginRequest(
-        runner.id,
-        runnerSupportsCapability(capabilities, CODEX_ACCOUNT_LOGIN_V1),
-      );
-      codexAccountRemoveRequest = await this.drainCodexAccountRemoveRequest(
-        runner.id,
-        runnerSupportsCapability(capabilities, CODEX_ACCOUNT_REMOVE_V1),
-      );
+      loginRequest = await this.drainLoginRequest(runner.id, capabilities);
+      const removeRequest = await this.drainAccountRemoveRequest(runner.id, capabilities);
+      // Codex rides the field a control plane older than accounts-per-engine reads; every other
+      // engine names itself. An old runner handed the generic field would remove a path under its
+      // own codex-accounts that never existed and report done.
+      if (removeRequest?.engine === 'codex' || removeRequest === undefined) {
+        // The codex-named field keeps the exact shape it always had: an older runner reads only
+        // account and attempt, and the engine it is about is the field's own name.
+        codexAccountRemoveRequest =
+          removeRequest === undefined ? undefined : { account: removeRequest.account, attempt: removeRequest.attempt };
+      } else {
+        accountRemoveRequest = removeRequest;
+      }
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
       claudeHistoryRequest = await this.drainClaudeHistoryRequest(runner.id);
@@ -1206,6 +1218,7 @@ export class RunnerApiController {
       artifactRequests,
       loginRequest,
       codexAccountRemoveRequest,
+      accountRemoveRequest,
       installRequest,
       agentDirs,
       repoCleanupRequest,
@@ -1572,7 +1585,8 @@ export class RunnerApiController {
    */
   private async drainLoginRequest(
     runnerId: string,
-    signsInAccounts = false,
+    /** The capabilities header as it arrived, read through runnerSupportsCapability. */
+    capabilities: string | string[] | undefined,
   ): Promise<LoginCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
@@ -1601,25 +1615,34 @@ export class RunnerApiController {
       }
       return undefined;
     }
+    // NULL predates the relay driving anything but claude.
+    const engine = (r.loginEngine as LoginCommand['engine']) ?? 'claude';
     if (r.loginStatus === 'pending') {
       const account = r.loginAccount ?? undefined;
       const accountName = r.loginAccountName ?? undefined;
-      // A process that does not declare account sign-in would ignore the account and sign in its
-      // machine's Default instead — replacing the very login this sign-in was meant to leave alone.
+      // A process that does not declare account sign-in for THIS engine would ignore the account
+      // and sign in its machine's Default instead — replacing the very login this sign-in was meant
+      // to leave alone. One engine's declaration says nothing about another's: a runner that has
+      // signed in Codex accounts since the beginning has never signed in a Claude one.
+      const signsInAccounts = runnerSupportsCapability(
+        capabilities,
+        engine === 'claude' ? CLAUDE_ACCOUNT_LOGIN_V1 : CODEX_ACCOUNT_LOGIN_V1,
+      );
       if (!signsInAccounts && (accountName || (account && account !== 'default'))) {
         await this.prisma.runner.update({
           where: { id: runnerId },
           data: {
             loginStatus: 'failed',
-            loginMessage: 'This runner is too old to sign in another Codex account — update it, then try again.',
+            loginMessage:
+              `This runner is too old to sign in another ${engine === 'claude' ? 'Claude' : 'Codex'} account — ` +
+              'update it, then try again.',
           },
         });
         return undefined;
       }
       return {
         action: 'start',
-        // NULL predates the relay driving anything but claude.
-        engine: (r.loginEngine as LoginCommand['engine']) ?? 'claude',
+        engine,
         attempt: r.loginAt?.toISOString() ?? '',
         // Only when named, so a start for the runner's own login is the shape it always was.
         ...(account ? { account } : {}),
@@ -1631,7 +1654,16 @@ export class RunnerApiController {
         where: { id: runnerId },
         data: { loginCode: null },
       });
-      return { action: 'code', code: r.loginCode };
+      // The account the code belongs to travels with it: with more than one Claude account, a
+      // sign-in can be waiting in any of them, and the runner routes the paste by this pair
+      // (loginAccountKey). An older control plane names none, and the runner falls back to the
+      // engine's own login.
+      return {
+        action: 'code',
+        engine,
+        code: r.loginCode,
+        ...(r.loginAccount ? { account: r.loginAccount } : {}),
+      };
     }
     return undefined;
   }
@@ -1649,13 +1681,16 @@ export class RunnerApiController {
    * An abandoned request is swept here rather than by a timer: a runner offline past the window has
    * not removed anything, and the row would otherwise stay `pending` forever.
    */
-  private async drainCodexAccountRemoveRequest(
+  private async drainAccountRemoveRequest(
     runnerId: string,
-    removesAccounts = false,
-  ): Promise<CodexAccountRemoveCommand | undefined> {
+    /** The capabilities header as it arrived, so the request is handed only to a process that has
+     *  the operation: one that ignored it would leave the account the page says is gone. */
+    capabilities: string | string[] | undefined,
+  ): Promise<AccountRemoveCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
       select: {
+        accountRemoveEngine: true,
         codexAccountRemoveAccount: true,
         codexAccountRemoveStatus: true,
         codexAccountRemoveAt: true,
@@ -1675,18 +1710,22 @@ export class RunnerApiController {
     }
     const account = r.codexAccountRemoveAccount;
     if (!account) return undefined;
-    if (!removesAccounts) {
+    // A row written before accounts-per-engine meant Codex.
+    const engine = (r.accountRemoveEngine as LoginCommand['engine']) ?? 'codex';
+    const capability = engine === 'claude' ? CLAUDE_ACCOUNT_REMOVE_V1 : CODEX_ACCOUNT_REMOVE_V1;
+    if (!runnerSupportsCapability(capabilities, capability)) {
       await this.prisma.runner.update({
         where: { id: runnerId },
         data: {
           codexAccountRemoveStatus: 'failed',
           codexAccountRemoveMessage:
-            'This runner is too old to remove a Codex account — update it, then try again.',
+            `This runner is too old to remove a ${engine === 'claude' ? 'Claude' : 'Codex'} account — ` +
+            'update it, then try again.',
         },
       });
       return undefined;
     }
-    return { account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '' };
+    return { engine, account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '' };
   }
 
   /**
@@ -1699,11 +1738,48 @@ export class RunnerApiController {
   @Post('codex-account-remove-result')
   @HttpCode(200)
   async codexAccountRemoveResult(@CurrentRunner() runner: { id: string }, @Body() body: CodexAccountRemoveResult) {
+    // A report on the codex-named route an older control plane reads. A report that names another
+    // engine is refused rather than applied: it arrived on the wrong route, and writing it would
+    // close out a removal it never carried out.
+    if (body?.engine !== undefined && body.engine !== 'codex') {
+      throw new BadRequestException('Unknown engine for this route');
+    }
+    return this.applyAccountRemoveResult(runner.id, body, 'codex');
+  }
+
+  /**
+   * Runner → control plane: what one account removal came to, naming its engine.
+   *
+   * The same report the codex-named route takes, for every engine whose store a removal can be in —
+   * including Codex, whose requests a current control plane hands over on the engine-tagged field.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('account-remove-result')
+  @HttpCode(200)
+  async accountRemoveResult(@CurrentRunner() runner: { id: string }, @Body() body: AccountRemoveResult) {
+    const engine = body?.engine;
+    if (engine !== 'codex' && engine !== 'claude') {
+      throw new BadRequestException('Unknown engine');
+    }
+    return this.applyAccountRemoveResult(runner.id, body, engine);
+  }
+
+  /**
+   * Apply one removal report to the row that asked for it, if that row is still the one it is about.
+   *
+   * A report names the request it answers (account, attempt, engine) and changes nothing when the
+   * row has moved past it — the person asked again, or cancelled by starting something else.
+   */
+  private async applyAccountRemoveResult(
+    runnerId: string,
+    body: AccountRemoveResult,
+    engine: LoginEngine,
+  ) {
     const status = body?.status;
     if (status !== 'done' && status !== 'failed') {
       throw new BadRequestException('Unknown removal status');
     }
-    if (body.account !== undefined && !CODEX_ACCOUNT_PATTERN.test(String(body.account))) {
+    if (body.account !== undefined && !ACCOUNT_ID_PATTERN.test(String(body.account))) {
       throw new BadRequestException('Unknown account');
     }
     const attempt = body.attempt ? new Date(body.attempt) : undefined;
@@ -1712,8 +1788,14 @@ export class RunnerApiController {
     }
     const { count } = await this.prisma.runner.updateMany({
       where: {
-        id: runner.id,
+        id: runnerId,
         codexAccountRemoveStatus: 'pending',
+        // The removal this report is about, engine included: a report from a runner that carried
+        // out a Claude removal must not close out a Codex one. A row asked for before this build
+        // (no engine stored) therefore matches nothing — the relay's window then fails it with
+        // "This runner did not answer — try again", which for a request the previous build handed
+        // over is the honest outcome, and the person who pressed it can press it again.
+        accountRemoveEngine: engine,
         ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
         ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
       },
@@ -1738,7 +1820,7 @@ export class RunnerApiController {
     if (status !== 'awaiting_code' && status !== 'awaiting_approval' && status !== 'done' && status !== 'failed') {
       throw new BadRequestException('Unknown login status');
     }
-    if (body.account !== undefined && !CODEX_ACCOUNT_PATTERN.test(String(body.account))) {
+    if (body.account !== undefined && !ACCOUNT_ID_PATTERN.test(String(body.account))) {
       throw new BadRequestException('Unknown account');
     }
     // A report names the start it is about. One about a start this row has moved past — the user
@@ -6129,7 +6211,7 @@ export class RunnerApiController {
         runner?.planUsage as PlanUsage | null,
         session.provider,
         now,
-        runCodexAccount(session.provider, workspace?.env, workspace?.codexAccount, runner?.engines),
+        runAccount(session.provider, workspace?.env, workspace, runner?.engines),
       );
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }

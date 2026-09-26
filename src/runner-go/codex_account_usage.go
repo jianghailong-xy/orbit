@@ -51,7 +51,7 @@ func newCodexSlotUsage(id string) *codexSlotUsage {
 	s := &codexSlotUsage{}
 	s.probe = &planUsageProbe{client: &http.Client{}, name: "codex plan-usage (account " + id + ")"}
 	s.probe.fetch = func(ctx context.Context, _ *http.Client) (*PlanUsage, error) {
-		home, err := codexAccountSlotHome(id)
+		home, err := codexAccountKind.home(id)
 		if err != nil {
 			return nil, err
 		}
@@ -125,7 +125,7 @@ func (u *codexAccountUsage) forget(id string) {
 // with the directory it reads. A read that outlived the directory would open an app-server in a
 // CODEX_HOME nothing is left in, and would go on reporting the account as the runner's.
 func removeCodexAccount(usage *codexAccountUsage, id string, liveHomes map[string]bool) error {
-	if err := removeCodexAccountSlot(id, liveHomes); err != nil {
+	if err := codexAccountKind.remove(id, liveHomes); err != nil {
 		return err
 	}
 	usage.forget(id)
@@ -140,7 +140,7 @@ func (u *codexAccountUsage) accountFingerprintPrefixes() map[string]string {
 	out := map[string]string{}
 	if def := u.def.snapshot(); def != nil && def.RateLimitReset != nil {
 		if f := def.RateLimitReset.AccountFingerprint; codexAccountFingerprintPattern.MatchString(f) {
-			out[codexAccountDefaultSlot] = f[:codexAccountFingerprintPrefixLen]
+			out[accountSlotDefaultID] = f[:codexAccountFingerprintPrefixLen]
 		}
 	}
 	u.mu.Lock()
@@ -156,7 +156,7 @@ func (u *codexAccountUsage) accountFingerprintPrefixes() map[string]string {
 // mergeCodexRateLimits is the codexRateLimitSink every Codex session is handed: the snapshot goes to
 // the probe of the session's own slot, and to no other.
 func (u *codexAccountUsage) mergeCodexRateLimits(slot string, snapshot map[string]interface{}) {
-	if slot == codexAccountDefaultSlot {
+	if slot == accountSlotDefaultID {
 		u.def.mergeCodexRateLimits(snapshot)
 		return
 	}
@@ -220,7 +220,7 @@ func (u *codexAccountUsage) runWithIntervals(ctx context.Context, activeCount fu
 // syncSlots starts a read loop for every added slot listed that has none, and stops the loop of, and
 // forgets, every slot no longer listed. A listing that fails changes nothing.
 func (u *codexAccountUsage) syncSlots(ctx context.Context, start func(context.Context, *planUsageProbe)) {
-	slots, err := listCodexAccountSlots()
+	slots, err := codexAccountKind.list()
 	if err != nil {
 		return
 	}
@@ -228,7 +228,7 @@ func (u *codexAccountUsage) syncSlots(ctx context.Context, start func(context.Co
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	for _, slot := range slots {
-		if slot.ID == codexAccountDefaultSlot {
+		if slot.ID == accountSlotDefaultID {
 			continue
 		}
 		listed[slot.ID] = true
