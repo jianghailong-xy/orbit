@@ -19,9 +19,6 @@ import {
 } from '../common/runner-repo-health';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
 
-/** Shape of the account-level preferences this service reads (users.controller owns the rest). */
-type OrchestrationPreference = { defaultEnableOrchestration?: unknown };
-
 /** Default is stored as NULL however the request spelled it: one value means "no other account". */
 function storedCodexAccount(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
@@ -48,27 +45,9 @@ export class WorkspacesService {
     if (!runner) throw new ForbiddenException('runner not found');
   }
 
-  /**
-   * The account-level answer to "should a workspace I make next be allowed to orchestrate?"
-   * (Settings → Session orchestration). A seed only: it decides what the new row is written with,
-   * and from then on the row is the authority — exactly how defaultPermissionMode seeds a session.
-   * Consulted solely when the create request itself names no value, so an explicit `false` from a
-   * form always wins over an account default of on.
-   */
-  private async defaultEnableOrchestration(ownerId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: ownerId },
-      select: { preferences: true },
-    });
-    const prefs = (user?.preferences ?? {}) as OrchestrationPreference;
-    return prefs.defaultEnableOrchestration === true;
-  }
-
   async create(ownerId: string, dto: CreateWorkspaceDto) {
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
-    const enableOrchestration =
-      dto.enableOrchestration ?? (await this.defaultEnableOrchestration(ownerId));
     const workspace = await this.prisma.workspace.create({
       data: {
         ownerId,
@@ -97,7 +76,6 @@ export class WorkspacesService {
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
         enableWorktree: dto.enableWorktree ?? false,
-        enableOrchestration,
         defaultMergeTarget: dto.defaultMergeTarget,
       },
     });
@@ -289,7 +267,6 @@ export class WorkspacesService {
       enabled: dto.enabled,
       autoInitGit: dto.autoInitGit,
       enableWorktree: dto.enableWorktree,
-      enableOrchestration: dto.enableOrchestration,
       canCreateTasks: dto.canCreateTasks,
       canDelegate: dto.canDelegate,
       maxConcurrentTasks: dto.maxConcurrentTasks,
@@ -308,23 +285,6 @@ export class WorkspacesService {
     }
     const workspace = await this.prisma.workspace.update({ where: { id }, data });
     return withProviderSeed([workspace], await lastProviderByWorkspace(this.prisma, [id]))[0];
-  }
-
-  /**
-   * Grant or revoke session orchestration across every live workspace this account owns.
-   *
-   * The grant stays per workspace — this writes each row rather than introducing an account-level
-   * switch the authorizer would consult — because the enforced bit has to stay revocable one
-   * workspace at a time (runner-orchestration-authorizer reads it live, per claim and per spawn).
-   * What this removes is only the clicking: turning it on for a fleet used to mean opening every
-   * workspace's editor in turn, and the "off" direction doubles as a kill switch for the account.
-   */
-  async setOrchestrationForAll(ownerId: string, enabled: boolean) {
-    const { count } = await this.prisma.workspace.updateMany({
-      where: { ownerId, deletedAt: null },
-      data: { enableOrchestration: enabled },
-    });
-    return { updated: count };
   }
 
   /**

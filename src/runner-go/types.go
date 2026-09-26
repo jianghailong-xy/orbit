@@ -824,7 +824,7 @@ type ClaimedSession struct {
 	// so the `orbit mcp` server can attribute task work and resolve the current task.
 	AgentID string `json:"agentId,omitempty"`
 	TaskID  string `json:"taskId,omitempty"`
-	// AllowOrchestration mirrors the agent's enableOrchestration; injected as
+	// AllowOrchestration mirrors the account's Session orchestration switch; injected as
 	// ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes the session_* tools.
 	AllowOrchestration bool `json:"allowOrchestration,omitempty"`
 	// WatchesDisabled is set when Watch is not switched on for this session's owner (the apiserver's

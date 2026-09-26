@@ -185,7 +185,7 @@ test('claim enables orchestration only when the runner negotiated credential v1'
 test('reclaim enables orchestration only when capability and every live guard match', async () => {
   const session = (
     id: string,
-    enableOrchestration: boolean,
+    orchestrationOn: boolean,
     overrides: Record<string, unknown> = {},
     workspaceOverrides: Record<string, unknown> = {},
   ) => ({
@@ -206,6 +206,8 @@ test('reclaim enables orchestration only when capability and every live guard ma
     mergeTarget: null,
     workspaceId: `workspace-${id}`,
     taskId: null,
+    // The owner's Session orchestration switch: absent means on, only turning it off is written.
+    owner: { preferences: orchestrationOn ? {} : { enableOrchestration: false } },
     workspace: {
       provider: 'codex',
       model: null,
@@ -222,7 +224,6 @@ test('reclaim enables orchestration only when capability and every live guard ma
       workDir: null,
       autoInitGit: false,
       defaultMergeTarget: null,
-      enableOrchestration,
       deletedAt: null,
       ...workspaceOverrides,
     },

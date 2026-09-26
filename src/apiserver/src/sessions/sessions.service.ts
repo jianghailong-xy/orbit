@@ -81,6 +81,7 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
 import {
   batchActiveTurns,
@@ -1502,12 +1503,13 @@ export class SessionsService {
         id: true,
         rootSessionId: true,
         spawnDepth: true,
-        workspace: { select: { enableOrchestration: true } },
+        workspaceId: true,
+        owner: { select: { preferences: true } },
       },
     });
     if (!parent) throw new NotFoundException('parent session not found');
-    if (!parent.workspace?.enableOrchestration) {
-      throw new ForbiddenException('orchestration is not enabled for this workspace');
+    if (!parent.workspaceId || !orchestrationEnabled(parent.owner)) {
+      throw new ForbiddenException('orchestration is not enabled for this account');
     }
     if (parent.spawnDepth >= SessionsService.MAX_SPAWN_DEPTH) {
       throw new ForbiddenException(`spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`);

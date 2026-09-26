@@ -62,8 +62,6 @@ export class CreateWorkspaceDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
-  // Opt-in: may this workspace's sessions orchestrate other sessions via orbit mcp (default off).
-  @IsOptional() @IsBoolean() enableOrchestration?: boolean;
   // Branch this workspace's sessions merge into by default (null = the runner auto-detects
   // main, else master). Also written implicitly when a session merges to an explicit target.
   @IsOptional() @IsString() defaultMergeTarget?: string;
@@ -98,18 +96,10 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
-  @IsOptional() @IsBoolean() enableOrchestration?: boolean;
   @IsOptional() @IsString() defaultMergeTarget?: string;
 }
 
 // The full workspace list in the desired sidebar order; each id's index becomes its position.
 export class ReorderWorkspacesDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
-}
-
-// Grant (or revoke) session orchestration on every workspace this account owns at once. Still a
-// per-workspace grant — this writes each row, so a workspace can be flipped back on its own
-// afterwards — it just spares the user one visit per workspace.
-export class SetOrchestrationDto {
-  @IsBoolean() enabled!: boolean;
 }

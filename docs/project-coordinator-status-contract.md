@@ -480,7 +480,7 @@ project off it.
 | | |
 | --- | --- |
 | Method / path | `POST /api/runner/projects/:id/coordinator/ensure` |
-| Auth | the machine's runner token (`RunnerAuthGuard`) **and** a live session — `X-Orbit-Session-Id` with an `X-Orbit-Session-Token` from `RunnerOrchestrationAuthorizer.assert`, so the caller is a session this runner is running, for this owner, in a workspace that still has orchestration on |
+| Auth | the machine's runner token (`RunnerAuthGuard`) **and** a live session — `X-Orbit-Session-Id` with an `X-Orbit-Session-Token` from `RunnerOrchestrationAuthorizer.assert`, so the caller is a session this runner is running, for this owner, whose account still has orchestration on |
 | `:id` | `PublicIdPipe`, as every other route on `RunnerProjectsController` |
 | Body | none |
 | Side effects | at most one, and only in the middle case below |

@@ -9,8 +9,8 @@ import (
 
 // `orbit agent` — the CLI half of the MCP agent_* tools, for an in-session agent that reaches
 // Orbit through a shell instead of through MCP. Same routes, same bodies, same gate: these are
-// orchestration verbs, so they need a live session whose agent has enableOrchestration. No
-// service-token scope names them, which requireCLIOrchestrationContext reports for us.
+// orchestration verbs, so they need a live session while its account has Session orchestration
+// on. No service-token scope names them, which requireCLIOrchestrationContext reports for us.
 
 const agentHelp = `orbit agent — inspect and configure Orbit agents
 
@@ -20,10 +20,11 @@ Usage:
   orbit agent update AGENT_ID [options]
 
 An agent is a machine plus a project directory. It has no provider of its own — pass
---provider to 'orbit session create' when a session needs a specific one. The orchestration
-permission cannot be set here: only a human can grant it in the web UI.
+--provider to 'orbit session create' when a session needs a specific one. Session
+orchestration cannot be switched here: it is one switch for the whole account, in Settings.
 
-These commands run inside a live Orbit session whose agent has enableOrchestration enabled.
+These commands run inside a live Orbit session while the account's Session orchestration
+switch is on.
 Run 'orbit agent <command> --help' for options.
 `
 

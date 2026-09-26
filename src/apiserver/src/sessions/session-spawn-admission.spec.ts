@@ -19,7 +19,8 @@ function makeService(tree: Tree | number, startedThisHour = 0) {
         id: where.id,
         rootSessionId: 'root',
         spawnDepth: 0,
-        workspace: { enableOrchestration: true },
+        workspaceId: 'workspace-1',
+        owner: { preferences: {} },
       }),
       update: async () => ({}),
       // Two different questions about the same tree: how much of it is unfinished, and how

@@ -36,8 +36,8 @@ Usage:
   orbit session complete SESSION_ID [--json]
   orbit session delete SESSION_ID [--json]
 
-Session orchestration is available inside a live Orbit session whose agent has
-enableOrchestration enabled. Outside any session — a launchd/cron process with no
+Session orchestration is available inside a live Orbit session while the account's
+Session orchestration switch (Settings) is on. Outside any session — a launchd/cron process with no
 ORBIT_SESSION_ID — the runner credential alone allows get, list, send and import, scoped to
 the sessions this runner hosts; set ORBIT_SERVICE_TOKEN to a credential from
 'orbit token mint' to get exactly its scopes instead, including create.
@@ -257,8 +257,8 @@ func headlessSessionCLICapabilities(allowed map[string]bool) []cliCapabilitySpec
 // cmdSessionCLI is the native adapter for the MCP session_* orchestration tools.
 // For an agent the environment gate controls discovery and fails closed locally; every
 // request also carries the calling session, and Transport reads or refreshes its signed
-// credential lazily so the control plane can authorize the exact runtime against the current
-// Agent.enableOrchestration value. A caller with no session at all sends no session context,
+// credential lazily so the control plane can authorize the exact runtime against the account's
+// current Session orchestration switch. A caller with no session at all sends no session context,
 // which is what asks the control plane for the narrower headless scope.
 func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
@@ -402,7 +402,7 @@ func headlessActionList(allowed map[string]bool) string {
 //   - ORBIT_SERVICE_TOKEN set: a headless process running on a credential someone minted for it.
 //     The token is the whole authorization; the control plane confines it to its scopes, its
 //     runner and its agent pin.
-//   - otherwise, ORBIT_SESSION_ID set: an agent, unchanged — its agent's orchestration opt-in
+//   - otherwise, ORBIT_SESSION_ID set: an agent, unchanged — its account's orchestration switch
 //     plus the signed session credential Transport attaches.
 //   - neither: headless on the runner credential, which reaches only this runner's own sessions
 //     and cannot spawn.

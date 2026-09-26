@@ -727,10 +727,6 @@ model Workspace {
   // worktree (the workspace's concurrent sessions then share one working tree); the
   // merge/commit/diff machinery is skipped since there's no isolated branch.
   enableWorktree      Boolean   @default(false) @map("enable_worktree")
-  // Opt-in per workspace (default off): may this workspace's in-session coding agent spawn and
-  // manage OTHER sessions via the `orbit mcp` session_* tools (L3 orchestration)? Off → those
-  // tools aren't exposed and the runner-token spawn endpoint refuses.
-  enableOrchestration Boolean   @default(false) @map("enable_orchestration")
   // The branch this workspace's sessions merge into by default, remembered from the last time the
   // user switched targets in the status bar's merge dropdown. Null → the runner's auto-detect
   // (main, else master). Workspace-scoped so a chosen target sticks across all its sessions.

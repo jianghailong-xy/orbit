@@ -136,9 +136,10 @@ export interface UserPreferences {
   /** Whether an agent may push a line of its own (the `notify` tool / `orbit notify`) to this
    *  account's devices. Absent means on; only opting out is ever written. */
   notifyAgentMessage?: boolean;
-  /** Whether a newly created agent starts with session orchestration granted. Seeds the new
-   *  agent's own switch — the grant that gets enforced stays on the agent. Absent means off. */
-  defaultEnableOrchestration?: boolean;
+  /** Whether this account's sessions may orchestrate other sessions — one switch for every
+   *  workspace, enforced by the server on each claim, spawn and call. Absent means on; only
+   *  opting out is ever written. */
+  enableOrchestration?: boolean;
 }
 
 export interface Me {

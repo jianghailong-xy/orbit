@@ -60,7 +60,6 @@ private struct SettingsPageView: View {
 
     var body: some View {
         switch page {
-        case .orchestration:  OrchestrationSettingsPage()
         case .providers:      ProvidersSettingsPage()
         case .notifications:  NotificationSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
@@ -79,6 +78,8 @@ struct SettingsHomeView: View {
 
     @State private var theme = "system"
     @State private var permMode: PermissionMode = .default
+    /// The account's one orchestration switch. Absent on the server means on.
+    @State private var orchestration = true
     @State private var seeded = false
     /// This device's own answer to "may Orbit alert you" — nil until asked.
     @State private var alertsAllowed: Bool?
@@ -128,16 +129,15 @@ struct SettingsHomeView: View {
             guard saved != value.rawValue else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(defaultPermissionMode: value.rawValue)) }
         }
+        .onChange(of: orchestration) { _, value in
+            guard (model.user?.preferences?.enableOrchestration ?? true) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(enableOrchestration: value)) }
+        }
         .onAppear(perform: seed)
         // Each row's value is its own read, so they are asked for side by side.
         .task { alertsAllowed = await model.notifications.alertsAllowed() }
         .task { await model.runners?.load() }
         .task { await model.sharedLinks?.load() }
-        .task {
-            // The orchestration count has to be true: Settings can open before the workspace list
-            // ever loaded, and "0 of 0" would read as an answer.
-            if let agents = model.agents, agents.items.isEmpty { await agents.load() }
-        }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -198,6 +198,8 @@ struct SettingsHomeView: View {
                     Text(AgentDefaults.label(mode)).tag(mode)
                 }
             } label: { label }
+        case .orchestration:
+            Toggle(isOn: $orchestration) { label }
         case .appearance:
             Picker(selection: $theme) {
                 Text("System").tag("system")
@@ -212,7 +214,7 @@ struct SettingsHomeView: View {
             NavigationLink(value: NavNode.settingsRunners) {
                 LabeledContent { if let value = runnersValue { Text(value) } } label: { label }
             }
-        case .orchestration, .providers, .notifications, .sharedLinks, .changePassword, .admin:
+        case .providers, .notifications, .sharedLinks, .changePassword, .admin:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -229,10 +231,6 @@ struct SettingsHomeView: View {
 
     private func value(of row: SettingsHome.Row) -> String? {
         switch row {
-        case .orchestration:
-            let agents = model.agents?.items ?? []
-            return SettingsHome.orchestrationValue(granted: agents.filter { $0.enableOrchestration == true }.count,
-                                                   total: agents.count)
         case .notifications:
             return SettingsHome.notificationsValue(allowed: alertsAllowed)
         case .sharedLinks:
@@ -266,6 +264,7 @@ struct SettingsHomeView: View {
         // An unset preference is the server's floor (Auto), not Default — showing Default would name
         // a mode the account isn't actually running.
         permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
+        orchestration = p?.enableOrchestration ?? true
     }
 }
 
@@ -401,93 +400,6 @@ private struct NotificationSettingsPage: View {
             await model.savePreferences(UpdatePreferencesRequest(notifySessionFinished: finished,
                                                                  notifyAgentMessage: message))
         }
-    }
-}
-
-// MARK: - Session orchestration
-
-/// The web page's card, as a page: the account's default for new agents, and the one press that
-/// sets every existing agent's own switch.
-private struct OrchestrationSettingsPage: View {
-    @Environment(AppModel.self) private var model
-
-    @State private var grantToNew = false
-    @State private var seeded = false
-    @State private var confirmingGrantAll = false
-    @State private var applying = false
-    @State private var applied: String?
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle(SettingsCopy.grantToNew, isOn: $grantToNew)
-            } footer: {
-                Text(SettingsCopy.grantToNewHint)
-            }
-
-            Section {
-                Button(SettingsCopy.turnOnForAll) { confirmingGrantAll = true }
-                    .disabled(total == 0 || applying)
-                // No confirmation on the way out: this is the account's kill switch, and one you
-                // have to argue with is one you can't reach in a hurry.
-                Button(SettingsCopy.turnOffForAll, role: .destructive) {
-                    Task { await apply(false) }
-                }
-                .disabled(granted == 0 || applying)
-            } header: {
-                SettingsHeader(SettingsCopy.applyToExisting)
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(status)
-                    if let applied { Text(applied) }
-                }
-            }
-        }
-        .navigationTitle(SettingsPage.orchestration.title)
-        .confirmationDialog(SettingsCopy.confirmAllTitle(total: total),
-                            isPresented: $confirmingGrantAll, titleVisibility: .visible) {
-            Button(SettingsCopy.turnOnForAll) { Task { await apply(true) } }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        } message: {
-            Text(SettingsCopy.confirmAllDetail)
-        }
-        .onAppear {
-            guard !seeded else { return }
-            seeded = true
-            grantToNew = model.user?.preferences?.defaultEnableOrchestration ?? false
-        }
-        // Written the moment it flips: a capability switch that looks set but was never written is
-        // the one kind of lie this page cannot afford.
-        .onChange(of: grantToNew) { _, value in
-            guard (model.user?.preferences?.defaultEnableOrchestration ?? false) != value else { return }
-            Task { await model.savePreferences(UpdatePreferencesRequest(defaultEnableOrchestration: value)) }
-        }
-        .task {
-            if let agents = model.agents, agents.items.isEmpty { await agents.load() }
-        }
-    }
-
-    private var total: Int { model.agents?.items.count ?? 0 }
-    private var granted: Int { model.agents?.items.filter { $0.enableOrchestration == true }.count ?? 0 }
-
-    private var status: String {
-        guard let agents = model.agents, !agents.items.isEmpty else {
-            return model.agents?.loading == true ? SettingsCopy.loadingAgents : SettingsCopy.noAgents
-        }
-        return SettingsCopy.grantedLine(granted: granted, total: agents.items.count)
-    }
-
-    /// Writes every agent's own switch in one call, then says what it actually wrote. Not a master
-    /// switch: each agent keeps its grant afterwards, so one can be revoked on its own.
-    private func apply(_ enabled: Bool) async {
-        guard let agents = model.agents else { return }
-        applying = true
-        defer { applying = false }
-        guard let updated = await agents.setOrchestrationForAll(enabled) else {
-            applied = "Couldn't apply that to your agents."
-            return
-        }
-        applied = SettingsCopy.appliedLine(enabled: enabled, updated: updated)
     }
 }
 

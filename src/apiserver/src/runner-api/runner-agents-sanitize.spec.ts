@@ -179,17 +179,24 @@ test('update forwards them too', async () => {
   assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
 });
 
-test('enableOrchestration and enabled are still dropped (human-only, web UI)', async () => {
+test('enableOrchestration and enabled are dropped on create and update', async () => {
   const { controller, seen } = makeController();
   await controller.createWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, {
     name: 'child',
     enableOrchestration: true,
     enabled: false,
   } as never);
-  // Pinned off, not merely dropped: an absent field now means "seed from the account default",
-  // so leaving it out would hand an orchestrator that ticked the box a second orchestrator.
-  assert.equal(seen.create?.enableOrchestration, false);
-  assert.equal('enabled' in (seen.create ?? {}), false);
+  await controller.updateWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, 'a1', {
+    name: 'renamed',
+    enableOrchestration: false,
+    enabled: false,
+  } as never);
+  // Orchestration is the account's own switch, not a workspace field, and `enabled` is the
+  // owner's to flip: an orchestrator gets neither through to the WorkspacesService.
+  for (const written of [seen.create, seen.update]) {
+    assert.equal('enableOrchestration' in (written ?? {}), false);
+    assert.equal('enabled' in (written ?? {}), false);
+  }
 });
 
 test('authorization posture and provider fallback remain human-only', async () => {
@@ -211,23 +218,6 @@ test('authorization posture and provider fallback remain human-only', async () =
   ]) {
     assert.equal(field in (seen.create ?? {}), false, `${field} escaped the runner whitelist`);
   }
-});
-
-test('an orchestrator that names no value still cannot inherit the account default', async () => {
-  const { controller, seen } = makeController();
-  await controller.createWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, { name: 'child' });
-  assert.equal(seen.create?.enableOrchestration, false);
-});
-
-test('updating a workspace leaves its existing grant alone', async () => {
-  const { controller, seen } = makeController();
-  await controller.updateWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, 'a1', {
-    name: 'renamed',
-    enableOrchestration: true,
-  } as never);
-  // Absent is the right answer here — Prisma leaves the column untouched, so an orchestrator can
-  // neither grant the capability nor strip it from a workspace a human already decided about.
-  assert.equal('enableOrchestration' in (seen.update ?? {}), false);
 });
 
 test('drops permissionMode — a workspace has no permission posture to set', async () => {
@@ -262,13 +252,9 @@ test('the runner HTTP create whitelist is the exported parity contract', async (
   });
 
   assert.deepEqual(
-    Object.keys(seen.create ?? {})
-      .filter((field) => field !== 'enableOrchestration')
-      .sort(),
+    Object.keys(seen.create ?? {}).sort(),
     [...ORCHESTRATOR_WORKSPACE_CREATE_FIELDS].sort(),
   );
-  assert.equal(seen.create?.enableOrchestration, false);
-  assert.equal('provider' in (seen.create ?? {}), false);
 });
 
 test('rejects a non-string env value — the runner decodes env as map[string]string', async () => {

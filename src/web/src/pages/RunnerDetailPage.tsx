@@ -42,7 +42,7 @@ import {
   type ClaudeHistoryResult,
 } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { meQuery, providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
+import { providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
 import { CodexAccountSelect, offersCodexAccount } from '../components/CodexAccountSelect';
@@ -69,7 +69,6 @@ interface Workspace {
   runnerId?: string | null;
   enabled?: boolean;
   enableWorktree?: boolean;
-  enableOrchestration?: boolean;
   /** Default a new session under this workspace inherits. null = inherit the account default.
    *  The permission mode is deliberately NOT here — it belongs to the run (Session), with an
    *  account-level default. */
@@ -126,11 +125,6 @@ export function RunnerDetailPage() {
   // Configured providers (custom slugs) are used to resolve the provider label and effective
   // Runtime-owned model shown in each workspace row.
   const configuredProviders = useQuery(providersQuery()).data ?? [];
-  // The account's "grant orchestration to new agents" answer (Settings). Read here because this
-  // form posts every field explicitly — an unseeded switch would send `false` and quietly beat
-  // the default the user just set.
-  const orchestrationDefault =
-    useQuery(meQuery()).data?.preferences?.defaultEnableOrchestration ?? false;
 
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
@@ -175,7 +169,6 @@ export function RunnerDetailPage() {
   const [fWorkDir, setFWorkDir] = useState('');
   const [fRepoUrl, setFRepoUrl] = useState('');
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
-  const [fEnableOrchestration, setFEnableOrchestration] = useState(false);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
   // null = Default, the runner's own Codex account.
   const [fCodexAccount, setFCodexAccount] = useState<string | null>(null);
@@ -188,7 +181,7 @@ export function RunnerDetailPage() {
   // offer at all rather than an empty one.
   const [history, setHistory] = useState<ClaudeHistoryResult | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>('none');
-  // The long tail (orchestration / env / instructions) stays folded until asked for, and
+  // The long tail (env / instructions) stays folded until asked for, and
   // edits are tracked so Cancel can't discard them silently.
   const [advOpen, setAdvOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -203,7 +196,6 @@ export function RunnerDetailPage() {
         workDir: fWorkDir.trim() || undefined,
         repoUrl: fRepoUrl.trim() || undefined,
         enableWorktree: fEnableWorktree,
-        enableOrchestration: fEnableOrchestration,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
         ),
@@ -269,7 +261,6 @@ export function RunnerDetailPage() {
           // silently dropped it would put the project binding back where it was before this field.
           repoUrl: a.repoUrl ?? undefined,
           enableWorktree: a.enableWorktree ?? false,
-          enableOrchestration: a.enableOrchestration ?? false,
           effort: a.effort ?? null,
           env: a.env ?? {},
           // Same machine, so the same account: a copy that fell back to Default would spend another
@@ -384,7 +375,6 @@ export function RunnerDetailPage() {
     setFWorkDir(a?.workDir ?? '');
     setFRepoUrl(a?.repoUrl ?? '');
     setFEnableWorktree(a?.enableWorktree ?? false);
-    setFEnableOrchestration(a ? (a.enableOrchestration ?? false) : orchestrationDefault);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setFCodexAccount(a?.codexAccount ?? null);
     setImportId('');
@@ -560,19 +550,6 @@ export function RunnerDetailPage() {
         checked={fEnableWorktree}
         onChange={(v) => {
           setFEnableWorktree(v);
-          setDirty(true);
-        }}
-      />
-
-      {/* Sits beside isolation rather than under Advanced: both answer "what is this workspace
-          allowed to do", and this is the one with a security consequence — a workspace that can
-          drive other sessions shouldn't be a setting you have to go looking for. */}
-      <SettingRow
-        label="Session orchestration"
-        desc="Let this workspace's sessions spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused. Enable only for trusted orchestrator workspaces."
-        checked={fEnableOrchestration}
-        onChange={(v) => {
-          setFEnableOrchestration(v);
           setDirty(true);
         }}
       />
