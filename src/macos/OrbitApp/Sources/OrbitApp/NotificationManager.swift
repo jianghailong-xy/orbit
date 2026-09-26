@@ -64,6 +64,28 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         center?.removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 
+    #if os(iOS)
+    /// Whether this device shows Orbit's alerts at all — the switch in the system's Settings, which
+    /// no account preference can override. Nil when there is no center to ask (an unbundled build) or
+    /// the question hasn't been put to the person yet.
+    func alertsAllowed() async -> Bool? {
+        guard let center else { return nil }
+        switch await center.notificationSettings().authorizationStatus {
+        case .authorized, .provisional, .ephemeral: return true
+        case .denied: return false
+        case .notDetermined: return nil
+        @unknown default: return nil
+        }
+    }
+
+    /// Put the question to the person if it has never been asked; answers what they chose. Once
+    /// refused, only the system's Settings can change it — the caller sends them there.
+    func askForAlerts() async -> Bool {
+        guard let center else { return false }
+        return (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+    }
+    #endif
+
     /// Remove delivered *approval* banners whose session (thread id) matches `predicate`, so an
     /// approval handled on another device also leaves Notification Center. The silent badge-sync
     /// push passes the resolved sessions; the foreground reconcile passes "no longer needs you".

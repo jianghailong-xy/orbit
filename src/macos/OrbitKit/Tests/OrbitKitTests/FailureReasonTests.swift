@@ -18,6 +18,7 @@ final class FailureReasonTests: XCTestCase {
         "src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift",
         "src/macos/OrbitApp/Sources/OrbitApp/RunnerControl.swift",
         "src/macos/OrbitApp/Sources/OrbitApp/ProjectsModel.swift",
+        "src/macos/OrbitApp/Sources/OrbitApp/SharedLinksModel.swift",
     ]
 
     func testARefusalIsSaidInTheServersOwnWords() {

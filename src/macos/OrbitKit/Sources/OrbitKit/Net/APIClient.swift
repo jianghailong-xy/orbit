@@ -311,6 +311,21 @@ public final class APIClient: @unchecked Sendable {
         try await deleteRaw("\(kind.pathSegment)/\(id)/share")
     }
 
+    /// Every link this account has made — Active, Paused and Ended alike — for Settings → Shared
+    /// links. Web parity: `listShareLinks`.
+    public func shareLinks() async throws -> [ShareLink] {
+        let list: ShareLinkList = try await get("share-links")
+        return list.links
+    }
+
+    /// Turn these links off in one go; answers how many were still on to turn off. Web parity:
+    /// `turnOffShareLinks`.
+    public func turnOffShareLinks(_ ids: [String]) async throws -> Int {
+        let result: TurnOffShareLinksResult = try await post("share-links/turn-off",
+                                                             body: TurnOffShareLinksRequest(shareLinkIds: ids))
+        return result.count
+    }
+
     // MARK: approvals
 
     public func approvals(sessionID: String, status: String = "PENDING") async throws -> [ApprovalInfo] {

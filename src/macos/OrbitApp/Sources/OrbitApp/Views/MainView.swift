@@ -85,6 +85,12 @@ struct SectionSidebar: View {
             },
             set: { value in
                 switch value {
+                #if os(iOS)
+                // Settings is a sheet over the section on iOS, never the section: choosing it here
+                // leaves the columns on the page they show.
+                case .section(.settings):
+                    model.settingsPresented = true
+                #endif
                 case .section(let s):
                     model.selectedSection = s
                 case .agent(let id):
@@ -244,9 +250,12 @@ struct AccountFooter: View {
     }
 }
 
-/// Circular initials avatar — the first letter of the name/email, like the web's `Avatar`.
+/// Circular initials avatar — the first letter of the name/email, like the web's `Avatar`. The
+/// sidebar's footer draws it at row size; Settings' header on iOS draws the same one large.
 struct AvatarMonogram: View {
     let name: String?
+    var diameter: CGFloat = 32
+    var font: Font = .orbitGlyph.weight(.semibold)
 
     private var initial: String {
         let trimmed = (name ?? "").trimmingCharacters(in: .whitespaces)
@@ -256,10 +265,10 @@ struct AvatarMonogram: View {
     var body: some View {
         Circle()
             .fill(Color.accentColor)
-            .frame(width: 32, height: 32)
+            .frame(width: diameter, height: diameter)
             .overlay(
                 Text(initial)
-                    .font(.orbitGlyph.weight(.semibold))
+                    .font(font)
                     .foregroundStyle(.white)
             )
     }
@@ -287,10 +296,10 @@ struct SectionContent: View {
             RunnersListView()
         case .settings:
             #if os(iOS)
-            // Settings is two columns here like every other section: its categories in this one,
-            // whichever is current in the pane beside it. This shell is only ever regular-width —
-            // the compact one renders the whole form from its own stack.
-            SettingsCategoryList()
+            // Never the section on iOS: choosing Settings presents it as a sheet over the section
+            // that is showing (the sidebar's selection, `AppModel.settingsPresented`), so there is
+            // no column to fill.
+            EmptyView()
             #else
             SettingsView()
             #endif
@@ -323,7 +332,8 @@ struct SectionDetail: View {
             AdminUserDetailView()
         case .settings:
             #if os(iOS)
-            SettingsDetail()
+            // A sheet on iOS, never the section — see `SectionContent`.
+            EmptyView()
             #else
             // macOS leaves this pane a placeholder on purpose: ⌘, opens the real Settings window,
             // and the middle column here is the whole form already.

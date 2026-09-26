@@ -378,16 +378,10 @@ private struct CompactSections: View {
                     .refreshable { await model.runners?.load() }
             }
 
-        // SETTINGS — the one stack that goes genuinely deep: the form → the runners list → a runner's
-        // record. Both pushes are frames of this stack now, the deepest in the app and the last place
-        // two mechanisms were chained on one stack (a boolean `isPresented` for the list, a
-        // destination closure for the record). Settings registers both destinations itself — see
-        // `SettingsView` — because iPad regular pushes the same two pages from the same form, so one
-        // registration serves both shells.
+        // SETTINGS — never the section here: the drawer's gear presents Settings as a sheet over
+        // whatever is showing (`AppModel.settingsPresented`, `settingsSheet`), with a stack of its own.
         case .settings:
-            NavigationStack(path: $model.nav.path) {
-                SettingsView().drawerToggle(open: openDrawer)
-            }
+            EmptyView()
 
         // ADMIN — a single-pane section, a first-class drawer destination, reachable only for admins
         // (the drawer hides it otherwise), so it needs no extra role gate. It used to be a bare
@@ -711,7 +705,8 @@ private struct NavigationDrawer: View {
     /// circular Settings button trailing it, laid over the rail instead of docked under a divider.
     /// It replaces the account footer that used to sit here — Settings already shows the signed-in
     /// account and now carries the actions that footer's menu owned (Admin, Sign out), so the avatar
-    /// row is redundant. "New session" starts a draft with the current agent (`currentAgentID`, the
+    /// row is redundant. Settings opens as a sheet over the page the drawer closes onto, the way
+    /// ChatGPT's does. "New session" starts a draft with the current agent (`currentAgentID`, the
     /// same target as macOS ⌘N), which is the compact shell's only entry point that doesn't first
     /// require navigating to that agent's session list.
     private var actionBar: some View {
@@ -743,8 +738,8 @@ private struct NavigationDrawer: View {
             Spacer(minLength: 8)
 
             Button {
-                model.selectedSection = .settings
                 close()
+                model.settingsPresented = true
             } label: {
                 DrawerCircleGlyph(systemName: AppSection.settings.systemImage, raised: true)
             }
