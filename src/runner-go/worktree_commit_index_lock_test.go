@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -87,6 +88,62 @@ func TestCommitRetriesOnIndexLock(t *testing.T) {
 			t.Fatal("the branch moved under a commit that reported an error")
 		}
 	})
+}
+
+// TestCommitRemovesAnAbandonedIndexLock is the 2026-09-25 incident: an empty index.lock that a
+// cut-off git left in a live session's checkout at 06:14 refused the Commit button at 13:58, and
+// would have refused every retry after, since nothing was ever going to let go of it. A lock that
+// outlasts the wait, has sat empty and untouched for longer than staleIndexLockAge, and that no
+// process has open is removed, and the commit goes through — saying what it removed.
+func TestCommitRemovesAnAbandonedIndexLock(t *testing.T) {
+	c := newIndexLockCheckout(t, "lockabandoned")
+	c.holdIndexLock(t)
+	lock := ageIndexLock(t, c.checkout, 2*staleIndexLockAge)
+
+	res := commitWorktree(CommitCommand{SessionID: c.id, Branch: c.branch})
+	if res.Status != "committed" {
+		t.Fatalf("commit = %q (%s), want committed past a lock nothing was using", res.Status, res.Message)
+	}
+	if head := mustGit(t, c.checkout, "rev-parse", "HEAD"); head == c.before {
+		t.Fatal("the branch did not advance after a commit that reported committed")
+	}
+	if _, err := git(c.checkout, "cat-file", "-e", "HEAD:work.txt"); err != nil {
+		t.Fatalf("the commit does not carry the checkout's work: %v", err)
+	}
+	if !strings.Contains(res.Message, "Removed the abandoned index.lock at "+lock) {
+		t.Fatalf("the commit must say which lock it removed, got %q", res.Message)
+	}
+}
+
+// TestCommitLeavesAnIndexLockSomebodyHasOpen: age is not proof on its own in a live session. A git
+// that has held an empty index.lock for a minute without writing it — hashing a very large tree on
+// a loaded machine — is still using it, and removing it would let this commit and that git each
+// write an index over the other's. The commit leaves such a lock alone and names who has it open.
+func TestCommitLeavesAnIndexLockSomebodyHasOpen(t *testing.T) {
+	c := newIndexLockCheckout(t, "lockopen")
+	c.holdIndexLock(t)
+	lock := ageIndexLock(t, c.checkout, 2*staleIndexLockAge)
+	holder, err := os.Open(lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+
+	res := commitWorktree(CommitCommand{SessionID: c.id, Branch: c.branch})
+	if res.Status != "error" {
+		t.Fatalf("commit = %q (%s), want an error while a process has the lock open", res.Status, res.Message)
+	}
+	for _, want := range []string{"still held", "not safe to remove", "pid " + strconv.Itoa(os.Getpid())} {
+		if !strings.Contains(res.Message, want) {
+			t.Fatalf("the error must say why the lock was left alone (missing %q): %q", want, res.Message)
+		}
+	}
+	if _, err := os.Stat(lock); err != nil {
+		t.Fatalf("a lock somebody has open must still be there: %v", err)
+	}
+	if head := mustGit(t, c.checkout, "rev-parse", "HEAD"); head != c.before {
+		t.Fatal("the branch moved under a commit that reported an error")
+	}
 }
 
 type indexLockCheckout struct {

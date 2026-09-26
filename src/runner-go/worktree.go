@@ -112,12 +112,7 @@ func gitFailure(err error) error {
 // Mutating worktree operations deliberately keep using git(): a repository commit,
 // rebase, or push may legitimately take longer than a telemetry budget.
 func gitCtx(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-	// A clean/LFS filter may inherit Git's output pipe. Bound Wait even if that
-	// descendant survives the direct Git process cancellation.
-	cmd.WaitDelay = 2 * time.Second
-	out, err := cmd.Output()
-	return strings.TrimSpace(string(out)), gitFailure(err)
+	return gitEnvCtx(ctx, dir, os.Environ(), args...)
 }
 
 type worktreeGitOps struct {
@@ -898,9 +893,22 @@ func gitEnv(dir string, env []string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), gitFailure(err)
 }
 
+// gitEnvCtx is gitCtx with extra environment (e.g. GIT_INDEX_FILE).
 func gitEnvCtx(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = env
+	// A probe that runs out of time is cut off with whatever git holds at that moment. `git
+	// status` takes the checkout's index.lock whenever it can, to write back the stat data it
+	// refreshed, and one cut off inside that window left an empty index.lock behind that refused
+	// every add, commit and rebase in the checkout until somebody removed it by hand — under load
+	// the heartbeat's budget ran out hundreds of times a day (2026-09-25). A probe only reads, so
+	// it takes none of those optional locks.
+	cmd.Env = append(env[:len(env):len(env)], "GIT_OPTIONAL_LOCKS=0")
+	// And it is cut off with a signal git answers by removing the lock files it does hold (a
+	// temporary index's, say) before it exits. Go's default is SIGKILL, which git never sees.
+	cmd.Cancel = func() error { return interruptGit(cmd.Process) }
+	// A clean/LFS filter may inherit Git's output pipe. Bound Wait even if that
+	// descendant survives the direct Git process cancellation, and kill a git still
+	// running this long after it was asked to stop.
 	cmd.WaitDelay = 2 * time.Second
 	out, err := cmd.Output()
 	return strings.TrimSpace(string(out)), gitFailure(err)
@@ -1872,8 +1880,12 @@ func commitWorktree(req CommitCommand) commitOutcome {
 		return commitOutcome{Status: "error", Message: "no live worktree for this session"}
 	}
 	// gitIndex runs a git command that takes the index lock, and runs it again while another
-	// process holds that lock — for commitIndexLockWait across the whole commit.
+	// process holds that lock — for commitIndexLockWait across the whole commit. A lock still
+	// there after that which nothing is using will never be let go of, however long a commit
+	// waits: that one is removed (breakAbandonedIndexLock) and the command run once more. cleared
+	// says what was removed; kept says why a lock was left alone.
 	var lockWaited time.Duration
+	var cleared, kept string
 	gitIndex := func(args ...string) error {
 		_, err := git(wtPath, args...)
 		for err != nil && indexLockHeld(err) && lockWaited < commitIndexLockWait {
@@ -1886,14 +1898,24 @@ func commitWorktree(req CommitCommand) commitOutcome {
 			_, err = git(wtPath, args...)
 			lockWaited += time.Since(retried)
 		}
+		if err != nil && indexLockHeld(err) {
+			broke, why := breakAbandonedIndexLock(wtPath)
+			if !broke {
+				kept = why
+				return err
+			}
+			cleared = why
+			logln("commit for session", req.SessionID, "broke", why)
+			_, err = git(wtPath, args...)
+		}
 		return err
 	}
 	if err := gitIndex("add", "-A"); err != nil {
-		return commitOutcome{Status: "error", Message: commitFailure(err)}
+		return commitOutcome{Status: "error", Message: commitFailure(err, kept)}
 	}
 	// `diff --cached --quiet` exits 0 when nothing is staged → the tree is already clean.
 	if _, err := git(wtPath, "diff", "--cached", "--quiet"); err == nil {
-		return commitOutcome{Status: "nochange"}
+		return commitOutcome{Status: "nochange", Message: clearedIndexLockNote(cleared)}
 	}
 	// Summarize the staged diff into a real Conventional-Commits message (one-shot headless
 	// Claude); fall back to a diffstat subject, then the bare branch slug, so the history
@@ -1904,10 +1926,10 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	if err := gitIndex(
 		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
 		"commit", "--no-verify", "-m", msg); err != nil {
-		return commitOutcome{Status: "error", Message: commitFailure(err)}
+		return commitOutcome{Status: "error", Message: commitFailure(err, kept)}
 	}
 	logln(fmt.Sprintf("committed worktree changes for session %s onto %s", req.SessionID, req.Branch))
-	return commitOutcome{Status: "committed"}
+	return commitOutcome{Status: "committed", Message: clearedIndexLockNote(cleared)}
 }
 
 // indexLockHeld reports whether git refused because another process holds the index lock. The
@@ -1960,10 +1982,25 @@ func stageForFinalize(dir string) error {
 //     lock a live git is actually working through has content.
 //   - Nothing has written it for staleIndexLockAge.
 //
-// This is deliberately the same test a person applies by hand, minus the open-file scan, which
-// costs a /proc walk this machine cannot afford under load. What it buys is bounded: the fallback
-// when it declines is the honest report that staging failed, which is what the caller already does.
+// This is deliberately the same test a person applies by hand, minus the open-file scan:
+// finalization has already stopped everything of the session's that could be holding the lock (see
+// stageForFinalize). What it buys is bounded: the fallback when it declines is the honest report
+// that staging failed, which is what the caller already does.
 func breakStaleIndexLock(dir string) (bool, string) {
+	return breakIndexLock(dir, false)
+}
+
+// breakAbandonedIndexLock is breakStaleIndexLock for a checkout whose session may still be running
+// — a commit asked for from the worktree bar. Nothing has stopped that session's engine and
+// background jobs the way finalization has, so this also requires that no process has the lock
+// open: git keeps index.lock open from the moment it creates it until it renames it over the index
+// or removes it, so an open descriptor is exactly what a lock somebody is using has, however long it
+// has sat empty (a git hashing a very large tree on a loaded machine).
+func breakAbandonedIndexLock(dir string) (bool, string) {
+	return breakIndexLock(dir, true)
+}
+
+func breakIndexLock(dir string, unlessOpen bool) (bool, string) {
 	gitDir, err := git(dir, "rev-parse", "--absolute-git-dir")
 	if err != nil || gitDir == "" {
 		return false, "a checkout whose git dir could not be resolved"
@@ -1991,22 +2028,47 @@ func breakStaleIndexLock(dir string) (bool, string) {
 	if age := time.Since(info.ModTime()); age < staleIndexLockAge {
 		return false, fmt.Sprintf("%s, untouched for only %s of the %s that makes a lock abandoned", lock, age.Truncate(time.Second), staleIndexLockAge)
 	}
+	state := "empty, untouched since " + info.ModTime().UTC().Format(time.RFC3339)
+	if unlessOpen {
+		holder, err := indexLockHolder(lock)
+		if err != nil {
+			return false, fmt.Sprintf("%s, whose holders could not be listed: %v", lock, err)
+		}
+		if holder != "" {
+			return false, fmt.Sprintf("%s, which %s has open", lock, holder)
+		}
+		state += ", open in no process"
+	}
 	if err := os.Remove(lock); err != nil {
 		return false, fmt.Sprintf("%s, which could not be removed: %v", lock, err)
 	}
-	return true, fmt.Sprintf("the abandoned index.lock at %s (empty, untouched since %s)", lock, info.ModTime().UTC().Format(time.RFC3339))
+	return true, fmt.Sprintf("the abandoned index.lock at %s (%s)", lock, state)
 }
 
 // commitFailure is what a failed commit says: git's own words and, when git was still refusing on
-// the index lock once the commit had waited for it, why the commit gave up.
-func commitFailure(err error) string {
+// the index lock once the commit had waited for it, why the commit gave up — kept, the reason the
+// lock was not safe to remove.
+func commitFailure(err error, kept string) string {
 	message := clip(gitStderr(err), 1000)
 	if indexLockHeld(err) {
 		message += "\nthe commit waited " + commitIndexLockWait.String() + " for this checkout's index.lock and" +
-			" it was still held: by git running in a background job here, or left behind by a git process that" +
-			" crashed. Nothing was committed."
+			" it was still held"
+		if kept != "" {
+			message += "; it was not safe to remove: " + kept
+		}
+		message += ". Nothing was committed."
 	}
 	return message
+}
+
+// clearedIndexLockNote is what a commit that had to remove an abandoned index.lock says about it:
+// that lock is why every earlier commit in this checkout failed, and removing it is the one thing
+// the commit did that nobody asked for.
+func clearedIndexLockNote(cleared string) string {
+	if cleared == "" {
+		return ""
+	}
+	return "Removed " + cleared + " before committing."
 }
 
 // commitMsgModel is the Claude alias used to summarize a commit's diff — a fast, cheap tier is
