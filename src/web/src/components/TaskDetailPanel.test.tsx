@@ -15,7 +15,7 @@ import { encodeId } from '../lib/idCodec';
 import { TASK_RUN_HELD_TITLE, TASK_RUN_PIN_TITLE } from '../lib/taskRunHandoff';
 import type { TaskRunConflictToast } from './TaskRunHandoffNotice';
 import type { WriteToast } from './TaskScheduleEditor';
-import { TaskDetailPanel, runNowHint, runNowMutationOptions } from './TaskDetailPanel';
+import { PROJECT_CANCELLED_NOTE, TaskDetailPanel, runNowHint, runNowMutationOptions } from './TaskDetailPanel';
 
 // A static (effect-free) render never invokes a queryFn, so the cache is seeded instead. Partial,
 // because the module also exports the attachment resolver Transcript reads at load time.
@@ -836,10 +836,18 @@ describe('the project a task is filed under', () => {
     expect(html.indexOf('tdp-project-line')).toBeLessThan(html.indexOf('tdp-title'));
   });
 
-  it('says Cancelled beside a project that was cancelled', () => {
+  it('says Cancelled beside a project that was cancelled, and that the task won’t start', () => {
     const html = renderPanel({ id: TASK_ID, title: 'Shard 000', status: 'OPEN', project: { ...PROJECT, status: 'CANCELLED' } });
 
     expect(line(html)).toContain('Cancelled');
+    expect(html).toContain(`<div class="tdp-project-note">${PROJECT_CANCELLED_NOTE}</div>`);
+  });
+
+  // NEGATIVE CONTROL: an open project's task is startable, so there is nothing to warn about.
+  it('says nothing about starting under a project that is still going', () => {
+    const html = renderPanel({ id: TASK_ID, title: 'Shard 000', status: 'OPEN', project: PROJECT });
+
+    expect(html).not.toContain('tdp-project-note');
   });
 
   // NEGATIVE CONTROL: a task in no project has nothing to name.

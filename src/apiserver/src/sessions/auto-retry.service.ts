@@ -6,7 +6,7 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma, ProjectStatus, RunStatus } from '@prisma/client';
 import {
   RunEventType,
   isRetryableApiErrorText,
@@ -111,6 +111,21 @@ const NOT_DISPATCH_HELD: Prisma.SessionWhereInput = {
 };
 
 /**
+ * The other standing veto on starting a task's work: its project was cancelled
+ * (projectNotCancelledSql, which every automatic door applies). Asked where the hold is asked and
+ * for the same reason — against the world at the instant of the resume, so a project cancelled
+ * after the retry was armed is honoured, and one reopened before it comes due is not held.
+ */
+const NOT_IN_CANCELLED_PROJECT: Prisma.SessionWhereInput = {
+  OR: [
+    { taskId: null },
+    { startsTaskWork: false },
+    { task: { projectId: null } },
+    { task: { project: { status: { not: ProjectStatus.CANCELLED } } } },
+  ],
+};
+
+/**
  * Re-sends messages that a self-healing failure killed, once it is likely to work.
  *
  * Four failures qualify. Two arrive as the entire reply: the account's provider quota running
@@ -199,7 +214,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // it would hold its place at the front of this bounded page on every sweep for as long as
         // the pause lasted — the pause would starve the retries that CAN run. Left out of the
         // page, its arm simply waits, and the sweep after the pause lifts finds it due.
-        AND: [NOT_DISPATCH_HELD],
+        AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
       },
       orderBy: { retryAt: 'asc' },
       take: MAX_PER_SWEEP,
@@ -451,7 +466,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             // strength of a reading taken before it. Zero rows is already the "somebody else owns
             // this retry" path — the arm is left standing, no attempt is spent, and the sweep
             // after the pause lifts decides.
-            AND: [NOT_DISPATCH_HELD],
+            AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
           },
           data: { retryAt: null, retryAttempts: attempts + 1 },
         });

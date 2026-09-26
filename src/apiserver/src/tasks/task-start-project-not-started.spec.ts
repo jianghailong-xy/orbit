@@ -150,7 +150,9 @@ test('task_start starts it once the project has been started, however that happe
     ['switched on without confirming', unstarted({ coordinatorEnabled: true }), PROJECT],
     ['confirmed once, switched off since', unstarted({ confirmations: 1 }), PROJECT],
     ['no criteria, so no card to press', unstarted({ criteria: 0 }), PROJECT],
-    ['not OPEN, so no card either', unstarted({ status: 'CANCELLED' }), PROJECT],
+    // Finished, so no card either. (A CANCELLED one is refused outright, by every door:
+    // `project-cancelled-dispatch.spec.ts`.)
+    ['not OPEN, so no card either', unstarted({ status: 'DONE' }), PROJECT],
     ['in no project at all', null, null],
   ];
   for (const [name, project, taskProjectId] of cases) {

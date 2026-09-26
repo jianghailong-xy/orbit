@@ -12,6 +12,7 @@ import {
 import {
   CreatorType,
   Prisma,
+  ProjectStatus,
   RunStatus,
   SessionDispatchOrigin,
   SessionRunSource,
@@ -61,6 +62,11 @@ import {
 } from '../projects/task-aggregation-writer';
 import { recordTaskFailure } from '../projects/project-open-item';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
+import {
+  cancelledProjectOf,
+  projectCancelledRefusal,
+  projectNotCancelledSql,
+} from './project-cancelled-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -498,6 +504,12 @@ export type TaskRunAnswer =
         | 'superseded'
         | 'aggregate-parent'
         /**
+         * The task is filed under a cancelled project (projectNotCancelledSql). Released, not
+         * frozen: reopening the project lifts it, and the same fact arriving then must be able to
+         * start the task.
+         */
+        | 'project-cancelled'
+        /**
          * The moment this request names has passed: `task_dispatch_epoch` has moved since the scan
          * that produced this delivery. Terminal, and the one automatic stand-down that is — the
          * epoch only goes up, so the moment this token names can never come back, and every later
@@ -888,6 +900,10 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
   -- fortnight. Every clause here that permits must be positive and read off the task itself.
   AND t.dispatch_hold = false
+  -- ...and so is a task filed under a cancelled project: its owner stopped pursuing the goal the
+  -- task is for. Read off the project row, which outlives every task filed under it (see
+  -- projectNotCancelledSql), and applied by every automatic door and by execute() alike.
+  AND ${Prisma.raw(projectNotCancelledSql('t'))}
   -- Policy is deliberately NOT a candidate filter. The Session insert remains the fail-closed
   -- authority boundary. Filtering blocked work out here was the production silent READY bug: no
   -- Session and no dispatchAttempt existed for a reader to follow.
@@ -975,8 +991,8 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
  *
  * Every other clause is the same clause spelled the same way, because these are the standing rules
  * about dispatching a task rather than anything to do with which pass found it: OPEN, opted into
- * auto-run, not held by a paused list, an assignee bound to a runner, no schedule still in the
- * future, not retired, nothing already occupying it (TASK_OCCUPYING, so an idle-but-live
+ * auto-run, not held by a paused list, not filed under a cancelled project, an assignee bound to a
+ * runner, no schedule still in the future, not retired, nothing already occupying it (TASK_OCCUPYING, so an idle-but-live
  * session counts), and no automatic run already had at its current dispatch moment
  * (AUTO_RUN_MOMENT_DISPATCHED_SQL).
  *
@@ -992,6 +1008,7 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
   AND t.dispatch_hold = false
+  AND ${Prisma.raw(projectNotCancelledSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND (t.run_at IS NULL OR t.run_at <= now())
   AND NOT EXISTS (SELECT 1 FROM task_dependency d WHERE d.task_id = t.id)
@@ -1013,8 +1030,8 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
  * `task t`. The scan that uses it joins the current moment's COMPLETED receipt itself.
  *
  * The standing rules that decide whether re-arming a moment could lead anywhere, and only those:
- * OPEN, opted into auto-run, not held, an assignee bound to a runner, not retired, and nothing
- * occupying it. An occupied task is not waiting on its moment at all: the run occupying it (the
+ * OPEN, opted into auto-run, not held, not filed under a cancelled project, an assignee bound to a
+ * runner, not retired, and nothing occupying it. An occupied task is not waiting on its moment at all: the run occupying it (the
  * moment's own, or one a person started by hand) is what holds it. The rest of the two candidate
  * predicates is left to them, because each of those clauses is either fixed for the life of one
  * moment or applied again by the pass that dispatches the new one: a schedule, a prerequisite's
@@ -1025,6 +1042,7 @@ const AUTO_RUN_RETRY_CANDIDATE_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
   AND t.dispatch_hold = false
+  AND ${Prisma.raw(projectNotCancelledSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND ${Prisma.raw(taskNotObsoleteSql('t'))}
   AND NOT EXISTS (
@@ -1109,7 +1127,7 @@ type AutoRunRetryDecision =
  *
  * What it shares with the auto-run sweep it shares exactly, because these are the standing rules
  * about dispatching a task rather than anything to do with scheduling: OPEN, not held by a paused
- * list, an assignee bound to a runner, no prerequisite outstanding, and nothing already occupying
+ * list, not filed under a cancelled project, an assignee bound to a runner, no prerequisite outstanding, and nothing already occupying
  * it (TASK_OCCUPYING, so an idle-but-live session counts — a scheduled run must not barge in on a
  * session that is merely waiting for a human).
  *
@@ -1122,6 +1140,7 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND t.run_at <= now()
   AND t.status = 'OPEN'::task_status
   AND t.dispatch_hold = false
+  AND ${Prisma.raw(projectNotCancelledSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   -- §13.6 SU9, and the same answer the Coordinator's pass gives: an edge names an ATTEMPT, and a
   -- replaced attempt's work is held by its successor. Read as a plain DONE check this is a
@@ -9469,8 +9488,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // deployment. Not measured the way that anchor was (264ms -> 32ms); if this scan ever turns up
     // in a slow log, `task_project_id_idx` is the join to look at first.
     //
-    // `project.status` is deliberately NOT read here: no dispatch path reads it today, and adding
-    // it on one side only would fork the two predicates.
+    // `project.status` is read by both predicates rather than by this join — through
+    // projectNotCancelledSql, the clause every door applies — so the two scans cannot fork on it.
     rows.push(...(await this.prisma.$queryRaw<typeof rows>`
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
@@ -12579,6 +12598,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         + 'so it has no work of its own to run',
       );
     }
+    // A cancelled project's tasks do not start, by any door (projectNotCancelledSql, which every
+    // automatic scan applies before it gets here). Ahead of the prerequisites for the same reason as
+    // the start check below: it holds every task in the project and outlasts them all. An automatic
+    // caller stands down like every other here; a person — or an agent's `task_start` — is told
+    // why and what lifts it.
+    if (task.projectId) {
+      const cancelled = await cancelledProjectOf(this.prisma, ownerId, task.projectId);
+      if (cancelled) {
+        if (auto) {
+          return this.standDownReleasing(
+            lease, { ok: false as const, skipped: 'project-cancelled' as const },
+          );
+        }
+        throw new ConflictException(projectCancelledRefusal(id, cancelled));
+      }
+    }
     // An agent does not start a project its owner has not started (`projectAwaitingStart`). Ahead
     // of the prerequisites, because it holds every task in the project and outlasts them all.
     if (runnerDoor && task.projectId) {
@@ -12978,6 +13013,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion: true,
         children: { where: { ownerId }, select: { id: true }, take: 1 },
         verifies: { select: { supersededByTaskId: true, terminalReason: true } },
+        // Whether its project was cancelled — the gate `execute` applies third, classified here.
+        project: { select: { status: true } },
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
@@ -13071,6 +13108,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ? 'Awaiting independent verification — the subject has no work of its own to run'
             : `Completed by aggregating its subtasks (${t.completionPolicy}) — run those instead`,
         });
+      } else if (t.project?.status === ProjectStatus.CANCELLED) {
+        // Third, where `execute` refuses it: a cancelled project's tasks do not start
+        // (projectNotCancelledSql), and somebody who selected fifty is told which were in one.
+        skipped.push({ id: t.id, title: t.title, reason: 'Project cancelled' });
       } else if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
       else if (!t.assignee.runnerId)
         skipped.push({ id: t.id, title: t.title, reason: 'Assignee not bound to a runner' });

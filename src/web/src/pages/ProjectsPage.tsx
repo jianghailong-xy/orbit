@@ -945,19 +945,20 @@ function ProjectStatusActions({
           <>
             <Typography.Paragraph type="secondary">
               This records that the goal is no longer being pursued. It says nothing about whether
-              the project reached what it was stated for, and it neither stops nor deletes the work
-              filed under it.
+              the project reached what it was stated for. From then on its tasks do not start —
+              nothing runs them by itself, and Run is refused — but a run already going is not
+              stopped, and nothing is deleted.
             </Typography.Paragraph>
             <Typography.Paragraph type="secondary">
-              这表示不再追求这个目标。它不评价项目有没有达成当初声明的条件，也不会停止或删除项目下的任何工作。
+              这表示不再追求这个目标。它不评价项目有没有达成当初声明的条件。此后项目下的任务不再启动——不会自动运行，手动 Run 也会被拒绝；但已经在跑的不会被中断，也不会删除任何东西。
             </Typography.Paragraph>
             {unfinished === null ? null : (
               <>
                 <Typography.Paragraph strong>
-                  {`${unfinished} unfinished ${unfinished === 1 ? 'task stays' : 'tasks stay'} filed under it.`}
+                  {`${unfinished} unfinished ${unfinished === 1 ? 'task stays' : 'tasks stay'} filed under it and won’t start.`}
                 </Typography.Paragraph>
                 <Typography.Paragraph type="secondary">
-                  {`项目下还有 ${unfinished} 个任务没有结束，它们会留在原地。`}
+                  {`项目下还有 ${unfinished} 个任务没有结束，它们会留在原地，不会再启动。`}
                 </Typography.Paragraph>
               </>
             )}
@@ -965,12 +966,12 @@ function ProjectStatusActions({
         ) : press === 'OPEN' ? (
           <>
             <Typography.Paragraph type="secondary">
-              Reopening puts this project back to Open and changes nothing else: its tasks, its
-              stated criteria and its history stay as they are. It is how a status written by
-              mistake is taken back, so it asks once and asks for nothing.
+              Reopening puts this project back to Open, so its tasks can start again, and changes
+              nothing else: its tasks, its stated criteria and its history stay as they are. It is
+              how a status written by mistake is taken back, so it asks once and asks for nothing.
             </Typography.Paragraph>
             <Typography.Paragraph type="secondary">
-              重开只是把项目改回 Open，其余一概不动：任务、验收标准与历史都保持原样。写错了就是靠它纠回来，所以只问一次，不要求任何依据。
+              重开只是把项目改回 Open，项目下的任务因此可以重新启动；其余一概不动：任务、验收标准与历史都保持原样。写错了就是靠它纠回来，所以只问一次，不要求任何依据。
             </Typography.Paragraph>
           </>
         ) : null}

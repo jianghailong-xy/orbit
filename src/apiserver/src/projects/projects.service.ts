@@ -3105,12 +3105,13 @@ export class ProjectsService {
    */
 
   /** Each field is written only when the caller sent it, so cancelling a project cannot blank the
-   * goal that says what it was for, and a rename cannot reopen it. A requested status change alters
-   * nothing about the project's tasks, and whether it is written at all turns on who asks: refused
-   * whole when an acting session is on the request, written verbatim when there is none, for
-   * `refuseProjectStatusWrite`'s reasons. Neither answer decides what DONE says: that is projected
-   * from rows already committed by `projects/project-done-derived.ts`, on this method's own
-   * post-commit edge as much as anywhere else. */
+   * goal that says what it was for, and a rename cannot reopen it. A requested status change writes
+   * nothing to the project's tasks (though CANCELLED is read by every door that starts one, which
+   * then starts none: tasks/project-cancelled-dispatch.ts), and whether it is written at all turns
+   * on who asks: refused whole when an acting session is on the request, written verbatim when
+   * there is none, for `refuseProjectStatusWrite`'s reasons. Neither answer decides what DONE says:
+   * that is projected from rows already committed by `projects/project-done-derived.ts`, on this
+   * method's own post-commit edge as much as anywhere else. */
   async update(ownerId: string, id: string, dto: UpdateProjectDto, actingSessionId?: string) {
     const current = await this.prisma.project.findFirst({
       where: { id, ownerId },
