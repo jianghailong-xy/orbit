@@ -2060,12 +2060,14 @@ export class RunnerApiController {
           fastModeAvailable(provider, exec.model, s.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // Same dispatch-time variant check as the queue claim: an OpenCode variant is only
-        // valid against the assigned runner's reported catalog for this model.
+        // valid against the assigned runner's reported catalog for this model, and a configured
+        // model that declares its levels is held to them.
         effort: normalizeEffortForRuntimeModel(
           provider,
           s.effort ?? workspace?.effort,
           exec.model,
           s.assignedRunner?.modelCatalog,
+          exec.reasoningLevels,
         ),
         // Includes a custom provider's injected baseUrl/key (else just the workspace's env).
         env: exec.env,
