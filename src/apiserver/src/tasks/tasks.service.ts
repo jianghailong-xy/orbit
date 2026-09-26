@@ -6702,7 +6702,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ownerId: string,
     tasks: T[],
     restrictToTaskIds = false,
-  ): Promise<(T & { running: boolean; queued: boolean })[]> {
+  ): Promise<(T & { running: boolean; queued: boolean; runningSince: Date | null })[]> {
     if (tasks.length === 0) return [];
     const busy = await this.prisma.session.groupBy({
       by: ['taskId', 'status'],
@@ -6712,9 +6712,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
       },
       _count: { _all: true },
+      // When the oldest live run began — what a list row's time slot says while it runs ("12m"),
+      // the way a session row says how long a turn has been going.
+      _min: { startedAt: true },
     });
-    const running = new Set(
-      busy.filter((b) => b.status === RunStatus.RUNNING).map((b) => b.taskId),
+    const running = new Map(
+      busy
+        .filter((b) => b.status === RunStatus.RUNNING)
+        .map((b) => [b.taskId, b._min?.startedAt ?? null] as const),
     );
     const queued = new Set(
       busy.filter((b) => b.status === RunStatus.PENDING).map((b) => b.taskId),
@@ -6725,6 +6730,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // A task with both a RUNNING and a PENDING session is simply running; `queued`
       // is only meaningful when nothing is running yet.
       queued: queued.has(t.id) && !running.has(t.id),
+      runningSince: running.get(t.id) ?? null,
     }));
   }
 

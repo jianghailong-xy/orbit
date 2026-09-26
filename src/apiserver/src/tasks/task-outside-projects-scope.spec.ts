@@ -240,3 +240,27 @@ test('each list says how many of its tasks are filed under no project', async ()
   assert.deepEqual(outside, { fineweb: 0, nce3: 32, empty: 0 });
   assert.deepEqual(outsideWheres[0], { listId: { in: ['fineweb', 'nce3', 'empty'] }, projectId: null });
 });
+
+// ── How long a running row has been going ────────────────────────────────────────────────────
+
+test('a running row says when its oldest live run began; a queued one says nothing', async () => {
+  const started = new Date('2026-09-26T07:58:00Z');
+  const { service } = harness(
+    [row(WAITING, 'EXECUTABLE', 'IN_PROGRESS'), row(PLAIN, 'EXECUTABLE', 'OPEN')],
+    {
+      session: {
+        groupBy: async () => [
+          { taskId: WAITING, status: 'RUNNING', _count: { _all: 1 }, _min: { startedAt: started } },
+          { taskId: PLAIN, status: 'PENDING', _count: { _all: 1 }, _min: { startedAt: null } },
+        ],
+        findMany: async () => [],
+      },
+    },
+  );
+
+  const page = await service.listPage(OWNER_ID, { projectId: 'none', counts: 'none' });
+
+  const byId = Object.fromEntries(page.items.map((item: any) => [item.id, [item.running, item.queued, item.runningSince]]));
+  assert.deepEqual(byId[WAITING], [true, false, started]);
+  assert.deepEqual(byId[PLAIN], [false, true, null]);
+});
