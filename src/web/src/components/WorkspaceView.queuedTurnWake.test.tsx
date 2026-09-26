@@ -321,3 +321,71 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
     });
   });
 });
+
+// The turn the control plane opened for a finished bg_run job — the block that filled an iPhone's
+// composer on 2026-09-25 — and two more turns nobody typed that a Stop or a Cancel reaches as often:
+// the acceptance round every message turn of a task queues, and a task run's brief.
+const BG_WAKE = [
+  '<background-job-wake>',
+  '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
+  '    bgj_10bca948d369｜job｜bash scripts/run-pg-spec.sh src/apiserver/src/tasks/task-dispatch-priority.pg.spec.ts｜land gate',
+  '      ended｜completed｜exit code 0',
+  '      output /root/.orbit/runs/01a0d619/bgj_10bca948d369.output｜this covers bytes 0–821',
+  '  The control plane recorded this for you; the user did not say it. Read the full output with mcp__orbit__bg_output by id; pass sinceOffset to read only what is new.',
+  '</background-job-wake>',
+].join('\n');
+const ACCEPTANCE = 'npm test -w @orbit/web';
+const BRIEF = '请开始执行任务「Fix the race」。\n\n任务描述：the dispatcher double-counts a slot.';
+
+describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, () => {
+  beforeEach(() => {
+    const at = '2026-09-25T03:30:26.000Z';
+    queue = [
+      { turnId: 'turn-wake', kind: 'message', placement: 'queued', content: WAKE, createdAt: at, authoredByOrbit: true },
+      { turnId: 'turn-bg-wake', kind: 'message', placement: 'queued', content: BG_WAKE, createdAt: at, authoredByOrbit: true },
+      { turnId: 'turn-acceptance', kind: 'shell', placement: 'queued', content: ACCEPTANCE, createdAt: at, authoredByOrbit: true },
+      { turnId: 'turn-brief', kind: 'message', placement: 'queued', content: BRIEF, createdAt: at, authoredByOrbit: true },
+      { turnId: 'turn-typed', kind: 'message', placement: 'queued', content: TYPED, createdAt: at },
+    ];
+  });
+
+  it('are left out when Stop folds the queue back into the composer', async () => {
+    await mountQueue();
+
+    let stop: Element | null = null;
+    await waitForUi(() => {
+      stop = mounted().querySelector('[aria-label="Stop"]');
+      expect(stop, 'a running session offers Stop').not.toBeNull();
+    });
+    await click(stop!);
+
+    await waitForUi(() => {
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC);
+      expect(composer()?.value).toBe(TYPED);
+    });
+  });
+
+  it('are withdrawn without putting any of their words in the composer', async () => {
+    await mountQueue();
+    const cancelIn = (row: Element | undefined): Element => {
+      const link = [...(row?.querySelectorAll('.chat-queued-meta a') ?? [])].find((a) => a.textContent === 'Cancel');
+      expect(link, 'the row offers Cancel').toBeDefined();
+      return link!;
+    };
+    const bubbleSaying = (text: string): Element | undefined =>
+      [...mounted().querySelectorAll('.chat-queued')].find((bubble) => bubble.textContent?.includes(text));
+
+    await click(cancelIn(bubbleSaying(`!${ACCEPTANCE}`)));
+    await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-acceptance'));
+    await click(cancelIn(mounted().querySelector('.bgwake-wrap') ?? undefined));
+    await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-bg-wake'));
+    await click(cancelIn(bubbleSaying('请开始执行任务')));
+    await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-brief'));
+    expect(composer()?.value).toBe('');
+
+    // The same Cancel on a message somebody typed still hands it back, so the empty composer above
+    // is the rule and not a Cancel that restores nothing.
+    await click(cancelIn(bubbleSaying(TYPED)));
+    await waitForUi(() => expect(composer()?.value).toBe(TYPED));
+  });
+});

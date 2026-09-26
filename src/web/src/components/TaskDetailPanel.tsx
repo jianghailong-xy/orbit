@@ -8,6 +8,7 @@ import {
   LinkOutlined,
   MoreOutlined,
   PlayCircleOutlined,
+  ProjectOutlined,
   SafetyOutlined,
 } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
@@ -1104,6 +1105,17 @@ export function TaskDetailPanel({
       />
       <div className="tdp-head">
         <div className="tdp-head-main">
+          {/* The project it is filed under. Its tasks are not listed on the Tasks page, so a task
+              opened from a link names the project, and says so when the project was cancelled. */}
+          {q.data?.project && (
+            <div className="tdp-project-line">
+              <ProjectOutlined />
+              <Link to={`/projects/${q.data.project.id}`}>{q.data.project.title}</Link>
+              {q.data.project.status === 'CANCELLED' && (
+                <span className="tdp-badge tone-muted">Cancelled</span>
+              )}
+            </div>
+          )}
           <div className="tdp-title">{task?.title ?? 'Loading…'}</div>
           <div className="tdp-meta">
             <span className={`tdp-badge tone-${status.tone}`}>{status.label}</span>

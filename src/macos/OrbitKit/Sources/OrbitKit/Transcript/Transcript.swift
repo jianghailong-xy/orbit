@@ -139,6 +139,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// the facts beside this turn's echo (`projectStarted`, see `ProjectStarted.parse`). Nobody's
     /// message either: the console draws the card, with `text` folded inside it.
     public var startedCard: ProjectStarted?
+    /// The control plane wrote this queued turn itself (`QueuedTurnInfo.authoredByOrbit`), so nobody
+    /// typed it: taken off the queue unrun, it hands nothing back to the composer.
+    public var authoredByOrbit: Bool
     /// Filed by the server as a steer: written into the turn that was already running rather than
     /// queued behind it. Not a variety of `queued` — the opposite of it: this message is not
     /// waiting for anything and cannot be withdrawn. Since it is answered by the turn it joined
@@ -156,7 +159,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 undelivered: Bool = false, note: String? = nil,
                 steer: Bool = false, delivery: String? = nil, itemCard: OpenItemDelivery? = nil,
                 taskStart: TaskStart? = nil,
-                startedCard: ProjectStarted? = nil) {
+                startedCard: ProjectStarted? = nil, authoredByOrbit: Bool = false) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -172,13 +175,14 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.itemCard = itemCard
         self.taskStart = taskStart
         self.startedCard = startedCard
+        self.authoredByOrbit = authoredByOrbit
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
-        case note, steer, delivery, itemCard, taskStart, startedCard
+        case note, steer, delivery, itemCard, taskStart, startedCard, authoredByOrbit
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -200,6 +204,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // Same for the task-start card: a snapshot from before it existed keeps the bubble.
         taskStart = try? c.decodeIfPresent(TaskStart.self, forKey: .taskStart)
         startedCard = try? c.decodeIfPresent(ProjectStarted.self, forKey: .startedCard)
+        authoredByOrbit = (try? c.decodeIfPresent(Bool.self, forKey: .authoredByOrbit)) ?? false
     }
 }
 

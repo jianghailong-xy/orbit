@@ -36,6 +36,7 @@ import {
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
 } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
+import { orchestrationEnabled } from '../common/orchestration-switch';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import {
   loggedRetry,
@@ -294,7 +295,8 @@ export class QueueService {
         assignedRunner: {
           select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true },
         },
-        // The account-level permission default, which replaced the per-workspace one.
+        // The account-level permission default and orchestration switch, which replaced the
+        // per-workspace ones.
         owner: { select: { preferences: true } },
       },
     });
@@ -507,9 +509,9 @@ export class QueueService {
       // Only the tool default: `context_task_id` takes no execution claim, occupies no slot and is
       // invisible to the reaper, which is exactly why the two columns are separate.
       taskId: session.taskId ?? session.contextTaskId ?? undefined,
-      // Mirror the workspace's orchestration opt-in so the runner injects ORBIT_ALLOW_ORCHESTRATION
-      // and `orbit mcp` exposes the session_* tools only for enabled workspaces.
-      allowOrchestration: workspace?.enableOrchestration ?? false,
+      // Mirror the owner's Session orchestration switch so the runner injects
+      // ORBIT_ALLOW_ORCHESTRATION and `orbit mcp` exposes the session_* tools only while it is on.
+      allowOrchestration: workspace != null && orchestrationEnabled(session.owner),
       // Absent while Watch is on for the owner, the payload runners have always had; `watchesDisabled` otherwise, so
       // the runner spawns the session without the watch tools (docs/watch-rollout.md).
       ...watchClaimFields(currentWatchRollout(), session.ownerId),

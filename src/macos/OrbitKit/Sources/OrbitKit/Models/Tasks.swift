@@ -58,6 +58,15 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let acceptanceCriteria: String?
     public let acceptanceCommand: String?
     public let acceptanceExpectedExitCode: Int?
+    /// When the task starts by itself, once (`Start at`); on list rows too, for their "Starts …".
+    /// Nil = not scheduled.
+    public let runAt: String?
+    /// The grouping labels (a batch, a shard, a topic); a row names its first.
+    public let labels: [String]?
+    /// The project it is filed under, named — the detail read's. Nil on a task in no project.
+    public let project: TaskProjectRef?
+    /// The files every run of this task is given (`Inputs`). Detail payload only.
+    public let attachments: [TaskInput]?
     /// Why a superseded task names no successor (`SUCCESSOR_DELETED` when it was deleted).
     public let supersededByTaskIdAbsentReason: String?
     /// The attempts this task replaced.
@@ -68,6 +77,11 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     // Computed list-view flags (absent on the detail payload).
     public let running: Bool?
     public let queued: Bool?
+    /// When the oldest live run began — what a running row's time slot counts from ("12m").
+    public let runningSince: String?
+    /// An OWNER_CONFIRMED task whose run is waiting on the owner right now — the same reading the
+    /// session list's "Waiting for your confirmation" takes. Absent on an older server.
+    public let awaitingOwnerConfirmation: Bool?
     public let blocked: Bool?
     public let dependencyState: String?
     /// Authoritative server Ready predicate on incremental list-row reads. Full Ready pages are
@@ -96,9 +110,10 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
         case completionPolicy, verifiesTaskId, verificationState, verifier
-        case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode
+        case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode, runAt, attachments
+        case labels, project
         case supersededByTaskIdAbsentReason, supersedes, successorChain
-        case running, queued, blocked, dependencyState, runnable
+        case running, queued, runningSince, awaitingOwnerConfirmation, blocked, dependencyState, runnable
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
     }
@@ -133,6 +148,26 @@ public struct TaskComment: Codable, Equatable, Sendable, Identifiable {
     /// Resolved server-side (the author is polymorphic USER|AGENT, no FK).
     public let authorName: String?
     public let createdAt: String?
+}
+
+/// One of a task's inputs: a file uploaded against the task rather than a conversation, copied into
+/// every run of it (web `TaskInputs.tsx`).
+public struct TaskInput: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let mimeType: String
+    public let sizeBytes: Int
+    public let fileName: String?
+    public let createdAt: String?
+
+    public init(id: String, mimeType: String, sizeBytes: Int, fileName: String? = nil, createdAt: String? = nil) {
+        self.id = id
+        self.mimeType = mimeType
+        self.sizeBytes = sizeBytes
+        self.fileName = fileName
+        self.createdAt = createdAt
+    }
+
+    public var isImage: Bool { mimeType.hasPrefix("image/") }
 }
 
 /// Lightweight `{id,title,status}` for a *task* (dependency edges) — `status` is a `TaskStatus`.
@@ -197,14 +232,25 @@ public struct TaskListSummary: Codable, Equatable, Sendable, Identifiable {
     public let updatedAt: String?
     public let runningTasks: Int?
     public let completed: Bool?
+    /// How many of its tasks are filed under no project. A list with tasks and none outside a
+    /// project is that project's, reached from its page (`TaskListLogic.isProjectOnlyList`).
+    public let tasksOutsideProjects: Int?
     public let counts: TaskListCounts?
 
     public var taskCount: Int { counts?.tasks ?? 0 }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, createdAt, updatedAt, runningTasks, completed
+        case id, title, createdAt, updatedAt, runningTasks, completed, tasksOutsideProjects
         case counts = "_count"
     }
+}
+
+/// The project a task is filed under, as the detail read names it.
+public struct TaskProjectRef: Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    /// OPEN / DONE / CANCELLED.
+    public let status: String?
 }
 
 public struct TaskListCounts: Codable, Equatable, Sendable {
@@ -233,6 +279,43 @@ public struct TaskPageCounts: Codable, Equatable, Sendable {
     public let running: Int
     public let queued: Int
     public let runnable: Int
+    /// Only on the `projectId=none` scope: how many of the owner's tasks are on project pages.
+    public let inProjects: TaskInProjectsCount?
+}
+
+/// The one sentence the Tasks page says about the work it does not list.
+public struct TaskInProjectsCount: Codable, Equatable, Sendable {
+    public let tasks: Int
+    public let projects: Int
+    public init(tasks: Int, projects: Int) {
+        self.tasks = tasks
+        self.projects = projects
+    }
+}
+
+/// `GET /tasks/active`: Happening now — capped, with the true total beside it.
+public struct ActiveTasksPage: Codable, Equatable, Sendable {
+    public let items: [TaskItem]
+    public let total: Int
+    public let truncated: Bool
+}
+
+/// `GET /tasks/labels`: every label in scope with its tallies, capped with the count it was cut
+/// from — the web's Batches table.
+public struct TaskLabelSummary: Codable, Equatable, Sendable {
+    public let items: [TaskLabelRow]
+    public let labelTotal: Int
+    public let truncated: Bool
+}
+
+public struct TaskLabelRow: Codable, Equatable, Sendable {
+    public let label: String
+    public let total: Int
+    public let open: Int
+    public let inProgress: Int
+    public let done: Int
+    public let failed: Int
+    public let cancelled: Int
 }
 
 /// How much aggregate metadata `GET /tasks/page` should compute. `.full` omits the query parameter
@@ -303,6 +386,13 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     /// exactly that; nothing else here writes either field.
     public var supersededByTaskId: FieldUpdate<String>
     public var terminalReason: FieldUpdate<String>
+    /// `Start at`: an ISO instant schedules the one start, `.clear` cancels it.
+    public var runAt: FieldUpdate<String>
+    /// The acceptance block. The command and its exit code are one field in every sense that matters
+    /// (`TaskAcceptanceDraft.patch` writes both or neither).
+    public var acceptanceCriteria: FieldUpdate<String>
+    public var acceptanceCommand: FieldUpdate<String>
+    public var acceptanceExpectedExitCode: FieldUpdate<Int>
 
     public init(title: String? = nil, description: String? = nil, status: TaskStatus? = nil,
                 assigneeId: FieldUpdate<String> = .keep, listId: FieldUpdate<String> = .keep,
@@ -310,7 +400,11 @@ public struct UpdateTaskRequest: Encodable, Sendable {
                 model: FieldUpdate<String> = .keep, dependsOnTaskIds: [String]? = nil,
                 autoRunWhenReady: Bool? = nil,
                 supersededByTaskId: FieldUpdate<String> = .keep,
-                terminalReason: FieldUpdate<String> = .keep) {
+                terminalReason: FieldUpdate<String> = .keep,
+                runAt: FieldUpdate<String> = .keep,
+                acceptanceCriteria: FieldUpdate<String> = .keep,
+                acceptanceCommand: FieldUpdate<String> = .keep,
+                acceptanceExpectedExitCode: FieldUpdate<Int> = .keep) {
         self.title = title
         self.description = description
         self.status = status
@@ -323,12 +417,17 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         self.autoRunWhenReady = autoRunWhenReady
         self.supersededByTaskId = supersededByTaskId
         self.terminalReason = terminalReason
+        self.runAt = runAt
+        self.acceptanceCriteria = acceptanceCriteria
+        self.acceptanceCommand = acceptanceCommand
+        self.acceptanceExpectedExitCode = acceptanceExpectedExitCode
     }
 
     enum CodingKeys: String, CodingKey {
         case title, description, status, assigneeId, listId, dueDate, provider, model
         case dependsOnTaskIds, autoRunWhenReady
         case supersededByTaskId, terminalReason
+        case runAt, acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -345,6 +444,10 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         try c.encodeIfPresent(autoRunWhenReady, forKey: .autoRunWhenReady)
         try supersededByTaskId.encode(into: &c, forKey: .supersededByTaskId)
         try terminalReason.encode(into: &c, forKey: .terminalReason)
+        try runAt.encode(into: &c, forKey: .runAt)
+        try acceptanceCriteria.encode(into: &c, forKey: .acceptanceCriteria)
+        try acceptanceCommand.encode(into: &c, forKey: .acceptanceCommand)
+        try acceptanceExpectedExitCode.encode(into: &c, forKey: .acceptanceExpectedExitCode)
     }
 }
 
@@ -361,13 +464,28 @@ public struct RunTaskRequest: Encodable, Sendable {
 }
 
 /// POST /tasks/batch-execute — `maxConcurrent` caps only this batch, not any runner's cap.
+/// `triggerId` names the press, as `RunTaskRequest` does for one task: drawn at the gesture
+/// (`PublicID.newToken`), so a resent request is the same press rather than a second batch.
 public struct BatchExecuteRequest: Encodable, Sendable {
     public let taskIds: [String]
     public let maxConcurrent: Int?
-    public init(taskIds: [String], maxConcurrent: Int? = nil) {
+    public let triggerId: String
+    public init(taskIds: [String], maxConcurrent: Int? = nil, triggerId: String) {
         self.taskIds = taskIds
         self.maxConcurrent = maxConcurrent
+        self.triggerId = triggerId
     }
+}
+
+/// POST /tasks/batch-delete
+public struct BatchDeleteRequest: Encodable, Sendable {
+    public let taskIds: [String]
+    public init(taskIds: [String]) { self.taskIds = taskIds }
+}
+
+/// POST /task-lists/:id/console — the list's steering session, resolved or created.
+public struct TaskListConsole: Decodable, Sendable {
+    public let sessionId: String
 }
 
 /// POST /tasks/batch-stop

@@ -7,6 +7,7 @@ import {
   WATCH_ATTENTION_STATES,
   WATCH_LIMITS,
   WATCH_STATES,
+  createdTasksCountLine,
   uuidToBase62,
   type WatchDeliveryView,
   type WatchPredicate,
@@ -15,6 +16,7 @@ import {
 } from '@orbit/shared';
 import {
   LEAF_COPY,
+  SESSION_TARGET_WORDS,
   TTL_CHOICES,
   ago,
   cancelWatch,
@@ -34,6 +36,9 @@ import {
   predicateFor,
   progressOf,
   resumeWatch,
+  stripCounts,
+  stripSentence,
+  stripStaleLine,
   thresholdOf,
   updateWatch,
   wakeWithdrawn,
@@ -654,3 +659,71 @@ describe('the turn a watch queues', () => {
     expect(text).toContain('\\`\\`\\`json\\n${JSON.stringify(payload, null, 2)}\\n\\`\\`\\`');
   });
 });
+
+/**
+ * The Watching strip's sentences, proved against `watch-strip.fixture.json` — the same cases the
+ * native client's `WatchStripCopyParityTests` proves its own against, so the two ends say one thing.
+ */
+describe('the Watching strip, in the words both clients say', () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      [
+        resolve(process.cwd(), '../shared/src/watch-strip.fixture.json'),
+        resolve(process.cwd(), 'src/shared/src/watch-strip.fixture.json'),
+      ].find(existsSync)!,
+      'utf8',
+    ),
+  ) as {
+    now: string;
+    sentences: Array<{ case: string; state: WatchView['state']; predicate: WatchPredicate; targets: string[]; expiresAt: string; sentence: string }>;
+    stale: Array<{ case: string; state: WatchView['state']; lastEvaluatedAt: string | null; createdAt: string; line: string | null }>;
+    counts: Array<{ case: string; targets: Array<{ kind: 'TASK' | 'SESSION'; status: WatchTargetView['targetStatus'] }>; line: string }>;
+    sessionWords: Record<string, string>;
+  };
+  const now = Date.parse(fixture.now);
+
+  it('says what each watch waits for in one sentence', () => {
+    expect(fixture.sentences.length).toBeGreaterThan(10);
+    for (const c of fixture.sentences) {
+      const targets = c.targets.map((spec, i) => {
+        const [kind, state] = spec.split(':');
+        return target(`t${i}`, { targetKind: kind as 'TASK' | 'SESSION', state: (state ?? 'OBSERVED') as WatchTargetView['state'] });
+      });
+      expect(stripSentence(watch({ state: c.state, predicate: c.predicate, targets, expiresAt: c.expiresAt }), now), c.case).toBe(
+        c.sentence,
+      );
+    }
+  });
+
+  it('adds a line only while nobody is checking a live watch', () => {
+    for (const c of fixture.stale) {
+      expect(
+        stripStaleLine(watch({ state: c.state, lastEvaluatedAt: c.lastEvaluatedAt, createdAt: c.createdAt }), now),
+        c.case,
+      ).toBe(c.line);
+    }
+  });
+
+  it('counts several targets in Tasks created here’s sentence', () => {
+    for (const c of fixture.counts) {
+      const targets = c.targets.map((t, i) => target(`t${i}`, { targetKind: t.kind, targetStatus: t.status }));
+      expect(createdTasksCountLine(stripCounts(targets)), c.case).toBe(c.line);
+    }
+  });
+
+  it('words a session target the way its own header does', () => {
+    expect(SESSION_TARGET_WORDS).toEqual(fixture.sessionWords);
+  });
+
+  it('reads the leaves in the words the rest of the page reads them in', () => {
+    // The sentence borrows the condition's verbs, so a leaf reads the same on a card and on the strip.
+    for (const leaf of ['TASK_TERMINAL', 'TASK_DONE', 'SESSION_TURN_SETTLED'] as const) {
+      const one = stripSentence(
+        watch({ predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf }, targets: [target('t1')], expiresAt: at(DAY) }),
+        NOW,
+      );
+      expect(one).toContain(`when it ${LEAF_COPY[leaf].one},`);
+    }
+  });
+});
+

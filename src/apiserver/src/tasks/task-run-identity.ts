@@ -130,6 +130,9 @@ export const TASK_RUN_TRIGGER = {
   batch: (pressToken: string, taskId: string): string => `batch:${pressToken}:${taskId}`,
 } as const;
 
+/** Every turn a run request delivers is keyed under this, which is how a reader recognises one. */
+export const TASK_RUN_TURN_PREFIX = 'task-run:v1:';
+
 /**
  * The turn a run request delivers to a run that is PAUSED, named after the request.
  *
@@ -146,7 +149,7 @@ export const TASK_RUN_TRIGGER = {
  * a bulk Run — delivers one turn to each rather than one in total.
  */
 export function taskRunResumeTurnId(requestToken: string, sessionId: string): string {
-  return `task-run:v1:${sessionId}:${requestToken}`;
+  return `${TASK_RUN_TURN_PREFIX}${sessionId}:${requestToken}`;
 }
 
 /**

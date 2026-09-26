@@ -351,26 +351,24 @@ final class WatchWakeCopyParityTests: XCTestCase {
 
     /// The line the strip always opens as: the fixed "Watching" title, then what the wait is for —
     /// the one target a lone watch over one names, the threshold a lone watch over several asks
-    /// for, or the distinct targets several watches cover — and how far it has got beside the
-    /// soonest deadline, "earliest" only when the line speaks for more than one watch.
+    /// for, or the distinct targets several watches cover — and, when it names no one target,
+    /// Tasks created here's sentence over where they stand.
     func testTheStripsOneLineMatchesTheBrowsers() throws {
         let web = try flat(Self.webRelations)
         // The title is a constant, not a state word: "Watching" alone, with the target beside it.
-        XCTAssertTrue(web.contains("className=\"watch-strip-title\">{STRIP_LABEL}"),
+        XCTAssertTrue(web.contains("className=\"bg-tray-title ct-head\">{STRIP_LABEL}"),
                       "the strip's title drifted: \(Self.webRelations) no longer renders it from "
                           + "STRIP_LABEL — first is WatchProjection.stripLabel.")
-        // The deadline: "earliest" before it only when the line speaks for several watches. Which
-        // watch count the prefix turns on is the point — one watch has exactly one deadline,
-        // whatever its middle says, so qualifying it would name a soonest that doesn't exist.
-        XCTAssertTrue(web.contains("{waitingOn.length === 1 ? '' : STRIP_EARLIEST}"),
-                      "the count line stopped prefixing the soonest deadline with STRIP_EARLIEST, "
-                          + "which this client does through WatchProjection.stripEarliest — or it "
-                          + "went back to qualifying a lone watch's own single deadline.")
+        // Several targets: the sentence Tasks created here writes, over where each target stands.
+        XCTAssertTrue(web.contains("<CountLine counts={stripCounts(live)} />"),
+                      "the line over several targets stopped writing Tasks created here's sentence "
+                          + "from `stripCounts`, which this client writes through "
+                          + "WatchSessionSummary.lineParts.")
         // The middle: a lone watch's own threshold, or the targets several watches cover.
         XCTAssertTrue(web.contains("thresholdOf(waitingOn[0].predicate, live)"),
                       "the strip's middle stopped reading the lone watch's own threshold — the "
                           + "condition's count, not the target set's, is what the line states.")
-        XCTAssertTrue(web.contains("targetNoun(waitingOn, targetCount)"),
+        XCTAssertTrue(web.contains("targetNoun(waitingOn, live.length)"),
                       "how several watches are counted drifted: \(Self.webRelations) no longer "
                           + "counts the distinct targets in the same noun the cards use.")
         // Which shape the line takes: one watch over one live target names it, anything else counts.
@@ -386,12 +384,11 @@ final class WatchWakeCopyParityTests: XCTestCase {
         ]))
         XCTAssertNil(waitOne.lineTarget, "four targets are counted, not named")
         XCTAssertEqual(waitOne.lineTargetWord, "any 1 of 4 tasks")
-        // The same watch asking for all four, and how far it has got: two of them met.
+        // The same watch asking for all four.
         let waitAll = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
             WatchFixture.watch(id: "W1", targets: WatchFixture.tasks(4, met: 2)),
         ]))
         XCTAssertEqual(waitAll.lineTargetWord, "all 4 tasks")
-        XCTAssertEqual(waitAll.lineTime(now: WatchFixture.now), "2 met · 1h left")
         // The one condition the two ends say different things about, and why: the browser reads
         // predicateVersion 2, so it states the quorum's own count — "2 of 4 tasks" — while this
         // client reads grammar 1, where a quorum is a term it does not know, and counts the targets
@@ -416,8 +413,6 @@ final class WatchWakeCopyParityTests: XCTestCase {
         XCTAssertNil(several.lineTarget)
         XCTAssertEqual(several.lineTargetCount, 2, "T1 and T2, not T1, T2 and T2 again")
         XCTAssertEqual(several.lineTargetWord, "2 tasks")
-        // Several watches: the soonest deadline is the only one with a qualifier to earn.
-        XCTAssertEqual(several.lineTime(now: WatchFixture.now), "earliest 0 met · 1h left")
     }
 
     // MARK: the wake that is still queued

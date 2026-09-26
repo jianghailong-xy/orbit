@@ -468,9 +468,12 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
 
 ### 8.1 工作中的会话：即时捕获（阶段 1）
 
+阶段 1 的即时捕获只剩两条，都经过 agent 的 `wiki_propose`：
+
 - agent 在工作中学到东西就调 `wiki_propose`，出处是本会话的 turn 或 tool call，也可以是任务评论、审批回答。
-- owner 在会话里也可以直接说「记到 wiki」。
-- web / iOS 的消息操作菜单新增 **Add to Wiki**：选中的文字自动成为引文，出处是这条 turn；owner 手写直接生效，trust=owner。见效果图 05c。
+- owner 在对话里让 agent「记到 wiki」，agent 同样用 `wiki_propose` 提议。
+
+会话界面里没有手动添加条目的入口（owner 2026-09-26 的决定）。wiki 的内容主要由阶段 2 的导入（§8.3）和维护作业（§8.2）在后台自动生成。
 
 ### 8.2 维护作业「Wiki maintenance」（阶段 2）
 
@@ -638,8 +641,8 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
   - 任务启动卡沿用「⊕ Orbit attached: Wiki context · N entries」折叠条（05a）；
   - `describeNote` 加 `wiki context` 种类；
   - `orbit-wiki:` 链接卡：`OrbitLinkCard` + `POST /api/link-previews` 加新 kind，同步改 `orbitLink.ts`、Swift 侧的 `OrbitLink` 和 fixture；
-  - 消息菜单 `Add to Wiki`；
-  - ⌘K 在 `SessionSearch.tsx` 加一个 Wiki 分区，走独立端点。
+  - ⌘K 在 `SessionSearch.tsx` 加一个 Wiki 分区，走独立端点；
+  - 消息上不提供手动添加条目的入口（见 §8.1）。
 - **实时**：`wiki.changed` 事件，owner 级、只带 id。
   - web 端 `groupsFor` 映射到 `['wiki']`。默认分支是 `['sessions']`，不映射会误触发会话列表重拉。
   - 按 `docs/realtime-control-plane-stream.md` 列的文件逐个改。
@@ -693,7 +696,7 @@ H4 精度 <50%、出现任何一次泄漏，或 H5 显示检索不比编译差�
 
 - **交付**：
   - 表与单一写入口；REST（两道门）；MCP 三个工具和 CLI；redactor；
-  - web：侧栏入口、首页、主题页、条目抽屉、Review、⌘K 分区、Add to Wiki、`orbit-wiki:` 链接卡；
+  - web：侧栏入口、首页、主题页、条目抽屉、Review、⌘K 分区、`orbit-wiki:` 链接卡；
   - OrbitKit：抽屉行、首页、详情、Review；
   - 推送块，外加启动卡上的「Orbit attached: Wiki context」和 exposure 记录；
   - 实时事件；`ORBIT_WIKI` 灰度开关。
@@ -775,7 +778,7 @@ H4 精度 <50%、出现任何一次泄漏，或 H5 显示检索不比编译差�
 | `02-topic-page` | 主题页：带脚注的 Summary，按类型分组的条目；展示了取代、锚点变了两种状态 |
 | `03-entry-drawer` | 条目详情抽屉：字段、Detector 读数、出处、锚点、使用情况、历史 |
 | `04-review` | Review 队列：ADD、RETIRE、AMEND（带 diff 和 Web-derived 警示） |
-| `05-session-touchpoints` | 会话里的四个接触点：启动卡、链接卡、Add to Wiki、⌘K |
+| `05-session-touchpoints` | 会话里的四个接触点：启动卡、链接卡、Add to Wiki（05c）、⌘K。05c 的 Add to Wiki 已按 owner 2026-09-26 决定取消（效果图保留原样） |
 | `06–09-phone-*` | 手机：入口、首页、详情、Review；排成「web 手机 \| iOS \| 说明」三栏逐区块对照 |
 | `10-architecture` | 技术架构图 |
 

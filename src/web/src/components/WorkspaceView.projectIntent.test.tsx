@@ -255,16 +255,16 @@ describe('the existing composer control inventory', () => {
     const menu = source.slice(menuStart, menuEnd);
 
     expect({
-      workspace: toolbar.includes('title="Workspace"'),
-      permission: toolbar.includes('title={configHints.permissionMode}'),
-      model: toolbar.includes('title={configHints.model}'),
+      workspace: toolbar.includes('onChange={setWorkspaceId}'),
+      permission: toolbar.includes('configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] })'),
+      model: toolbar.includes('items: modelMenuItems'),
     }).toEqual({ workspace: true, permission: true, model: true });
     expect(toolbar.match(/<span className="composer-pill(?: [^"]*)?">/g) ?? []).toHaveLength(3);
     expect({
-      provider: menu.includes('title={configHints.provider}'),
+      provider: menu.includes('onClick: () => pickProvider(choice.slug)'),
       model: menu.includes('key: `model:${option.value}`'),
-      effort: menu.includes('title={configHints.effort}'),
-      fastMode: menu.includes('title={configHints.fastMode}'),
+      effort: menu.includes('onClick: () => pickEffort(option.value)'),
+      fastMode: menu.includes('onClick: () => pickFastMode(option.value)'),
     }).toEqual({ provider: true, model: true, effort: true, fastMode: true });
     expect(menu.match(/key: '(provider|effort|speed)',/g) ?? []).toHaveLength(3);
   });

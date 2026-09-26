@@ -47,9 +47,8 @@ public enum NavNode: Hashable, Sendable {
     /// the third, and it is the *same* ``runnerDetail(runnerID:)`` frame the Runners section pushes —
     /// what tells the two apart is the stack a frame rides, not the frame.
     case settingsRunners
-    /// Every other page Settings' list opens — Notifications, Session orchestration, Providers,
-    /// Shared links, Change password, Admin — each a frame of Settings' own stack like the runners
-    /// list above it.
+    /// Every other page Settings' list opens — Notifications, Providers, Shared links, Change
+    /// password, Admin — each a frame of Settings' own stack like the runners list above it.
     case settingsPage(SettingsPage)
     case userDetail(userID: String)
     /// One project's page, pushed from the Projects list or from the drawer's project rows.
@@ -240,6 +239,20 @@ public struct NavState: Equatable, Sendable {
         withPath {
             if $0.isEmpty { $0.append(node) } else { $0[$0.count - 1] = node }
         }
+    }
+
+    /// Back to `sessionID`'s console when it is the page directly under the one on top: the
+    /// conversation a phone opened its project's page over. Going to that conversation again is a
+    /// pop, so the stack reads conversation › project page instead of growing a second copy of the
+    /// same conversation on every round trip. False, with nothing changed, when it is not there.
+    @discardableResult
+    public mutating func returnToConsole(_ sessionID: String) -> Bool {
+        let frames = path
+        guard !settingsPresented, frames.count >= 2,
+              case .console(let beneath, _) = frames[frames.count - 2],
+              PublicID.storageKey(beneath) == PublicID.storageKey(sessionID) else { return false }
+        pop()
+        return true
     }
 
     /// The session's console is gone — completed, trashed or purged out from under it — so nothing

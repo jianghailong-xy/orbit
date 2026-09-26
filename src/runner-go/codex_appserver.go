@@ -886,19 +886,8 @@ func bridgeCodexApproval(ctx context.Context, t *Transport, job *ClaimedSession,
 	}
 	// Poll without a wall-clock cap, as the MCP and Kimi bridges do: an unanswered approval is a
 	// human who has not looked yet, not a denial. Cancelling the session cancels ctx and unblocks.
-	for {
-		if ctx.Err() != nil {
-			return false
-		}
-		decision, pollErr := t.pollApproval(ctx, job.SessionID, approvalID)
-		if pollErr != nil {
-			return false
-		}
-		if decision.Status == "PENDING" {
-			continue
-		}
-		return decision.Status == "ALLOWED"
-	}
+	decision, err := awaitApprovalDecision(ctx, t, job.SessionID, approvalID)
+	return err == nil && decision.Status == "ALLOWED"
 }
 
 // codexStateHandshakeRetries is how many further starts Codex gets after dying on its SQLite

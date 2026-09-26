@@ -8,6 +8,11 @@ export interface TaskCounts {
   running: number;
   queued: number;
   runnable: number;
+  /**
+   * Only with `projectId=none`: how many of the owner's tasks that scope leaves on project pages,
+   * across how many projects — the one sentence the Tasks page says about the work it doesn't list.
+   */
+  inProjects?: { tasks: number; projects: number };
 }
 
 /** `total`/`counts` describe the scope, not the page, and are omitted when `counts=none`. */
@@ -29,6 +34,8 @@ export interface TaskPageParams {
   q?: string;
   /** Only the tasks this session created (`task.creatorSessionId`). */
   creatorSessionId?: string;
+  /** A project's tasks, or `'none'` for the tasks filed under no project — the Tasks page's scope. */
+  projectId?: string;
   /**
    * How much of the aggregate block to compute.
    *
@@ -50,6 +57,7 @@ export function taskPagePath(params: TaskPageParams = {}): string {
   for (const label of params.labels ?? []) search.append('labels', label);
   if (params.q?.trim()) search.set('q', params.q.trim());
   if (params.creatorSessionId) search.set('creatorSessionId', params.creatorSessionId);
+  if (params.projectId) search.set('projectId', params.projectId);
   if (params.counts) search.set('counts', params.counts);
   const suffix = search.toString();
   return `/tasks/page${suffix ? `?${suffix}` : ''}`;
@@ -73,8 +81,12 @@ export interface LabelSummary {
   truncated: boolean;
 }
 
-export function labelSummaryPath(listId?: string): string {
-  return `/tasks/labels${listId ? `?listId=${encodeURIComponent(listId)}` : ''}`;
+export function labelSummaryPath(listId?: string, projectId?: string): string {
+  const search = new URLSearchParams();
+  if (listId) search.set('listId', listId);
+  if (projectId) search.set('projectId', projectId);
+  const suffix = search.toString();
+  return `/tasks/labels${suffix ? `?${suffix}` : ''}`;
 }
 
 /**
@@ -89,15 +101,25 @@ export interface ActiveTasks<T = any> {
   truncated: boolean;
 }
 
-export function activeTasksPath(listId?: string): string {
-  return `/tasks/active${listId ? `?listId=${encodeURIComponent(listId)}` : ''}`;
+export function activeTasksPath(listId?: string, projectId?: string): string {
+  const search = new URLSearchParams();
+  if (listId) search.set('listId', listId);
+  if (projectId) search.set('projectId', projectId);
+  const suffix = search.toString();
+  return `/tasks/active${suffix ? `?${suffix}` : ''}`;
 }
 
-export function taskCountsPath(listId?: string, labels: string[] = [], creatorSessionId?: string): string {
+export function taskCountsPath(
+  listId?: string,
+  labels: string[] = [],
+  creatorSessionId?: string,
+  projectId?: string,
+): string {
   const search = new URLSearchParams();
   if (listId) search.set('listId', listId);
   for (const label of labels) search.append('labels', label);
   if (creatorSessionId) search.set('creatorSessionId', creatorSessionId);
+  if (projectId) search.set('projectId', projectId);
   const suffix = search.toString();
   return `/tasks/counts${suffix ? `?${suffix}` : ''}`;
 }

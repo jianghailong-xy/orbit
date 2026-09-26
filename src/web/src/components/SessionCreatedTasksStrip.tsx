@@ -103,8 +103,8 @@ export function SessionCreatedTasksStrip({ sessionId }: { sessionId: string }) {
   );
 }
 
-/** The shared sentence, with its `N failed` part in red. */
-function CountLine({ counts }: { counts: SessionCreatedTaskCounts }) {
+/** The shared sentence, with its `N failed` part in red. The Watching strip writes it too. */
+export function CountLine({ counts }: { counts: SessionCreatedTaskCounts }) {
   const failed = `${counts.failed} failed`;
   return (
     <>

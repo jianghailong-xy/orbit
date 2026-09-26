@@ -228,54 +228,55 @@ describe('a session’s Following and Followed by', () => {
     expect(buttons(container!)).toEqual(['Follow']);
   });
 
-  it('keeps one line above the composer naming the lone target a watch waits on', async () => {
-    serve(
-      [
-        watch('WAITING', {
-          targets: [target('TASK', 'T1', { targetTitle: 'A task' })],
-          expiresAt: at(6 * HOUR + 10 * MINUTE),
-          ...resumes('S_ME'),
-        }),
-      ],
-      { T1: { status: 'IN_PROGRESS' } },
-    );
-    await mount(<SessionWatchStrip sessionId="S_ME" />);
-    const strip = container!.querySelector('.watch-strip')!;
-    expect(strip.querySelector('.watch-strip-title')?.textContent).toBe('Watching');
-    // The name the watch carries, not one asked for by id.
-    expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('A task');
-    // Where that one target stands, off the read its name came from: folded shut, the line answers
-    // "is it even running" without the strip being opened.
-    expect(strip.querySelector('.watch-target-status')?.textContent).toBe('In progress');
-    expect(strip.querySelector('.watch-strip-time')?.textContent).toBe('0 met · 6h left');
-    expect(strip.querySelector('.watch-strip-caret')?.textContent).toBe('›');
-    expect(strip.querySelector('.watch-strip-block')).toBeNull();
+  /** A target's own standing as the watch read carries it: a task by status and overlays. */
+  const standing = (status: string, over: { running?: boolean; queued?: boolean } = {}) => ({
+    targetStatus: { status, running: over.running ?? false, queued: over.queued ?? false },
   });
 
-  it('counts the distinct targets and the soonest deadline on one line for several watches', async () => {
+  it('keeps one line above the composer: the lone target by name, and where it stands', async () => {
     serve([
-      watch('W1', {
-        targets: [target('TASK', 'T1'), target('TASK', 'T2')],
+      watch('WAITING', {
+        targets: [target('TASK', 'T1', { targetTitle: 'A task', ...standing('OPEN', { running: true }) })],
         expiresAt: at(6 * HOUR + 10 * MINUTE),
-        ...resumes('S_ME'),
-      }),
-      watch('W2', {
-        targets: [target('TASK', 'T2')],
-        // Held off the whole-minute line: the strip floors what remains, and a deadline exactly
-        // 30 minutes out renders 29m only while the clock never steps backward between building
-        // this fixture and drawing it — on CI it does, and this test failed there for it (twice).
-        expiresAt: at(30 * MINUTE - 30 * 1000),
         ...resumes('S_ME'),
       }),
     ]);
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     const strip = container!.querySelector('.watch-strip')!;
-    // T1 and T2, not T1, T2 and T2 again: each target is counted once.
+    // The Background processes tray's own shell, as Tasks created here is drawn in.
+    expect(strip.classList.contains('bg-tray')).toBe(true);
+    expect(strip.querySelector('.bg-tray-title')?.textContent).toBe('Watching');
+    // The name the watch carries, and the task list's own pill for where the task is: no read of its own.
+    expect(strip.querySelector('.ct-one')?.textContent).toBe('A task');
+    expect(strip.querySelector('.status-pill')?.textContent).toBe('Running');
+    expect(vi.mocked(api).mock.calls.map(([path]) => path).filter((path) => !path.startsWith('/watches'))).toEqual([]);
+    // Neither the watch's own `met` nor its deadline is on the folded line: the pill says how far it
+    // has got, and the deadline is the opened sentence's.
+    expect(strip.textContent).not.toContain('met');
+    expect(strip.textContent).not.toContain('left');
+    expect(strip.querySelector('.wt-expand')?.textContent).toBe('▸');
+    expect(strip.querySelector('.ct-list')).toBeNull();
+  });
+
+  it('counts several targets in Tasks created here’s sentence, each target once', async () => {
+    serve([
+      watch('W1', {
+        targets: [
+          target('TASK', 'T1', standing('OPEN', { running: true })),
+          target('TASK', 'T2', standing('FAILED')),
+        ],
+        ...resumes('S_ME'),
+      }),
+      watch('W2', { targets: [target('TASK', 'T2', standing('FAILED'))], ...resumes('S_ME') }),
+    ]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const strip = container!.querySelector('.watch-strip')!;
+    // T1 and T2, not T1, T2 and T2 again.
     expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('2 tasks');
-    expect(strip.querySelector('.watch-strip-time')?.textContent).toBe('earliest 0 met · 29m left');
-    // No status on a line that names no one target: several targets have no one status, and
-    // reading every row to say so would be a request per target on a line that is folded shut.
-    expect(strip.querySelector('.watch-target-status')).toBeNull();
+    expect(strip.querySelector('.ct-count')?.textContent).toBe('1 running · 1 failed · 0/2 done');
+    expect(strip.querySelector('.ct-count .ct-failed')?.textContent).toBe('1 failed');
+    // No one target's pill on a line that names none.
+    expect(strip.querySelector('.bg-tray-row .status-pill')).toBeNull();
   });
 
   it('counts out what a lone watch’s own condition needs, in the card’s noun', async () => {
@@ -285,8 +286,7 @@ describe('a session’s Following and Followed by', () => {
       await mount(<SessionWatchStrip sessionId="S_ME" />);
       return container!.querySelector('.watch-strip-target')?.textContent;
     };
-    // Four targets, three conditions, three different amounts of work — today all three read
-    // "4 targets", which is the count of what the watch covers and not what it is waiting for.
+    // Four targets, three conditions, three different amounts of work.
     expect(await middle({ kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' })).toBe('any 1 of 4 tasks');
     expect(await middle({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' })).toBe('all 4 tasks');
     expect(await middle({ kind: 'AT_LEAST', count: 2, over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' })).toBe(
@@ -294,154 +294,133 @@ describe('a session’s Following and Followed by', () => {
     );
   });
 
-  it('counts the targets that met the condition, so 0 met and 2 met never read alike', async () => {
-    const two = [target('TASK', 'T1'), target('TASK', 'T2')];
-    serve([watch('W1', { targets: two, ...resumes('S_ME') })]);
-    await mount(<SessionWatchStrip sessionId="S_ME" />);
-    const waiting = container!.querySelector('.watch-strip-row')?.textContent ?? '';
-
-    serve([watch('W1', { targets: [satisfied('TASK', 'T1'), satisfied('TASK', 'T2')], ...resumes('S_ME') })]);
-    await mount(<SessionWatchStrip sessionId="S_ME" />);
-    const met = container!.querySelector('.watch-strip-row')?.textContent ?? '';
-
-    expect(met).not.toBe(waiting);
-    expect(met).toContain('2 met');
-  });
-
-  it('drops "earliest" from a lone watch, whose one deadline is nobody’s earliest', async () => {
+  it('opens a lone target into its sentence and the ways to it and to the Following page', async () => {
     serve([
       watch('W1', {
-        targets: [target('TASK', 'T1'), target('TASK', 'T2'), target('TASK', 'T3'), target('TASK', 'T4')],
+        lastEvaluatedAt: at(-MINUTE),
+        predicate: { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+        targets: [target('TASK', 'T1', { targetTitle: 'A task', ...standing('OPEN') })],
         ...resumes('S_ME'),
       }),
-    ]);
-    await mount(<SessionWatchStrip sessionId="S_ME" />);
-    const time = container!.querySelector('.watch-strip-time')!;
-    // One watch has exactly one deadline, so there is no soonest of several to qualify.
-    expect(time.textContent).toBe('0 met · 20h left');
-    expect(time.textContent).not.toContain('earliest');
-  });
-
-  it('opens into read-only facts, with no controls and a way to the Following page', async () => {
-    serve([
-      watch('W1', {
-        targets: [target('TASK', 'T1')],
-        expiresAt: at(6 * HOUR + 10 * MINUTE),
-        ...resumes('S_ME'),
-      }),
-      watch('W2', { targets: [target('TASK', 'T2')], ...resumes('S_ME') }),
     ]);
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     const strip = container!.querySelector('.watch-strip')!;
-    await click(strip.querySelector('.watch-strip-row'), 'the strip');
-    expect(strip.querySelector('.watch-strip-caret')?.textContent).toBe('⌄');
-    const blocks = [...strip.querySelectorAll<HTMLElement>('.watch-strip-block')];
-    expect(blocks.map((b) => b.dataset.watchId)).toEqual(['W1', 'W2']);
-    // Read-only: the strip holds no View/Edit/Pause/Stop anywhere, and no button at all.
-    expect(buttons(strip.querySelector('.watch-strip-list')!)).toEqual([]);
+    await click(strip.querySelector('.bg-tray-row'), 'the strip');
+    expect(strip.querySelector('.wt-expand')?.textContent).toBe('▾');
+    // One sentence says what the five rows said: the condition, the resume, and the deadline.
+    expect(strip.querySelector('.watch-say')?.textContent).toBe(
+      'Resumes this session when it finishes, or in 20h at the latest.',
+    );
+    // The line above already names the one target, so the list doesn't again; the foot leads to it.
+    expect(strip.querySelectorAll('.ct-row')).toHaveLength(0);
+    const links = [...strip.querySelectorAll<HTMLAnchorElement>('.ct-foot a')];
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Open task ›', '/tasks/T1'],
+      ['Manage in Watches ›', '/following'],
+    ]);
+    // Read-only: no View/Edit/Pause/Stop anywhere, and no button but the caret.
+    expect(buttons(strip)).toEqual(['▾']);
     for (const verb of ['View', 'Edit', 'Pause', 'Stop']) {
       expect(strip.textContent, `no ${verb}`).not.toContain(verb);
     }
-    const labels = (block: HTMLElement) => [...block.querySelectorAll('dt')].map((dt) => dt.textContent);
-    expect(labels(blocks[0])).toEqual(['Until', 'Progress', 'Watching', 'Then', 'Expires']);
-    expect(labels(blocks[1])).toEqual(['Until', 'Progress', 'Watching', 'Expires']);
-    // Until says the condition without the sentence's "When", which the label already is.
-    expect(blocks[0].querySelectorAll('dd')[0]?.textContent).toBe('The task finishes');
-    // Progress carries the evaluator's last look.
-    expect(blocks[0].querySelectorAll('dd')[1]?.textContent).toBe('0 met · checked 5m ago');
-    // Then is said once, on the first watch: every strip watch resumes this session.
-    expect(blocks[0].querySelectorAll('dd')[3]?.textContent).toBe('Resume this session');
-    // The deadline says both the span left and the moment it lands, as the card's Expires does.
-    expect(blocks[1].querySelectorAll('dd')[3]?.textContent).toMatch(/^in 20h · /);
-    const manage = strip.querySelector('a.watch-strip-manage');
-    expect(manage?.textContent).toBe('Manage in Watches ›');
-    expect(manage?.getAttribute('href')).toBe('/following');
   });
 
-  it('caps the Watching row at three targets and folds the rest into a link', async () => {
-    // A watch may name 200 targets; drawn flat, the names push Until, Progress, Then and Expires
-    // past the list's max-height and the strip is a directory again.
+  it('opens several watches into one sentence each, over the targets each waits on', async () => {
+    serve([
+      watch('W1', {
+        lastEvaluatedAt: at(-MINUTE),
+        predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+        targets: [
+          target('TASK', 'T1', { targetTitle: 'First', ...standing('OPEN', { running: true }) }),
+          target('TASK', 'T2', { state: 'SATISFIED', targetTitle: 'Second', ...standing('DONE') }),
+        ],
+        expiresAt: at(6 * HOUR + 10 * MINUTE),
+        ...resumes('S_ME'),
+      }),
+      watch('W2', {
+        lastEvaluatedAt: at(-MINUTE),
+        predicate: { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+        targets: [target('TASK', 'T3', { targetTitle: 'Third', ...standing('OPEN', { queued: true }) })],
+        ...resumes('S_ME'),
+      }),
+    ]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const strip = container!.querySelector('.watch-strip')!;
+    await click(strip.querySelector('.bg-tray-row'), 'the strip');
+
+    const watches = [...strip.querySelectorAll<HTMLElement>('.watch-strip-watch')];
+    expect(watches.map((w) => w.dataset.watchId)).toEqual(['W1', 'W2']);
+    expect(watches.map((w) => w.querySelector('.watch-say')?.textContent)).toEqual([
+      'Resumes this session when all of them finish, or in 6h at the latest.',
+      'Resumes this session when it finishes, or in 20h at the latest.',
+    ]);
+    // Each target a row in the task list's words, opening its own page; what met the condition first.
+    const rows = (w: HTMLElement) =>
+      [...w.querySelectorAll<HTMLAnchorElement>('a.ct-row')].map((a) => [
+        a.querySelector('.status-pill')?.textContent,
+        a.querySelector('.ct-title')?.textContent,
+        a.getAttribute('href'),
+      ]);
+    expect(rows(watches[0])).toEqual([
+      ['Done', 'Second', '/tasks/T2'],
+      ['Running', 'First', '/tasks/T1'],
+    ]);
+    expect(rows(watches[1])).toEqual([['Queued', 'Third', '/tasks/T3']]);
+    // Several targets: the foot is the way to the Following page alone.
+    expect([...strip.querySelectorAll('.ct-foot a')].map((a) => a.textContent)).toEqual(['Manage in Watches ›']);
+    expect(buttons(strip.querySelector('.ct-list')!)).toEqual([]);
+  });
+
+  it('lists every target a wide watch waits on, the list scrolling past its height', async () => {
     serve([
       watch('WIDE', {
-        targets: Array.from({ length: 24 }, (_, i) => target('TASK', `T${i + 1}`)),
+        targets: Array.from({ length: 24 }, (_, i) => target('TASK', `T${i + 1}`, standing('OPEN'))),
         ...resumes('S_ME'),
       }),
     ]);
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     const strip = container!.querySelector('.watch-strip')!;
-    await click(strip.querySelector('.watch-strip-row'), 'the strip');
-
-    const block = strip.querySelector('.watch-strip-block')!;
-    expect(block.querySelectorAll('.watch-target')).toHaveLength(3);
-    const more = [...block.querySelectorAll('a')].find((a) => a.textContent === '+21 more');
-    expect(more, 'the fold is on screen').toBeTruthy();
-    expect(more!.tagName).toBe('A');
-    expect(more!.getAttribute('href')).toBe('/following?watch=WIDE');
-    // One word each, and it is the task's own — never the watch's `met`, which the Progress row counts.
-    expect([...block.querySelectorAll('.watch-target-status')].map((s) => s.textContent)).toEqual([
-      'Open',
-      'Open',
-      'Open',
-    ]);
-    expect(block.querySelector('.watch-target-state'), 'no state word on the shown three').toBeNull();
-    expect(buttons(strip.querySelector('.watch-strip-list')!)).toEqual([]);
+    await click(strip.querySelector('.bg-tray-row'), 'the strip');
+    expect(strip.querySelectorAll('.ct-list .ct-row')).toHaveLength(24);
+    expect(strip.textContent).not.toContain('more');
   });
 
-  it('names the targets that met the condition first, and words each with its own status', async () => {
-    serve(
-      [
-        watch('W', {
-          targets: [
-            target('TASK', 'T1'),
-            target('TASK', 'T2', { state: 'SATISFIED' }),
-            target('TASK', 'T3'),
-            target('TASK', 'T4', { state: 'SATISFIED' }),
-          ],
-          ...resumes('S_ME'),
-        }),
-      ],
-      {
-        T1: { status: 'IN_PROGRESS' },
-        T2: { status: 'DONE' },
-        T4: { status: 'CANCELLED', terminalReason: 'SUPERSEDED' },
-      },
-    );
-    await mount(<SessionWatchStrip sessionId="S_ME" />);
-    const strip = container!.querySelector('.watch-strip')!;
-    await click(strip.querySelector('.watch-strip-row'), 'the strip');
-
-    const shown = [...strip.querySelectorAll<HTMLElement>('.watch-target')];
-    // T2 and T4 first, each group keeping the watch's own order; T3 falls past the cap.
-    expect(shown.map((t) => t.getAttribute('title'))).toEqual(['Task T2', 'Task T4', 'Task T1']);
-    // One word per row, and it is the task's own — including T4, which met the condition and has
-    // since been replaced. `met` said here as well would be a second word to arbitrate against.
-    expect(shown.map((t) => t.querySelector('.watch-target-status')?.textContent ?? null)).toEqual([
-      'Done',
-      'Superseded',
-      'In progress',
-    ]);
-    expect(shown.map((t) => t.querySelector('.watch-target-state')), 'met is not repeated per target')
-      .toEqual([null, null, null]);
-    // It is still counted once, above, and the satisfied ones are still sorted first.
-    const progress = strip.querySelectorAll('.watch-strip-block dd')[1]?.textContent ?? '';
-    expect(progress).toMatch(/^2 of 4 met · /);
-  });
-
-  it('keeps the recorded word on a session target, which has no status chip of its own', async () => {
+  it('says a session target in its own header’s words', async () => {
     serve([
       watch('W', {
-        predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_RUN_TERMINAL' },
-        targets: [satisfied('SESSION', 'S_OTHER')],
+        predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' },
+        targets: [
+          target('SESSION', 'S_A', { targetTitle: 'Child A', targetStatus: { status: 'RUNNING', running: true, queued: false } }),
+          target('SESSION', 'S_B', {
+            targetTitle: 'Child B',
+            targetStatus: { status: 'AWAITING_INPUT', running: false, queued: false },
+          }),
+        ],
         ...resumes('S_ME'),
       }),
     ]);
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     const strip = container!.querySelector('.watch-strip')!;
-    await click(strip.querySelector('.watch-strip-row'), 'the strip');
+    expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('all 2 sessions');
+    // A session whose turn is over is done with what it was doing.
+    expect(strip.querySelector('.ct-count')?.textContent).toBe('1 running · 1/2 done');
+    await click(strip.querySelector('.bg-tray-row'), 'the strip');
+    expect([...strip.querySelectorAll('a.ct-row')].map((a) => [a.querySelector('.status-pill')?.textContent, a.getAttribute('href')])).toEqual([
+      ['Running', '/sessions/S_A'],
+      ['Waiting for your reply', '/sessions/S_B'],
+    ]);
+  });
 
-    const shown = strip.querySelector('.watch-strip-block .watch-target')!;
-    expect(shown.querySelector('.watch-target-status'), 'no task chip for a session').toBeNull();
-    expect(shown.querySelector('.watch-target-state')?.textContent).toBe('met');
+  it('says so under a watch nobody has checked for more than three minutes', async () => {
+    const strip = async (lastEvaluatedAt: string) => {
+      serve([watch('W', { lastEvaluatedAt, targets: [target('TASK', 'T1', standing('OPEN'))], ...resumes('S_ME') })]);
+      await mount(<SessionWatchStrip sessionId="S_ME" />);
+      const shown = container!.querySelector('.watch-strip')!;
+      await click(shown.querySelector('.bg-tray-row'), 'the strip');
+      return shown.querySelector('.watch-say-stale')?.textContent ?? null;
+    };
+    expect(await strip(at(-MINUTE))).toBeNull();
+    expect(await strip(at(-12 * MINUTE))).toBe('Not checked for 12m — the resume may be late.');
   });
 
   it('draws no strip when the session waits on nothing live', async () => {
@@ -497,7 +476,7 @@ describe('a live watch older than the newest 100', () => {
       </>,
     );
 
-    expect(container!.querySelector('.watch-strip-title')?.textContent).toBe('Watching');
+    expect(container!.querySelector('.watch-strip .bg-tray-title')?.textContent).toBe('Watching');
     expect(buttons(container!.querySelector('.watch-badges')!)).toEqual(['Following 2 tasks', 'Follow']);
     const followedBy = container!.querySelector('section')!;
     expect(followedBy.querySelector('.tdp-section-title span')?.textContent).toBe('Followed by (1)');

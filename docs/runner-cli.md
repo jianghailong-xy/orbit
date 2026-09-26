@@ -54,11 +54,12 @@ the permanent purge operation to agents.
 `--agent-name` selects the Orbit agent (project directory and runner configuration) that should execute the
 session. Check `orbit capabilities --json` instead of assuming a session operation is authorized.
 
-Creating sessions and using lifecycle operations requires a live caller session whose current workspace has
-orchestration enabled. The runner receives a short-lived, session-bound proof. Every request rechecks the live
-session assignment and workspace policy, so ending, deleting, reassigning, or disabling orchestration revokes
-access without waiting for proof expiry. When orchestration is enabled, `orbit agent list`, `agent create`,
-and `agent update` expose the same agent-management surface to the CLI. Only a human can enable orchestration.
+Creating sessions and using lifecycle operations requires a live caller session while its account has
+Session orchestration on (one switch for every workspace, on unless the owner turns it off in Settings). The
+runner receives a short-lived, session-bound proof. Every request rechecks the live session assignment and that
+switch, so ending, deleting, reassigning, or turning orchestration off revokes access without waiting for proof
+expiry. When orchestration is on, `orbit agent list`, `agent create`, and `agent update` expose the same
+agent-management surface to the CLI. Only a human can switch orchestration.
 
 ## Providers
 

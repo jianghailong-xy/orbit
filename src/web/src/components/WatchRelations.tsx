@@ -1,25 +1,27 @@
 import { useMemo, useState } from 'react';
-import { EyeOutlined } from '@ant-design/icons';
+import { EyeOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Popover } from 'antd';
 import { Link } from 'react-router-dom';
-import type { WatchView } from '@orbit/shared';
+import type { WatchTargetView, WatchView } from '@orbit/shared';
 import { watchesQuery } from '../lib/queries';
 import {
-  SHOWN_TARGETS,
-  STRIP_EARLIEST,
+  SESSION_TARGET_WORDS,
   STRIP_LABEL,
   STRIP_MANAGE,
-  STRIP_THEN,
-  STRIP_UNTIL,
+  STRIP_OPEN_SESSION,
+  STRIP_OPEN_TASK,
   ago,
   describeCondition,
   describeProgress,
   expiryLabel,
-  formatSpan,
   isLiveWatch,
   linkId,
   progressOf,
+  stripCounts,
+  stripSentence,
+  stripStaleLine,
+  targetHref,
   thresholdOf,
   watchBucket,
   watchHref,
@@ -28,9 +30,10 @@ import {
   watchesFollowing,
   type WatchThreshold,
 } from '../lib/watches';
-import { absTime } from './WatchCard';
+import { CountLine } from './SessionCreatedTasksStrip';
+import { TaskStatusPill } from './TaskStatusPill';
 import { WatchEditorModal } from './WatchEditor';
-import { ObserverLink, WatchStatePill, WatchTargetLink, useNow, useTargetName } from './WatchParts';
+import { ObserverLink, WatchStatePill, useNow } from './WatchParts';
 
 const rowsOf = (data: unknown): WatchView[] => (Array.isArray(data) ? (data as WatchView[]) : []);
 
@@ -205,141 +208,160 @@ export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
 }
 
 /**
- * Above the composer: the watches this session is waiting on, while any is live. Always one line
- * first — the same language as the Background processes tray beside it — naming the single target a
- * lone watch waits on, or counting the targets several watches cover, with the soonest deadline.
- * Opened, each watch's facts read as read-only rows: a wait is changed by talking to the agent, and
- * Pause/Stop live on the Following page. Its own strip on purpose — a watch is not a process, and
- * contract §9.2 keeps it out of the Background processes tray beside it.
+ * Above the composer: the watches this session is waiting on, while any is live — in the Background
+ * processes tray's own shell (`.bg-tray`), so the stack above the composer reads as one system, the
+ * way Tasks created here does. Always one line first: a lone target by name with where it stands, in
+ * its own list's pill; several by what the wait needs, with Tasks created here's sentence over where
+ * they stand. Opened, each watch is one sentence — what it waits for, and the deadline that resumes
+ * this session anyway — over the targets it waits on, each opening its own page; a lone target is
+ * already on the line, so it gets a way to it instead. Read-only: a wait is changed by talking to the
+ * agent, and Pause/Stop live on the Following page. Its own card on purpose — a watch is not a
+ * process, and contract §9.2 keeps it out of the Background processes tray beside it.
  */
 export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   const watchesQ = useQuery(watchesQuery());
   const now = useNow();
   const [open, setOpen] = useState(false);
   const waitingOn = watchesFollowing(rowsOf(watchesQ.data), sessionId).filter(isLiveWatch);
-  // One line names the target only when there is one name to give: a lone watch over one target
-  // that still exists. Anything else counts the distinct targets, so two watches over the same
-  // task never read "2 targets".
-  const live = waitingOn.flatMap((w) => w.targets.filter((t) => t.state !== 'GONE'));
-  const targets = live.map((t) => `${t.targetKind}:${t.targetResourceId}`);
-  const single = waitingOn.length === 1 && new Set(targets).size === 1 ? live[0] : null;
-  // The lone target's own status, beside the name the watch already carries. Only for a lone target:
-  // several of them have no one status, and asking for all of their rows to say so would be a read
-  // per target on a line that is folded shut.
-  const { chip: singleStatus } = useTargetName(
-    single?.targetKind ?? null,
-    single?.targetResourceId ?? null,
-  );
   if (waitingOn.length === 0) return null;
-  const deadline = Math.min(...waitingOn.map((w) => Date.parse(w.expiresAt)));
-  const left = Number.isFinite(deadline) ? deadline - now : NaN;
-  const time = Number.isFinite(left) ? (left <= 0 ? 'now' : `${formatSpan(left)} left`) : null;
-  const targetCount = new Set(targets).size;
-  const met = new Set(
-    live.filter((t) => t.state === 'SATISFIED').map((t) => `${t.targetKind}:${t.targetResourceId}`),
-  ).size;
-  // What the wait is for: one watch over one target names it, one watch over several states the
-  // threshold its own condition sets, and several watches — no one condition between them — count
-  // the targets they cover.
-  const targetLine = single
-    ? (single.targetTitle ?? linkId(single.targetResourceId).slice(0, 8))
-    : waitingOn.length === 1
+  // Each live target once, however many watches name it, so two watches over the same task never
+  // read "2 targets".
+  const live = [
+    ...new Map(
+      waitingOn
+        .flatMap((w) => w.targets.filter((t) => t.state !== 'GONE'))
+        .map((t) => [`${t.targetKind}:${t.targetResourceId}`, t] as const),
+    ).values(),
+  ];
+  const single = waitingOn.length === 1 && live.length === 1 ? live[0] : null;
+  // What the wait is for when it names no one target: one watch states the threshold its own
+  // condition sets, several — no one condition between them — count the targets they cover.
+  const targetLine =
+    waitingOn.length === 1
       ? thresholdLine(thresholdOf(waitingOn[0].predicate, live), waitingOn)
-      : `${targetCount} ${targetNoun(waitingOn, targetCount)}`;
+      : `${live.length} ${targetNoun(waitingOn, live.length)}`;
+  const toggle = () => setOpen((o) => !o);
   return (
-    <div className={`watch-strip${open ? ' is-open' : ''}`}>
-      <button
-        type="button"
-        className="watch-strip-row"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <EyeOutlined className="watch-strip-ico" />
-        <span className="watch-strip-title">{STRIP_LABEL}</span>
-        <span className="watch-strip-target">{targetLine}</span>
-        {singleStatus && (
-          <span className={`watch-target-status tone-${singleStatus.tone}`}>{singleStatus.label}</span>
+    <div className={`bg-tray watch-strip${open ? ' bg-open' : ''}`}>
+      <div className="bg-tray-row" onClick={toggle}>
+        <EyeOutlined className="bg-tray-ico" />
+        <span className="bg-tray-title ct-head">{STRIP_LABEL}</span>
+        {single ? (
+          <>
+            <span className="ct-one" title={targetName(single)}>
+              {targetName(single)}
+            </span>
+            <WatchTargetPill target={single} />
+          </>
+        ) : (
+          <>
+            <span className="watch-strip-target">{targetLine}</span>
+            <span className="bg-tray-count ct-count">
+              <CountLine counts={stripCounts(live)} />
+            </span>
+          </>
         )}
-        {time && (
-          <span className="watch-strip-time">
-            {waitingOn.length === 1 ? '' : STRIP_EARLIEST}
-            <b className="watch-strip-met">{met}</b> met · {time}
-          </span>
-        )}
-        <span className="watch-strip-caret">{open ? '⌄' : '›'}</span>
-      </button>
+        <span className="wt-spacer" />
+        <button
+          type="button"
+          className="wt-expand"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle();
+          }}
+          aria-label={open ? 'Hide what this session waits on' : 'Show what this session waits on'}
+        >
+          {open ? '▾' : '▸'}
+        </button>
+      </div>
       {open && (
-        <div className="watch-strip-list">
-          {waitingOn.map((w, index) => (
-            <StripWatchBlock key={w.id} watch={w} now={now} showsThen={index === 0} />
-          ))}
-          <Link className="watch-strip-manage" to="/following">
-            {STRIP_MANAGE}
-          </Link>
-        </div>
+        <>
+          <div className="ct-list">
+            {waitingOn.map((w) => (
+              <StripWatch key={w.id} watch={w} now={now} listsTargets={!single} />
+            ))}
+          </div>
+          <div className="ct-foot">
+            {single && (
+              <Link to={targetHref(single.targetKind, single.targetResourceId)}>
+                {single.targetKind === 'SESSION' ? STRIP_OPEN_SESSION : STRIP_OPEN_TASK}
+              </Link>
+            )}
+            <Link to="/following">{STRIP_MANAGE}</Link>
+          </div>
+        </>
       )}
     </div>
   );
 }
 
+/** A target by the name the watch carries for it, and by its short id when it carries none. */
+const targetName = (t: WatchTargetView): string => t.targetTitle ?? linkId(t.targetResourceId).slice(0, 8);
+
+/** The session run states' pill colours, as the app's pills use them (index.css `.status-pill`). */
+const SESSION_TARGET_TONE: Record<string, string> = {
+  QUEUED: 'queued',
+  RUNNING: 'running',
+  AWAITING_INPUT: 'todo',
+  INTERRUPTED: 'cancelled',
+  SUCCEEDED: 'done',
+  FAILED: 'failed',
+  ENDED: 'cancelled',
+};
+
 /**
- * One watch's facts in the opened strip, read-only: the rows are Until / Progress / Watching /
- * Then / Expires — what the wait is for first, so a reader with several watches open reads the
- * conditions before wading through the names they are over. Then — a constant for every strip
- * watch, since all of them resume this session — is said once, on the first. Progress carries the
- * evaluator's last look, so the strip keeps one fewer row than a card does.
+ * Where a target itself stands, in the pill its own list uses: a task's `TaskStatusPill`, so one task
+ * reads the same word and colour on this strip, in Tasks created here and in the task list; a session
+ * by its run state, in its header's word. Nothing when the watch carries no standing for it.
  */
-function StripWatchBlock({ watch, now, showsThen }: { watch: WatchView; now: number; showsThen: boolean }) {
-  const expiry = expiryLabel(watch, now);
-  const until = describeCondition(watch.predicate, watch.targets).replace(/^When /, '').replace(/^./, (c) => c.toUpperCase());
-  // Capped the way the card caps its Watching row: a watch may name 200 targets, and all of them
-  // flat pushes the rows this strip exists for out of the list's scroll box. What the condition has
-  // already met goes first, so the three that survive are the ones worth the room — a stable sort,
-  // so the watch's own order holds within each group.
+function WatchTargetPill({ target }: { target: WatchTargetView }) {
+  const standing = target.targetStatus;
+  if (!standing) return null;
+  if (target.targetKind === 'TASK') {
+    return <TaskStatusPill status={standing.status} running={standing.running} queued={standing.queued} />;
+  }
+  const tone = SESSION_TARGET_TONE[standing.status] ?? 'cancelled';
+  return (
+    <span className={`status-pill ${tone}`}>
+      {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
+      {SESSION_TARGET_WORDS[standing.status] ?? standing.status}
+    </span>
+  );
+}
+
+/**
+ * One watch in the opened strip: its sentence, the line it adds when nobody is checking it, and —
+ * when the line above names no one target — the targets it waits on, each opening its own page. What
+ * the condition has already met goes first, a stable sort, so the watch's own order holds within each
+ * group.
+ */
+function StripWatch({ watch, now, listsTargets }: { watch: WatchView; now: number; listsTargets: boolean }) {
+  const stale = stripStaleLine(watch, now);
   const targets = watch.targets
     .filter((t) => t.state !== 'GONE')
     .sort((a, b) => Number(a.state !== 'SATISFIED') - Number(b.state !== 'SATISFIED'));
-  const shown = targets.slice(0, SHOWN_TARGETS);
-  const hidden = targets.length - shown.length;
   return (
-    <dl className="watch-facts watch-strip-block" data-watch-id={watch.id}>
-      <dt>{STRIP_UNTIL}</dt>
-      <dd>{until}</dd>
-      <dt>Progress</dt>
-      <dd>{`${describeProgress(progressOf(watch), thresholdOf(watch.predicate, watch.targets))} · checked ${ago(watch.lastEvaluatedAt, now)}`}</dd>
-      <dt>Watching</dt>
-      <dd className="watch-targets">
-        {shown.map((t) => (
-          <WatchTargetLink
+    <div className="watch-strip-watch" data-watch-id={watch.id}>
+      <div className="watch-say">
+        {stripSentence(watch, now)}
+        {stale && <span className="watch-say-stale">{stale}</span>}
+      </div>
+      {listsTargets &&
+        targets.map((t) => (
+          <Link
             key={`${t.targetKind}:${t.targetResourceId}`}
-            kind={t.targetKind}
-            id={t.targetResourceId}
-            title={t.targetTitle}
-            // Each target says where it itself stands, which is what the reader came for. `met` is
-            // not repeated per target: the Progress row above counts them, and the satisfied ones
-            // are sorted first, so the order says which they are. Kept for a session target, which
-            // has no status chip of its own.
-            state={t.state === 'SATISFIED' ? t.state : undefined}
-            showsStatus
-          />
-        ))}
-        {hidden > 0 && (
-          <Link className="watch-strip-more" to={watchHref(watch.id)}>
-            +{hidden} more
+            className="ct-row"
+            to={targetHref(t.targetKind, t.targetResourceId)}
+          >
+            <span className="ct-pill">
+              <WatchTargetPill target={t} />
+            </span>
+            <span className="ct-title" title={targetName(t)}>
+              {targetName(t)}
+            </span>
+            <span className="ct-caret">›</span>
           </Link>
-        )}
-      </dd>
-      {showsThen && (
-        <>
-          <dt>Then</dt>
-          <dd>{STRIP_THEN}</dd>
-        </>
-      )}
-      <dt>Expires</dt>
-      <dd>
-        {expiry ? expiry.text : ''}
-        {expiry && <span className="watch-muted"> · {absTime(watch.expiresAt)}</span>}
-      </dd>
-    </dl>
+        ))}
+    </div>
   );
 }

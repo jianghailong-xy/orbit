@@ -15,7 +15,8 @@ function makeService(workspace: { id: string; name: string } | null = null) {
         id: where.id,
         rootSessionId: 'root',
         spawnDepth: 0,
-        workspace: { enableOrchestration: true },
+        workspaceId: 'workspace-1',
+        owner: { preferences: {} },
       }),
       update: async () => ({}),
       // Admission control has its own spec; keep every tree here spawnable.

@@ -27,6 +27,24 @@ public enum TaskScope: Hashable, Sendable {
     }
 }
 
+/// The two views of one scope — the web's segmented control: the rows, or each label's progress.
+public enum TaskListViewMode: String, Sendable {
+    case tasks, batches
+}
+
+/// What a row's second line says after its status pill: the first of these that is true, else who
+/// it is assigned to. Every sentence is one the web or the session list already says.
+public enum TaskRowPhrase: Equatable, Sendable {
+    /// An OWNER_CONFIRMED run is waiting on the owner — `OwnerConfirmations.waitingForConfirmation`.
+    case waitingForConfirmation
+    /// A prerequisite failed or was cancelled — the web row's red-lock tooltip.
+    case prerequisiteCancelled
+    /// Waiting for prerequisites — the web row's grey-lock tooltip.
+    case waitingForPrerequisites
+    /// Starts once, at this local time — the web row's "Starts …" marker.
+    case starts(String)
+}
+
 public enum TaskFilter: String, CaseIterable, Sendable, Identifiable {
     case runnable, all, running, ongoing, failed, done, cancelled
 
@@ -103,6 +121,8 @@ public struct TaskOverview: Equatable, Sendable {
     public let running: Int
     public let queued: Int
     public let runnable: Int
+    /// On the outside-projects scope: the tasks on project pages, for the page's one sentence.
+    public var inProjects: TaskInProjectsCount? = nil
 
     public func count(for filter: TaskFilter) -> Int {
         switch filter {
@@ -166,6 +186,81 @@ public enum TaskListLogic {
 
     // MARK: scope, filter and search
 
+    /// The tab the page opens on: the one the reader last picked, else All — the web's rule
+    /// (`initialTaskFilter`), so the two clients open the same account onto the same list.
+    public static func initialFilter(remembered: String?) -> TaskFilter {
+        remembered.flatMap(TaskFilter.init(rawValue:)) ?? .all
+    }
+
+    /// The `projectId` the page's reads send. Every task and No list are the owner's own work —
+    /// the tasks filed under no project (`none`); a project's tasks are on that project's page. A
+    /// list the reader opened, or one conversation's tasks, is a scope somebody picked and lists
+    /// its members whoever filed them (a coordinator's "View all" would otherwise land on nothing).
+    public static func projectScope(_ scope: TaskScope, creatorSessionID: String?) -> String? {
+        guard creatorSessionID == nil else { return nil }
+        switch scope {
+        case .all, .unlisted: return "none"
+        case .list:           return nil
+        }
+    }
+
+    /// A list whose every task is some project's: reached from that project's page, not from
+    /// Tasks. An empty list stays — it is somebody's plan — and so does every list when the server
+    /// does not report the split.
+    public static func isProjectOnlyList(_ list: TaskListSummary) -> Bool {
+        guard let outside = list.tasksOutsideProjects else { return false }
+        return list.taskCount > 0 && outside == 0
+    }
+
+    // MARK: a row
+
+    /// The second line's phrase, first true wins: waiting on the owner, a failed prerequisite, a
+    /// prerequisite still running, a scheduled start. Nil means the line names the assignee.
+    public static func rowPhrase(_ task: TaskItem, timeZone: TimeZone = .current,
+                                 locale: Locale = .current) -> TaskRowPhrase? {
+        if task.awaitingOwnerConfirmation == true { return .waitingForConfirmation }
+        if isBlocked(task) {
+            return task.dependencyState == "BLOCKED_FAILED" ? .prerequisiteCancelled : .waitingForPrerequisites
+        }
+        if task.status != .done, task.status != .cancelled,
+           let local = TaskDetailLogic.scheduledLocal(task.runAt, timeZone: timeZone, locale: locale) {
+            return .starts(local)
+        }
+        return nil
+    }
+
+    /// The time slot on the first line. A running row says how long its run has been going ("12m",
+    /// no "ago"), the way a session row does while it works; every other row says when it last
+    /// changed ("2h ago").
+    public static func rowTime(_ task: TaskItem, now: Date = Date()) -> String? {
+        if isRunning(task), let since = task.runningSince, let elapsed = RelativeTime.elapsed(since, now: now) {
+            return elapsed
+        }
+        guard let stamp = task.updatedAt ?? task.createdAt else { return nil }
+        return RelativeTime.format(stamp, now: now)
+    }
+
+    /// The empty page, in the web's sentences.
+    public static func emptyTitle(scope: TaskScope, filter: TaskFilter) -> String {
+        switch filter {
+        case .runnable: return TaskListCopy.noneReady
+        case .running:  return TaskListCopy.noneRunning
+        default:
+            switch scope {
+            case .list:     return TaskListCopy.noneInList
+            case .unlisted: return TaskListCopy.noneUnlisted
+            case .all:      return TaskListCopy.noneYet
+            }
+        }
+    }
+
+    /// Whether Happening now is pinned over the rows: only on the unfiltered tab of a browsing
+    /// scope (web: `pinStrip`). `/tasks/active` is narrowed by neither a session nor a label, so
+    /// under either it would pin live tasks the page is not showing.
+    public static func pinsHappeningNow(filter: TaskFilter, creatorSessionID: String?, labels: [String]) -> Bool {
+        filter == .all && creatorSessionID == nil && labels.isEmpty
+    }
+
     public static func scoped(_ items: [TaskItem], to scope: TaskScope) -> [TaskItem] {
         switch scope {
         case .all:          return items
@@ -184,9 +279,11 @@ public enum TaskListLogic {
         return items.filter { $0.title.localizedCaseInsensitiveContains(q) }
     }
 
-    /// Cancelled is rare, matching Web: hide it until the scope contains one (or it is selected).
+    /// The web's tab row, in its order: everything, what is waiting, what could start, what is
+    /// running, how it ended. Cancelled is rare, matching Web: hidden until the scope contains one
+    /// (or it is selected).
     public static func availableFilters(overview: TaskOverview, current: TaskFilter) -> [TaskFilter] {
-        var filters: [TaskFilter] = [.runnable, .all, .running, .ongoing, .failed, .done]
+        var filters: [TaskFilter] = [.all, .ongoing, .runnable, .running, .failed, .done]
         if overview.cancelled > 0 || current == .cancelled { filters.append(.cancelled) }
         return filters
     }
@@ -216,7 +313,8 @@ public enum TaskListLogic {
     public static func overview(_ counts: TaskPageCounts) -> TaskOverview {
         TaskOverview(total: counts.total, open: counts.open, inProgress: counts.inProgress,
                      done: counts.done, failed: counts.failed, cancelled: counts.cancelled,
-                     running: counts.running, queued: counts.queued, runnable: counts.runnable)
+                     running: counts.running, queued: counts.queued, runnable: counts.runnable,
+                     inProjects: counts.inProjects)
     }
 
     public static func listIsCompleted(_ list: TaskListSummary) -> Bool {

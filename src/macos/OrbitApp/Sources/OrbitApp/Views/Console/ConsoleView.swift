@@ -36,6 +36,9 @@ struct ConsoleView: View {
     @State private var renameDraft = ""
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
+    /// A phone's stack: the project a coordinator's title opens goes over this console, so the back
+    /// swipe returns here (`opensPagesOverConsole`).
+    @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
     #endif
 
     var body: some View {
@@ -217,10 +220,21 @@ struct ConsoleView: View {
                     console: registry.peek(sessionID),
                     availableWidth: navTitleWidth
                 )
-                // Tap to rename, matching web's double-click-the-header-title. A trashed session is
-                // not renamable there either, and a row we haven't loaded yet has no title to seed
-                // the field with — both fall back to the plain, non-interactive title.
-                if let session, session.effectiveLifecycleState != .trash {
+                // A coordinator conversation's title is its project's — the server keeps the two in
+                // step — so its tap opens that project, the way a Messages header opens what the
+                // conversation is about; the › beside the badge says so. Every other title is tap to
+                // rename, matching web's double-click-the-header-title. A trashed session is not
+                // renamable there either, and a row we haven't loaded yet has no title to seed the
+                // field with — both fall back to the plain, non-interactive title.
+                if let session, let projectID = session.projectId {
+                    Button {
+                        appModel.openProjectFromConversation(projectID, overConsole: opensPagesOverConsole)
+                    } label: {
+                        title
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens the project this conversation coordinates")
+                } else if let session, session.effectiveLifecycleState != .trash {
                     Button {
                         renameDraft = session.title ?? ""
                         renaming = true
@@ -284,6 +298,14 @@ private struct ConsoleNavTitle: View {
                 if let session {
                     SessionCoordinatorBadge(session: session)
                         .layoutPriority(1)
+                    // The tap opens the project (see the title's button in `ConsoleView`).
+                    if session.projectId != nil {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .layoutPriority(1)
+                            .accessibilityHidden(true)
+                    }
                 }
             }
             Text(subtitle)

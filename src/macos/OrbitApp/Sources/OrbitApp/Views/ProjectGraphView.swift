@@ -145,6 +145,8 @@ struct ProjectGraphCanvas: View {
     let layout: ProjectGraph.Layout
     let edges: [ProjectGraphEdge]
     let onOpenMark: (ProjectGraphMark) -> Void
+    /// The task a task page's dependency graph is drawn around, outlined so the reader finds it.
+    var focusID: String? = nil
 
     var body: some View {
         let marks = layout.placements.map(\.mark)
@@ -162,7 +164,8 @@ struct ProjectGraphCanvas: View {
             }
             ForEach(layout.placements) { placement in
                 Button { onOpenMark(placement.mark) } label: {
-                    ProjectGraphMarkView(mark: placement.mark, waitingOn: waiting[placement.id] ?? 0)
+                    ProjectGraphMarkView(mark: placement.mark, waitingOn: waiting[placement.id] ?? 0,
+                                         isFocus: placement.id == focusID)
                 }
                 .buttonStyle(.plain)
                 .frame(width: CGFloat(placement.box.width), height: CGFloat(placement.box.height))
@@ -188,6 +191,7 @@ struct ProjectGraphCanvas: View {
 private struct ProjectGraphMarkView: View {
     let mark: ProjectGraphMark
     let waitingOn: Int
+    var isFocus = false
 
     var body: some View {
         if mark.kind == .task {
@@ -221,9 +225,9 @@ private struct ProjectGraphMarkView: View {
         }
         .background(complete ? Color.secondary.opacity(0.08) : Color.secondary.opacity(0.03), in: shape)
         .clipShape(shape)
-        .overlay(shape.strokeBorder(border(tone), lineWidth: 1))
+        .overlay(shape.strokeBorder(isFocus ? Color.accentColor : border(tone), lineWidth: isFocus ? 2 : 1))
         .background {
-            if tone == .ready { shape.stroke(Color.accentColor.opacity(0.14), lineWidth: 6) }
+            if tone == .ready || isFocus { shape.stroke(Color.accentColor.opacity(0.14), lineWidth: 6) }
         }
         .contentShape(shape)
     }

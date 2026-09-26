@@ -47,8 +47,9 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.systemImage(.admin), AppSection.admin.systemImage)
     }
 
-    /// The rows that open a page open their own, titled as the row is; the pickers and the two
-    /// lines that only say something open nothing; Runners pushes its older frame of its own.
+    /// The rows that open a page open their own, titled as the row is; the pickers, the orchestration
+    /// switch and the two lines that only say something open nothing; Runners pushes its older frame
+    /// of its own.
     func testTheRowsThatOpenAPageOpenTheirOwn() {
         let opening = SettingsHome.Row.allCases.compactMap(SettingsHome.page)
         XCTAssertEqual(Set(opening), Set(SettingsPage.allCases), "a page no row opens, or a row opening two")
@@ -78,11 +79,10 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.runnersValue([]), "None")
     }
 
-    /// "0 of 0" would read as an answer; before there are any agents the row says nothing.
-    func testOrchestrationCountsTheGrantAndNeverSaysZeroOfZero() {
-        XCTAssertEqual(SettingsHome.orchestrationValue(granted: 7, total: 8), "7 of 8")
-        XCTAssertEqual(SettingsHome.orchestrationValue(granted: 0, total: 3), "0 of 3")
-        XCTAssertNil(SettingsHome.orchestrationValue(granted: 0, total: 0))
+    /// One switch for the whole account, so the row is the switch: nothing to count per workspace,
+    /// and no page behind it.
+    func testOrchestrationIsAnsweredOnItsRow() {
+        XCTAssertNil(SettingsHome.page(.orchestration))
     }
 
     func testSharedLinksCountWhatIsOpenForAnyone() {
@@ -114,11 +114,6 @@ final class SettingsHomeTests: XCTestCase {
     // MARK: - Copy that is composed
 
     func testTheComposedLinesReadAsTheWebsDo() {
-        XCTAssertEqual(SettingsCopy.grantedLine(granted: 7, total: 8),
-                       "7 of 8 can orchestrate now. Each keeps its own switch afterwards.")
-        XCTAssertEqual(SettingsCopy.confirmAllTitle(total: 8), "Let all 8 agents orchestrate?")
-        XCTAssertEqual(SettingsCopy.appliedLine(enabled: true, updated: 8), "Enabled on 8 agents.")
-        XCTAssertEqual(SettingsCopy.appliedLine(enabled: false, updated: 1), "Disabled on 1 agent.")
         XCTAssertEqual(SettingsCopy.signOutTitle(instance: "orbitd.io"), "Sign out of orbitd.io?")
         XCTAssertEqual(SettingsCopy.signOutTitle(instance: nil), "Sign out?")
         XCTAssertEqual(SettingsCopy.deviceHeader("iPhone"), "This iPhone")

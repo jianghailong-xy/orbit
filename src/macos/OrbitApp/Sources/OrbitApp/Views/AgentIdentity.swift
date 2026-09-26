@@ -291,13 +291,20 @@ struct ProviderSwitchSheet: View {
 /// drawer button's own circle.
 struct WorkspaceTitleSwitcher: View {
     let name: String
+    /// What the name names, for VoiceOver ("Workspace: orbit. Switch").
+    var subject = "Workspace"
+    /// A cap on the name's width, past which it truncates rather than pushing the bar's trailing
+    /// buttons. Nil draws the whole name, as the Sessions list does for its short workspace names;
+    /// a task list's title can be a sentence.
+    var maxNameWidth: CGFloat?
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(name)
-                    .font(.headline).foregroundStyle(.primary).lineLimit(1)
+                    .font(.headline).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: maxNameWidth, alignment: .leading)
                 Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -305,7 +312,7 @@ struct WorkspaceTitleSwitcher: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
-        .accessibilityLabel("Workspace: \(name). Switch")
+        .accessibilityLabel("\(subject): \(name). Switch")
     }
 }
 

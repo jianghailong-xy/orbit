@@ -796,6 +796,64 @@ test('a watch carries its targets\' titles, and none for a target its account ca
   expectStatus(await call(h, other.bearer, 'GET', `/watches/${overTask.id}`), 404, "another account's read of the watch");
 });
 
+/** A run of `taskId` in `status`, the way dispatch opens one: what the task list's overlays read. */
+async function run(h: Harness, ownerId: string, taskId: string, status: 'RUNNING' | 'PENDING'): Promise<void> {
+  await h.sql.query(
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","task_id","status",
+                           "dispatch_origin","starts_task_work","updated_at")
+     VALUES ($1,'a run of it','p',$2,$2,$3,$4,'USER',TRUE,now())`,
+    [randomUUID(), ownerId, taskId, status],
+  );
+}
+
+/**
+ * Every read says where each target stands, in its own list's words, so the strip above a composer
+ * says it without a read per target: a task by its status with the task list's two overlays — a run
+ * going, or one queued with none going — and a session by its run state. A target this account cannot
+ * read stands nowhere, exactly as it has no title.
+ */
+test('a watch carries where each target stands, as its own list says it', { skip, timeout: 120_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'standing targets');
+  const other = await account(h, 'somebody else');
+  const idle = await task(h, owner.id, 'OPEN');
+  const busy = await task(h, owner.id, 'OPEN');
+  const waiting = await task(h, owner.id, 'OPEN');
+  const done = await task(h, owner.id, 'DONE');
+  await run(h, owner.id, busy, 'RUNNING');
+  await run(h, owner.id, waiting, 'PENDING');
+  const parked = await session(h, owner.id, { status: 'AWAITING_INPUT' });
+  const live = await session(h, owner.id, { status: 'RUNNING' });
+
+  type Standing = { targetResourceId: string; targetStatus: unknown };
+  const standing = (targets: Standing[]) => new Map(targets.map((t) => [toUuid(t.targetResourceId), t.targetStatus]));
+  const overTasks = await create(h, owner, watchBody(tasks([idle, busy, waiting, done])), 'a watch over four tasks');
+  const overSessions = await create(
+    h,
+    owner,
+    watchBody(sessions([parked, live]), { predicate: ALL_SETTLED }),
+    'a watch over two sessions',
+  );
+
+  const created = standing(overTasks.targets);
+  assert.deepEqual(created.get(idle), { status: 'OPEN', running: false, queued: false }, 'nothing on it');
+  assert.deepEqual(created.get(busy), { status: 'OPEN', running: true, queued: false }, 'a run going');
+  assert.deepEqual(created.get(waiting), { status: 'OPEN', running: false, queued: true }, 'a run queued');
+  assert.deepEqual(created.get(done), { status: 'DONE', running: false, queued: false }, 'its own status');
+  const bySession = standing(overSessions.targets);
+  assert.deepEqual(bySession.get(parked), { status: 'AWAITING_INPUT', running: false, queued: false });
+  assert.deepEqual(bySession.get(live), { status: 'RUNNING', running: true, queued: false });
+
+  // The list reads the same, and a task moved to another account stands nowhere, like its title.
+  await h.sql.query(`UPDATE "task" SET "owner_id" = $2 WHERE "id" = $1`, [idle, other.id]);
+  const list = await call(h, owner.bearer, 'GET', '/watches');
+  expectStatus(list, 200, 'the list reads back');
+  const listed = standing((list.body as Array<{ targets: Standing[] }>).flatMap((w) => w.targets));
+  assert.equal(listed.get(idle), null, "a target of another account's stands nowhere");
+  assert.deepEqual(listed.get(busy), { status: 'OPEN', running: true, queued: false });
+  assert.deepEqual(listed.get(live), { status: 'RUNNING', running: true, queued: false });
+});
+
 // ── lifecycle ───────────────────────────────────────────────────────────────────────────────────
 
 test('pause, resume, edit and cancel move only along the contract transitions', { skip, timeout: 120_000 }, async () => {

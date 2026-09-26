@@ -118,7 +118,6 @@ function sessionRow(s: Scenario) {
       workDir: '/srv/repo',
       autoInitGit: false,
       defaultMergeTarget: null,
-      enableOrchestration: false,
       appendSystemPrompt: null,
       systemPrompt: null,
       disallowedTools: [],

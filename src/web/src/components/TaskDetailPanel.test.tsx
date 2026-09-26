@@ -820,3 +820,32 @@ describe('what a successful Run now refreshes', () => {
     );
   });
 });
+
+// A project's tasks are not listed on the Tasks page, so a task opened from a link has to say which
+// project it is filed under — and whether that project is still going.
+describe('the project a task is filed under', () => {
+  const PROJECT = { id: '34C0tJjDOprFHYQ38s69w', title: 'FineWeb × Common Crawl → RocksDB', status: 'OPEN' };
+  const line = (html: string): string => /<div class="tdp-project-line">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
+
+  it('names the project above the title and links to its page', () => {
+    const html = renderPanel({ id: TASK_ID, title: 'Shard 000', status: 'OPEN', project: PROJECT });
+
+    expect(line(html)).toContain(`href="/projects/${PROJECT.id}"`);
+    expect(line(html)).toContain('FineWeb × Common Crawl → RocksDB');
+    expect(line(html)).not.toContain('Cancelled');
+    expect(html.indexOf('tdp-project-line')).toBeLessThan(html.indexOf('tdp-title'));
+  });
+
+  it('says Cancelled beside a project that was cancelled', () => {
+    const html = renderPanel({ id: TASK_ID, title: 'Shard 000', status: 'OPEN', project: { ...PROJECT, status: 'CANCELLED' } });
+
+    expect(line(html)).toContain('Cancelled');
+  });
+
+  // NEGATIVE CONTROL: a task in no project has nothing to name.
+  it('draws no project line for a task filed under no project', () => {
+    const html = renderPanel({ id: TASK_ID, title: 'Mine', status: 'OPEN', project: null });
+
+    expect(html).not.toContain('tdp-project-line');
+  });
+});

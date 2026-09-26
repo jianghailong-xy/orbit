@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   handleProjectsShortcut,
   handleNavActivation,
+  isProjectOnlyList,
   projectsShortcutLabel,
   WorkspaceRow,
   WorkspaceStateMark,
@@ -529,5 +530,27 @@ describe('TasksSidePanel workspace rows', () => {
     expect(compactRunning).toContain('tp-rail-running');
     expect(compactRunning).toContain('anticon-spin');
     expect(compactRunning).not.toContain('tp-rail-offline');
+  });
+});
+
+// The Tasks page lists the tasks outside projects, so the sidebar's lists do too: a list whose
+// every task is some project's is reached from that project's page.
+describe('TasksSidePanel lists outside projects', () => {
+  it('leaves out a list whose every task is filed under a project', () => {
+    expect(isProjectOnlyList({ _count: { tasks: 27_468 }, tasksOutsideProjects: 0 })).toBe(true);
+    expect(isProjectOnlyList({ _count: { tasks: 32 }, tasksOutsideProjects: 32 })).toBe(false);
+    expect(isProjectOnlyList({ _count: { tasks: 3 }, tasksOutsideProjects: 1 })).toBe(false);
+  });
+
+  // An empty list is somebody's plan for work, not a project's; and a server that does not report
+  // the split lists everything, as it always did.
+  it('keeps an empty list, and every list when the server does not say', () => {
+    expect(isProjectOnlyList({ _count: { tasks: 0 }, tasksOutsideProjects: 0 })).toBe(false);
+    expect(isProjectOnlyList({ _count: { tasks: 27_468 } })).toBe(false);
+  });
+
+  it('skips project-only lists before grouping, and counts No list over the same scope', () => {
+    expect(source).toMatch(/for \(const l of taskLists\.data \?\? \[\]\) \{\s*if \(isProjectOnlyList\(l\)\) continue;/);
+    expect(source).toContain("taskPagePath({ limit: 1, listId: 'none', projectId: 'none' })");
   });
 });

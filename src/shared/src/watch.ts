@@ -213,6 +213,27 @@ export interface WatchTargetView {
    * "Deleted" from. Absent from an older server, which leaves a client naming the target by its id.
    */
   targetTitle?: string | null;
+  /**
+   * Where the target itself stands, read with the watch and under the same account, so the strip
+   * above a composer can say it without a read per target. Null on the same terms as `targetTitle`;
+   * absent from an older server.
+   */
+  targetStatus?: WatchTargetStatusView | null;
+}
+
+/**
+ * One target's own standing, in the words its own list uses: a task as the task list reads it — its
+ * status column, with the `running`/`queued` overlays `TasksService.withRunning` derives from its
+ * sessions — and a session by its run state (`SessionRunState`), `running`/`queued` saying the same
+ * two things about it.
+ */
+export interface WatchTargetStatusView {
+  /** A task's `TaskStatus`, or a session's `SessionRunState`. */
+  status: string;
+  /** A RUNNING session is on the task, or the session is RUNNING. */
+  running: boolean;
+  /** A PENDING session waits on the task with none running, or the session is QUEUED. */
+  queued: boolean;
 }
 
 export type WatchDeliveryState = 'PENDING' | 'IN_FLIGHT' | 'DELIVERED' | 'DEAD_LETTER';

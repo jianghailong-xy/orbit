@@ -182,6 +182,9 @@ describe('the Tasks page scoped to one session', () => {
 
     expect(requested).toContain(`/tasks/page?limit=200&creatorSessionId=${SESSION}&counts=total`);
     expect(requested).toContain(`/tasks/counts?creatorSessionId=${SESSION}`);
+    // A conversation's tasks are a scope somebody picked: a coordinator's are all some project's,
+    // so narrowing them to the tasks outside projects would answer its "View all" with nothing.
+    expect(requested.filter((p) => p.includes('projectId'))).toEqual([]);
     expect(
       requested.filter((p) => (p.startsWith('/tasks/page') || p.startsWith('/tasks/counts')) && !p.includes(SESSION)),
       'a read of the page that is not narrowed to the session',
@@ -209,8 +212,9 @@ describe('the Tasks page scoped to one session', () => {
 
     expect(address()).toBe('/tasks');
     expect(chip()).toBeNull();
-    expect(requested).toContain('/tasks/page?limit=200&counts=total');
-    expect(requested).toContain('/tasks/counts');
+    // Back on every task: the owner's own work, the tasks filed under no project.
+    expect(requested).toContain('/tasks/page?limit=200&projectId=none&counts=total');
+    expect(requested).toContain('/tasks/counts?projectId=none');
     expect(requested.filter((p) => p.includes('creatorSessionId'))).toEqual([]);
     expect(rowTitles()).toEqual([MINE.title, ELSEWHERE.title]);
   });

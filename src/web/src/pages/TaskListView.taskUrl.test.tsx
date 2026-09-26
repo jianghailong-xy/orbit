@@ -74,9 +74,13 @@ beforeEach(() => {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['task-lists'], [{ id: LIST_KEY, title: 'FineWeb Parquet' }]);
   qc.setQueryData(['tasks', 'page', { filter: 'ALL', query: '', listId: LIST_KEY }], page([FIRST, SECOND]));
-  qc.setQueryData(['tasks', 'page', { filter: 'ALL', query: '', listId: null }], page([ELSEWHERE]));
+  // Every task, the page's browsing view, is the tasks filed under no project; one list is not.
+  qc.setQueryData(
+    ['tasks', 'page', { filter: 'ALL', query: '', listId: null, projectId: 'none' }],
+    page([ELSEWHERE]),
+  );
   qc.setQueryData(['tasks', 'counts', LIST_KEY, []], counts);
-  qc.setQueryData(['tasks', 'counts', null, []], counts);
+  qc.setQueryData(['tasks', 'counts', null, [], { projectId: 'none' }], counts);
   // jsdom implements neither, and the view measures its scrolling body with both.
   vi.stubGlobal(
     'ResizeObserver',

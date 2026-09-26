@@ -4,11 +4,14 @@ import XCTest
 
 /// Where a tap on an Orbit link card goes, case by case.
 ///
-/// The rule is `OrbitLinkDestination` (`OrbitKit/App`), and this file is that rule asserted: each of
-/// the four kinds of object a link can name has exactly one place to land, a project lands on the
-/// conversation that coordinates it — or, with none, on the deployment's own page for the project
-/// rather than on a dead link or a screen this app cannot draw — and an object the server would not
-/// describe leaves the app rather than opening a page with nothing to show.
+/// The rule is `OrbitLinkDestination` (`OrbitKit/App`), and this file is that rule asserted: each kind
+/// of object a link can name has exactly one place to land — a project included, which lands on its
+/// own page as it does on the web — and an object the server would not describe leaves the app rather
+/// than opening a page with nothing to show.
+///
+/// A project used to land on the conversation that coordinates it, from before this client had a
+/// project page. Inside that conversation — where its coordinator writes the link — the tap went
+/// nowhere (2026-09-26).
 ///
 /// The last case is the project name on a native task start card. It is a link to a project like any
 /// other and has to go through this rule rather than one of its own; it used to be drawn as
@@ -66,9 +69,7 @@ final class OrbitLinkDestinationTests: XCTestCase {
 
     // MARK: the four kinds, and where each goes
 
-    /// One destination per kind: a task, a session and a task list are pages this app has, and a
-    /// project is not — what a project's card leads to is the conversation that coordinates it, and
-    /// the id for that is the read's to give.
+    /// One destination per kind: a task, a session, a task list and a project are pages this app has.
     func testEveryKindAndWhereItGoes() throws {
         let task = try preview("""
         {"kind":"task","id":"\(taskID)","state":"ok","task":{"title":"t","status":"DONE"}}
@@ -89,10 +90,10 @@ final class OrbitLinkDestinationTests: XCTestCase {
             // spelling that page knows the list by — the link named it by UUID.
             (ref(.list, listUUID, "https://orbitd.io/lists/\(listID)"), list,
              .list(id: listID)),
-            // The project the coordinator's own session coordinates: it opens the conversation.
+            // A project opens its own page, in the spelling the Projects list knows it by.
             (ref(.project, projectUUID, "https://orbitd.io/projects/\(projectID)"),
              try project(coordinator: sessionID),
-             .session(id: sessionID)),
+             .project(id: projectID)),
         ]
         for (link, answer, expected) in cases {
             XCTAssertEqual(OrbitLinkDestination.tap(for: link, preview: answer, baseURL: baseURL),
@@ -100,25 +101,20 @@ final class OrbitLinkDestinationTests: XCTestCase {
         }
     }
 
-    /// A project with no conversation to open — the server nulls the id when the coordinator is in
-    /// Trash — goes to the deployment's own page for the project. That page exists and says what the
-    /// project is: not a dead link, and not somebody else's screen. An `ok` answer that carries no
-    /// project at all is the same answer, for the same reason.
-    func testAProjectWithNoCoordinatorLeavesForItsOwnPage() throws {
-        let own = URL(string: "https://orbitd.io/projects/\(projectID)")!
-        let answers = [try project(coordinator: nil),
+    /// Whoever coordinates it — somebody, nobody (the server nulls the id when the coordinator is in
+    /// Trash), or an `ok` answer that carries no project at all — a project opens its own page in the
+    /// app. The conversation that coordinates it is no longer where its link goes.
+    func testAProjectOpensItsOwnPageWhoeverCoordinatesIt() throws {
+        let answers = [try project(coordinator: sessionID),
+                       try project(coordinator: nil),
                        try project(coordinator: ""),
                        try preview("""
                        {"kind":"project","id":"\(projectID)","state":"ok"}
                        """)]
         for answer in answers {
             let link = ref(.project, projectUUID, "https://orbitd.io/projects/\(projectID)")
-            let destination = OrbitLinkDestination.tap(for: link, preview: answer, baseURL: baseURL)
-            XCTAssertEqual(destination, .web(own),
-                           "a project with nobody coordinating it opens its own page")
-            guard case .web(let url) = destination else { return XCTFail("not a page at all") }
-            XCTAssertEqual(url.path, "/projects/\(projectID)",
-                           "and it is that project's page, not the site's root or another object's")
+            XCTAssertEqual(OrbitLinkDestination.tap(for: link, preview: answer, baseURL: baseURL),
+                           .project(id: projectID), "a project opens its own page in the app")
         }
     }
 
@@ -166,9 +162,9 @@ final class OrbitLinkDestinationTests: XCTestCase {
                        .web(URL(string: "https://orbitd.io/tasks/\(taskID)")!))
     }
 
-    /// And a link somebody wrote or pasted, with nothing read at all: three kinds are a page in this
-    /// app whatever the object turns out to be. A project is not one of them — its destination is
-    /// the conversation that coordinates it, which only a read can name.
+    /// And a link somebody wrote or pasted, with nothing read at all: every kind is a page in this app
+    /// whatever the object turns out to be — a project's page included, which says so when the
+    /// project is gone.
     func testALinkSomebodyWroteGoesInAppWithoutReadingAnything() {
         XCTAssertEqual(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .task, id: taskUUID)),
                        .task(id: taskID))
@@ -176,7 +172,8 @@ final class OrbitLinkDestinationTests: XCTestCase {
                        .session(id: sessionID))
         XCTAssertEqual(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .list, id: listUUID)),
                        .list(id: listID))
-        XCTAssertNil(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .project, id: projectUUID)))
+        XCTAssertEqual(OrbitLinkDestination.inApp(for: OrbitLinkTarget(kind: .project, id: projectUUID)),
+                       .project(id: projectID))
     }
 
     // MARK: a wiki entry
@@ -235,14 +232,12 @@ final class OrbitLinkDestinationTests: XCTestCase {
                                    "\(text) is not a link this app's door understands")
         XCTAssertEqual(target, OrbitLinkTarget(kind: .project, id: projectUUID))
 
-        // A project is never one of the three kinds this app opens with nothing read…
-        XCTAssertNil(OrbitLinkDestination.inApp(for: target))
-        // …so it lands where the rule says it does: the conversation that coordinates it.
+        // It opens the project's own page, read or not.
+        XCTAssertEqual(OrbitLinkDestination.inApp(for: target), .project(id: projectID))
         let link = OrbitLinkRef(target: target, source: .reference(text))
         XCTAssertEqual(OrbitLinkDestination.tap(for: link, preview: try project(coordinator: sessionID),
                                                 baseURL: baseURL),
-                       .session(id: sessionID))
-        // With no coordinator it lands on the project's own page — asserted above, for the same rule.
+                       .project(id: projectID))
     }
 
     /// The same claim read off the view that draws the row, because the shells do not compile here:
@@ -273,17 +268,19 @@ final class OrbitLinkDestinationTests: XCTestCase {
 
     // MARK: the one door
 
-    /// …and the door is this rule: a task, a session and a list are answered from the link alone, a
-    /// project is read for the conversation that coordinates it, and every destination it hands back
-    /// lands somewhere — a route in this app, or out to the system for the one that leaves it.
+    /// …and the door is this rule: every kind is answered from the link alone, a card's tap from what
+    /// that card's read returned, and every destination either hands back lands somewhere — a page in
+    /// this app, or out to the system for the one that leaves it.
     func testTheOneDoorResolvesThroughTheDestinationRule() throws {
         let cards = try source("src/macos/OrbitApp/Sources/OrbitApp/OrbitLinkCards.swift")
         let door = code(try slice(cards, from: "func openOrbitLink(_ ref: OrbitLinkRef, overConsole: Bool = false) {",
                                   to: "\n    }"))
-        XCTAssertTrue(door.contains("OrbitLinkDestination.inApp(for:"),
-                      "the door spends this rule's answer for a task, a session and a list")
-        XCTAssertTrue(door.contains("OrbitLinkDestination.tap(for:"),
-                      "and its read-first answer for a project")
+        XCTAssertTrue(door.contains("open(OrbitLinkDestination.inApp(for: ref.target), overConsole: overConsole)"),
+                      "the door spends this rule's answer for every kind, with nothing read first")
+        let tap = code(try slice(cards, from: "func destination(for ref: OrbitLinkRef) -> OrbitLinkDestination {",
+                                 to: "\n    }"))
+        XCTAssertTrue(tap.contains("OrbitLinkDestination.tap(for: ref, preview:"),
+                      "and a card's tap spends its read-first answer")
 
         // A task or a session goes through the conversation's door, which routes exactly as before
         // unless the link is in a phone's conversation — then it is pushed over that console, so the
@@ -292,6 +289,7 @@ final class OrbitLinkDestinationTests: XCTestCase {
                                   to: "\n    }"))
         let landings = [("case .task(let id):", "openFromConversation(.task(id), overConsole: overConsole)"),
                         ("case .session(let id):", "openFromConversation(.session(id), overConsole: overConsole)"),
+                        ("case .project(let id):", "openProjectFromConversation(id, overConsole: overConsole)"),
                         ("case .list(let id):", "route(to: .list(id))"),
                         ("case .wikiEntry(let id):", "openWikiEntry(id, overConsole: overConsole)"),
                         ("case .web(let url):", "openExternal(url)")]

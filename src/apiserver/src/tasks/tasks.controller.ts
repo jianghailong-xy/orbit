@@ -73,6 +73,8 @@ export class TasksController {
     // `none` is this filter's sentinel for "tasks in no list", not an id — and it is also valid
     // base62, so without the exemption it decodes to a uuid no list has.
     @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
+    // `none` is "filed under no project" — the Tasks page's scope — for the same reason as listId's.
+    @Query('projectId', PublicIdPipe.allowing('none')) projectId?: string,
     @Query('assigneeId', PublicIdPipe) assigneeId?: string,
     // Free text, never an id: no PublicIdPipe, and a label that happens to look like a public id
     // must survive as the string it is.
@@ -88,6 +90,7 @@ export class TasksController {
       limit,
       status,
       listId,
+      projectId,
       assigneeId,
       labels,
       q,
@@ -103,11 +106,12 @@ export class TasksController {
   taskCounts(
     @CurrentUser() user: AuthUser,
     @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
+    @Query('projectId', PublicIdPipe.allowing('none')) projectId?: string,
     @Query('assigneeId', PublicIdPipe) assigneeId?: string,
     @Query('labels') labels?: string | string[],
     @Query('creatorSessionId', PublicIdPipe) creatorSessionId?: string,
   ) {
-    return this.tasks.taskCounts(user.userId, { listId, assigneeId, labels, creatorSessionId });
+    return this.tasks.taskCounts(user.userId, { listId, projectId, assigneeId, labels, creatorSessionId });
   }
 
   // Above :id, like "page" and "labels" — none of these literals is a task uuid.
@@ -115,8 +119,9 @@ export class TasksController {
   activeTasks(
     @CurrentUser() user: AuthUser,
     @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
+    @Query('projectId', PublicIdPipe.allowing('none')) projectId?: string,
   ) {
-    return this.tasks.activeTasks(user.userId, { listId });
+    return this.tasks.activeTasks(user.userId, { listId, projectId });
   }
 
   // Above :id for the same reason as "page" — "labels" is not a task uuid.
@@ -124,9 +129,10 @@ export class TasksController {
   labelSummary(
     @CurrentUser() user: AuthUser,
     @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
+    @Query('projectId', PublicIdPipe.allowing('none')) projectId?: string,
     @Query('assigneeId', PublicIdPipe) assigneeId?: string,
   ) {
-    return this.tasks.labelSummary(user.userId, { listId, assigneeId });
+    return this.tasks.labelSummary(user.userId, { listId, projectId, assigneeId });
   }
 
   @Get(':id/dependency-graph')

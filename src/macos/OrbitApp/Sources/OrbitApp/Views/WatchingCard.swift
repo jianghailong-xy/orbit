@@ -3,42 +3,46 @@ import OrbitKit
 
 /// What this session is waiting on, in the console above the composer: the live watches that will
 /// resume it. This is what a monitoring session shows instead of the "Background process running" a
-/// polling shell used to leave behind. It sits above the Background processes tray, which keeps the
-/// real shells and dev servers (contract §9.2).
+/// polling shell used to leave behind; the Background processes tray below keeps the real shells and
+/// dev servers (contract §9.2). Drawn as the band's other cards are (`BackgroundTrayView`,
+/// `CreatedTasksCard`): one line, and opened, a list.
 ///
-/// Always one line first — the same language as the tray beside it — naming the single target a
-/// lone watch waits on, or counting the targets several watches cover, with the soonest deadline.
-/// Opened, each watch reads as read-only rows and the only action is the way to the Following page:
-/// a wait is changed by talking to the agent, and Pause/Stop live on the detail page (the web's
-/// `SessionWatchStrip`).
+/// The line names a lone target with where it stands, in its own list's pill, or states what several
+/// need beside Tasks created here's sentence over where they stand. Opened, each watch is one
+/// sentence — what it waits for, and the deadline that resumes this session anyway — over the targets
+/// it waits on, each opening its page; a lone target is on the line already, so the foot leads to it
+/// instead. Read-only: a wait is changed by talking to the agent, and Pause/Stop live on the Following
+/// page. The browser's `SessionWatchStrip` says the same words (`WatchStripCopyParityTests`,
+/// `src/shared/src/watch-strip.fixture.json`).
 struct WatchingCardStack: View {
     @Environment(AppModel.self) private var model
-    /// In a phone's conversation, the Following page opens over it (see `opensPagesOverConsole`).
+    /// In a phone's conversation, the pages this card opens are pushed over it (see `opensPagesOverConsole`).
     @Environment(\.opensPagesOverConsole) private var overConsole
     let sessionID: String
     @State private var open = false
 
+    /// Tasks created here's row: the pill column, so the titles start under each other, and its height.
+    private static let statusColumn: CGFloat = 70
+    private static let rowHeight: CGFloat = 31
+    /// Past about five rows and a sentence the list stops and scrolls inside, so opening it never
+    /// pushes the conversation off…
+    private static let listCap: CGFloat = 190
+    /// …and however little room the band leaves — a card opened below takes its share too — a
+    /// sentence and a row stay on screen: every scrolling list in the band keeps a floor.
+    private static let listFloor: CGFloat = 60
+
     var body: some View {
         if let store = model.watches, let summary = store.summary(for: sessionID) {
-            // "checked …" and the deadline are relative to now: redraw between fetches so they
+            // The deadline and "Not checked for" are relative to now: redraw between fetches so they
             // don't freeze.
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 VStack(spacing: 0) {
-                    stripRow(summary, now: context.date)
+                    header(summary)
                     if open {
                         Divider().opacity(0.5)
-                        // One card among the band's, so its facts stop at about 240pt and scroll
-                        // inside — the browser caps the opened strip the same way (`.watch-strip-list`).
-                        // Uncapped, a strip opened over a Tasks created here card that was open took
-                        // the band's whole share and left that card's rows at no height at all. At least
-                        // 120pt stays on screen however little room is left.
-                        ViewThatFits(in: .vertical) {
-                            watchFacts(summary, now: context.date)
-                            ScrollView { watchFacts(summary, now: context.date) }
-                                .frame(minHeight: Self.factsFloor, maxHeight: Self.factsCap)
-                        }
+                        list(summary, now: context.date)
                         Divider().opacity(0.5)
-                        manageRow
+                        footer(summary)
                     }
                 }
             }
@@ -50,101 +54,202 @@ struct WatchingCardStack: View {
         }
     }
 
-    /// The one line the strip always reads as: Watching, the single target by name or the targets
-    /// by count, how long the soonest deadline has left, and the caret that opens the facts.
-    private func stripRow(_ summary: WatchSessionSummary, now: Date) -> some View {
-        Button { open.toggle() } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "eye").font(.orbitMeta).foregroundStyle(.secondary)
+    // MARK: - the line
+
+    /// The one line the card always reads as; all of it opens and closes the list.
+    private func header(_ summary: WatchSessionSummary) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "eye").font(.orbitMeta).foregroundStyle(.secondary)
+            if let target = summary.lineTarget {
                 Text(WatchProjection.stripLabel)
                     .font(.orbitLabel.weight(.semibold))
                     .lineLimit(1)
-                Text(stripTarget(summary))
+                    .layoutPriority(1)
+                // Enough of the name to tell which it is; where it stands keeps its size.
+                Text(name(target))
                     .font(.orbitMeta)
                     .foregroundStyle(.tint)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                // Where that one target stands, so the folded line answers "is it even running"
-                // without being opened. Only when the line names one target: several of them have
-                // no one status, and the count beside it is what the line says instead.
-                if let target = summary.lineTarget, let pill = targetPill(target, model: model) {
-                    TaskStatusPill(pill: pill)
-                }
-                if let time = summary.lineTime(now: now) {
-                    Text(time)
-                        .font(.orbitMeta)
-                        .foregroundStyle(.secondary)
-                        // The deadline is the fact this line exists for, so it keeps its own width
-                        // and the target's name yields instead: the name already truncates, and
-                        // without the priority the greedy `.frame(maxWidth: .infinity)` beside it
-                        // won the HStack's slack, leaving "earliest 2 met · 13h left" a partial
-                        // width that folded onto two lines and grew the row with it. Web's
-                        // `.watch-strip-time` says the same thing as `flex: none`.
-                        .lineLimit(1)
-                        .layoutPriority(1)
-                }
-                Image(systemName: open ? "chevron.down" : "chevron.right")
+                TargetStanding(target: target).fixedSize()
+            } else {
+                Text(WatchProjection.stripLabel)
+                    .font(.orbitLabel.weight(.semibold))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Text(summary.lineTargetWord)
                     .font(.orbitMeta)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tint)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                // The sentence is what the line is for: when it grows, what the wait needs yields.
+                countText(summary.lineParts)
+                    .font(.orbitMeta)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: 4)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            Image(systemName: open ? "chevron.down" : "chevron.right")
+                .font(.orbitMeta.weight(.semibold))
+                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(WatchProjection.stripLabel)
+        .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.easeOut(duration: 0.12)) { open.toggle() } }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(open ? "Hides what this session waits on" : "Shows what this session waits on")
     }
 
-    /// One target by name; otherwise what the wait is for — a lone watch's own threshold, or the
-    /// targets several watches cover between them. A target this client holds no name for falls
-    /// back to its short id, never "Task <id>": two nameless watches used to look identical, which
-    /// is what sent the account owner into the detail sheet to tell them apart.
-    private func stripTarget(_ summary: WatchSessionSummary) -> String {
-        if let target = summary.lineTarget {
-            return WatchProjection.targetTitle(kind: target.targetKind,
-                                               id: target.targetResourceId,
-                                               name: targetName(target, model: model))
+    /// Tasks created here's sentence, secondary, with its failed part red (`CreatedTasksCard`).
+    private func countText(_ parts: [SessionCreatedTasksCopy.CountPart]) -> Text {
+        var text = Text(verbatim: "")
+        for (index, part) in parts.enumerated() {
+            if index > 0 {
+                text = text + Text(SessionCreatedTasksCopy.separator).foregroundStyle(.secondary)
+            }
+            text = text + Text(part.text).foregroundStyle(part.failed ? Color.red : Color.secondary)
         }
-        return summary.lineTargetWord
+        return text
     }
 
-    private static let factsCap: CGFloat = 240
-    private static let factsFloor: CGFloat = 120
+    // MARK: - opened
 
-    /// Each watch's read-only facts, a hairline between them.
-    private func watchFacts(_ summary: WatchSessionSummary, now: Date) -> some View {
-        VStack(spacing: 0) {
+    /// Each watch's sentence and targets. Natural height where the band has room; where it hasn't, a
+    /// capped list that scrolls inside and never shrinks below its floor.
+    private func list(_ summary: WatchSessionSummary, now: Date) -> some View {
+        ViewThatFits(in: .vertical) {
+            watches(summary, now: now)
+            ScrollView { watches(summary, now: now) }
+                .frame(minHeight: Self.listFloor, maxHeight: Self.listCap)
+        }
+    }
+
+    private func watches(_ summary: WatchSessionSummary, now: Date) -> some View {
+        // The line above names a lone target already; the list names targets only when it doesn't.
+        let listsTargets = summary.lineTarget == nil
+        return VStack(spacing: 0) {
             ForEach(Array(summary.watches.enumerated()), id: \.element.id) { index, watch in
                 if index > 0 {
                     Divider().opacity(0.5)
                 }
-                WatchingCard(watch: watch, now: now, showsThen: index == 0)
+                watchBlock(watch, now: now, listsTargets: listsTargets)
             }
         }
     }
 
-    /// The way to the Following page, where Pause and Stop live: the strip itself is read-only. In a
-    /// phone's conversation the page is pushed over it, so the back swipe returns to the conversation.
-    private var manageRow: some View {
-        Button {
-            if overConsole { model.push(.watches) } else { model.selectedSection = .following }
-        } label: {
-            HStack {
-                Text(WatchProjection.stripManage)
+    /// One watch: its sentence, the line it adds while nobody is checking it, and its targets.
+    private func watchBlock(_ watch: Watch, now: Date, listsTargets: Bool) -> some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(WatchProjection.stripSentence(for: watch, now: now))
                     .font(.orbitMeta)
-                    .foregroundStyle(.tint)
-                Spacer(minLength: 0)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let stale = WatchProjection.stripStaleLine(for: watch, now: now) {
+                    Text(stale)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.vertical, 7)
+            if listsTargets {
+                ForEach(WatchProjection.stripTargets(of: watch), id: \.targetResourceId) { target in
+                    Divider().opacity(0.5)
+                    targetRow(target)
+                }
+            }
+        }
+    }
+
+    /// One target: where it stands in a column of its own, and its name. A tap opens its page.
+    private func targetRow(_ target: WatchTarget) -> some View {
+        Button { openTarget(target) } label: {
+            HStack(spacing: 8) {
+                TargetStanding(target: target)
+                    .fixedSize()
+                    .frame(minWidth: Self.statusColumn, alignment: .leading)
+                // The primary colour — a concrete colour, so a button's tint can't bleed into it.
+                Text(name(target))
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right").font(.orbitMeta).foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: Self.rowHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(route(for: target) == nil)
+        .accessibilityHint("Opens it")
+    }
+
+    // MARK: - the ways out
+
+    /// The lone target's page, when the line names one, and the Following page, where Pause and Stop
+    /// live. In a phone's conversation both are pushed over it, so the back swipe returns here.
+    private func footer(_ summary: WatchSessionSummary) -> some View {
+        HStack(spacing: 18) {
+            if let target = summary.lineTarget, route(for: target) != nil {
+                footerLink(target.targetKind == .session ? WatchProjection.stripOpenSession
+                                                         : WatchProjection.stripOpenTask) {
+                    openTarget(target)
+                }
+            }
+            footerLink(WatchProjection.stripManage) {
+                if overConsole { model.push(.watches) } else { model.selectedSection = .following }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .frame(minHeight: 32)
+    }
+
+    /// A link in Tasks created here's `View all in Tasks ›` style.
+    private func footerLink(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.orbitMeta)
+                .foregroundStyle(.tint)
+                .lineLimit(1)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func openTarget(_ target: WatchTarget) {
+        guard let destination = route(for: target) else { return }
+        model.openFromConversation(destination, overConsole: overConsole)
+    }
+
+    private func route(for target: WatchTarget) -> Route? {
+        guard target.state != .gone else { return nil }
+        switch target.targetKind {
+        case .session: return .session(target.targetResourceId)
+        case .task: return .task(target.targetResourceId)
+        case .unknown: return nil
+        }
+    }
+
+    /// A target by the name the watch carries for it, else the one this client holds, else by kind
+    /// and short id: a card that can't name what it waits on leaves several watches looking alike.
+    private func name(_ target: WatchTarget) -> String {
+        WatchProjection.targetTitle(kind: target.targetKind,
+                                    id: target.targetResourceId,
+                                    name: target.targetTitle ?? targetName(target, model: model))
     }
 }
 
-/// A target's name where this model holds it: the session's title or the task's.
+/// A target's name where this model holds it — the session's title or the task's — for a server that
+/// sends none with the watch.
 @MainActor
 private func targetName(_ target: WatchTarget, model: AppModel) -> String? {
     switch target.targetKind {
@@ -154,141 +259,17 @@ private func targetName(_ target: WatchTarget, model: AppModel) -> String? {
     }
 }
 
-/// Where a target itself stands, as the task list says it (`TaskListLogic.pill`) — one task reads
-/// the same word and colour wherever it is shown, and the browser's strip says it in the same place
-/// (`WatchTargetLink`'s status chip). Nothing for a task this model has not listed, and nothing for
-/// a session: the strip names what it holds rather than guessing at it.
-@MainActor
-private func targetPill(_ target: WatchTarget, model: AppModel) -> TaskPill? {
-    guard target.targetKind == .task,
-          let task = model.tasks?.item(target.targetResourceId) else { return nil }
-    return TaskListLogic.pill(task)
-}
-
-/// One watch's facts in the opened strip, read-only: Until / Progress / Watching / Then / Expires,
-/// the browser's rows in the browser's order (`WatchStripCopyParityTests`) — the condition first, so
-/// a reader with several watches open reads what each is waiting for before the names it is over.
-/// Progress carries the evaluator's last look so the strip keeps one fewer row than a card does, and
-/// Then — a constant for every strip watch, since all of them resume this session — is said once, on
-/// the first.
-private struct WatchingCard: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.opensPagesOverConsole) private var overConsole
-    let watch: Watch
-    let now: Date
-    let showsThen: Bool
+/// Where a target itself stands, in its own list's pill: a task's `TaskStatusPill` — the word and
+/// colour the task list, Tasks created here and the Orbit link card give it — and a session's glyph
+/// for its run state, as its header draws it. Nothing when the watch carries no standing for it.
+private struct TargetStanding: View {
+    let target: WatchTarget
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            factRow(WatchRowLabel.until) {
-                Text(WatchProjection.condition(watch.predicate, targetCount: liveTargets))
-                    .font(.orbitMeta)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            factRow(WatchRowLabel.progress) {
-                Text("\(WatchProjection.progress(for: watch)) · \(WatchProjection.checked(for: watch, now: now))")
-                    .font(.orbitMeta)
-                    .foregroundStyle(tone)
-                    .lineLimit(2)
-            }
-            watching
-            if showsThen {
-                factRow(WatchRowLabel.then) {
-                    Text(WatchProjection.stripThen)
-                        .font(.orbitMeta)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let expires = WatchProjection.expiresIn(for: watch, now: now) {
-                factRow(WatchRowLabel.expires) {
-                    Text(expires)
-                        .font(.orbitMeta)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-    }
-
-    /// The targets themselves, named and openable. Without this every watch on the strip was the
-    /// same card and the only way to tell two apart was to open the detail sheet.
-    private var watching: some View {
-        let shown = Array(watch.targets.prefix(WatchProjection.shownTargets))
-        let hidden = watch.targets.count - shown.count
-        return factRow(WatchRowLabel.watching) {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(shown.indices, id: \.self) { index in
-                    targetRow(shown[index])
-                }
-                if hidden > 0 {
-                    Text(WatchProjection.moreTargets(hidden))
-                        .font(.orbitMeta)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func targetRow(_ target: WatchTarget) -> some View {
-        // A one-line name, however long the title: this row sits above the composer, and a title
-        // that wraps pushes the thing the person is typing into off the screen.
-        let title = WatchProjection.targetTitle(kind: target.targetKind,
-                                                id: target.targetResourceId,
-                                                name: targetName(target, model: model))
-        HStack(spacing: 6) {
-            if let destination = route(for: target) {
-                Button { model.openFromConversation(destination, overConsole: overConsole) } label: {
-                    Text(title).font(.orbitMeta).foregroundStyle(.tint).lineLimit(1)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Text(title).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
-            }
-            // One word per target, and it is the task's own. What the evaluator last recorded about
-            // it is not said per row: the Progress row above counts what has been met.
-            if let pill = targetPill(target, model: model) {
-                TaskStatusPill(pill: pill)
-            }
-        }
-    }
-
-    /// One labelled row. The label goes beside the value where it fits and above it where it
-    /// doesn't — the same narrow-screen fallback the browser's card uses.
-    private func factRow<Content: View>(_ label: String,
-                                        @ViewBuilder _ value: () -> Content) -> some View {
-        let caption = Text(label.uppercased())
-            .font(.orbitMeta)
-            .foregroundStyle(.secondary)
-        return ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                caption.frame(width: 64, alignment: .leading)
-                value()
-                Spacer(minLength: 0)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                caption
-                value()
-            }
-        }
-    }
-
-    /// An evaluator that isn't keeping up is the one fact on the card worth colouring: everything
-    /// else it says is only as fresh as that look.
-    private var tone: Color {
-        WatchFreshness.of(watch, now: now) == .stale ? .orange : .secondary
-    }
-
-    private var liveTargets: Int { WatchProgress(watch.targets).live }
-
-    private func route(for target: WatchTarget) -> Route? {
-        guard target.state != .gone else { return nil }
-        switch target.targetKind {
-        case .session: return .session(target.targetResourceId)
-        case .task: return .task(target.targetResourceId)
-        case .unknown: return nil
+        if let pill = WatchProjection.stripPill(target) {
+            TaskStatusPill(pill: pill)
+        } else if let glyph = WatchProjection.stripGlyph(target) {
+            SessionStatusPill(glyph: glyph)
         }
     }
 }
