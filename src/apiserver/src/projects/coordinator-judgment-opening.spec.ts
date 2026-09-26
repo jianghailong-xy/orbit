@@ -21,6 +21,7 @@ import {
   projectAcceptanceLandedFact,
   projectTasksSettledFact,
 } from './coordinator-wake';
+import { standardSetConfirmationStanding } from './project-acceptance';
 
 const PROJECT = randomUUID();
 const TASK = randomUUID();
@@ -219,6 +220,53 @@ test('the confirmation card sends the owner to the card in this conversation, no
   // reason for this conversation to press anything.
   assert.match(who, /账号所有者自己的凭据/);
   assert.doesNotMatch(who, /你来确认|由你确认|你去确认/);
+});
+
+/**
+ * The same fact once the owner has ALREADY confirmed the version that stands. No client draws a
+ * card then — `settlementHeldOnConfirmation` holds one only while the standing can be answered —
+ * so the message may not send anybody to one: it says when the set was confirmed and that nothing
+ * is left to do. A standing that is not CONFIRMED, never confirmed or confirmed about criteria
+ * edited since, reads exactly as the card does with no standing at all.
+ *
+ * The end-to-end half, over the receipt door and the stored column, is
+ * `project-acceptance-landed-confirmed.pg.spec.ts`; this one runs where that one skips.
+ */
+test('a confirmed standard set leaves the landed card nothing to ask', () => {
+  const landed = projectAcceptanceLandedFact(
+    PROJECT,
+    [{ taskId: TASK, status: 'DONE' }],
+    [{ key: 'ab12', text: '条件 ab12', satisfied: true, landing: 'LANDED', serving: [] }],
+  )!;
+  const version = { digest: 'a'.repeat(64), material: [] };
+  const confirmation = {
+    criteriaDigest: version.digest,
+    criteriaMaterial: [],
+    confirmedAt: new Date('2026-09-25T04:37:25.000Z'),
+    confirmedById: randomUUID(),
+  };
+  const notice = buildCoordinatorDeliveryMessage(
+    landed, '验收闭环', standardSetConfirmationStanding(version, confirmation),
+  );
+
+  assert.doesNotMatch(notice, /确认卡上确认/);
+  assert.doesNotMatch(notice, /请账号所有者/);
+  assert.ok(notice.includes('2026-09-25T04:37:25.000Z'), 'the notice does not say when it was confirmed');
+  assert.match(notice, /无需任何动作/);
+  assert.match(notice, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
+  assert.doesNotMatch(notice, /你应该|你需要|请先|接下来你/);
+  assert.equal(notice.includes('PASS'), false);
+
+  const card = buildCoordinatorDeliveryMessage(landed, '验收闭环');
+  for (const standing of [
+    standardSetConfirmationStanding(version, null),
+    standardSetConfirmationStanding({ digest: 'b'.repeat(64), material: [] }, confirmation),
+  ]) {
+    assert.equal(
+      buildCoordinatorDeliveryMessage(landed, '验收闭环', standing), card,
+      `a ${standing.state} standing changed the card`,
+    );
+  }
 });
 
 test('a judgment session is filed under a different title from the conversation', () => {

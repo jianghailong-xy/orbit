@@ -13,6 +13,7 @@ import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening'
 import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { derivedUuid } from './project-dispatch-identity';
+import { readStandardSetConfirmationStanding } from './project-done-derived';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
 
 /**
@@ -258,7 +259,7 @@ export class CoordinatorDeliveryService {
       sessionId = project.coordinatorSessionId;
       await this.sessions.createTurn(project.ownerId, sessionId, {
         clientTurnId,
-        content: buildCoordinatorDeliveryMessage(fact, project.title),
+        content: await this.render(fact, project.title),
         intent: 'NEXT_TURN',
       }, {
         participateSendTransaction: (tx) => bindQueuedDelivery(tx, wakeId, sessionId, clientTurnId),
@@ -335,7 +336,7 @@ export class CoordinatorDeliveryService {
     try {
       await this.sessions.resume(project.ownerId, standing.id, {
         clientTurnId,
-        content: buildCoordinatorDeliveryMessage(fact, project.title),
+        content: await this.render(fact, project.title),
       });
     } catch (e) {
       // The refusals `resume` gives for an ordinary state of the world rather than a fault: the
@@ -396,6 +397,22 @@ export class CoordinatorDeliveryService {
     });
     if (bound.count === 0) return { outcome: 'ALREADY_DELIVERED', wakeId, idempotencyKey };
     return { outcome: 'DELIVERED', wakeId, idempotencyKey, sessionId, clientTurnId };
+  }
+
+  /**
+   * The words one fact is delivered as, for both carriers.
+   *
+   * `PROJECT_ACCEPTANCE_LANDED` asks the owner to confirm the standard set only while there is a
+   * confirmation to give, so the standing is read here — after the claim, as the message is
+   * written, off the client this service already holds — rather than by the producer: it changes
+   * what the message says and nothing about which fact it is or whether it is delivered. Every
+   * other fact renders from itself.
+   */
+  private async render(fact: WakeFact, projectTitle: string): Promise<string> {
+    const confirmation = fact.event === 'PROJECT_ACCEPTANCE_LANDED'
+      ? await readStandardSetConfirmationStanding(this.prisma, fact.projectId)
+      : null;
+    return buildCoordinatorDeliveryMessage(fact, projectTitle, confirmation);
   }
 
   private async refuse(

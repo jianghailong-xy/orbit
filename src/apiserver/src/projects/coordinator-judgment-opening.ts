@@ -2,6 +2,7 @@ import { uuidToBase62 } from '@orbit/shared';
 
 import { dispatchRefusalNextStep } from '../tasks/task-dispatch-refusal';
 import { SettledCriterionReport, WakeFact } from './coordinator-wake';
+import type { StandardSetConfirmationStanding } from './project-acceptance';
 
 /**
  * What a coordinator is TOLD about a committed fact — in either of the two places one can be told.
@@ -323,6 +324,20 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  * merely unauthorized spends a turn on a 403, and one told a person writes it goes looking for a
  * writer that does not exist.
  *
+ * AND WHEN THE OWNER HAS ALREADY CONFIRMED, THERE IS NOTHING TO ASK
+ * ================================================================
+ * The confirmation can be on record, naming the version that stands, before the last receipt
+ * lands. Then that receipt is the last input the projection needed: the project goes DONE on the
+ * same edge that sends this message, and no client draws a card, because
+ * `settlementHeldOnConfirmation` holds one only for an OPEN project whose standing can still be
+ * answered. On 2026-09-25 (project 34JNIW4b31ujSVqEG784v) the message asked anyway, and a
+ * coordinator doing what it said would have sent the owner looking for a card that was not there.
+ *
+ * So `confirmation` — the standing, read by the delivery as it writes these words — decides the
+ * text. CONFIRMED says when the owner confirmed and that nothing is left to do, and carries no
+ * roster: the roster is in the card for the question, and there is no question. Unconfirmed, or
+ * confirmed about criteria that have since been edited, reads exactly as it always has.
+ *
  * WHAT IS NOT DELIVERED HERE ANY MORE
  * ===================================
  * Until 2026-09-10 two more facts had a branch here: `COMPLETION_EVIDENCE_REVISED`, whose message
@@ -332,9 +347,33 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  * are now cards the clients draw from the pending reads, with buttons that reach the decision doors
  * directly, and neither fact is delivered to any conversation.
  */
-export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: string): string {
+export function buildCoordinatorDeliveryMessage(
+  fact: WakeFact,
+  projectTitle: string,
+  /** Where the project stands on owner confirmation. Only `PROJECT_ACCEPTANCE_LANDED` reads it, and
+   *  absent reads as not confirmed. */
+  confirmation?: StandardSetConfirmationStanding | null,
+): string {
   const projectId = uuidToBase62(fact.projectId);
   if (fact.event === 'PROJECT_ACCEPTANCE_LANDED') {
+    const confirmedAt = confirmation?.confirmed ? confirmation.confirmation?.confirmedAt : undefined;
+    if (confirmedAt) {
+      return (
+        `【项目「${projectTitle}」的验收标准已全部满足并落地，已按账号所有者的确认记为 DONE】\n\n`
+        + `${describeWakeFact(fact)}\n\n`
+        + `现在这一版标准集，就是账号所有者 ${confirmedAt.toISOString()} 确认过的那一版`
+        + '（CONFIRM_ACCEPTANCE_CRITERIA）。项目已按那次确认记为 DONE，无需任何动作：这里没有要确认的东西，'
+        + '这个会话里也不会出现确认卡——确认卡只为还没被确认的那一版画出来。\n\n'
+        + 'DONE 不是谁写的一列：每条标准都满足、都 LANDED，再加上账号所有者对这一版标准集的确认，'
+        + '服务端自己把它投影出来。project_update 的 status 你也写不了：带会话的请求写这个字段会被整条拒掉'
+        + '（PROJECT_STATUS_NOT_SESSION_WRITABLE）。\n\n'
+        + '全量状态自己读，这条消息里除了上面那个事实和那次确认的时间，没有这个项目的任何其他状态：'
+        + `project_get（projectId 传 ${projectId}）读目标、验收标准与 status，`
+        + `task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
+        + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+        + '所以以你自己刚读到的库里状态为准。'
+      );
+    }
     const criteria = settledCriteriaOf(fact);
     return (
       `【项目「${projectTitle}」的验收标准已全部满足并落地，请确认它们表达的是你要的目标】\n\n`
