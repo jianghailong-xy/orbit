@@ -334,10 +334,11 @@ export const sessionDiffQuery = (id: string | null | undefined) =>
  * loop this endpoint exists to remove. Polled on the same cadence as an idle task list; the
  * numbers move when runs settle, not continuously.
  */
-export const labelSummaryQuery = (listId?: string) =>
+export const labelSummaryQuery = (listId?: string, projectId?: string) =>
   queryOptions({
-    queryKey: ['task-labels', listId ?? null] as const,
-    queryFn: () => api<LabelSummary>(labelSummaryPath(listId)),
+    // The project scope enters the key only when there is one, so every other scope keeps its key.
+    queryKey: ['task-labels', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
+    queryFn: () => api<LabelSummary>(labelSummaryPath(listId, projectId)),
     staleTime: 10_000,
   });
 
@@ -347,10 +348,10 @@ export const labelSummaryQuery = (listId?: string) =>
  * Polled faster than the list it sits above: this is the part of the page that is supposed to be
  * moving, and it is bounded, so the refresh costs a small query rather than a page of rows.
  */
-export const activeTasksQuery = (listId?: string) =>
+export const activeTasksQuery = (listId?: string, projectId?: string) =>
   queryOptions({
-    queryKey: ['tasks', 'active', listId ?? null] as const,
-    queryFn: () => api<ActiveTasks>(activeTasksPath(listId)),
+    queryKey: ['tasks', 'active', listId ?? null, ...(projectId ? [{ projectId }] : [])] as const,
+    queryFn: () => api<ActiveTasks>(activeTasksPath(listId, projectId)),
     refetchInterval: 5_000,
   });
 
@@ -361,18 +362,24 @@ export const activeTasksQuery = (listId?: string) =>
  * search term, so every tab sees the same numbers. Keyed this way, switching tab is a cache hit
  * and the four aggregates behind them run once per scope instead of once per tab.
  */
-export const taskCountsQuery = (listId?: string, labels: string[] = [], creatorSessionId?: string) =>
+export const taskCountsQuery = (
+  listId?: string,
+  labels: string[] = [],
+  creatorSessionId?: string,
+  projectId?: string,
+) =>
   queryOptions({
-    // The session scope enters the key only when there is one, so every other scope keeps the key
-    // it had before that scope existed.
+    // The session and project scopes enter the key only when there is one, so every other scope
+    // keeps the key it had before those scopes existed.
     queryKey: [
       'tasks',
       'counts',
       listId ?? null,
       labels,
       ...(creatorSessionId ? [{ creatorSessionId }] : []),
+      ...(projectId ? [{ projectId }] : []),
     ] as const,
-    queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels, creatorSessionId)),
+    queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels, creatorSessionId, projectId)),
     staleTime: 10_000,
   });
 

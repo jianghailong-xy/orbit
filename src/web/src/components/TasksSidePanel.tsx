@@ -261,6 +261,16 @@ interface TaskList {
   // True once the list is finished: it has tasks and every one is DONE. Turns the
   // dot green and mutes the title.
   completed?: boolean;
+  // How many of its tasks are filed under no project. A list with tasks and none of them outside a
+  // project is that project's list: it is reached from the project's page, not listed here.
+  tasksOutsideProjects?: number;
+}
+
+/** A list whose every task belongs to a project — reached from that project's page, not from Tasks. */
+export function isProjectOnlyList(list: { _count?: { tasks: number }; tasksOutsideProjects?: number }): boolean {
+  // An older server that does not report the split lists everything, as it always did.
+  if (list.tasksOutsideProjects === undefined) return false;
+  return (list._count?.tasks ?? 0) > 0 && list.tasksOutsideProjects === 0;
 }
 
 async function logout() {
@@ -462,6 +472,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     const active: TaskList[] = [];
     const completed: TaskList[] = [];
     for (const l of taskLists.data ?? []) {
+      if (isProjectOnlyList(l)) continue;
       if (l.completed && (l.runningTasks ?? 0) === 0) completed.push(l);
       else active.push(l);
     }
@@ -472,7 +483,8 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // aggregate instead of downloading every unlisted task into the sidebar.
   const unlistedTasks = useQuery({
     queryKey: ['tasks', 'unlisted-count'],
-    queryFn: () => api<TaskPage>(taskPagePath({ limit: 1, listId: 'none' })),
+    // Counted over the tasks outside projects, the same scope the No list page lists.
+    queryFn: () => api<TaskPage>(taskPagePath({ limit: 1, listId: 'none', projectId: 'none' })),
     refetchInterval: 15_000,
   });
   const unlistedCount = unlistedTasks.data?.counts?.total ?? 0;

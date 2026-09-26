@@ -5,6 +5,7 @@ import {
   DeleteOutlined,
   LockOutlined,
   PlayCircleOutlined,
+  ProjectOutlined,
   ReloadOutlined,
   SearchOutlined,
   StopOutlined,
@@ -441,6 +442,11 @@ export function TaskListView() {
   // under a session's "Tasks created here" row lands. A scope like the list's, so the server narrows
   // the rows and the tallies alike; the chip in the toolbar names it and takes it off.
   const createdIn = routeId(searchParams.get('createdIn')) ?? undefined;
+  // The browsing views — every task, and the tasks in no list — are the owner's own work: the tasks
+  // filed under no project. A project's tasks are on that project's page, where the project decides
+  // whether they run. A list the reader opened, or one conversation's tasks, is a scope somebody
+  // picked, so it shows its members whoever filed them.
+  const scopeProjectId = isListView || createdIn ? undefined : 'none';
   const createdInSession = useQuery(sessionQuery(createdIn));
   const createdInTitle = createdInSession.data?.title?.trim() || 'this session';
 
@@ -462,6 +468,7 @@ export function TaskListView() {
         filter,
         query,
         listId: scopeListId ?? null,
+        ...(scopeProjectId ? { projectId: scopeProjectId } : {}),
         labels: labels.length ? labels : undefined,
         creatorSessionId: createdIn,
       },
@@ -473,6 +480,7 @@ export function TaskListView() {
           limit: 200,
           status: filter,
           listId: scopeListId,
+          projectId: scopeProjectId,
           labels,
           q: query,
           creatorSessionId: createdIn,
@@ -505,7 +513,7 @@ export function TaskListView() {
   // The tallies have their own request, keyed by the scope they describe rather than by the tab.
   // They survive a tab change because nothing about them changed — no carrying, no cache trick,
   // just a query whose key says what it depends on.
-  const taskCounts = useQuery(taskCountsQuery(scopeListId, labels, createdIn));
+  const taskCounts = useQuery(taskCountsQuery(scopeListId, labels, createdIn, scopeProjectId));
   const taskPageCounts = taskCounts.data;
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
   // Feeds both the Batches table and the picker's options, so opening the picker costs no
@@ -517,20 +525,23 @@ export function TaskListView() {
   // exists to show it is just showing it twice. Nor in one session's scope: `/tasks/active` cannot
   // be narrowed to it, so it would pin other conversations' work over this one's — and the tasks a
   // session created are few enough to all be on the first page anyway.
+  // Nor under a label filter, for the same reason: the strip is not narrowed by label, so it would
+  // pin every live task in scope over a page that shows one batch.
+  const pinStrip = view === 'tasks' && filter === 'ALL' && !createdIn && labels.length === 0;
   const activeTasks = useQuery({
-    ...activeTasksQuery(scopeListId),
-    enabled: view === 'tasks' && filter === 'ALL' && !createdIn,
+    ...activeTasksQuery(scopeListId, scopeProjectId),
+    enabled: pinStrip,
   });
   // Ranked by live state here, which is the one place that ranking is honest: the strip is the
   // complete set in scope (capped at 50 and reporting when it capped), not a page of it, so
   // "running first" is a statement about all of it rather than about what happened to load.
   const activeRows = useMemo(() => {
     // Checked here as well as in `enabled`: a disabled query still hands back what it cached.
-    if (filter !== 'ALL' || createdIn) return [];
+    if (!pinStrip) return [];
     const items = activeTasks.data?.items ?? [];
     return [...items].sort((a: any, b: any) => compareTasksBy(a, b, 'status'));
-  }, [activeTasks.data, filter, createdIn]);
-  const labelSummary = useQuery(labelSummaryQuery(scopeListId));
+  }, [activeTasks.data, pinStrip]);
+  const labelSummary = useQuery(labelSummaryQuery(scopeListId, scopeProjectId));
   const labelRows = labelSummary.data?.items ?? [];
   const hasLabels = labelRows.length > 0 || labels.length > 0;
 
@@ -589,7 +600,7 @@ export function TaskListView() {
   // Re-sorting or re-searching keeps the selection — the rows are still there — but voids
   // the anchor: a range is defined by two rows' positions, which just moved under it.
   useEffect(() => setSelection(dropAnchor), [sortField, sortDir, query]);
-  const pageTitle = isListView ? (listRow?.title ?? '') : isUnlisted ? 'No list' : 'Active';
+  const pageTitle = isListView ? (listRow?.title ?? '') : isUnlisted ? 'No list' : 'All tasks';
 
   // ── The list's console ────────────────────────────────────────────────────────────────────
   //
@@ -1227,6 +1238,17 @@ export function TaskListView() {
                     </>
                   )}
                 </div>
+              </div>
+            )}
+
+            {scopeProjectId && (counts.inProjects?.tasks ?? 0) > 0 && (
+              <div className="tasks-scope-note">
+                <ProjectOutlined />
+                <span>
+                  Tasks outside projects. <b>{counts.inProjects!.tasks.toLocaleString()}</b> tasks in{' '}
+                  {counts.inProjects!.projects.toLocaleString()} projects are on their project pages.
+                </span>
+                <a onClick={() => navigate('/projects')}>Projects ›</a>
               </div>
             )}
 
