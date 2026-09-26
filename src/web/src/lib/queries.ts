@@ -893,23 +893,6 @@ export const wikiSearchQuery = (q: string) =>
   });
 
 /**
- * The space a session's workspace is bound to: the codebase Add to Wiki files a note into, and whose
- * topics its form offers.
- *
- * A read of its own rather than a lookup in the owner's space list, because which space a session
- * belongs to is the server's rule (`resolveSpaceForCall`) and not a guess the client is entitled to
- * make: an owner with two codebases would otherwise file a note into whichever the list happened to
- * put first. Under the `['wiki']` prefix like every other wiki read, so a `wiki.changed` re-reads it.
- */
-export const wikiSpaceForSessionQuery = (sessionId: string | null) =>
-  queryOptions({
-    queryKey: ['wiki', 'session-space', sessionId] as const,
-    queryFn: () => api<WikiSpaceRow>(`/wiki/spaces/for-session/${encodeURIComponent(sessionId!)}`),
-    enabled: sessionId !== null,
-    staleTime: 30_000,
-  });
-
-/**
  * What waits for the owner, newest first, across every space or one of them.
  *
  * The key carries the space so switching spaces is a cache hit rather than a refetch, and `null`
