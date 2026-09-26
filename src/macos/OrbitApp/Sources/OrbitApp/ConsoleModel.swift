@@ -195,6 +195,12 @@ final class ConsoleModel {
     /// draft. They may refine the legacy workspace seed only until the user touches the picker;
     /// tracking the edit explicitly also catches re-selecting the value already on screen.
     private var effortSelectionRevision = EffortSelectionRevision()
+    /// Whether this session runs in the runtime's fast lane (Claude Code's `/fast`, Codex's
+    /// "priority" tier). The composer draws the Speed row only where
+    /// `AgentDefaults.fastModeAvailable` says the runtime and model have a lane at all
+    /// (web parity — `fastModeUsable`), and the value travels the way effort does: onto a live
+    /// session's config, or into the payload of the create/resume that builds the process.
+    var fastMode = false
     private(set) var pendingAttachments: [PendingAttachment] = []
     /// The in-flight `attach` uploads, keyed by their chip's local id, so a send that lands while
     /// the bytes are still going up can wait for them instead of leaving them behind. Each upload
@@ -882,7 +888,8 @@ final class ConsoleModel {
     // without this the adopted value would echo straight back as a PATCH, and every live PATCH
     // costs the session something — a control frame at least, and a re-spawn when the change is
     // one only a new process can carry (see `applyConfig`). So we only push genuine user edits.
-    private var syncedConfig: (model: String, permissionMode: String, effort: String)?
+    private var syncedConfig: (model: String, permissionMode: String, effort: String,
+                               fastMode: Bool)?
 
     /// Load the footer context once: the owning agent's name + the runner's plan usage, and
     /// adopt the session's stored model/permission/effort so the pills show its real settings
@@ -926,11 +933,14 @@ final class ConsoleModel {
         } else {
             effort = .default
         }
+        // Fast mode is stored, never inherited from the agent: a session either is in the lane or
+        // is not, and an absent field (older server, or one that never set it) is off.
+        fastMode = s.fastMode == true
         let live = ComposerLogic.isLive(status: s.effectiveRunStatus)
         // When the session already stores a model, this is a complete server baseline before the
         // slower optional Runner/provider reads. A manual pick can now PATCH against it safely.
         if live, s.model != nil, modelSelectionRevision.isPristine {
-            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue)
+            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
         }
 
         // Plan usage + Runtime model/default data ride the GET /runners list. A request failure is
@@ -989,7 +999,7 @@ final class ConsoleModel {
         // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
         // A terminal session isn't live, so its pills stay local until the next resume.
         if live, modelSelectionRevision.isPristine {
-            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue)
+            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
         }
     }
 
@@ -1185,18 +1195,18 @@ final class ConsoleModel {
     /// Default sends "" to clear it). No-op when the value equals the synced server config —
     /// that filters the programmatic adopt in `loadContext` from re-sending a change nobody made.
     ///
-    /// WHEN the pushed change takes hold is not one answer for all four fields, and the server
-    /// decides it (SessionsService.updateConfig), not this call. Effort and provider are decided
-    /// when the engine process is built, so they queue a `reload`: the runner re-spawns with
-    /// --resume once the running turn ends, and they govern the NEXT turn. Model and permission
-    /// mode are handed to a resident Claude Code over its control channel (`set_model` /
-    /// `set_permission_mode`) as a `setconfig` the inbox delivers mid-turn, so they take hold
-    /// where the running turn stands. Those control frames are the claude runtime's alone — a
-    /// Codex / Kimi / OpenCode session still re-spawns for all four. Web says as much in the
-    /// pill tooltips (`configPillHints`); nothing here shows the difference yet, so this comment
-    /// is where the two clients agree on it.
+    /// WHEN the pushed change takes hold is not one answer for all fields, and the server
+    /// decides it (SessionsService.updateConfig), not this call. Effort, fast mode and provider are
+    /// decided when the engine process is built — the CLI reads fast mode out of the settings file
+    /// its process started with — so they queue a `reload`: the runner re-spawns with --resume once
+    /// the running turn ends, and they govern the NEXT turn. Model and permission mode are handed
+    /// to a resident Claude Code over its control channel (`set_model` / `set_permission_mode`) as
+    /// a `setconfig` the inbox delivers mid-turn, so they take hold where the running turn stands.
+    /// Those control frames are the claude runtime's alone — a Codex / Kimi / OpenCode session
+    /// still re-spawns for all of them. Web says as much in the pill tooltips (`configPillHints`);
+    /// nothing here shows the difference yet, so this comment is where the two clients agree on it.
     func applyConfig(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
-                     provider: String? = nil) async {
+                     fastMode: Bool? = nil, provider: String? = nil) async {
         guard isLive else { return }
         // A provider only ever arrives from an explicit pick — `loadContext`'s adopt never sets one
         // — so it needs no comparison against the synced pair to prove it isn't an echo.
@@ -1204,17 +1214,20 @@ final class ConsoleModel {
             || (model.map { $0 != syncedConfig?.model } ?? false)
             || (permissionMode.map { $0 != syncedConfig?.permissionMode } ?? false)
             || (effort.map { $0 != syncedConfig?.effort } ?? false)
+            || (fastMode.map { $0 != syncedConfig?.fastMode } ?? false)
         guard changed else { return }
         do {
             try await api.updateConfig(sessionID: sessionID,
                 ConfigUpdateRequest(model: model, permissionMode: permissionMode, effort: effort,
-                                    provider: provider))
+                                    fastMode: fastMode, provider: provider))
             let baseline = syncedConfig ?? (model: modelID,
                                              permissionMode: self.permissionMode.rawValue,
-                                             effort: self.effort.rawValue)
+                                             effort: self.effort.rawValue,
+                                             fastMode: self.fastMode)
             syncedConfig = (model ?? baseline.model,
                             permissionMode ?? baseline.permissionMode,
-                            effort ?? baseline.effort)
+                            effort ?? baseline.effort,
+                            fastMode ?? baseline.fastMode)
         } catch {
             statusMessage = "Couldn't apply change — \(APIClient.failureReason(error))."
         }
@@ -1660,6 +1673,11 @@ final class ConsoleModel {
                                           // Resume config is authoritative. Keep the empty string
                                           // so Default clears a stale server-side model variant.
                                           effort: effort.rawValue,
+                                          // Same authority as effort, and sent as a value rather
+                                          // than only when true: a resume is the one moment a
+                                          // dormant session can leave the lane, so leaving it has
+                                          // to travel as clearly as joining it.
+                                          fastMode: fastMode,
                                           attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
                                           provider: pendingResumeProvider,
                                           // Only ever the answer to the question that asked about
@@ -1737,6 +1755,9 @@ final class ConsoleModel {
             model: modelID,
             permissionMode: permissionMode.rawValue,
             effort: effort.label,
+            // Passed only while it is on, the way web's snapshot carries it: a false here would be
+            // indistinguishable from a session that has no lane, which is the same thing it means.
+            fastMode: fastMode ? true : nil,
             contextTokens: state.contextTokens,
             contextWindow: window,
             planUsageLabel: primary?.label,
@@ -1773,6 +1794,10 @@ final class ConsoleModel {
                 provider: draftProviderOverride,
                 model: providerCapabilitiesResolved ? modelID : nil,
                 permissionMode: permissionMode.rawValue, effort: effort.rawValue,
+                // Sent only when on, like every other override that has an "off" default: a
+                // session that never touched Speed starts without the lane rather than with an
+                // explicit false the server would have to remember anyway.
+                fastMode: fastMode ? true : nil,
                 shell: shell ? true : nil,
                 attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
             composerText = ""
