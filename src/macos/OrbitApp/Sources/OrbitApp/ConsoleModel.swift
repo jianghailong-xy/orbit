@@ -1211,8 +1211,8 @@ final class ConsoleModel {
     /// to a resident Claude Code over its control channel (`set_model` / `set_permission_mode`) as
     /// a `setconfig` the inbox delivers mid-turn, so they take hold where the running turn stands.
     /// Those control frames are the claude runtime's alone — a Codex / Kimi / OpenCode session
-    /// still re-spawns for all of them. Web says as much in the pill tooltips (`configPillHints`);
-    /// nothing here shows the difference yet, so this comment is where the two clients agree on it.
+    /// still re-spawns for all of them. Neither client shows the difference, so this comment is
+    /// where it is written down.
     func applyConfig(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                      fastMode: Bool? = nil, provider: String? = nil) async {
         guard isLive else { return }

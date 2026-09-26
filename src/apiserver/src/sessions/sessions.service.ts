@@ -7059,8 +7059,7 @@ export class SessionsService {
       // driven over ACP/JSON-RPC, opencode runs one process per turn, and none of their session
       // loops has an arm for the kind — one filed there is acked on delivery and applied by
       // nobody, which is worse than the wait this split removed. For them the live half stays
-      // what it always was: part of the re-spawn, effort included (web `appliesMidTurn` promises
-      // the same).
+      // what it always was: part of the re-spawn, effort included.
       //
       // Asked of the RUNTIME, the way deliverSteer asks its own question, and read off
       // `resolveProviderExec` — whose `provider` IS that runtime (`execRuntime`), resolved after

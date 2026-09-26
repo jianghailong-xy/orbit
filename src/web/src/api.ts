@@ -659,8 +659,7 @@ export const decideApproval = (
  *  channel and take effect where the turn stands; a provider is spawn-only (it IS the process's
  *  environment) and so is fast mode (the engine reads it once, from the settings file its process
  *  was built with), so for those the runner re-spawns with --resume once the turn ends and the
- *  change takes effect on the next one (`configPillHints` is the copy that says which is which,
- *  and only the claude runtime has the control channel). */
+ *  change takes effect on the next one (only the claude runtime has the control channel). */
 export const updateSessionConfig = (
   sessionId: string,
   config: {
