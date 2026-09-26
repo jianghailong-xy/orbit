@@ -124,6 +124,22 @@ final class TaskDetailLogicTests: XCTestCase {
         XCTAssertNil(TaskDetailLogic.createdFootnote(creatorName: " ", createdAt: "not a date"))
     }
 
+    func testTheCreatorIsNamedFromTheAgentListWhenTheServerSendsNoName() throws {
+        let agents = try JSONDecoder().decode([Agent].self, from: Data("""
+        [{"id":"3CuIHiSJZBQ7nLVUwc7ekz","name":"orbit"},{"id":"34P37zDvozLi9NZwD8BIL","name":"rocm"}]
+        """.utf8))
+        let byAgent = task(#"{"id":"T","title":"t","status":"OPEN","creatorType":"AGENT","creatorId":"34P37zDvozLi9NZwD8BIL"}"#)
+        XCTAssertEqual(TaskDetailLogic.creatorName(byAgent, agents: agents), "rocm")
+        let byUUID = task("""
+        {"id":"T","title":"t","status":"OPEN","creatorType":"AGENT","creatorId":"\(PublicID.storageKey("34P37zDvozLi9NZwD8BIL"))"}
+        """)
+        XCTAssertEqual(TaskDetailLogic.creatorName(byUUID, agents: agents), "rocm", "either spelling of the id")
+        let named = task(#"{"id":"T","title":"t","status":"OPEN","creatorType":"AGENT","creatorId":"x","creatorName":"Coordinator"}"#)
+        XCTAssertEqual(TaskDetailLogic.creatorName(named, agents: agents), "Coordinator", "the server's name wins")
+        let byPerson = task(#"{"id":"T","title":"t","status":"OPEN","creatorType":"USER","creatorId":"3CuIHiSJZBQ7nLVUwc7ekz"}"#)
+        XCTAssertNil(TaskDetailLogic.creatorName(byPerson, agents: agents), "a person is not looked up among agents")
+    }
+
     func testTheStartAtRowAndItsHint() {
         XCTAssertEqual(TaskDetailLogic.scheduleValue(nil), TaskDetailCopy.scheduleNotSet)
         XCTAssertEqual(TaskDetailLogic.scheduleHint(nil), TaskDetailCopy.scheduleHintUnscheduled)

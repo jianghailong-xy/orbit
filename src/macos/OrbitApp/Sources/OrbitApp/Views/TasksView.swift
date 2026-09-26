@@ -1328,7 +1328,9 @@ private struct TaskDetailContent: View {
             sectionHeader(TaskDetailCopy.detailsHeading)
         } footer: {
             if let footnote = TaskDetailLogic.createdFootnote(
-                creatorName: task.creatorName ?? tasks.item(task.id)?.creatorName, createdAt: task.createdAt) {
+                creatorName: TaskDetailLogic.creatorName(task, agents: model.agents?.items ?? [])
+                    ?? tasks.item(task.id)?.creatorName,
+                createdAt: task.createdAt) {
                 Text(footnote)
             }
         }

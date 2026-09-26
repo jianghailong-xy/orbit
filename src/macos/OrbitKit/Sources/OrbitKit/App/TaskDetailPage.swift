@@ -367,6 +367,16 @@ public enum TaskDetailLogic {
         }
     }
 
+    /// Who made the task, by name: the server's own when it sent one — neither the detail nor the
+    /// list page does today, which is why the browser's row reads `—` — else the agent the creator
+    /// id names in the loaded agent list. A person's id has no name to look up here.
+    public static func creatorName(_ task: TaskItem, agents: [Agent]) -> String? {
+        if let name = task.creatorName, !name.trimmingCharacters(in: .whitespaces).isEmpty { return name }
+        guard task.creatorType == "AGENT", let id = task.creatorId else { return nil }
+        let key = PublicID.storageKey(id)
+        return agents.first { PublicID.storageKey($0.id) == key }?.name
+    }
+
     /// The scheduled start as the reader reads it (`scheduledStart`), or nil when there is none or
     /// it cannot be read.
     public static func scheduledLocal(_ runAt: String?, timeZone: TimeZone = .current,
