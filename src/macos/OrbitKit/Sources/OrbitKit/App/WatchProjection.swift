@@ -435,21 +435,155 @@ public enum WatchProjection {
         }
     }
 
-    /// The console strip's one line and its opened rows, in the web's words (`STRIP_*` in
-    /// lib/watches.ts, held to these by `WatchStripCopyParityTests`). "Watching" alone is the line's
-    /// fixed label — what is watched is named beside it, where the header's word counts it.
+    /// The console strip's words, in the web's (`STRIP_*` in lib/watches.ts, held to these by
+    /// `WatchStripCopyParityTests`; the sentences both ends build from them are proved against
+    /// `src/shared/src/watch-strip.fixture.json`). "Watching" alone is the line's fixed label — what
+    /// is watched is named beside it, where the header's word counts it.
     public static let stripLabel = "Watching"
-
-    /// What the strip's Then row says, on the first watch only: every strip watch resumes this
-    /// session, so the constant fact is said once.
-    public static let stripThen = "Resume this session"
 
     /// The strip's way to the Following page, where Pause and Stop live.
     public static let stripManage = "Manage in Watches ›"
 
-    /// How the strip prefixes the soonest deadline on the count line — a lone watch's own deadline
-    /// needs no qualifier.
-    public static let stripEarliest = "earliest "
+    /// The opened strip's way to the one target its line names.
+    public static let stripOpenTask = "Open task ›"
+    public static let stripOpenSession = "Open session ›"
+
+    static let stripResumes = "Resumes this session when"
+    static let stripPaused = "Paused · resumes this session when"
+    static let stripUnread = "its condition is met"
+    static let stripNotChecked = "Not checked for"
+    static let stripMayBeLate = "the resume may be late."
+
+    /// What an opened strip says about one watch, in one sentence: what it waits for, that this
+    /// session resumes when it holds, and the deadline that resumes it anyway — "Resumes this session
+    /// when it finishes, or in 13d at the latest." The condition is said of the watch's live targets,
+    /// "it" for one and "all of them" / "any of them" for several; a condition this build can't read
+    /// says only that it has one. The browser's `stripSentence`.
+    public static func stripSentence(for watch: Watch, now: Date = Date()) -> String {
+        let live = watch.targets.filter { $0.state != .gone }
+        let clause = live.count <= 1
+            ? oneTargetVerbs(watch.predicate).map { "it \($0)" }
+            : manyTargetsClause(watch.predicate)
+        let tail: String
+        if let expiresAt = RelativeTime.parse(watch.expiresAt) {
+            let left = expiresAt.timeIntervalSince(now)
+            tail = left > 0 ? ", or in \(duration(left)) at the latest." : ", or any moment now."
+        } else {
+            tail = "."
+        }
+        let lead = watch.state == .paused ? stripPaused : stripResumes
+        return "\(lead) \(clause ?? stripUnread)\(tail)"
+    }
+
+    /// The line an opened strip adds under a watch nobody is checking — "Not checked for 12m — the
+    /// resume may be late." — the one fact on it worth colouring (`WatchFreshness.stale`). The
+    /// browser's `stripStaleLine`.
+    public static func stripStaleLine(for watch: Watch, now: Date = Date()) -> String? {
+        guard WatchFreshness.of(watch, now: now) == .stale else { return nil }
+        let looked = watch.lastEvaluatedAt.flatMap(RelativeTime.parse)
+            ?? RelativeTime.parse(watch.createdAt) ?? now
+        return "\(stripNotChecked) \(duration(now.timeIntervalSince(looked))) — \(stripMayBeLate)"
+    }
+
+    /// A leaf in the browser's words for it (`LEAF_COPY`'s `one` and `many`), which the strip's
+    /// sentence borrows so both ends say one sentence. Nil for a leaf this build can't read.
+    static func stripVerb(_ leaf: WatchLeaf, many: Bool) -> String? {
+        switch leaf {
+        case .sessionTurnSettled: return many ? "finish their turns" : "finishes its turn"
+        case .sessionRunTerminal: return many ? "end" : "ends"
+        case .sessionLifecycleTerminal:
+            return many ? "are moved to Completed or Trash" : "is moved to Completed or Trash"
+        case .sessionNeedsAttention: return many ? "ask for an approval" : "asks for an approval"
+        case .taskTerminal: return many ? "finish" : "finishes"
+        case .taskDone: return many ? "are done" : "is done"
+        case .taskFailed: return many ? "fail" : "fails"
+        case .unknown: return nil
+        }
+    }
+
+    /// What a condition says of one target, each fact once: "finishes", "finishes its turn or asks
+    /// for an approval". "It finishes, or it fails" is one fact about one task — failing is one way
+    /// of finishing — so an ANY_OF naming both says the one.
+    private static func oneTargetVerbs(_ predicate: WatchPredicate) -> String? {
+        switch predicate {
+        case .all(let leaf), .any(let leaf):
+            return stripVerb(leaf, many: false)
+        case .allOf(let operands), .anyOf(let operands):
+            let parts = operands.map(oneTargetVerbs)
+            guard !parts.isEmpty, !parts.contains(where: { $0 == nil }) else { return nil }
+            var verbs: [String] = []
+            for part in parts.compactMap({ $0 }) where !verbs.contains(part) { verbs.append(part) }
+            guard case .anyOf = predicate else { return verbs.joined(separator: " and ") }
+            if let finishes = stripVerb(.taskTerminal, many: false), verbs.contains(finishes) {
+                verbs.removeAll { $0 == stripVerb(.taskFailed, many: false) }
+            }
+            return verbs.joined(separator: " or ")
+        case .unknown:
+            return nil
+        }
+    }
+
+    /// What a condition says of several targets: "all of them finish or any of them fails".
+    private static func manyTargetsClause(_ predicate: WatchPredicate) -> String? {
+        switch predicate {
+        case .all(let leaf):
+            return stripVerb(leaf, many: true).map { "all of them \($0)" }
+        case .any(let leaf):
+            return stripVerb(leaf, many: false).map { "any of them \($0)" }
+        case .allOf(let operands), .anyOf(let operands):
+            let parts = operands.map(manyTargetsClause)
+            guard !parts.isEmpty, !parts.contains(where: { $0 == nil }) else { return nil }
+            if case .anyOf = predicate { return parts.compactMap { $0 }.joined(separator: " or ") }
+            return parts.compactMap { $0 }.joined(separator: " and ")
+        case .unknown:
+            return nil
+        }
+    }
+
+    /// A task target's pill, where it itself stands in the task list's words: a run going or queued
+    /// outranks the lifecycle, and the lifecycle words are the ones the browser draws — the rule the
+    /// Orbit link card draws a task by. Nil for a session (`stripGlyph`) and for a target the watch
+    /// carries no standing for.
+    public static func stripPill(_ target: WatchTarget) -> TaskPill? {
+        guard target.targetKind == .task, let standing = target.targetStatus else { return nil }
+        return TaskListLogic.overlayPill(running: standing.running, queued: standing.queued)
+            ?? ReferencedTaskNote.pill(status: standing.status)
+    }
+
+    /// A session target's standing: the glyph its own header draws for its run state.
+    public static func stripGlyph(_ target: WatchTarget) -> SessionStatusGlyph? {
+        guard target.targetKind == .session, let standing = target.targetStatus else { return nil }
+        return SessionStatusGlyph.make(runState: SessionRunState(rawValue: standing.status) ?? .unknown)
+    }
+
+    /// The targets an opened strip lists for one watch: the live ones, what the condition has
+    /// already met first — a stable split, so the watch's own order holds within each group. The
+    /// browser's `StripWatch`.
+    public static func stripTargets(of watch: Watch) -> [WatchTarget] {
+        let live = watch.targets.filter { $0.state != .gone }
+        return live.filter { $0.state == .satisfied } + live.filter { $0.state != .satisfied }
+    }
+
+    /// The four numbers the folded line writes about several targets, in Tasks created here's
+    /// sentence (`SessionCreatedTasksCopy.countParts`), each counted from where the target itself
+    /// stands: a task is done when its status is DONE, a session when its turn is over — neither
+    /// running, queued nor failed. A target nobody could read is only counted. The browser's
+    /// `stripCounts`.
+    public static func stripCounts(_ targets: [WatchTarget]) -> (running: Int, failed: Int, done: Int, total: Int) {
+        var running = 0
+        var failed = 0
+        var done = 0
+        for target in targets {
+            guard let standing = target.targetStatus else { continue }
+            if standing.running { running += 1 }
+            if standing.status == "FAILED" {
+                failed += 1
+            } else if target.targetKind == .task ? standing.status == "DONE" : !standing.running && !standing.queued {
+                done += 1
+            }
+        }
+        return (running, failed, done, targets.count)
+    }
 
     /// How many targets a card names before it stops counting them out, and that line. Web's
     /// `SHOWN_TARGETS` and the `+N more` beside it; the wake card counts its own changes the same way.
@@ -500,7 +634,6 @@ public enum WatchProjection {
 /// there.
 public enum WatchRowLabel {
     public static let watching = "Watching"
-    public static let until = "Until"
     public static let progress = "Progress"
     public static let updated = "Updated"
     public static let then = "Then"
@@ -575,17 +708,14 @@ public struct WatchSessionSummary: Equatable, Sendable {
         return targets
     }
 
-    /// How far the wait has got and how long is left, as the line reads it: "0 met · 3h left",
-    /// "earliest 0 met · 4h left" — never the sentence's "in" prefix. "earliest" only when the line
-    /// speaks for several watches: a lone watch has one deadline, so there is no soonest of several
-    /// to qualify. Nil when no deadline parses.
-    public func lineTime(now: Date = Date()) -> String? {
-        let lefts = watches.compactMap { RelativeTime.parse($0.expiresAt)?.timeIntervalSince(now) }
-        guard let earliest = lefts.min() else { return nil }
-        let span = earliest > 0 ? "\(WatchProjection.duration(earliest)) left" : "now"
-        let met = lineTargets.filter { $0.state == .satisfied }.count
-        let line = "\(met) met · \(span)"
-        return watches.count == 1 ? line : "\(WatchProjection.stripEarliest)\(line)"
+    /// The line's sentence when it names no one target: Tasks created here's (`2 running · 1 failed ·
+    /// 4/8 done`), over the distinct live targets, each counted from where it itself stands
+    /// (`WatchProjection.stripCounts`). The deadline is not on the line — almost every wait ends long
+    /// before it — but in each watch's sentence, opened.
+    public var lineParts: [SessionCreatedTasksCopy.CountPart] {
+        let counts = WatchProjection.stripCounts(lineTargets)
+        return SessionCreatedTasksCopy.countParts(running: counts.running, failed: counts.failed,
+                                                  done: counts.done, total: counts.total)
     }
 
     /// The oldest last look among the ACTIVE watches — the least fresh reading is the one to show.

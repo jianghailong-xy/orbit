@@ -536,6 +536,9 @@ export interface ActiveSessionTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStartedCard;
+  /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
+   *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
+  authoredByOrbit?: true;
 }
 
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores

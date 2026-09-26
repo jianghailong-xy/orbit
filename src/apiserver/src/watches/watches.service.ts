@@ -9,8 +9,9 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import {
+  SessionRunState,
   WATCH_ATTENTION_EXPIRED_ACTIONS,
   WATCH_ATTENTION_STATES,
   WATCH_DELIVERY_STATES,
@@ -18,6 +19,7 @@ import {
   WATCH_QUIET_DEAD_LETTER_CODES,
   WATCH_STATES,
   WATCH_UNRETRYABLE_DEAD_LETTER_CODES,
+  deriveSessionRunState,
   transientDbConflictBody,
   watchDeadLetterCodeOf,
   type WatchAction,
@@ -26,6 +28,7 @@ import {
   type WatchSnapshot,
   type WatchState,
   type WatchTargetKind,
+  type WatchTargetStatusView,
 } from '@orbit/shared';
 import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -122,9 +125,12 @@ const WATCH_VIEW_SELECT = {
 
 type WatchRow = Prisma.WatchGetPayload<{ select: typeof WATCH_VIEW_SELECT }>;
 
-/** A watch as a client reads it: every target carries its own name, read with the watch (`named`). */
+/** A watch as a client reads it: every target carries its own name and standing, read with the watch (`named`). */
 type NamedWatchRow = Omit<WatchRow, 'targets'> & {
-  targets: (WatchRow['targets'][number] & { targetTitle: string | null })[];
+  targets: (WatchRow['targets'][number] & {
+    targetTitle: string | null;
+    targetStatus: WatchTargetStatusView | null;
+  })[];
 };
 
 /** A delivery as the operations read lists it: what a watch's read shows, and the watch and Match it belongs to. */
@@ -386,6 +392,11 @@ export class WatchesService {
    * Scoped to the owner like every other read here. A target this account can no longer read has no
    * title, and that is all it means: whether the row is gone is the target's own `state` (GONE), which
    * the evaluator writes, and which is the only thing a client may say "Deleted" from.
+   *
+   * Where each target stands rides along from the same rows (`targetStatus`), so the strip above a
+   * session's composer can say what it waits on is doing without a read per target: a task in the task
+   * list's words — its status with the `running`/`queued` overlays, derived as `TasksService.withRunning`
+   * derives them — and a session by its run state. Not read at all, it is null with the title.
    */
   private async named(ownerId: string, watches: WatchRow[]): Promise<NamedWatchRow[]> {
     const idsOf = (kind: WatchTargetKind): string[] => [
@@ -395,23 +406,55 @@ export class WatchesService {
     ];
     const sessionIds = idsOf('SESSION');
     const taskIds = idsOf('TASK');
-    const [sessions, tasks] = await Promise.all([
+    const [sessions, tasks, busy] = await Promise.all([
       sessionIds.length === 0
         ? []
-        : this.prisma.session.findMany({ where: { id: { in: sessionIds }, ownerId }, select: { id: true, title: true } }),
+        : this.prisma.session.findMany({
+            where: { id: { in: sessionIds }, ownerId },
+            select: { id: true, title: true, status: true, endReason: true },
+          }),
       taskIds.length === 0
         ? []
-        : this.prisma.task.findMany({ where: { id: { in: taskIds }, ownerId }, select: { id: true, title: true } }),
+        : this.prisma.task.findMany({
+            where: { id: { in: taskIds }, ownerId },
+            select: { id: true, title: true, status: true },
+          }),
+      taskIds.length === 0
+        ? []
+        : this.prisma.session.groupBy({
+            by: ['taskId', 'status'],
+            where: { ownerId, taskId: { in: taskIds }, status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } },
+            _count: { _all: true },
+          }),
     ]);
-    const titles = new Map<string, string | null>();
-    for (const row of sessions) titles.set(`SESSION:${row.id}`, row.title);
-    for (const row of tasks) titles.set(`TASK:${row.id}`, row.title);
+    const running = new Set(busy.filter((b) => b.status === RunStatus.RUNNING).map((b) => b.taskId));
+    const queued = new Set(busy.filter((b) => b.status === RunStatus.PENDING).map((b) => b.taskId));
+    const read = new Map<string, { title: string | null; status: WatchTargetStatusView }>();
+    for (const row of sessions) {
+      const state = deriveSessionRunState({ status: row.status, endReason: row.endReason });
+      read.set(`SESSION:${row.id}`, {
+        title: row.title,
+        status: {
+          status: state,
+          running: state === SessionRunState.RUNNING,
+          queued: state === SessionRunState.QUEUED,
+        },
+      });
+    }
+    for (const row of tasks) {
+      // A task with both is simply running: `queued` only means something while nothing runs yet.
+      const on = running.has(row.id);
+      read.set(`TASK:${row.id}`, {
+        title: row.title,
+        status: { status: row.status, running: on, queued: queued.has(row.id) && !on },
+      });
+    }
     return watches.map((watch) => ({
       ...watch,
-      targets: watch.targets.map((target) => ({
-        ...target,
-        targetTitle: titles.get(`${target.targetKind}:${target.targetResourceId}`) ?? null,
-      })),
+      targets: watch.targets.map((target) => {
+        const row = read.get(`${target.targetKind}:${target.targetResourceId}`);
+        return { ...target, targetTitle: row?.title ?? null, targetStatus: row?.status ?? null };
+      }),
     }));
   }
 

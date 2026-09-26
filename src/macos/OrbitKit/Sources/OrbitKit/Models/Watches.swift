@@ -238,6 +238,22 @@ public struct WatchTarget: Codable, Equatable, Sendable {
     /// When an evaluation last MOVED this target's state: the evaluator writes it only together
     /// with a change, so it reads as "last changed". The watch's own `lastEvaluatedAt` is the look.
     public let lastEvaluatedAt: String?
+    /// The target's own title, read with the watch under the same account. Nil when this account
+    /// can't read the row, which alone never means it was deleted (that is `state` GONE), and from a
+    /// server older than the field.
+    public var targetTitle: String? = nil
+    /// Where the target itself stands, read with the watch on the same terms as `targetTitle`.
+    public var targetStatus: WatchTargetStatus? = nil
+}
+
+/// One target's own standing, in its own list's words: a task as the task list reads it — its status
+/// with the `running`/`queued` overlays — and a session by its run state (`SessionRunState`), the two
+/// flags saying the same of it.
+public struct WatchTargetStatus: Codable, Equatable, Sendable {
+    /// A task's `TaskStatus`, or a session's `SessionRunState`, as the raw value.
+    public let status: String
+    public let running: Bool
+    public let queued: Bool
 }
 
 /// What a target looked like to the evaluation that recorded a Match or an expiry.

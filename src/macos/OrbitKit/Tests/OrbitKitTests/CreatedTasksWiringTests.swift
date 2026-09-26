@@ -216,8 +216,8 @@ final class CreatedTasksWiringTests: XCTestCase {
             .count - 1, 2, "both of the list's scrolling shapes keep the floor")
         XCTAssertFalse(card.contains(".frame(maxHeight: Self.listCap)"), "no scrolling shape without one")
         let watching = code(try source("Views/WatchingCard.swift"))
-        XCTAssertTrue(watching.contains(".frame(minHeight: Self.factsFloor, maxHeight: Self.factsCap)"),
-                      "the strip's facts scroll inside past a cap, above a floor")
+        XCTAssertTrue(watching.contains(".frame(minHeight: Self.listFloor, maxHeight: Self.listCap)"),
+                      "the strip's list scrolls inside past a cap, above a floor")
         XCTAssertTrue(code(try source("Views/WorktreeBar.swift"))
             .contains(".frame(minHeight: CGFloat(min(procs.count, 2)) * 30, maxHeight: 320)"),
                       "and the Background processes list keeps its floor too")

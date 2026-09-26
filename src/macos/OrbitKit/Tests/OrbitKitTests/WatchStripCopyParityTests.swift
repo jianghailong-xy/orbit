@@ -90,18 +90,23 @@ final class WatchStripCopyParityTests: XCTestCase {
         }
     }
 
-    /// The strip's own words, declaration for declaration: the fixed title, the opened rows' labels,
-    /// the way to the Following page, and the count line's deadline prefix. Both ends compute the
-    /// line from the same two shapes — `WatchSessionSummary.lineTarget` and the web's `single` — and
-    /// `WatchWakeCopyParityTests` holds those together; this holds the words the line is made of.
+    /// The strip's own words, declaration for declaration: the fixed title, the ways out, and the
+    /// words the opened sentences are built from. Both ends compute the line from the same two
+    /// shapes — `WatchSessionSummary.lineTarget` and the web's `single` — and
+    /// `WatchWakeCopyParityTests` holds those together; this holds the words the strip is made of,
+    /// and the fixture tests below hold the sentences built from them.
     func testTheStripsWordsAreTheBrowsersDeclarations() throws {
         let lib = try flat(Self.webWatches)
         let pairs: [(what: String, declaration: String, mine: String)] = [
             ("the strip's title", "STRIP_LABEL", WatchProjection.stripLabel),
-            ("the Until row's label", "STRIP_UNTIL", WatchRowLabel.until),
-            ("the Then row's words", "STRIP_THEN", WatchProjection.stripThen),
             ("the way to the Following page", "STRIP_MANAGE", WatchProjection.stripManage),
-            ("the count line's deadline prefix", "STRIP_EARLIEST", WatchProjection.stripEarliest),
+            ("the way to a lone task", "STRIP_OPEN_TASK", WatchProjection.stripOpenTask),
+            ("the way to a lone session", "STRIP_OPEN_SESSION", WatchProjection.stripOpenSession),
+            ("the sentence's opening", "STRIP_RESUMES", WatchProjection.stripResumes),
+            ("a paused watch's opening", "STRIP_PAUSED", WatchProjection.stripPaused),
+            ("a condition neither end reads", "STRIP_UNREAD", WatchProjection.stripUnread),
+            ("the unchecked line's opening", "STRIP_NOT_CHECKED", WatchProjection.stripNotChecked),
+            ("the unchecked line's reason", "STRIP_MAY_BE_LATE", WatchProjection.stripMayBeLate),
         ]
         for pair in pairs {
             let web = try capture(lib, "const \(pair.declaration) = '(.+?)';", pair.what, Self.webWatches)
@@ -111,35 +116,140 @@ final class WatchStripCopyParityTests: XCTestCase {
         }
     }
 
-    /// The strip's opened rows, label for label, in the order both clients draw them — the
-    /// condition first (Until), then how far it has got, then the names it is over, which is the
-    /// card's reading too: its heading is the condition. The card's rows are held by
-    /// `WatchWakeCopyParityTests`; the strip is its own shape — one row fewer (no Updated, the
-    /// evaluator's last look rides on Progress) and one the card has no reason for (Until, since
-    /// the strip's headline is the fixed "Watching" and not the condition).
-    func testTheStripsRowLabelsAreTheBrowsersRowLabelsInOrder() throws {
-        let web = try flat(Self.webRelations)
-        let labels = try captures(web, "<dt>(.*?)</dt>")
-        guard !labels.isEmpty else {
-            throw ParityError.notDeclared(what: "any <dt> label", file: Self.webRelations)
+    /// The sentence borrows each leaf's verbs from the browser's `LEAF_COPY` — the words its cards
+    /// and editor say a condition in — so the strip reads a leaf the way the rest of the page does.
+    func testTheSentencesVerbsAreTheBrowsersLeafCopy() throws {
+        let lib = try flat(Self.webWatches)
+        for leaf in WatchLeaf.allCases where leaf != .unknown {
+            let entry = try capture(lib, "\\n  \(leaf.rawValue): \\{(.+?)\\n  \\},", "LEAF_COPY.\(leaf.rawValue)",
+                                    Self.webWatches)
+            let one = try capture(entry, "one: '(.+?)',", "LEAF_COPY.\(leaf.rawValue).one", Self.webWatches)
+            let many = try capture(entry, "many: '(.+?)',", "LEAF_COPY.\(leaf.rawValue).many", Self.webWatches)
+            XCTAssertEqual(WatchProjection.stripVerb(leaf, many: false), one, "\(leaf.rawValue), of one target")
+            XCTAssertEqual(WatchProjection.stripVerb(leaf, many: true), many, "\(leaf.rawValue), of several")
         }
-        // Until is the one label the browser says through a constant; the rest are bare.
-        let spelled = labels.map { $0 == "{STRIP_UNTIL}" ? WatchRowLabel.until : $0 }
-        let mine = [WatchRowLabel.until, WatchRowLabel.progress, WatchRowLabel.watching,
-                    WatchRowLabel.then, WatchRowLabel.expires]
-        var last = -1
-        for label in mine {
-            guard let at = spelled.firstIndex(of: label) else {
-                return XCTFail("the \(label) row drifted: \(Self.webRelations) no longer labels a row "
-                                   + "\(label.debugDescription). Rows this client draws and the "
-                                   + "browser doesn't are rows one set of readers can't ask about.")
+    }
+
+    // MARK: the sentences both ends are proved against
+
+    private static let fixturePath = "src/shared/src/watch-strip.fixture.json"
+
+    private struct Fixture: Decodable {
+        struct Sentence: Decodable {
+            let `case`: String
+            let state: String
+            let predicate: AnyJSON
+            let targets: [String]
+            let expiresAt: String
+            let sentence: String
+        }
+        struct Stale: Decodable {
+            let `case`: String
+            let state: String
+            let lastEvaluatedAt: String?
+            let createdAt: String
+            let line: String?
+        }
+        struct Count: Decodable {
+            struct Target: Decodable {
+                let kind: String
+                let status: WatchTargetStatus?
             }
-            XCTAssertGreaterThan(at, last, "the \(label) row moved: the strip reads top to bottom in "
-                                     + "different orders on the two clients.")
-            last = at
+            let `case`: String
+            let targets: [Target]
+            let line: String
         }
-        // Exactly these rows: an extra one is a new fact one end says alone.
-        XCTAssertEqual(spelled, mine)
+        let now: String
+        let sentences: [Sentence]
+        let stale: [Stale]
+        let counts: [Count]
+        let sessionWords: [String: String]
+    }
+
+    /// Any JSON value, kept as the Foundation object the watch fixture is built from.
+    private struct AnyJSON: Decodable {
+        let value: Any
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if let object = try? c.decode([String: AnyJSON].self) {
+                value = object.mapValues(\.value)
+            } else if let array = try? c.decode([AnyJSON].self) {
+                value = array.map(\.value)
+            } else if let string = try? c.decode(String.self) {
+                value = string
+            } else if let number = try? c.decode(Int.self) {
+                value = number
+            } else {
+                value = NSNull()
+            }
+        }
+    }
+
+    private func fixture() throws -> Fixture {
+        let url = try repoRoot().appendingPathComponent(Self.fixturePath)
+        guard FileManager.default.fileExists(atPath: url.path) else { throw ParityError.missing(Self.fixturePath) }
+        return try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
+    }
+
+    private func date(_ iso: String) throws -> Date {
+        try XCTUnwrap(RelativeTime.parse(iso), iso)
+    }
+
+    func testEachWatchsSentenceIsTheFixtures() throws {
+        let f = try fixture()
+        let now = try date(f.now)
+        XCTAssertGreaterThan(f.sentences.count, 10)
+        for c in f.sentences {
+            let targets: [[String: Any]] = c.targets.enumerated().map { index, spec in
+                let parts = spec.split(separator: ":").map(String.init)
+                return WatchFixture.target("T\(index)", kind: parts[0], state: parts.count > 1 ? parts[1] : "OBSERVED")
+            }
+            let predicate = try XCTUnwrap(c.predicate.value as? [String: Any], c.case)
+            let watch = WatchFixture.watch(state: c.state, predicate: predicate, targets: targets, expiresAt: c.expiresAt)
+            XCTAssertEqual(WatchProjection.stripSentence(for: watch, now: now), c.sentence, c.case)
+        }
+    }
+
+    func testTheUncheckedLineIsTheFixtures() throws {
+        let f = try fixture()
+        let now = try date(f.now)
+        for c in f.stale {
+            let watch = WatchFixture.watch(state: c.state, lastEvaluatedAt: c.lastEvaluatedAt, createdAt: c.createdAt)
+            XCTAssertEqual(WatchProjection.stripStaleLine(for: watch, now: now), c.line, c.case)
+        }
+    }
+
+    func testTheLinesSentenceOverSeveralTargetsIsTheFixtures() throws {
+        let f = try fixture()
+        for c in f.counts {
+            let targets: [[String: Any]] = c.targets.enumerated().map { index, target in
+                var object = WatchFixture.target("T\(index)", kind: target.kind)
+                if let status = target.status {
+                    object["targetStatus"] = ["status": status.status, "running": status.running, "queued": status.queued]
+                }
+                return object
+            }
+            // One watch over them all, so the line counts every one of them.
+            let summary = try XCTUnwrap(WatchSessionSummary(sessionID: "S1",
+                                                            watches: [WatchFixture.watch(targets: targets)]))
+            XCTAssertEqual(summary.lineParts.map(\.text).joined(separator: SessionCreatedTasksCopy.separator),
+                           c.line, c.case)
+        }
+    }
+
+    func testASessionTargetsWordIsItsHeadersGlyphs() throws {
+        let f = try fixture()
+        let states: [SessionRunState] = [.queued, .running, .awaitingInput, .interrupted, .succeeded, .failed, .ended]
+        XCTAssertEqual(Set(f.sessionWords.keys), Set(states.map(\.rawValue)),
+                       "every run state a session can be in has a word, and no other")
+        for (state, word) in f.sessionWords {
+            let target = WatchFixture.watch(targets: [{
+                var object = WatchFixture.target("S0", kind: "SESSION")
+                object["targetStatus"] = ["status": state, "running": false, "queued": false]
+                return object
+            }()]).targets[0]
+            XCTAssertEqual(WatchProjection.stripGlyph(target)?.label, word, state)
+        }
     }
 
     /// What Stop costs, said before it happens, on both ends' detail views. CANCELLED is the one end
