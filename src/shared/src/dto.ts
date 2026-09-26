@@ -389,6 +389,11 @@ export interface RunnerHeartbeatRequest {
   /** Every session currently registered in this process's local supervisor pool,
    *  including cold sessions that do not poll an inbox. */
   supervisedSessionIds?: string[];
+  /** Commits this runner reported as failed that no longer fail for the reason they gave: the
+   *  index lock they met is gone, or the branch has moved since. The control plane drops each
+   *  settled error it still holds for that exact operation, so the worktree bar offers Commit
+   *  afresh instead of repeating a reason that has stopped being true. Absent on older runners. */
+  expiredCommitErrors?: { sessionId: string; operationId: string }[];
   /** This process has begun draining (self-update or shutdown) and will not execute
    *  heartbeat-delivered Git operations any more. The control plane must not claim
    *  merge/commit requests for it: a claim it cannot run would fence the session
@@ -1865,6 +1870,9 @@ export interface SessionCommitResultRequest {
   leaseOwner?: string;
   status: 'committed' | 'nochange' | 'error' | 'released';
   message?: string;
+  /** For `error`: the runner's own plain-language sentence about why the commit failed and what
+   *  to do about it, beside git's words in `message`. Absent when it has nothing better to say. */
+  summary?: string;
 }
 
 /**

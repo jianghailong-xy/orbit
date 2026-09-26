@@ -161,6 +161,7 @@ import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
+import { returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 import {
@@ -324,6 +325,7 @@ import {
   type AcceptedUserTurn,
 } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
+import { commitFailureCopy, resolveCommitPrompt } from '../lib/commitFailure';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
 import {
   composerDraftAfterSend,
@@ -405,6 +407,8 @@ export interface QueuedTurn {
   openItemDelivery?: OpenItemDelivery;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStarted;
+  /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
+  authoredByOrbit?: true;
 }
 
 /** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is
@@ -1628,6 +1632,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // payload mints another key; a verbatim retry lets the server return its committed receipt.
   const sendOperationRef = useRef<LogicalSendToken | null>(null);
   const resolveConflictOperationRef = useRef<LogicalSendToken | null>(null);
+  const resolveCommitOperationRef = useRef<LogicalSendToken | null>(null);
   // Images already sent, keyed by their turnId. The runner echoes only the turn's text,
   // so these local previews are joined back into the user bubble (and the queued bubble)
   // to show the sent image in the transcript. Object URLs are revoked on session switch.
@@ -2190,7 +2195,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           sessionTitle: operation.title,
           event: 'commit-result',
           headline: 'Commit failed',
-          detail: d.commitError ?? 'See the status bar for details.',
+          // The runner's plain sentence when it gave one; git's words otherwise (commitFailureCopy).
+          detail: commitFailureCopy(d.commitError, d.commitResultMessage).why,
           tone: 'error',
         });
       }
@@ -2780,6 +2786,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       pickedWorkspace?.effort,
       selectedModel,
       runner.modelCatalog,
+      configuredProviders,
     );
     const decision = decideContextSeed(effortSeedState.current, effortContextKey, true);
     effortSeedState.current = decision.state;
@@ -2793,6 +2800,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     pickedWorkspace?.effort,
     me.data?.preferences?.defaultEffort,
     runner.modelCatalog,
+    configuredProviders,
   ]);
 
   // Slot accounting is turn-based: only RUNNING occupies maxConcurrent. A warm or
@@ -4242,6 +4250,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             effort,
             model,
             runner.modelCatalog,
+            configuredProviders,
           );
           const res = await resumeSession(
             selected.id,
@@ -4570,8 +4579,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // empty composer), so this never clobbers an in-progress draft. Their attachments come
       // back the same way: the messages are already being merged into one draft, so the files
       // they were sent with are staged together under it.
-      const restored = visibleQueuedTurns
-        .filter((q) => !parseWatchWake(q.content)) // a wake is the watch's words, never theirs
+      // Only what somebody typed: a wake, a delivery or an acceptance round was never theirs.
+      const theirs = visibleQueuedTurns.filter(returnsToComposer);
+      const restored = theirs
         .map((q) => {
           const body = q.content.trim();
           return body && q.shell ? `!${body}` : body; // a `!cmd` comes back as one
@@ -4579,7 +4589,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         .filter(Boolean)
         .join('\n\n');
       if (restored) setText(restored);
-      stageRestored(visibleQueuedTurns.flatMap((q) => q.attachments ?? []));
+      stageRestored(theirs.flatMap((q) => q.attachments ?? []));
       setQueued([]);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
@@ -4599,7 +4609,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // in the transcript and restoring would duplicate it. Unlike Stop (offered only with an
       // empty composer), Cancel is reachable mid-draft, so an in-progress draft always wins —
       // read through textRef, since the awaited gap may have outdated this render's `text`.
-      const body = withdrawn?.content.trim();
+      // Nor does a turn nobody typed come back (`returnsToComposer`).
+      const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
       if (body && !textRef.current.trim()) {
         setText(withdrawn?.shell ? `!${body}` : body);
         // The files follow the words: restoring them under a draft that kept its place would stage
@@ -5057,6 +5068,44 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionTitle: vars.title,
         event: 'resolve-conflict-error',
         headline: 'Could not start conflict resolution',
+        detail: e.message,
+        tone: 'error',
+      }),
+  });
+  // Hand a failed commit to the session: its own agent can see what refused the commit (a held
+  // index.lock, most often), clear it and commit — what the runner will not do unasked. resume()
+  // clears the settled commit error, so the bar offers Commit afresh while the agent works.
+  const resolveCommitMut = useMutation({
+    mutationFn: (vars: SessionToastTarget & { branch: string; why: string }) => {
+      const content = resolveCommitPrompt(vars.branch, vars.why);
+      const operation = logicalSendToken(resolveCommitOperationRef.current, {
+        operation: 'resolve-commit',
+        sessionId: vars.id,
+        branch: vars.branch,
+        content,
+      });
+      resolveCommitOperationRef.current = operation;
+      return resumeSession(vars.id, content, undefined, undefined, undefined, operation.clientTurnId);
+    },
+    onSuccess: (_d, vars) => {
+      resolveCommitOperationRef.current = null;
+      message.sessionNotice({
+        sessionId: vars.id,
+        sessionTitle: vars.title,
+        event: 'resolve-commit',
+        headline: 'Handed the commit to the session',
+        tone: 'info',
+        icon: 'sync',
+      });
+      void qc.invalidateQueries({ queryKey: ['session', vars.id] });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    onError: (e: Error, vars) =>
+      message.sessionNotice({
+        sessionId: vars.id,
+        sessionTitle: vars.title,
+        event: 'resolve-commit-error',
+        headline: 'Could not hand the commit to the session',
         detail: e.message,
         tone: 'error',
       }),
@@ -6075,11 +6124,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     live ? effectiveEffort : effort,
     shownModel,
     runner.modelCatalog,
+    configuredProviders,
   );
   const shownEffortOptions = effortOptionsForProvider(
     shownProvider,
     shownModel,
     runner.modelCatalog,
+    configuredProviders,
   );
   // Whether this session has a fast lane to offer at all — Claude's `/fast` on the models that
   // carry it, Codex's "Fast" service tier on a model whose row in this runner's catalogue
@@ -6213,7 +6264,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       : defaultModelForProvider(v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
     const drop = shownMode === 'Auto' && !supportsAuto(nextModel, v, configuredProviders, runner.modelCatalog);
     const currentEffort = live ? effectiveEffort : effort;
-    const nextEffort = normalizeEffortForProvider(v, currentEffort, nextModel, runner.modelCatalog);
+    const nextEffort = normalizeEffortForProvider(
+      v,
+      currentEffort,
+      nextModel,
+      runner.modelCatalog,
+      configuredProviders,
+    );
     if (live) {
       configMut.mutate({
         provider: v,
@@ -6250,7 +6307,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const drop = shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);
     // An OpenCode variant is model-defined: a model switch can strip it.
     const currentEffort = live ? effectiveEffort : effort;
-    const nextEffort = normalizeEffortForProvider(shownProvider, currentEffort, v, runner.modelCatalog);
+    const nextEffort = normalizeEffortForProvider(
+      shownProvider,
+      currentEffort,
+      v,
+      runner.modelCatalog,
+      configuredProviders,
+    );
     const resetEffort = nextEffort !== currentEffort;
     if (live) {
       configMut.mutate({
@@ -6274,7 +6337,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pickEffort = (v: string): void => {
     if (v === shownEffort) return;
     effortSeedState.current = dirtyContextSeed(effortContextKey);
-    const normalized = normalizeEffortForProvider(shownProvider, v, shownModel, runner.modelCatalog);
+    const normalized = normalizeEffortForProvider(
+      shownProvider,
+      v,
+      shownModel,
+      runner.modelCatalog,
+      configuredProviders,
+    );
     // Remember as the account default (replaces localStorage) so the next new session — here or on
     // iOS/macOS — starts at this effort. Optimistically patch the cached `me` so the seed effect
     // sees it, then persist best-effort.
@@ -7702,6 +7771,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     title: selectedSession?.title ?? 'Untitled session',
                     branch: detailForSelected.branch!,
                     target,
+                  })
+              : undefined
+          }
+          resolvingCommit={resolveCommitMut.isPending}
+          onResolveCommitInSession={
+            selectedId && detailForSelected?.branch
+              ? () =>
+                  resolveCommitMut.mutate({
+                    id: selectedId,
+                    title: selectedSession?.title ?? 'Untitled session',
+                    branch: detailForSelected.branch!,
+                    why: commitFailureCopy(
+                      detailForSelected.commitError,
+                      detailForSelected.commitResultMessage,
+                    ).why,
                   })
               : undefined
           }

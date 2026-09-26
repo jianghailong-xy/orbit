@@ -236,12 +236,15 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		for _, action := range []string{"search", "get", "propose"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
-		// The two single-command families: `orbit notify` is how a session reaches the human the
-		// runner works for — the reader most likely to be stuck without one is the plain
-		// single-session agent — and `orbit provider list` answers for the `--provider` field the
-		// task commands above take, which need no orchestration to be given one.
+		// `orbit notify` is how a session reaches the human the runner works for — the reader most
+		// likely to be stuck without one is the plain single-session agent — and `orbit provider list`
+		// answers for the `--provider` field the task commands above take, which need no orchestration
+		// to be given one. The provider writes are the owner's own configuration, and each is put on a
+		// confirmation card in front of them before it is made (askBeforeCreate), as a task create is.
 		rules = append(rules, "Bash("+command+" notify *)")
-		rules = append(rules, "Bash("+command+" provider list *)")
+		for _, action := range []string{"list", "create", "update", "delete"} {
+			rules = append(rules, "Bash("+command+" provider "+action+" *)")
+		}
 		// The merge receipts are the one pair of session verbs advertised OUTSIDE the orchestration
 		// gate (mergeReceiptCLICapabilities, §13.7): recording that a branch was merged is evidence
 		// about the caller's own work rather than a power over somebody else's session, and the agent

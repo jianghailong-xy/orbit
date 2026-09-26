@@ -18,6 +18,12 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// `Agent.enableOrchestration`, so this can't grant anything to an agent that already exists.
     /// Absent = off.
     public let defaultEnableOrchestration: Bool?
+    /// Whether a session settling — finished on its own, or failed for good — pushes an alert to
+    /// this account's devices. Absent means on; only opting out is ever written.
+    public let notifySessionFinished: Bool?
+    /// Whether an agent may push a line of its own (the `notify` tool / `orbit notify`) to this
+    /// account's devices. Absent means on; only opting out is ever written.
+    public let notifyAgentMessage: Bool?
 }
 
 /// PATCH /users/me/preferences — only the present keys are merged; nil omits (synthesized
@@ -28,12 +34,17 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var defaultPermissionMode: String?
     public var defaultEffort: String?
     public var defaultEnableOrchestration: Bool?
+    public var notifySessionFinished: Bool?
+    public var notifyAgentMessage: Bool?
     public init(theme: String? = nil, defaultModel: String? = nil, defaultPermissionMode: String? = nil,
-                defaultEffort: String? = nil, defaultEnableOrchestration: Bool? = nil) {
+                defaultEffort: String? = nil, defaultEnableOrchestration: Bool? = nil,
+                notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil) {
         self.theme = theme
         self.defaultModel = defaultModel
         self.defaultPermissionMode = defaultPermissionMode
         self.defaultEffort = defaultEffort
         self.defaultEnableOrchestration = defaultEnableOrchestration
+        self.notifySessionFinished = notifySessionFinished
+        self.notifyAgentMessage = notifyAgentMessage
     }
 }

@@ -25,7 +25,9 @@ export interface ConfiguredProvider {
   slug: string;
   label: string;
   runtime: string;
-  models: { value: string; label: string; contextWindow?: number }[];
+  /** `reasoningLevels`: the efforts a self-hosted Claude-runtime model declares it accepts, which
+   *  dispatch holds the session to (see declaredEffortLevels). */
+  models: { value: string; label: string; contextWindow?: number; reasoningLevels?: string[] }[];
   defaultModel?: string | null;
   /** The vendor preset this provider was configured from — its brand identity, and where the
    *  New Session picker gets its logo. NULL for a self-maintained custom endpoint. Served by
@@ -400,11 +402,52 @@ const KIMI_EFFORT_ALIASES: Record<string, string> = {
   xhigh: 'max',
 };
 
+// Claude Code's effort levels, lowest first: the scale a declared list is read against. Mirrors
+// CLAUDE_EFFORT_ORDER in apiserver common/runtime-provider.ts.
+const CLAUDE_EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/** The efforts a configured Claude-runtime model declares it accepts (`reasoningLevels` on its
+ *  provider row), lowest first, or undefined when it declares nothing. Dispatch holds the session to
+ *  exactly this list (apiserver declaredReasoningLevels) — a self-hosted model refuses the rest —
+ *  so the picker offers this list rather than Claude's. */
+const declaredEffortLevels = (
+  provider?: string | null,
+  model?: string | null,
+  configured?: ConfiguredProvider[] | null,
+): string[] | undefined => {
+  const custom = configuredProvider(provider, configured);
+  if (!custom || runtimeForProvider(provider, configured) !== AgentProvider.CLAUDE) return undefined;
+  const levels = custom.models.find((entry) => entry.value === model)?.reasoningLevels;
+  return Array.isArray(levels) ? CLAUDE_EFFORT_ORDER.filter((level) => levels.includes(level)) : undefined;
+};
+
+/** The level dispatch runs `effort` at on a model that declares `levels`: the nearest one, the
+ *  higher of two equally near, with Ultra (ultracode, which runs at xhigh) kept wherever xhigh is.
+ *  Mirrors effortWithinDeclaredLevels (apiserver common/runtime-provider.ts), except that Default
+ *  stays Default: the picker offers it, and dispatch resolves it. */
+const effortWithinDeclaredLevels = (effort: string, levels: string[]): string => {
+  if (!effort || levels.length === 0) return '';
+  const asked = effort === 'ultra' ? 'xhigh' : effort;
+  if (levels.includes(asked)) return effort;
+  const rank = CLAUDE_EFFORT_ORDER.indexOf(asked);
+  const distance = (level: string) => Math.abs(CLAUDE_EFFORT_ORDER.indexOf(level) - rank);
+  // `levels` runs lowest first, so `<=` leaves the higher of two equally near levels standing.
+  return levels.reduce((nearest, level) => (distance(level) <= distance(nearest) ? level : nearest));
+};
+
 export const effortOptionsForProvider = (
   provider?: string | null,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
+  configured?: ConfiguredProvider[] | null,
 ) => {
+  const declared = declaredEffortLevels(provider, model, configured);
+  if (declared) {
+    return CLAUDE_EFFORT_OPTIONS.filter(
+      ({ value }) =>
+        value === '' || declared.includes(value) || (value === 'ultra' && declared.includes('xhigh')),
+    );
+  }
   if (provider !== 'codex' && provider !== 'opencode' && provider !== 'kimi') {
     return CLAUDE_EFFORT_OPTIONS;
   }
@@ -428,7 +471,15 @@ export const normalizeEffortForProvider = (
   effort: string,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
+  configured?: ConfiguredProvider[] | null,
 ): string => {
+  // A level the declaring model lacks is not dropped but moved, exactly as dispatch moves it, so
+  // the pill names the level the session actually runs at.
+  const declared = declaredEffortLevels(provider, model, configured);
+  if (declared) {
+    const claudeEffort = CLAUDE_EFFORT_OPTIONS.some((option) => option.value === effort) ? effort : '';
+    return effortWithinDeclaredLevels(claudeEffort, declared);
+  }
   // Kimi's closed vocabulary maps first; the model's own list below has the last word.
   const normalized =
     provider === 'kimi'
@@ -466,12 +517,14 @@ export const newSessionEffortForProvider = (
   workspaceEffort?: string | null,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
+  configured?: ConfiguredProvider[] | null,
 ): string =>
   normalizeEffortForProvider(
     provider,
     accountEffort ?? workspaceEffort ?? '',
     model,
     modelCatalog,
+    configured,
   );
 
 // The permission mode a new session of the workspace starts in.

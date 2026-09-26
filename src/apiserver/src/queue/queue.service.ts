@@ -559,12 +559,14 @@ export class QueueService {
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // An OpenCode variant is model-defined, so it is only checkable once the assigned
         // runner's catalog is known — an account default carried over from another runtime
-        // would otherwise reach the CLI as an unsupported `--variant`.
+        // would otherwise reach the CLI as an unsupported `--variant`. A configured model that
+        // declares the levels it accepts is held to them the same way.
         effort: normalizeEffortForRuntimeModel(
           provider,
           session.effort ?? workspace?.effort,
           exec.model,
           session.assignedRunner?.modelCatalog,
+          exec.reasoningLevels,
         ),
         // Includes a custom provider's injected baseUrl/key (else just the workspace's env).
         env: exec.env,

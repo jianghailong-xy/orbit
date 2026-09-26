@@ -23,6 +23,7 @@ import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
+import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -140,6 +141,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
+  normalizeEffortForRuntimeModel,
   normalizeRuntimeProvider,
 } from '../common/runtime-provider';
 import {
@@ -218,6 +220,10 @@ interface ListedQueuedTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (project-started.ts). */
   projectStarted?: ProjectStartedCard;
+  /** The control plane wrote this turn itself (`isOrbitAuthoredTurn`): nobody typed its words, so a
+   *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
+   *  turn somebody sent. */
+  authoredByOrbit?: true;
 }
 
 interface ListedActiveTurn extends ListedQueuedTurn {
@@ -4813,6 +4819,7 @@ export class SessionsService {
           })),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
     }
@@ -4885,6 +4892,7 @@ export class SessionsService {
             : {}),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({
@@ -6993,6 +7001,22 @@ export class SessionsService {
         dto.effort !== undefined
           ? normalizeEffortForProvider(exec.provider, dto.effort)
           : undefined;
+      // What the engine is told about effort. For a model whose row declares the levels it accepts,
+      // the claim spawned it on a level mapped onto that list, so every move that could leave it on
+      // one the model refuses — the effort itself, the model, the provider — states the mapped
+      // effective effort, and the row keeps the value the person picked. For everything else it is
+      // the value stored below, exactly as before.
+      const engineEffort =
+        exec.reasoningLevels &&
+        (dto.effort !== undefined || next.changed || exec.model !== session.model)
+          ? normalizeEffortForRuntimeModel(
+              exec.provider,
+              dto.effort !== undefined ? normalizedEffort : (session.effort ?? session.workspace?.effort),
+              exec.model,
+              undefined,
+              exec.reasoningLevels,
+            )
+          : normalizedEffort;
       // Clamped here, unlike on create: every part of the question — the runtime this session
       // executes on, the model it is being pointed at, and (for Codex) the tiers that model's row
       // in the assigned runner's catalogue advertises — is resolved above, so a PATCH that asks for
@@ -7097,8 +7121,9 @@ export class SessionsService {
             // workspace.effort`), so the session's committed value is not what the engine was
             // built with — restating it every time would tell a live engine to drop a workspace
             // default nobody touched. `undefined` is dropped by JSON.stringify, and the runner
-            // reads an absent effort as "say nothing about effort".
-            effort: dto.effort !== undefined ? normalizedEffort : undefined,
+            // reads an absent effort as "say nothing about effort". (A model with declared levels
+            // is the exception engineEffort makes: there a model change is an effort change too.)
+            effort: engineEffort,
           }),
           clientTurnId: randomUUID(),
         });
@@ -7110,7 +7135,7 @@ export class SessionsService {
           content: JSON.stringify({
             model: exec.model,
             permissionMode: normalizedPermissionMode,
-            effort: normalizedEffort,
+            effort: engineEffort,
             // Stated only when this PATCH moved it, like `effort` and for the same reason: the
             // runner reads an absent `fastMode` as "say nothing about fast mode" and keeps what
             // the process it is replacing was running with.

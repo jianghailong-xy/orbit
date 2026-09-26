@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunnerModelCatalog } from '@orbit/shared';
 import {
   clampPermissionModeForModel,
+  CLAUDE_EFFORT_OPTIONS,
   CODEX_EFFORT_OPTIONS,
   contextWindowFor,
   defaultModelForProvider,
@@ -173,6 +174,81 @@ describe('Kimi runtime defaults', () => {
     expect(normalizeEffortForProvider('kimi', 'medium', 'kimi-code/k3', kimiCatalog)).toBe('high');
     // A model the catalog does not report (KIMI_MODEL_* alias) keeps its value.
     expect(normalizeEffortForProvider('kimi', 'max', 'local-kimi-alias', kimiCatalog)).toBe('max');
+  });
+});
+
+describe('Efforts a self-hosted model declares', () => {
+  // A vLLM endpoint serving Qwen3.8, whose chat template refuses every level but low/medium/xhigh:
+  // dispatch holds the session to what the row declares (apiserver effortWithinDeclaredLevels).
+  const vllm: ConfiguredProvider = {
+    slug: 'local-vllm',
+    label: 'Local vLLM',
+    runtime: 'claude',
+    presetSlug: null,
+    models: [
+      { value: 'qwen3.8-27b-fp8', label: 'Qwen3.8 27B FP8', reasoningLevels: ['xhigh', 'low', 'medium'] },
+      { value: 'qwen3.8-9b', label: 'Qwen3.8 9B', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'qwen3.8-mini', label: 'Qwen3.8 Mini', reasoningLevels: [] },
+      { value: 'qwen3.8-plain', label: 'Qwen3.8 Plain' },
+    ],
+  };
+  const configured = [vllm];
+  const shown = (model: string, effort: string) =>
+    normalizeEffortForProvider('local-vllm', effort, model, null, configured);
+
+  it('offers only the declared levels, lowest first, with Ultra where xhigh is one of them', () => {
+    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-27b-fp8', null, configured)).toEqual([
+      { value: '', label: 'Default' },
+      { value: 'low', label: 'Low' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'xhigh', label: 'xHigh' },
+      { value: 'ultra', label: 'Ultra' },
+    ]);
+    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-9b', null, configured)).toEqual([
+      { value: '', label: 'Default' },
+      { value: 'low', label: 'Low' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'high', label: 'High' },
+    ]);
+    // `[]` is a model that takes no effort at all.
+    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-mini', null, configured)).toEqual([
+      { value: '', label: 'Default' },
+    ]);
+    // No declaration leaves Claude's list, as before.
+    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-plain', null, configured)).toEqual(
+      CLAUDE_EFFORT_OPTIONS,
+    );
+    // Without the provider list the model cannot be looked up, so nothing is withheld.
+    expect(effortOptionsForProvider('local-vllm', 'qwen3.8-27b-fp8')).toEqual(CLAUDE_EFFORT_OPTIONS);
+  });
+
+  it('names the level dispatch runs a stored effort at: the nearest declared one, ties going up', () => {
+    // The case that was painted "Max": the session runs at xhigh.
+    expect(shown('qwen3.8-27b-fp8', 'max')).toBe('xhigh');
+    expect(shown('qwen3.8-27b-fp8', 'high')).toBe('xhigh');
+    expect(shown('qwen3.8-27b-fp8', 'medium')).toBe('medium');
+    expect(shown('qwen3.8-27b-fp8', 'ultra')).toBe('ultra');
+    expect(shown('qwen3.8-9b', 'ultra')).toBe('high');
+    expect(shown('qwen3.8-9b', 'max')).toBe('high');
+    // Default stays Default (dispatch resolves it), and so does a level outside Claude's vocabulary.
+    expect(shown('qwen3.8-27b-fp8', '')).toBe('');
+    expect(shown('qwen3.8-27b-fp8', 'minimal')).toBe('');
+    expect(shown('qwen3.8-mini', 'high')).toBe('');
+    expect(shown('qwen3.8-plain', 'max')).toBe('max');
+  });
+
+  it('starts a new session at the declared level nearest the account default', () => {
+    expect(
+      newSessionEffortForProvider('local-vllm', 'max', undefined, 'qwen3.8-27b-fp8', null, configured),
+    ).toBe('xhigh');
+  });
+
+  it('reads a declaration only on the Claude runtime, the one dispatch honours it on', () => {
+    const codexRow: ConfiguredProvider = { ...vllm, slug: 'gateway', runtime: 'codex' };
+    expect(effortOptionsForProvider('gateway', 'qwen3.8-27b-fp8', null, [codexRow])).toEqual(
+      effortOptionsForProvider('gateway', 'qwen3.8-27b-fp8'),
+    );
+    expect(normalizeEffortForProvider('gateway', 'max', 'qwen3.8-27b-fp8', null, [codexRow])).toBe('max');
   });
 });
 

@@ -123,6 +123,34 @@ const MODEL_DEFINED_EFFORT_RUNTIMES: AgentProvider[] = [
   AgentProvider.KIMI,
 ];
 
+/** Claude Code's effort levels, lowest first: the scale a declared list is read against, and the
+ *  only names a configured model may declare (ProvidersService). */
+export const CLAUDE_EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/**
+ * An effort moved onto the levels a configured model declares it accepts (declaredReasoningLevels in
+ * providers/custom-provider.ts).
+ *
+ * Always a level, never "the default": the default is Claude Code's own pick — `high` for a model it
+ * does not recognise — made without reading any declaration, so a model whose list leaves `high` out
+ * would be sent it anyway. No effort is therefore read as the `high` the CLI would have sent, and a
+ * level the model lacks moves to the nearest one it has; of two equally near, the higher, so a session
+ * is not handed less reasoning than it asked for while more is on offer at the same distance. `ultra`
+ * is Claude Code's ultracode, which runs at xhigh: it stays itself where xhigh is accepted and moves as
+ * xhigh would where it is not. An empty list is a model that takes no effort, and yields none — the CLI
+ * is told to send none at all (injectedEnv).
+ */
+export function effortWithinDeclaredLevels(effort: string | undefined, levels: string[]): string {
+  const accepted = CLAUDE_EFFORT_ORDER.filter((level) => levels.includes(level));
+  if (accepted.length === 0) return '';
+  const asked = !effort ? 'high' : effort === 'ultra' ? 'xhigh' : effort;
+  if (accepted.includes(asked)) return effort === 'ultra' ? effort : asked;
+  const rank = CLAUDE_EFFORT_ORDER.indexOf(asked);
+  const distance = (level: string) => Math.abs(CLAUDE_EFFORT_ORDER.indexOf(level) - rank);
+  // `accepted` runs lowest first, so `<=` leaves the higher of two equally near levels standing.
+  return accepted.reduce((nearest, level) => (distance(level) <= distance(nearest) ? level : nearest));
+}
+
 /**
  * The dispatch-time variant check, applied once the assigned runner's model catalog is known.
  *
@@ -132,14 +160,20 @@ const MODEL_DEFINED_EFFORT_RUNTIMES: AgentProvider[] = [
  * all. Mirrors the web picker's rule — an exact catalog row is authoritative even when it lists no
  * variants, while a model the runner-wide catalog does not report may be project-scoped (or come
  * from a runner too old to probe its CLI) and keeps its value.
+ *
+ * `declaredLevels` is what a configured provider's row says its model accepts (resolveProviderExec's
+ * `reasoningLevels`). No runner catalogue describes such a model, so when the row speaks it is the
+ * whole answer (effortWithinDeclaredLevels).
  */
 export function normalizeEffortForRuntimeModel(
   provider: AgentProvider,
   effort: string | null | undefined,
   model: string,
   modelCatalog: unknown,
+  declaredLevels?: string[],
 ): string | undefined {
   const normalized = normalizeEffortForProvider(provider, effort);
+  if (declaredLevels) return effortWithinDeclaredLevels(normalized, declaredLevels);
   if (!MODEL_DEFINED_EFFORT_RUNTIMES.includes(provider) || !normalized) return normalized;
   const levels = runtimeCatalogReasoningLevels(modelCatalog, provider, model);
   if (levels === undefined) return normalized;

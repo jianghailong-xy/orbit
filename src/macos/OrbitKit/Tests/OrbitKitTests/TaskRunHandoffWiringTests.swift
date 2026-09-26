@@ -236,12 +236,16 @@ final class TaskRunHandoffWiringTests: XCTestCase {
         XCTAssertFalse(row.contains("task.status == .failed ? \"Retry\" : \"Run\""),
                        "the label came off `status`, which is the thing that lags")
 
-        let detail = try section(view, from: "private func actions(_ task: TaskItem)",
+        let detail = try section(view, from: "private func actionRow(_ task: TaskItem)",
                                  to: "private func runDisabledHint")
         XCTAssertTrue(detail.contains("TaskRunHandoff.entry(for: task)"))
-        XCTAssertTrue(detail.contains("model.route(to: .session(id))"),
+        XCTAssertTrue(detail.contains("TaskDetailLogic.actionRow("), "one rule lays the presses out")
+        XCTAssertTrue(detail.contains("model.route(to: .session(sessionID))"),
                       "the detail carries the sessions, so it links to the run itself")
-        XCTAssertTrue(detail.contains("Text(entry.hint)"))
+        // The live run's press already says where it goes; the sentence that stood under it said the
+        // same thing again (the owner's redesign, 2026-09-26). Only a press that cannot be taken says why.
+        XCTAssertFalse(detail.contains("Text(entry.hint)"))
+        XCTAssertTrue(detail.contains("let hint = runDisabledHint(task)"))
         XCTAssertTrue(detail.contains("Task { _ = await tasks.execute(task.id) }"))
         XCTAssertFalse(detail.contains("task.status == .failed ? \"Retry\" : \"Run\""))
 

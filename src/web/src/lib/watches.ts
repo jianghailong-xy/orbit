@@ -13,6 +13,7 @@ import {
   type WatchRefusalCode,
   type WatchState,
   type WatchTargetKind,
+  type WatchTargetView,
   type WatchView,
 } from '@orbit/shared';
 import { api } from '../api';
@@ -265,23 +266,140 @@ export function expiryLabel(
 }
 
 /**
- * How many targets a watch names before the rest fold into a "+N more": the closed card's Watching
- * row and the opened strip's both cap here, so one number reads the same on both. The macOS client's
- * `WatchProjection.shownTargets` is this number, held to it by `WatchWakeCopyParityTests`.
+ * How many targets a watch card names before the rest fold into a "+N more": the closed card's
+ * Watching row caps here. The macOS client's `WatchProjection.shownTargets` is this number, held to
+ * it by `WatchWakeCopyParityTests`.
  */
 export const SHOWN_TARGETS = 3;
 
 /**
- * The console's Watching strip (`SessionWatchStrip`): one line above the composer, reading the same
- * words on web and macOS — the macOS client's `WatchStripCopyParityTests` holds each to its
- * declaration here. The times are composed from `formatSpan`; "earliest" prefixes the soonest
- * deadline only on the count line, since a lone watch's own deadline needs no qualifier.
+ * The console's Watching strip (`SessionWatchStrip`), in the Background processes tray's own shell:
+ * one line above the composer, reading the same words on web and native — the native client's
+ * `WatchStripCopyParityTests` holds each to its declaration here, and both ends are proved against
+ * one set of sentences, `src/shared/src/watch-strip.fixture.json`.
  */
 export const STRIP_LABEL = 'Watching';
-export const STRIP_UNTIL = 'Until';
-export const STRIP_THEN = 'Resume this session';
 export const STRIP_MANAGE = 'Manage in Watches ›';
-export const STRIP_EARLIEST = 'earliest ';
+export const STRIP_OPEN_TASK = 'Open task ›';
+export const STRIP_OPEN_SESSION = 'Open session ›';
+export const STRIP_RESUMES = 'Resumes this session when';
+export const STRIP_PAUSED = 'Paused · resumes this session when';
+export const STRIP_UNREAD = 'its condition is met';
+export const STRIP_NOT_CHECKED = 'Not checked for';
+export const STRIP_MAY_BE_LATE = 'the resume may be late.';
+
+/**
+ * How long a live watch may go unlooked-at before that means evaluation isn't happening: every live
+ * watch is scheduled at most a minute ahead and claimed under a minute's lease
+ * (`watch-evaluator.service.ts`). The native `WatchFreshness.staleAfter`.
+ */
+export const WATCH_STALE_AFTER_MS = 3 * MINUTE;
+
+/** What a condition says of one target, each fact once: "finishes", "finishes its turn or asks for an approval". */
+function oneTargetVerbs(p: WatchPredicate): string | null {
+  if (!p || typeof p !== 'object') return null;
+  if ('leaf' in p) return LEAF_COPY[p.leaf]?.one ?? null;
+  const parts = (p.operands ?? []).map(oneTargetVerbs);
+  if (parts.length === 0 || parts.some((part) => part === null)) return null;
+  let verbs = [...new Set(parts as string[])];
+  // "It finishes, or it fails" is one fact about one task: failing is one way of finishing.
+  if (p.kind === 'ANY_OF' && verbs.includes(LEAF_COPY.TASK_TERMINAL.one)) {
+    verbs = verbs.filter((verb) => verb !== LEAF_COPY.TASK_FAILED.one);
+  }
+  return verbs.join(p.kind === 'ALL_OF' ? ' and ' : ' or ');
+}
+
+/** What a condition says of several targets: "all of them finish or any of them fails". */
+function manyTargetsClause(p: WatchPredicate): string | null {
+  if (!p || typeof p !== 'object') return null;
+  if ('leaf' in p) {
+    const copy = LEAF_COPY[p.leaf];
+    if (!copy) return null;
+    if (p.kind === 'ANY') return `any of them ${copy.one}`;
+    if (p.kind === 'AT_LEAST') return `${p.count} of them ${copy.many}`;
+    return `all of them ${copy.many}`;
+  }
+  const parts = (p.operands ?? []).map(manyTargetsClause);
+  if (parts.length === 0 || parts.some((part) => part === null)) return null;
+  return parts.join(p.kind === 'ALL_OF' ? ' and ' : ' or ');
+}
+
+/**
+ * What an opened strip says about one watch, in one sentence: what it waits for, that this session
+ * resumes when it holds, and the deadline that resumes it anyway — "Resumes this session when it
+ * finishes, or in 13d at the latest." The condition is said of the watch's live targets, "it" for one
+ * and "all of them" / "any of them" for several; a condition this build can't read says only that it
+ * has one. The folded line leaves the deadline to this: almost every wait ends long before it.
+ */
+export function stripSentence(
+  w: Pick<WatchView, 'predicate' | 'targets' | 'state' | 'expiresAt'>,
+  now: number,
+): string {
+  const live = w.targets.filter((t) => t.state !== 'GONE');
+  const verbs = live.length <= 1 ? oneTargetVerbs(w.predicate) : null;
+  const clause = (live.length <= 1 ? verbs && `it ${verbs}` : manyTargetsClause(w.predicate)) ?? STRIP_UNREAD;
+  const at = Date.parse(w.expiresAt);
+  const tail = !Number.isFinite(at)
+    ? '.'
+    : at > now
+      ? `, or in ${formatSpan(at - now)} at the latest.`
+      : ', or any moment now.';
+  return `${w.state === 'PAUSED' ? STRIP_PAUSED : STRIP_RESUMES} ${clause}${tail}`;
+}
+
+/**
+ * The line an opened strip adds under a watch nobody is checking — "Not checked for 12m — the resume
+ * may be late." — or null. Only an ACTIVE watch is meant to be looked at; one that has never been
+ * counts from when it was made.
+ */
+export function stripStaleLine(
+  w: Pick<WatchView, 'state' | 'lastEvaluatedAt' | 'createdAt'>,
+  now: number,
+): string | null {
+  if (w.state !== 'ACTIVE') return null;
+  const looked = Date.parse(w.lastEvaluatedAt ?? w.createdAt);
+  if (!Number.isFinite(looked) || now - looked <= WATCH_STALE_AFTER_MS) return null;
+  return `${STRIP_NOT_CHECKED} ${formatSpan(now - looked)} — ${STRIP_MAY_BE_LATE}`;
+}
+
+/**
+ * The four numbers the folded line writes about several targets, in Tasks created here's sentence
+ * (`createdTasksCountLine`): how many are running, failed and done, each counted from where the
+ * target itself stands (`targetStatus`). A task is done when its status is DONE; a session when its
+ * turn is over — neither running, queued nor failed. A target nobody could read is only counted.
+ */
+export function stripCounts(targets: readonly Pick<WatchTargetView, 'targetKind' | 'targetStatus'>[]): {
+  running: number;
+  failed: number;
+  done: number;
+  total: number;
+} {
+  let running = 0;
+  let failed = 0;
+  let done = 0;
+  for (const t of targets) {
+    const s = t.targetStatus;
+    if (!s) continue;
+    if (s.running) running += 1;
+    if (s.status === 'FAILED') failed += 1;
+    else if (t.targetKind === 'TASK' ? s.status === 'DONE' : !s.running && !s.queued) done += 1;
+  }
+  return { running, failed, done, total: targets.length };
+}
+
+/**
+ * A session target's word, by its run state: the one its own header's glyph says for that state
+ * (`SessionStatusGlyph.make(runState:)` natively), held to it by `watch-strip.fixture.json`.
+ */
+export const SESSION_TARGET_WORDS: Record<string, string> = {
+  QUEUED: 'Queued',
+  RUNNING: 'Running',
+  AWAITING_INPUT: 'Waiting for your reply',
+  INTERRUPTED: 'Interrupted',
+  SUCCEEDED: 'Succeeded',
+  FAILED: 'Failed',
+  ENDED: 'Ended',
+};
 
 /**
  * The words the console header says a session parked on watches in. macOS says the same four from

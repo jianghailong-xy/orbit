@@ -1364,7 +1364,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 					if err := t.commitResult(req.SessionID, CommitResultRequest{
 						OperationID: req.OperationID, LeaseOwner: req.LeaseOwner,
-						Status: res.Status, Message: res.Message,
+						Status: res.Status, Message: res.Message, Summary: res.Summary,
 					}); err != nil {
 						logln("commit-result POST failed for", req.SessionID+":", err)
 						if !isRetryableTransportError(err) {

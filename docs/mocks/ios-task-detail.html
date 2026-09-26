@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 任务详情页 — 改版效果图</title>
+<style>
+  :root {
+    --tint: #2E6AFF;
+    --tint-bg: rgba(46, 106, 255, .14);
+    --amber: #FF9500;
+    --amber-ink: #B35A00;
+    --amber-bg: rgba(255, 149, 0, .15);
+    --green: #34C759;
+    --green-ink: #248A3D;
+    --red: #FF3B30;
+    --red-ink: #C9261B;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: #E1E1E3;
+    --surface: #fff;
+    --grouped: #F2F2F7;
+    --fill: #E9E9EA;
+    --glass: rgba(255, 255, 255, .72);
+    --mark: #FF9500;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 36px 40px 44px; background: #e4e4e9; color: #16161a;
+    font: 15px/1.5 "Nimbus Sans", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: "DejaVu Sans Mono", monospace; }
+  .board { display: none; }
+  body[data-board="all"] .board, body[data-board="1"] #b1, body[data-board="2"] #b2,
+  body[data-board="3"] #b3, body[data-board="4"] #b4 { display: block; }
+  body[data-board="all"] .board { margin-bottom: 60px; }
+  .board > h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 6px; }
+  .board > .lede { color: #4a4a52; margin: 0 0 22px; font-size: 14.5px; max-width: 1300px; }
+  .row { display: flex; gap: 36px; align-items: flex-start; }
+  figure { margin: 0; flex: none; }
+  .tag { display: inline-block; font-size: 13px; font-weight: 700; border-radius: 999px; padding: 2px 11px; margin-bottom: 10px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+  .tag.web { background: #dde8d4; color: #2c5418; }
+  .tag.ref { background: #ece0ff; color: #4b2388; }
+  figcaption { margin-top: 12px; font-size: 13px; line-height: 1.55; color: #4a4a52; width: 393px; }
+  figcaption b { color: #16161a; }
+
+  /* ── phone shell ─────────────────────────────────────── */
+  .phone { width: 393px; height: 852px; background: var(--grouped); overflow: hidden; position: relative;
+           border-radius: 44px; box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08); color: var(--label);
+           font: 17px/1.3 "Nimbus Sans", "Noto Sans CJK SC", sans-serif; }
+  .phone.shot { background: #fff; }
+  .phone.shot img { width: 393px; display: block; }
+  .phone.long { height: auto; border-radius: 44px 44px 44px 44px; }
+  .scroll { position: absolute; left: 0; right: 0; top: 0; }
+  .phone.long .scroll { position: relative; }
+  .topfade { position: absolute; left: 0; right: 0; top: 0; height: 118px; z-index: 4; pointer-events: none;
+             background: linear-gradient(var(--grouped) 52%, rgba(242,242,247,0)); }
+  .status { position: absolute; left: 0; right: 0; top: 0; height: 59px; display: flex; align-items: center; justify-content: space-between;
+            padding: 2px 30px 0 44px; font-size: 17px; font-weight: 600; z-index: 6; }
+  .status .r { display: flex; align-items: center; gap: 6px; }
+  .bars { display: flex; align-items: flex-end; gap: 1.6px; height: 11px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 26px; height: 13px; background: #000; color: #fff;
+          border-radius: 4px; font-size: 9.5px; font-weight: 700; position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4.5px; background: #9a9a9e; border-radius: 0 1px 1px 0; }
+  .nav { position: absolute; left: 0; right: 0; top: 59px; height: 44px; display: flex; align-items: center; justify-content: space-between;
+         padding: 0 16px; z-index: 6; }
+  .platter { position: relative; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: var(--glass);
+             border-radius: 999px; flex: none; box-shadow: 0 2px 10px rgba(0,0,0,.08), inset 0 0 0 .5px rgba(0,0,0,.06);
+             backdrop-filter: blur(12px); }
+  .ico { width: 21px; height: 21px; stroke: var(--label); fill: none; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+  .navtitle { position: absolute; left: 72px; right: 72px; text-align: center; line-height: 1.2; }
+  .navtitle .t { font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .navtitle .s { font-size: 11.5px; color: var(--label-2); display: flex; align-items: center; justify-content: center; gap: 4px; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 139px; margin-left: -69.5px; height: 5px; border-radius: 3px; background: #000; z-index: 7; }
+  .botfade { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; z-index: 4; pointer-events: none;
+             background: linear-gradient(rgba(242,242,247,0), rgba(242,242,247,.92) 45%); }
+  .composer { position: absolute; left: 16px; right: 16px; bottom: 30px; height: 50px; z-index: 6; display: flex; align-items: center; gap: 8px;
+              padding: 0 7px 0 18px; border-radius: 25px; background: rgba(255,255,255,.86); backdrop-filter: blur(14px);
+              box-shadow: 0 4px 18px rgba(0,0,0,.10), inset 0 0 0 .5px rgba(0,0,0,.07); }
+  .phone.long .composer { position: relative; left: auto; right: auto; bottom: auto; margin: 6px 16px 30px; }
+  .composer .ph { flex: 1; min-width: 0; font-size: 16px; color: var(--label-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .composer .send { width: 36px; height: 36px; border-radius: 50%; background: var(--fill); display: flex; align-items: center; justify-content: center; flex: none; }
+  .composer .send svg { width: 17px; height: 17px; stroke: #aeaeb2; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── page ────────────────────────────────────────────── */
+  .page { padding: 103px 0 150px; }
+  .phone.long .page { padding-bottom: 0; }
+  .hdr { padding: 14px 20px 0; position: relative; }
+  .hdr h2 { font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 10px; }
+  .meta { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--label-2); flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 500; line-height: 18px;
+          border-radius: 999px; padding: 2px 8px 2px 7px; white-space: nowrap; }
+  .pill.run { background: var(--tint-bg); color: var(--tint); }
+  .pill.need { background: var(--amber-bg); color: var(--amber-ink); }
+  .pill.done { background: rgba(52,199,89,.16); color: var(--green-ink); }
+  .pill.fail { background: rgba(255,59,48,.13); color: var(--red-ink); }
+  .pill.open { background: rgba(120,120,128,.14); color: var(--label-2); }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .spin { width: 12px; height: 12px; border-radius: 50%; flex: none;
+          background: conic-gradient(currentColor 0 12%, transparent 0 25%, currentColor 0 37%, transparent 0 50%, currentColor 0 62%, transparent 0 75%, currentColor 0 87%, transparent 0);
+          -webkit-mask: radial-gradient(circle, transparent 2.2px, #000 2.6px); opacity: .85; }
+  .who { display: inline-flex; align-items: center; gap: 5px; color: var(--label); }
+  .av { width: 20px; height: 20px; border-radius: 50%; background: var(--tint-bg); color: var(--tint); font-size: 11px; font-weight: 700;
+        display: inline-flex; align-items: center; justify-content: center; font-style: normal; }
+  .judge { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; height: 24px; padding: 0 10px 0 8px; border-radius: 12px;
+           border: .5px solid rgba(60,60,67,.3); font-size: 13px; color: var(--label-2); }
+  .judge svg { width: 14px; height: 14px; stroke: var(--green); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .acts { display: flex; gap: 10px; margin: 16px 16px 0; position: relative; }
+  .b { flex: 1 1 0; height: 50px; border-radius: 25px; display: flex; align-items: center; justify-content: center; gap: 7px;
+       font-size: 17px; font-weight: 600; white-space: nowrap; }
+  .b svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .b.pri { background: var(--tint); color: #fff; }
+  .b.sec { background: var(--fill); color: var(--tint); }
+  .b.warn { background: var(--amber); color: #fff; }
+  .b.dis { background: var(--fill); color: rgba(60,60,67,.3); }
+  .why { margin: 8px 20px 0; font-size: 13px; color: var(--label-2); }
+
+  .sh { display: flex; align-items: baseline; gap: 8px; padding: 26px 32px 8px; font-size: 20px; font-weight: 700; letter-spacing: -.01em; position: relative; }
+  .sh .d { font-size: 13px; font-weight: 400; color: var(--label-2); letter-spacing: 0; }
+  .sh .act { margin-left: auto; font-size: 17px; font-weight: 400; color: var(--tint); letter-spacing: 0; }
+  .card { background: var(--surface); margin: 0 16px; border-radius: 26px; position: relative; }
+  .foot { padding: 7px 32px 0; font-size: 13px; line-height: 1.4; color: var(--label-2); }
+  .r { position: relative; display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 11px 16px; font-size: 17px; line-height: 1.3; }
+  .r + .r::before, .r + .md::before, .md + .r::before, .md + .md::before, .seg + .r::before, .graph + .r::before {
+    content: ""; position: absolute; top: 0; left: 16px; right: 16px; height: .5px; background: var(--sep); }
+  .r .k { flex: none; }
+  .r .v { margin-left: auto; color: var(--label-2); text-align: right; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+  .r .v.one { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r .v.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-align: right; }
+  .ud { width: 9px; height: 15px; flex: none; stroke: var(--label-3); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .chev { width: 8px; height: 14px; flex: none; stroke: var(--label-3); fill: none; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+  .r.muted { color: var(--label-2); }
+  .r.add { color: var(--tint); gap: 10px; }
+  .r.add svg { width: 20px; height: 20px; stroke: var(--tint); fill: none; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+  .r.stack { flex-direction: column; align-items: stretch; gap: 3px; }
+  .r.stack .k { font-size: 13px; color: var(--label-2); }
+  .r.stack .v2 { font-size: 16px; line-height: 1.38; display: flex; align-items: center; gap: 8px; }
+  .r.stack .v2.absent { color: var(--label-2); }
+  .ev { font-size: 11.5px; font-weight: 600; color: var(--label-2); border: .5px solid rgba(60,60,67,.3); border-radius: 6px; padding: 0 5px; white-space: nowrap; }
+  .md { position: relative; padding: 13px 16px 14px; font-size: 16px; line-height: 1.5; }
+  .md h4 { font-size: 19px; line-height: 1.3; margin: 2px 0 6px; font-weight: 700; }
+  .md p { margin: 0 0 8px; }
+  .md ul, .md ol { margin: 0 0 8px; padding-left: 20px; }
+  .md li { margin: 3px 0; }
+  .md code { font-size: 13.5px; background: rgba(120,120,128,.12); border-radius: 5px; padding: 1px 4px; }
+  .md .lbl { font-size: 13px; color: var(--label-2); margin-bottom: 4px; }
+  .fold { max-height: 318px; overflow: hidden; position: relative; }
+  .fold::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: linear-gradient(rgba(255,255,255,0), #fff 82%); }
+  .more { position: relative; display: flex; justify-content: center; margin-top: -40px; padding-bottom: 14px; z-index: 2; }
+  .more span { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; color: var(--tint);
+               background: var(--fill); border-radius: 17px; padding: 7px 15px; }
+  .more svg { width: 13px; height: 13px; stroke: var(--tint); fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .run { display: flex; align-items: center; gap: 12px; }
+  .run .body { flex: 1; min-width: 0; }
+  .run .l1 { display: flex; align-items: baseline; gap: 8px; }
+  .run .l1 .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .run .l1 .w { font-size: 15px; color: var(--label-2); flex: none; }
+  .run .l2 { font-size: 15px; margin-top: 2px; }
+  .run .l2.runs { color: var(--tint); }
+  .run .l2.ok { color: var(--green-ink); }
+  .live { width: 18px; height: 18px; flex: none; color: var(--tint); display: flex; align-items: center; justify-content: center; }
+  .live .spin { width: 16px; height: 16px; -webkit-mask: radial-gradient(circle, transparent 3px, #000 3.5px); }
+  .live .d { width: 9px; height: 9px; border-radius: 50%; }
+  .cm { position: relative; padding: 12px 16px 13px; }
+  .cm .h { display: flex; align-items: center; gap: 7px; font-size: 15px; }
+  .cm .h b { font-weight: 600; }
+  .cm .h .w { color: var(--label-2); }
+  .cm .bd { font-size: 16px; line-height: 1.48; margin-top: 5px; max-height: 118px; overflow: hidden; position: relative; }
+  .cm .bd::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 40px; background: linear-gradient(rgba(255,255,255,0), #fff); }
+  .cm .bd h5 { font-size: 16px; margin: 0 0 3px; }
+  .cm .bd p { margin: 0 0 4px; }
+  .cm .mr { font-size: 15px; color: var(--tint); margin-top: 3px; }
+  .cm + .cm::before { content: ""; position: absolute; top: 0; left: 16px; right: 16px; height: .5px; background: var(--sep); }
+  .seg { display: flex; margin: 4px 16px 10px; background: rgba(120,120,128,.12); border-radius: 9px; padding: 2px; }
+  .seg span { flex: 1; text-align: center; font-size: 13.5px; font-weight: 600; padding: 5px 0; border-radius: 7px; color: var(--label); }
+  .seg span.on { background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+  .graph { position: relative; padding: 2px 16px 12px; }
+  .toggle { width: 51px; height: 31px; border-radius: 16px; background: var(--green); position: relative; flex: none; margin-left: auto; }
+  .toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+
+  /* numbered markers */
+  [data-n]::after { content: attr(data-n); position: absolute; left: -14px; top: 1px; width: 18px; height: 18px; border-radius: 50%;
+                    background: var(--mark); color: #fff; font: 700 11px/18px "Nimbus Sans", sans-serif; text-align: center; z-index: 5;
+                    box-shadow: 0 0 0 2px var(--grouped); }
+  .hdr[data-n]::after { left: 2px; top: 8px; }
+  .acts[data-n]::after { left: -14px; top: 16px; }
+  .sh[data-n]::after { left: 10px; top: 29px; }
+  .composer[data-n]::after { left: -14px; top: 16px; }
+  .nav [data-n]::after { left: auto; right: -6px; top: -6px; }
+  .nomark [data-n]::after { display: none; }
+
+  .webwrap { position: relative; width: 393px; background: #fff; border-radius: 22px; overflow: hidden;
+             box-shadow: 0 18px 44px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.08); }
+  .webwrap img { width: 393px; display: block; }
+  .wb { position: absolute; left: 1px; width: 18px; height: 18px; border-radius: 50%; background: var(--mark); color: #fff;
+        font: 700 11px/18px "Nimbus Sans", sans-serif; text-align: center; font-style: normal; box-shadow: 0 0 0 2px #fff; }
+  .phone.long .botfade { display: none; }
+
+  /* menu */
+  .menu { position: absolute; right: 16px; top: 108px; width: 250px; z-index: 9; border-radius: 22px; background: rgba(250,250,252,.93);
+          backdrop-filter: blur(20px); box-shadow: 0 12px 40px rgba(0,0,0,.2), inset 0 0 0 .5px rgba(0,0,0,.06); padding: 6px 0; font-size: 17px; }
+  .menu .mi { display: flex; align-items: center; gap: 12px; padding: 11px 18px; }
+  .menu .mi svg { width: 20px; height: 20px; stroke: var(--label); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; margin-left: auto; }
+  .menu .mi small { display: block; font-size: 13px; color: var(--label-2); }
+  .menu .mi.red { color: var(--red); }
+  .menu .mi.red svg { stroke: var(--red); }
+  .menu hr { border: 0; height: 7px; background: rgba(120,120,128,.1); margin: 5px 0; }
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.08); z-index: 8; }
+
+  /* notes */
+  .note { width: 393px; font-size: 13px; line-height: 1.55; color: #3a3a42; }
+  .note h3 { font-size: 15px; margin: 0 0 6px; color: #16161a; }
+  .note ol { margin: 0; padding-left: 20px; }
+  .note li { margin: 4px 0; }
+  .note .src { display: inline-block; font-size: 11.5px; font-weight: 700; border-radius: 5px; padding: 0 5px; background: #ece0ff; color: #4b2388; margin-right: 3px; }
+
+  /* state strip */
+  .state { width: 393px; background: var(--grouped); border-radius: 26px; padding: 14px 0 16px; margin-bottom: 16px; position: relative;
+           box-shadow: 0 6px 18px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.06); }
+  .state .cap { padding: 0 20px 8px; font-size: 13px; font-weight: 700; color: #4a4a52; }
+  .state .hdr h2 { font-size: 19px; line-height: 24px; margin-bottom: 8px; }
+
+  /* refs */
+  .refgrid { display: grid; grid-template-columns: repeat(4, 290px); gap: 26px 30px; }
+  .refgrid figure img { width: 290px; border-radius: 18px; display: block; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+  .refgrid figcaption { width: 290px; font-size: 13px; }
+  .refgrid .sum { background: #fff; border-radius: 18px; padding: 16px 18px; font-size: 13.5px; line-height: 1.55; color: #3a3a42; }
+  .refgrid .sum h3 { margin: 0 0 8px; font-size: 16px; color: #16161a; }
+  .refgrid .sum ol { margin: 0; padding-left: 18px; }
+  .refgrid .sum li { margin: 5px 0; }
+</style>
+
+<body data-board="all">
+
+<!-- ════════════════════ the new page (template) ════════════════════ -->
+<template id="tpl-page">
+  <div class="page">
+    <div class="hdr" data-n="1">
+      <h2>支持配置自托管（本地 vLLM）provider</h2>
+      <div class="meta">
+        <span class="pill run"><i class="spin"></i>Running</span>
+        <span class="who"><i class="av">o</i>orbit</span>
+        <span>· 10m ago</span>
+      </div>
+      <span class="judge"><svg viewBox="0 0 24 24"><path d="M12 2.8l2.3 1.7 2.8-.2 1 2.7 2.4 1.5-.6 2.8.9 2.7-2.1 1.9-.4 2.8-2.8.5-1.9 2.1-2.6-1.1-2.6 1.1-1.9-2.1-2.8-.5-.4-2.8L2.9 14l.9-2.7-.6-2.8 2.4-1.5 1-2.7 2.8.2z"/><path d="M8.3 12.2l2.5 2.5 4.9-5"/></svg>Judged by · the account owner</span>
+    </div>
+    <div class="acts" data-n="2">
+      <span class="b sec"><svg viewBox="0 0 24 24"><path d="M12 2.8l2.3 1.7 2.8-.2 1 2.7 2.4 1.5-.6 2.8.9 2.7-2.1 1.9-.4 2.8-2.8.5-1.9 2.1-2.6-1.1-2.6 1.1-1.9-2.1-2.8-.5-.4-2.8L2.9 14l.9-2.7-.6-2.8 2.4-1.5 1-2.7 2.8.2z"/><path d="M8.3 12.2l2.5 2.5 4.9-5"/></svg>Confirm done</span>
+      <span class="b pri"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg>Open the run</span>
+    </div>
+
+    <div class="sh" data-n="3">Details</div>
+    <div class="card">
+      <div class="r"><span class="k">Assignee</span><span class="v">orbit<svg class="ud" viewBox="0 0 9 15"><path d="M1.5 5.5L4.5 2.5l3 3M1.5 9.5l3 3 3-3"/></svg></span></div>
+      <div class="r"><span class="k">Provider</span><span class="v">Assignee's (Claude)<svg class="ud" viewBox="0 0 9 15"><path d="M1.5 5.5L4.5 2.5l3 3M1.5 9.5l3 3 3-3"/></svg></span></div>
+      <div class="r"><span class="k">Model</span><span class="v">Provider default<svg class="ud" viewBox="0 0 9 15"><path d="M1.5 5.5L4.5 2.5l3 3M1.5 9.5l3 3 3-3"/></svg></span></div>
+      <div class="r"><span class="k">List</span><span class="v">No list<svg class="ud" viewBox="0 0 9 15"><path d="M1.5 5.5L4.5 2.5l3 3M1.5 9.5l3 3 3-3"/></svg></span></div>
+      <div class="r"><span class="k">Start at</span><span class="v">Not set<svg class="ud" viewBox="0 0 9 15"><path d="M1.5 5.5L4.5 2.5l3 3M1.5 9.5l3 3 3-3"/></svg></span></div>
+      <div class="r"><span class="k">Created from</span><span class="v one">wiki.ingest 开源模型第一轮筛选（契约 + 工具纪律）</span><svg class="chev" viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5"/></svg></div>
+    </div>
+    <div class="foot">Created by rocm · Today 12:48</div>
+
+    <div class="sh" data-n="4">Dependencies</div>
+    <div class="card">
+      <div class="r muted">No dependencies</div>
+      <div class="r add"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2"/><path d="M12 8v8M8 12h8"/></svg>Add prerequisite</div>
+    </div>
+
+    <div class="sh" data-n="5">Description</div>
+    <div class="card">
+      <div class="md fold">
+        <h4>背景</h4>
+        <p>Orbit 的 provider 目前只能在账号侧配置（Web UI），CLI 与 MCP 都<b>没有写入路径</b>。已在 2026-09-26 实测确认：</p>
+        <ul>
+          <li><code>orbit provider</code> 子命令<b>只有 <code>list</code></b>（<code>orbit provider list [--json]</code>）</li>
+          <li>MCP 工具只有只读的 <code>provider_list</code></li>
+          <li><code>orbit capabilities --json</code> 的全量命令表里没有任何 <code>provider create/add/update</code></li>
+          <li><code>~/.orbit/config.json</code> 只有 runner 配置，<b>不含 provider 定义</b></li>
+        </ul>
+      </div>
+      <div class="more"><span>Show more<svg viewBox="0 0 14 14"><path d="M2.5 5l4.5 4.5L11.5 5"/></svg></span></div>
+    </div>
+
+    <div class="sh" data-n="6">Acceptance<span class="act">Edit</span></div>
+    <div class="card">
+      <div class="md">
+        <div class="lbl">Acceptance criteria</div>
+        <p>由账号所有者亲自验证并确认。所有者会按下面三条检查：</p>
+        <ol>
+          <li><b>写入路径存在</b>：<code>orbit provider create --help</code>（或 MCP <code>provider_create</code>）可用，且 <code>orbit provider list --json</code> 能列出新 provider，字段齐全</li>
+          <li><b>真能跑起来</b>：注册指向 <code>http://127.0.0.1:8000</code> 的 provider 后，<code>orbit session create --provider &lt;新 slug&gt;</code> 能启动会话并完成一个回合</li>
+          <li><b>凭证不回显</b>：任何读取路径都不暴露该 provider 的 token</li>
+        </ol>
+        <p style="margin:0">第 2 条若不可达，结项时必须给出明确证据——<b>「配了但不生效」不算完成</b>。</p>
+      </div>
+      <div class="r stack"><span class="k">Automatic judgement</span><span class="v2">Not set — a person decides when this task is done.</span></div>
+    </div>
+    <div class="foot">Filled in as a pair, the task is judged by running this command and reading its exit code — nobody has to decide by hand.</div>
+
+    <div class="sh" data-n="7">Inputs <span class="d">0</span></div>
+    <div class="card">
+      <div class="r muted" style="font-size:15px;line-height:1.4">Files every run of this task is given — design mocks, specs. Each run gets its own copy.</div>
+      <div class="r add"><svg viewBox="0 0 24 24"><path d="M20.5 11.5l-8.2 8.2a5 5 0 01-7.1-7.1l8.6-8.6a3.4 3.4 0 014.8 4.8l-8.6 8.6a1.7 1.7 0 01-2.4-2.4l7.9-7.9"/></svg>Add file</div>
+    </div>
+
+    <div class="sh" data-n="8">Attribution</div>
+    <div class="card">
+      <div class="r stack"><span class="k">Counts towards</span><span class="v2 absent">This task is filed under no project.</span></div>
+      <div class="r stack" style="padding-right:36px"><span class="k">Noticed in</span><span class="v2">wiki.ingest 开源模型第一轮筛选（契约 + 工具纪律）</span><span style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--label-2)"><span class="ev">Evidence only</span>Trigger <code style="font-size:12px">agent.session_filed</code></span>
+        <svg class="chev" viewBox="0 0 8 14" style="position:absolute;right:16px;top:50%;margin-top:-7px"><path d="M1.5 1.5L6.5 7l-5 5.5"/></svg></div>
+      <div class="r stack"><span class="k">Crossing</span><span class="v2 absent">No declared crossing touches this task.</span></div>
+      <div class="r stack"><span class="k">Blocked by</span><span class="v2 absent">Nothing is blocking where this work counts.</span></div>
+    </div>
+
+    <div class="sh" data-n="9">Followed by <span class="d">0</span></div>
+    <div class="card">
+      <div class="r muted">Nothing is watching this task.</div>
+      <div class="r add"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Follow task</div>
+    </div>
+
+    <div class="sh" data-n="10">Runs <span class="d">1</span></div>
+    <div class="card">
+      <div class="r run">
+        <span class="live"><i class="spin"></i></span>
+        <div class="body"><div class="l1"><span class="t">orbit</span><span class="w">9m</span></div><div class="l2 runs">Running</div></div>
+        <svg class="chev" viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5"/></svg>
+      </div>
+    </div>
+
+    <div class="sh" data-n="11">Comments <span class="d">0</span></div>
+    <div class="card">
+      <div class="r muted">No comments yet</div>
+    </div>
+    <div class="endpad"></div>
+  </div>
+</template>
+
+<template id="tpl-chrome">
+  <div class="status"><span>12:58</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8.5px"></i><i style="height:11px"></i></span>
+    <svg viewBox="0 0 24 24" style="width:17px;height:17px;fill:none;stroke:#000;stroke-width:2.4;stroke-linecap:round"><path d="M2 9a15 15 0 0120 0M5.5 12.5a10 10 0 0113 0M9 16a5 5 0 016 0"/><circle cx="12" cy="19.5" r=".9" fill="#000"/></svg>
+    <span class="batt">58</span></span></div>
+  <div class="nav">
+    <span class="platter"><svg class="ico" viewBox="0 0 24 24"><path d="M15 4.5L7.5 12l7.5 7.5"/></svg></span>
+    <span class="platter" data-n="12"><svg class="ico" viewBox="0 0 24 24" style="stroke-width:0;fill:#000"><circle cx="5.5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="18.5" cy="12" r="1.9"/></svg></span>
+  </div>
+  <div class="botfade"></div>
+  <div class="composer" data-n="13"><span class="ph">Add a comment… type @Workspace to mention</span>
+    <span class="send"><svg viewBox="0 0 24 24"><path d="M21 3L10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5z"/></svg></span></div>
+  <div class="home"></div>
+</template>
+
+<template id="tpl-navtitle">
+  <div class="navtitle"><div class="t">支持配置自托管（本地 vLLM）provider</div><div class="s"><span style="color:var(--tint)">Running</span> · orbit</div></div>
+</template>
+
+<!-- ════════════════════ board 1: now vs new first screen ════════════════════ -->
+<section class="board" id="b1">
+  <h1>iOS 任务详情页 · 首屏：现在 vs 改版</h1>
+  <p class="lede">同一张任务（线上真实数据：「支持配置自托管（本地 vLLM）provider」，Running，所有者判定）。橙色编号对应文字说明；第 ③ 屏以后见第 2 张图。</p>
+  <div class="row">
+    <figure><span class="tag now">现在</span>
+      <div class="phone shot"><img src="ios-task-detail/current-ios.png" alt=""></div>
+    </figure>
+    <figure><span class="tag after">改版 · 首屏</span>
+      <div class="phone" data-scroll="0"></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ════════════════════ board 2: whole page, web vs new ════════════════════ -->
+<section class="board" id="b2">
+  <h1>整页逐区块：web 手机 ↔ iOS 改版</h1>
+  <p class="lede">区块和顺序与 web 手机端（TaskDetailPanel，393 宽，同一张任务的真实数据）一一对应；橙色编号相同即同一区块。iOS 现在缺的是 ⑥ Acceptance、⑦ Inputs、⑧ Attribution、⑨ Followed by，以及 Details 里的 Start at。</p>
+  <div class="row" id="b2row">
+    <figure id="webfig"><span class="tag web">web 手机（现有 · 同一张任务）</span>
+      <div class="webwrap"><img src="ios-task-detail/web-phone.png" alt="">
+        <i class="wb" style="top:18px">1</i><i class="wb" style="top:146px">2</i><i class="wb" style="top:208px">3</i><i class="wb" style="top:588px">4</i>
+        <i class="wb" style="top:710px">5</i><i class="wb" style="top:2244px">6</i><i class="wb" style="top:2783px">7</i><i class="wb" style="top:2931px;left:auto;right:8px">8</i>
+        <i class="wb" style="top:3244px">9</i><i class="wb" style="top:3329px">10</i><i class="wb" style="top:3446px">11</i><i class="wb" style="top:3540px">13</i>
+        <i class="wb" style="top:20px;left:auto;right:6px">12</i></div>
+    </figure>
+    <figure><span class="tag after">iOS 改版 · 整页（评论框实际常驻屏幕底部）</span>
+      <div class="phone long" data-scroll="long"></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ════════════════════ board 3: states + menu + fullest task ════════════════════ -->
+<section class="board" id="b3">
+  <h1>操作行随状态原地换字 · ⋯ 菜单 · 字段最满的任务</h1>
+  <p class="lede">操作行一行最多两个等宽大按钮：左边灰底是「给这件事下结论」，右边实心是「让它往前走」。按钮文案全用现有的词（web / OrbitKit 里已有）。</p>
+  <div class="row">
+    <div>
+      <div class="state"><div class="cap">未开始 · OPEN</div>
+        <div class="hdr"><h2>支持配置自托管（本地 vLLM）provider</h2><div class="meta"><span class="pill open"><i class="dot"></i>Open</span><span class="who"><i class="av">o</i>orbit</span><span>· 2m ago</span></div></div>
+        <div class="acts"><span class="b sec">Confirm done</span><span class="b pri"><svg viewBox="0 0 24 24" style="fill:#fff;stroke:none"><path d="M7 4.5v15l12.5-7.5z"/></svg>Run now</span></div></div>
+      <div class="state"><div class="cap">在跑 · 本图主状态</div>
+        <div class="hdr"><h2>支持配置自托管（本地 vLLM）provider</h2><div class="meta"><span class="pill run"><i class="spin"></i>Running</span><span class="who"><i class="av">o</i>orbit</span><span>· 10m ago</span></div></div>
+        <div class="acts"><span class="b sec">Confirm done</span><span class="b pri"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg>Open the run</span></div></div>
+      <div class="state"><div class="cap">run 停下来等你确认</div>
+        <div class="hdr"><h2>支持配置自托管（本地 vLLM）provider</h2><div class="meta"><span class="pill open"><i class="dot"></i>Open</span><span class="who"><i class="av">o</i>orbit</span><span>· 42m ago</span></div></div>
+        <div class="acts"><span class="b warn"><svg viewBox="0 0 24 24"><path d="M5 5v7a3 3 0 003 3h11M15 11l4 4-4 4"/></svg>Waiting for your confirmation</span></div>
+        <div class="acts" style="margin-top:10px"><span class="b sec"><svg viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><path d="M7 4.5v15l12.5-7.5z"/></svg>Run now</span></div>
+        <div class="why">Confirm done 那一格换成琥珀色的「去 run 里的确认卡」；字太长放不下两格，只有这个状态上下排。</div></div>
+    </div>
+    <div>
+      <div class="state"><div class="cap">失败 · FAILED</div>
+        <div class="hdr"><h2>支持配置自托管（本地 vLLM）provider</h2><div class="meta"><span class="pill fail"><i class="dot"></i>Failed</span><span class="who"><i class="av">o</i>orbit</span><span>· 1h ago</span></div></div>
+        <div class="acts"><span class="b sec"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3"/></svg>Reopen task</span><span class="b pri"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.3-5.6M20 4v5h-5"/></svg>Retry</span></div></div>
+      <div class="state"><div class="cap">完成 · DONE</div>
+        <div class="hdr"><h2>支持配置自托管（本地 vLLM）provider</h2><div class="meta"><span class="pill done"><i class="dot"></i>Done</span><span class="who"><i class="av">o</i>orbit</span><span>· 3h ago</span></div></div>
+        <div class="acts"><span class="b sec"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3"/></svg>Reopen task</span></div></div>
+      <div class="state"><div class="cap">不能跑 · 按钮灰 + 一行原因（只在这时出现）</div>
+        <div class="hdr"><h2>支持配置自托管（本地 vLLM）provider</h2><div class="meta"><span class="pill open"><i class="dot"></i>Open</span><span class="who" style="color:var(--label-2)">Unassigned</span></div></div>
+        <div class="acts"><span class="b sec">Confirm done</span><span class="b dis"><svg viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><path d="M7 4.5v15l12.5-7.5z"/></svg>Run now</span></div>
+        <div class="why">Assign an agent before running this task.</div></div>
+    </div>
+    <figure><span class="tag after">⋯ 菜单</span>
+      <div class="phone nomark" data-scroll="0" data-menu="1"></div>
+    </figure>
+    <figure><span class="tag after">字段最满的真实任务 T9（依赖 · 2 次 run · 4 条评论；页面下半段）</span>
+      <div class="phone nomark long" id="richphone">
+        <div class="scroll"><div class="page" style="padding-top:113px">
+          <div class="sh">Dependencies</div>
+          <div class="card">
+            <div class="md" style="padding:11px 16px 2px;font-size:13px;color:var(--label-2)">7 connected · 7 upstream · 0 downstream</div>
+            <div class="seg"><span class="on">Graph</span><span>List</span></div>
+            <div class="graph"><svg id="dag" width="329" height="236" viewBox="0 0 329 236"></svg></div>
+            <div class="r">Auto-run when all prerequisites finish<span class="toggle"></span></div>
+            <div class="r add"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2"/><path d="M12 8v8M8 12h8"/></svg>Add prerequisite</div>
+          </div>
+          <div class="sh">Runs <span class="d">2</span></div>
+          <div class="card">
+            <div class="r run"><span class="live"><i class="d" style="background:var(--green)"></i></span>
+              <div class="body"><div class="l1"><span class="t">orbit</span><span class="w">Yesterday 18:19</span></div><div class="l2 ok">Succeeded</div></div>
+              <svg class="chev" viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5"/></svg></div>
+            <div class="r run"><span class="live"><i class="d" style="background:var(--green)"></i></span>
+              <div class="body"><div class="l1"><span class="t">orbit</span><span class="w">Yesterday 16:42</span></div><div class="l2 ok">Succeeded</div></div>
+              <svg class="chev" viewBox="0 0 8 14"><path d="M1.5 1.5L6.5 7l-5 5.5"/></svg></div>
+          </div>
+          <div class="sh">Comments <span class="d">4</span></div>
+          <div class="card">
+            <div class="cm"><div class="h"><i class="av">o</i><b>orbit</b><span class="w">· Yesterday 17:44</span></div>
+              <div class="bd"><h5>T9 完成：会话里的四个 Wiki 接触点</h5><p>分支 <code>orbit/t9-web-wiki-context-…-8039bf</code>，tip <code>f44ce03f6</code>，已 push。</p><p>左半是本分支的真实组件 + 真实 <code>index.css</code>，chromium 1440 视口…</p></div>
+              <div class="mr">Show more</div></div>
+            <div class="cm"><div class="h"><i class="av">o</i><b>orbit</b><span class="w">· Yesterday 18:18</span></div>
+              <div class="bd"><h5>重开说明（协调会话）：先修 index.css 的整份复制，再把 T9 重放上去</h5><p>T9 已被 owner 确认，但落地时 REBASE 冲突，冲突文件是 <code>src/web/src/index.css</code>…</p></div>
+              <div class="mr">Show more</div></div>
+            <div class="cm"><div class="h"><i class="av">o</i><b>orbit</b><span class="w">· Yesterday 18:28</span></div>
+              <div class="bd"><h5>判断会话（16:18:38 的 ATTEMPT_ENDED_UNSETTLED）：是重开触发的，新一轮已在跑</h5><p><b>结论：不开任务、不 start、不动任何卡。</b></p></div>
+              <div class="mr">Show more</div></div>
+            <div class="cm"><div class="h"><i class="av">o</i><b>orbit</b><span class="w">· Yesterday 18:59</span></div>
+              <div class="bd"><h5>重开这一轮：修好 T8 带进来的 index.css 整份复制，T9 原样重放</h5><p>分支 <code>orbit/t9-web-wiki-context-…-f6225a</code>，tip <code>8f70e8c1c</code>，已 push。</p></div>
+              <div class="mr">Show more</div></div>
+          </div>
+          <div style="height:12px"></div>
+        </div></div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- Board 4 (the reference board: App Store screenshots of Linear, GitHub, Asana, Jira, Todoist and
+     Things 3) was shown to the owner as a session attachment and is not kept here — the screenshots
+     are those products' own. What was borrowed from each is written beside the blocks it shaped. -->
+
+<script>
+  const q = new URLSearchParams(location.search);
+  document.body.dataset.board = q.get('board') || 'all';
+  const tplPage = document.getElementById('tpl-page');
+  const tplChrome = document.getElementById('tpl-chrome');
+  const tplNavTitle = document.getElementById('tpl-navtitle');
+
+  function build(phone) {
+    const scrollAt = phone.dataset.scroll;
+    const scroll = document.createElement('div');
+    scroll.className = 'scroll';
+    scroll.appendChild(tplPage.content.cloneNode(true));
+    phone.appendChild(scroll);
+    phone.appendChild(tplChrome.content.cloneNode(true));
+    if (scrollAt === 'long') return;
+    const y = Number(scrollAt) || 0;
+    scroll.style.transform = `translateY(${-y}px)`;
+    if (y > 60) {
+      const fade = document.createElement('div'); fade.className = 'topfade'; phone.appendChild(fade);
+      phone.querySelector('.nav').appendChild(tplNavTitle.content.cloneNode(true));
+    }
+    if (phone.dataset.menu) {
+      const scrim = document.createElement('div'); scrim.className = 'scrim'; phone.appendChild(scrim);
+      const m = document.createElement('div'); m.className = 'menu';
+      m.innerHTML = `
+        <div class="mi">Copy link<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3.5-3.5a4 4 0 00-5.7-5.7L12 6.3M14 10a4 4 0 00-5.7 0l-3.5 3.5a4 4 0 005.7 5.7l1.5-1.5"/></svg></div>
+        <div class="mi"><span>Share…<small>Live link</small></span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg></div>
+        <div class="mi">Copy as Markdown<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"/></svg></div>
+        <hr>
+        <div class="mi"><span>Mark done</span><svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></svg></div>
+        <hr>
+        <div class="mi red">Delete task<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></div>`;
+      phone.appendChild(m);
+    }
+  }
+  document.querySelectorAll('.phone[data-scroll]').forEach(build);
+
+  // rich phone chrome (scrolled: nav title for T9)
+  const rich = document.getElementById('richphone');
+  rich.appendChild(tplChrome.content.cloneNode(true));
+  const fade = document.createElement('div'); fade.className = 'topfade'; rich.appendChild(fade);
+  rich.querySelector('.nav').insertAdjacentHTML('beforeend', `<div class="navtitle"><div class="t">T9 web 会话接触点：启动卡 Wiki context、orbit-wiki 链接卡…</div><div class="s"><span style="color:var(--green-ink)">Done</span> · orbit</div></div>`);
+  rich.querySelector('.composer .ph').textContent = 'Add a comment… type @Workspace to mention';
+
+  // T9's real graph: 8 tasks, 11 edges, layered top→bottom (the project page's ProjectGraph direction for deep/narrow graphs)
+  (function dag() {
+    const svg = document.getElementById('dag');
+    const W = 329, nodeH = 30, gapY = 21.5;
+    const layers = [['T1 共享脱敏器', 'T2 wiki 契约与迁移'], ['T3 WikiService 与两道门'], ['T4 检索 wiki_search', 'T7 wiki.changed 事件'], ['T6 开场推送 context', 'T8 web Wiki 入口'], ['T9 web 会话接触点']];
+    const pos = {};
+    layers.forEach((layer, li) => {
+      const n = layer.length, w = n === 1 ? 190 : 152, gap = 10;
+      const total = n * w + (n - 1) * gap; let x = (W - total) / 2;
+      layer.forEach(t => { pos[t.split(' ')[0]] = { x, y: li * (nodeH + gapY), w, t }; x += w + gap; });
+    });
+    const edges = [['T1','T3'],['T2','T3'],['T3','T4'],['T3','T6'],['T4','T6'],['T3','T7'],['T3','T8'],['T4','T8'],['T7','T8'],['T6','T9'],['T8','T9']];
+    let out = '';
+    for (const [a, b] of edges) {
+      const p = pos[a], c = pos[b];
+      const x1 = p.x + p.w / 2, y1 = p.y + nodeH, x2 = c.x + c.w / 2, y2 = c.y;
+      const my = (y1 + y2) / 2;
+      out += `<path d="M${x1} ${y1} C${x1} ${my} ${x2} ${my} ${x2} ${y2 - 3}" fill="none" stroke="#c7c7cc" stroke-width="1.3"/>`;
+      out += `<path d="M${x2 - 3.5} ${y2 - 6} L${x2} ${y2 - 1.5} L${x2 + 3.5} ${y2 - 6}" fill="none" stroke="#c7c7cc" stroke-width="1.3"/>`;
+    }
+    for (const k in pos) {
+      const p = pos[k], focus = k === 'T9';
+      out += `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${nodeH}" rx="9" fill="${focus ? 'rgba(46,106,255,.1)' : '#F7F7F9'}" stroke="${focus ? '#2E6AFF' : '#E1E1E3'}" stroke-width="${focus ? 1.4 : 1}"/>`;
+      out += `<circle cx="${p.x + 12}" cy="${p.y + nodeH / 2}" r="3.6" fill="#34C759"/>`;
+      out += `<text x="${p.x + 22}" y="${p.y + 19.5}" font-size="12.5" font-family="Nimbus Sans, Noto Sans CJK SC" fill="#000" font-weight="${focus ? 700 : 400}">${p.t}</text>`;
+    }
+    svg.innerHTML = out;
+  })();
+
+  // measure for the harness: block tops inside the long page
+  setTimeout(() => {
+    const long = document.querySelector('.phone.long');
+    const out = {};
+    if (long) {
+      const top = long.getBoundingClientRect().top;
+      long.querySelectorAll('[data-n]').forEach(el => { out[el.dataset.n] = Math.round(el.getBoundingClientRect().top - top); });
+      out.height = Math.round(long.getBoundingClientRect().height);
+    }
+    const first = document.querySelector('#b1 .phone[data-scroll="0"]');
+    if (first) {
+      const t = first.getBoundingClientRect().top;
+      out.first = {};
+      first.querySelectorAll('[data-n]').forEach(el => { out.first[el.dataset.n] = Math.round(el.getBoundingClientRect().top - t); });
+    }
+    document.title = 'PROBE ' + JSON.stringify(out);
+  }, 400);
+</script>
+</body>
+</html>

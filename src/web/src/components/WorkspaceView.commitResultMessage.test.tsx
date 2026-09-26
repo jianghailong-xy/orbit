@@ -18,15 +18,17 @@ vi.mock('../api', async (importOriginal) => {
     api: vi.fn(),
     getSession: vi.fn(),
     commitSession: vi.fn(),
+    resumeSession: vi.fn(),
     getSessionEventPage: vi.fn(),
     listApprovals: vi.fn(),
   };
 });
 
-const { api, getSession, commitSession, getSessionEventPage, listApprovals } = await import('../api');
+const { api, getSession, commitSession, resumeSession, getSessionEventPage, listApprovals } = await import('../api');
 const apiMock = vi.mocked(api);
 const getSessionMock = vi.mocked(getSession);
 const commitMock = vi.mocked(commitSession);
+const resumeMock = vi.mocked(resumeSession);
 const { encodeId } = await import('../lib/idCodec');
 const { WorkspaceView } = await import('./WorkspaceView');
 
@@ -325,10 +327,10 @@ describe('a finished commit reports the runner line', () => {
     expect(toastDetail()).toBeNull();
   });
 
-  it('still reports a failed commit with the error, not the runner line', async () => {
+  it('reports a failed commit with git\'s words when the runner had nothing plainer to say', async () => {
     await commitAndAwaitOutcome({
       status: 'error',
-      message: RUNNER_MESSAGE,
+      message: null,
       error: 'error: Your local changes to the following files would be overwritten by merge',
     });
 
@@ -336,5 +338,46 @@ describe('a finished commit reports the runner line', () => {
     expect(toastDetail()).toBe(
       'error: Your local changes to the following files would be overwritten by merge',
     );
+  });
+
+  // For an error, commitResultMessage is the runner's plain sentence about why and what to do; it
+  // leads, and git's words stay on the bar behind "Show git output".
+  it('leads a failed commit with the runner\'s plain sentence when it gave one', async () => {
+    const plain =
+      "A git process (pid 48213) has held this worktree's index lock for 3 minutes. Retry once it finishes, or hand it to the session.";
+    await commitAndAwaitOutcome({
+      status: 'error',
+      message: plain,
+      error: "fatal: Unable to create '/work/.git/index.lock': File exists.",
+    });
+
+    expect(toastStatus()).toBe('Commit failed');
+    expect(toastDetail()).toBe(plain);
+  });
+});
+
+describe('a failed commit handed to the session', () => {
+  it('resumes the session with what the bar said and the branch to commit on', async () => {
+    resumeMock.mockResolvedValue({} as never);
+    const plain =
+      "A git process (pid 48213) has held this worktree's index lock for 3 minutes. Retry once it finishes, or hand it to the session.";
+    await commitAndAwaitOutcome({
+      status: 'error',
+      message: plain,
+      error: "fatal: Unable to create '/work/.git/index.lock': File exists.",
+    });
+    const resolve = [...mounted().querySelectorAll<HTMLButtonElement>('.wt-bar button')].find(
+      (button) => button.textContent === 'Resolve in session',
+    );
+    expect(resolve, 'the failed commit offers Resolve in session').toBeTruthy();
+
+    await act(async () => resolve!.click());
+    await waitForUi(() => {
+      expect(resumeMock).toHaveBeenCalledTimes(1);
+    });
+    const [, content, , , , clientTurnId] = resumeMock.mock.calls[0]!;
+    expect(content).toContain(`It said: "${plain}"`);
+    expect(content).toContain('checked out on orbit/commit-while-building-1a2b3c.');
+    expect(clientTurnId, 'the hand-off is one logical send, retried under one key').toEqual(expect.any(String));
   });
 });

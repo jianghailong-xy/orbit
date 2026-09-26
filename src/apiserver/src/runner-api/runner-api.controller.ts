@@ -1071,6 +1071,38 @@ export class RunnerApiController {
         // Next heartbeat retries; the status bar tolerates a one-cycle lag.
       }
     }
+    // Commits this runner reported as failed that no longer fail for the reason they gave: the
+    // index lock they met is gone, or the branch has moved since. Only that exact settled attempt
+    // is cleared — a newer click (pending) or a later failure carries another operation id — so the
+    // bar offers Commit afresh instead of repeating a reason that has stopped being true.
+    const expiredCommitErrors = (dto?.expiredCommitErrors ?? [])
+      .slice(0, 100)
+      .filter((e) => SESSION_ID_RE.test(e?.sessionId ?? '') && SESSION_ID_RE.test(e?.operationId ?? ''));
+    if (expiredCommitErrors.length > 0) {
+      try {
+        await Promise.all(
+          expiredCommitErrors.map((e) =>
+            this.prisma.session.updateMany({
+              where: {
+                id: e.sessionId.toLowerCase(),
+                assignedRunnerId: runner.id,
+                commitStatus: 'error',
+                commitOperationId: e.operationId.toLowerCase(),
+              },
+              data: {
+                commitStatus: null,
+                commitError: null,
+                commitResultMessage: null,
+                commitOperationId: null,
+                commitOperationOwner: null,
+              },
+            }),
+          ),
+        );
+      } catch {
+        // Advisory: the error stays until the next click, as it always did.
+      }
+    }
     // Record what the runner found at each workspace's working directory, so the config form can
     // report a bad path at edit time. Scoped to this runner's own workspaces: a probe names an
     // workspace id, and only the machine that runs it can say anything about its disk.
@@ -2060,12 +2092,14 @@ export class RunnerApiController {
           fastModeAvailable(provider, exec.model, s.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // Same dispatch-time variant check as the queue claim: an OpenCode variant is only
-        // valid against the assigned runner's reported catalog for this model.
+        // valid against the assigned runner's reported catalog for this model, and a configured
+        // model that declares its levels is held to them.
         effort: normalizeEffortForRuntimeModel(
           provider,
           s.effort ?? workspace?.effort,
           exec.model,
           s.assignedRunner?.modelCatalog,
+          exec.reasoningLevels,
         ),
         // Includes a custom provider's injected baseUrl/key (else just the workspace's env).
         env: exec.env,
@@ -5724,8 +5758,9 @@ export class RunnerApiController {
   /** Outcome of a heartbeat-delivered CommitCommand — persist it so the worktree status bar
    *  can flip from Commit to Merge. On success the worktree is clean (worktreeDirty=false),
    *  so the bar shows Merge without waiting for the next live-diff heartbeat; 'nochange' is
-   *  also clean. An error keeps the Commit button (commitError carries git's message). A
-   *  success keeps the runner's message in commitResultMessage — e.g. that it evicted the
+   *  also clean. An error keeps the Commit button (commitError carries git's message, and
+   *  commitResultMessage the runner's plain sentence about why and what to do, when it has one).
+   *  A success keeps the runner's message in commitResultMessage — e.g. that it evicted the
    *  session's parked engine before committing, which nothing else records.
    *  `released` is not an outcome: a runner that drained before touching the repo hands
    *  the claim back. */
@@ -5812,7 +5847,13 @@ export class RunnerApiController {
         data: {
           commitStatus: dto.status,
           commitError: dto.status === 'error' ? (dto.message ?? null) : null,
-          commitResultMessage: clean ? (dto.message ?? null) : null,
+          // The runner's own words about the outcome: what it did, for a commit that went through;
+          // why it failed and what to do, for one that did not (git's words stay in commitError).
+          commitResultMessage: clean
+            ? (dto.message ?? null)
+            : dto.status === 'error'
+              ? dto.summary?.trim().slice(0, 1000) || null
+              : null,
           ...(clean ? { worktreeDirty: false } : {}),
         },
       });

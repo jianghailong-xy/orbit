@@ -133,6 +133,56 @@ final class WorktreeBarLogicTests: XCTestCase {
         )
     }
 
+    // MARK: - a failed commit (mirrors web's SessionOutputs.commitFailure.test.tsx)
+
+    private let gitOutput = "fatal: Unable to create '/root/orbit/.git/worktrees/01a0d723/index.lock': File exists.\n"
+        + "the commit waited 2s for this checkout's index.lock and it was still held; it was not safe to remove: "
+        + "/root/orbit/.git/worktrees/01a0d723/index.lock, which git (pid 48213) has open. Nothing was committed."
+    private let summary = "A git process (pid 48213) has held this worktree's index lock for 3 minutes. Retry once it finishes, or hand it to the session."
+
+    func testCommitFailureLeadsWithTheRunnerSentenceAndKeepsGitsWords() {
+        let failure = WorktreeBarLogic.commitFailure(commitStatus: "error", commitError: gitOutput,
+                                                     commitResultMessage: " \(summary) ")
+        XCTAssertEqual(failure?.headline, "Couldn't commit — git is busy in this worktree")
+        XCTAssertEqual(failure?.why, summary)
+        XCTAssertEqual(failure?.gitOutput, gitOutput)
+    }
+
+    func testCommitFailureNamesALockEvenFromARunnerTooOldToExplainIt() {
+        let failure = WorktreeBarLogic.commitFailure(commitStatus: "error", commitError: gitOutput,
+                                                     commitResultMessage: nil)
+        XCTAssertEqual(failure?.headline, "Couldn't commit — git is busy in this worktree")
+        XCTAssertEqual(failure?.why,
+                       "Another git process holds this worktree's index lock. Retry once it finishes, or hand it to the session.")
+        XCTAssertEqual(failure?.gitOutput, gitOutput)
+    }
+
+    func testCommitFailureCallsOtherErrorsWhatTheyAre() {
+        let error = "error: Your local changes to the following files would be overwritten by merge"
+        let failure = WorktreeBarLogic.commitFailure(commitStatus: "error", commitError: error,
+                                                     commitResultMessage: nil)
+        XCTAssertEqual(failure, .init(headline: "Couldn't commit", why: error, gitOutput: nil))
+        XCTAssertEqual(WorktreeBarLogic.commitFailure(commitStatus: "error", commitError: nil, commitResultMessage: nil),
+                       .init(headline: "Couldn't commit", why: "Commit failed — try again.", gitOutput: nil))
+    }
+
+    func testCommitFailureOnlyForAFailedCommit() {
+        for status in [nil, "pending", "committed", "nochange"] {
+            XCTAssertNil(WorktreeBarLogic.commitFailure(commitStatus: status, commitError: gitOutput,
+                                                        commitResultMessage: summary))
+        }
+    }
+
+    func testResolveCommitPromptIsWebsWordForWord() {
+        XCTAssertEqual(
+            WorktreeBarLogic.resolveCommitPrompt(branch: "orbit/web-command-workspace-7960ce", why: summary),
+            "The Commit button on the worktree bar could not commit this session's work. It said: \"\(summary)\"\n\n"
+                + "You're in this session's isolated git worktree, checked out on orbit/web-command-workspace-7960ce."
+                + " Find out what stopped the commit and clear it: let a git command that is still running here"
+                + " finish; an index.lock that no process has open was left behind by a git that died and is safe"
+                + " to remove. Then commit the work on this branch with a message that describes it. Do not push.")
+    }
+
     func testManualMergeCommandUsesTargetAndBranch() {
         XCTAssertEqual(
             WorktreeBarLogic.manualMergeCommand(mergeTarget: "develop", branch: "orbit/fix-a1b2c3"),

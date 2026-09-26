@@ -19,8 +19,11 @@ final class OrbitAskPreviewTests: XCTestCase {
         // same shape from the other side — the blocker IS the project asking for a person, so
         // "always let this session clear whatever stops its project" would make every card after
         // it a formality. Web refuses all of them too, and the weaker client would otherwise win.
+        // A provider write joins them for its own reason: a standing yes would let the next one name
+        // any endpoint and key.
         for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create",
-                     "orbit_blocker_resolve"] {
+                     "orbit_blocker_resolve", "orbit_provider_create", "orbit_provider_update",
+                     "orbit_provider_delete"] {
             XCTAssertNil(Approvals.rememberRule(toolName: tool, input: json("{}")),
                          "\(tool) must not offer Allow & remember")
         }

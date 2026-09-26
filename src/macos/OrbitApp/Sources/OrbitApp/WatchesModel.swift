@@ -89,6 +89,18 @@ final class WatchesModel {
         }
     }
 
+    /// Follow: create a watch. The watch as it stands — already MATCHED when its condition held — or
+    /// the sentence to show in the sheet.
+    func create(_ request: CreateWatchRequest) async -> (watch: Watch?, failure: String?) {
+        do {
+            let created = try await api.createWatch(request)
+            adopt(WatchIndex.replacing(created, in: watches))
+            return (created, nil)
+        } catch {
+            return (nil, WatchProjection.failureMessage(error, verb: "follow"))
+        }
+    }
+
     /// Save an edit. Nil when it went through; otherwise the sentence to show in the sheet.
     func save(_ request: UpdateWatchRequest, for watch: Watch) async -> String? {
         do {

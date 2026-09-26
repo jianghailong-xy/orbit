@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AgentProvider, providerPreset, RunEventType, type ProviderPreset } from '@orbit/shared';
+import { CLAUDE_EFFORT_ORDER } from '../common/runtime-provider';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -45,6 +46,32 @@ function poolMemberRefused(row: { id: string; label: string }, reason: PoolMembe
     providerId: row.id,
     message: `${row.label}: ${POOL_MEMBER_REFUSALS[reason]}`,
   });
+}
+
+/**
+ * Refuse a model list whose `reasoningLevels` dispatch could not honour: a level Claude Code has no
+ * name for, or a declaration on any runtime but Claude's. Dispatch maps an effort onto a declared list
+ * only for the Claude runtime (declaredReasoningLevels), so on another one it would be stored, shown
+ * back, and never read.
+ */
+function assertReasoningLevels(runtime: string, models: unknown): void {
+  if (!Array.isArray(models)) return;
+  for (const entry of models) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { value, reasoningLevels } = entry as { value?: unknown; reasoningLevels?: unknown };
+    if (reasoningLevels === undefined) continue;
+    if (runtime !== AgentProvider.CLAUDE) {
+      throw new BadRequestException(`model "${value}": reasoningLevels is only honoured on the claude runtime`);
+    }
+    if (
+      !Array.isArray(reasoningLevels) ||
+      reasoningLevels.some((level) => !CLAUDE_EFFORT_ORDER.includes(level as string))
+    ) {
+      throw new BadRequestException(
+        `model "${value}": reasoningLevels must list only ${CLAUDE_EFFORT_ORDER.join(', ')}`,
+      );
+    }
+  }
 }
 
 /** A provider row as refusing an edit to a pool member reads it, before and after the edit. */
@@ -280,6 +307,7 @@ export class ProvidersService {
       enabled: dto.enabled ?? true,
       ownerId,
     };
+    assertReasoningLevels(data.runtime, models);
     const row = await this.withFreeSlug(base, (slug) =>
       this.prisma.modelProvider.create({ data: { ...data, slug } }),
     );
@@ -322,6 +350,7 @@ export class ProvidersService {
    *  users pass their id (their personal rows). Cross-scope ids read as not-found. */
   async update(ownerId: string | null, id: string, dto: UpdateModelProviderDto) {
     const current = await this.getScoped(ownerId, id);
+    assertReasoningLevels(dto.runtime ?? current.runtime, dto.models ?? current.models);
     const data: Prisma.ModelProviderUpdateInput = {
       label: dto.label,
       runtime: dto.runtime,
@@ -345,6 +374,18 @@ export class ProvidersService {
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
     this.publishChanged(ownerId, row.id);
     return this.desensitize(row);
+  }
+
+  /** The id of one of the caller's own providers, found by the slug `orbit provider list` shows — the
+   *  handle the runner's write doors take, since that list carries no id. Scoped like every write: a
+   *  shared row, or another user's, reads as not-found. */
+  async idOfMine(ownerId: string, slug: string): Promise<string> {
+    const row = await this.prisma.modelProvider.findFirst({
+      where: { ownerId, slug: { equals: slug, not: AgentProvider.OPENCODE } },
+      select: { id: true },
+    });
+    if (!row) throw new NotFoundException('provider not found');
+    return row.id;
   }
 
   async remove(ownerId: string | null, id: string) {

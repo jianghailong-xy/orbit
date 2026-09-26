@@ -97,6 +97,9 @@ private struct RootView: View {
             // Register for "needs your reply" pushes once signed in (idempotent).
             .task { model.enablePush() }
             .sessionSearchSheet(model)
+            // Settings is a sheet over whichever shell is showing — the drawer's gear on iPhone, the
+            // sidebar's row on iPad.
+            .settingsSheet(model)
         } else {
             LoginView()
         }

@@ -570,7 +570,12 @@ final class TasksModel {
         guard selectedDetailID == id else { return false }
         detailGeneration &+= 1
         let generation = detailGeneration
-        if detail?.id != id { detail = nil }
+        if detail?.id != id {
+            detail = nil
+            attribution = nil
+            attributionFailed = false
+            dependencyGraph = nil
+        }
         detailLoading = true
         detailMissing = false
         detailErrorText = nil
@@ -600,6 +605,41 @@ final class TasksModel {
         detailMissing = false
         detailErrorText = nil
         ownerConfirmation = nil
+        attribution = nil
+        attributionFailed = false
+        dependencyGraph = nil
+    }
+
+    // MARK: the detail page's other reads
+
+    /// Where the task on screen counts, where it was noticed, which crossing touches it and what
+    /// blocks it (`GET /tasks/:id/attribution`). Nil until read; `attributionFailed` when the read
+    /// failed, which the page says rather than drawing an empty block.
+    private(set) var attribution: TaskAttribution?
+    private(set) var attributionFailed = false
+
+    /// The dependency component around the task on screen. Nil until read — the page draws the
+    /// task's direct edges until it arrives, and keeps drawing them if it never does.
+    private(set) var dependencyGraph: TaskDependencyGraph?
+
+    func loadAttribution(_ id: String) async {
+        guard selectedDetailID == id else { return }
+        do {
+            let view = try await api.taskAttribution(id)
+            guard selectedDetailID == id else { return }
+            attribution = view
+            attributionFailed = false
+        } catch {
+            if isCancellation(error) { return }
+            guard selectedDetailID == id else { return }
+            attributionFailed = attribution == nil
+        }
+    }
+
+    func loadDependencyGraph(_ id: String) async {
+        guard selectedDetailID == id else { return }
+        guard let graph = try? await api.taskDependencyGraph(id), selectedDetailID == id else { return }
+        dependencyGraph = graph
     }
 
     /// What the task on screen is waiting on from its owner, when it declares OWNER_CONFIRMED.
@@ -703,6 +743,32 @@ final class TasksModel {
         await mutate(id) { _ = try await self.api.updateTask(id, TaskReopen.request) }
     }
 
+    /// `Start at`: schedule the task's one start (nil = Cancel schedule).
+    @discardableResult
+    func setRunAt(_ id: String, _ date: Date?) async -> Bool {
+        let field: FieldUpdate<String> = date.map { .set(TaskDetailLogic.runAtISO($0)) } ?? .clear
+        return await mutate(id) { _ = try await self.api.updateTask(id, UpdateTaskRequest(runAt: field)) }
+    }
+
+    /// Save the acceptance block — the fields `TaskAcceptanceDraft.patch` says moved, and only those.
+    @discardableResult
+    func saveAcceptance(_ id: String, _ request: UpdateTaskRequest) async -> Bool {
+        await mutate(id) { _ = try await self.api.updateTask(id, request) }
+    }
+
+    /// Add one of the task's inputs: a file every run of it is given.
+    @discardableResult
+    func addInput(_ id: String, filename: String, mimeType: String, data: Data) async -> Bool {
+        await mutate(id) {
+            _ = try await self.api.uploadTaskInput(taskID: id, filename: filename, mimeType: mimeType, data: data)
+        }
+    }
+
+    /// Remove an input. Runs already started keep their copy.
+    func removeInput(_ id: String, inputID: String) async {
+        _ = await mutate(id) { try await self.api.deleteAttachment(inputID) }
+    }
+
     func setAutoRun(_ id: String, _ on: Bool) async {
         _ = await mutate(id) { _ = try await self.api.updateTask(id, UpdateTaskRequest(autoRunWhenReady: on)) }
     }
@@ -751,17 +817,20 @@ final class TasksModel {
 
     @discardableResult
     func addDependency(_ id: String, dependsOn: String) async -> Bool {
-        await mutate(id) {
+        let added = await mutate(id) {
             try await self.api.addTaskDependency(
                 taskID: id, AddDependencyRequest(dependsOnTaskId: dependsOn)
             )
         }
+        if added { await loadDependencyGraph(id) }
+        return added
     }
 
     func removeDependency(_ id: String, dependsOn: String) async {
-        _ = await mutate(id) {
+        let removed = await mutate(id) {
             try await self.api.removeTaskDependency(taskID: id, dependsOnTaskID: dependsOn)
         }
+        if removed { await loadDependencyGraph(id) }
     }
 
     /// Server-side prerequisite search, matching Web's bounded 50-row picker instead of limiting

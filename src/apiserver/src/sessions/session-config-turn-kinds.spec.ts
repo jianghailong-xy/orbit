@@ -522,3 +522,70 @@ test('a Codex model whose catalogue row does not advertise the priority tier has
   // drops it from the request without a word, so recording `true` would be a setting nothing honours.
   assert.equal('fastMode' in JSON.parse(turns[0]?.content ?? '{}'), false);
 });
+
+/** A self-hosted Claude-runtime row whose models declare the efforts they accept — vLLM serving
+ *  Qwen3.8, whose chat template raises on any `reasoning_effort` but xhigh/medium/low. */
+const declaringRow = () => ({
+  runtime: 'claude',
+  baseUrl: 'http://127.0.0.1:8000',
+  apiKeyEnc: encryptSecret('EMPTY'),
+  defaultModel: 'qwen3.8-27b-fp8',
+  enabled: true,
+  models: [
+    { value: 'qwen3.8-27b-fp8', label: 'Qwen3.8 27B', reasoningLevels: ['low', 'medium', 'xhigh'] },
+    { value: 'qwen3.8-9b', label: 'Qwen3.8 9B', reasoningLevels: ['low', 'medium'] },
+  ],
+});
+
+test('a model that declares its efforts is told one it accepts, not the level asked for', async () => {
+  process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
+  const { service, turns } = serviceOn({
+    provider: 'local-vllm',
+    providerBuiltin: false,
+    model: 'qwen3.8-27b-fp8',
+    modelProvider: declaringRow(),
+  });
+
+  await service.updateConfig(OWNER, ID, { effort: 'high' });
+
+  // `high` is refused by this model's template on every request; the nearest level it takes is said
+  // instead, the same one the claim would have spawned it on.
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+  assert.equal(JSON.parse(turns[0].content ?? '{}').effort, 'xhigh');
+});
+
+test('moving to another declaring model restates the effort that model accepts', async () => {
+  process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
+  const { service, turns } = serviceOn({
+    provider: 'local-vllm',
+    providerBuiltin: false,
+    model: 'qwen3.8-27b-fp8',
+    effort: 'xhigh',
+    modelProvider: declaringRow(),
+  });
+
+  await service.updateConfig(OWNER, ID, { model: 'qwen3.8-9b' });
+
+  // The effort did not move, but the level the engine holds is one the new model refuses: a model
+  // change is an effort change here, so the frame carries both.
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+  assert.deepEqual(JSON.parse(turns[0].content ?? '{}'), {
+    model: 'qwen3.8-9b',
+    permissionMode: 'default',
+    effort: 'medium',
+  });
+});
+
+test('a switch onto a declaring provider re-spawns on a level its model accepts', async () => {
+  process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
+  const { service, turns } = serviceOn({ modelProvider: declaringRow() });
+
+  await service.updateConfig(OWNER, ID, { provider: 'local-vllm' });
+
+  // The session had no effort of its own — which on the process it is leaving was the CLI's `high` —
+  // so the re-spawn states the level the new model takes rather than leaving the default standing.
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  const reload = JSON.parse(turns[0].content ?? '{}');
+  assert.equal(reload.model, 'qwen3.8-27b-fp8');
+  assert.equal(reload.effort, 'xhigh');
+});

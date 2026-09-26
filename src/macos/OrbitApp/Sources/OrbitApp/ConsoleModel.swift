@@ -398,7 +398,8 @@ final class ConsoleModel {
         // the resolver deliberately preserves an explicit account "" (Default).
         self.effort = AgentDefaults.newSessionEffort(
             accountDefault: accountDefaultEffort, legacyWorkspaceDefault: agent.effort,
-            for: provider, model: defaultModel, catalog: modelCatalog)
+            for: provider, model: defaultModel, catalog: modelCatalog,
+            configured: configuredProviders)
         wireWorktree()
     }
 
@@ -994,7 +995,8 @@ final class ConsoleModel {
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
         effort = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: modelID, catalog: modelCatalog)
+            effort, for: provider, model: modelID, catalog: modelCatalog,
+            configured: configuredProviders)
         // A LIVE session pushes later pill edits to the server (PATCH /config); record the
         // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
         // A terminal session isn't live, so its pills stay local until the next resume.
@@ -1113,7 +1115,8 @@ final class ConsoleModel {
                                                 catalog: modelCatalog)
             : permissionMode
         let nextEffort = AgentDefaults.normalizedEffort(effort, for: slug, model: nextModel,
-                                                        catalog: modelCatalog)
+                                                        catalog: modelCatalog,
+                                                        configured: configuredProviders)
         providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: from, to: slug, liveRun: isLive)
         provider = slug
         if nextModel != modelID {
@@ -1151,7 +1154,8 @@ final class ConsoleModel {
                 catalog: modelCatalog)
         }
         effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
-                                                catalog: modelCatalog)
+                                                catalog: modelCatalog,
+                                                configured: configuredProviders)
     }
 
     /// Adopt a provider catalogue with the account pools folded in, each resolved like a Claude key.
@@ -1187,6 +1191,10 @@ final class ConsoleModel {
                 permissionMode, for: modelID, provider: provider,
                 configured: configuredProviders, catalog: modelCatalog)
         }
+        // The provider list is also where a configured model declares the efforts it accepts.
+        effort = AgentDefaults.normalizedEffort(
+            effort, for: provider, model: modelID, catalog: modelCatalog,
+            configured: configuredProviders)
     }
 
     /// A picker change on a LIVE session is pushed to the server immediately (PATCH /config,
@@ -1248,7 +1256,8 @@ final class ConsoleModel {
         guard isDraft, effortSelectionRevision.isPristine else { return }
         effort = AgentDefaults.newSessionEffort(
             accountDefault: accountDefault, legacyWorkspaceDefault: legacyWorkspaceDefault,
-            for: provider, model: modelID, catalog: modelCatalog)
+            for: provider, model: modelID, catalog: modelCatalog,
+            configured: configuredProviders)
     }
 
     // MARK: `/` autocomplete
@@ -1862,7 +1871,8 @@ final class ConsoleModel {
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
         effort = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: modelID, catalog: modelCatalog)
+            effort, for: provider, model: modelID, catalog: modelCatalog,
+            configured: configuredProviders)
     }
 
     func interrupt() async {
@@ -1949,10 +1959,9 @@ final class ConsoleModel {
             // transcript and restoring would duplicate it. Unlike Stop (offered only with an empty
             // composer), Cancel is reachable mid-draft, so an in-progress draft always wins.
             // Attachments aren't rehydrated (the composer needs their bytes), matching interrupt.
-            // Except a wake a watch queued: nobody typed those words, so folding them back would
-            // put a UUID and a block of JSON in the composer as though the user had written it.
-            let body = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !body.isEmpty, WatchWakeText.parse(bubble.text) == nil,
+            // Except a turn nobody typed — a wake, a delivery — which would land in the composer
+            // as though the user had written it (`ComposerLogic.restorableText`).
+            if let body = ComposerLogic.restorableText(of: bubble),
                composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 composerText = body
             }
@@ -1970,8 +1979,12 @@ final class ConsoleModel {
     /// composer — an interrupt event can also arrive from another client, so it must never clobber a
     /// draft being typed here. Queued images aren't rehydrated (the composer needs their bytes), so
     /// they're dropped as before; the text is what's costly to lose.
+    ///
+    /// Only for the interrupt a Stop produced (`TranscriptReducer.dropsQueue`): the one a runner
+    /// writes as it restarts drops nothing, so folding its queue back would show every message in
+    /// it twice — and it did, on 2026-09-25, with a background job's wake nobody had typed.
     private func foldQueuedBackIntoComposer(before ev: RunEvent) {
-        guard case .interrupt = ev.type, !reducer.state.queued.isEmpty,
+        guard TranscriptReducer.dropsQueue(ev), !reducer.state.queued.isEmpty,
               composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         // The follow-up of a "stop and send this instead" is in this same queue and was NOT dropped
         // — it was filed after the interrupt's delete, which is the whole point of sending them
@@ -1981,11 +1994,8 @@ final class ConsoleModel {
         interruptFollowUpClientTurnId = nil
         let restored = reducer.state.queued
             .filter { $0.clientTurnId == nil || $0.clientTurnId != followUp }
-            // A wake a watch queued was never the user's to get back (web parity: the queued tail
-            // filters them out of both restore paths).
-            .filter { WatchWakeText.parse($0.text) == nil }
-            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            // A turn nobody typed — a wake, a delivery — was never the user's to get back.
+            .compactMap(ComposerLogic.restorableText(of:))
             .joined(separator: "\n\n")
         guard !restored.isEmpty else { return }
         composerText = restored

@@ -13,6 +13,7 @@ import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening'
 import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { derivedUuid } from './project-dispatch-identity';
+import { readDerivedProjectDoneReading } from './project-done-derived';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
 
 /**
@@ -258,7 +259,7 @@ export class CoordinatorDeliveryService {
       sessionId = project.coordinatorSessionId;
       await this.sessions.createTurn(project.ownerId, sessionId, {
         clientTurnId,
-        content: buildCoordinatorDeliveryMessage(fact, project.title),
+        content: await this.render(fact, project),
         intent: 'NEXT_TURN',
       }, {
         participateSendTransaction: (tx) => bindQueuedDelivery(tx, wakeId, sessionId, clientTurnId),
@@ -335,7 +336,7 @@ export class CoordinatorDeliveryService {
     try {
       await this.sessions.resume(project.ownerId, standing.id, {
         clientTurnId,
-        content: buildCoordinatorDeliveryMessage(fact, project.title),
+        content: await this.render(fact, project),
       });
     } catch (e) {
       // The refusals `resume` gives for an ordinary state of the world rather than a fault: the
@@ -396,6 +397,26 @@ export class CoordinatorDeliveryService {
     });
     if (bound.count === 0) return { outcome: 'ALREADY_DELIVERED', wakeId, idempotencyKey };
     return { outcome: 'DELIVERED', wakeId, idempotencyKey, sessionId, clientTurnId };
+  }
+
+  /**
+   * The words one fact is delivered as, for both carriers.
+   *
+   * `PROJECT_ACCEPTANCE_LANDED` asks the owner to confirm the standard set only while there is a
+   * confirmation to give, and says DONE only when the projection does — so the projection, and the
+   * standing it is folded from, are read here: after the claim, as the message is written, off the
+   * client this service already holds, and from the same batch `project-done-derived.ts` stores the
+   * column from. Not by the producer: it changes what the message says and nothing about which fact
+   * it is or whether it is delivered. Every other fact renders from itself.
+   */
+  private async render(
+    fact: WakeFact,
+    project: { ownerId: string; title: string },
+  ): Promise<string> {
+    const reading = fact.event === 'PROJECT_ACCEPTANCE_LANDED'
+      ? await readDerivedProjectDoneReading(this.prisma, project.ownerId, fact.projectId)
+      : null;
+    return buildCoordinatorDeliveryMessage(fact, project.title, reading);
   }
 
   private async refuse(

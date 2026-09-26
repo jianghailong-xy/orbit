@@ -55,6 +55,8 @@ type HeartbeatRequest struct {
 	// older runners omit both fields and retain the legacy heartbeat behavior.
 	LeaseOwner           string   `json:"leaseOwner,omitempty"`
 	SupervisedSessionIDs []string `json:"supervisedSessionIds,omitempty"`
+	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
+	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its
 	// sessions) but no longer dispatches heartbeat-delivered git work. The control
 	// plane stops claiming merge/commit requests for it; they wait for the successor.
@@ -693,6 +695,17 @@ type CommitResultRequest struct {
 	// request goes back to unclaimed and the successor performs it.
 	Status  string `json:"status"` // "committed" | "nochange" | "error" | "released"
 	Message string `json:"message,omitempty"`
+	// Summary is, for "error", the runner's own plain sentence about why the commit failed and
+	// what to do, beside git's words in Message.
+	Summary string `json:"summary,omitempty"`
+}
+
+// CommitErrorExpiry names a commit this runner reported as failed whose reason no longer holds —
+// the index lock it met is gone, or the branch has moved since — so the control plane can drop the
+// settled error it still holds for exactly that operation.
+type CommitErrorExpiry struct {
+	SessionID   string `json:"sessionId"`
+	OperationID string `json:"operationId"`
 }
 
 // DiffResultRequest mirrors @orbit/shared SessionDiffResultRequest: a freshly recomputed live

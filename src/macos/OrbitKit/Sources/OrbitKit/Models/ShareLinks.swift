@@ -195,3 +195,26 @@ public struct PutShareLinkRequest: Encodable, Equatable, Sendable {
         try expiresAt.encode(into: &c, forKey: .expiresAt)
     }
 }
+
+/// `GET /share-links`: every link the account has made, whatever its state.
+public struct ShareLinkList: Codable, Equatable, Sendable {
+    public let links: [ShareLink]
+
+    public init(links: [ShareLink]) {
+        self.links = links
+    }
+}
+
+/// `POST /share-links/turn-off`: the links to end, by id.
+public struct TurnOffShareLinksRequest: Encodable, Equatable, Sendable {
+    public let shareLinkIds: [String]
+
+    public init(shareLinkIds: [String]) {
+        self.shareLinkIds = shareLinkIds
+    }
+}
+
+/// How many of them were still on and are off now.
+public struct TurnOffShareLinksResult: Codable, Equatable, Sendable {
+    public let count: Int
+}

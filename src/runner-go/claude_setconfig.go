@@ -74,7 +74,10 @@ type setConfigFrame struct {
 // in the engine's environment makes the frame inert — still answered `success`, still
 // changing nothing. Orbit does not set it (claude_spawn.go passes --effort and nothing
 // else), and must not start: doing so would silently turn every effort change back into a
-// lie, in exactly the way no test here could catch.
+// lie, in exactly the way no test here could catch. The one exception is the control plane's,
+// and it is the case where there is no change to lie about: a configured model declared to take
+// no effort at all is sent CLAUDE_CODE_EFFORT_LEVEL=unset in its provider env (apiserver
+// providers/custom-provider.ts), because nothing else stops the CLI sending one.
 const claudeEffortFloor = "2.1.235"
 
 // claudeUltraEffort is Orbit's `ultra` on this runtime: Claude Code's ultracode, which is xhigh

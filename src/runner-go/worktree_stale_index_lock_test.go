@@ -109,12 +109,20 @@ func TestTheSharedRepositorysIndexLockIsNeverBroken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	broke, why := breakStaleIndexLock(repo)
-	if broke {
-		t.Fatalf("the shared repository's index.lock must never be broken: %s", why)
-	}
-	if !strings.Contains(why, "shared repository") {
-		t.Fatalf("the refusal must name what it declined to touch, got %q", why)
+	for name, breakLock := range map[string]func(string) (bool, string){
+		"finalize": breakStaleIndexLock,
+		"commit": func(dir string) (bool, string) {
+			d := breakAbandonedIndexLock(dir)
+			return d.Broke, d.Why
+		},
+	} {
+		broke, why := breakLock(repo)
+		if broke {
+			t.Fatalf("%s: the shared repository's index.lock must never be broken: %s", name, why)
+		}
+		if !strings.Contains(why, "shared repository") {
+			t.Fatalf("%s: the refusal must name what it declined to touch, got %q", name, why)
+		}
 	}
 	if _, err := os.Stat(lock); err != nil {
 		t.Fatalf("the shared lock must still be there: %v", err)

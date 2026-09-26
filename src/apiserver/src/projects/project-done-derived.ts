@@ -7,6 +7,7 @@ import {
   standardSetVersion,
   type AcceptanceCriterionDefinitionLike,
   type RecordedStandardSetConfirmation,
+  type StandardSetConfirmationStanding,
   type StandardSetConfirmationState,
 } from './project-acceptance';
 import {
@@ -231,6 +232,31 @@ export async function readDerivedProjectDone(
   ownerId: string,
   projectId: string,
 ): Promise<DerivedProjectDone> {
+  return (await readDerivedProjectDoneReading(prisma, ownerId, projectId)).derived;
+}
+
+/**
+ * The projection, with the two readings it was folded from that a reader has to QUOTE rather than
+ * only act on: the confirmation standing — when the standing set was confirmed, not only whether —
+ * and the satisfaction lane, whose `unmet` clauses say what a criterion that does not count is
+ * missing. The coordinator's `PROJECT_ACCEPTANCE_LANDED` message is that reader
+ * (`coordinator-delivery.service.ts`): it may say DONE only when this says DONE, and says why not
+ * when it does not.
+ *
+ * All three come out of `readDerivedProjectDone`'s one batch, so the message cannot describe a
+ * confirmation or a clause the projection did not fold.
+ */
+export interface DerivedProjectDoneReading {
+  derived: DerivedProjectDone;
+  standing: StandardSetConfirmationStanding;
+  satisfaction: CriterionSatisfaction[];
+}
+
+export async function readDerivedProjectDoneReading(
+  prisma: DerivationClient,
+  ownerId: string,
+  projectId: string,
+): Promise<DerivedProjectDoneReading> {
   const [definitions, satisfaction, landing, independence, confirmation] = await Promise.all([
     prisma.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId, project: { ownerId } },
@@ -251,15 +277,15 @@ export async function readDerivedProjectDone(
     latestConfirmation(prisma, projectId),
   ]);
 
-  return derivedDoneFromLanes(
-    satisfaction,
-    landing,
-    independence,
-    standardSetConfirmationStanding(
-      standardSetVersion(criteriaFromDefinitions(definitions)),
-      confirmation,
-    ).state,
+  const standing = standardSetConfirmationStanding(
+    standardSetVersion(criteriaFromDefinitions(definitions)),
+    confirmation,
   );
+  return {
+    derived: derivedDoneFromLanes(satisfaction, landing, independence, standing.state),
+    standing,
+    satisfaction,
+  };
 }
 
 /**
