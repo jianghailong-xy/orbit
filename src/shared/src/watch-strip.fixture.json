@@ -1,0 +1,259 @@
+{
+  "about": [
+    "The Watching strip above a session's composer: the sentence an opened strip says about each",
+    "watch, the line it adds when nobody is checking one, the sentence its folded line writes over",
+    "several targets, and a session target's word — one set of cases both clients are proved",
+    "against. The web reads this file in `lib/watches.test.ts` (`stripSentence`, `stripStaleLine`,",
+    "`stripCounts`, `SESSION_TARGET_WORDS`), the native client in `WatchStripCopyParityTests`",
+    "(`WatchProjection.stripSentence`, `stripStaleLine`, `WatchSessionSummary.lineCounts`,",
+    "`SessionStatusGlyph.make(runState:)`), so the two ends cannot drift into two sentences.",
+    "",
+    "Every time here is read against `now`.",
+    "",
+    "`sentences`: one watch → its sentence. `targets` are the watch's targets by kind, a",
+    "`:GONE` suffix marking one whose row was deleted (it is not counted). The condition is said of",
+    "the live targets — `it` for one, `all of them` / `any of them` for several — and the deadline",
+    "is the time left until `expiresAt`, in the strip's spans.",
+    "",
+    "`stale`: one watch → the line an opened strip adds under its sentence, or null. Only an ACTIVE",
+    "watch nobody has looked at for more than three minutes (since `lastEvaluatedAt`, or since",
+    "`createdAt` when it was never looked at) says one.",
+    "",
+    "`counts`: the distinct live targets of the strip's watches, each with its `targetStatus` (null",
+    "when the account cannot read the row) → the folded line's sentence, which is Tasks created",
+    "here's (`session-created-tasks.fixture.json`). A task is done when its status is DONE; a",
+    "session when it is neither running, queued nor failed — its turn is over.",
+    "",
+    "`sessionWords`: a session target's run state → the word its pill says, the one its own",
+    "header's glyph says for that run state."
+  ],
+  "now": "2026-09-14T10:00:00Z",
+  "sentences": [
+    {
+      "case": "one task, the screenshot's watch",
+      "state": "ACTIVE",
+      "predicate": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+      "targets": ["TASK"],
+      "expiresAt": "2026-09-27T10:00:00Z",
+      "sentence": "Resumes this session when it finishes, or in 13d at the latest."
+    },
+    {
+      "case": "task_await's own condition over one task: failing is finishing",
+      "state": "ACTIVE",
+      "predicate": {
+        "kind": "ANY_OF",
+        "operands": [
+          { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+        ]
+      },
+      "targets": ["TASK"],
+      "expiresAt": "2026-09-15T09:00:00Z",
+      "sentence": "Resumes this session when it finishes, or in 23h at the latest."
+    },
+    {
+      "case": "task_await's own condition over three tasks: one failing ends the wait",
+      "state": "ACTIVE",
+      "predicate": {
+        "kind": "ANY_OF",
+        "operands": [
+          { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+        ]
+      },
+      "targets": ["TASK", "TASK", "TASK"],
+      "expiresAt": "2026-09-15T09:00:00Z",
+      "sentence": "Resumes this session when all of them finish or any of them fails, or in 23h at the latest."
+    },
+    {
+      "case": "any one of three tasks",
+      "state": "ACTIVE",
+      "predicate": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+      "targets": ["TASK", "TASK", "TASK"],
+      "expiresAt": "2026-09-14T15:40:00Z",
+      "sentence": "Resumes this session when any of them finishes, or in 5h 40m at the latest."
+    },
+    {
+      "case": "session_await's own condition over one session",
+      "state": "ACTIVE",
+      "predicate": {
+        "kind": "ANY_OF",
+        "operands": [
+          { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+          { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+        ]
+      },
+      "targets": ["SESSION"],
+      "expiresAt": "2026-09-15T09:00:00Z",
+      "sentence": "Resumes this session when it finishes its turn or asks for an approval, or in 23h at the latest."
+    },
+    {
+      "case": "two sessions finish their turns",
+      "state": "ACTIVE",
+      "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+      "targets": ["SESSION", "SESSION"],
+      "expiresAt": "2026-09-15T09:00:00Z",
+      "sentence": "Resumes this session when all of them finish their turns, or in 23h at the latest."
+    },
+    {
+      "case": "a session's run ends",
+      "state": "ACTIVE",
+      "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_RUN_TERMINAL" },
+      "targets": ["SESSION"],
+      "expiresAt": "2026-09-15T09:00:00Z",
+      "sentence": "Resumes this session when it ends, or in 23h at the latest."
+    },
+    {
+      "case": "a session is filed away",
+      "state": "ACTIVE",
+      "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_LIFECYCLE_TERMINAL" },
+      "targets": ["SESSION"],
+      "expiresAt": "2026-09-15T09:00:00Z",
+      "sentence": "Resumes this session when it is moved to Completed or Trash, or in 23h at the latest."
+    },
+    {
+      "case": "a task is done",
+      "state": "ACTIVE",
+      "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_DONE" },
+      "targets": ["TASK"],
+      "expiresAt": "2026-09-15T09:00:00Z",
+      "sentence": "Resumes this session when it is done, or in 23h at the latest."
+    },
+    {
+      "case": "one task is done or fails: two facts, both said",
+      "state": "ACTIVE",
+      "predicate": {
+        "kind": "ANY_OF",
+        "operands": [
+          { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_DONE" },
+          { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+        ]
+      },
+      "targets": ["TASK"],
+      "expiresAt": "2026-09-15T09:00:00Z",
+      "sentence": "Resumes this session when it is done or fails, or in 23h at the latest."
+    },
+    {
+      "case": "two tasks are done and both have finished",
+      "state": "ACTIVE",
+      "predicate": {
+        "kind": "ALL_OF",
+        "operands": [
+          { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_DONE" },
+          { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" }
+        ]
+      },
+      "targets": ["TASK", "TASK"],
+      "expiresAt": "2026-09-15T09:00:00Z",
+      "sentence": "Resumes this session when all of them are done and all of them finish, or in 23h at the latest."
+    },
+    {
+      "case": "a deleted target is not counted: one live task left",
+      "state": "ACTIVE",
+      "predicate": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+      "targets": ["TASK", "TASK:GONE"],
+      "expiresAt": "2026-09-27T10:00:00Z",
+      "sentence": "Resumes this session when it finishes, or in 13d at the latest."
+    },
+    {
+      "case": "paused",
+      "state": "PAUSED",
+      "predicate": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+      "targets": ["TASK"],
+      "expiresAt": "2026-09-27T10:00:00Z",
+      "sentence": "Paused · resumes this session when it finishes, or in 13d at the latest."
+    },
+    {
+      "case": "past its deadline, not yet ended",
+      "state": "ACTIVE",
+      "predicate": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+      "targets": ["TASK"],
+      "expiresAt": "2026-09-14T09:59:00Z",
+      "sentence": "Resumes this session when it finishes, or any moment now."
+    },
+    {
+      "case": "a condition neither end can read",
+      "state": "ACTIVE",
+      "predicate": { "kind": "NEVER_HEARD_OF" },
+      "targets": ["TASK"],
+      "expiresAt": "2026-09-27T10:00:00Z",
+      "sentence": "Resumes this session when its condition is met, or in 13d at the latest."
+    }
+  ],
+  "stale": [
+    {
+      "case": "looked at a minute ago",
+      "state": "ACTIVE",
+      "lastEvaluatedAt": "2026-09-14T09:59:00Z",
+      "createdAt": "2026-09-14T09:00:00Z",
+      "line": null
+    },
+    {
+      "case": "not looked at for twelve minutes",
+      "state": "ACTIVE",
+      "lastEvaluatedAt": "2026-09-14T09:48:00Z",
+      "createdAt": "2026-09-14T09:00:00Z",
+      "line": "Not checked for 12m — the resume may be late."
+    },
+    {
+      "case": "never looked at, made five minutes ago",
+      "state": "ACTIVE",
+      "lastEvaluatedAt": null,
+      "createdAt": "2026-09-14T09:55:00Z",
+      "line": "Not checked for 5m — the resume may be late."
+    },
+    {
+      "case": "paused: nobody is meant to be looking",
+      "state": "PAUSED",
+      "lastEvaluatedAt": "2026-09-14T09:00:00Z",
+      "createdAt": "2026-09-14T09:00:00Z",
+      "line": null
+    }
+  ],
+  "counts": [
+    {
+      "case": "two running, one queued",
+      "targets": [
+        { "kind": "TASK", "status": { "status": "OPEN", "running": true, "queued": false } },
+        { "kind": "TASK", "status": { "status": "IN_PROGRESS", "running": true, "queued": false } },
+        { "kind": "TASK", "status": { "status": "OPEN", "running": false, "queued": true } }
+      ],
+      "line": "2 running · 0/3 done"
+    },
+    {
+      "case": "one failed, one done, one cancelled",
+      "targets": [
+        { "kind": "TASK", "status": { "status": "FAILED", "running": false, "queued": false } },
+        { "kind": "TASK", "status": { "status": "DONE", "running": false, "queued": false } },
+        { "kind": "TASK", "status": { "status": "CANCELLED", "running": false, "queued": false } }
+      ],
+      "line": "1 failed · 1/3 done"
+    },
+    {
+      "case": "sessions: one running, one whose turn is over, one queued",
+      "targets": [
+        { "kind": "SESSION", "status": { "status": "RUNNING", "running": true, "queued": false } },
+        { "kind": "SESSION", "status": { "status": "AWAITING_INPUT", "running": false, "queued": false } },
+        { "kind": "SESSION", "status": { "status": "QUEUED", "running": false, "queued": true } }
+      ],
+      "line": "1 running · 1/3 done"
+    },
+    {
+      "case": "a target nobody could read is counted, and nothing else",
+      "targets": [
+        { "kind": "TASK", "status": null },
+        { "kind": "TASK", "status": { "status": "DONE", "running": false, "queued": false } }
+      ],
+      "line": "1/2 done"
+    }
+  ],
+  "sessionWords": {
+    "QUEUED": "Queued",
+    "RUNNING": "Running",
+    "AWAITING_INPUT": "Waiting for your reply",
+    "INTERRUPTED": "Interrupted",
+    "SUCCEEDED": "Succeeded",
+    "FAILED": "Failed",
+    "ENDED": "Ended"
+  }
+}
