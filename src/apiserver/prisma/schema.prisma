@@ -5426,8 +5426,9 @@ model WikiSpace {
   /// The repository's first root commit, once a runner reports it: two repositories behind one URL
   /// are told apart by it.
   rootCommitSha String? @map("root_commit_sha") @db.Char(40)
-  /// `{ push, autoAcceptReinforce }` (contract `space.settings`). An absent key reads as its default:
-  /// both are on.
+  /// `{ push, autoAcceptReinforce, reviewMode }` (contract `space.settings`). An absent key reads as
+  /// its default — both switches on — except `reviewMode`, which a space made before review modes
+  /// lacks and reads as `manual`; a space made since is written `tiered`.
   settings      Json    @default("{}")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -5497,8 +5498,9 @@ model WikiEntry {
   /// `proposed` | `active` | `superseded` | `retired` | `rejected`; the last three are terminal. A
   /// rejected entry stays, as the counter-example the next proposal's `similar` shows.
   status          String
-  /// `owner` | `confirmed` | `proposed` | `external`. `proposed` exactly while the status is
-  /// `proposed` or `rejected`; only `owner` and `confirmed` are pushed.
+  /// `owner` | `confirmed` | `auto` | `unreviewed` | `proposed` | `external`. `proposed` exactly
+  /// while the status is `proposed` or `rejected`; only `owner`, `confirmed` and `auto` are pushed.
+  /// `auto` and `unreviewed` are what a space's review mode leaves an entry it applied at once (0311).
   trust           String
   currentRevision Int    @map("current_revision")
   /// At most 120 characters.
@@ -5682,6 +5684,11 @@ model WikiChangesetOp {
   resultRevision Int?       @map("result_revision")
   /// Set exactly when the decision is not `pending`.
   decidedAt      DateTime?  @map("decided_at") @db.Timestamptz(3)
+  /// `tiered` | `automatic`: the space's review mode applied this op at once (only an add or an
+  /// amend). NULL when the effect policy decided it (0311).
+  appliedByMode  String?    @map("applied_by_mode")
+  /// An op a review mode applied that was drawn into Review for the owner to check after the fact.
+  spotCheck      Boolean    @default(false) @map("spot_check")
 
   @@unique([changesetId, seq], map: "wiki_changeset_op_changeset_seq_key")
   @@map("wiki_changeset_op")

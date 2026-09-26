@@ -206,7 +206,11 @@ test('the wiki context a session is handed when it starts', {
 
   // ── fixtures ────────────────────────────────────────────────────────────────────────────────────
 
-  /** A space the owner makes and binds this workspace to — the read boundary itself (§10.1). */
+  /**
+   * A space the owner makes and binds this workspace to — the read boundary itself (§10.1). Manual,
+   * unless a case says otherwise: this file pins phase 1's push, whose proposals wait for Review, and
+   * a space is made Tiered now (contract `space.settings.reviewMode`).
+   */
   async function boundSpace(settings: Record<string, unknown> = {}): Promise<{ spaceId: string; workspaceId: string }> {
     const workspaceId = randomUUID();
     await prisma.workspace.create({
@@ -219,10 +223,8 @@ test('the wiki context a session is handed when it starts', {
     assert.equal(created.status, 201, `the owner creates a space: ${created.text}`);
     // The doors answer with public ids; every write below names the row it is about by its own id.
     const spaceId = toUuid(created.json.id as string);
-    if (Object.keys(settings).length > 0) {
-      const patched = await send('PATCH', `/wiki/spaces/${spaceId}`, settings, 'owner');
-      assert.ok([200, 204].includes(patched.status), `the owner changes the space's settings: ${patched.text}`);
-    }
+    const patched = await send('PATCH', `/wiki/spaces/${spaceId}`, { reviewMode: 'manual', ...settings }, 'owner');
+    assert.ok([200, 204].includes(patched.status), `the owner changes the space's settings: ${patched.text}`);
     const bound = await send('POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId }, 'owner');
     assert.ok([200, 201].includes(bound.status), `the owner binds the workspace: ${bound.text}`);
     return { spaceId, workspaceId };

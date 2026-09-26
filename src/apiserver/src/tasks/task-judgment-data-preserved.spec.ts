@@ -1266,7 +1266,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       //   0310 tagged the account removal a runner is handed with the engine whose store it is in:
       //        one `ALTER TABLE "runner" ADD COLUMN` and nothing else, on the same terms.
       '0309_workspace_claude_account',
-      '0310_runner_account_remove_engine'],
+      '0310_runner_account_remove_engine',
+      // Orbit Wiki review modes: `wiki_entry_trust_chk` dropped and re-added with two more values
+      // (`auto`, `unreviewed`), and two columns on `wiki_changeset_op` (`applied_by_mode`, a nullable
+      // TEXT, and `spot_check`, a BOOLEAN NOT NULL DEFAULT false — constant defaults, so catalog-only)
+      // with three CHECKs over them. Read against every claim above: only the two wiki tables are
+      // named, and neither is a preserved relation; no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach. No function, trigger, type or index is created, replaced or dropped
+      // — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: every stored entry and op
+      // already satisfies the widened and the new CHECKs, so none is read or rewritten.
+      '0311_wiki_review_modes'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

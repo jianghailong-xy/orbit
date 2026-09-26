@@ -25,14 +25,20 @@ export type WikiReservedKind = (typeof WIKI_RESERVED_KINDS)[number];
 export type WikiEntryKind = WikiKind | WikiReservedKind;
 export const WIKI_ENTRY_KINDS: readonly WikiEntryKind[] = [...WIKI_KINDS, ...WIKI_RESERVED_KINDS];
 
-/** proposed → active → superseded | retired; proposed → rejected. The last three are terminal. */
+/** proposed → active → superseded | retired; proposed → rejected; and an entry the review mode
+ *  applied at once, active → rejected when the owner rejects it. The last three are terminal. */
 export const WIKI_ENTRY_STATUSES = ['proposed', 'active', 'superseded', 'retired', 'rejected'] as const;
 export type WikiEntryStatus = (typeof WIKI_ENTRY_STATUSES)[number];
 
-export const WIKI_TRUST_LEVELS = ['owner', 'confirmed', 'proposed', 'external'] as const;
+/** `auto` and `unreviewed` are what a space's review mode leaves an entry it applied at once:
+ *  `auto` is pushed, `unreviewed` is shown and never pushed (contract `reviewModes`). */
+export const WIKI_TRUST_LEVELS = ['owner', 'confirmed', 'auto', 'unreviewed', 'proposed', 'external'] as const;
 export type WikiTrust = (typeof WIKI_TRUST_LEVELS)[number];
 /** Only these reach a session's `<orbit_wiki_context>`. */
-export const WIKI_PUSHABLE_TRUST: readonly WikiTrust[] = ['owner', 'confirmed'];
+export const WIKI_PUSHABLE_TRUST: readonly WikiTrust[] = ['owner', 'confirmed', 'auto'];
+/** The trust an entry carries while the review mode's write of it is still nobody's but the machine's:
+ *  what the owner can Reject from the entry itself, and what a lineage-ending op never applies to at once. */
+export const WIKI_MACHINE_TRUST: readonly WikiTrust[] = ['auto', 'unreviewed'];
 
 /** First-hand records only. A wiki entry or any view of entries is never a source. */
 export const WIKI_SOURCE_KINDS = [
@@ -141,9 +147,12 @@ export const WIKI_LIMITS = {
   fieldTextMaxChars: 4_000,
   /** Every list inside `fields`, and an entry's anchors and an op's sources. */
   listMaxItems: 20,
-  /** Ops one session may record in one turn, and in its whole life. */
+  /** Ops that WAIT FOR THE OWNER one request may record, and one session in its whole life. An op
+   *  that applies at once counts toward neither: `opsPerChangeset` and the circuit breaker bound it. */
   opsPerTurn: 5,
   opsPerSession: 15,
+  /** Ops one changeset may hold, whatever becomes of them. */
+  opsPerChangeset: 30,
   /** Pending ops a space may hold; an op that applies at once never counts. */
   pendingOpsPerSpace: 30,
   /** A pending op expires after this many days. */
@@ -210,6 +219,102 @@ export function wikiOpEffect(input: {
   const effect = row[input.op];
   if (effect === 'appliedUnlessOff') return input.autoAcceptReinforce ? 'applied' : 'pending';
   return effect;
+}
+
+// ── Review modes (contract `reviewModes`): which of what waits above the space lets apply at once. ──
+
+/**
+ * Manual is the effect policy above and nothing more. Tiered applies an add or an amend at once —
+ * `auto` when it is the owner's own words or machine-verified, `unreviewed` otherwise — and
+ * Automatic applies every one that passed the checks as `auto`. The floors hold in every mode.
+ */
+export const WIKI_REVIEW_MODES = ['manual', 'tiered', 'automatic'] as const;
+export type WikiReviewMode = (typeof WIKI_REVIEW_MODES)[number];
+
+/**
+ * What a space whose settings name no review mode is: every space made before review modes existed.
+ * A space made since is written with `WIKI_DEFAULT_SPACE_SETTINGS.reviewMode`, so none of the old
+ * ones changes behaviour until its owner can see the setting and chooses another.
+ */
+export const WIKI_UNSET_REVIEW_MODE: WikiReviewMode = 'manual';
+
+/** The numbers the review modes are held to. Decided (criterion 7), not tuned. */
+export const WIKI_REVIEW_RULES = {
+  /** Tiered: a pitfall is machine-verified when its anchors verified and its sources span this many sessions. */
+  pitfallMinSessions: 2,
+  /** One in this many ops the review mode applies at once is drawn into Review as a spot check. */
+  spotCheckEvery: 10,
+  /** The reject rate is read over this many of the latest answered spot checks. */
+  spotCheckWindow: 10,
+  /** More than this percent of that window rejected sends the space back to Manual. */
+  spotCheckMaxRejectPercent: 30,
+  /** The circuit breaker: one changeset may change at most this percent of the active entries … */
+  breakerMaxChangedPercent: 10,
+  /** … once the space holds at least this many. Below it there is no breaker, so an empty space fills. */
+  breakerMinActiveEntries: 100,
+} as const;
+
+/** Why tiered applies an op as `auto`. Anything else it applies is `unreviewed`. */
+export type WikiTieredBasis = 'owner_words' | 'machine_verified';
+
+/**
+ * Tiered's classification (contract `reviewModes.tiered`).
+ *
+ * - The owner's own words: a decision or a convention one of whose sources is the owner's message,
+ *   steer or AskUserQuestion answer, with its quote verified against that record.
+ * - Machine-verified: a recipe whose verify command a maintenance run re-ran green, or a pitfall
+ *   whose anchors re-verified and whose sources span `pitfallMinSessions` independent sessions.
+ */
+export function wikiTieredBasis(input: {
+  kind: WikiEntryKind;
+  ownerWords: boolean;
+  anchorState: WikiAnchorState;
+  sessions: number;
+  recipeVerified: boolean;
+}): WikiTieredBasis | null {
+  if ((input.kind === 'decision' || input.kind === 'convention') && input.ownerWords) return 'owner_words';
+  if (input.kind === 'recipe' && input.recipeVerified) return 'machine_verified';
+  if (input.kind === 'pitfall' && input.anchorState === 'verified' && input.sessions >= WIKI_REVIEW_RULES.pitfallMinSessions) {
+    return 'machine_verified';
+  }
+  return null;
+}
+
+/** What the review mode made of an op: the effect, and — when the MODE applied it — the trust it leaves. */
+export interface WikiReviewEffect {
+  effect: 'applied' | 'pending';
+  byMode: { mode: Exclude<WikiReviewMode, 'manual'>; trust: 'auto' | 'unreviewed' } | null;
+}
+
+/**
+ * The effect of an op that passed every check, under the space's review mode.
+ *
+ * The effect policy decides first, and whatever it applies (the owner's own write, a reinforce, a
+ * challenge) is untouched by the mode. What it holds back, a mode other than Manual may apply — only
+ * an add or an amend, because only those can be undone (a revert retires the add and restores the
+ * revision the amend replaced; a supersede or a retire ends a lineage for good), and only an amend
+ * of an entry the machine wrote. The floors hold in every mode: a tainted op waits, and so does an
+ * amend of anything the owner wrote or confirmed.
+ */
+export function wikiReviewEffect(input: {
+  mode: WikiReviewMode;
+  origin: WikiChangesetOrigin;
+  op: WikiOp;
+  tainted: boolean;
+  autoAcceptReinforce: boolean;
+  /** An amend's entry: the owner wrote or confirmed it, and it is live with machine trust. */
+  target: { ownerVouched: boolean; machineWritten: boolean } | null;
+  /** Tiered's classification of what the op leaves ({@link wikiTieredBasis}). */
+  basis: WikiTieredBasis | null;
+}): WikiReviewEffect {
+  const effect = wikiOpEffect(input);
+  if (effect === 'applied' || input.mode === 'manual') return { effect, byMode: null };
+  const held: WikiReviewEffect = { effect: 'pending', byMode: null };
+  if (input.tainted) return held;
+  if (input.op !== 'add' && input.op !== 'amend') return held;
+  if (input.op === 'amend' && (!input.target || input.target.ownerVouched || !input.target.machineWritten)) return held;
+  const trust = input.mode === 'automatic' || input.basis !== null ? 'auto' : 'unreviewed';
+  return { effect: 'applied', byMode: { mode: input.mode, trust } };
 }
 
 // ── Field schemas: the language `KIND_SPECS` and the contract's `kinds` are both written in. ─────
@@ -614,8 +719,27 @@ export type WikiSearchRow = WikiSearchHit & WikiSearchRowAdditions;
 export interface WikiSpaceSettings {
   push: boolean;
   autoAcceptReinforce: boolean;
+  /** The owner's, on the owner channel only. A space the spot checks sent back is `manual` again. */
+  reviewMode: WikiReviewMode;
+  /** Server-written: when the mode last changed, and who changed it. Absent until it first does. */
+  reviewModeChangedAt?: string;
+  reviewModeChangedBy?: 'owner' | 'spot_checks';
 }
-export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = { push: true, autoAcceptReinforce: true };
+/** What a space is created with. A stored space whose settings lack `reviewMode` reads as
+ *  {@link WIKI_UNSET_REVIEW_MODE} instead — see {@link wikiSpaceSettings}. */
+export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = {
+  push: true,
+  autoAcceptReinforce: true,
+  reviewMode: 'tiered',
+};
+
+/** A stored space's settings as they read: every absent key its default, and an absent or unknown
+ *  review mode the one a space had before review modes existed. */
+export function wikiSpaceSettings(stored: unknown): WikiSpaceSettings {
+  const raw = (stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) as Partial<WikiSpaceSettings>;
+  const reviewMode = (WIKI_REVIEW_MODES as readonly unknown[]).includes(raw.reviewMode) ? raw.reviewMode! : WIKI_UNSET_REVIEW_MODE;
+  return { ...WIKI_DEFAULT_SPACE_SETTINGS, ...raw, reviewMode };
+}
 
 export interface WikiSpace {
   id: string;
@@ -711,6 +835,10 @@ export interface WikiChangesetOp {
   resultEntryId: string | null;
   resultRevision: number | null;
   decidedAt: string | null;
+  /** The review mode that applied this op at once, or null when the effect policy decided it. */
+  appliedByMode: Exclude<WikiReviewMode, 'manual'> | null;
+  /** An op the review mode applied, drawn into Review for the owner to check after the fact. */
+  spotCheck: boolean;
 }
 
 export interface WikiChangeset {

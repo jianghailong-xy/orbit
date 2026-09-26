@@ -63,18 +63,23 @@ function entry(over: Partial<WikiEntry> = {}): WikiEntry {
 }
 
 describe('the trust vocabulary', () => {
-  it('says the four levels in the words every surface shares', () => {
+  it('says the six levels in the words every surface shares', () => {
     expect(WIKI_TRUST_LABELS).toEqual({
       owner: 'Owner',
       confirmed: 'Confirmed',
+      auto: 'Auto',
+      unreviewed: 'Unreviewed',
       proposed: 'Proposed',
       external: 'Web-derived',
     });
     // The tones: an owner's entry is the inverse surface, a confirmed one is brand, a proposal is
     // grey, and anything web-derived is amber — the colour that means "a person has to look at this"
-    // everywhere else in the app.
+    // everywhere else in the app. What a review mode applied is green when it is pushed (Auto) and
+    // grey when it is only shown (Unreviewed).
     expect(WIKI_TRUST_TONE.owner).toBe('owner');
     expect(WIKI_TRUST_TONE.confirmed).toBe('blue');
+    expect(WIKI_TRUST_TONE.auto).toBe('green');
+    expect(WIKI_TRUST_TONE.unreviewed).toBe('muted');
     expect(WIKI_TRUST_TONE.proposed).toBe('muted');
     expect(WIKI_TRUST_TONE.external).toBe('amber');
   });
