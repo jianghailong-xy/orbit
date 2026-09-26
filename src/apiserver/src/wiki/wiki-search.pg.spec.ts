@@ -255,13 +255,19 @@ async function turn(h: Harness, sessionId: string, seq: number, content: string)
   );
 }
 
-/** A space the owner makes through the door, so the fixture is exercised the way a client uses it. */
+/**
+ * A space the owner makes through the door, so the fixture is exercised the way a client uses it —
+ * and switches to Manual: a session's proposal here waits for Review, as it did in phase 1, while a
+ * space is made Tiered now (contract `space.settings.reviewMode`).
+ */
 async function space(h: Harness, who: Account, repoUrl: string): Promise<string> {
   const answer = await call(h, { bearer: who.bearer }, 'POST', '/wiki/spaces', {
     title: 'The orbit repository',
     repoUrl,
   });
   expectStatus(answer, 201, 'the owner creates a space');
+  const manual = await call(h, { bearer: who.bearer }, 'PATCH', `/wiki/spaces/${answer.body.id}`, { reviewMode: 'manual' });
+  expectStatus(manual, 200, 'the owner switches the space to Manual');
   return answer.body.id as string;
 }
 

@@ -7,16 +7,21 @@ T4 检索、T5 runner 工具、T6 推送、T7 实时事件、T8–T10 客户端�
 
 **基线**：`origin/main` = `083d61fc5a853af1c0fc65b9b681eb37a8e8d56e`（2026-09-25 12:35 +02:00）。
 
+**阶段 2 的增补（判据 7：审阅模式，2026-09-27）**：space 设置 `reviewMode`（Manual / Tiered / Automatic）、两个新 trust
+`auto` 与 `unreviewed`、五条安全底线、抽检、整次撤回与逐条 Reject，见新增的 §7.3；迁移
+`0311_wiki_review_modes`；各节里受影响的地方已随之改写。JSON 里对应的是 `reviewModes` 一节。
+
 **权威来源**
 
 | 来源 | 位置 |
 | --- | --- |
 | 机器可读契约与测试向量 | `contracts/wiki.contract.json` |
 | 设计全文与效果图 | [`wiki-design.md`](./wiki-design.md)、[`mocks/wiki/`](./mocks/wiki/) |
-| 迁移 | `src/apiserver/prisma/migrations/0307_wiki/migration.sql`，`schema.prisma` 的 `Wiki*` 九个 model |
+| 迁移 | `src/apiserver/prisma/migrations/0307_wiki/migration.sql`、`0311_wiki_review_modes/migration.sql`，`schema.prisma` 的 `Wiki*` 九个 model |
 | TS 闭集、wire 类型、`KIND_SPECS` 与校验函数 | `src/shared/src/wiki.ts` |
 | 契约测试（TS ↔ JSON） | `src/shared/src/wikiContract.spec.ts` |
 | 库结构测试（库 ↔ JSON） | `src/apiserver/src/wiki/wiki-schema.pg.spec.ts`，经 `scripts/run-pg-spec.sh` 跑 |
+| 审阅模式的行为测试 | `src/apiserver/src/wiki/wiki-review-mode.pg.spec.ts`，经 `scripts/run-pg-spec.sh` 跑 |
 
 **本任务不做**：服务、控制器、MCP 工具、推送、实时事件的实现，以及任何 UI。它们各自的任务照本契约写。
 
@@ -29,7 +34,8 @@ T4 检索、T5 runner 工具、T6 推送、T7 实时事件、T8–T10 客户端�
    `(父 id, owner_id)` 复合外键挂在父行下，所以子行不可能和父行属于不同 owner。删除 owner 仍会经由 space 删掉全部行（§1.2）。
 3. **指向历史的 id 不挂外键。** 会话、tool call、作者、出处的 `ref` 都是快照；原记录删了，id 作为墓碑留下（§1.3）。
 4. **闭集一律是 CHECK。** 取值与 JSON 完全一致，pg spec 逐个值写入、写一个闭集外的值被拒，并核对 CHECK 列出的值（§6、§7）。
-5. **agent 只能提议。** 能立即生效的只有 owner 自己的写入，以及 reinforce / challenge 两种安全操作；决定只在 owner 通道（§7）。
+5. **agent 只能提议。** 能立即生效的只有 owner 自己的写入、reinforce / challenge 两种安全操作，以及 space 的审阅模式
+   放行的 add / amend（§7.3）；安全底线在任何模式下都不放开，决定、撤回、逐条 Reject、切换模式只在 owner 通道（§7）。
 6. **每类条目有自己的字段 schema。** `KIND_SPECS` 与 JSON 的 `kinds.<kind>.fields` 逐字段相等，校验失败按字段路径报错（§3）。
 7. **`wiki.changed` 只带 space 的 id**，丢了只影响客户端多等一会儿（§12）。
 
@@ -106,6 +112,11 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
 - **设置**（`settings` jsonb，缺省的键按默认值读）：
   - `push`，默认开（owner 2026-09-25 拍板：推送默认开，每个 space 可以关）；
   - `autoAcceptReinforce`，默认开：非 owner 的 reinforce 立即生效；关掉后进 Review；
+  - `reviewMode`：`manual` / `tiered` / `automatic`（§7.3）。**新建的 space 写成 `tiered`**（判据 7 的默认）；**阶段 1 就有的
+    space 设置里没有这个键，读作 `manual`**，不回填——在客户端（判据 8）能显示和切换模式之前，已有的 space 若开始直接
+    应用 agent 的提议，就是 owner 看不见、也撤不回的行为变化。只能经 owner 门（JWT）的 `PATCH /api/wiki/spaces/:id` 切换，
+    带会话头的请求一律 `WIKI_OWNER_CHANNEL_ONLY`；
+  - `reviewModeChangedAt` / `reviewModeChangedBy`（`owner` 或 `spot_checks`）：服务端写，记录模式最近一次在何时、被谁改；
   - `maintenance`、`embedding` 留给阶段 2。
 
 ---
@@ -202,18 +213,21 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
 
 ```
 proposed ──accept / edit──▶ active ──supersede──▶ superseded
-    │                          └────retire──────▶ retired
+    │                          ├────retire──────▶ retired
+    │                          └────reject──────▶ rejected   （仅审阅模式直接生效、trust 为 auto / unreviewed 的条目）
     └──reject / expire / withdraw──▶ rejected
 ```
 
-- 生来就是 `proposed`（等 Review 的 add / supersede）或 `active`（owner 自己的，立即生效）。`superseded`、`retired`、`rejected` 是终态。
+- 生来就是 `proposed`（等 Review 的 add / supersede）或 `active`（owner 自己的，或审阅模式直接生效的 add）。`superseded`、`retired`、`rejected` 是终态。
+- 审阅模式直接生效、还没人确认的条目（trust `auto` / `unreviewed`），owner 在抽检卡上或在条目上 Reject 时变 `rejected`，与被拒的提议一样留作反例。
 - 被拒的条目保留，作为反例：以后提议的 `similar[]` 会显示「曾被拒：理由」。
 - 库里的不变量（CHECK）：`superseded` 当且仅当 `superseded_by_id` 非空；`retired_at` 当且仅当状态是终态；
   `trust = proposed` 当且仅当状态是 `proposed` 或 `rejected`。
 
 ### 6.2 op 的决定
 
-`pending` 是唯一的非终态。提交时记为 `pending`（等 owner）或 `auto_applied`（立即生效）；之后 `pending` 只会变成：
+提交时记为 `pending`（等 owner）或 `auto_applied`（立即生效）。`auto_applied` 只有一种出路：审阅模式直接生效的 add，
+owner 在条目上 Reject 时变 `rejected`（§7.3 的逐条 Reject）；其余 `auto_applied` 不再变。`pending` 只会变成：
 
 | 决定 | 何时 |
 | --- | --- |
@@ -222,7 +236,9 @@ proposed ──accept / edit──▶ active ──supersede──▶ superseded
 | `rejected` | owner 拒绝，必须选理由：Not true / Not useful / Duplicate / Too specific（存为 `not_true` / `not_useful` / `duplicate` / `too_specific`） |
 | `conflict` | owner 接受时 baseRevision 已不是当前版，什么都没生效 |
 | `expired` | 等了 14 天 |
-| `withdrawn` | owner 决定前，目标条目已被别的 op 取代或退役，这个 op 不再适用 |
+| `withdrawn` | owner 决定前，目标条目已被别的 op 取代或退役（或被整次撤回），这个 op 不再适用 |
+
+抽检卡（`spot_check`）也是 `pending` 的 op：效果已经生效，accept 是确认、edit 是 owner 改写后确认、reject 是撤销；条目在 op 生效后又被改过时记为 `conflict`。
 
 库里的不变量：`decided_at` 当且仅当已决定；`decision_reason` 当且仅当被拒。
 
@@ -240,12 +256,16 @@ proposed ──accept / edit──▶ active ──supersede──▶ superseded
 | trust | 含义 |
 | --- | --- |
 | `owner` | owner 写的：owner 自己的 add / supersede |
-| `confirmed` | agent、维护作业、导入或巡检提议，owner 接受（原样或改过） |
+| `confirmed` | agent、维护作业、导入或巡检提议，owner 接受（原样或改过）；或 owner 接受了它的抽检卡 |
+| `auto` | 审阅模式直接生效、没人看过：Tiered 下出自 owner 原话或经机器验证的，Automatic 下通过校验的全部。推送，标 Auto |
+| `unreviewed` | Tiered 直接生效但既无 owner 原话也无机器验证的；或被整次撤回、被拒的抽检恢复过的。显示、标 Unreviewed，从不推送 |
 | `proposed` | 没被接受：所有待审条目和被拒条目 |
 | `external` | 靠网页衍生出处支撑（阶段 3 引用 url 的 assumption），从不推送 |
 
-只推送 `owner` 与 `confirmed`。生效时 trust 的变化：owner 的 add / supersede → `owner`；被接受的 add / supersede / amend → `confirmed`；
-其余生效的 op 不改 trust。owner 改过再接受时，修订作者记为 owner，trust 仍是 `confirmed`。
+只推送 `owner`、`confirmed` 与 `auto`。生效时 trust 的变化：owner 的 add / supersede → `owner`；被接受的 add / supersede / amend → `confirmed`
+（被接受的 amend 落在 `auto` / `unreviewed` 条目上时也变 `confirmed`）；审阅模式直接生效的 add / amend → `auto` 或 `unreviewed`；
+抽检被接受 → `confirmed`；被整次撤回或被拒的抽检恢复的条目 → `unreviewed`；其余生效的 op 不改 trust。owner 改过再接受时，
+修订作者记为 owner，trust 仍是 `confirmed`。
 
 ### 7.2 生效策略（设计 §4.2）
 
@@ -260,6 +280,47 @@ proposed ──accept / edit──▶ active ──supersede──▶ superseded
 - challenge 从任何来源都立即生效：它只打一个标，作用是让条目立刻退出推送，等 owner 在 Review 里 Re-confirm、Amend 或 Retire。
 - `wiki.ts` 的 `WIKI_EFFECT_POLICY` 是这张表的数据形态，`wikiOpEffect()` 给出单个 op 的结论。
 - **决定**：`POST /api/wiki/changesets/:id/decide`，逐个 op 给 `accept` / `edit` / `reject`；只在 owner 通道（§11）。
+
+### 7.3 审阅模式（判据 7）
+
+生效策略先判；它直接生效的（owner 自己的写入、reinforce、challenge）不受模式影响。它扣下的，由 space 的 `reviewMode` 决定：
+
+| 模式 | 直接生效的 | trust | 其余 |
+| --- | --- | --- | --- |
+| `manual` | 无（就是 §7.2，和阶段 1 一样） | — | 进 Review |
+| `tiered` | add，以及对 `auto` / `unreviewed` 条目的 amend | owner 原话或机器验证 → `auto`，否则 `unreviewed` | 进 Review |
+| `automatic` | 同上 | `auto` | 进 Review |
+
+- **只放行 add 和 amend**：只有它们撤得回来（撤回把 add 退役、把 amend 恢复到上一版）。supersede 与 retire 会结束一条谱系，
+  终态回不来，所以任何模式下都待审；autoAcceptReinforce 关着时被扣下的 reinforce 同样待审。op 行上记 `applied_by_mode`。
+  数据形态是 `wiki.ts` 的 `wikiReviewEffect()`。
+- **Tiered 的分类**（`wikiTieredBasis()`）：
+  - **owner 原话**：kind 是 decision 或 convention，出处里至少一条是 owner 自己的话，且引文校验通过。owner 自己的话 =
+    owner 从用户门发出的 message / steer（带显式路由意图、client turn id 不是控制面自己的命名空间；runner 门转发的消息不带意图，
+    所以 agent 冒充不了），或 owner 回答过的 AskUserQuestion（`decided_by_id` 非空的 ALLOWED 审批）。
+    **已知缺口**：Apple 客户端发消息时还不带路由意图，这些消息暂不算 owner 原话，相关条目显示为 Unreviewed；客户端补发意图后即可。
+  - **机器验证**：recipe 的验证命令由维护作业重跑为绿（维护作业还没有回报通道，所以现在一律不算）；pitfall 的锚点复验是
+    `verified`，且出处覆盖 2 个以上独立会话。新条目的锚点还没复验过，所以 add 在复验之前不会是机器验证；不动锚点的 amend
+    沿用条目的复验结果。
+  - 其余一律 `unreviewed`。
+- **五条安全底线**（任何模式都生效）：principle 只有 owner 能写（`WIKI_KIND_OWNER_ONLY`）；tainted 一律待审；修改或退役 owner
+  写的、owner 确认过的条目（trust 是 owner / confirmed，或有任何一版由 owner 写）一律待审；单个变更集经模式直接改动的条目数
+  超过开始时 active 条目的 10% 就熔断，越线的 op 拒 `WIKI_QUOTA`（active 少于 100 条时不熔断，让空 space 能写入第一批）；
+  每个变更集最多 30 个 op（`limits.opsPerChangeset`）。
+- **抽检**（按事实，不用时钟）：模式直接生效的 op 每 10 个抽 1 个进 Review，位置由 space 与块号的哈希决定，重放抽到同一个。
+  抽检卡记 `pending` + `spot_check`，占待审队列；队列满时本块不抽，不拒绝已生效的 op。最近 10 张已答的抽检卡
+  （只算模式最近一次变更之后记录的）里被拒超过 30% 时，同一事务把 space 改回 `manual`（对模式做 compare-and-set），
+  提交后给 owner 推一次通知；已经是 Manual 的 space 不会再切、也不会再通知。
+- **整次撤回**：`POST /api/wiki/changesets/:id/revert`，owner 门、不带会话头。把这个变更集里模式直接生效、owner 还没答过的
+  op 全部撤掉：add 的条目退役，被 amend 的条目恢复到这次运行第一次改它之前的那一版（带那一版的出处）并变 `unreviewed`，
+  这次运行未答的抽检卡撤回。撤回本身是 owner 的一个变更集，走 `recordChangeset` / `applyOp`，留修订历史；幂等键
+  `revert:<变更集 id>`，再按一次返回第一次的回答。已离开 active、或之后又被改过的条目不动，列在 `skipped` 里。撤回后这些条目立刻退出推送。
+- **逐条 Reject**：`POST /api/wiki/entries/:id/reject`（`reason` 取四个拒绝理由之一），owner 门、不带会话头。只对 active 且 trust 是
+  `auto` / `unreviewed` 的条目：条目变 `rejected`，拒绝记在当初创建它的那个模式生效的 add 上。那个 add 若是未答的抽检卡，
+  这就是它的回答，计入拒绝率。其余条目回 409：提议在 Review 里拒，owner 写的或确认过的用 retire。
+- **批量导入**（预览 space 的一次性载入）：在 apiserver 里直接构造 `WikiService` 调 `submitChangeset`，principal 为
+  `origin: 'import'`、`authorKind: 'system'`，不冒充 owner；Automatic 的 space 里直接生效；出处可以只挂记录 id、不带引文；
+  幂等键防重放；每个变更集最多 30 个 op，熔断照常。
 
 ---
 
@@ -292,8 +353,9 @@ proposed ──accept / edit──▶ active ──supersede──▶ superseded
 | title / summary | 120 / 280 字符 | 设计 |
 | topics / aliases | 3 / 8 个 | 设计 |
 | quote | 300 字符 | 设计 |
-| 每轮 op / 每个会话 op | 5 / 15 | 设计 |
-| 每个 space 待审 op | 30（立即生效的 op 不计） | 设计 |
+| 每轮 op / 每个会话 op | 5 / 15，**只计等 owner 的 op** | 设计（判据 7 改为只计待审） |
+| 每个变更集 op | 30，任何来源 | 设计 §8.2 |
+| 每个 space 待审 op | 30（立即生效的 op 不计，抽检卡计） | 设计 |
 | 待审过期 | 14 天 | 设计 |
 | `wiki_search` limit / `wiki_get` ids | ≤10 / ≤10 | 设计 |
 | 单个 alias | 80 字符 | 本契约补 |
@@ -303,6 +365,9 @@ proposed ──accept / edit──▶ active ──supersede──▶ superseded
 
 设计只限制了公共字段，没限制条目内部的文本和列表；条目本该是原子的，所以本契约给每段文本、每个列表都加了一个远高于正常用量的上限。
 title、summary、topics、aliases、quote、slug 的上限同时是库里的 CHECK。
+
+每轮 5 个、每会话 15 个的配额是为了保护 Review 队列，所以只计被生效策略扣下、要等 owner 的 op（提议、challenge）；直接生效的
+op（owner 自己的、reinforce、审阅模式放行的）不计，改由每个变更集 30 个和熔断（§7.3）约束。
 
 ---
 
@@ -317,10 +382,10 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
 | `WIKI_SOURCE_UNRESOLVED` | 422 | op | 出处在本 owner 内解析不到、引用了 wiki 条目或视图，或该带出处却没带 |
 | `WIKI_QUOTE_NOT_FOUND` | 422 | op | 引文空白归一化后不是原文子串 |
 | `WIKI_REVISION_CONFLICT` | 409 | op | baseRevision 不是当前版；回答里带当前版和 diff |
-| `WIKI_QUOTA` | 429 | op | 超过每轮或每会话的 op 配额 |
+| `WIKI_QUOTA` | 429 | op | 超过每个变更集 30 个；或这个 op 要等 owner、且超过每轮或每会话的待审配额；或审阅模式会直接应用它、但变更集会越过熔断线 |
 | `WIKI_REVIEW_QUEUE_FULL` | 429 | op | 这个 op 要进 Review，而 space 已有 30 个待审 |
 | `WIKI_PROBE_REFUSED` | 422 | op | 标题或正文像工具探针（test / probe / TEST_WRITE_CHECK）；消息里说明工具正常、不要重试 |
-| `WIKI_OWNER_CHANNEL_ONLY` | 403 | 请求 | decide 带了会话头，不论会话是什么角色 |
+| `WIKI_OWNER_CHANNEL_ONLY` | 403 | 请求 | decide、整次撤回、逐条 Reject 或切换审阅模式带了会话头，不论会话是什么角色 |
 | `WIKI_NOT_MAINTENANCE_SESSION` | 403 | 请求 | 阶段 2：非维护会话调用维护专用路由 |
 | `WIKI_SESSION_EXCLUDED` | 403 | 请求 | **本契约补**：调用会话是 verifier、foreman 或判断会话。知识不能当证据，这些会话不读也不提议 |
 | `WIKI_IDEMPOTENCY_KEY_REUSED` | 409 | 请求 | **本契约补**：用过的幂等键配了不同的请求 |
@@ -328,8 +393,8 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
 另外两条不带 wiki 代码的规则：别的 owner 的 space、条目、变更集一律回普通 404，与不存在无法区分；service token 在两道门上都拒绝（403），
 理由同 `session_search`：条目衍生自其他机器上的对话正文。
 
-每个 op 的检查顺序（设计 §4.1）：schema → owner-only 类型 → 出处 → 脱敏 → CAS → 探针 → 配额 → 相似 → 污染 → 生效。
-脱敏、相似、污染不拒绝，只给 op 打标。
+每个 op 的检查顺序（设计 §4.1）：变更集大小 → schema → owner-only 类型 → 出处 → 脱敏 → CAS → 探针 → 污染 → 生效 → 配额 → 相似。
+脱敏、污染、生效、相似不拒绝，只给 op 打标。配额排在生效之后，是因为它数的东西取决于生效：待审队列、要等 owner 的 op，以及熔断数的模式直接生效的 op。
 
 ---
 
@@ -345,12 +410,13 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
 
   CLI 同名同参：`orbit wiki search | get | propose`。**没有**接受、确认、决定、硬删、整页覆盖的工具；确认只存在于 owner 通道。
 - **`wiki_propose` 的描述**把「这是提议、要等 owner 审」写成前置条件（JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。
-- **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表与待审数、建 space、改设置、绑 workspace、首页、条目列表、主题、
-  时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、`GET /api/wiki/search`（⌘K 的独立端点）、Review、decide。
+- **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表与待审数、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
+  时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject、`GET /api/wiki/search`（⌘K 的独立端点）、Review、decide、整次撤回。
 - **runner 门** `/api/runner/wiki`（RunnerAuthGuard，外加照 `runner-watches.controller.ts` 校验调用会话）：search（只返回 active 条目，
   外加本会话自己的待审提议）、条目、提议、推送块预览；阶段 2 的维护专用路由（dossiers、anchors、anchor-checks、cursor）。
 - **decide 只在用户门**：任何带会话头的请求都拒 `WIKI_OWNER_CHANNEL_ONLY`（先例：`coordinator-authority.ts` 的
   `refuseSessionAuthoredConfirmation`）。runner 里弹的确认卡不是闸门：服务端不校验它，headless 调用直接放行。
+  整次撤回、逐条 Reject、切换审阅模式同样只在用户门、同样拒绝带会话头的请求。
 - **读的边界**：只有绑在 space 上的 workspace 里的会话能读这个 space 的条目；把 workspace 绑进来就是 owner 同意在这些
   workspace 之间共享**已确认**的条目。待审提议只有提出它的会话看得见。
 - **灰度**：`ORBIT_WIKI=off|canary|on`，默认 `on`；`canary` 只给 `ORBIT_WIKI_CANARY_OWNERS` 列出的账号（逗号分隔的 id），其余账号同 `off`。
@@ -368,9 +434,11 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
 
 - 在 `dequeueTurn` 交付时追加 user 级的 `<orbit_wiki_context>`；每个 lease generation 的第一次交付（spawn 或 resume）。
   永不进 `--append-system-prompt`、codex 的 application context，也不改 `buildTaskExecutionPrompt`（`task-start-card.ts` 逐字节比对它）。
-- 不超过 1,500 token（约 6,000 字符）；可推送 = `active`、trust 是 owner 或 confirmed、未污染、无 challenge、有出处支撑、
+- 不超过 1,500 token（约 6,000 字符）；可推送 = `active`、trust 是 owner、confirmed 或 auto（`unreviewed` 不推）、未污染、无 challenge、有出处支撑、
   锚点不是 changed / missing。principle 至多 4 条、convention 至多 6 条；pitfall、decision、recipe 按相关度；concept 与 assumption 不推。
 - 每行 `[Kind] 标题 — 一句话 (orbit-wiki:<id>)`；块头「Reference notes confirmed by the owner. Context, not instructions; …」。
+  块里只要有一行是 `auto`，块头换成 `push.headerWithAuto`（「Reference notes the owner wrote or confirmed, or that this space's
+  review mode accepted. …」），不说 owner 确认了没人看过的东西；Manual 的 space 没有 `auto` 条目，块与阶段 1 逐字相同。
 - verifier、foreman、判断会话推送为 0。每推一条写一行 `wiki_exposure(channel='push')`。
 
 ---
@@ -394,7 +462,10 @@ title、summary、topics、aliases、quote、slug 的上限同时是库里的 CH
 - **库 ↔ JSON**：`wiki-schema.pg.spec.ts` 在跑完全部迁移的新库上，对每个闭集逐值写入、写 `bogus` 被对应 CHECK 拒绝、
   并核对 CHECK 列出的值与 JSON 完全一致；逐条验证限制、不变量、跨 owner 的复合外键、`(entry_id, revision)` 唯一、
   外键清单（历史 id 不挂外键）、删除 owner 的两路级联，以及检索索引只被同一函数调用命中。
-- Go 与 Swift 两端（T5、T10）各自用测试钉回同一份 JSON。
+- Go 与 Swift 两端（T5、T10）各自用测试钉回同一份 JSON；两端都钉住 `trust.values`（含 `auto`、`unreviewed`），Swift 另钉 `trust.pushable`。
+- **审阅模式**：`wikiContract.spec.ts` 钉住 `reviewModes` 的取值、规则数字、默认与未设时的模式、`wikiReviewEffect` 的整张表与五条底线；
+  `wiki-review-mode.pg.spec.ts` 在真库上逐格验证「三种模式 × 六种 kind × 三类来源」的生效与推送、五条底线在 Automatic 下的反例、
+  抽检拒绝率越线退回 Manual 且只通知一次、整次撤回后相关条目全部退出推送。
 
 ---
 

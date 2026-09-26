@@ -43,6 +43,11 @@ var wikiOpNames = []string{"add", "reinforce", "amend", "supersede", "retire", "
 // wikiSearchMatches is contracts/wiki.contract.json searchMatches: the legs that can find an entry.
 var wikiSearchMatches = []string{"keyword", "semantic", "path"}
 
+// wikiTrustLevels is contracts/wiki.contract.json trust.values, in its order: what a hit's trust can
+// say. `auto` and `unreviewed` are what a space's review mode leaves an entry it applied at once, and
+// an output schema that did not name them would call a correct answer malformed.
+var wikiTrustLevels = []string{"owner", "confirmed", "auto", "unreviewed", "proposed", "external"}
+
 // wikiIncludes is what wiki_get's include names, besides `none`.
 var wikiIncludes = []string{"sources", "anchors", "history"}
 
@@ -131,7 +136,7 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 						"kind":        map[string]interface{}{"type": "string", "enum": wikiEntryKinds},
 						"title":       str,
 						"summary":     map[string]interface{}{"type": "string", "description": "One sentence: the whole of what a card shows."},
-						"trust":       map[string]interface{}{"type": "string", "enum": []string{"owner", "confirmed", "proposed", "external"}},
+						"trust":       map[string]interface{}{"type": "string", "enum": wikiTrustLevels},
 						"anchorState": map[string]interface{}{"type": "string", "enum": []string{"unchecked", "verified", "changed", "missing"}},
 						"match": map[string]interface{}{
 							"type":        "array",
