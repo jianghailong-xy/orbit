@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { coordinatorDeliveryTurnId } from '../projects/coordinator-delivery.service';
 import {
   openItemMessage,
   openItemTurnId,
 } from '../projects/project-open-item';
+import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
+import { taskRunResumeTurnId } from '../tasks/task-run-identity';
 
 /**
  * What a reopened console can still see of a message sent mid-turn.
@@ -650,6 +654,7 @@ test('the default projection carries the card too, for the tail a native client 
   assert.deepEqual(wire.openItemDelivery, ITEM_CARD);
   assert.deepEqual(Object.keys(wire).sort(), [
     'attachments',
+    'authoredByOrbit',
     'content',
     'kind',
     'openItemDelivery',
@@ -685,4 +690,46 @@ test('an ordinary queued turn carries no card and costs no read', async () => {
   ]);
   assert.deepEqual(Object.keys(listed[2]).sort(), Object.keys(listed[1]).sort());
   assert.deepEqual(h.itemReads, [], 'nothing is read for a turn that is not a delivery');
+});
+
+// Turns Orbit files on its own account, keyed exactly as their writers key them.
+const ACCEPTANCE_TURN = `${TASK_ACCEPTANCE_CLIENT_TURN_PREFIX}${SESSION_ID}:0`;
+const TASK_RUN_TURN = taskRunResumeTurnId('press-1', SESSION_ID);
+const COORDINATOR_TURN = coordinatorDeliveryTurnId('wake-key-1');
+
+test('a turn Orbit wrote says so in both projections, and a turn anybody typed does not', async () => {
+  // Nobody typed the first three, and each is on the queue often enough to be what a Stop drops or a
+  // Cancel withdraws — which is exactly when a client hands a turn's words back to the composer.
+  const h = makeService([
+    row('running', 'message', 'working now', { seq: 1, status: 'IN_FLIGHT' }),
+    row('acceptance', 'shell', 'npm test', { seq: 2, clientTurnId: ACCEPTANCE_TURN }),
+    row('task-run', 'message', '请开始执行任务「Fix the race」。', { seq: 3, clientTurnId: TASK_RUN_TURN }),
+    row('coordinator', 'message', '【项目「Pause」有干完但还没落 main 的成果】', {
+      seq: 4,
+      clientTurnId: COORDINATOR_TURN,
+    }),
+    // How messages that somebody did type are keyed: the app's uppercase uuid, the browser's
+    // lowercase one, and a key an agent chose for itself.
+    row('app', 'message', 'and then deploy', { seq: 5, clientTurnId: randomUUID().toUpperCase() }),
+    row('web', 'message', 'and the dark theme', { seq: 6, clientTurnId: randomUUID() }),
+    row('agent', 'message', 'status?', { seq: 7, clientTurnId: 'coord-e-seq208-status' }),
+  ]);
+
+  const typed = [['app', null], ['web', null], ['agent', null]];
+  const active = asWire(await h.service.listQueuedTurns(OWNER_ID, SESSION_ID, 'active'));
+  assert.deepEqual(active.map((turn) => [turn.turnId, turn.authoredByOrbit ?? null]), [
+    ['running', null],
+    ['acceptance', true],
+    ['task-run', true],
+    ['coordinator', true],
+    ...typed,
+  ]);
+  // The native clients read the default projection.
+  const queued = asWire(await h.service.listQueuedTurns(OWNER_ID, SESSION_ID));
+  assert.deepEqual(queued.map((turn) => [turn.turnId, turn.authoredByOrbit ?? null]), [
+    ['acceptance', true],
+    ['task-run', true],
+    ['coordinator', true],
+    ...typed,
+  ]);
 });

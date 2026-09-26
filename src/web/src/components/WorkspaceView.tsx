@@ -161,6 +161,7 @@ import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
+import { returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 import {
@@ -406,6 +407,8 @@ export interface QueuedTurn {
   openItemDelivery?: OpenItemDelivery;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStarted;
+  /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
+  authoredByOrbit?: true;
 }
 
 /** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is
@@ -4576,8 +4579,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // empty composer), so this never clobbers an in-progress draft. Their attachments come
       // back the same way: the messages are already being merged into one draft, so the files
       // they were sent with are staged together under it.
-      const restored = visibleQueuedTurns
-        .filter((q) => !parseWatchWake(q.content)) // a wake is the watch's words, never theirs
+      // Only what somebody typed: a wake, a delivery or an acceptance round was never theirs.
+      const theirs = visibleQueuedTurns.filter(returnsToComposer);
+      const restored = theirs
         .map((q) => {
           const body = q.content.trim();
           return body && q.shell ? `!${body}` : body; // a `!cmd` comes back as one
@@ -4585,7 +4589,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         .filter(Boolean)
         .join('\n\n');
       if (restored) setText(restored);
-      stageRestored(visibleQueuedTurns.flatMap((q) => q.attachments ?? []));
+      stageRestored(theirs.flatMap((q) => q.attachments ?? []));
       setQueued([]);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
@@ -4605,7 +4609,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // in the transcript and restoring would duplicate it. Unlike Stop (offered only with an
       // empty composer), Cancel is reachable mid-draft, so an in-progress draft always wins —
       // read through textRef, since the awaited gap may have outdated this render's `text`.
-      const body = withdrawn?.content.trim();
+      // Nor does a turn nobody typed come back (`returnsToComposer`).
+      const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
       if (body && !textRef.current.trim()) {
         setText(withdrawn?.shell ? `!${body}` : body);
         // The files follow the words: restoring them under a draft that kept its place would stage

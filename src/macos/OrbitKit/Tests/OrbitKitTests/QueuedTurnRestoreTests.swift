@@ -106,6 +106,36 @@ final class QueuedTurnRestoreTests: XCTestCase {
             startedCard: ProjectStarted(by: .confirmation, projectId: "p1", projectTitle: "Priority"))))
     }
 
+    /// The turns that look like anybody's message — an acceptance round, a task's brief, a
+    /// coordinator's delivery — are told apart by the server alone (`authoredByOrbit`), and that
+    /// word reaches the rule above through the queue's own reading of the list.
+    func testATurnTheServerSaysOrbitWroteNeverComesBack() throws {
+        let listed = try JSONDecoder().decode([QueuedTurnInfo].self, from: Data("""
+            [{"turnId": "t-acceptance", "kind": "shell", "content": "npm test -w @orbit/web",
+              "attachments": [], "authoredByOrbit": true},
+             {"turnId": "t-brief", "kind": "message", "content": "请开始执行任务「Fix the race」。",
+              "attachments": [], "authoredByOrbit": true},
+             {"turnId": "t-typed", "kind": "message", "content": "and then deploy", "attachments": []}]
+            """.utf8))
+        XCTAssertEqual(listed.map(\.authoredByOrbit), [true, true, nil])
+
+        var r = TranscriptReducer()
+        r.reconcileQueuedTurns(listed, knownBefore: [])
+        XCTAssertEqual(r.state.queued.map(\.authoredByOrbit), [true, true, false])
+        XCTAssertEqual(r.state.queued.compactMap(ComposerLogic.restorableText(of:)), ["and then deploy"])
+
+        // Kept across the queue's next reading, and across a transcript snapshot written before the
+        // field existed (which has none to keep).
+        r.reconcileQueuedTurns(listed, knownBefore: Set(listed.map(\.turnId)))
+        XCTAssertEqual(r.state.queued.map(\.authoredByOrbit), [true, true, false])
+        let stored = try JSONEncoder().encode(r.state.queued[0])
+        XCTAssertTrue(try JSONDecoder().decode(UserBubble.self, from: stored).authoredByOrbit)
+        let older = try JSONDecoder().decode(UserBubble.self, from: Data("""
+            {"id": "server-t1", "text": "and then deploy", "pending": true, "queued": true}
+            """.utf8))
+        XCTAssertFalse(older.authoredByOrbit)
+    }
+
     // MARK: the console is wired to both rules
 
     private enum WiringError: Error, CustomStringConvertible {

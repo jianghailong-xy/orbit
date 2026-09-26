@@ -581,6 +581,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.itemCard = turn.itemCard
                 // And the card a project start is, on the same terms (web parity: `q.projectStarted`).
                 bubble.startedCard = turn.startedCard
+                bubble.authoredByOrbit = turn.authoredByOrbit == true
                 reconciled.append(bubble)
             } else {
                 reconciled.append(UserBubble(id: "server-\(turn.turnId)", text: turn.content,
@@ -588,7 +589,8 @@ public struct TranscriptReducer: Sendable, Codable {
                                              pending: true, queued: true,
                                              steer: SteerDelivery.isSteerKind(turn.kind),
                                              itemCard: turn.itemCard,
-                                             startedCard: turn.startedCard))
+                                             startedCard: turn.startedCard,
+                                             authoredByOrbit: turn.authoredByOrbit == true))
             }
         }
 
