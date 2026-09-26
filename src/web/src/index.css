@@ -3807,6 +3807,61 @@ html[data-theme='dark'] .session-tag-chip {
 .wt-merge-where {
   color: var(--text-3, var(--text-2));
 }
+/* A failed commit (SessionOutputs CommitFailure): what happened, why and what to do, with git's own
+   words behind a toggle. */
+.wt-commit-fail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wt-commit-fail-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--error);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.wt-commit-fail-icon {
+  color: var(--error-solid);
+}
+.wt-commit-fail-why {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.wt-commit-fail-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 3px;
+}
+.wt-commit-fail-toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.wt-commit-fail-toggle:hover {
+  color: var(--text-1);
+}
+.wt-commit-fail-git {
+  margin: 2px 0 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
 .workspace-header-count {
   font-size: 13px;
   color: var(--text-2);

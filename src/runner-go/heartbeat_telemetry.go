@@ -215,7 +215,15 @@ func sendHeartbeatCycle(
 	if request.Draining {
 		request.IdleCapacity = 0
 	}
+	// Failed commits whose reason has gone away since. Bounded: this is the heartbeat's critical
+	// path, and each check can be a git process.
+	expiryCtx, cancelExpiry := context.WithTimeout(context.Background(), time.Second)
+	request.ExpiredCommitErrors = failedCommits.expired(expiryCtx)
+	cancelExpiry()
 	response, err := send(request)
+	if err == nil {
+		failedCommits.forget(request.ExpiredCommitErrors)
+	}
 	telemetry.trigger(targets)
 	return response, supervisors, err
 }

@@ -204,6 +204,26 @@ final class WorktreeModel {
         await loadDetail()
     }
 
+    /// Hand a failed commit to the session: its own agent can see what refused the commit (a held
+    /// index.lock, most often), clear it and commit — what the runner will not do unasked. The resume
+    /// clears the settled commit error server-side, so the bar offers Commit afresh meanwhile. Same
+    /// prompt web sends from `resolveCommitMut`.
+    func resolveCommitInSession(branch: String, why: String) async {
+        busy = true
+        defer { busy = false }
+        let content = WorktreeBarLogic.resolveCommitPrompt(branch: branch, why: why)
+        do {
+            _ = try await api.resume(sessionID: sessionID,
+                                     ResumeRequest(clientTurnId: UUID().uuidString, content: content,
+                                                   kind: "message"))
+            onOutcome(ToastRequest(message: "Handed the commit to the session", tone: .info))
+        } catch {
+            onOutcome(Self.failure("Couldn't resume the session", error: error))
+            return
+        }
+        await loadDetail()
+    }
+
     /// Turn a finished merge/commit into the same card web shows for it — same headline, same tone,
     /// same diagnostic line (`AgentView`'s merge/commit notices). "status bar" in web's copy is this
     /// worktree bar; on iOS that phrase would read as the system clock strip, so it's named here.
@@ -229,8 +249,11 @@ final class WorktreeModel {
             onOutcome(ToastRequest(message: "Merge into \(target) failed",
                                    detail: Self.trimmed(new.mergeError), tone: .error))
         } else if old.commitStatus == "pending", new.commitStatus == "error" {
-            onOutcome(ToastRequest(message: "Commit failed",
-                                   detail: Self.trimmed(new.commitError), tone: .error))
+            // The runner's plain sentence when it gave one, git's words otherwise (web does the same).
+            let failure = WorktreeBarLogic.commitFailure(commitStatus: new.commitStatus,
+                                                         commitError: new.commitError,
+                                                         commitResultMessage: new.commitResultMessage)
+            onOutcome(ToastRequest(message: "Commit failed", detail: failure?.why, tone: .error))
         } else if old.commitStatus == "pending", new.commitStatus == "committed" {
             onOutcome(ToastRequest(message: "Changes committed",
                                    detail: Self.trimmed(new.commitResultMessage)))

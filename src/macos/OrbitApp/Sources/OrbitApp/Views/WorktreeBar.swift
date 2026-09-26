@@ -68,10 +68,15 @@ struct WorktreeBar: View {
                                                 committed: committed, turnActive: turnActive)
         let add = files.reduce(0) { $0 + max(0, $1.additions) }
         let del = files.reduce(0) { $0 + max(0, $1.deletions) }
-        let failure = WorktreeBarLogic.failureMessage(mergeStatus: d.mergeStatus,
-                                                      mergeError: d.mergeError,
-                                                      commitStatus: d.commitStatus,
-                                                      commitError: d.commitError)
+        // A failed commit gets its own panel (what happened, why, what to do); the plain failure line
+        // below is for a failed merge.
+        let commitFailure = WorktreeBarLogic.commitFailure(commitStatus: d.commitStatus,
+                                                           commitError: d.commitError,
+                                                           commitResultMessage: d.commitResultMessage)
+        let failure = commitFailure != nil ? nil : WorktreeBarLogic.failureMessage(mergeStatus: d.mergeStatus,
+                                                                                  mergeError: d.mergeError,
+                                                                                  commitStatus: d.commitStatus,
+                                                                                  commitError: d.commitError)
         let manualMergeCmd = failure != nil && d.commitStatus != "error"
             ? WorktreeBarLogic.manualMergeCommand(mergeTarget: d.mergeTarget, branch: branch)
             : nil
@@ -93,7 +98,10 @@ struct WorktreeBar: View {
                 case .none:   EmptyView()
                 }
             }
-            if let failure {
+            if let commitFailure {
+                WorktreeCommitFailureView(console: console, failure: commitFailure, branch: branch)
+                    .id(d.commitError ?? "")
+            } else if let failure {
                 failureView(message: failure, manualMergeCommand: manualMergeCmd)
             }
         }
@@ -452,6 +460,76 @@ private struct WorktreeCommitControl: View {
                      disabled: pending || turnActive || busy) {
             Task { await console.worktree.commit() }
         }
+    }
+}
+
+/// A failed commit (mirrors web `CommitFailure`): what happened, why and what to do, with git's own
+/// words behind "Show git output" for whoever is debugging. Keyed on the error by its parent, so a
+/// new failure starts folded again.
+private struct WorktreeCommitFailureView: View {
+    let console: ConsoleModel
+    let failure: WorktreeBarLogic.CommitFailure
+    let branch: String
+    @State private var showGitOutput = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.circle.fill")
+                Text(failure.headline)
+            }
+            .font(.orbitMeta.weight(.semibold))
+            .foregroundStyle(Color.red)
+            Text(failure.why)
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            HStack(spacing: 12) {
+                let busy = console.worktree.busy
+                WTPillButton(title: busy ? "Resuming…" : "Resolve in session", tint: .red, disabled: busy) {
+                    Task { await console.worktree.resolveCommitInSession(branch: branch, why: failure.why) }
+                }
+                if failure.gitOutput != nil {
+                    Button { showGitOutput.toggle() } label: {
+                        HStack(spacing: 3) {
+                            Text(showGitOutput ? "Hide git output" : "Show git output")
+                            Image(systemName: showGitOutput ? "chevron.down" : "chevron.right")
+                        }
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityValue(showGitOutput ? "Shown" : "Hidden")
+                }
+            }
+            .padding(.top, 2)
+            if showGitOutput, let gitOutput = failure.gitOutput {
+                Text(gitOutput)
+                    .font(.orbitMonoFine)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .contextMenu {
+            Button { copy(failure.why) } label: {
+                Label("Copy failure reason", systemImage: "doc.on.doc")
+            }
+            if let gitOutput = failure.gitOutput {
+                Button { copy(gitOutput) } label: {
+                    Label("Copy git output", systemImage: "terminal")
+                }
+            }
+        }
+    }
+
+    private func copy(_ text: String) {
+        PlatformPasteboard.copyString(text)
+        PlatformHaptics.success()
     }
 }
 
