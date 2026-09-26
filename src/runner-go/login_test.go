@@ -82,7 +82,7 @@ func TestPTYCommandWrapsArgv(t *testing.T) {
 // user needs to be told to start over, not left watching a card that never resolves.
 func TestSubmitCodeWithNoRelayReportsFailure(t *testing.T) {
 	var got LoginResultRequest
-	(&loginRelay{}).submitCode("abc", func(r LoginResultRequest) { got = r })
+	(&loginRelay{}).submitCode(LoginCommand{Engine: providerClaude, Code: "abc"}, func(r LoginResultRequest) { got = r })
 	if got.Status != loginFailed {
 		t.Fatalf("status = %q, want %q", got.Status, loginFailed)
 	}

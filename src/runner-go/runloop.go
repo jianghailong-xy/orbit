@@ -951,10 +951,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		return pool.providerCount(provider, true)
 	}
 	residentProviderCount := func(provider string) int { return pool.providerCount(provider, false) }
-	claudeUsageProbe := newClaudePlanUsageProbe()
+	// Claude keeps one snapshot per account too now: Default's — the login the runner's own
+	// environment selects — and every added account's own.
+	claudeUsage := newClaudeAccountUsage()
 	claudeActive := func() int { return activeProviderCount(providerClaude) }
 	claudeIdle := func() bool { return providerConfigured(providerClaude) }
-	go claudeUsageProbe.run(loopCtx, claudeActive, claudeIdle)
+	go claudeUsage.run(loopCtx, claudeActive, claudeIdle)
 	// Codex keeps one snapshot per account slot: Default's — its usage probe, which the reset steps
 	// read through too — and every added slot's own.
 	codexUsage := newCodexAccountUsage(t.leaseOwner)
@@ -1131,7 +1133,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
 				Commands: cmds, Skills: skills,
-				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsage.snapshot()),
+				PlanUsage:            combinePlanUsage(claudeUsage.snapshot(), codexUsage.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
@@ -1420,7 +1422,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				case "start":
 					login.start(*lr, report)
 				case "code":
-					login.submitCode(lr.Code, report)
+					login.submitCode(*lr, report)
 				}
 			}
 			// Install an engine CLI the user asked for from the web. Idempotent for the same
@@ -1472,19 +1474,39 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				repoHealth.refresh() // report the repaired state on the next heartbeat, not in a minute
 			}
-			// Remove a Codex account slot the user asked to be rid of. Carried out here, on the
+			// Remove an account slot the user asked to be rid of. Carried out here, on the
 			// heartbeat's own goroutine, for the reason the repair above is: it is a directory
 			// removal, and the request is redelivered until we report, so a second one racing the
 			// first would only fight over a directory that is already going. A slot one of this
 			// runner's live sessions is stuck to is refused inside — the session's thread lives in
-			// that CODEX_HOME.
-			if rr := resp.CodexAccountRemoveRequest; rr != nil {
-				res := CodexAccountRemoveResultRequest{Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-				if err := removeCodexAccount(codexUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
+			// that directory.
+			//
+			// Two fields carry the same request: `accountRemoveRequest` names the engine, and the
+			// codex-named one is what a control plane older than accounts-per-engine sends. A
+			// runner that answered a Claude request on the codex field would remove a path that
+			// never existed and report "done".
+			if rr := resp.AccountRemoveRequest; rr != nil {
+				kind, ok := accountSlotKindFor(rr.Engine)
+				if !ok {
+					logln("account-remove: unknown engine", rr.Engine)
+				} else {
+					res := AccountRemoveResultRequest{Engine: rr.Engine, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
+					if err := removeAccount(kind, claudeUsage, codexUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
+						res.Status, res.Message = "failed", firstLine(err.Error())
+					} else {
+						// Re-probe the engines as well, so the account leaves the page's list on the
+						// next beat rather than in five minutes.
+						go engineHealth.refresh()
+					}
+					if err := t.accountRemoveResult(res); err != nil {
+						logln("account-remove-result POST failed:", err)
+					}
+				}
+			} else if rr := resp.CodexAccountRemoveRequest; rr != nil {
+				res := AccountRemoveResultRequest{Engine: providerCodex, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
+				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
 					res.Status, res.Message = "failed", firstLine(err.Error())
 				} else {
-					// Re-probe the engines as well, so the account leaves the page's list on the
-					// next beat rather than in five minutes.
 					go engineHealth.refresh()
 				}
 				if err := t.codexAccountRemoveResult(res); err != nil {

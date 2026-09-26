@@ -30,6 +30,7 @@ const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
 // what the page raises its duplicate note for.
 const DEFAULT: RunnerEngineAccount = {
   id: 'default',
+  home: '/root/.codex',
   codexHome: '/root/.codex',
   auth: 'yes',
   fingerprintPrefix: 'cxa1_2b7e9013',
@@ -37,6 +38,7 @@ const DEFAULT: RunnerEngineAccount = {
 const WORK: RunnerEngineAccount = {
   id: '3fa91c2e',
   name: 'Work',
+  home: '/root/.orbit/codex-accounts/3fa91c2e',
   codexHome: '/root/.orbit/codex-accounts/3fa91c2e',
   auth: 'yes',
   fingerprintPrefix: 'cxa1_9f3a41c7',
@@ -44,6 +46,7 @@ const WORK: RunnerEngineAccount = {
 const PERSONAL: RunnerEngineAccount = {
   id: '7c21de40',
   name: 'Personal',
+  home: '/root/.orbit/codex-accounts/7c21de40',
   codexHome: '/root/.orbit/codex-accounts/7c21de40',
   auth: 'yes',
   fingerprintPrefix: 'cxa1_4d5c8b26',
@@ -130,7 +133,7 @@ const click = async (el: HTMLElement) => {
 const accountsOf = (page: ParentNode) => rows(page, '.re-acct');
 /** Every request the page made to remove an account, in order. */
 const removals = () =>
-  apiMock.mock.calls.filter(([path, options]) => (options?.method ?? 'GET') === 'DELETE' && String(path).includes('/codex-accounts/'));
+  apiMock.mock.calls.filter(([path, options]) => (options?.method ?? 'GET') === 'DELETE' && String(path).includes('/accounts/'));
 
 describe('removing one Codex account from a runner', () => {
   it('offers Remove on the accounts the runner added, and never on Default', () => {
@@ -158,7 +161,7 @@ describe('removing one Codex account from a runner', () => {
     await click(button(personalRow, 'Remove'));
 
     expect(removals().map(([path]) => path)).toEqual([
-      `/runners/${RUNNER_ID}/codex-accounts/7c21de40`,
+      `/runners/${RUNNER_ID}/accounts/codex/7c21de40`,
     ]);
   });
 
@@ -186,7 +189,7 @@ describe('the note raised by one account signed in twice', () => {
     await click(personalRow.querySelector('.re-dup .re-link') as HTMLButtonElement);
 
     expect(removals().map(([path]) => path)).toEqual([
-      `/runners/${RUNNER_ID}/codex-accounts/7c21de40`,
+      `/runners/${RUNNER_ID}/accounts/codex/7c21de40`,
     ]);
   });
 
@@ -206,7 +209,7 @@ describe('the note raised by one account signed in twice', () => {
     await click(noteRemove);
 
     expect(removals().map(([path]) => path)).toEqual([
-      `/runners/${RUNNER_ID}/codex-accounts/3fa91c2e`,
+      `/runners/${RUNNER_ID}/accounts/codex/3fa91c2e`,
     ]);
   });
 });
@@ -216,7 +219,7 @@ describe('a removal the machine would not do', () => {
     const refused = 'codex account 3fa91c2e is in use by a session running on this machine — end that session, then remove it';
     const page = mount([
       runner([DEFAULT, WORK], {
-        codexAccountRemove: { account: '3fa91c2e', status: 'failed', message: refused },
+        accountRemove: { engine: 'codex', account: '3fa91c2e', status: 'failed', message: refused },
       }),
     ]);
     const [, workRow] = accountsOf(page);
@@ -229,7 +232,7 @@ describe('a removal the machine would not do', () => {
   it('leaves another account’s row alone', () => {
     const page = mount([
       runner([DEFAULT, WORK, PERSONAL], {
-        codexAccountRemove: { account: WORK.id, status: 'failed', message: 'a session is running on it' },
+        accountRemove: { engine: 'codex', account: WORK.id, status: 'failed', message: 'a session is running on it' },
       }),
     ]);
     const [, workRow, personalRow] = accountsOf(page);
@@ -241,7 +244,7 @@ describe('a removal the machine would not do', () => {
   it('shows the account as going while the machine has yet to answer', () => {
     const page = mount([
       runner([DEFAULT, WORK], {
-        codexAccountRemove: { account: WORK.id, status: 'pending', message: null },
+        accountRemove: { engine: 'codex', account: WORK.id, status: 'pending', message: null },
       }),
     ]);
     const [, workRow] = accountsOf(page);

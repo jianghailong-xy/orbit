@@ -37,7 +37,7 @@ func TestManualLoginRelayEndToEnd(t *testing.T) {
 		// exit and does not re-prompt — so this is the assertion that the rejection watcher is
 		// keyed on something that actually happens. It hung here until the 10-minute timeout when
 		// the watcher was (wrongly) looking for a second prompt instead.
-		r.submitCode("definitely-not-a-real-code", func(res2 LoginResultRequest) { got <- res2 })
+		r.submitCode(LoginCommand{Engine: providerClaude, Code: "definitely-not-a-real-code"}, func(res2 LoginResultRequest) { got <- res2 })
 		select {
 		case res2 := <-got:
 			t.Logf("after bogus code: status=%s message=%q", res2.Status, res2.Message)

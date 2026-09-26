@@ -331,17 +331,31 @@ func engineAuthPreflight(bin string, agentEnv map[string]string) string {
 	return ""
 }
 
-// sessionEngineAuth is probeAuth asked of the login a session's engine will run on. Codex keeps one
-// login per CODEX_HOME, and a session can run on an account other than the runner's own — dispatch
-// names it with a CODEX_HOME in the session's env — so Codex is asked in the environment its engine
-// is spawned with. The runner's own answer is Default's, and says nothing about that account.
+// sessionEngineAuth is probeAuth asked of the login a session's engine will run on. An engine whose
+// CLI keeps a login per directory can be dispatched onto an account other than the runner's own —
+// a CODEX_HOME or a CLAUDE_CONFIG_DIR in the session's env — so it is asked in the environment its
+// engine is spawned with, by the kind's own status question. The runner's own answer is Default's,
+// and says nothing about that account: asking it would refuse a session that can run, or let one
+// spawn that is signed out.
 func sessionEngineAuth(bin, path string, agentEnv map[string]string) authState {
-	if bin != providerCodex {
+	kind, ok := accountSlotKindFor(bin)
+	if !ok {
 		return probeAuth(bin, path)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return codexLoginStatus(ctx, path, envWithAgent(agentEnv))
+	// The account dispatch named, else the one the runner's own environment selects — resolved and
+	// asked exactly as the sign-in relay resolves and asks it, so "is this account signed in" has
+	// one answer however it is reached.
+	dir := strings.TrimSpace(envValue(envWithAgent(agentEnv), kind.varName))
+	if dir == "" {
+		def, err := defaultAccountSlot(kind)
+		if err != nil {
+			return authUnknown
+		}
+		dir = def.Dir
+	}
+	return kind.loginStatus(ctx, path, dir)
 }
 
 // hasInjectedCredentials reports whether this session carries provider credentials of its

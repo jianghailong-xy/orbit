@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
-import { RunnerStatus, type CodexAccountRemoveCommand, type RunnerCodexAccountRemoveState } from '@orbit/shared';
+import { RunnerStatus, type CodexAccountRemoveCommand, type RunnerAccountRemoveState } from '@orbit/shared';
 import type { AuthUser } from '../common/current-user.decorator';
 import { CODEX_ACCOUNT_REMOVE_V1, RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnersController } from './runners.controller';
@@ -84,7 +84,7 @@ function harness(row: Row = {}) {
   return {
     runner,
     /** DELETE /runners/:id/codex-accounts/:account, as the page sends it. */
-    remove: (account: string): Promise<RunnerCodexAccountRemoveState> =>
+    remove: (account: string): Promise<RunnerAccountRemoveState> =>
       runners.removeCodexAccount(USER, RUNNER_ID, account),
     /** What the runner is told to do: the `codexAccountRemoveRequest` of its next heartbeat.
      *  `null` is a runner that sends no capability header at all. */
@@ -107,9 +107,11 @@ function harness(row: Row = {}) {
         }
       ).codexAccountRemoveResult({ id: RUNNER_ID }, body),
     /** The state the page reads back off this runner. */
-    state: (): RunnerCodexAccountRemoveState => ({
+    state: (): RunnerAccountRemoveState => ({
+      // A row written before accounts-per-engine meant Codex.
+      engine: (runner.accountRemoveEngine as RunnerAccountRemoveState['engine']) ?? 'codex',
       account: runner.codexAccountRemoveStatus ? (runner.codexAccountRemoveAccount as string) ?? null : null,
-      status: (runner.codexAccountRemoveStatus as RunnerCodexAccountRemoveState['status']) ?? null,
+      status: (runner.codexAccountRemoveStatus as RunnerAccountRemoveState['status']) ?? null,
       message: (runner.codexAccountRemoveMessage as string) ?? null,
     }),
   };
@@ -120,7 +122,7 @@ const attemptOf = (row: Row) => (row.codexAccountRemoveAt as Date).toISOString()
 test('the account the page names is the account in the removal the runner is handed', async () => {
   const h = harness();
   const state = await h.remove(SLOT);
-  assert.deepEqual(state, { account: SLOT, status: 'pending', message: null });
+  assert.deepEqual(state, { engine: 'codex', account: SLOT, status: 'pending', message: null });
 
   assert.deepEqual(await h.beat(), { account: SLOT, attempt: attemptOf(h.runner) });
   // Redelivered, unchanged, until the runner's report moves the row on.
@@ -132,7 +134,7 @@ test('the account the page names is the account in the removal the runner is han
     attempt: attemptOf(h.runner),
   });
   assert.deepEqual(applied, { ok: true, applied: true });
-  assert.deepEqual(h.state(), { account: SLOT, status: 'done', message: null });
+  assert.deepEqual(h.state(), { engine: 'codex', account: SLOT, status: 'done', message: null });
   assert.equal(await h.beat(), undefined, 'nothing is redelivered once the runner has reported');
 });
 
@@ -143,19 +145,19 @@ test('a removal the machine refused is reported back with the machine’s own wo
 
   const message = 'codex account 1a2b3c4d is in use by a session running on this machine — end that session, then remove it';
   assert.deepEqual(
-    await h.report({ account: SLOT, status: 'failed', message, attempt: attemptOf(h.runner) }),
+    await h.report({ engine: 'codex', account: SLOT, status: 'failed', message, attempt: attemptOf(h.runner) }),
     { ok: true, applied: true },
   );
-  assert.deepEqual(h.state(), { account: SLOT, status: 'failed', message });
+  assert.deepEqual(h.state(), { engine: 'codex', account: SLOT, status: 'failed', message });
 
   // Asking again starts a new attempt — the first one's report does not answer it.
   await h.remove(SLOT);
   assert.equal(h.state().status, 'pending');
   assert.deepEqual(
-    await h.report({ account: SLOT, status: 'done', attempt: attemptOf(h.runner) }),
+    await h.report({ engine: 'codex', account: SLOT, status: 'done', attempt: attemptOf(h.runner) }),
     { ok: true, applied: true },
   );
-  assert.deepEqual(h.state(), { account: SLOT, status: 'done', message: null });
+  assert.deepEqual(h.state(), { engine: 'codex', account: SLOT, status: 'done', message: null });
 });
 
 test('a runner that cannot remove accounts is refused, in the words the page shows', async () => {
@@ -169,7 +171,7 @@ test('a runner that cannot remove accounts is refused, in the words the page sho
       return true;
     },
   );
-  assert.deepEqual(h.state(), { account: null, status: null, message: null }, 'a refused request stores nothing');
+  assert.deepEqual(h.state(), { engine: 'codex', account: null, status: null, message: null }, 'a refused request stores nothing');
   assert.equal(await h.beat('session-worktree-ops-v1'), undefined);
 
   // A runner that has never reported its capabilities at all is the same answer: we cannot tell
@@ -202,7 +204,7 @@ test('Default is never removable', async () => {
       `removing ${JSON.stringify(account)}`,
     );
   }
-  assert.deepEqual(h.state(), { account: null, status: null, message: null });
+  assert.deepEqual(h.state(), { engine: 'codex', account: null, status: null, message: null });
   assert.equal(await h.beat(), undefined);
 });
 
@@ -217,30 +219,30 @@ test('a report about a removal the row has moved past changes nothing', async ()
   assert.notEqual(first, second);
 
   assert.deepEqual(
-    await h.report({ account: SLOT, status: 'done', attempt: first }),
+    await h.report({ engine: 'codex', account: SLOT, status: 'done', attempt: first }),
     { ok: true, applied: false },
   );
-  assert.deepEqual(h.state(), { account: OTHER_SLOT, status: 'pending', message: null });
+  assert.deepEqual(h.state(), { engine: 'codex', account: OTHER_SLOT, status: 'pending', message: null });
 
   // A report about an account that is not the one being removed is not this removal's either.
   assert.deepEqual(
-    await h.report({ account: SLOT, status: 'done', attempt: second }),
+    await h.report({ engine: 'codex', account: SLOT, status: 'done', attempt: second }),
     { ok: true, applied: false },
   );
   assert.deepEqual(
-    await h.report({ account: OTHER_SLOT, status: 'done', attempt: second }),
+    await h.report({ engine: 'codex', account: OTHER_SLOT, status: 'done', attempt: second }),
     { ok: true, applied: true },
   );
-  assert.deepEqual(h.state(), { account: OTHER_SLOT, status: 'done', message: null });
+  assert.deepEqual(h.state(), { engine: 'codex', account: OTHER_SLOT, status: 'done', message: null });
 });
 
 test('a report that cannot be one is refused', async () => {
   const h = harness();
   await h.remove(SLOT);
-  await assert.rejects(() => h.report({ account: SLOT, status: 'removing' }), BadRequestException);
-  await assert.rejects(() => h.report({ account: '../../.codex', status: 'done' }), BadRequestException);
+  await assert.rejects(() => h.report({ engine: 'codex', account: SLOT, status: 'removing' }), BadRequestException);
+  await assert.rejects(() => h.report({ engine: 'codex', account: '../../.codex', status: 'done' }), BadRequestException);
   await assert.rejects(
-    () => h.report({ account: SLOT, status: 'done', attempt: 'not a request' }),
+    () => h.report({ engine: 'codex', account: SLOT, status: 'done', attempt: 'not a request' }),
     BadRequestException,
   );
   assert.equal(h.state().status, 'pending');

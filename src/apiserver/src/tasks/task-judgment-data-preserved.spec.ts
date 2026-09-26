@@ -1259,7 +1259,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project_acceptance_*` object is named, so the 0177 pair and every stored task and
       // criterion row are out of its reach. No INSERT, UPDATE or DELETE: the dropped column held
       // nothing any preserved row refers to.
-      '0308_orchestration_account_switch'],
+      '0308_orchestration_account_switch',
+      //   0309 landed the Claude account a workspace's sessions run on: one
+      //        `ALTER TABLE "workspace" ADD COLUMN` and nothing else. It names no preserved object,
+      //        creates no function or trigger, and holds DML of no kind.
+      //   0310 tagged the account removal a runner is handed with the engine whose store it is in:
+      //        one `ALTER TABLE "runner" ADD COLUMN` and nothing else, on the same terms.
+      '0309_workspace_claude_account',
+      '0310_runner_account_remove_engine'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

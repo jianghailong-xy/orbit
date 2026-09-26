@@ -187,8 +187,8 @@ test("a Codex run the quota killed at startup is armed by the quota of the accou
       installed: true,
       auth: 'yes',
       accounts: [
-        { id: 'default', codexHome: '/root/.codex', auth: 'yes' },
-        { id: work, name: 'Work', codexHome: '/root/.orbit/codex-accounts/3fa91c2e', auth: 'yes' },
+        { id: 'default', home: '/root/.codex', codexHome: '/root/.codex', auth: 'yes' },
+        { id: work, name: 'Work', home: '/root/.orbit/codex-accounts/3fa91c2e', codexHome: '/root/.orbit/codex-accounts/3fa91c2e', auth: 'yes' },
       ],
     },
   ];

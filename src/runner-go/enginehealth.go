@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"sync"
 	"time"
 )
@@ -56,44 +55,55 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 		if rec, ok := updates[spec.bin]; ok && h.installed && rec.Status != "" {
 			report.Update = &rec
 		}
-		if spec.bin == providerCodex && h.installed {
-			report.Accounts = codexAccountHealth(h.path, h.auth)
+		// An engine whose CLI keeps a login per directory reports one entry per account: the one
+		// the user added, and Default. The engines without accounts simply say nothing here.
+		if kind, ok := accountSlotKindFor(spec.bin); ok && h.installed {
+			report.Accounts = accountHealth(kind, h.path, h.auth)
 		}
 		out = append(out, report)
 	}
 	return out
 }
 
-// codexAccountHealth asks every Codex account slot on this machine whether it is signed in. An
-// account's login lives in its CODEX_HOME, so each slot gets its own `codex login status`, run in
-// that slot's CODEX_HOME. Default's is the one the engine probe just ran — in the runner's own
-// environment, which is what selects Default — so its answer is reused instead of asked twice.
-// Nil when the slots can't be listed: the report then reads as the one account it was before.
-func codexAccountHealth(binPath string, defaultAuth authState) []EngineAccountReport {
-	slots, err := listCodexAccountSlots()
+// accountHealth asks every added account slot on this machine whether it is signed in. An account's
+// login lives in its own directory, so each slot gets the CLI's own status question, run in that
+// directory. Default's is the one the engine probe just ran — in the runner's own environment, which
+// is what selects Default — so its answer is reused instead of asked twice. Nil when the slots can't
+// be listed: the report then reads as the one account it was before.
+func accountHealth(kind accountSlotKind, binPath string, defaultAuth authState) []EngineAccountReport {
+	slots, err := kind.list()
 	if err != nil {
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	out := make([]EngineAccountReport, 0, len(slots))
 	for _, slot := range slots {
 		auth := defaultAuth
-		if slot.ID != codexAccountDefaultSlot {
-			auth = codexSlotLoginStatus(binPath, slot.CodexHome)
+		if slot.ID != accountSlotDefaultID {
+			auth = kind.loginStatus(ctx, binPath, slot.Dir)
 		}
 		out = append(out, EngineAccountReport{
 			ID:        slot.ID,
 			Name:      slot.Name,
-			CodexHome: slot.CodexHome,
+			Dir:       slot.Dir,
+			CodexHome: codexHomeOf(kind, slot.Dir),
 			Auth:      authWord(auth),
 		})
 	}
 	return out
 }
 
-func codexSlotLoginStatus(binPath, codexHome string) authState {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	return codexLoginStatus(ctx, binPath, envWithValue(os.Environ(), "CODEX_HOME", codexHome))
+// codexHomeOf repeats a Codex account's directory under the historical field name. The control
+// plane's sanitizer drops an account whose `codexHome` is empty — every replica older than `home`
+// would then report no accounts at all and run pinned workspaces on Default — so the field keeps
+// travelling for as long as such a reader can serve a response. Empty for every other engine,
+// whose accounts never had that name.
+func codexHomeOf(kind accountSlotKind, dir string) string {
+	if kind.engine == providerCodex {
+		return dir
+	}
+	return ""
 }
 
 // codexAccountFingerprintPrefixLen is how much of an account fingerprint the heartbeat's account

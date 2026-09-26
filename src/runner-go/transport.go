@@ -74,6 +74,8 @@ func init() {
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		codexAccountRemoveCapabilityV1,
+		claudeAccountLoginCapabilityV1,
+		claudeAccountRemoveCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -632,9 +634,15 @@ func (t *Transport) loginResult(b LoginResultRequest) error {
 	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
 }
 
-// codexAccountRemoveResult reports what a heartbeat-delivered account removal came to.
-func (t *Transport) codexAccountRemoveResult(b CodexAccountRemoveResultRequest) error {
+// codexAccountRemoveResult reports what a heartbeat-delivered account removal came to, on the route
+// a control plane older than accounts-per-engine reads — the one that handed the request over.
+func (t *Transport) codexAccountRemoveResult(b AccountRemoveResultRequest) error {
 	return t.do(nil, "POST", "/runner/codex-account-remove-result", b, nil, 15*time.Second)
+}
+
+// accountRemoveResult reports one on the engine-tagged route: the same body, with the engine named.
+func (t *Transport) accountRemoveResult(b AccountRemoveResultRequest) error {
+	return t.do(nil, "POST", "/runner/account-remove-result", b, nil, 15*time.Second)
 }
 
 // installResult reports one step of a browser-requested engine install: the command being run,

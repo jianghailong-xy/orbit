@@ -67,7 +67,7 @@ func newCodexLoginHarness(t *testing.T) *codexLoginHarness {
 		relay:       &loginRelay{},
 	}
 	t.Setenv("FAKE_CODEX_SEEN", h.seen)
-	if def, err := codexAccountSlotHome(codexAccountDefaultSlot); err != nil || def != h.defaultHome {
+	if def, err := codexAccountKind.home(accountSlotDefaultID); err != nil || def != h.defaultHome {
 		t.Fatalf("Default slot = %q (%v), want %q", def, err, h.defaultHome)
 	}
 	if err := os.MkdirAll(h.defaultHome, 0o700); err != nil {
@@ -220,7 +220,7 @@ func assertSignedInto(t *testing.T, home string) {
 // flow reaches the page unchanged, every report names the account, and Default is not touched.
 func TestCodexLoginAccountSlotSignsInTheNamedSlot(t *testing.T) {
 	h := newCodexLoginHarness(t)
-	slot, err := createCodexAccountSlot("Work")
+	slot, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,14 +233,14 @@ func TestCodexLoginAccountSlotSignsInTheNamedSlot(t *testing.T) {
 	if waiting.Account != slot.ID {
 		t.Fatalf("the report names account %q, want %q", waiting.Account, slot.ID)
 	}
-	approveFakeCodexSignIn(t, slot.CodexHome)
+	approveFakeCodexSignIn(t, slot.Dir)
 	if done := h.waitReport(t, "attempt-1", loginDone); done.Account != slot.ID {
 		t.Fatalf("the outcome names account %q, want %q", done.Account, slot.ID)
 	}
 	h.relay.stop()
 
-	h.assertEveryCallIn(t, slot.CodexHome)
-	assertSignedInto(t, slot.CodexHome)
+	h.assertEveryCallIn(t, slot.Dir)
+	assertSignedInto(t, slot.Dir)
 	h.assertDefaultUntouched(t)
 }
 
@@ -255,7 +255,7 @@ func TestCodexLoginAccountSlotAddsTheNewAccountOnce(t *testing.T) {
 	waiting := h.waitReport(t, "attempt-1", loginAwaitingApproval)
 	h.start(LoginCommand{Attempt: "attempt-1", AccountName: "  Work  "})
 
-	slots, err := listCodexAccountSlots()
+	slots, err := codexAccountKind.list()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,16 +266,16 @@ func TestCodexLoginAccountSlotAddsTheNewAccountOnce(t *testing.T) {
 	if waiting.Account != added.ID {
 		t.Fatalf("the report names account %q, want the added slot %q", waiting.Account, added.ID)
 	}
-	approveFakeCodexSignIn(t, added.CodexHome)
+	approveFakeCodexSignIn(t, added.Dir)
 	if done := h.waitReport(t, "attempt-1", loginDone); done.Account != added.ID {
 		t.Fatalf("the outcome names account %q, want %q", done.Account, added.ID)
 	}
 	h.relay.stop()
 
-	h.assertEveryCallIn(t, added.CodexHome)
-	assertSignedInto(t, added.CodexHome)
+	h.assertEveryCallIn(t, added.Dir)
+	assertSignedInto(t, added.Dir)
 	h.assertDefaultUntouched(t)
-	if slots, err := listCodexAccountSlots(); err != nil || len(slots) != 2 {
+	if slots, err := codexAccountKind.list(); err != nil || len(slots) != 2 {
 		t.Fatalf("after the redelivery slots = %+v (%v), want still two", slots, err)
 	}
 }
@@ -294,7 +294,7 @@ func TestCodexLoginAccountSlotUnknownAccountNeverFallsBackToDefault(t *testing.T
 	if calls := h.calls(t); len(calls) != 0 {
 		t.Fatalf("codex ran for an account the runner does not have: %+v", calls)
 	}
-	if slots, err := listCodexAccountSlots(); err != nil || len(slots) != 1 {
+	if slots, err := codexAccountKind.list(); err != nil || len(slots) != 1 {
 		t.Fatalf("slots = %+v (%v), want only Default", slots, err)
 	}
 	h.assertDefaultUntouched(t)
@@ -305,11 +305,11 @@ func TestCodexLoginAccountSlotUnknownAccountNeverFallsBackToDefault(t *testing.T
 // so the control plane can tell it from the sign-in that replaced it.
 func TestCodexLoginAccountSlotOneSignInPerSlot(t *testing.T) {
 	h := newCodexLoginHarness(t)
-	a, err := createCodexAccountSlot("A")
+	a, err := codexAccountKind.create("A")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := createCodexAccountSlot("B")
+	b, err := codexAccountKind.create("B")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,16 +337,16 @@ func TestCodexLoginAccountSlotOneSignInPerSlot(t *testing.T) {
 		t.Fatalf("a new attempt at A must replace A's sign-in and leave B's: A=%+v B=%+v", nowA, nowB)
 	}
 
-	approveFakeCodexSignIn(t, a.CodexHome)
-	approveFakeCodexSignIn(t, b.CodexHome)
+	approveFakeCodexSignIn(t, a.Dir)
+	approveFakeCodexSignIn(t, b.Dir)
 	h.waitReport(t, "a-2", loginDone)
 	h.waitReport(t, "b-1", loginDone)
 	h.relay.stop()
 
-	assertSignedInto(t, a.CodexHome)
-	assertSignedInto(t, b.CodexHome)
+	assertSignedInto(t, a.Dir)
+	assertSignedInto(t, b.Dir)
 	for _, c := range h.calls(t) {
-		if c.home != a.CodexHome && c.home != b.CodexHome {
+		if c.home != a.Dir && c.home != b.Dir {
 			t.Errorf("`codex %s` ran in %q, outside both accounts", c.args, c.home)
 		}
 	}

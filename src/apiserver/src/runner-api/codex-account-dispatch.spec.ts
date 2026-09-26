@@ -52,8 +52,8 @@ const ENGINES: RunnerEngineHealth[] = [
     auth: 'yes',
     version: '0.156.0',
     accounts: [
-      { id: 'default', codexHome: DEFAULT_HOME, auth: 'yes' },
-      { id: WORK, name: 'Work', codexHome: WORK_HOME, auth: 'yes' },
+      { id: 'default', home: DEFAULT_HOME, codexHome: DEFAULT_HOME, auth: 'yes' },
+      { id: WORK, name: 'Work', home: WORK_HOME, codexHome: WORK_HOME, auth: 'yes' },
     ],
   },
 ];
@@ -221,7 +221,7 @@ test('a workspace that picked no account injects no CODEX_HOME: the runner resol
 test('an account the assigned runner does not report runs on Default instead of failing', async () => {
   const onlyDefault = [
     ENGINES[0],
-    { ...ENGINES[1], accounts: [{ id: 'default', codexHome: DEFAULT_HOME, auth: 'yes' }] },
+    { ...ENGINES[1], accounts: [{ id: 'default', home: DEFAULT_HOME, codexHome: DEFAULT_HOME, auth: 'yes' }] },
   ];
   for (const [why, engines] of [
     // The workspace moved to a machine that never had this account.

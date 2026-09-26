@@ -4,14 +4,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Tag } from 'antd';
 import type {
   LoginEngine,
-  RunnerCodexAccountRemoveState,
+  RunnerAccountRemoveState,
   RunnerEngineAccount,
   RunnerEngineHealth,
   RunnerInstallState,
 } from '@orbit/shared';
 import { api } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { codexAccountPlanUsage, planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
+import { accountDir, accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
+import { planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { runnersQuery } from '../lib/queries';
 import { updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
@@ -100,10 +101,11 @@ function metaFor(kind: RowKind, engine: LoginEngine, health?: RunnerEngineHealth
   return health.version ? `${engine} ${health.version}` : engine;
 }
 
-/** The sign-in panel a card holds open: an engine's own (keyed by the engine), one Codex
- *  account's, or the account being added. */
-const accountPanel = (id: string) => `codex/${id}`;
-const ADD_ACCOUNT_PANEL = 'codex/+';
+/** The sign-in panel a card holds open: an engine's own (keyed by the engine), one of its
+ *  accounts', or the account being added — each engine's under its own prefix, so opening one
+ *  account's panel never opens another engine's. */
+const accountPanel = (engine: LoginEngine, id: string) => `${engine}/${id}`;
+const addAccountPanel = (engine: LoginEngine) => `${engine}/+`;
 
 /** An account's own answer, in the words a row speaks. */
 function accountKindOf(account: RunnerEngineAccount): RowKind {
@@ -163,7 +165,7 @@ function accountRowsOf(
   health: RunnerEngineHealth | undefined,
   install: RunnerInstallState | null | undefined,
 ): RunnerEngineAccount[] {
-  const accounts = engine === 'codex' ? (health?.accounts ?? []) : [];
+  const accounts = engineKeepsAccounts(engine) ? (health?.accounts ?? []) : [];
   const kind = rowKindOf(health, install, engine);
   return accounts.length >= 2 && (kind === 'in' || kind === 'out' || kind === 'unknown')
     ? accounts
@@ -256,7 +258,8 @@ function EngineRow({
   // "+ Account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
   // or not.
-  const addsAccounts = engine === 'codex' && (kind === 'in' || kind === 'out' || kind === 'unknown');
+  const addsAccounts =
+    engineKeepsAccounts(engine) && (kind === 'in' || kind === 'out' || kind === 'unknown');
 
   // An offline machine isn't updating anything, and the header already says so — repeating it
   // per row as a warning would put three alarms on one fact the user has already read.
@@ -356,7 +359,7 @@ function EngineRow({
           <Button
             size="small"
             disabled={offline}
-            onClick={() => onSignIn(signIn === ADD_ACCOUNT_PANEL ? null : ADD_ACCOUNT_PANEL)}
+            onClick={() => onSignIn(signIn === addAccountPanel(engine) ? null : addAccountPanel(engine))}
           >
             + Account
           </Button>
@@ -421,9 +424,9 @@ function EngineRow({
           <RunnerSignIn runnerId={runner.id} engine={engine} />
         </div>
       )}
-      {addsAccounts && signIn === ADD_ACCOUNT_PANEL && (
+      {addsAccounts && signIn === addAccountPanel(engine) && (
         <div className="re-panel">
-          <AddCodexAccount runnerId={runner.id} onCancel={() => onSignIn(null)} />
+          <AddEngineAccount engine={engine} runnerId={runner.id} onCancel={() => onSignIn(null)} />
         </div>
       )}
     </div>
@@ -435,6 +438,7 @@ function EngineRow({
  *  machine. */
 function AccountRow({
   runner,
+  engine,
   account,
   duplicateOf,
   lastOfGroup,
@@ -442,6 +446,8 @@ function AccountRow({
   onSignIn,
 }: {
   runner: Runner;
+  /** The engine this account belongs to: its own sign-in panel, its own removal, its own quota. */
+  engine: LoginEngine;
   account: RunnerEngineAccount;
   /** The account already signed in above that this slot turned out to hold too
    *  (duplicateAccounts). Absent for the slot that made the sign-in. */
@@ -456,17 +462,17 @@ function AccountRow({
   const qc = useQueryClient();
   const kind = accountKindOf(account);
   const isDefault = account.id === 'default';
-  const panel = accountPanel(account.id);
-  // What became of the last removal asked for here, if it was this account's: the button says it
-  // is under way, and a machine that refused says why.
-  const removal = runner.codexAccountRemove;
-  const mine = removal?.account === account.id ? removal : null;
+  const panel = accountPanel(engine, account.id);
+  // What became of the last removal asked for here, if it was this account's of this engine's: the
+  // button says it is under way, and a machine that refused says why.
+  const removal = runner.accountRemove;
+  const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
   const removing = mine?.status === 'pending';
   const refused = mine?.status === 'failed' ? mine.message : null;
   const remove = useMutation({
     mutationFn: () =>
-      api<RunnerCodexAccountRemoveState>(
-        `/runners/${runner.id}/codex-accounts/${account.id}`,
+      api<RunnerAccountRemoveState>(
+        `/runners/${runner.id}/accounts/${engine}/${account.id}`,
         { method: 'DELETE' },
       ),
     onSuccess: (state) => {
@@ -479,7 +485,7 @@ function AccountRow({
   });
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
-  const snapshot = codexAccountPlanUsage(runner.planUsage, account.id);
+  const snapshot = accountPlanUsage(runner.planUsage, engine, account.id);
   const quota = kind === 'in' && snapshot ? planUsageRows(snapshot)[0] : null;
   const toggle = () => onSignIn(signIn === panel ? null : panel);
 
@@ -494,8 +500,8 @@ function AccountRow({
           </div>
           {/* Where the account lives and which one it is — never who: the account's email and id
               stay on the machine, and the fingerprint is a prefix of a non-reversible one. */}
-          <div className="re-meta" title={account.codexHome}>
-            {tildePath(account.codexHome)}
+          <div className="re-meta" title={accountDir(account)}>
+            {tildePath(accountDir(account))}
             {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
           </div>
         </div>
@@ -561,25 +567,33 @@ function AccountRow({
         <div className="re-panel bad">
           <div className="re-panel-row">{refused}</div>
           <div className="re-panel-hint">
-            {tildePath(account.codexHome)} on {runner.displayName || runner.name} is untouched.
+            {tildePath(accountDir(account))} on {runner.displayName || runner.name} is untouched.
           </div>
         </div>
       )}
       {signIn === panel && (
         <div className="re-panel">
-          <RunnerSignIn runnerId={runner.id} engine="codex" account={account.id} />
+          <RunnerSignIn runnerId={runner.id} engine={engine} account={account.id} />
         </div>
       )}
     </div>
   );
 }
 
-/** "+ Account": name the new account, then the same device flow as every other sign-in here. The
- *  runner gives it a CODEX_HOME of its own, so Default — and the terminal's codex — is untouched. */
-function AddCodexAccount({ runnerId, onCancel }: { runnerId: string; onCancel: () => void }) {
+/** "+ Account": name the new account, then the same sign-in flow as every other here. The runner
+ *  gives it a config directory of its own, so Default — and the CLI in a terminal — is untouched. */
+function AddEngineAccount({
+  engine,
+  runnerId,
+  onCancel,
+}: {
+  engine: LoginEngine;
+  runnerId: string;
+  onCancel: () => void;
+}) {
   const [name, setName] = useState('');
   return (
-    <RunnerSignIn runnerId={runnerId} engine="codex" accountName={name} onCancel={onCancel}>
+    <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} onCancel={onCancel}>
       <label className="re-add">
         <span className="re-add-label">Account name</span>
         <input
@@ -594,8 +608,8 @@ function AddCodexAccount({ runnerId, onCancel }: { runnerId: string; onCancel: (
       </label>
       <div className="re-panel-hint re-add-hint">
         Only a label for this page. Orbit gives the account its own{' '}
-        <code className="re-cmd">CODEX_HOME</code> on this machine; your terminal keeps using
-        Default.
+        <code className="re-cmd">{engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'}</code> on
+        this machine; your terminal keeps using Default.
       </div>
     </RunnerSignIn>
   );
@@ -693,6 +707,7 @@ function RunnerEngineCard({
                 <AccountRow
                   key={account.id}
                   runner={runner}
+                  engine={engine}
                   account={account}
                   duplicateOf={repeats.get(account.id)}
                   lastOfGroup={index === accounts.length - 1}
@@ -765,7 +780,7 @@ export function RunnerEngines() {
           // Same for an account removal: the machine answers on its next check-in, and the page
           // has to be there to take the answer — a refusal is news the person who pressed it has
           // to see, and the row it is about leaves once the probe catches up.
-          r.codexAccountRemove?.status === 'pending',
+          r.accountRemove?.status === 'pending',
       )
         ? 4000
         : false,
