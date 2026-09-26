@@ -92,7 +92,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     return container;
   };
 
-  const mount = async (): Promise<void> => {
+  const mount = async (chipText = 'Opus 5.5Max'): Promise<void> => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
     container = document.createElement('div');
     root = createRoot(container);
@@ -115,7 +115,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     // The provider row needs the configured providers read; the effort's name, the session's.
     await act(async () => {
       await vi.waitFor(
-        () => expect(chip()?.textContent).toBe('Opus 5.5Max'),
+        () => expect(chip()?.textContent).toBe(chipText),
         { timeout: 20_000, interval: 20 },
       );
     });
@@ -348,5 +348,53 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     expect(row('effort:high')).toBeUndefined();
     await openSub('Effort', 'effort:high');
     expect(row('effort:high')).toBeDefined();
+  });
+
+  it('offers a self-hosted model only the efforts it declares, and names the one it runs at', async () => {
+    // A session stored at Max on a vLLM model that takes only low/medium/xhigh: dispatch runs it at
+    // xhigh (apiserver effortWithinDeclaredLevels), so that is the level the control names.
+    const vllm = { ...DETAIL, provider: 'local-vllm', model: 'qwen3.8-27b-fp8', effort: 'max' };
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (p: string, options?: Parameters<typeof api>[1]): Promise<never> => {
+      if (p === '/providers') {
+        return [
+          {
+            slug: 'local-vllm', label: 'Local vLLM', runtime: 'claude', presetSlug: null,
+            models: [{ label: 'Qwen3.8 27B FP8', value: 'qwen3.8-27b-fp8', contextWindow: 131_072,
+              reasoningLevels: ['low', 'medium', 'xhigh'] }],
+          },
+        ] as never;
+      }
+      const value: unknown = await served(p, options);
+      return (value === DETAIL ? vllm : Array.isArray(value) && value[0] === DETAIL ? [vllm] : value) as never;
+    });
+    vi.mocked(getSession).mockImplementation(async () => vllm as never);
+
+    const openVllm = async () => {
+      await click(chip(), 'the model control');
+      await act(async () => {
+        await vi.waitFor(() => expect(row('model:qwen3.8-27b-fp8')).toBeDefined(), { timeout: 20_000, interval: 20 });
+      });
+    };
+    await mount('Qwen3.8 27B FP8xHigh');
+    await openVllm();
+    expect(submenu('Effort')?.textContent).toBe('EffortxHigh');
+    await openSub('Effort', 'effort:xhigh');
+    const offered = Array.from(document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item'))
+      .map((el) => el.getAttribute('data-menu-id')?.match(/-effort:(.*)$/)?.[1])
+      .filter((level): level is string => level !== undefined);
+    expect(offered).toEqual(['', 'low', 'medium', 'xhigh', 'ultra']);
+
+    // xHigh is what runs already, so picking it is no change; a level the model has is one PATCH.
+    await click(row('effort:xhigh'), 'the level it runs at');
+    await settle();
+    expect(configCalls()).toHaveLength(0);
+    await openVllm();
+    await openSub('Effort', 'effort:medium');
+    await click(row('effort:medium'), 'a declared level');
+    await act(async () => {
+      await vi.waitFor(() => expect(configCalls()).toHaveLength(1), { timeout: 20_000, interval: 20 });
+    });
+    expect(configCalls()[0]).toEqual({ effort: 'medium' });
   });
 });

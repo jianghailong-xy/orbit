@@ -152,10 +152,11 @@ struct ComposerView: View {
     /// is incompatible. This mirrors the model picker's preservation of non-catalog values.
     private var effortMenuItems: [Effort] {
         let options = AgentDefaults.efforts(for: console.provider, model: console.modelID,
-                                            catalog: console.modelCatalog)
+                                            catalog: console.modelCatalog,
+                                            configured: console.configuredProviders)
         let current = AgentDefaults.normalizedEffort(
             console.effort, for: console.provider, model: console.modelID,
-            catalog: console.modelCatalog)
+            catalog: console.modelCatalog, configured: console.configuredProviders)
         return options.contains(current) ? options : [current] + options
     }
 
@@ -590,19 +591,21 @@ struct ComposerView: View {
             }
             ForEach(modelMenuItems) { m in
                 Button {
-                    // An OpenCode variant is model-defined: a model switch can strip it.
-                    let resetEffort = !AgentDefaults.supportsEffort(
+                    // An OpenCode variant is model-defined: a model switch can strip it. A model
+                    // that declares its levels moves the effort onto them instead (web parity).
+                    let nextEffort = AgentDefaults.normalizedEffort(
                         console.effort, for: console.provider, model: m.id,
-                        catalog: console.modelCatalog)
+                        catalog: console.modelCatalog, configured: console.configuredProviders)
+                    let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil
-                    if resetEffort { console.effort = .default }
+                    if resetEffort { console.effort = nextEffort }
                     Task {
                         await console.applyConfig(
                             model: m.id, permissionMode: permissionMode,
-                            effort: resetEffort ? Effort.default.rawValue : nil)
+                            effort: resetEffort ? nextEffort.rawValue : nil)
                     }
                 } label: {
                     menuItemLabel(m.name, selected: m.id == console.modelID)

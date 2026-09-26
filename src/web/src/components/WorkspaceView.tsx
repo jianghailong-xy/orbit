@@ -2783,6 +2783,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       pickedWorkspace?.effort,
       selectedModel,
       runner.modelCatalog,
+      configuredProviders,
     );
     const decision = decideContextSeed(effortSeedState.current, effortContextKey, true);
     effortSeedState.current = decision.state;
@@ -2796,6 +2797,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     pickedWorkspace?.effort,
     me.data?.preferences?.defaultEffort,
     runner.modelCatalog,
+    configuredProviders,
   ]);
 
   // Slot accounting is turn-based: only RUNNING occupies maxConcurrent. A warm or
@@ -4245,6 +4247,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             effort,
             model,
             runner.modelCatalog,
+            configuredProviders,
           );
           const res = await resumeSession(
             selected.id,
@@ -6116,11 +6119,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     live ? effectiveEffort : effort,
     shownModel,
     runner.modelCatalog,
+    configuredProviders,
   );
   const shownEffortOptions = effortOptionsForProvider(
     shownProvider,
     shownModel,
     runner.modelCatalog,
+    configuredProviders,
   );
   // Whether this session has a fast lane to offer at all — Claude's `/fast` on the models that
   // carry it, Codex's "Fast" service tier on a model whose row in this runner's catalogue
@@ -6254,7 +6259,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       : defaultModelForProvider(v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
     const drop = shownMode === 'Auto' && !supportsAuto(nextModel, v, configuredProviders, runner.modelCatalog);
     const currentEffort = live ? effectiveEffort : effort;
-    const nextEffort = normalizeEffortForProvider(v, currentEffort, nextModel, runner.modelCatalog);
+    const nextEffort = normalizeEffortForProvider(
+      v,
+      currentEffort,
+      nextModel,
+      runner.modelCatalog,
+      configuredProviders,
+    );
     if (live) {
       configMut.mutate({
         provider: v,
@@ -6291,7 +6302,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const drop = shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);
     // An OpenCode variant is model-defined: a model switch can strip it.
     const currentEffort = live ? effectiveEffort : effort;
-    const nextEffort = normalizeEffortForProvider(shownProvider, currentEffort, v, runner.modelCatalog);
+    const nextEffort = normalizeEffortForProvider(
+      shownProvider,
+      currentEffort,
+      v,
+      runner.modelCatalog,
+      configuredProviders,
+    );
     const resetEffort = nextEffort !== currentEffort;
     if (live) {
       configMut.mutate({
@@ -6315,7 +6332,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pickEffort = (v: string): void => {
     if (v === shownEffort) return;
     effortSeedState.current = dirtyContextSeed(effortContextKey);
-    const normalized = normalizeEffortForProvider(shownProvider, v, shownModel, runner.modelCatalog);
+    const normalized = normalizeEffortForProvider(
+      shownProvider,
+      v,
+      shownModel,
+      runner.modelCatalog,
+      configuredProviders,
+    );
     // Remember as the account default (replaces localStorage) so the next new session — here or on
     // iOS/macOS — starts at this effort. Optimistically patch the cached `me` so the seed effect
     // sees it, then persist best-effort.
