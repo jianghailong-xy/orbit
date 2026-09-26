@@ -1280,8 +1280,13 @@ export class WikiService {
         return;
       }
     }
-    const payload = editing ? (edited as Record<string, unknown>) : proposed;
-    const sources = await this.sourcesOfOp(tx, ownerId, changeset.sessionId, payload);
+    // An edit of an amend is the owner's changes laid over the proposal's, as an add's is over its
+    // draft above: a key the owner left alone is the proposal's, not the entry's. And the proposal's
+    // sources are still what the revision rests on — the owner rewrote the words, not the evidence.
+    const payload = editing
+      ? { ...((proposed.changes ?? {}) as Record<string, unknown>), ...(edited as Record<string, unknown>) }
+      : proposed;
+    const sources = await this.sourcesOfOp(tx, ownerId, changeset.sessionId, proposed);
     const draft = opName === 'add' || opName === 'supersede' ? preparedDraft((payload.entry ?? {}) as Record<string, unknown>) : null;
     const promote = opName === 'add' || opName === 'supersede';
     const written = await this.applyOp(tx, ownerId, changeset.spaceId, {
