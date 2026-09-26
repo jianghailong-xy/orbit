@@ -454,17 +454,39 @@ function EntryEditor({
               ? 'The replacement keeps this entry’s kind, fields and anchor, and this entry points at it.'
               : 'Only the title and the one-line summary change here.'}
           </p>
-          <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Title" />
-          <Input.TextArea
-            rows={3}
-            value={summary}
-            onChange={(event) => setSummary(event.target.value)}
-            placeholder="One line"
-            style={{ marginTop: 8 }}
-          />
+          <WikiTitleSummaryFields title={title} summary={summary} onTitle={setTitle} onSummary={setSummary} />
         </>
       )}
     </Modal>
+  );
+}
+
+/**
+ * The two lines an edit rewrites, as the drawer's Edit and Supersede draw them — and Review's Edit
+ * too (`WikiReviewPage`), so an entry's words are rewritten in one form wherever that happens.
+ */
+export function WikiTitleSummaryFields({
+  title,
+  summary,
+  onTitle,
+  onSummary,
+}: {
+  title: string;
+  summary: string;
+  onTitle: (value: string) => void;
+  onSummary: (value: string) => void;
+}) {
+  return (
+    <>
+      <Input value={title} onChange={(event) => onTitle(event.target.value)} placeholder="Title" />
+      <Input.TextArea
+        rows={3}
+        value={summary}
+        onChange={(event) => onSummary(event.target.value)}
+        placeholder="One line"
+        style={{ marginTop: 8 }}
+      />
+    </>
   );
 }
 

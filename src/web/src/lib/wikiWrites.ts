@@ -91,6 +91,23 @@ export interface WikiDecision {
   note?: string;
 }
 
+/**
+ * Review's Edit, as `edited`: the keys the owner changed in the form, and no others.
+ *
+ * The server lays `edited` over the proposal key by key (contract `effectPolicy.decide.edit`), so a key
+ * sent back unchanged would record the owner as rewriting what they only read. Empty means nothing was
+ * changed — which is an Accept, and the form leaves that to the Accept button.
+ */
+export function wikiEditedChanges(
+  proposed: { title: string; summary: string },
+  version: { title: string; summary: string },
+): WikiEntryChanges {
+  const edited: WikiEntryChanges = {};
+  if (version.title.trim() !== proposed.title.trim()) edited.title = version.title.trim();
+  if (version.summary.trim() !== proposed.summary.trim()) edited.summary = version.summary.trim();
+  return edited;
+}
+
 /** `POST /api/wiki/spaces/:id/changesets` — the owner's own write, applied at once. */
 export function proposeToWiki(spaceId: string, body: WikiProposeBody): Promise<{ ops: WikiOpOutcome[] }> {
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/changesets`, { method: 'POST', body });

@@ -8,9 +8,11 @@ import {
   LeftOutlined,
   RightOutlined,
 } from '@ant-design/icons';
-import { App, Button, Dropdown } from 'antd';
+import { Alert, App, Button, Dropdown, Modal } from 'antd';
+import type { WikiEntryChanges } from '@orbit/shared';
 import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty } from './WikiCards';
+import { WikiTitleSummaryFields } from './WikiEntryDrawer';
 import { WikiAim } from './WikiMarks';
 import { WikiSourceList } from './WikiSources';
 import { wikiEntriesQuery, wikiEntryQuery, wikiReviewQuery, wikiSpacesQuery } from '../lib/queries';
@@ -60,7 +62,7 @@ import {
   type WikiChangesetOp,
   type WikiSource,
 } from '../lib/wiki';
-import { decideWikiChangeset, useWikiWrite, type WikiDecision } from '../lib/wikiWrites';
+import { decideWikiChangeset, useWikiWrite, wikiEditedChanges, type WikiDecision } from '../lib/wikiWrites';
 
 /**
  * Review: the one place an agent's proposal becomes knowledge.
@@ -264,6 +266,17 @@ function ReviewCard({
     }
   };
 
+  const [editing, setEditing] = useState(false);
+  // What Edit opens on. An amend's form waits for the entry it amends, because its title and one line
+  // are that entry's with the amend's changes over them.
+  const proposed = payload.entry || target.data || target.isError ? proposedText(payload, target.data) : null;
+  // Edit's answer, from its form. A refusal is thrown back for the form to show rather than toasted
+  // here: the reason is about what the owner typed, and the form keeps that open beside it.
+  const acceptEdited = async (edited: WikiEntryChanges) => {
+    await write.mutateAsync([{ opId: op.id, action: 'edit', edited }]);
+    message.success('Decided');
+  };
+
   const sources = sourcesOf(op);
   const hunks = diffed
     ? wikiChangesDiff((target.data ?? {}) as Record<string, unknown>, changes)
@@ -418,7 +431,7 @@ function ReviewCard({
             <button
               type="button"
               className="card-action card-action--secondary"
-              onClick={() => decide({ opId: op.id, action: 'edit' })}
+              onClick={() => setEditing(true)}
             >
               {WIKI_REVIEW_EDIT}
             </button>
@@ -440,8 +453,87 @@ function ReviewCard({
           </>
         )}
       </div>
+      {editing && proposed && (
+        <ProposalEditor proposed={proposed} onAccept={acceptEdited} onClose={() => setEditing(false)} />
+      )}
     </div>
   );
+}
+
+/**
+ * Edit on a Review card: the owner's version of the proposal's title and one line, accepted as
+ * theirs — the iOS form's twin (`WikiProposalForm`), in the drawer's own dialog and fields.
+ *
+ * ONLY WHAT CHANGED IS SENT (`wikiEditedChanges`), and with nothing changed the button waits: an edit
+ * that changes nothing is an Accept, and sending it as an edit would record the proposer's words as
+ * the owner's.
+ *
+ * A REFUSAL STAYS IN THE FORM, and so does the form: the reason is about this version, and closing
+ * would throw away the text it is about.
+ */
+function ProposalEditor({
+  proposed,
+  onAccept,
+  onClose,
+}: {
+  proposed: { title: string; summary: string };
+  /** The decide request; it throws what the server refused it with. */
+  onAccept: (edited: WikiEntryChanges) => Promise<void>;
+  onClose: () => void;
+}) {
+  // What the form opened on is what "changed" is measured against, held as it was: a re-read of the
+  // entry while the owner types must not turn a field they never touched into an edit.
+  const [opened] = useState(proposed);
+  const [title, setTitle] = useState(opened.title);
+  const [summary, setSummary] = useState(opened.summary);
+  const [saving, setSaving] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const edited = wikiEditedChanges(opened, { title, summary });
+
+  const submit = async () => {
+    setSaving(true);
+    setRefusal(null);
+    try {
+      await onAccept(edited);
+    } catch (error) {
+      setSaving(false);
+      setRefusal(error instanceof Error ? error.message : 'The server refused it');
+      return;
+    }
+    onClose();
+  };
+
+  return (
+    <Modal
+      open
+      title={WIKI_REVIEW_EDIT}
+      onCancel={onClose}
+      onOk={submit}
+      okText={WIKI_REVIEW_ACCEPT}
+      okButtonProps={{ disabled: Object.keys(edited).length === 0 || title.trim().length === 0 }}
+      confirmLoading={saving}
+      destroyOnHidden
+    >
+      <p className="wk-modal-note">{WIKI_ACCEPT_NOTE}</p>
+      <WikiTitleSummaryFields title={title} summary={summary} onTitle={setTitle} onSummary={setSummary} />
+      {refusal && <Alert type="error" showIcon title={refusal} style={{ marginTop: 8 }} />}
+    </Modal>
+  );
+}
+
+/**
+ * The title and one line a proposal would leave its entry with: an add's or a supersede's own draft,
+ * else the entry the op names with the op's changes over it — the iOS form's reading.
+ */
+function proposedText(
+  payload: Record<string, unknown>,
+  entry: { title: string; summary: string } | undefined,
+): { title: string; summary: string } {
+  const over = (payload.entry ?? payload.changes ?? {}) as Record<string, unknown>;
+  return {
+    title: typeof over.title === 'string' ? over.title : (entry?.title ?? ''),
+    summary: typeof over.summary === 'string' ? over.summary : (entry?.summary ?? ''),
+  };
 }
 
 /** The op's chip, in the contract's own words. A supersede is the card's AMEND. */
