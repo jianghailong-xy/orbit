@@ -24,6 +24,7 @@ import { RunnersController } from '../runners/runners.controller';
 import { SessionTagsController } from '../session-tags/session-tags.controller';
 import { SessionsController } from '../sessions/sessions.controller';
 import { SharedController } from '../shared/shared.controller';
+import { ShareLinksController } from '../share-links/share-links.controller';
 import { ProjectsController } from '../projects/projects.controller';
 import { TaskListsController } from '../task-lists/task-lists.controller';
 import { TasksController } from '../tasks/tasks.controller';
@@ -38,6 +39,8 @@ import { RunnerSessionsController } from '../runner-api/runner-sessions.controll
 import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from '../runner-api/runner-task-completion-evidence.controller';
 import { RunnerTaskProgressController } from '../runner-api/runner-task-progress.controller';
+import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
+import { WikiController } from '../wiki/wiki.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -50,7 +53,9 @@ import { RunnerTaskProgressController } from '../runner-api/runner-task-progress
 // integer cursor), `version` (a task list revision's per-list number, guarded by ParseIntPipe),
 // `account` (a Codex account slot: `default` or four random bytes in lowercase hex — the shape
 // every Codex account route already takes, refused by the service for anything else, and named by
-// DELETE /runners/:id/codex-accounts/:account). They key by their own columns and must stay
+// DELETE /runners/:id/codex-accounts/:account), `slug` (a wiki topic's human-readable name, like
+// `tasks-dispatch`, that GET /wiki/spaces/:id/topics/:slug matches as text against
+// `wiki_topic.slug` and `wiki_entry.topics`). They key by their own columns and must stay
 // unpiped: PublicIdPipe here would translate a name that is not one, and a slot that no runner
 // added would be addressed as `00000000-0000-0000-0000-000000b52cc2`.
 // Deliberately a DENYLIST, and deliberately not replaced by PUBLIC_ID_FIELDS below: a route
@@ -58,7 +63,7 @@ import { RunnerTaskProgressController } from '../runner-api/runner-task-progress
 // says otherwise". An allowlist would let a param nobody classified through unchecked. UUID
 // exceptions are route-specific below: a generic `requestId` exemption would also silently exempt
 // future public request-row addresses.
-const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account']);
+const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug']);
 
 const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {};
 
@@ -76,6 +81,7 @@ const CONTROLLERS = [
   SessionTagsController,
   SessionsController,
   SharedController,
+  ShareLinksController,
   ProjectsController,
   TaskListsController,
   TasksController,
@@ -90,6 +96,10 @@ const CONTROLLERS = [
   RunnerTasksController,
   RunnerTaskCompletionEvidenceController,
   RunnerTaskProgressController,
+  // The Orbit Wiki's two doors (migration 0307, design §5.1). Registered by hand on purpose: a new
+  // controller nothing lists here is a controller whose ids nothing checks.
+  WikiController,
+  RunnerWikiController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed

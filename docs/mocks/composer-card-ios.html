@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>composer-ios</title>
+<style>
+  :root {
+    --label: #0b0b0c;
+    --secondary: rgb(138, 138, 142);
+    --tertiary: rgba(60, 60, 67, 0.3);
+    --placeholder: rgba(60, 60, 67, 0.32);
+    --sep: rgba(60, 60, 67, 0.2);
+    --track: rgba(60, 60, 67, 0.16);
+    --tint: #2e6aff;
+    --orange: #ff8c27;
+    --red: #ff373c;
+    --page: #ffffff;
+    --card: #ffffff;
+    --card-border: rgba(0, 0, 0, 0.13);
+    --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
+    --send-off: #d1d1d6;
+  }
+  .dark {
+    --label: #f5f5f7;
+    --secondary: rgba(235, 235, 245, 0.6);
+    --placeholder: rgba(235, 235, 245, 0.3);
+    --sep: rgba(84, 84, 88, 0.6);
+    --track: rgba(235, 235, 245, 0.18);
+    --tint: #3d7bff;
+    --page: #000000;
+    --card: #1c1c1e;
+    --card-border: rgba(255, 255, 255, 0.1);
+    --card-shadow: none;
+    --send-off: #3a3a3c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 1330px;
+    padding: 36px 40px 40px;
+    background: #eef0f3;
+    font-family: "Nimbus Sans", "Noto Sans CJK SC", sans-serif;
+    color: #1f2329;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.2px; }
+  .lede { margin-top: 8px; font-size: 15px; color: #4b5260; line-height: 1.55; max-width: 1180px; }
+  h2 { font-size: 17px; font-weight: 700; margin: 30px 0 12px; display: flex; align-items: baseline; gap: 10px; }
+  h2 small { font-size: 13px; font-weight: 400; color: #6b7280; }
+
+  /* ── board rows ─────────────────────────── */
+  .row { display: flex; gap: 22px; align-items: flex-start; }
+  .tile { width: 393px; flex: none; }
+  .cap { font-size: 14px; font-weight: 700; margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; }
+  .cap span { font-weight: 400; color: #6b7280; font-size: 12.5px; }
+  .shot { width: 393px; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 0 rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.06); background: #fff; }
+  .shot img { display: block; width: 393px; }
+  .notes { flex: 1; background: #fff; border-radius: 14px; padding: 16px 20px; font-size: 13.5px; line-height: 1.6; color: #2b303b; box-shadow: 0 0 0 1px rgba(0,0,0,0.06); }
+  .notes h3 { font-size: 14px; margin: 0 0 6px; }
+  .notes h3 + ul { margin-bottom: 12px; }
+  .notes ul { padding-left: 18px; }
+  .notes li { margin: 2px 0; }
+  .notes b { color: #111; }
+  .yes { color: #16833a; font-weight: 700; }
+  .no { color: #c2410c; font-weight: 700; }
+  .num { display: inline-flex; width: 18px; height: 18px; border-radius: 9px; background: #1f2329; color: #fff; font-size: 11px; font-weight: 700; align-items: center; justify-content: center; margin-right: 4px; vertical-align: 1px; }
+  .num.o { background: #c2410c; }
+
+  /* ── phone bottom crop ──────────────────── */
+  .phone {
+    position: relative; width: 393px; height: 318px; overflow: hidden;
+    border-radius: 14px; background: var(--page);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
+    color: var(--label);
+    display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  .phone::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 56px; z-index: 1;
+    background: linear-gradient(var(--page), transparent); }
+  .phone.tall { height: 560px; }
+  .tail { padding: 0 16px 14px; font-size: 17px; line-height: 26px; color: var(--label); }
+  .band { padding: 12px 16px 10px; border-top: 0.5px solid var(--sep); }
+  .band .card + .card { margin-top: 12px; }
+  .safe { position: relative; height: 34px; flex: none; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: var(--label); }
+
+  /* ── the new composer card ──────────────── */
+  .card {
+    position: relative;
+    background: var(--card);
+    border-radius: 24px;
+    box-shadow: 0 0 0 0.5px var(--card-border), var(--card-shadow);
+  }
+  .card.focus { box-shadow: 0 0 0 0.5px rgba(0,0,0,0.26), 0 6px 22px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.05); }
+  .dark .card.focus { box-shadow: 0 0 0 0.5px rgba(255,255,255,0.22); }
+  .atts { display: flex; gap: 8px; padding: 12px 12px 0; }
+  .att { position: relative; width: 58px; height: 58px; border-radius: 14px; overflow: hidden;
+    background: linear-gradient(135deg, #dfe7ff, #f4f6fb 55%, #e9ecf2); box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.1); }
+  .att::before { content: ""; position: absolute; left: 8px; top: 10px; right: 8px; height: 6px; border-radius: 3px; background: #c7d3f5; box-shadow: 0 11px 0 #d6dbe6, 0 22px 0 #d6dbe6, 0 33px 0 #d6dbe6; }
+  .att .x { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; border-radius: 9px; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
+  .att.file { width: auto; padding: 0 12px 0 10px; display: flex; align-items: center; gap: 8px; background: rgba(120,120,128,0.1); box-shadow: none; }
+  .att.file::before { display: none; }
+  .att.file .fn { font-size: 14px; color: var(--label); line-height: 18px; }
+  .att.file .fs { font-size: 12px; color: var(--secondary); }
+  .field {
+    padding: 15px 16px 8px;
+    font-size: 17px; line-height: 22px; min-height: 45px;
+    color: var(--label);
+  }
+  .field .ph { color: var(--placeholder); }
+  .field .caret { display: inline-block; width: 2px; height: 21px; background: var(--tint); vertical-align: -4px; margin-left: 1px; border-radius: 1px; }
+  .field .caret.first { margin-left: -1px; margin-right: 1px; }
+  .toolbar {
+    display: flex; align-items: center;
+    height: 46px; padding: 6px 8px 8px 8px;
+    font-size: 15px; line-height: 20px;
+  }
+  .ic { flex: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--label); }
+  .mode { flex: none; margin-left: 6px; color: var(--secondary); font-weight: 500; white-space: nowrap; }
+  .sp { flex: 1 1 auto; min-width: 10px; }
+  .chip { display: flex; align-items: baseline; gap: 5px; min-width: 0; flex: 0 1 auto; padding: 0 2px; white-space: nowrap; }
+  .chip b { font-weight: 600; color: var(--label); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .chip i { font-style: normal; color: var(--secondary); flex: none; }
+  .meters { flex: none; display: flex; align-items: center; gap: 8px; margin-left: 12px; }
+  .bar { width: 20px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 2px; background: var(--tint); }
+  .bar.warn > span { background: var(--orange); }
+  .ring { display: block; }
+  .send { flex: none; margin-left: 10px; width: 32px; height: 32px; border-radius: 16px; background: var(--tint); display: flex; align-items: center; justify-content: center; }
+  .send.off { background: var(--send-off); }
+  .send.black { background: #0b0b0c; }
+  .dark .send.black { background: #f5f5f7; }
+
+  /* ── iOS 26 menu ────────────────────────── */
+  .menu {
+    position: absolute; right: 16px; width: 262px;
+    background: rgba(250, 250, 252, 0.94);
+    border-radius: 26px;
+    box-shadow: 0 0 0 0.5px rgba(0,0,0,0.08), 0 12px 40px rgba(0,0,0,0.18);
+    padding: 8px 0;
+    font-size: 17px; color: var(--label);
+    z-index: 3;
+  }
+  .mi { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 20px 0 18px; }
+  .mi .ck { width: 16px; flex: none; display: flex; justify-content: center; }
+  .mi .t { flex: 1; min-width: 0; }
+  .mi .sub { display: block; font-size: 13px; color: var(--secondary); line-height: 16px; margin-top: 1px; }
+  .mi .chev { color: var(--secondary); font-size: 15px; flex: none; }
+  .msep { height: 0.5px; background: rgba(60,60,67,0.2); margin: 6px 24px; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,0.04); z-index: 2; }
+
+  /* ── callouts ───────────────────────────── */
+  .co { position: absolute; z-index: 4; width: 20px; height: 20px; border-radius: 10px; background: #e0460f; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #fff; }
+  .dash { position: absolute; z-index: 4; border: 1.5px dashed #e0460f; border-radius: 10px; }
+  .spec { position: absolute; z-index: 4; font-size: 11px; font-weight: 700; color: #7c3aed; white-space: nowrap; }
+  .specline { position: absolute; z-index: 4; background: #7c3aed; }
+
+  .legend { margin-top: 10px; font-size: 12.5px; color: #4b5260; line-height: 1.55; }
+  .legend b { color: #1f2329; }
+</style>
+</head>
+<body>
+
+<h1>Orbit 输入框 · 借 ChatGPT 的「一张卡、两行」改版 —— iPhone</h1>
+<p class="lede">结构照参考图：字在上、控件在下，全部收进一张圆角卡。内容照 Orbit：Mode、Provider、Model、Effort、Plan、Context、Send/Stop 一个不少，只是重新分组。
+数据用你这个会话的真实配置（orbitd@Claude · Opus 5.5 · Max · Auto），「最挤」那格用近 7 天最常用的 DeepSeek V4 Flash。</p>
+
+<h2>参考 × 现状 <small>左：你给的 ChatGPT 截图（iPhone 3x 原图，按 393pt 缩放）；中：Orbit iOS 真机截图（8/21）</small></h2>
+<div class="row">
+  <div class="tile">
+    <div class="cap">参考 · ChatGPT</div>
+    <div class="shot"><img src="composer-card-ref-chatgpt.png"></div>
+    <div class="legend">实测：卡宽 369、圆角 ≈24、高 93；<b>「+」和发送键的圆心都在离两条边 24pt 处</b>，正好是圆角的圆心（同心）。
+      正文 17pt；「6 Sol」黑色半粗 + 「Light」次级灰，是同一个按钮。</div>
+  </div>
+  <div class="tile">
+    <div class="cap">现状 · Orbit iOS</div>
+    <div class="shot"><img src="composer-card-before-ios.png"></div>
+    <div class="legend">框 52pt、r16，框里只有「+」和发送；另外 5 个设置排在框外一行灰字里。</div>
+  </div>
+  <div class="notes">
+    <h3>Review：可以借，但不照搬</h3>
+    <ul>
+      <li><span class="yes">借</span> <b>一张卡装下这条消息的全部</b>：字、附件、控件都在卡里。现在的灰字行在框外，看着像说明文字，不像按钮。</li>
+      <li><span class="yes">借</span> <b>两行</b>：字独占整宽，控件行固定在底部。现在 iOS 的「+」和发送是垂直居中的，打到 6 行会漂到框中间；web 是贴底的，两端也不一致。</li>
+      <li><span class="yes">借</span> <b>模型 + 力度合成一个按钮</b>，用两种颜色写：「Opus 5.5 <span style="color:#8a8a8e">Max</span>」。现在它们是两个互不相干的灰词，看不出力度跟着模型走（换模型会重置力度）。</li>
+      <li><span class="yes">借</span> <b>同心圆角 r24</b>；两端控件的圆心落在圆角圆心上；不加 chevron；图标用正文色；只有发送键是实心的。</li>
+      <li><span class="no">不借</span> <b>麦克风 + 语音键</b>：Orbit 没有语音，iOS 键盘自带听写，再放一个就重复了。</li>
+      <li><span class="no">不借</span> <b>黑色发送键</b>：Orbit 的主色只给页面上唯一的主操作，web 和原生的主按钮都是这个蓝。想要黑色只改一个色值，见 ④ 下方的小样。</li>
+      <li><span class="no">不借</span> <b>12pt 边距和占位文案</b>：卡的左右边距保持 16pt，和上面的 Background 条、分支条对齐；占位文案沿用现在的 Message… / Reply…。</li>
+    </ul>
+    <h3>Orbit 自己要多解决的</h3>
+    <ul>
+      <li>你这个会话多一个 Provider 词（orbitd@Claude），现在的底栏在 iPhone 上一行放不下。<b>Provider 收进模型按钮的菜单</b>（见 ④）。web 的 Fast 同样收进去，打开时在标签后面加「Fast」。</li>
+      <li>Plan 和 Context 两个读数：iPhone 上<b>只留图形</b>（条和环），数字点开看。桌面宽度够，<b>保留数字</b>。</li>
+    </ul>
+  </div>
+</div>
+
+<h2>新设计 · iPhone（393pt）<small>虚线框和红点是标注，不是界面的一部分</small></h2>
+<div class="row">
+  <!-- ① idle -->
+  <div class="tile">
+    <div class="cap">① 空闲 <span>两行卡片 · 同心圆角</span></div>
+    <div class="phone">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="band">
+        <div class="card" id="c1">
+          <div class="field"><span class="ph">Message…</span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+            <span class="mode">Auto</span>
+            <span class="sp"></span>
+            <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters">
+              <span class="bar"><span style="width:22%"></span></span>
+              <svg class="ring" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="var(--tint)" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="22.2" transform="rotate(-90 8 8)"/></svg>
+            </span>
+            <div class="send off"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend"><b>卡</b> 左右各 16，r24（continuous），白底 + 0.5pt 描边 + 柔和阴影；空闲高 91。
+      <b>字</b> 17pt，一行起，最多 6 行，往上长。<b>控件行</b> 高 46，「+」和发送的圆心离两条边各 24，控件行不随字数移动。</div>
+  </div>
+
+  <!-- ② typing + attachments -->
+  <div class="tile">
+    <div class="cap">② 输入中 · 带附件 <span>附件进卡里，发送键亮起</span></div>
+    <div class="phone" style="height:388px">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="band">
+        <div class="card focus">
+          <div class="atts">
+            <div class="att"><span class="x">×</span></div>
+            <div class="att file"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M10.5 4.5 5.4 9.6a1.6 1.6 0 0 0 2.3 2.3l5.6-5.6a3 3 0 0 0-4.2-4.2L3.4 7.8a4.3 4.3 0 0 0 6.1 6.1l4-4" fill="none" stroke="var(--secondary)" stroke-width="1.4" stroke-linecap="round"/></svg><span><span class="fn">gateway.log</span><br><span class="fs">184 KB</span></span></div>
+          </div>
+          <div class="field">先别发 beta。把输入框改成两行卡片：上面打字，下面一排控件，附件也放进卡里<span class="caret"></span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+            <span class="mode">Auto</span>
+            <span class="sp"></span>
+            <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters">
+              <span class="bar"><span style="width:22%"></span></span>
+              <svg class="ring" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="var(--tint)" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="22.2" transform="rotate(-90 8 8)"/></svg>
+            </span>
+            <div class="send"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">附件现在在整个条带的最上面，隔着 Watching、Background、分支条才到输入框。<b>放进卡里</b>之后，它和要发的字在一起，读起来是同一条消息。聚焦时描边加深、阴影略抬，不换成蓝框。</div>
+  </div>
+
+  <!-- ③ running -->
+  <div class="tile">
+    <div class="cap">③ 运行中 <span>空草稿时发送键变「停止」</span></div>
+    <div class="phone">
+      <div class="tail">正在跑 web 的全量测试，第 3 片（S–Z）还剩 41 个文件…</div>
+      <div class="band">
+        <div class="card">
+          <div class="field"><span class="ph">Message…</span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+            <span class="mode">Auto</span>
+            <span class="sp"></span>
+            <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters">
+              <span class="bar"><span style="width:64%"></span></span>
+              <svg class="ring" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="var(--orange)" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="8.3" transform="rotate(-90 8 8)"/></svg>
+            </span>
+            <div class="send"><svg width="12" height="12" viewBox="0 0 12 12"><rect x="0.5" y="0.5" width="11" height="11" rx="2.6" fill="#fff"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">行为不变：跑着且草稿为空时是「停止」；一打字又变回发送（排队进这一轮）。
+      Context 环 ≥75% 变橙、≥90% 变红，和现在的规则一致。点环或条，弹出的详情和现在相同。</div>
+  </div>
+</div>
+
+<div class="row" style="margin-top:26px">
+  <!-- ④ menu -->
+  <div class="tile">
+    <div class="cap">④ 点「Opus 5.5 Max」 <span>一个按钮、一个菜单</span></div>
+    <div class="phone tall">
+      <div class="dim"></div>
+      <div class="menu" style="bottom:156px">
+        <div class="mi"><span class="ck"></span><span class="t">Provider<span class="sub">orbitd@Claude</span></span><span class="chev">›</span></div>
+        <div class="msep"></div>
+        <div class="mi"><span class="ck"><svg width="15" height="15" viewBox="0 0 15 15"><path d="M2.5 8 6 11.5 12.5 3.5" fill="none" stroke="var(--label)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="t">Opus 5.5</span></div>
+        <div class="mi"><span class="ck"></span><span class="t">Opus 5</span></div>
+        <div class="mi"><span class="ck"></span><span class="t">Fable 5.1</span></div>
+        <div class="mi"><span class="ck"></span><span class="t">Sonnet 5</span></div>
+        <div class="mi"><span class="ck"></span><span class="t">Haiku 4.5</span></div>
+        <div class="msep"></div>
+        <div class="mi"><span class="ck"></span><span class="t">Effort<span class="sub">Max</span></span><span class="chev">›</span></div>
+      </div>
+      <div class="band">
+        <div class="card">
+          <div class="field"><span class="ph">Message…</span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+            <span class="mode">Auto</span>
+            <span class="sp"></span>
+            <span class="chip" style="background:rgba(120,120,128,0.14);border-radius:12px;padding:4px 8px;margin:-4px -6px"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters"><span class="bar"><span style="width:22%"></span></span><svg class="ring" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="var(--tint)" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="22.2" transform="rotate(-90 8 8)"/></svg></span>
+            <div class="send off"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">三个设置合进一个菜单：<b>Provider</b>（有 ≥2 个可选时才出现）→ <b>当前 Provider 的模型</b>直接列出 → <b>Effort</b> 二级菜单。
+      换 Provider 或换模型时，不支持的 Effort / Auto 照现在的规则自动回落。web 的 Fast 以「Speed」一行出现在 Effort 下面。</div>
+    <div class="legend" style="display:flex;gap:8px;align-items:center;margin-top:10px;background:#fff;border-radius:12px;padding:8px 12px;box-shadow:0 0 0 1px rgba(0,0,0,0.06);white-space:nowrap;font-size:12px">
+      <span>发送键备选：</span>
+      <span class="send" style="margin:0;width:26px;height:26px"><svg width="13" height="13" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Orbit 主色（推荐）</span>
+      <span class="send black" style="margin:0 0 0 8px;width:26px;height:26px"><svg width="13" height="13" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>纯黑（同 ChatGPT）</span>
+    </div>
+  </div>
+
+  <!-- ⑤ tightest -->
+  <div class="tile">
+    <div class="cap">⑤ 最挤的两档 <span>上：常用里最长；下：人为凑的极端</span></div>
+    <div class="phone" style="height:430px">
+      <div class="tail">上下文快满了。压缩一次还是开新会话？</div>
+      <div class="band">
+        <div class="card" id="t5a">
+          <div class="field"><span class="ph">Message…</span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+            <span class="mode">Auto</span>
+            <span class="sp"></span>
+            <span class="chip"><b>DeepSeek V4 Flash</b><i>Max</i></span>
+            <span class="meters"><svg class="ring" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="var(--red)" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="2.6" transform="rotate(-90 8 8)"/></svg></span>
+            <div class="send off"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+        <div class="card" id="t5b">
+          <div class="field"><span class="ph">Message…</span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+            <span class="mode">Accept Edits</span>
+            <span class="sp"></span>
+            <span class="chip"><b>GPT-5.6-Sol</b><i>Ultra</i></span>
+            <span class="meters"><span class="bar warn"><span style="width:93%"></span></span><svg class="ring" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="var(--red)" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="2.6" transform="rotate(-90 8 8)"/></svg></span>
+            <div class="send off"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend" id="t5legend">放不下时<b>只让模型名截断</b>；力度、Mode、读数和发送键都不让位。DeepSeek 用 API key 接入，没有订阅额度，所以没有 Plan 条。</div>
+  </div>
+
+  <!-- ⑥ dark -->
+  <div class="tile">
+    <div class="cap">⑥ 深色 <span>卡片用 secondarySystemBackground，去掉阴影</span></div>
+    <div class="phone dark">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="band">
+        <div class="card focus">
+          <div class="field">先别发，先出输入框的效果图<span class="caret"></span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+            <span class="mode">Auto</span>
+            <span class="sp"></span>
+            <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters">
+              <span class="bar"><span style="width:22%"></span></span>
+              <svg class="ring" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="var(--tint)" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="22.2" transform="rotate(-90 8 8)"/></svg>
+            </span>
+            <div class="send"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">深色下卡片靠底色和页面区分，阴影在黑底上看不见，去掉；描边保留 10% 白。</div>
+  </div>
+</div>
+
+<p class="legend" id="measure" style="margin-top:18px;font-size:12px;color:#6b7280"></p>
+
+<script>
+  const m = (id) => {
+    const c = document.getElementById(id), b = c.querySelector('.chip b'), sp = c.querySelector('.sp');
+    return { need: Math.round(b.scrollWidth), got: Math.round(b.clientWidth), spare: Math.round(sp.getBoundingClientRect().width) };
+  };
+  const a = m('t5a'), b = m('t5b');
+  const h1 = Math.round(document.querySelector('#c1').getBoundingClientRect().height);
+  document.getElementById('measure').textContent =
+    `实测（替身字体 Nimbus Sans ≈ SF Pro）：⑤ 上档模型名要 ${a.need}pt、给到 ${a.got}pt，余 ${a.spare}pt；下档要 ${b.need}pt、给到 ${b.got}pt；① 卡片高 ${h1}pt。`;
+  document.title = 'M ' + JSON.stringify({a, b, h1, H: document.documentElement.scrollHeight});
+</script>
+</body>
+</html>

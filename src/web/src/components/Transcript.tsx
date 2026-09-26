@@ -41,6 +41,11 @@ import {
   isUsageLimitErrorText,
   MAX_API_ERROR_RETRIES,
   parseQuotaResetAt,
+  isAsyncAgentLaunchAck,
+  progressBadge,
+  workflowLaunchReceipt,
+  workflowTitle,
+  type TaskProgress,
 } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
@@ -62,7 +67,11 @@ import { WatchWakeCard } from './WatchWakeCard';
 import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
 import { ReferencedTaskNote } from './ReferencedTaskNote';
+import { WikiContextNote } from './WikiContextNote';
+import { AddToWikiRow, useAddToWiki } from './AddToWiki';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
+import { EMPTY_LIVE_TASK_PROGRESS, endedTaskProgress, type LiveTaskProgress } from '../lib/liveTaskProgress';
+import { TaskProgressBlock } from './TaskProgressBlock';
 import { parseWatchWake } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
@@ -75,6 +84,7 @@ import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
+import { parseWikiContext } from '../lib/wikiContext';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -84,6 +94,10 @@ export const AttachmentResolverContext =
 
 export const ArtifactResolverContext =
   createContext<((artifactPath: string) => Promise<string>) | null>(null);
+
+// Where the transcript's links to tasks, projects and sessions go on a public page, which is read
+// signed out: the page's resolver answers for every AppLink and SameOriginLink in the tree.
+export { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
 import Markdown from 'react-markdown';
 import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
@@ -141,8 +155,8 @@ export const ExportCtx = createContext<ExportMode | null>(null);
 // renders non-clickable there (a logged-out or offline viewer can't open another session).
 export const SessionNavCtx = createContext<((rawId: string) => void) | null>(null);
 
-// Refetch one event's untrimmed payload by seq. WorkspaceView provides it; the shared/public page
-// leaves it null, since that endpoint never clips (nothing there is ever `truncated`).
+// Refetch one event's untrimmed payload by seq. WorkspaceView provides it, and so does the shared
+// page, over the share's own route (its pages are clipped the same way).
 export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null>(null);
 
 /**
@@ -289,6 +303,10 @@ type TextNode = {
   kind: 'user' | 'assistant' | 'thinking';
   seq: number;
   text: string;
+  /** The conversation turn this message belongs to, when its event named one. What Add to Wiki
+   *  cites an entry's provenance by (`{ kind: 'turn', ref: turnId }`), and what the wiki's
+   *  exposure and provenance rules are written in terms of. */
+  turnId?: string | null;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
   // one row. Both are known only while it streams (see lib/thinkingDraft) — a reload has neither,
   // so the row states its size alone.
@@ -576,6 +594,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             kind: 'user',
             seq: ev.seq,
             text: recorded ? recorded.text : p.text ? String(p.text) : '',
+            turnId: ev.turnId ?? null,
             note: recorded?.note,
             itemCard,
             taskStart,
@@ -622,7 +641,12 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           else if (isUsageLimitErrorText(text)) autoRetry(parent, ev.seq, text, 'quota');
           else if (isRetryableApiErrorText(text)) autoRetry(parent, ev.seq, text, 'apiError');
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
-          else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
+          else {
+            // A reply carries the turn it answers (`turnId`) and its own wall clock, neither of
+            // which the row under it can be drawn without: the turn is what Add to Wiki cites, and
+            // the stamp is the "2h ago" beside the button.
+            into(parent).push({ kind: 'assistant', seq: ev.seq, text, turnId: ev.turnId ?? null, ts: ev.ts });
+          }
         }
         break;
       case 'thinking': {
@@ -769,6 +793,18 @@ export const StreamingDraftsCtx = createContext<{
  */
 export const LiveToolOutputsCtx = createContext<LiveToolOutputs>(EMPTY_LIVE_TOOL_OUTPUTS);
 
+/**
+ * The workspace's background sub-agents and workflows as the console sees them: the live progress
+ * frames (broadcast-only `task_progress`) and which launching calls are still running (the tray's
+ * list). The share page and the export mount none, and draw the ended progress alone.
+ */
+export type TaskActivity = { live: LiveTaskProgress; running: ReadonlySet<string> };
+export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TASK_PROGRESS, running: new Set() });
+
+/** One call's progress — live while it runs, then what its end carried — and whether it runs. */
+type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
+const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
+
 function StreamingDrafts() {
   const drafts = useContext(StreamingDraftsCtx);
   if (!drafts) return null;
@@ -863,6 +899,17 @@ export const Transcript = memo(function Transcript({
   inserts?: readonly TranscriptInsert[];
 }) {
   const nodes = useMemo(() => buildNodes(events, turnImages), [events, turnImages]);
+  // Only the Agent and Workflow cards read this (TaskBadgeAndStatus, TaskProgressDetail), so a
+  // progress frame re-renders those and nothing else.
+  const activity = useContext(TaskActivityCtx);
+  const ended = useMemo(() => endedTaskProgress(events), [events]);
+  const taskLookup = useMemo<TaskLookup>(
+    () => ({
+      progress: (id) => activity.live.get(id) ?? ended.get(id) ?? null,
+      running: (id) => activity.running.has(id),
+    }),
+    [activity, ended],
+  );
   // Where each insert goes: after the last top-level card at or before its seq, keyed by that
   // card's seq. Whichever half of the split holds the card draws it, so nothing is drawn twice,
   // and an insert older than every loaded card is not drawn at all — UNLESS it says `head`, which
@@ -906,14 +953,16 @@ export const Transcript = memo(function Transcript({
     return at < 0 || at >= nodes.length ? [nodes, [] as Node[]] : [nodes.slice(0, at), nodes.slice(at)];
   }, [nodes, streamingAfterSeq]);
   const body = (
-    <ImagePreviewProvider>
-      {head.map((insert) => (
-        <Fragment key={insert.key}>{insert.element}</Fragment>
-      ))}
-      <NodeList nodes={before} live={live} placed={placed} />
-      <StreamingDrafts />
-      {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
-    </ImagePreviewProvider>
+    <TaskLookupCtx.Provider value={taskLookup}>
+      <ImagePreviewProvider>
+        {head.map((insert) => (
+          <Fragment key={insert.key}>{insert.element}</Fragment>
+        ))}
+        <NodeList nodes={before} live={live} placed={placed} />
+        <StreamingDrafts />
+        {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
+      </ImagePreviewProvider>
+    </TaskLookupCtx.Provider>
   );
   return artifactResolve ? (
     <ArtifactResolverContext.Provider value={artifactResolve}>{body}</ArtifactResolverContext.Provider>
@@ -1020,8 +1069,7 @@ function isGroupableTool(node: Node): node is ToolNode {
     node.name !== 'mcp__orbit__task_create_batch' &&
     node.name !== 'mcp__orbit__task_create' &&
     node.name !== 'mcp__orbit__project_create' &&
-    node.name !== 'Task' &&
-    node.name !== 'Workspace'
+    !isBackgroundTaskCall(node.name)
   );
 }
 
@@ -1130,7 +1178,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       return <UserBubble node={node} />;
     }
     case 'assistant':
-      return <AssistantBubble text={node.text} seq={node.seq} />;
+      return <AssistantBubble text={node.text} seq={node.seq} turnId={node.turnId} ts={node.ts} />;
     case 'thinking':
       return <Thinking text={node.text} seq={node.seq} ms={node.thinkingMs} blocks={node.blocks} />;
     case 'tool':
@@ -1573,6 +1621,8 @@ function UserBubble({ node }: { node: TextNode }) {
   const putBack = useContext(UndeliveredCtx);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  // The bubble itself, so Add to Wiki reads a selection only when it is inside THIS message.
+  const bubbleEl = useRef<HTMLDivElement>(null);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
   // — a reference expansion, a list's condition board, the background work a returning engine is
   // told about, or a promoted coordinator's standing role. Those belong to Orbit, not to the person
@@ -1582,6 +1632,7 @@ function UserBubble({ node }: { node: TextNode }) {
   // and the length cap follow the typed text for the same reason: neither should be measured
   // against a block nobody wrote.
   const typed = node.text;
+  const addWiki = useAddToWiki({ turnId: node.turnId ?? null, messageRef: bubbleEl });
   const attached = node.note ? { kind: describeNote(node.note), text: node.note } : null;
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
@@ -1594,7 +1645,7 @@ function UserBubble({ node }: { node: TextNode }) {
   };
   return (
     <div className="chat-user-wrap">
-      <div className="chat-msg chat-user" data-seq={node.seq}>
+      <div ref={bubbleEl} className="chat-msg chat-user" data-seq={node.seq}>
         <TurnAttachments node={node} />
         {shownText && <MD breaks>{shownText}</MD>}
         {attached && (
@@ -1649,9 +1700,17 @@ function UserBubble({ node }: { node: TextNode }) {
           >
             {copied ? <CheckOutlined /> : <CopyOutlined />}
           </button>
+          {/* A message of the owner's own is an entry waiting to be written just as much as a reply
+              is: design §8.1 has them saying "记到 wiki" in the conversation. Not in the export,
+              where nothing can be pressed, and not on a shared page, where `useAddToWiki` finds no
+              conversation to write as and hands back nothing at all. */}
+          {!exp && addWiki.button}
           {node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
         </div>
       )}
+      {/* Outside the row: the form takes a line of its own rather than sitting beside the copy
+          button in a row that is one line tall. */}
+      {!exp && addWiki.form}
     </div>
   );
 }
@@ -2227,18 +2286,40 @@ export function AssistantBubble({
   text,
   streaming,
   seq,
+  turnId,
+  ts,
 }: {
   text: string;
   streaming?: boolean;
   // Absent for the live draft, which has no persisted event to point at yet.
   seq?: number;
+  // The turn this reply answers, and when it was written. Both absent on the live draft, which has
+  // neither, and a draft is not something anyone records a note from — the row waits for the reply
+  // to settle (`streaming`).
+  turnId?: string | null;
+  ts?: string;
 }) {
+  const exp = useContext(ExportCtx);
+  const el = useRef<HTMLDivElement>(null);
   return (
     <div
+      ref={el}
       className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
       data-seq={seq}
     >
       <MD highlight={!streaming}>{text}</MD>
+      {/* Inside the message, not beside it: the transcript's other readers walk a node's SIBLINGS
+          by `data-seq` (the receipt insert, the jump-to-seq lookup), and a wrapper around the reply
+          would put a stamp-less div between them. The assistant's own box is a plain block with no
+          bubble, so a row under its text is drawn exactly where the mock draws one. */}
+      {!streaming && !exp && text.trim() !== '' && (
+        <AddToWikiRow
+          text={text}
+          turnId={turnId ?? null}
+          messageRef={el}
+          time={ts ? relTime(ts) : null}
+        />
+      )}
     </div>
   );
 }
@@ -2284,15 +2365,17 @@ function useThrottled(value: string, ms: number): string {
 function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const exp = useContext(ExportCtx);
   const [open, setOpen] = useState(!!exp);
-  // Two of the blocks open as something other than their own text: the inventory a returning engine
-  // is handed, whose lines are a list of outcomes, and the tasks a person named with `#`, whose
-  // table holds an id nobody could click. One note can carry both, so each reading is handed what
-  // the one before it did not take and what is left over is drawn as it always was. Their counts go
-  // on the line that names the note shut: "background jobs" alone never said whether opening it was
-  // worth the click.
+  // Three of the blocks open as something other than their own text: the inventory a returning engine
+  // is handed, whose lines are a list of outcomes; the tasks a person named with `#`, whose table
+  // holds an id nobody could click; and the wiki's notes for this codebase, whose lines are what the
+  // agent read before it began. One note can carry several, so each reading is handed what the one
+  // before it did not take and what is left over is drawn as it always was. Their counts go on the
+  // line that names the note shut: "background jobs" alone never said whether opening it was worth
+  // the click.
   const jobs = useMemo(() => parseBackgroundJobs(text), [text]);
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
-  const rest = tasks ? tasks.rest : jobs ? jobs.rest : text;
+  const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
+  const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
   return (
     <div className="chat-injected">
       <button
@@ -2306,10 +2389,11 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
         {jobs && ` · ${summarizeBackgroundJobs(jobs)}`}
       </button>
       {open &&
-        (tasks || jobs ? (
+        (tasks || jobs || wiki ? (
           <>
             {tasks && <ReferencedTaskNote tasks={tasks.tasks} />}
             {jobs && <BackgroundJobsNote jobs={jobs} />}
+            {wiki && <WikiContextNote context={wiki} />}
             {rest !== '' && <pre className="chat-injected-body">{rest}</pre>}
           </>
         ) : (
@@ -2382,6 +2466,24 @@ function resultRepeatsBody(node: ToolNode): boolean {
   return !!batchTasks(node);
 }
 
+/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow. */
+function isBackgroundTaskCall(name: string): boolean {
+  return name === 'Agent' || name === 'Task' || name === 'Workflow';
+}
+
+/**
+ * A result that only says the work STARTED — the async agent's "Async agent launched successfully
+ * … agentId" (internal metadata the agent is told never to quote) or a workflow's "Workflow
+ * launched in background. Task ID …". The card shows what the work did instead: its progress, and a
+ * sub-agent's own transcript.
+ */
+function isLaunchReceipt(node: ToolNode): boolean {
+  const content = node.result?.content;
+  if (!content || node.result?.isError) return false;
+  if (node.name === 'Workflow') return !!workflowLaunchReceipt(content);
+  return (node.name === 'Agent' || node.name === 'Task') && isAsyncAgentLaunchAck(content);
+}
+
 // ── tool calls ──────────────────────────────────────────────────────────────
 // Each tool renders as a single folded row (icon · name · summary · status);
 // clicking expands to show the call body, any sub-workspace transcript, and the
@@ -2441,7 +2543,11 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     () => describeTool(node.name, input, isShell, answer),
     [node.name, input, isShell, answer],
   );
-  const isSubWorkspace = node.name === 'Task' || node.name === 'Workspace';
+  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent';
+  const isBackgroundTask = isBackgroundTaskCall(node.name);
+  const launchReceipt = isLaunchReceipt(node);
+  // A workflow is named by its launch receipt once that lands — see describeTool.
+  const title = node.name === 'Workflow' ? workflowTitle(input, resultContent) ?? summary : summary;
   const p = path ? splitPath(path) : null;
   const hasDetail = !!body || node.children.length > 0 || !!node.result;
   // While an AskUserQuestion or ExitPlanMode is still awaiting the user, the
@@ -2481,10 +2587,16 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             {p.dir && <span className="chat-path-dir">{p.dir}</span>}
           </span>
         ) : (
-          summary && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{summary}</span>
+          title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
         )}
-        {meta && <span className="chat-tool-meta">{meta}</span>}
-        <ToolStatus node={node} live={live} />
+        {isBackgroundTask ? (
+          <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+        ) : (
+          <>
+            {meta && <span className="chat-tool-meta">{meta}</span>}
+            <ToolStatus node={node} live={live} />
+          </>
+        )}
       </div>
       {hasDetail && open && (
         <div className="chat-tool-detail">
@@ -2495,13 +2607,27 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           {node.result?.isError && (
             <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
           )}
+          {node.name === 'Workflow' && (
+            <TaskProgressDetail
+              id={node.id}
+              // Before a runner that reports progress, a workflow's receipt is still all there is.
+              // An agent's ack is internal metadata; its own transcript below says what it did.
+              fallback={
+                launchReceipt && node.name === 'Workflow' ? (
+                  <ToolResult seq={node.seq} content={resultContent} compact />
+                ) : null
+              }
+            />
+          )}
           {body && <div className="chat-tool-body">{body}</div>}
           {node.children.length > 0 && (
             <div className="chat-subagent">
               <NodeList nodes={node.children} live={live} />
             </div>
           )}
-          {node.result && !node.result.isError && !hideResult && (
+          {/* A sub-agent's totals close its transcript rather than open it. */}
+          {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
+          {node.result && !node.result.isError && !hideResult && !launchReceipt && (
             <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
           )}
           {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
@@ -2638,6 +2764,33 @@ function ToolGroupStatus({ status }: { status: ToolGroupSummary['status'] }) {
 // Folded-row status: spinner while a result is still pending on a live session,
 // a neutral dot for an unfinished call on an ended session (e.g. cancelled),
 // otherwise success / error.
+/**
+ * The badge and status of a background agent's or workflow's card: agents done out of all (a
+ * workflow) or tool calls made (an agent), and a spinner for as long as the work runs — the call
+ * itself returned the moment it launched, so its own result would put a check on work just begun.
+ */
+function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boolean; meta?: string }) {
+  const lookup = useContext(TaskLookupCtx);
+  const progress = lookup.progress(node.id);
+  const badge = (progress && progressBadge(progress)) ?? meta;
+  return (
+    <>
+      {badge && <span className="chat-tool-meta">{badge}</span>}
+      {lookup.running(node.id) ? (
+        <LoadingOutlined className="chat-tool-status running" spin />
+      ) : (
+        <ToolStatus node={node} live={live} />
+      )}
+    </>
+  );
+}
+
+/** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */
+function TaskProgressDetail({ id, fallback }: { id: string; fallback?: ReactNode }) {
+  const progress = useContext(TaskLookupCtx).progress(id);
+  return progress ? <TaskProgressBlock progress={progress} /> : <>{fallback}</>;
+}
+
 function ToolStatus({ node, live }: { node: ToolNode; live?: boolean }) {
   if (!node.result) {
     return live ? (
@@ -2755,8 +2908,10 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
       return { label: 'WebSearch', icon: <SearchOutlined />, tone: 'read', summary: i.query };
     case 'ToolSearch':
       return { label: 'ToolSearch', icon: <ApiOutlined />, tone: 'read', summary: i.query, summaryMono: true, body: hasKeys(i) ? <KeyVals obj={i} /> : undefined };
+    // Claude Code's own names — Agent (Task before 2.x). The 08-14 Agent→Workspace rename rewrote
+    // this case too, and from then on every Agent call fell through to the generic row.
     case 'Task':
-    case 'Workspace':
+    case 'Agent':
       return {
         label: `${name}${i.subagent_type ? ` · ${i.subagent_type}` : ''}`,
         icon: <PartitionOutlined />,
@@ -2767,6 +2922,18 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
             <MD>{String(i.prompt)}</MD>
           </div>
         ) : undefined,
+      };
+    case 'Workflow':
+      // A team of agents the runtime runs in the background. Named by the script's own meta
+      // here; ToolView prefers the launch receipt's summary once it lands (a resumed run carries
+      // no script at all). Its progress, not its script, is what the card opens to — the script
+      // is kept below it, folded.
+      return {
+        label: 'Workflow',
+        icon: <ApartmentOutlined />,
+        tone: 'agent',
+        summary: workflowTitle(i, null),
+        body: typeof i.script === 'string' ? <Pre text={i.script} threshold={6} muted /> : undefined,
       };
     case 'ExitPlanMode':
       // The plan is Markdown meant to be read — render it like Task's prompt,

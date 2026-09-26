@@ -7,7 +7,8 @@ import { buildResumeContinuation } from './resume-continuation';
  *
  * Delivery appends context to a person's message — `#`-reference summaries, a list console's
  * condition board, the background work a returning engine is told about, a promoted coordinator's
- * standing role — and leaves `conversation_turn.content` as the words they wrote. The runner echoes
+ * standing role, the wiki's confirmed notes for the codebase (`<orbit_wiki_context>`) — and leaves
+ * `conversation_turn.content` as the words they wrote. The runner echoes
  * what it was handed as the `user` event, so that event's text is both at once, and every client
  * drew all of it inside the person's own bubble: blocks that say "不是用户说的", signed by the user.
  *

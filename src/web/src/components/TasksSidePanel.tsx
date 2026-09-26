@@ -1,6 +1,7 @@
 import {
   ApiOutlined,
   BgColorsOutlined,
+  BookOutlined,
   CaretDownOutlined,
   CheckOutlined,
   CodeOutlined,
@@ -32,7 +33,7 @@ import type {
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { workspaceSessionCountsQuery, meQuery, sessionQuery } from '../lib/queries';
+import { wikiSpacesQuery, workspaceSessionCountsQuery, meQuery, sessionQuery } from '../lib/queries';
 import {
   groupWorkspacesByRunner,
   orderWorkspaceGroupsByRunners,
@@ -41,6 +42,7 @@ import {
 } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
+import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -104,6 +106,11 @@ const TOP: TopNavItem[] = [
     label: 'Projects',
     shortcut: projectsShortcutLabel(),
   },
+  // The Wiki sits under Projects because it is the other thing a codebase has: Projects is the work
+  // in it, and the Wiki is what the work learned. Its amber count is the proposals waiting for the
+  // owner, which is the same `needs-you` pill a workspace row shows — and the same rule applies with
+  // it: a row carrying an amber number shows no shortcut.
+  { key: 'wiki', icon: <BookOutlined />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
@@ -126,6 +133,39 @@ const clampWidth = (w: number): number =>
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
   if (!Number.isInteger(index) || index < 0 || index >= 9) return null;
   return isMac ? `⌘${index + 1}` : `Ctrl ${index + 1}`;
+}
+
+type WorkspaceStepEvent = Pick<
+  KeyboardEvent,
+  'altKey' | 'ctrlKey' | 'defaultPrevented' | 'isComposing' | 'key' | 'metaKey' | 'shiftKey'
+>;
+
+/** Which way a keypress steps the open Workspace — Cmd/Ctrl + Down one row down, Cmd/Ctrl + Up one
+ * row up — or null when it is not that chord, or not the sidebar's to take.
+ *
+ * In a text field the same chord moves the caret (to the field's start or end on a Mac, a paragraph
+ * with Ctrl), so the field keeps it until the caret has nowhere further to go that way, the same wait
+ * the composer's own Up recall makes for the first line. An empty field is at both ends. */
+export function workspaceStepDirection(
+  event: WorkspaceStepEvent,
+  focused: Element | null,
+): 1 | -1 | null {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return null;
+  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return null;
+  // Already taken: the composer's slash/mention/reference menus and the search inputs move their
+  // own highlight on any Up/Down, the chord included.
+  if (event.defaultPrevented || event.isComposing) return null;
+  const dir = event.key === 'ArrowDown' ? 1 : -1;
+  if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) {
+    const edge = dir === 1 ? focused.value.length : 0;
+    // selectionStart is null on inputs without a caret (checkboxes and the like).
+    if (
+      focused.selectionStart !== null &&
+      (focused.selectionStart !== edge || focused.selectionEnd !== edge)
+    )
+      return null;
+  }
+  return dir;
 }
 
 export interface Runner {
@@ -236,11 +276,19 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
   const { mode, setMode } = useThemeMode();
+  // The Wiki's amber count: the proposals waiting for the owner, summed over every space (a wiki
+  // belongs to the account, and Review's own page asks across all of them). Its own key root, so the
+  // control plane's `wiki.changed` refresh reaches it and nothing else has to.
+  const wikiSpaces = useQuery({ ...wikiSpacesQuery(), enabled: !!me.data });
+  const wikiPending = (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0);
+  // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
+  // an entry that led to a refusal would be worse than none.
+  const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
   // Admins get an extra top-nav entry: user management.
   const navItems: TopNavItem[] =
     me.data?.role === 'ADMIN'
-      ? [...TOP, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
-      : TOP;
+      ? [...topItems, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
+      : topItems;
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -264,7 +312,20 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // route. keepPreviousData (above) keeps the last session's data around to avoid
   // flicker between sessions, but that stale data would otherwise keep a workspace
   // row highlighted after navigating away to a list or top-nav route.
-  const activeWorkspaceId = openWorkspaceId ?? (sessionId ? sessionQ.data?.workspace?.id : null) ?? null;
+  //
+  // Nor is the placeholder's workspace read: a workspace switch lands on one of the new
+  // workspace's sessions, so the placeholder is a session of the workspace just left, and the row
+  // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
+  // While the placeholder stands, the row already active holds.
+  const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
+  const activeWorkspaceId =
+    openWorkspaceId ??
+    (sessionId
+      ? sessionQ.isPlaceholderData
+        ? heldWorkspaceId
+        : (sessionQ.data?.workspace?.id ?? null)
+      : null);
+  useEffect(() => setHeldWorkspaceId(activeWorkspaceId), [activeWorkspaceId]);
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
   // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
@@ -279,9 +340,13 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         ? 'runners'
         : loc.pathname.startsWith('/projects/')
           ? 'projects'
-          : loc.pathname.startsWith('/lists/')
-            ? loc.pathname.slice('/lists/'.length)
-            : loc.pathname.slice(1);
+          // Every wiki route — a space, a topic, an entry's drawer, Review — is the Wiki's own
+          // destination, so the row stays lit across all of them.
+          : loc.pathname === '/wiki' || loc.pathname.startsWith('/wiki/')
+            ? 'wiki'
+            : loc.pathname.startsWith('/lists/')
+              ? loc.pathname.slice('/lists/'.length)
+              : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
@@ -487,6 +552,28 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [orderedWorkspaces, openWorkspace]);
 
+  // ⌘/Ctrl + Up/Down steps to the Workspace above/below the open one in the list's order — the
+  // session list's own Up/Down, one level up, stopping at the ends the same way. With no Workspace
+  // open there is nothing to step from, so the chord stays the browser's: a long page's jump to its
+  // top or bottom.
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    const onKey = (e: KeyboardEvent) => {
+      const dir = workspaceStepDirection(e, document.activeElement);
+      if (dir === null) return;
+      // Taken even at the first or last row: the browser's own use of the chord would jump the
+      // conversation to its top or bottom, which is not what "the Workspace above" asked for.
+      e.preventDefault();
+      const from = orderedWorkspaces.findIndex((a) => a.id === activeWorkspaceId);
+      const next = from === -1 ? undefined : orderedWorkspaces[from + dir];
+      // A row with no runner has no console, so openWorkspace ignores it; such rows sort last (the
+      // Shared group), so landing on one is the end of the list.
+      if (next) openWorkspace(next);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeWorkspaceId, orderedWorkspaces, openWorkspace]);
+
   const renderListRow = (l: TaskList) => {
     const key = encodeId(l.id);
     const running = (l.runningTasks ?? 0) > 0;
@@ -556,7 +643,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           task lists) have no icon form, so they fold away — expand to bring them back. The
           workspaces themselves stay as monogram avatars below. Shown only when collapsed, on desktop. */}
       <div className="tp-rail">
-        {TOP.map((t) => (
+        {topItems.map((t) => (
           <div
             key={t.key}
             className={`tp-rail-item ${sel === t.key ? 'active' : ''}`}
@@ -568,6 +655,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
+            {t.key === 'wiki' && wikiPending > 0 && (
+              <span className="tp-rail-badge needs-you">{wikiPending}</span>
+            )}
           </div>
         ))}
         {/* The user's workspaces, kept reachable when collapsed: a monogram avatar each
@@ -620,13 +710,23 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
-              {t.shortcut && (
-                <kbd
-                  className="tp-count tp-nav-shortcut"
-                  title={`Open ${t.label} with ${t.shortcut}`}
+              {t.key === 'wiki' && wikiPending > 0 ? (
+                <span
+                  className="tp-count needs-you"
+                  title={wikiProposalsToReview(wikiPending)}
+                  aria-label={wikiProposalsToReview(wikiPending)}
                 >
-                  {t.shortcut}
-                </kbd>
+                  {wikiPending}
+                </span>
+              ) : (
+                t.shortcut && (
+                  <kbd
+                    className="tp-count tp-nav-shortcut"
+                    title={`Open ${t.label} with ${t.shortcut}`}
+                  >
+                    {t.shortcut}
+                  </kbd>
+                )
               )}
             </div>
           ))}
@@ -784,9 +884,13 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
 /** The trailing status slot shared by the expanded row and collapsed rail.
  *
- * Attention wins first. In the expanded list, Runner availability lives on the leading folder;
- * this slot therefore stays empty for offline and merely suppresses a stale spinner. The compact
- * rail keeps its existing Disconnect overlay here because its avatar is a separate surface.
+ * In the expanded list — the desktop sidebar and the <=960px drawer alike — this slot is the
+ * needs-you count's alone: activity and Runner availability live on the leading folder, so every
+ * row's marks line up in one column whether or not a count sits at the row's far end. The compact
+ * rail pins the count to the avatar's top corner and activity to its bottom one: beside it rather
+ * than replaced by it, because the two answer different questions and the server leaves the
+ * sessions waiting on you out of `running`/`jobs`. The rail keeps its existing Disconnect overlay
+ * in that bottom corner because its avatar is a separate surface, and a count still outranks it.
  */
 export function WorkspaceStateMark({
   offline,
@@ -804,9 +908,10 @@ export function WorkspaceStateMark({
   runnerLabel?: string;
   compact?: boolean;
 }) {
+  let badge: ReactNode = null;
   if (needsYou > 0) {
     const title = `${needsYou} ${needsYou === 1 ? 'session needs' : 'sessions need'} your reply`;
-    return (
+    badge = (
       <span
         className={compact ? 'tp-rail-badge needs-you' : 'tp-count needs-you'}
         title={title}
@@ -816,8 +921,9 @@ export function WorkspaceStateMark({
       </span>
     );
   }
+  if (!compact) return badge;
   if (offline) {
-    if (!compact) return null;
+    if (badge) return badge;
     const title = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
     return (
       <Tooltip title={title}>
@@ -831,14 +937,17 @@ export function WorkspaceStateMark({
   }
   if (running) {
     return (
-      <Tooltip title="Running">
-        <LoadingOutlined
-          className={compact ? 'tp-rail-running' : 'tp-workspace-running'}
-          spin
-          aria-label="Session running"
-          style={{ color: 'var(--brand)', fontSize: 16 }}
-        />
-      </Tooltip>
+      <>
+        <Tooltip title="Running">
+          <LoadingOutlined
+            className="tp-rail-running"
+            spin
+            aria-label="Session running"
+            style={{ color: 'var(--brand)', fontSize: 16 }}
+          />
+        </Tooltip>
+        {badge}
+      </>
     );
   }
   // Below the spinner and said in the terminal glyph's own words: something is running here, but
@@ -847,18 +956,21 @@ export function WorkspaceStateMark({
   if (jobs > 0) {
     const title = `${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`;
     return (
-      <Tooltip title={title}>
-        <CodeOutlined
-          // In the collapsed rail this mark sits at the avatar's corner like the spinner it
-          // replaces, and the desktop rule below turns it into a quiet dot there.
-          className={compact ? 'tp-rail-jobs status-glyph-active' : 'status-glyph-active'}
-          aria-label={title}
-          style={{ color: 'var(--text-3)', fontSize: 16 }}
-        />
-      </Tooltip>
+      <>
+        <Tooltip title={title}>
+          <CodeOutlined
+            // In the collapsed rail this mark sits at the avatar's corner like the spinner it
+            // replaces, and the desktop rule below turns it into a quiet dot there.
+            className="tp-rail-jobs status-glyph-active"
+            aria-label={title}
+            style={{ color: 'var(--text-3)', fontSize: 16 }}
+          />
+        </Tooltip>
+        {badge}
+      </>
     );
   }
-  return null;
+  return badge;
 }
 
 // A compact, permanently visible workspace row. Its folder occupies the same icon column as the
@@ -886,12 +998,14 @@ export function WorkspaceRow({
   onOpen: (a: Workspace) => void;
 }) {
   const offlineTitle = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
-  // Attention and disconnection remain higher priority than background activity. CSS reveals this
-  // quiet mark on the expanded desktop sidebar; the mobile drawer keeps its trailing spinner.
-  const showRunningDot = running && !offline && needsYou === 0;
+  // Disconnection remains higher priority than background activity. A needs-you count does not
+  // hide it: the count sits at the row's other end, and the server leaves the sessions waiting on
+  // you out of `running` and `jobs`, so a dot beside it is other work still moving. The desktop
+  // sidebar and the drawer draw this same quiet mark.
+  const showRunningDot = running && !offline;
   // One slot, one blue: this dot means a job is in flight here with nobody generating, which the
   // still dot above outranks when generation happens. The two differ by breathing only.
-  const showJobsDot = jobs > 0 && !running && !offline && needsYou === 0;
+  const showJobsDot = jobs > 0 && !running && !offline;
   return (
     <div
       className={`tp-item ${active ? 'active' : ''}`}

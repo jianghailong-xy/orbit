@@ -1242,6 +1242,10 @@ export interface ClaimedSession {
    *  docs/watch-rollout.md). Injected as ORBIT_WATCHES=off so `orbit mcp` leaves out the watch tools and waits
    *  inline, and the bg-guard hook lets polling through, as before watches. Absent means on. */
   watchesDisabled?: boolean;
+  /** Present, and true, only when the Orbit wiki is not switched on for this session's owner (the apiserver's
+   *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
+   *  tools. Absent means on. */
+  wikiDisabled?: boolean;
   /** How many spawn links sit above this session (a root is 0), injected as
    *  ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
    *  nested wait always finishes inside the wait that is waiting on it. */
@@ -1593,6 +1597,8 @@ export interface ReclaimSession {
   allowOrchestration?: boolean;
   /** Watch not switched on for the owner, cf. ClaimedSession.watchesDisabled. */
   watchesDisabled?: boolean;
+  /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
+  wikiDisabled?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */
   orchestrationToken?: string;
   /** The SOURCE snapshot, cf. ClaimedSession.source. On reclaim it is read, never re-derived

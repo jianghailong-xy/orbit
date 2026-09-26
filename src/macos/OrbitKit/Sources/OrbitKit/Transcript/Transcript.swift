@@ -375,6 +375,13 @@ public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
     /// tray's "5m ago". Optional, so it's nil until an event carrying `ts` lands and old snapshots
     /// still decode (synthesized Codable reads a missing optional as nil). Web parity: `BgShell.startedTs`.
     public var startedAt: String? = nil
+    /// What launched it: `shell` (Bash run_in_background), `agent` (an async Agent call) or
+    /// `workflow` (a Workflow call). Nil on rows from before this existed and on a row known only
+    /// from its end. Web parity: `BgShell.kind`.
+    public var kind: String? = nil
+    /// The runtime's own id for the task — the shell id, the agent id, the workflow's task id — read
+    /// off the launch receipt. It is what a completion that names no tool_use id is matched by.
+    public var taskId: String? = nil
 }
 
 /// A live tool-permission / question / plan prompt awaiting a human decision.

@@ -1027,7 +1027,6 @@ struct NewSessionView: View {
                     }
                     .padding(.bottom, .composerBandGap)
                 }
-                ComposerAttachmentsView(console: draft)
                 ComposerView(console: draft, autoFocus: true)
             }
         }

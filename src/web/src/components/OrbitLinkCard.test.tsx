@@ -46,6 +46,7 @@ const TASK = '34TcwNgAIo6tGUiIKjqnQ';
 const SESSION = '34TYUP5wb87XfuYCInJRY';
 const PROJECT = '34Tcl0kralZrY8opuLJU4';
 const LIST = '347en66xizlGSG9a6Nej5';
+const WIKI = '34UDFnrgM4q5oGQloG3uq';
 const AT = '2026-09-23T12:00:00.000Z';
 
 let container: HTMLDivElement;
@@ -175,6 +176,26 @@ const previews = {
       ...over,
     },
   }),
+  wiki: (over: Record<string, unknown> = {}): LinkPreview => ({
+    kind: 'wiki',
+    id: WIKI,
+    state: 'ok',
+    wiki: {
+      spaceId: '34Tcl0kralZrY8opuLJU4',
+      spaceSlug: 'orbit',
+      kind: 'principle',
+      title: 'A clock never starts agent work',
+      summary:
+        'Work starts from a committed fact (evidence revised, a receipt written, a turn ended); '
+        + 'elapsed time may only reassign an open item to a person.',
+      trust: 'owner',
+      status: 'active',
+      anchorState: 'verified',
+      anchorCheckedRef: '4db4f9f0c1a2b3d4e5f60718293a4b5c6d7e8f90',
+      anchor: { type: 'path', path: 'open-item-escalation.service.ts' },
+      ...over,
+    },
+  }),
 };
 
 const text = (selector: string) =>
@@ -192,7 +213,7 @@ async function renderCard(linkRef: OrbitLinkRef, preview?: LinkPreview) {
   return container.firstElementChild as HTMLElement;
 }
 
-describe('the four cards', () => {
+describe('the cards, one per kind', () => {
   it('draws a task: its pill, the project it is filed under, and how its run came out', async () => {
     const card = await renderCard(link('task', TASK, `${BASE}/tasks/${TASK}`), previews.task());
     expect(card.dataset.state).toBe('ready');
@@ -267,6 +288,41 @@ describe('the four cards', () => {
     expect(text('.olc-kind')).toEqual(['Task list']);
     expect(text('.olc-title')).toEqual(['FineWeb Parquet 文件下载（手动启动）']);
     expect(text('.olc-line')).toEqual(['Done 117 / 27,468 · Open 27,350 · Failed 1']);
+  });
+
+  it('draws a wiki entry: its kind beside the type, its trust, its anchor, and its page', async () => {
+    await renderCard(
+      { target: { kind: 'wiki', id: decodeId(WIKI) as string }, source: { kind: 'ref', ref: `orbit-wiki:${WIKI}` } },
+      previews.wiki(),
+    );
+    // "Wiki · Principle", the way the push block's own lines open (`[Principle] …`).
+    expect(text('.olc-kind')).toEqual(['Wiki · Principle']);
+    // The trust badge the Wiki's own pages wear, in the same word and the same tone.
+    expect(text('.olc-state, .tdp-badge')).toContain('Owner');
+    expect(container.querySelector('.tdp-badge.tone-owner')).toBeTruthy();
+    expect(text('.olc-title')).toEqual(['A clock never starts agent work']);
+    expect(text('.olc-line-text')[0]).toContain('Work starts from a committed fact');
+    // What the entry stands on: the anchor's own word, then the path itself. The mark is the glyph
+    // beside the text (`WikiAnchorMark`), which is why the text is read on its own.
+    expect(text('.wk-anchor')).toEqual(['4db4f9f']);
+    expect(text('.olc-line-text')[1]).toBe('open-item-escalation.service.ts');
+    // An entry's page takes its space as well as its id, so the href is the server's slug plus the
+    // id the link named.
+    expect(container.querySelector('.olc-title a')?.getAttribute('href')).toBe(`/wiki/orbit/e/${WIKI}`);
+  });
+
+  it('says an entry agents no longer get, and one with nothing to check it against', async () => {
+    await renderCard(
+      { target: { kind: 'wiki', id: decodeId(WIKI) as string }, source: { kind: 'ref', ref: `orbit-wiki:${WIKI}` } },
+      previews.wiki({ status: 'retired', anchorState: 'changed', anchor: null }),
+    );
+    expect(text('.olc-line-text')).toEqual([
+      'Work starts from a committed fact (evidence revised, a receipt written, a turn ended); '
+        + 'elapsed time may only reassign an open item to a person.',
+      'No anchor',
+      'no longer sent to agents',
+    ]);
+    expect(text('.wk-anchor')).toEqual(['Changed']);
   });
 });
 
@@ -351,7 +407,9 @@ function answers() {
               ? previews.session()
               : ref.kind === 'project'
                 ? previews.project()
-                : previews.list(),
+                : ref.kind === 'wiki'
+                  ? previews.wiki()
+                  : previews.list(),
         ),
       });
     }
@@ -437,7 +495,7 @@ describe('a conversation page', () => {
 describe('the shared page and the export', () => {
   it('draws no card and asks for no card data on a shared session', async () => {
     fetchMock = vi.fn(async (url: string) =>
-      url === '/api/shared/token-1'
+      url.startsWith('/api/shared/token-1?')
         ? okJson({
             title: 'x',
             workspaceName: 'orbit',
@@ -463,10 +521,11 @@ describe('the shared page and the export', () => {
     expect(container.querySelectorAll('.orbit-link-card')).toHaveLength(0);
     // The page read the session it was pointed at, and nothing else asked anything: a visitor here
     // may not be signed in at all, so a card is not a thing this page may try to draw.
-    expect(requests().map(([url]) => url)).toEqual(['/api/shared/token-1']);
-    // The link is still the link it was: this deployment's own address, said in the app's own
-    // route (`SameOriginLink` keeps a same-origin destination inside the SPA).
-    expect(container.querySelector(`a[href="/tasks/${TASK}"]`)).toBeTruthy();
+    expect(requests().map(([url]) => url)).toEqual(['/api/shared/token-1?limit=200&maxPayload=2048']);
+    // The address stays in the text, but not as a link: to a signed-out reader an app page is a
+    // sign-in page, so a public page draws it as its words (PublicLinkResolverCtx).
+    expect(container.querySelector(`a[href="/tasks/${TASK}"]`)).toBeNull();
+    expect(container.textContent).toContain(`${BASE}/tasks/${TASK}`);
   });
 
   it('draws no card and asks for no card data in an exported file', async () => {

@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Modal, Spin } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import type { SessionSearchHit } from '@orbit/shared';
+import type { SessionSearchHit, WikiSearchRow } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
-import { sessionSearchQuery } from '../lib/queries';
+import { sessionSearchQuery, wikiSearchQuery } from '../lib/queries';
 import { splitHighlight } from '../lib/searchHighlight';
 import { sessionLifecycleStateOf } from '../lib/sessionState';
+import { wikiAnchorMark, wikiKindWord, WIKI_TRUST_LABELS, WIKI_TITLE } from '../lib/wiki';
+import { useWikiShown } from '../lib/useWikiShown';
+import { WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
 import { StatusIcon, statusLabel } from './WorkspaceView';
 
 // Matches the server's CONTENT_MIN_CHARS. Below it the search only matches names (session title,
@@ -53,13 +56,92 @@ const MATCH_LABEL: Partial<Record<SessionSearchHit['matchField'], string>> = {
 };
 
 
+/** The placeholder: what this palette searches. Both, since the wiki group comes first. */
+export const SEARCH_PLACEHOLDER = 'Search sessions and the wiki…';
+/** The same, for an account the server has not switched the wiki on for: the palette it was before the wiki. */
+export const SEARCH_PLACEHOLDER_SESSIONS = 'Search sessions…';
+/** The foot, when nothing is typed. */
+export const SEARCH_FOOT_IDLE = 'Recent sessions';
+/** The foot, when something is. Says which side is being searched first. */
+export const SEARCH_FOOT_SEARCHING = 'Searching the wiki, then session titles, messages, workspaces and tasks';
+/** The same, without the wiki. */
+export const SEARCH_FOOT_SEARCHING_SESSIONS = 'Searching IDs, titles, messages, workspaces and tasks';
+/** The two group headings: the wiki's, with the count of hits under it, and the sessions'. */
+export const SEARCH_WIKI_GROUP = WIKI_TITLE;
+export const SEARCH_GROUP_SESSIONS = 'Sessions';
+/** What a wiki row says when the entry is filed under no topic. */
+export const WIKI_ROW_NO_TOPIC = 'No topic';
+
 /**
- * The ⌘K session palette. Mounted once by the app shell, so it works from every route.
+ * Where a wiki row's click goes: the entry's own page, which takes its space as well as its id.
+ *
+ * The space's slug is what `?include=space` is for. A hit answered without one — a control plane
+ * that is one release behind — falls back to the Wiki itself rather than to a page built from an
+ * id that names no page (`/wiki/<id>` is not a route this deployment serves).
+ */
+export function wikiRowHref(hit: WikiSearchRow): string {
+  return hit.spaceSlug
+    ? `/wiki/${encodeURIComponent(hit.spaceSlug)}/e/${encodeURIComponent(hit.id)}`
+    : '/wiki';
+}
+
+/** One wiki hit: the kind's mark, the title, its trust — then kind, topic and the anchor check. */
+function WikiRow({
+  hit,
+  active,
+  onHover,
+  onOpen,
+}: {
+  hit: WikiSearchRow;
+  active: boolean;
+  onHover: () => void;
+  onOpen: () => void;
+}) {
+  const anchor = wikiAnchorMark({ anchorState: hit.anchorState, anchorCheckedRef: hit.anchorCheckedRef ?? null });
+  return (
+    <div
+      className={`ssearch-row${active ? ' active' : ''}`}
+      onMouseEnter={onHover}
+      onClick={onOpen}
+    >
+      <WikiKindMark kind={hit.kind} />
+      <div className="ssearch-body">
+        <div className="ssearch-title-line">
+          <span className="ssearch-title">{hit.title}</span>
+          <WikiTrustBadge trust={hit.trust} />
+        </div>
+        <div className="ssearch-meta">
+          <span className="ssearch-workspace">{wikiKindWord(hit.kind)}</span>
+          <span>{hit.topics?.[0] ?? WIKI_ROW_NO_TOPIC}</span>
+          {anchor && <WikiAnchorMark mark={anchor} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The ⌘K search palette. Mounted once by the app shell, so it works from every route.
  *
  * It searches across everything the sidebar can't reach in one place: every workspace, every runner,
  * and the Completed / Trash scopes as well as Open. With an empty query it lists
  * recents, which makes the same keystroke a fast session switcher.
+ *
+ * THE WIKI IS A GROUP ABOVE THE SESSIONS, AND ITS OWN READS. Entries come from `/wiki/search`
+ * (`wikiSearchQuery`) and their hits are drawn by the code below rather than pushed through
+ * `SessionSearchHit`: a wiki entry is not a session — the session shape has no room for a kind, a
+ * trust or a topic — and every session hit's click goes to `/sessions/<id>`, which is not where an
+ * entry lives. A client that decoded one as the other would fail on the whole answer, which is why
+ * the two are two endpoints and two row builders (design §6, `GET /wiki/search`).
+ *
+ * One cursor covers both groups: the rows are concatenated for the keyboard (↑↓ and ⏎), so Enter
+ * opens whatever the highlight is on — an entry's page, or a conversation.
  */
+export interface SearchRow {
+  key: string;
+  hit: SessionSearchHit | WikiSearchRow;
+  kind: 'session' | 'wiki';
+}
 export function SessionSearch() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -126,16 +208,36 @@ export function SessionSearch() {
     placeholderData: keepPreviousData,
   });
 
+  // The wiki answers the same keystrokes: one debounce, two requests, two draws. Without a query
+  // there is nothing to look up, and the palette stays the session switcher it has always been —
+  // as it does for an account the server has not switched the wiki on for, which is never asked.
+  const wikiOn = useWikiShown();
+  const wiki = useQuery({
+    ...wikiSearchQuery(debounced.trim()),
+    enabled: open && debounced.trim() !== '' && wikiOn,
+  });
+
   const hits = useMemo(() => search.data?.hits ?? [], [search.data]);
+  const wikiHits = useMemo(() => (wikiOn ? (wiki.data?.hits ?? []) : []), [wikiOn, wiki.data]);
+  // One cursor over both groups: the wiki is drawn first, so it is walked first.
+  const rows = useMemo<SearchRow[]>(
+    () => [
+      ...wikiHits.map((hit) => ({ key: `wiki:${hit.id}`, hit, kind: 'wiki' as const })),
+      ...hits.map((hit) => ({ key: `session:${hit.id}`, hit, kind: 'session' as const })),
+    ],
+    [wikiHits, hits],
+  );
 
   // Any new result set re-homes the selection to the top; keeping the old index would leave the
   // highlight on an unrelated row.
-  useEffect(() => setActive(0), [search.data]);
+  useEffect(() => setActive(0), [search.data, wiki.data]);
 
-  const openHit = useCallback(
-    (hit: SessionSearchHit) => {
+  const openRow = useCallback(
+    (row: SearchRow | undefined) => {
+      if (!row) return;
       setOpen(false);
-      navigate(`/sessions/${encodeId(hit.id)}`);
+      if (row.kind === 'wiki') navigate(wikiRowHref(row.hit as WikiSearchRow));
+      else navigate(`/sessions/${encodeId((row.hit as SessionSearchHit).id)}`);
     },
     [navigate],
   );
@@ -155,14 +257,13 @@ export function SessionSearch() {
   const onInputKey = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActive((i) => Math.min(i + 1, hits.length - 1));
+      setActive((i) => Math.min(i + 1, rows.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActive((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const hit = hits[active];
-      if (hit) openHit(hit);
+      openRow(rows[active]);
     }
   };
 
@@ -207,15 +308,36 @@ export function SessionSearch() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onInputKey}
           onBlur={onInputBlur}
-          placeholder="Search sessions…"
+          placeholder={wikiOn ? SEARCH_PLACEHOLDER : SEARCH_PLACEHOLDER_SESSIONS}
           spellCheck={false}
           autoComplete="off"
         />
-        {search.isFetching && <Spin size="small" />}
+        {(search.isFetching || wiki.isFetching) && <Spin size="small" />}
       </div>
 
       <div className="ssearch-list" ref={listRef}>
-        {hits.length === 0 && !search.isFetching && (
+        {/* The wiki first, and only when something was typed: the group's heading is what says the
+            palette searched it at all, and an empty query is the session switcher it always was. */}
+        {trimmed !== '' && wikiHits.length > 0 && (
+          <>
+            <div className="wk-pal-group">
+              {SEARCH_WIKI_GROUP} <span className="n">{wikiHits.length}</span>
+            </div>
+            {wikiHits.map((hit, i) => (
+              <WikiRow
+                key={hit.id}
+                hit={hit}
+                active={i === active}
+                onHover={() => setActive(i)}
+                onOpen={() => openRow(rows[i])}
+              />
+            ))}
+          </>
+        )}
+        {trimmed !== '' && wikiHits.length > 0 && hits.length > 0 && (
+          <div className="wk-pal-group">{SEARCH_GROUP_SESSIONS}</div>
+        )}
+        {hits.length === 0 && wikiHits.length === 0 && !search.isFetching && !wiki.isFetching && (
           <div className="ssearch-empty">
             {trimmed ? `No sessions match “${trimmed}”.` : 'No sessions yet.'}
           </div>
@@ -223,12 +345,13 @@ export function SessionSearch() {
         {hits.map((hit, i) => {
           const badge = scopeBadge(hit);
           const matchLabel = MATCH_LABEL[hit.matchField];
+          const at = wikiHits.length + i;
           return (
             <div
               key={hit.id}
-              className={`ssearch-row${i === active ? ' active' : ''}`}
-              onMouseEnter={() => setActive(i)}
-              onClick={() => openHit(hit)}
+              className={`ssearch-row${at === active ? ' active' : ''}`}
+              onMouseEnter={() => setActive(at)}
+              onClick={() => openRow(rows[at])}
             >
               <StatusIcon session={hit} />
               <div className="ssearch-body">
@@ -274,10 +397,12 @@ export function SessionSearch() {
         ) : (
           <span>
             {!trimmed
-              ? 'Recent sessions'
+              ? SEARCH_FOOT_IDLE
               : capped
                 ? `Top ${hits.length} of ${total} matching sessions`
-                : 'Searching IDs, titles, messages, workspaces and tasks'}
+                : wikiOn
+                  ? SEARCH_FOOT_SEARCHING
+                  : SEARCH_FOOT_SEARCHING_SESSIONS}
           </span>
         )}
         <span className="ssearch-keys">

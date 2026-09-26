@@ -88,6 +88,26 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 	}
 }
 
+// updateWhenNoTurnInFlight reports an update check's release only once the pool has closed for it,
+// which it does only while no turn is in flight (closeForUpdate). While any turn runs, the check
+// reports nothing and logs one line, and the next tick asks again: the release stays published, so
+// waiting loses nothing. There is no deadline after which the update stops waiting — a runner busy
+// at every check stays on its release until a check finds it idle.
+func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, interval time.Duration) selfUpdateChecker {
+	return func(ctx context.Context, server string) (string, bool) {
+		remote, ok := check(ctx, server)
+		if !ok {
+			return "", false
+		}
+		if n := pool.closeForUpdate(); n > 0 {
+			logln(fmt.Sprintf("orbit %s update available; deferred — %d turn(s) in flight, checking again in %s",
+				remote, n, interval))
+			return "", false
+		}
+		return remote, true
+	}
+}
+
 // restartForUpdate gives a stop signal received during session drain the final
 // say. signal.Stop is called before this in runLoop, so an empty channel is a
 // stable result rather than a race with a later signal delivery.
@@ -333,6 +353,8 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		AgentID:            r.AgentID,
 		TaskID:             r.TaskID,
 		AllowOrchestration: r.AllowOrchestration,
+		WatchesDisabled:    r.WatchesDisabled,
+		WikiDisabled:       r.WikiDisabled,
 		OrchestrationToken: r.OrchestrationToken,
 		Reclaimed:          true,
 		SessionUUID:        r.SessionUUID,
@@ -837,7 +859,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	var updateRequested atomic.Bool
 	var check selfUpdateChecker
 	if selfUpdateEnabled() {
-		check = availableSelfUpdate
+		check = updateWhenNoTurnInFlight(availableSelfUpdate, pool, selfUpdateCheckInterval)
 	}
 	go func() {
 		defer close(monitorDone)
@@ -847,7 +869,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		}
 		if reason == runLoopStopUpdate {
 			updateRequested.Store(true)
-			logln(fmt.Sprintf("orbit %s update available; stopping claims and draining sessions", remote))
+			logln(fmt.Sprintf("orbit %s update available and no turn in flight; stopping claims and draining sessions", remote))
 			// The cause tells each session's drain that this stop re-executes, so its jobs are handed
 			// on rather than ended (handOffJobs).
 			stopLoop(errRunnerSelfUpdate)

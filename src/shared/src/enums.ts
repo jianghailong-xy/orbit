@@ -314,6 +314,12 @@ export enum RunEventType {
   // the process's output file (broadcast-only animation, like *_DELTA — not persisted).
   BACKGROUND_TASK = 'background_task',
   BACKGROUND_OUTPUT = 'background_output',
+  // How far a background sub-agent or workflow has got, relayed from Claude Code's
+  // `task_started`/`task_progress` frames (runner-go claude_task_progress.go) and keyed by the
+  // launching Agent/Workflow call's tool_use id. Broadcast-only like BACKGROUND_OUTPUT: frequent,
+  // and each one restates the whole picture. The last one rides the durable BACKGROUND_TASK that
+  // ends the task, as its `progress`.
+  TASK_PROGRESS = 'task_progress',
   // Control-plane-internal lifecycle signals (a session entered / left the Open list).
   // They ride the same realtime hub as run events — buying the cross-replica NOTIFY bridge for
   // free — but are NEVER persisted to run_events (the `type` column is a plain String, so no
@@ -353,6 +359,13 @@ export enum RunEventType {
   // correctness never depends on it (docs/watch-contract.md §8.1): the watch list's own poll and
   // the leased reconciliation sweep are what make a lost one a latency bug and nothing else.
   WATCH_CHANGED = 'watch_changed',
+  // One of the owner's wiki spaces changed: a changeset recorded something, the owner decided ops in
+  // Review, or the space's own settings or bindings moved. Owner-scoped like the libraries above —
+  // the wiki belongs to the account, not to the session that proposed into it — and only a nudge
+  // carrying the SPACE's id: no entry, title, status, op or count (contract `realtime.redaction`).
+  // Nothing depends on it (contract `realtime.correctness`): the wiki pages re-read on focus and on
+  // reconnect, so a dropped one costs latency and nothing else.
+  WIKI_CHANGED = 'wiki_changed',
 }
 
 /** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
@@ -368,7 +381,8 @@ export function isLifecycleType(t: RunEventType): boolean {
     t === RunEventType.TAG_CHANGED ||
     t === RunEventType.PROVIDER_CHANGED ||
     t === RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED ||
-    t === RunEventType.WATCH_CHANGED
+    t === RunEventType.WATCH_CHANGED ||
+    t === RunEventType.WIKI_CHANGED
   );
 }
 

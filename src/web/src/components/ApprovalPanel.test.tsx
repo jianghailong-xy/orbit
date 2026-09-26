@@ -606,7 +606,7 @@ describe('one waiting completion decision on the session page', () => {
       if (path === `/projects/${PROJECT_ID}`) return reply({ id: PROJECT_ID, acceptanceCriteriaItems: [] });
       if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
       if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
-      if (path === '/providers' || path === '/providers/pools' || path === '/session-tags' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true') return reply([]);
+      if (path === '/providers' || path === '/providers/pools' || path === '/session-tags' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true' || path === '/wiki/spaces') return reply([]);
       unstubbed.push(path);
       return reply([]);
     });

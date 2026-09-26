@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>01 wiki home</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="wiki-desktop.css">
+<style>
+  /* the sidebar in this frame is a static picture: let the marks and the tooltip hang over its edge */
+  .frame .tp-scroll { overflow: visible; }
+  .frame .app-nav { width: 280px; }
+  .tp-item.m-mark { outline-offset: 2px; }
+  .tp-item.m-mark > .m-n { top: -11px; right: -16px; }
+
+  .wk-head.m-mark { outline-offset: 6px; }
+  .project-integration.m-mark { outline-offset: 4px; margin-top: 14px; }
+  .project-integration-facts b.warn { color: var(--warning); }
+  .project-integration-facts .ok { color: var(--success); font-weight: 600; }
+
+  .wk-topics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+  .wk-topic { padding: 10px 12px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); min-width: 0; }
+  .wk-topic-h { display: flex; align-items: center; gap: 8px; }
+  .wk-topic-n { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wk-topic-c { flex: none; font-size: 11.5px; font-weight: 600; color: var(--text-2); background: var(--fill-muted); border-radius: 999px; padding: 1px 7px; }
+  .wk-topic-l { margin-top: 6px; font-size: 12px; line-height: 1.5; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical; overflow: hidden; min-height: 36px; }
+  .wk-topic-l b { font-weight: 600; color: var(--text-1); }
+  .wk-topic-l .when { color: var(--text-3); }
+
+  .wk-dec { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 2px;
+            border-top: 1px solid var(--border-subtle); }
+  .wk-dec.first { border-top: 0; }
+  .wk-dec .d { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-3); }
+  .wk-dec .t { font-size: 13.5px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wk-dec .s { margin-top: 2px; font-size: 12.5px; color: var(--text-3); display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .wk-dec .s .x { text-decoration: line-through; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+  .wk-review .project-open-items-head .tp-count.needs-you { font-size: 12px; }
+  .wk-rv-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; line-height: 18px; }
+  .wk-rv-row.first { border-top: 0; }
+  .wk-rv-row .t { flex: 1; min-width: 0; color: var(--text-1); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .wk-rv-row .a { flex: none; color: var(--text-3); font-size: 12px; }
+  .wk-rv-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .wk-rv-foot .hint { font-size: 12px; color: var(--text-3); }
+
+  .wk-tl { list-style: none; margin: 4px 0 0; padding: 0; }
+  .wk-tl li { position: relative; display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 8px; padding: 6px 0; }
+  .wk-tl li::before { content: ""; position: absolute; left: 3px; top: 20px; bottom: -8px; width: 1px; background: var(--border); }
+  .wk-tl li:last-child::before { display: none; }
+  .wk-tl .wk-dot { margin-top: 6px; }
+  .wk-tl-h { display: flex; align-items: baseline; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+  .wk-tl-h b { color: var(--text-1); font-weight: 600; }
+  .wk-tl-h .when { margin-left: auto; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+  .wk-tl-t { font-size: 13px; line-height: 1.45; color: var(--brand); }
+  .wk-tl-n { font-size: 12px; color: var(--text-3); }
+  .wk-tl .retired .wk-tl-t { color: var(--text-2); text-decoration: line-through; }
+
+  .wk-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-top: 8px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; }
+  .wk-stats > div { background: var(--bg-raised); padding: 8px 10px 9px; }
+  .wk-stats .n { font-size: 26px; font-weight: 650; line-height: 1.2; color: var(--text-1); }
+  .wk-stats .l { font-size: 12px; line-height: 1.35; color: var(--text-3); }
+  .wk-bars { margin-top: 12px; }
+  .wk-bars .h { margin: 0 0 2px; font-size: 11.5px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; color: var(--text-3); }
+  .wk-bar { padding: 5px 0 4px; }
+  .wk-bar .t { font-size: 12.5px; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wk-bar .b { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .wk-bar .b i { display: block; height: 6px; border-radius: 0 4px 4px 0; background: var(--brand); }
+  .wk-bar .b .v { font-size: 12px; color: var(--text-2); }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');const h=Math.ceil(s.getBoundingClientRect().height);document.title='01 wiki home · H='+h;document.body.setAttribute('data-h',String(h))})</script>
+</head>
+<body class="m">
+<script src="wiki-desktop-icons.js"></script>
+<div class="m-sheet wide">
+  <h1 class="m-h1 zh">01 · Wiki 首页：一个代码库一份，先看原则，再按主题往下找</h1>
+  <p class="m-sub zh">Web · /wiki，space = orbit（HEAD <code>4db4f9f</code>）。整页新增，已有界面只在侧栏多一行入口 ①。数据取自 orbit 仓库真实历史；界面文案英文，批注中文。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">新增</span>桌面 1440 视口：侧栏 280 + 内容列 1040；右栏 320 放「等你做的」和「最近动了什么」</div>
+    <div class="frame">
+      <div class="app-shell">
+        <aside class="app-nav">
+          <div class="tp-brand">
+            <span class="tp-brand-logo"><svg width="22" height="22" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="og-nav" x1="14" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse"><stop stop-color="#5b8bff"/><stop offset="1" stop-color="#3370ff"/></linearGradient></defs><g transform="rotate(-26 32 32)"><ellipse cx="32" cy="32" rx="28" ry="12.5" stroke="url(#og-nav)" stroke-width="3.4" opacity="0.6"/><circle cx="56" cy="25.6" r="5.4" fill="url(#og-nav)"/></g><rect x="19" y="20" width="26" height="24" rx="6" fill="url(#og-nav)"/><path d="M25 27.5 L30 32 L25 36.5" stroke="#fff" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/><line x1="33" y1="35.8" x2="39.5" y2="35.8" stroke="#fff" stroke-width="2.9" stroke-linecap="round"/></svg></span>
+            <span class="tp-brand-name">Orbit</span>
+            <span class="tp-collapse-btn"><svg class="ic"><use href="#i-menu-fold"/></svg></span>
+          </div>
+          <div class="tp-scroll">
+            <div class="tp-section">
+              <div class="tp-item"><span class="tp-ico"><svg class="ic"><use href="#i-project"/></svg></span><span class="tp-label">Projects</span><kbd class="tp-count tp-nav-shortcut">⌘P</kbd></div>
+              <div class="tp-item active m-mark"><span class="m-n">1</span><span class="tp-ico"><svg class="ic"><use href="#i-book"/></svg></span><span class="tp-label">Wiki</span><span class="tp-count needs-you">3</span></div>
+              <div class="tp-item"><span class="tp-ico"><svg class="ic"><use href="#i-desktop"/></svg></span><span class="tp-label">Runners</span></div>
+              <div class="tp-item"><span class="tp-ico"><svg class="ic"><use href="#i-api"/></svg></span><span class="tp-label">Providers</span></div>
+            </div>
+            <div class="tp-divider"></div>
+            <div class="tp-group">
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><span class="tp-count needs-you">1</span></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-develop</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><kbd class="tp-count tp-workspace-shortcut">⌘2</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-prod</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span><kbd class="tp-count tp-workspace-shortcut">⌘3</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg><span class="tp-workspace-icon-running"></span></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikova-data</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span><kbd class="tp-count tp-workspace-shortcut">⌘4</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">longdeMac-mini.local</span></span><kbd class="tp-count tp-workspace-shortcut">⌘5</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">lfs</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span><kbd class="tp-count tp-workspace-shortcut">⌘6</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">wikids</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span><kbd class="tp-count tp-workspace-shortcut">⌘7</kbd></div>
+              <div class="tp-item"><span class="tp-ico tp-workspace-icon"><svg class="ic"><use href="#i-folder"/></svg></span><span class="tp-label tp-workspace-label"><span class="tp-workspace-name">rocm</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation-gpu</span></span><kbd class="tp-count tp-workspace-shortcut">⌘8</kbd></div>
+            </div>
+            <div class="tp-divider"></div>
+            <div class="tp-group">
+              <div class="tp-group-head"><span class="tp-group-name">Task List</span><span class="tp-count">10</span></div>
+              <div class="tp-group-head"><span class="tp-group-name">Completed</span><span class="tp-count">6</span></div>
+            </div>
+          </div>
+          <div class="tp-user"><div class="tp-user-trigger"><span class="wk-avatar"><svg class="ic"><use href="#i-user"/></svg></span><span class="tp-user-name">wikova</span></div></div>
+          <div class="wk-tip" style="top:130px;right:10px">3 proposals to review</div>
+        </aside>
+
+        <main class="app-main"><div class="app-view app-view--doc"><div class="doc-col">
+          <div class="wk-head m-mark"><span class="m-n">2</span>
+            <div class="wk-title-row">
+              <h1 class="page-title">Wiki</h1>
+              <span class="wk-select"><svg class="ic" style="color:var(--text-3)"><use href="#i-branches"/></svg>orbit<span class="dim">· github.com/jianghailong-xy/orbit</span><svg class="ic caret"><use href="#i-down"/></svg></span>
+              <div class="wk-actions"><span class="wk-btn primary"><svg class="ic"><use href="#i-plus"/></svg>New entry</span></div>
+            </div>
+            <div class="wk-search"><svg class="ic"><use href="#i-search"/></svg><span class="grow">Search the wiki</span><span class="wk-kbd">⌘K</span></div>
+          </div>
+
+          <div class="project-integration m-mark"><span class="m-n">3</span>
+            <div class="project-integration-row">
+              <span class="project-integration-facts">
+                <span><b>96</b> entries</span><span style="color:var(--text-4)">·</span>
+                <span><b class="warn">3</b> to review</span><span style="color:var(--text-4)">·</span>
+                <span>Anchors verified at <code>4db4f9f</code> 2h ago</span><span style="color:var(--text-4)">·</span>
+                <span>Maintenance: last run 3h ago <span class="ok">✓</span></span>
+              </span>
+            </div>
+          </div>
+
+          <div class="wk-cols">
+            <div class="wk-col">
+              <section class="project-open-items wk-card m-mark"><span class="m-n">4</span>
+                <div class="project-open-items-head"><svg class="ic wk-pin"><use href="#i-pushpin"/></svg><span class="project-open-items-title">Principles</span><span class="project-open-items-hint">4 · written by you · pinned</span></div>
+                <div class="wk-row first">
+                  <span class="wk-kind"><svg class="ic"><use href="#i-flag"/></svg></span>
+                  <div style="min-width:0"><div class="wk-row-t"><span class="tt">A clock never starts agent work</span></div>
+                    <div class="wk-row-d">Work starts from a committed fact (evidence revised, a receipt written, a turn ended); elapsed time may only reassign an open item to a person.</div></div>
+                  <span class="tdp-badge tone-owner">Owner</span>
+                </div>
+                <div class="wk-row">
+                  <span class="wk-kind"><svg class="ic"><use href="#i-flag"/></svg></span>
+                  <div style="min-width:0"><div class="wk-row-t"><span class="tt">Agent-writable data never becomes a system instruction</span></div>
+                    <div class="wk-row-d">Compiled or agent-written text reaches agents as user-level context only.</div></div>
+                  <span class="tdp-badge tone-owner">Owner</span>
+                </div>
+                <div class="wk-row">
+                  <span class="wk-kind"><svg class="ic"><use href="#i-flag"/></svg></span>
+                  <div style="min-width:0"><div class="wk-row-t"><span class="tt">Completion is adjudicated, not claimed</span></div>
+                    <div class="wk-row-d">A task is DONE when its declared criterion says so, not when the agent says so.</div></div>
+                  <span class="tdp-badge tone-owner">Owner</span>
+                </div>
+                <div class="wk-row">
+                  <span class="wk-kind"><svg class="ic"><use href="#i-flag"/></svg></span>
+                  <div style="min-width:0"><div class="wk-row-t"><span class="tt">Delete means forget</span><span class="wk-new" title="Added 1d ago"></span><span class="m-xin">新词 · 新原则</span></div>
+                    <div class="wk-row-d">When the owner deletes a session or task, everything compiled from it is withdrawn.</div></div>
+                  <span class="tdp-badge tone-owner">Owner</span>
+                </div>
+              </section>
+
+              <section class="project-open-items wk-card m-mark"><span class="m-n">5</span>
+                <div class="project-open-items-head"><span class="project-open-items-title">Topics</span><span class="project-open-items-hint">6 topics · 96 entries</span></div>
+                <div class="wk-topics">
+                  <div class="wk-topic"><div class="wk-topic-h"><span class="wk-topic-n">Runner &amp; engines</span><span class="wk-topic-c">21</span></div>
+                    <div class="wk-topic-l"><b>Amended</b> <span class="when">1d ago</span> · runner-go's full suite inside a session reaches production</div></div>
+                  <div class="wk-topic"><div class="wk-topic-h"><span class="wk-topic-n">Tasks &amp; dispatch</span><span class="wk-topic-c">17</span></div>
+                    <div class="wk-topic-l"><b>Confirmed</b> <span class="when">2h ago</span> · Task priority is a field on the task, not a dispatcher session</div></div>
+                  <div class="wk-topic"><div class="wk-topic-h"><span class="wk-topic-n">Projects &amp; criteria</span><span class="wk-topic-c">14</span></div>
+                    <div class="wk-topic-l"><b>Confirmed</b> <span class="when">3d ago</span> · Landing vs promotion</div></div>
+                  <div class="wk-topic"><div class="wk-topic-h"><span class="wk-topic-n">Clients (web · iOS · macOS)</span><span class="wk-topic-c">19</span></div>
+                    <div class="wk-topic-l"><b>Confirmed</b> <span class="when">1d ago</span> · Web mobile and iOS mirror each other section by section</div></div>
+                  <div class="wk-topic"><div class="wk-topic-h"><span class="wk-topic-n">Deploy &amp; ops</span><span class="wk-topic-c">12</span></div>
+                    <div class="wk-topic-l"><b>Confirmed</b> <span class="when">2d ago</span> · Cut betas from main, never from a session branch</div></div>
+                  <div class="wk-topic"><div class="wk-topic-h"><span class="wk-topic-n">Testing &amp; CI</span><span class="wk-topic-c">13</span></div>
+                    <div class="wk-topic-l"><b>Retired</b> <span class="when">5h ago</span> · Headless Chromium needs --window-size=393</div></div>
+                </div>
+              </section>
+
+              <section class="project-open-items wk-card m-mark"><span class="m-n">6</span>
+                <div class="project-open-items-head"><span class="project-open-items-title">Recent decisions</span><span class="project-open-items-hint">decision log · newest first</span><span class="wk-card-more">All decisions ›</span></div>
+                <div class="wk-dec first"><span class="d">2026-09-25</span><div style="min-width:0"><div class="t">Task priority is a field on the task, not a dispatcher session</div></div><span class="tdp-badge tone-green">Active</span></div>
+                <div class="wk-dec"><span class="d">2026-09-13</span><div style="min-width:0"><div class="t">Wakeups are held by the server</div></div><span class="tdp-badge tone-green">Active</span></div>
+                <div class="wk-dec"><span class="d">2026-09-04</span><div style="min-width:0"><div class="t">EXECUTABLE judges by exit code and records nothing</div></div><span class="tdp-badge tone-green">Active</span></div>
+                <div class="wk-dec"><span class="d">2026-09-03</span><div style="min-width:0"><div class="t">Project DONE is a projection, not a gate</div>
+                    <div class="s"><span>supersedes</span><span class="x">Projects close through an acceptance DONE gate</span><span class="tdp-badge tone-muted">Superseded</span></div></div>
+                  <span class="tdp-badge tone-green">Active</span></div>
+              </section>
+            </div>
+
+            <div class="wk-col">
+              <section class="project-open-items wk-card wk-review m-mark"><span class="m-n">7</span>
+                <div class="project-open-items-head"><span class="wk-dot amber" style="align-self:center"></span><span class="project-open-items-title">Review</span><span class="tp-count needs-you">3</span></div>
+                <div class="project-open-items-hint" style="margin:-2px 0 8px">3 proposals from 2 sessions</div>
+                <div class="wk-rv-row first"><span class="wk-op add">ADD</span><span class="t">Secret redaction lets ENV_VAR=value secrets through</span><span class="a">12m</span></div>
+                <div class="wk-rv-row"><span class="wk-op retire">RETIRE</span><span class="t">Claude's ScheduleWakeup is lost when the engine is recycled</span><span class="a">2h</span></div>
+                <div class="wk-rv-row"><span class="wk-op amend">AMEND</span><span class="t">Deploy apiserver and web</span><span class="a">1h</span></div>
+                <div class="wk-rv-foot"><span class="wk-btn primary">Review</span><span class="hint">oldest 2h</span></div>
+              </section>
+
+              <section class="project-open-items wk-card m-mark"><span class="m-n">8</span>
+                <div class="project-open-items-head"><span class="project-open-items-title">Recently changed</span></div>
+                <ol class="wk-tl">
+                  <li><span class="wk-dot confirmed"></span><div><div class="wk-tl-h"><b>Confirmed by you</b><span class="when">2h ago</span></div><div class="wk-tl-t">Task priority is a field on the task</div></div></li>
+                  <li class="retired"><span class="wk-dot proposed"></span><div><div class="wk-tl-h"><b>Retired</b><span class="when">5h ago</span></div><div class="wk-tl-t">Headless Chromium needs --window-size=393</div><div class="wk-tl-n">anchor missing · replaced by “Headless Chromium clamps the window to 500px”</div></div></li>
+                  <li><span class="wk-dot confirmed"></span><div><div class="wk-tl-h"><b>Amended</b><span class="when">1d ago</span></div><div class="wk-tl-t">runner-go's full suite inside a session reaches production</div><div class="wk-tl-n">fix now also unsets ORBIT_BG_SOCKET / ORBIT_BG_TOKEN</div></div></li>
+                  <li><span class="wk-dot owner"></span><div><div class="wk-tl-h"><b>Added by you</b><span class="when">1d ago</span></div><div class="wk-tl-t">Delete means forget</div></div></li>
+                  <li><span class="wk-dot confirmed"></span><div><div class="wk-tl-h"><b>Confirmed by you</b><span class="when">2d ago</span></div><div class="wk-tl-t">Cut betas from main</div></div></li>
+                </ol>
+              </section>
+
+              <section class="project-open-items wk-card m-mark"><span class="m-n">9</span>
+                <div class="project-open-items-head"><span class="project-open-items-title">Agents used the wiki</span><span class="project-open-items-hint">this week</span></div>
+                <div class="wk-stats">
+                  <div><div class="n">214</div><div class="l">sessions received wiki context</div></div>
+                  <div><div class="n">38</div><div class="l">searches</div></div>
+                </div>
+                <div class="wk-bars">
+                  <div class="h">Most used</div>
+                  <div class="wk-bar"><div class="t">runner-go's full suite inside a session reaches production</div><div class="b"><i style="width:230px"></i><span class="v">41×</span></div></div>
+                  <div class="wk-bar"><div class="t">UI copy is English; code comments may be Chinese</div><div class="b"><i style="width:185px"></i><span class="v">33×</span></div></div>
+                  <div class="wk-bar"><div class="t">A clock never starts agent work</div><div class="b"><i style="width:163px"></i><span class="v">29×</span></div></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div></div></main>
+      </div>
+    </div>
+
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>侧栏入口</b>：Wiki 放在 Projects 下面，book 图标；右侧琥珀数字 3 = 等你审的提议数（悬停 tooltip「3 proposals to review」）。<span class="t orbit">Orbit 一致性</span>整行照抄 <code>.tp-item</code>，琥珀胶囊就是 workspace 行「等你回复」用的 <code>.tp-count.needs-you</code>；有琥珀数时不显示快捷键，和 workspace 行同一条规则。<span class="t coord">协调性</span>同一个 3 出现在侧栏、状态行「3 to review」、右栏 Review 卡和 04 的副标题，口径都是「等你拍板的提议」。</span></li>
+      <li><span class="m-n">2</span><span><b>页头</b>：标题 + space 选择器 + New entry，下面整行搜索框，右侧提示 ⌘K（⌘K 全局面板里也搜得到 Wiki，见 05-d）。space 就是代码库：orbit 这一份同时服务 wikova 和 longdeMac-mini.local 上两个叫 orbit 的 workspace；另一份是 wikova（wikova-develop / -prod / -data 共用）。<span class="t orbit">Orbit 一致性</span>布局照 Projects 页的标题行 + 整行搜索（<code>projects-title-row</code> / <code>projects-toolbar</code>）。<span class="t xin">新词</span>space、entry。</span></li>
+      <li><span class="m-n">3</span><span><b>状态行</b>：条目数 · 待审数 · 锚点最近一次在哪个提交上复验、多久前 · 维护任务最近一次运行。<span class="t orbit">Orbit 一致性</span>直接用项目详情页集成线那一行（<code>.project-integration-row</code>），灰底一行、数字加粗、需要你的数字用琥珀。<span class="t xin">新词</span>Anchors verified、Maintenance。</span></li>
+      <li><span class="m-n">4</span><span><b>Principles 置顶</b>：owner 写的 4 条，每行标题 + 一行说明 + 深色 Owner 标签；第 4 条是昨天新加的（蓝点 = 你上次来之后新增）。<span class="t ref">借鉴</span>Notion verified pages：谁核验过就挂在条目上。<span class="t orbit">Orbit 一致性</span>卡片框 = 项目页 Open items 卡（<code>.project-open-items</code>），行 = 列表两行式（标题 + 摘要）。<span class="t xin">新词</span>Principle；信任标签 Owner / Confirmed / Proposed（深 / 蓝 / 灰），在 02–05 各处同一套。</span></li>
+      <li><span class="m-n">5</span><span><b>Topics</b>：6 个主题（2 列 × 3 行），数字是条目数，六个加起来 = 96；底下一行是这个主题最近一次变化。<span class="t ref">借鉴</span>Confluence / Notion 的 space home。<span class="t coord">协调性</span>动词和右栏 Recently changed 同一套：Added / Confirmed / Amended / Retired。<span class="t xin">新词</span>Topic。</span></li>
+      <li><span class="m-n">6</span><span><b>Recent decisions</b>：决策日志，日期 · 标题 · 状态。被取代的决策不删，在取代它的那条下面划线显示并标 Superseded。为了让 Active / Superseded 两种状态都看得见，这里放了 4 行（规格写 3 条）。<span class="t ref">借鉴</span>ADR 的状态字段、Oxide RFD 的状态标签。<span class="t orbit">Orbit 一致性</span>Superseded 是任务结局里已有的词（<code>lib/taskOutcome.ts</code>）；标签用任务详情的 <code>.tdp-badge</code>。</span></li>
+      <li><span class="m-n">7</span><span><b>Review 卡</b>：琥珀点 + 同一个 3，列出 3 条提议（ADD / RETIRE / AMEND，顺序和写法都与 04 的三张卡一致），按钮进 04。<span class="t orbit">Orbit 一致性</span>琥珀 = 等你处理，和侧栏、项目页 Needs you 同一规则；按钮是主色，不是琥珀。</span></li>
+      <li><span class="m-n">8</span><span><b>Recently changed</b>：最近 5 次变化。圆点颜色 = 变化后的信任状态：深 = Owner，蓝 = Confirmed，灰 = 已退役（退役的标题划线，并说明原因和替代条目）。<span class="t ref">借鉴</span>Linear Pulse 的时间线。</span></li>
+      <li><span class="m-n">9</span><span><b>Agents used the wiki</b>：本周 214 个会话在开工时收到 Wiki context，agent 主动搜了 38 次；最常用 3 条。这是「整份 Wiki 有没有被用上」的总读数，单条的读数见 03 的 Detector 和 Where it's used。条形图单色、数值写在条尾，不配图例。</span></li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

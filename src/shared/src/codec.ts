@@ -258,6 +258,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'targetTurnId',
   'approvalId',
   'decisionId',
+  // The public links a caller turns off in one request (`POST /share-links/turn-off`, 0306): each
+  // is a `share_link` row's own id, the one its list hands out and `DELETE /share-links/:id` takes.
+  'shareLinkIds',
   // Owner Ratification's durable decision, reusable authority and two-phase action ledgers. These
   // all name rows a caller can inspect or hand back; whether the named authority is still valid is
   // decided by the database from its immutable scope, not by preserving UUID spelling.
@@ -448,6 +451,24 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'observerSessionId',
   'targetResourceId',
   'snapshotSourceId',
+  // Orbit Wiki (migration 0307). Every one is an address a reader follows: the space an entry,
+  // topic, binding or changeset lives in, the lineage (`orbit-wiki:<id>`) a revision, op or exposure
+  // is about, the revision a source supports, the changeset an op belongs to and the op a revision
+  // came from, the lineage a supersession points at, and the user and tool call that authored a
+  // revision or submitted a changeset. None is a fence: a wiki write's compare-and-set is on
+  // `baseRevision`, an integer, and nothing echoes one of these back to be compared byte for byte.
+  // `toolCallId`, `authorToolCallId`, `authorUserId` and `changesetOpId` carry no foreign key by
+  // design — history snapshots — which makes them addresses that may 404, not tokens.
+  'spaceId',
+  'entryId',
+  'revisionId',
+  'changesetId',
+  'changesetOpId',
+  'resultEntryId',
+  'supersedesId',
+  'toolCallId',
+  'authorUserId',
+  'authorToolCallId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

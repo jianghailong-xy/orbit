@@ -7,8 +7,8 @@
 // external assets — openable offline in any browser, printable to PDF.
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ExportCtx, Transcript, type RunEvent } from '../components/Transcript';
-import { fetchAttachmentDataUrl } from '../api';
+import { ExportCtx, PublicLinkResolverCtx, Transcript, type PublicLinkResolver, type RunEvent } from '../components/Transcript';
+import { fetchAttachmentDataUrl, getSessionEventPage } from '../api';
 import { titleFirstLine } from './title';
 // Vite `?raw`: pull the real CSS text into the bundle. index.css carries the design tokens
 // (:root light + dark) and every .chat-*/.md/.diff-* rule; github.css is the light-theme
@@ -103,12 +103,14 @@ body { margin: 0; background: var(--bg-base); color: var(--text-1);
 .orbit-export .chat-user-meta { position: static; opacity: 1; height: auto; }
 `;
 
-/** Build a standalone HTML document string for a session's transcript. */
+/** Build a standalone HTML document string for a session's transcript. `linkResolver` is the
+ *  public page's, when the file is saved from one: its links go where that page's do. */
 export function buildSessionHtml(
   session: ExportSession,
   events: RunEvent[],
   images: Map<string, string>,
   theme: string,
+  linkResolver: PublicLinkResolver | null = null,
 ): string {
   const title = titleFirstLine(session.title || 'Session');
   const workspaceName = session.workspace?.name?.trim();
@@ -119,12 +121,16 @@ export function buildSessionHtml(
 
   const body = renderToStaticMarkup(
     createElement(
-      ExportCtx.Provider,
-      { value: { images } },
+      PublicLinkResolverCtx.Provider,
+      { value: linkResolver },
       createElement(
-        'div',
-        { className: 'workspace-sessions' },
-        createElement(Transcript, { events, live: false }),
+        ExportCtx.Provider,
+        { value: { images } },
+        createElement(
+          'div',
+          { className: 'workspace-sessions' },
+          createElement(Transcript, { events, live: false }),
+        ),
       ),
     ),
   );
@@ -156,15 +162,17 @@ ${meta ? `<div class="orbit-export-meta">${escapeHtml(meta)}</div>` : ''}
 
 /** Render the session to HTML and trigger a browser download of the self-contained file.
  *  `fetchImage` defaults to the owner (bearer) attachment route; the public shared page
- *  passes a token-scoped fetcher so a logged-out viewer can still embed the images. */
+ *  passes a token-scoped fetcher so a logged-out viewer can still embed the images, and its
+ *  link resolver, so the file links no further than the page does. */
 export async function exportSessionHtml(
   session: ExportSession,
   events: RunEvent[],
   fetchImage: (id: string) => Promise<string> = fetchAttachmentDataUrl,
+  linkResolver: PublicLinkResolver | null = null,
 ): Promise<void> {
   const images = await resolveImages(events, fetchImage);
   const theme = document.documentElement.getAttribute('data-theme') ?? '';
-  const html = buildSessionHtml(session, events, images, theme);
+  const html = buildSessionHtml(session, events, images, theme, linkResolver);
 
   const name = `${slug(session.workspace?.name || 'orbit')}-${slug(session.title || 'session')}-${new Date()
     .toISOString()
@@ -177,4 +185,25 @@ export async function exportSessionHtml(
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+// The largest page the owner's event route serves.
+const OWNER_EXPORT_PAGE = 500;
+
+/** Every event of one of your sessions, unclipped: from the newest page back to the first. */
+async function ownerTranscript(sessionId: string): Promise<RunEvent[]> {
+  const pages: RunEvent[][] = [];
+  let before: number | undefined;
+  for (;;) {
+    const page = await getSessionEventPage(sessionId, { before, limit: OWNER_EXPORT_PAGE, whole: true });
+    pages.unshift(page.events);
+    if (!page.hasMore || page.events.length === 0) return pages.flat();
+    before = page.events[0].seq;
+  }
+}
+
+/** Download HTML from the session's own menu: the whole transcript read through the owner's routes,
+ *  its images through the owner's attachment route — keeping a copy needs no public link. */
+export async function downloadSessionHtml(session: ExportSession): Promise<void> {
+  await exportSessionHtml(session, await ownerTranscript(session.id));
 }

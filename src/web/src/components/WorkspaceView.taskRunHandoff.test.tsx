@@ -332,48 +332,47 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     }
   });
 
-  const pickProvider = async (label: string, pill?: HTMLElement): Promise<HTMLElement> => {
-    // `.ant-select-content`, not `.ant-select-selector`: antd 6 renamed its private DOM classes.
-    // A test that picks TWICE has to hold the `.ant-select` around it: the first pick changes the
-    // text this finds the control by, and it is still the same control.
-    const root = pill ?? Array.from(
-      mounted().querySelectorAll<HTMLElement>('.composer-pills .ant-select'),
-    ).find((el) => el.textContent?.toLowerCase().includes('claude'));
-    const selector = root?.querySelector<HTMLElement>('.ant-select-content');
-    if (!root || !selector) {
-      throw new Error(
-        'no provider pill on the composer; pills say '
-        + JSON.stringify(
-          Array.from(mounted().querySelectorAll('.composer-pills .ant-select')).map(
-            (el) => el.textContent,
-          ),
-        ),
-      );
-    }
+  const pickProvider = async (label: string): Promise<void> => {
+    // The provider lives one level down in the composer's model control: open the control, open
+    // its Provider row, pick. The control is one button whatever it currently says, so a test that
+    // picks twice finds it the same way both times.
+    const chip = mounted().querySelector<HTMLElement>('.composer-model-chip');
+    if (!chip) throw new Error('no model control on the composer');
     await act(async () => {
-      selector.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      chip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+    const providerRow = (): HTMLElement | undefined =>
+      Array.from(
+        document.querySelectorAll<HTMLElement>('.composer-model-menu .ant-dropdown-menu-submenu-title'),
+      ).find((el) => el.textContent?.includes('Provider'));
+    await act(async () => {
+      await vi.waitFor(() => expect(providerRow()).toBeDefined(), { timeout: 20_000, interval: 20 });
     });
     await act(async () => {
-      await vi.waitFor(
-        () => expect(document.querySelectorAll('.ant-select-item-option').length).toBeGreaterThan(1),
-        { timeout: 20_000, interval: 20 },
-      );
+      providerRow()!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
-    const option = Array.from(
-      document.querySelectorAll<HTMLElement>('.ant-select-item-option'),
-    ).find((el) => el.textContent?.includes(label));
+    // rc-menu names each row after its key (`data-menu-id` ends in it), which is how the provider
+    // rows are told apart from the model rows that can carry the same words.
+    const providerOptions = (): HTMLElement[] =>
+      Array.from(document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')).filter((el) =>
+        el.getAttribute('data-menu-id')?.includes('provider:'),
+      );
+    await act(async () => {
+      await vi.waitFor(() => expect(providerOptions().length).toBeGreaterThan(1), {
+        timeout: 20_000,
+        interval: 20,
+      });
+    });
+    const option = providerOptions().find((el) => el.textContent?.includes(label));
     if (!option) {
       throw new Error(
-        `no "${label}" option; the pill offers `
-        + JSON.stringify(
-          Array.from(document.querySelectorAll('.ant-select-item-option')).map((el) => el.textContent),
-        ),
+        `no "${label}" option; the Provider row offers `
+        + JSON.stringify(providerOptions().map((el) => el.textContent)),
       );
     }
     await act(async () => {
       option.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
-    return root;
   };
 
   it('says when a provider pick takes effect, while the pick still stands', async () => {
@@ -410,14 +409,14 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     } as never);
     await mount();
 
-    // Two picks, because a select does not report a click on the value it is already showing: the
-    // first is a real switch and says so, which is what makes the second one's silence mean
-    // something rather than "no pick was ever made".
-    const pill = await pickProvider('DeepSeek');
+    // Two picks, because re-picking the provider already showing is not a pick at all: the first
+    // is a real switch and says so, which is what makes the second one's silence mean something
+    // rather than "no pick was ever made".
+    await pickProvider('DeepSeek');
     await act(async () => {
       await vi.waitFor(() => expect(providerNote()).not.toBe(''), { timeout: 20_000, interval: 20 });
     });
-    await pickProvider('Claude', pill);
+    await pickProvider('Claude');
     expect(providerNote()).toBe('');
 
     await type('继续干活');

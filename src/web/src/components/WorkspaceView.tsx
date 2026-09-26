@@ -2,7 +2,6 @@ import {
   ArrowDownOutlined,
   ArrowLeftOutlined,
   ArrowUpOutlined,
-  BorderOutlined,
   CheckCircleFilled,
   CheckCircleOutlined,
   CheckOutlined,
@@ -12,9 +11,12 @@ import {
   CodeOutlined,
   DeleteOutlined,
   DisconnectOutlined,
+  DownloadOutlined,
   DownOutlined,
   EyeOutlined,
+  GlobalOutlined,
   InfoCircleOutlined,
+  LinkOutlined,
   LoadingOutlined,
   MessageOutlined,
   MinusCircleOutlined,
@@ -26,7 +28,6 @@ import {
   PushpinFilled,
   PushpinOutlined,
   SearchOutlined,
-  ShareAltOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
@@ -63,6 +64,7 @@ import {
   useState,
 } from 'react';
 import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
+import { copyText } from '../lib/clipboard';
 import { routeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -160,6 +162,12 @@ import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import type { BgShell } from '../lib/backgroundShells';
+import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
+import {
+  EMPTY_LIVE_TASK_PROGRESS,
+  reduceLiveTaskProgress,
+  type SessionLiveTaskProgress,
+} from '../lib/liveTaskProgress';
 import {
   api,
   ApiError,
@@ -198,7 +206,9 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AddToWikiCtx } from './AddToWiki';
+import { useWikiShown } from '../lib/useWikiShown';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
   SessionDecisionStrip,
@@ -237,11 +247,7 @@ import {
   SessionAcceptanceConfirmationCard,
   acceptancePlanChangeContext,
 } from './AcceptanceConfirmationCard';
-import {
-  SETTLEMENT_CHAT_PLACEHOLDER,
-  SETTLEMENT_CHAT_PREFIX,
-  SessionProjectSettlementCard,
-} from './ProjectSettlementCard';
+import { SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -948,6 +954,9 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
   );
 }
 
+/** What the globe beside a row's time says: a public link opens this session right now. */
+export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
+
 /** The title is the only flexible item: time, merge state, and coordinator relation stay visible
  * while a long title ellipsizes into whatever width remains. */
 export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session: any; hoverTipOpen?: boolean }) {
@@ -962,6 +971,13 @@ export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session:
         >
           <span className="session-merge-badge">⚠</span>
         </Tooltip>
+      )}
+      {/* The list row's `shared` (docs/share-links-design.md §8). A native title rather than a
+          Tooltip: nothing to linger on a touch screen, where a tap opens the row. */}
+      {s.shared === true && (
+        <span className="session-shared" title={SESSION_SHARED_TIP} aria-label={SESSION_SHARED_TIP}>
+          <GlobalOutlined />
+        </span>
       )}
       <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
@@ -1271,6 +1287,27 @@ function SlashCommandIcon({ className }: { className?: string }) {
   );
 }
 
+/**
+ * What the send button turns into while a turn runs: a filled square, as native draws it
+ * (`stop.circle.fill`). `BorderOutlined` is an outline, and inside a filled circle an outline reads
+ * as an empty box rather than as Stop.
+ */
+function StopSquareIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 12 12"
+      width="0.8em"
+      height="0.8em"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="1" y="1" width="10" height="10" rx="2.4" />
+    </svg>
+  );
+}
+
 /** What withdrawing a queued wake costs: said beside the action, and again when it asks to confirm. */
 const WAKE_WITHDRAW_CONSEQUENCE =
   "If withdrawn, this session is not woken this time, and the watch won't send it again.";
@@ -1428,7 +1465,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // that dismisses it — the bubble lingers on screen (e.g. an "Unpin" tip stuck after a
   // pin tap, or a composer pill's tip stacked over the Select it just opened). Suppress
   // these tooltips where hover is unavailable; every gated control already labels itself.
-  const hoverTipOpen = useMediaQuery('(hover: hover)') ? undefined : false;
+  // The same reading decides how a menu opens a level down: on hover where the pointer can
+  // hover, on a tap where it cannot (the composer model menu's `triggerSubMenuAction`).
+  const canHover = useMediaQuery('(hover: hover)');
+  const hoverTipOpen = canHover ? undefined : false;
   const [text, setText] = useState('');
   // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
   // draft rather than in the URL or the server, because it only has to survive as long as the
@@ -1531,8 +1571,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       | { kind: 'approval'; id: string }
       | { kind: 'ownerConfirmation'; taskId: string; requestId: string }
       | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string }
-      | { kind: 'planChange'; projectId: string; criteriaDigest: string }
-      | { kind: 'projectSettlement'; projectId: string };
+      | { kind: 'planChange'; projectId: string; criteriaDigest: string };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
     /** What the empty composer asks for while this is armed. */
@@ -1553,6 +1592,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [liveToolOutputState, setLiveToolOutputState] = useState<SessionLiveToolOutputs>({
     sessionId: selectedId,
     outputs: EMPTY_LIVE_TOOL_OUTPUTS,
+  });
+  // Broadcast-only progress of the workspace's background agents and workflows — the same kind of
+  // side channel as the shell snapshots above, and scoped to its session the same way.
+  const [liveTaskProgressState, setLiveTaskProgressState] = useState<SessionLiveTaskProgress>({
+    sessionId: selectedId,
+    progress: EMPTY_LIVE_TASK_PROGRESS,
   });
   // The seq the stream was at when the current stretch of generation began, so the transcript can
   // render the drafts where they started rather than always last. A ref, not state: it only ever
@@ -2013,6 +2058,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             : undefined,
       }
     : null;
+  // What Add to Wiki writes as: this conversation, which is both where the entry's provenance comes
+  // from (the turn a message belongs to) and what decides which codebase's wiki it is filed into
+  // (`wikiSpaceForSessionQuery`). Memoised because it is a context value: a fresh object each render
+  // would re-render every message row in the transcript on every token of a streaming reply. None at
+  // all for an account the server has not switched the wiki on for: the row keeps its copy button.
+  const wikiOn = useWikiShown();
+  const addToWikiConversation = useMemo(
+    () => (selectedId && wikiOn ? { sessionId: selectedId, title: selectedSession?.title ?? '' } : null),
+    [selectedId, selectedSession?.title, wikiOn],
+  );
   // What this conversation is waiting on, when a watch is what will bring it back: the same read the
   // Watching strip above the composer makes (one cache entry between them), so the header's word and
   // the strip under it cannot disagree about the same wait.
@@ -2035,6 +2090,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     : null;
   const selectedTrashed = selectedLifecycleState === 'TRASH';
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
+  // Whether a public link opens this conversation right now: the detail's open link once it has
+  // been read, the list row's flag until then. The Trash pauses a link, so a trashed one is not.
+  const selectedShared =
+    !selectedTrashed &&
+    (detailForSelected ? detailForSelected.shareToken != null : (selected as any)?.shared === true);
   // Keep an observer on every locally accepted Merge/Commit until its runner reports a terminal
   // result. Unlike the selected-detail-only observer this survives switching conversations, and
   // the operation token prevents a stale query result from finishing a newer retry for the same
@@ -2787,6 +2847,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     liveToolOutputState.sessionId === selectedId
       ? liveToolOutputState.outputs
       : EMPTY_LIVE_TOOL_OUTPUTS;
+  const scopedLiveTaskProgress =
+    liveTaskProgressState.sessionId === selectedId
+      ? liveTaskProgressState.progress
+      : EMPTY_LIVE_TASK_PROGRESS;
+  // Which of the workspace's Agent/Workflow calls are still at work — the tray's own list, read the
+  // same way, so a card's spinner and its tray row always agree.
+  const runningTasks = useMemo(() => {
+    const running = new Set<string>();
+    const shells = mergeBackgroundShells(serverBgShells, deriveBackgroundShells(events, { sessionLive: live }));
+    for (const s of shells) {
+      if ((s.kind === 'agent' || s.kind === 'workflow') && s.status === 'running') running.add(s.toolUseId);
+    }
+    return running;
+  }, [events, live, serverBgShells]);
+  const taskActivity = useMemo<TaskActivity>(
+    () => ({ live: scopedLiveTaskProgress, running: runningTasks }),
+    [scopedLiveTaskProgress, runningTasks],
+  );
   const visibleAcceptedUserTurns = useMemo(
     () =>
       acceptedUserTurns.filter(
@@ -2900,6 +2978,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       current.sessionId === selectedId && current.outputs.size === 0
         ? current
         : { sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS },
+    );
+    setLiveTaskProgressState((current) =>
+      current.sessionId === selectedId && current.progress.size === 0
+        ? current
+        : { sessionId: selectedId, progress: EMPTY_LIVE_TASK_PROGRESS },
     );
     streamAnchorRef.current = null;
     setApprovals([]);
@@ -3068,6 +3151,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       writeCache();
       setEvents(accRef.current);
     };
+    const applyLiveTaskEvent = (ev: RunEvent): void => {
+      setLiveTaskProgressState((current) => {
+        const base = current.sessionId === selectedId ? current.progress : EMPTY_LIVE_TASK_PROGRESS;
+        const progress = reduceLiveTaskProgress(base, ev);
+        return current.sessionId === selectedId && progress === current.progress
+          ? current
+          : { sessionId: selectedId, progress };
+      });
+    };
     const applyLiveToolEvent = (ev: RunEvent): void => {
       setLiveToolOutputState((current) => {
         const base =
@@ -3094,6 +3186,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       accRef.current = [];
       seen.current = new Set();
       setLiveToolOutputState({ sessionId: selectedId, outputs: EMPTY_LIVE_TOOL_OUTPUTS });
+      setLiveTaskProgressState({ sessionId: selectedId, progress: EMPTY_LIVE_TASK_PROGRESS });
       oldestSeqRef.current = null;
       hasMoreOlderRef.current = false;
       lastSeq = 0;
@@ -3155,6 +3248,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         if (ev.type === 'tool_output') {
           applyLiveToolEvent(ev);
           return;
+        }
+        // How far a background agent or workflow has got: animation like the snapshot above — the
+        // task's end (a durable background_task) carries the last of it into the transcript.
+        if (ev.type === 'task_progress') {
+          applyLiveTaskEvent(ev);
+          return;
+        }
+        if (ev.type === 'background_task' || (ev.type === 'system' && ev.payload?.subtype === 'resumed')) {
+          applyLiveTaskEvent(ev);
         }
         // The durable result wins in the same render that appends it. Clearing here also releases
         // the potentially large snapshot once the result has entered the ordinary transcript.
@@ -3973,9 +4075,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
     // Nothing answers a plan change another way: no call is pending on it, so there is no question
     // that can go out from under the reader mid-sentence. It stays armed until it is sent or the
-    // chip is dismissed. The project settlement card's "Chat about this" is the same kind of armed
-    // reply — an ordinary turn at an idle agent — so it stays armed by the same rule.
-    if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') return;
+    // chip is dismissed.
+    if (replyTo.target.kind === 'planChange') return;
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
     // the card is drawn from, and only once that read has come back, for the reason below.
@@ -4672,6 +4773,55 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         tone: 'error',
       }),
   });
+  // Trash pauses a public link rather than ending it (docs/share-links-design.md §3). That is worth
+  // saying before the move: whoever has the link loses it now, and has it again if the session is
+  // restored. A session nobody shared moves straight to Trash, with its Undo, as before.
+  const requestTrash = (session: any): void => {
+    const target = { id: session.id, title: session.title };
+    const shared = session.id === selectedId ? selectedShared : session.shared === true;
+    if (!shared) {
+      deleteMut.mutate(target);
+      return;
+    }
+    modal.confirm({
+      title: 'Move to Trash?',
+      content:
+        'Its public link is paused while the session is in Trash. Restoring the session turns the link back on.',
+      okText: 'Move to Trash',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: () => deleteMut.mutate(target),
+    });
+  };
+  // Download HTML, from the session's own menu: the whole transcript through the owner's routes
+  // (lib/sessionExport), fetched only when asked — the module carries the app's stylesheet.
+  const [downloadingHtml, setDownloadingHtml] = useState(false);
+  const downloadHtml = async (session: any): Promise<void> => {
+    if (downloadingHtml) return;
+    setDownloadingHtml(true);
+    try {
+      const { downloadSessionHtml } = await import('../lib/sessionExport');
+      await downloadSessionHtml({
+        id: session.id,
+        title: session.title,
+        status: sessionRunStateOf(session),
+        createdAt: session.createdAt,
+        startedAt: session.startedAt,
+        lastTurnAt: session.lastTurnAt,
+        workspace: { name: session.workspace?.name ?? null },
+      });
+    } catch (e) {
+      message.error(`Download failed: ${(e as Error).message}`);
+    } finally {
+      setDownloadingHtml(false);
+    }
+  };
+  // Copy link: the signed-in address, for the owner's own use — never the public one (§8).
+  const copySessionLink = (session: any): void => {
+    void copyText(`${window.location.origin}/sessions/${encodeId(session.id)}`).then((ok) =>
+      ok ? message.success('Link copied') : message.error('Could not copy'),
+    );
+  };
   // Permanent delete (from Trash): unlike deleteMut there's no undo — the row and all its
   // data are gone — so it's always gated behind confirmPurge's modal.
   const purgeMut = useMutation({
@@ -4745,7 +4895,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
     else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
-    else if (action === 'delete') deleteMut.mutate({ id: s.id, title: s.title });
+    else if (action === 'delete') requestTrash(s);
     else confirmPurge({ id: s.id, title: s.title });
   };
   // Apply the menu's complete selection in one write. Optimistically patch every list scope so the
@@ -5227,11 +5377,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         evidenceDecision.mutate({ sessionId: selectedId, taskId, evidenceRevision, note: c });
         return;
       }
-      // Talking about a plan before it is started — and about a project whose criteria are all met —
-      // reaches no door either: both are ordinary turns at an idle agent, with the facts the card is
-      // drawn from carried in front of the message because nothing in the session holds them. The
-      // card that armed it is untouched: its own primary action is still the other way out.
-      if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') {
+      // Talking about a plan before it is started reaches no door either: it is an ordinary turn at
+      // an idle agent, with the facts the card is drawn from carried in front of the message
+      // because nothing in the session holds them. The card that armed it is untouched: its own
+      // primary action is still the other way out.
+      if (replyTo.target.kind === 'planChange') {
         if (!c) return;
         pinToBottom();
         const carried = replyTo.context;
@@ -5672,22 +5822,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // The project settlement card's "Chat about this": the next send is an ordinary turn saying what
-  // is still missing, with the card's own facts — the criteria and the two facts beside each —
-  // carried in front of it. Like the plan change above it answers nothing, so no door is named
-  // here. The card stays, with its own Confirm still live.
-  const startProjectSettlementChat = (talk: {
-    projectId: string;
-    projectTitle: string;
-    facts: string;
-  }): void => {
-    setReplyTo({
-      target: { kind: 'projectSettlement', projectId: talk.projectId },
-      banner: SETTLEMENT_CHAT_PREFIX + talk.projectTitle,
-      placeholder: SETTLEMENT_CHAT_PLACEHOLDER,
-      context: talk.facts,
-    });
-    setTimeout(() => taRef.current?.focus(), 0);
+  // The project settlement card's "Ask the coordinator to handle it": the card's own facts — the
+  // blocked criteria, what each is waiting on and what would clear them — go out as one ordinary
+  // turn. Ordinary because nothing is waiting on an answer: the card explains a projection, and the
+  // work that would clear it is this agent's. The facts ARE the message, so unlike the armed
+  // replies above there is nothing to type first; the composer stays free for anything they leave
+  // out. The card stays where it is, with its own Confirm still live.
+  const delegateProjectSettlement = (talk: { facts: string }): void => {
+    if (send.isPending) return;
+    send.mutate({ content: talk.facts, images: [], intent: defaultSendIntent });
   };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
@@ -6038,6 +6181,230 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const checkSlot = (on: boolean): ReactNode => (
     <span className="scope-menu-check">{on ? <CheckOutlined /> : null}</span>
   );
+  // ── The composer's model control ───────────────────────────────────────────────────────────
+  // Provider, model, effort and speed used to be four pills; they are one button now, labelled
+  // "model effort", with a menu that lists the current provider's models and puts the rarer
+  // choices — provider, effort, speed — one level down, each row saying its current value the way
+  // the session list's scope menu does. Each pick runs what its pill's onChange did. A menu
+  // (unlike a Select) also fires for the value already chosen, and re-picking the running provider
+  // would PATCH a reload for nothing — so every pick first checks that it changes something.
+  const pickProvider = (v: string): void => {
+    if (v === shownProvider) return;
+    // A provider this runner can't run isn't a switch — it's a request for the sign-in (or
+    // install) that would make it one. Go straight to that engine's row on the Providers page, as
+    // the New Session picker's row does — or, for a choice that names its own fix (an account
+    // pool), to that page. The chip keeps showing the provider still in use.
+    const picked = providerSwitchChoices.find((c) => c.slug === v);
+    if (picked?.unavailable) {
+      navigate(
+        picked.fixHref ??
+          `/providers?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
+      );
+      return;
+    }
+    // Each provider owns its model space, so carry the running model only when the new one offers
+    // it (two Anthropic accounts do; a third-party endpoint with its own list does not) and
+    // otherwise take that provider's default. Mode and effort follow the model, exactly as a model
+    // switch makes them.
+    const nextModel = modelOptionsForProvider(v, runner.modelCatalog, configuredProviders).some(
+      (option) => option.value === shownModel,
+    )
+      ? shownModel
+      : defaultModelForProvider(v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
+    const drop = shownMode === 'Auto' && !supportsAuto(nextModel, v, configuredProviders, runner.modelCatalog);
+    const currentEffort = live ? effectiveEffort : effort;
+    const nextEffort = normalizeEffortForProvider(v, currentEffort, nextModel, runner.modelCatalog);
+    if (live) {
+      configMut.mutate({
+        provider: v,
+        ...(nextModel !== shownModel ? { model: nextModel } : {}),
+        ...(drop ? { permissionMode: 'default' } : {}),
+        ...(nextEffort !== currentEffort ? { effort: nextEffort } : {}),
+      });
+      return;
+    }
+    // Ended: hold the pick until the resume carries it, and move the values that depend on it now
+    // — marking their seeds dirty, exactly as a manual Model or Mode edit does, so the seeding
+    // effect doesn't put the old values back.
+    setEndedProviderPick({ sessionId: selected!.id, provider: v });
+    // A pick that may mean stopping a run is not a settled question any more: whatever the last
+    // answer was, it was about the provider before this one.
+    setRunConflict(null);
+    if (nextModel !== shownModel) {
+      modelSeedState.current = dirtyContextSeed(modelContextKey);
+      setModel(nextModel);
+    }
+    if (drop) {
+      modeSeedState.current = dirtyContextSeed(modelContextKey);
+      setMode('Default');
+    }
+    if (nextEffort !== currentEffort) {
+      effortSeedState.current = dirtyContextSeed(effortContextKey);
+      setEffort(nextEffort);
+    }
+  };
+  const pickModel = (v: string): void => {
+    if (v === shownModel) return;
+    // Switching to a model that can't do Auto while Auto is selected would send a mode claude
+    // rejects — snap back to Default.
+    const drop = shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);
+    // An OpenCode variant is model-defined: a model switch can strip it.
+    const currentEffort = live ? effectiveEffort : effort;
+    const nextEffort = normalizeEffortForProvider(shownProvider, currentEffort, v, runner.modelCatalog);
+    const resetEffort = nextEffort !== currentEffort;
+    if (live) {
+      configMut.mutate({
+        model: v,
+        ...(drop ? { permissionMode: 'default' } : {}),
+        ...(resetEffort ? { effort: nextEffort } : {}),
+      });
+      return;
+    }
+    modelSeedState.current = dirtyContextSeed(modelContextKey);
+    setModel(v);
+    if (drop) {
+      modeSeedState.current = dirtyContextSeed(modelContextKey);
+      setMode('Default');
+    }
+    if (resetEffort) {
+      effortSeedState.current = dirtyContextSeed(effortContextKey);
+      setEffort(nextEffort);
+    }
+  };
+  const pickEffort = (v: string): void => {
+    if (v === shownEffort) return;
+    effortSeedState.current = dirtyContextSeed(effortContextKey);
+    const normalized = normalizeEffortForProvider(shownProvider, v, shownModel, runner.modelCatalog);
+    // Remember as the account default (replaces localStorage) so the next new session — here or on
+    // iOS/macOS — starts at this effort. Optimistically patch the cached `me` so the seed effect
+    // sees it, then persist best-effort.
+    qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
+      prev ? { ...prev, preferences: { ...prev.preferences, defaultEffort: normalized } } : prev,
+    );
+    void api('/users/me/preferences', {
+      method: 'PATCH',
+      body: { defaultEffort: normalized },
+    }).catch(() => {});
+    if (live) configMut.mutate({ effort: normalized });
+    else setEffort(normalized);
+  };
+  const pickFastMode = (next: boolean): void => {
+    if (next === shownFastMode) return;
+    if (live) configMut.mutate({ fastMode: next });
+    else setFastMode(next);
+  };
+  const shownModelLabel = shownModelOptions.find((o) => o.value === shownModel)?.label ?? shownModel;
+  const shownEffortLabel = shownEffortOptions.find((o) => o.value === shownEffort)?.label ?? shownEffort;
+  const menuValue = (value: string): ReactNode => (
+    <span className="scope-menu-value">
+      <span className="scope-menu-value-text">{value}</span>
+    </span>
+  );
+  const modelMenuItems: MenuProps['items'] = [
+    // Only when there is somewhere to go: a second account with the same vendor, or another
+    // endpoint on the same CLI. One entry means no switch is possible, and the row is left out
+    // rather than shown inert — the common case, one Claude sign-in and no configured providers.
+    ...(providerSwitchChoices.length > 1
+      ? [
+          {
+            key: 'provider',
+            label: (
+              <span className="scope-menu-row" title={configHints.provider}>
+                Provider
+                {menuValue(providerSwitchChoices.find((c) => c.slug === shownProvider)?.label ?? shownProvider)}
+              </span>
+            ),
+            children: providerSwitchChoices.map((choice) => {
+              // Carry the reason on the row itself, where it answers the question being asked
+              // ("why can't I pick Claude?"). It stays pickable rather than greyed because picking
+              // it does something useful — it goes where the fix is (see pickProvider), which is
+              // the New Session picker's behaviour for the same row. The running provider is
+              // exempt: it is the chip's own provider, and needs no parenthetical.
+              const blocked = !!choice.unavailable && choice.slug !== shownProvider;
+              return {
+                key: `provider:${choice.slug}`,
+                // Distinguishable at a glance from a provider that is ready to run, without being
+                // inert: the identity is dimmed, the call to action is not.
+                className: blocked ? 'composer-provider-fix' : undefined,
+                label: (
+                  <span className="scope-menu-row">
+                    {blocked
+                      ? `${choice.label} — ${choice.unavailable}, ${choice.fixHref ? 'fix it' : 'sign in'} →`
+                      : choice.label}
+                    {checkSlot(choice.slug === shownProvider)}
+                  </span>
+                ),
+                onClick: () => pickProvider(choice.slug),
+              };
+            }),
+          },
+          { key: 'provider-divider', type: 'divider' as const },
+        ]
+      : []),
+    ...shownModelOptions.map((option) => ({
+      key: `model:${option.value}`,
+      disabled: !shownProviderCapabilitiesResolved,
+      label: (
+        <span className="scope-menu-row">
+          {option.label}
+          {checkSlot(option.value === shownModel)}
+        </span>
+      ),
+      onClick: () => pickModel(option.value),
+    })),
+    { key: 'effort-divider', type: 'divider' as const },
+    {
+      key: 'effort',
+      label: (
+        <span className="scope-menu-row" title={configHints.effort}>
+          Effort
+          {menuValue(shownEffortLabel)}
+        </span>
+      ),
+      children: shownEffortOptions.map((option) => ({
+        key: `effort:${option.value}`,
+        label: (
+          <span className="scope-menu-row">
+            {option.label}
+            {checkSlot(option.value === shownEffort)}
+          </span>
+        ),
+        onClick: () => pickEffort(option.value),
+      })),
+    },
+    // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast" tier
+    // both exist on some models and not others. A row offered to a session that cannot have it
+    // would be a control whose only outcome is being ignored — the server clamps it at dispatch
+    // either way. A session that stored `true` and then moved to a model without a fast lane keeps
+    // the stored value while the row is away, so going back to a model that has one restores what
+    // was asked for rather than silently dropping it.
+    ...(fastModeUsable
+      ? [
+          {
+            key: 'speed',
+            label: (
+              <span className="scope-menu-row" title={configHints.fastMode}>
+                Speed
+                {menuValue(shownFastMode ? 'Fast' : 'Standard')}
+              </span>
+            ),
+            children: [
+              { value: false, label: 'Standard' },
+              { value: true, label: 'Fast' },
+            ].map((option) => ({
+              key: `speed:${option.value ? 'fast' : 'standard'}`,
+              label: (
+                <span className="scope-menu-row">
+                  {option.label}
+                  {checkSlot(option.value === shownFastMode)}
+                </span>
+              ),
+              onClick: () => pickFastMode(option.value),
+            })),
+          },
+        ]
+      : []),
+  ];
   const selectedSessionTagIds = ((selected?.tags ?? []) as SessionTagRef[]).map((t) => t.id);
   const setTagsFromMenu = ({
     key,
@@ -6260,7 +6627,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   danger: true,
                   onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
                     domEvent.stopPropagation();
-                    deleteMut.mutate({ id: s.id, title: s.title });
+                    requestTrash(s);
                   },
                 };
                 const purgeItem = {
@@ -6584,6 +6951,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {!composing && (
                 <CoordinatorBadge projectId={selectedSession?.projectId} />
               )}
+              {!composing && selected && selectedShared && (
+                <button
+                  type="button"
+                  className="session-shared-pill"
+                  title="Anyone with the link can view this session — open its sharing settings"
+                  onClick={() => setShareOpen(true)}
+                >
+                  <GlobalOutlined /> Shared · Live
+                </button>
+              )}
               {!composing && selectedId && !selectedTrashed && !selectedMissing && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
@@ -6695,13 +7072,41 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 { type: 'divider' as const },
                               ]
                             : []),
+                        // Two words for two links (docs/share-links-design.md §8): Copy link is
+                        // the signed-in address, for yourself; Share… is the public one. Keeping a
+                        // copy needs neither: Download HTML reads the transcript as its owner.
+                        {
+                          key: 'copy-link',
+                          icon: <LinkOutlined />,
+                          label: 'Copy link',
+                          onClick: () => {
+                            setHeaderMenuOpen(false);
+                            copySessionLink(selected);
+                          },
+                        },
                         {
                           key: 'share',
-                          icon: <ShareAltOutlined />,
-                          label: detailForSelected?.shareToken ? 'Share · link active' : 'Share…',
+                          icon: <GlobalOutlined className={selectedShared ? 'session-share-icon-live' : undefined} />,
+                          label: selectedShared ? (
+                            <span className="scope-menu-row">
+                              Share…<span className="scope-menu-value">Live link</span>
+                            </span>
+                          ) : (
+                            'Share…'
+                          ),
                           onClick: () => {
                             setHeaderMenuOpen(false);
                             setShareOpen(true);
+                          },
+                        },
+                        {
+                          key: 'download-html',
+                          icon: <DownloadOutlined />,
+                          label: downloadingHtml ? 'Preparing HTML…' : 'Download HTML',
+                          disabled: downloadingHtml,
+                          onClick: () => {
+                            setHeaderMenuOpen(false);
+                            void downloadHtml(selectedSession ?? selected);
                           },
                         },
                         { type: 'divider' },
@@ -6712,7 +7117,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           label: 'Delete',
                           onClick: () => {
                             setHeaderMenuOpen(false);
-                            deleteMut.mutate({ id: selected.id, title: selected.title });
+                            requestTrash(selected);
                           },
                         },
                       ],
@@ -6728,8 +7133,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           <ShareModal
             open={shareOpen}
             onClose={() => setShareOpen(false)}
-            sessionId={selected.id}
-            initialToken={detailForSelected?.shareToken ?? null}
+            kind="SESSION"
+            rootId={selected.id}
           />
         )}
 
@@ -6845,7 +7250,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     <AutoRetryCtx.Provider value={autoRetryHelp}>
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
                         <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
+                          <TaskActivityCtx.Provider value={taskActivity}>
                           <StreamingDraftsCtx.Provider value={streamingDrafts}>
+                            {/* What Add to Wiki writes as, and into which codebase's wiki. Mounted
+                                here and by nothing else: the shared page and the static export
+                                leave it null, which is what keeps a write button off a page its
+                                reader cannot write from. */}
+                            <AddToWikiCtx.Provider value={addToWikiConversation}>
                             {/* The links in this conversation, drawn as cards. The provider is
                                 what makes a card possible at all — the shared page and the export
                                 mount none — and it re-reads the links when the detail above is
@@ -6863,7 +7274,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 inserts={transcriptInserts}
                               />
                             </OrbitLinkCardsProvider>
+                            </AddToWikiCtx.Provider>
                           </StreamingDraftsCtx.Provider>
+                          </TaskActivityCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
                       </UndeliveredCtx.Provider>
                     </AutoRetryCtx.Provider>
@@ -6977,7 +7390,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <SessionProjectSettlementCard
                   key={`settlement:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
-                  onChatAbout={startProjectSettlementChat}
+                  onDelegate={delegateProjectSettlement}
                 />
               )}
               {selected &&
@@ -7236,65 +7649,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         </div>
 
       <div className="workspace-composer">
-        {/* Image previews sit above the worktree status bar so a staged screenshot reads
-            as part of the message you're about to send, not buried under the diff chip. */}
-        {images.length > 0 && (
-          <div className="composer-attachments">
-            {images.map((im) =>
-              // An image picked here draws from its local object URL (instant); one handed back out
-              // of a sent message has no blob and draws from the bytes the control plane holds.
-              im.previewUrl || (im.id && im.mime.startsWith('image/')) ? (
-                <span key={im.uid} className="composer-pill composer-attach">
-                  {im.previewUrl ? (
-                    <Image
-                      className="composer-attach-thumb"
-                      src={im.previewUrl}
-                      alt=""
-                      preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }}
-                    />
-                  ) : (
-                    <AttachmentImage id={im.id as string} variant="chip" />
-                  )}
-                  {im.status === 'uploading' && (
-                    <span className="composer-attach-spin">
-                      <LoadingOutlined spin />
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="composer-attach-remove"
-                    onClick={() => removeImage(im.uid)}
-                    aria-label="Remove image"
-                  >
-                    <CloseOutlined />
-                  </button>
-                </span>
-              ) : (
-                <span key={im.uid} className="composer-pill composer-file">
-                  {im.status === 'uploading' ? (
-                    <LoadingOutlined spin className="composer-file-icon" />
-                  ) : (
-                    <PaperClipOutlined className="composer-file-icon" />
-                  )}
-                  <span className="composer-file-name" title={im.name}>
-                    {im.name}
-                  </span>
-                  {im.size !== undefined && (
-                    <span className="composer-file-size">{fmtBytes(im.size)}</span>
-                  )}
-                  <button
-                    type="button"
-                    className="composer-file-remove"
-                    onClick={() => removeImage(im.uid)}
-                    aria-label="Remove file"
-                  >
-                    <CloseOutlined />
-                  </button>
-                </span>
-              ),
-            )}
-          </div>
-        )}
         {/* What this session is waiting on: live watches it observes. A watch waits on the server,
             not in a process, so it gets its own strip rather than a row in the tray below
             (docs/watch-contract.md §9.2). Hidden when there are none. */}
@@ -7302,7 +7656,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         {/* Background processes the workspace launched (Bash run_in_background) — invisible
             otherwise. Derived from this session's events; hidden when there are none. */}
         {selectedId && !selectedTrashed && (
-          <BackgroundShellsTray events={events} live={live} serverShells={serverBgShells} />
+          <BackgroundShellsTray
+            events={events}
+            live={live}
+            serverShells={serverBgShells}
+            liveProgress={scopedLiveTaskProgress}
+          />
         )}
         {/* The tasks this session's agent created, beside the branch below: the conversation's two
             kinds of output next to each other. Hidden until it has created one. */}
@@ -7526,87 +7885,66 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               e.target.value = '';
             }}
           />
-          {/* In shell mode this stops being a menu: `trigger={[]}` makes the Dropdown an inert
-              wrapper so the button below acts on its own onClick (leave shell mode) instead of
-              opening the attachment menu. Nothing in that menu applies to a raw command anyway —
-              and a mode you can enter needs a visible way out. */}
-          <Dropdown
-            trigger={shellMode ? [] : ['click']}
-            placement="topLeft"
-            disabled={composerDisabled}
-            menu={{
-              className: 'composer-attach-menu',
-              // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
-              // array's last entry is the one beside the `+` — while the native menu
-              // (ComposerView.swift `addMenu`) hands its items to the system with the first one
-              // nearest the button and gets them back reversed. Hence the native source reads
-              // Command…File and this reads File…Command: both clients put Command under the
-              // thumb and File at the far end, and a divider between the two groups. Pinned by
-              // WorkspaceView.composerMenu.test.tsx, drawn in
-              // docs/mocks/composer-attach-menu-phone.html.
-              items: [
-                {
-                  key: 'file',
-                  icon: <PaperClipOutlined />,
-                  label: 'File',
-                  onClick: () => fileInputRef.current?.click(),
-                },
-                {
-                  key: 'image',
-                  icon: <PictureOutlined />,
-                  // One word per action, the way the native composer's `+` menu writes them
-                  // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
-                  // upload can't work in says so on pick, rather than greying the item out.
-                  label: 'Image',
-                  onClick: () => imageInputRef.current?.click(),
-                },
-                { type: 'divider' },
-                {
-                  key: 'shell',
-                  // The terminal box, as native Shell draws it — not `ConsoleSqlOutlined`, whose
-                  // SQL monitor appeared in neither client.
-                  icon: <CodeOutlined />,
-                  // Works on a live session, a brand-new draft (sent as the first turn), and
-                  // an ended-but-resumable session (sent as the revive turn — the runner
-                  // --resumes claude, runs the command, and buffers its output for the next
-                  // message). Only an unresumable ended session blocks it (never started, or
-                  // its runner is offline) — there's no claude context to wake.
-                  label:
-                    sameSessionSendBlocked || (!!selected && !live && !resumable)
-                      ? 'Shell (session unavailable)'
-                      : 'Shell',
-                  disabled: sameSessionSendBlocked || (!!selected && !live && !resumable),
-                  onClick: insertShell,
-                },
-                {
-                  key: 'skill',
-                  icon: <ThunderboltOutlined />,
-                  label: 'Skill',
-                  disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
-                  onClick: () => insertSlash('skill'),
-                },
-                {
-                  key: 'command',
-                  icon: <SlashCommandIcon />,
-                  label: 'Command',
-                  disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
-                  onClick: () => insertSlash('command'),
-                },
-              ],
-            }}
-          >
-            <Button
-              className={shellMode ? 'composer-attach-btn composer-shell-btn' : 'composer-attach-btn'}
-              type="text"
-              icon={shellMode ? undefined : <PlusOutlined />}
-              onClick={shellMode ? exitShell : undefined}
-              disabled={composerDisabled}
-              aria-label={shellMode ? 'Leave shell mode' : 'Add attachment'}
-              title={shellMode ? 'Leave shell mode' : undefined}
-            >
-              {shellMode ? '❯' : null}
-            </Button>
-          </Dropdown>
+          {/* Staged attachments sit inside the card, above the text they go out with, so a
+              screenshot reads as part of the message you're about to send — not as one more strip
+              of the band above, separated from the text by the watch, tray and branch bars. */}
+          {images.length > 0 && (
+            <div className="composer-attachments">
+              {images.map((im) =>
+                // An image picked here draws from its local object URL (instant); one handed back out
+                // of a sent message has no blob and draws from the bytes the control plane holds.
+                im.previewUrl || (im.id && im.mime.startsWith('image/')) ? (
+                  <span key={im.uid} className="composer-pill composer-attach">
+                    {im.previewUrl ? (
+                      <Image
+                        className="composer-attach-thumb"
+                        src={im.previewUrl}
+                        alt=""
+                        preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }}
+                      />
+                    ) : (
+                      <AttachmentImage id={im.id as string} variant="chip" />
+                    )}
+                    {im.status === 'uploading' && (
+                      <span className="composer-attach-spin">
+                        <LoadingOutlined spin />
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="composer-attach-remove"
+                      onClick={() => removeImage(im.uid)}
+                      aria-label="Remove image"
+                    >
+                      <CloseOutlined />
+                    </button>
+                  </span>
+                ) : (
+                  <span key={im.uid} className="composer-pill composer-file">
+                    {im.status === 'uploading' ? (
+                      <LoadingOutlined spin className="composer-file-icon" />
+                    ) : (
+                      <PaperClipOutlined className="composer-file-icon" />
+                    )}
+                    <span className="composer-file-name" title={im.name}>
+                      {im.name}
+                    </span>
+                    {im.size !== undefined && (
+                      <span className="composer-file-size">{fmtBytes(im.size)}</span>
+                    )}
+                    <button
+                      type="button"
+                      className="composer-file-remove"
+                      onClick={() => removeImage(im.uid)}
+                      aria-label="Remove file"
+                    >
+                      <CloseOutlined />
+                    </button>
+                  </span>
+                ),
+              )}
+            </div>
+          )}
           <div className="composer-field">
           {/* Behind the input, drawing its chips. Same characters, same metrics — see the
               `.composer-field` block in index.css for why that is not negotiable. */}
@@ -7772,197 +8110,148 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             }}
           />
           </div>
-          {showStop ? (
-            <Tooltip title="Stop the current turn">
-              <Button
-                type="primary"
-                icon={<BorderOutlined />}
-                onClick={() => selected && control.mutate(selected.id)}
-                aria-label="Stop"
-              />
-            </Tooltip>
-          ) : (
-            <Tooltip
-              title={
-                sameSessionSendBlocked
-                  ? sameSessionSendBlockedCopy
-                  : defaultSendIntent === 'CURRENT_WORK'
-                    ? 'Add to current work'
-                    : 'Send as next turn'
-              }
+          <div className="composer-toolbar">
+            {/* In shell mode this stops being a menu: `trigger={[]}` makes the Dropdown an inert
+                wrapper so the button below acts on its own onClick (leave shell mode) instead of
+                opening the attachment menu. Nothing in that menu applies to a raw command anyway —
+                and a mode you can enter needs a visible way out. */}
+            <Dropdown
+              trigger={shellMode ? [] : ['click']}
+              placement="topLeft"
+              disabled={composerDisabled}
+              menu={{
+                className: 'composer-attach-menu',
+                // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
+                // array's last entry is the one beside the `+` — while the native menu
+                // (ComposerView.swift `addMenu`) hands its items to the system with the first one
+                // nearest the button and gets them back reversed. Hence the native source reads
+                // Command…File and this reads File…Command: both clients put Command under the
+                // thumb and File at the far end, and a divider between the two groups. Pinned by
+                // WorkspaceView.composerMenu.test.tsx, drawn in
+                // docs/mocks/composer-attach-menu-phone.html.
+                items: [
+                  {
+                    key: 'file',
+                    icon: <PaperClipOutlined />,
+                    label: 'File',
+                    onClick: () => fileInputRef.current?.click(),
+                  },
+                  {
+                    key: 'image',
+                    icon: <PictureOutlined />,
+                    // One word per action, the way the native composer's `+` menu writes them
+                    // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
+                    // upload can't work in says so on pick, rather than greying the item out.
+                    label: 'Image',
+                    onClick: () => imageInputRef.current?.click(),
+                  },
+                  { type: 'divider' },
+                  {
+                    key: 'shell',
+                    // The terminal box, as native Shell draws it — not `ConsoleSqlOutlined`, whose
+                    // SQL monitor appeared in neither client.
+                    icon: <CodeOutlined />,
+                    // Works on a live session, a brand-new draft (sent as the first turn), and
+                    // an ended-but-resumable session (sent as the revive turn — the runner
+                    // --resumes claude, runs the command, and buffers its output for the next
+                    // message). Only an unresumable ended session blocks it (never started, or
+                    // its runner is offline) — there's no claude context to wake.
+                    label:
+                      sameSessionSendBlocked || (!!selected && !live && !resumable)
+                        ? 'Shell (session unavailable)'
+                        : 'Shell',
+                    disabled: sameSessionSendBlocked || (!!selected && !live && !resumable),
+                    onClick: insertShell,
+                  },
+                  {
+                    key: 'skill',
+                    icon: <ThunderboltOutlined />,
+                    label: 'Skill',
+                    disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
+                    onClick: () => insertSlash('skill'),
+                  },
+                  {
+                    key: 'command',
+                    icon: <SlashCommandIcon />,
+                    label: 'Command',
+                    disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
+                    onClick: () => insertSlash('command'),
+                  },
+                ],
+              }}
             >
               <Button
-                type="primary"
-                icon={<ArrowUpOutlined />}
-                disabled={!canSend}
-                loading={send.isPending}
-                onClick={() => onSend()}
-                aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
-              />
-            </Tooltip>
-          )}
-        </div>
-        <div className="composer-pills">
-          {/* The workspace is only a Select when it can actually be picked (new, unlocked
-              session); once read-only it shows as a static pill left of Model below. */}
-          {!workspaceReadOnly && (
-            <Tooltip title="Workspace" open={hoverTipOpen}>
-              <span className="composer-pill composer-pill-workspace">
-                <Select
-                  size="small"
-                  variant="borderless"
-                  suffixIcon={null}
-                  value={shownWorkspaceId}
-                  onChange={setWorkspaceId}
-                  options={workspacesForRunner.map((a) => ({ value: a.id, label: a.name }))}
-                  placeholder="Default"
-                  disabled={live || !!lockedWorkspaceId}
-                  popupMatchSelectWidth={false}
-                />
-              </span>
-            </Tooltip>
-          )}
-          {/* Tooltip wraps the span (not the Select): a disabled Select has no pointer
-              events, so the parent span is what surfaces the reason on hover. With the
-              icons gone, the tooltip also names what each pill controls. */}
-          <Tooltip title={configHints.permissionMode} open={hoverTipOpen}>
-            <span className="composer-pill">
-              <Select
-                size="small"
-                variant="borderless"
-                suffixIcon={null}
-                value={shownMode}
-                onChange={(v) => {
-                  if (live) {
-                    configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] });
-                  } else {
-                    modeSeedState.current = dirtyContextSeed(modelContextKey);
-                    setMode(v);
-                  }
-                }}
-                options={MODE_OPTIONS.map((m) => {
-                  // A mode this ENGINE cannot honor is still offered, and never disabled: it is the
-                  // user's stored intent, and it starts being enforced the moment the session moves
-                  // to an engine that can — it just must not read as a guarantee it isn't, so the
-                  // option carries the caveat. The wording comes from the shared table rather than
-                  // being rebuilt here: a picker that re-derives it is a picker that can contradict
-                  // what dispatch will do.
-                  //
-                  // A mode this RUNNER cannot run is the one exception, and disabled rather than
-                  // annotated, because the premise above does not hold for it: a session cannot move
-                  // to another machine, so Bypass on a root runner is not a mode awaiting its moment
-                  // — claude exits during startup and the session never produces anything. Disabled
-                  // and not hidden, so the reason is visible instead of the option silently missing.
-                  const semantics = permissionSemanticsFor(m);
-                  const runnable = permissionModeAvailableOnRunner(
-                    MODE_TO_PERMISSION[m],
-                    runner.runsAsRoot,
-                  );
-                  const shortNote = semantics?.shortNote;
-                  return {
-                    value: m,
-                    label: shortNote ? `${m} — ${shortNote}` : m,
-                    disabled: !runnable,
-                  };
-                })}
-                disabled={!configEditable}
-                popupMatchSelectWidth={false}
-              />
-            </span>
-          </Tooltip>
-          <span className="composer-pill-spacer" />
-          {providerSwitchChoices.length > 1 && (
-            <Tooltip title={configHints.provider} open={hoverTipOpen}>
+                className={shellMode ? 'composer-attach-btn composer-shell-btn' : 'composer-attach-btn'}
+                type="text"
+                icon={shellMode ? undefined : <PlusOutlined />}
+                onClick={shellMode ? exitShell : undefined}
+                disabled={composerDisabled}
+                aria-label={shellMode ? 'Leave shell mode' : 'Add attachment'}
+                title={shellMode ? 'Leave shell mode' : undefined}
+              >
+                {shellMode ? '❯' : null}
+              </Button>
+            </Dropdown>
+            {/* The workspace is only a Select when it can actually be picked (new, unlocked
+                session); once read-only it shows as a static pill left of Model below. */}
+            {!workspaceReadOnly && (
+              <Tooltip title="Workspace" open={hoverTipOpen}>
+                <span className="composer-pill composer-pill-workspace">
+                  <Select
+                    size="small"
+                    variant="borderless"
+                    suffixIcon={null}
+                    value={shownWorkspaceId}
+                    onChange={setWorkspaceId}
+                    options={workspacesForRunner.map((a) => ({ value: a.id, label: a.name }))}
+                    placeholder="Default"
+                    disabled={live || !!lockedWorkspaceId}
+                    popupMatchSelectWidth={false}
+                  />
+                </span>
+              </Tooltip>
+            )}
+            {/* Tooltip wraps the span (not the Select): a disabled Select has no pointer
+                events, so the parent span is what surfaces the reason on hover. With the
+                icons gone, the tooltip also names what each pill controls. */}
+            <Tooltip title={configHints.permissionMode} open={hoverTipOpen}>
               <span className="composer-pill">
                 <Select
                   size="small"
                   variant="borderless"
                   suffixIcon={null}
-                  value={shownProvider}
+                  value={shownMode}
                   onChange={(v) => {
-                    // A provider this runner can't run isn't a switch — it's a request for the
-                    // sign-in (or install) that would make it one. Go straight to that engine's
-                    // row on the Providers page, as the New Session picker's row does. The Select
-                    // is controlled, so the pill keeps showing the provider still in use.
-                    const picked = providerSwitchChoices.find((c) => c.slug === v);
-                    if (picked?.unavailable) {
-                      navigate(
-                        picked.fixHref ??
-                          `/providers?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
-                      );
-                      return;
-                    }
-                    // Each provider owns its model space, so carry the running model only when
-                    // the new one offers it (two Anthropic accounts do; a third-party endpoint
-                    // with its own list does not) and otherwise take that provider's default.
-                    // Mode and effort follow the model, exactly as a model switch makes them.
-                    const nextModel = modelOptionsForProvider(
-                      v,
-                      runner.modelCatalog,
-                      configuredProviders,
-                    ).some((option) => option.value === shownModel)
-                      ? shownModel
-                      : defaultModelForProvider(
-                          v,
-                          runner.modelCatalog,
-                          configuredProviders,
-                          runner.runtimeDefaultModels,
-                        );
-                    const drop =
-                      shownMode === 'Auto' &&
-                      !supportsAuto(nextModel, v, configuredProviders, runner.modelCatalog);
-                    const currentEffort = live ? effectiveEffort : effort;
-                    const nextEffort = normalizeEffortForProvider(
-                      v,
-                      currentEffort,
-                      nextModel,
-                      runner.modelCatalog,
-                    );
                     if (live) {
-                      configMut.mutate({
-                        provider: v,
-                        ...(nextModel !== shownModel ? { model: nextModel } : {}),
-                        ...(drop ? { permissionMode: 'default' } : {}),
-                        ...(nextEffort !== currentEffort ? { effort: nextEffort } : {}),
-                      });
-                      return;
-                    }
-                    // Ended: hold the pick until the resume carries it, and move the pills that
-                    // depend on it now — marking their seeds dirty, exactly as a manual Model or
-                    // Mode edit does, so the seeding effect doesn't put the old values back.
-                    setEndedProviderPick({ sessionId: selected!.id, provider: v });
-                    // A pick that may mean stopping a run is not a settled question any more:
-                    // whatever the last answer was, it was about the provider before this one.
-                    setRunConflict(null);
-                    if (nextModel !== shownModel) {
-                      modelSeedState.current = dirtyContextSeed(modelContextKey);
-                      setModel(nextModel);
-                    }
-                    if (drop) {
+                      configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] });
+                    } else {
                       modeSeedState.current = dirtyContextSeed(modelContextKey);
-                      setMode('Default');
-                    }
-                    if (nextEffort !== currentEffort) {
-                      effortSeedState.current = dirtyContextSeed(effortContextKey);
-                      setEffort(nextEffort);
+                      setMode(v);
                     }
                   }}
-                  options={providerSwitchChoices.map((choice) => {
-                    // Carry the reason on the row itself, where it answers the question being
-                    // asked ("why can't I pick Claude?"). It stays selectable rather than greyed
-                    // because picking it does something useful — it goes where the fix is (see
-                    // onChange), which is the New Session picker's behaviour for the same row.
-                    // The running provider is exempt: it is the closed pill's own label, and a
-                    // parenthetical there would sit in the footer of every turn.
-                    const blocked = !!choice.unavailable && choice.slug !== shownProvider;
+                  options={MODE_OPTIONS.map((m) => {
+                    // A mode this ENGINE cannot honor is still offered, and never disabled: it is the
+                    // user's stored intent, and it starts being enforced the moment the session moves
+                    // to an engine that can — it just must not read as a guarantee it isn't, so the
+                    // option carries the caveat. The wording comes from the shared table rather than
+                    // being rebuilt here: a picker that re-derives it is a picker that can contradict
+                    // what dispatch will do.
+                    //
+                    // A mode this RUNNER cannot run is the one exception, and disabled rather than
+                    // annotated, because the premise above does not hold for it: a session cannot move
+                    // to another machine, so Bypass on a root runner is not a mode awaiting its moment
+                    // — claude exits during startup and the session never produces anything. Disabled
+                    // and not hidden, so the reason is visible instead of the option silently missing.
+                    const semantics = permissionSemanticsFor(m);
+                    const runnable = permissionModeAvailableOnRunner(
+                      MODE_TO_PERMISSION[m],
+                      runner.runsAsRoot,
+                    );
+                    const shortNote = semantics?.shortNote;
                     return {
-                      value: choice.slug,
-                      label: blocked
-                        ? `${choice.label} — ${choice.unavailable}, ${choice.fixHref ? 'fix it' : 'sign in'} →`
-                        : choice.label,
-                      // Distinguishable at a glance from a provider that is ready to run, without
-                      // being inert: the identity is dimmed, the call to action is not.
-                      className: blocked ? 'composer-provider-fix' : undefined,
+                      value: m,
+                      label: shortNote ? `${m} — ${shortNote}` : m,
+                      disabled: !runnable,
                     };
                   })}
                   disabled={!configEditable}
@@ -7970,150 +8259,116 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 />
               </span>
             </Tooltip>
-          )}
-          <Tooltip title={configHints.model} open={hoverTipOpen}>
-            <span className="composer-pill">
-              <Select
-                size="small"
-                variant="borderless"
-                suffixIcon={null}
-                value={shownModel}
-                onChange={(v) => {
-                  // Switching to a model that can't do Auto while Auto is selected
-                  // would send a mode claude rejects — snap back to Default.
-                  const drop =
-                    shownMode === 'Auto' &&
-                    !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);
-                  // An OpenCode variant is model-defined: a model switch can strip it.
-                  const currentEffort = live ? effectiveEffort : effort;
-                  const nextEffort = normalizeEffortForProvider(
-                    shownProvider,
-                    currentEffort,
-                    v,
-                    runner.modelCatalog,
-                  );
-                  const resetEffort = nextEffort !== currentEffort;
-                  if (live) {
-                    configMut.mutate({
-                      model: v,
-                      ...(drop ? { permissionMode: 'default' } : {}),
-                      ...(resetEffort ? { effort: nextEffort } : {}),
-                    });
-                  } else {
-                    modelSeedState.current = dirtyContextSeed(modelContextKey);
-                    setModel(v);
-                    if (drop) {
-                      modeSeedState.current = dirtyContextSeed(modelContextKey);
-                      setMode('Default');
-                    }
-                    if (resetEffort) {
-                      effortSeedState.current = dirtyContextSeed(effortContextKey);
-                      setEffort(nextEffort);
-                    }
-                  }
-                }}
-                options={shownModelOptions}
-                disabled={!configEditable || !shownProviderCapabilitiesResolved}
-                popupMatchSelectWidth={false}
-              />
-            </span>
-          </Tooltip>
-          <Tooltip title={configHints.effort} open={hoverTipOpen}>
-            <span className="composer-pill">
-              <Select
-                size="small"
-                variant="borderless"
-                suffixIcon={null}
-                value={shownEffort}
-                onChange={(v) => {
-                  effortSeedState.current = dirtyContextSeed(effortContextKey);
-                  const normalized = normalizeEffortForProvider(
-                    shownProvider,
-                    v,
-                    shownModel,
-                    runner.modelCatalog,
-                  );
-                  // Remember as the account default (replaces localStorage) so the next new
-                  // session — here or on iOS/macOS — starts at this effort. Optimistically patch
-                  // the cached `me` so the seed effect sees it, then persist best-effort.
-                  qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
-                    prev ? { ...prev, preferences: { ...prev.preferences, defaultEffort: normalized } } : prev,
-                  );
-                  void api('/users/me/preferences', {
-                    method: 'PATCH',
-                    body: { defaultEffort: normalized },
-                  }).catch(() => {});
-                  if (live) configMut.mutate({ effort: normalized });
-                  else setEffort(normalized);
-                }}
-                options={shownEffortOptions}
-                disabled={!configEditable}
-                popupMatchSelectWidth={false}
-              />
-            </span>
-          </Tooltip>
-          {/* Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
-              tier both exist on some models and not others. A pill rendered for a session that cannot have it
-              would be a control whose only outcome is being ignored — the server clamps it at
-              dispatch either way. A session that stored `true` and then moved to a model without
-              a fast lane keeps the stored value while the pill is away, so going back to a model
-              that has one restores what was asked for rather than silently dropping it. */}
-          {fastModeUsable && (
-            <Tooltip title={configHints.fastMode} open={hoverTipOpen}>
-              <span className="composer-pill">
-                <Select
-                  size="small"
-                  variant="borderless"
-                  suffixIcon={null}
-                  value={shownFastMode ? 'on' : 'off'}
-                  onChange={(v) => {
-                    const next = v === 'on';
-                    if (live) configMut.mutate({ fastMode: next });
-                    else setFastMode(next);
-                  }}
-                  options={[
-                    { value: 'off', label: 'Standard' },
-                    { value: 'on', label: 'Fast' },
-                  ]}
+            <span className="composer-pill-spacer" />
+            {/* Provider, model, effort and — on a model with a fast lane — speed are one control, the
+                way a reference composer writes "model · effort" as one button: the model in the
+                label's colour, the effort after it in the secondary one. The menu behind it
+                (`modelMenuItems`) keeps each field's own rules and tooltip. */}
+            <Tooltip title={configHints.model} open={hoverTipOpen}>
+              <span className="composer-pill composer-model-pill">
+                <Dropdown
+                  trigger={['click']}
+                  placement="topRight"
                   disabled={!configEditable}
-                  popupMatchSelectWidth={false}
+                  // Rows that open a level down open on hover where the pointer can hover, the way
+                  // the browser's own menus do — and on a tap where it cannot, because a phone has
+                  // no hover to give: one row, two gestures, decided by the pointer.
+                  // They open to the right — and on a phone, where the control sits near the
+                  // right edge, there is no right: shift the level back inside the screen rather
+                  // than let it hang off the edge (and widen the page with it).
+                  menu={{
+                    className: 'composer-model-menu',
+                    items: modelMenuItems,
+                    triggerSubMenuAction: canHover ? 'hover' : 'click',
+                    builtinPlacements: {
+                      rightTop: {
+                        points: ['tl', 'tr'],
+                        overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
+                      },
+                    },
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="composer-model-chip"
+                    disabled={!configEditable}
+                    aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}`}
+                  >
+                    <span className="composer-model-name">{shownModelLabel}</span>
+                    <span className="composer-model-effort">
+                      {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
+                    </span>
+                  </button>
+                </Dropdown>
+              </span>
+            </Tooltip>
+            {shownPool && shownPoolAccount && (
+              <Tooltip
+                title={
+                  shownPoolAccount.current
+                    ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
+                    : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — the account with the most room right now`
+                }
+              >
+                <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
+                  <span className="composer-account-name">{shownPoolAccount.member.label}</span>
+                </span>
+              </Tooltip>
+            )}
+            {shownPlanUsage && (
+              <PlanUsageIndicator
+                usage={shownPlanUsage}
+                // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
+                // the built-in Codex runtime is offered them; the create route judges the workspace.
+                reset={shownProvider === 'codex' ? { runner, workspaceId: shownWorkspaceId } : undefined}
+              />
+            )}
+            {/* Context stays visible even before the first turn reports tokens — a New Session reads
+                "—". Rightmost pill, to the right of plan usage. */}
+            {!(shownProvider === 'opencode' && shownModel === '') && (
+              <ContextWindowIndicator
+                tokens={contextTokens}
+                reportedWindow={reportedContextWindow}
+                model={shownModel}
+                provider={shownProvider}
+                modelCatalog={runner.modelCatalog}
+                configured={configuredProviders}
+              />
+            )}
+            {showStop ? (
+              <Tooltip title="Stop the current turn">
+                <Button
+                  className="composer-send"
+                  type="primary"
+                  shape="circle"
+                  icon={<StopSquareIcon />}
+                  onClick={() => selected && control.mutate(selected.id)}
+                  aria-label="Stop"
                 />
-              </span>
-            </Tooltip>
-          )}
-          {shownPool && shownPoolAccount && (
-            <Tooltip
-              title={
-                shownPoolAccount.current
-                  ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
-                  : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — the account with the most room right now`
-              }
-            >
-              <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
-                <span className="composer-account-name">{shownPoolAccount.member.label}</span>
-              </span>
-            </Tooltip>
-          )}
-          {shownPlanUsage && (
-            <PlanUsageIndicator
-              usage={shownPlanUsage}
-              // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
-              // the built-in Codex runtime is offered them; the create route judges the workspace.
-              reset={shownProvider === 'codex' ? { runner, workspaceId: shownWorkspaceId } : undefined}
-            />
-          )}
-          {/* Context stays visible even before the first turn reports tokens — a New Session reads
-              "—". Rightmost pill, to the right of plan usage. */}
-          {!(shownProvider === 'opencode' && shownModel === '') && (
-            <ContextWindowIndicator
-              tokens={contextTokens}
-              reportedWindow={reportedContextWindow}
-              model={shownModel}
-              provider={shownProvider}
-              modelCatalog={runner.modelCatalog}
-              configured={configuredProviders}
-            />
-          )}
+              </Tooltip>
+            ) : (
+              <Tooltip
+                title={
+                  sameSessionSendBlocked
+                    ? sameSessionSendBlockedCopy
+                    : defaultSendIntent === 'CURRENT_WORK'
+                      ? 'Add to current work'
+                      : 'Send as next turn'
+                }
+              >
+                <Button
+                  className="composer-send"
+                  type="primary"
+                  shape="circle"
+                  icon={<ArrowUpOutlined />}
+                  disabled={!canSend}
+                  loading={send.isPending}
+                  onClick={() => onSend()}
+                  aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+                />
+              </Tooltip>
+            )}
+          </div>
         </div>
       </div>
       </div>

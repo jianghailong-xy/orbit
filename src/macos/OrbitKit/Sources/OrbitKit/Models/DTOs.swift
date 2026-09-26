@@ -242,6 +242,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let model: String?
     public let permissionMode: String?
     public let effort: String?
+    /// Whether the session runs in the runtime's fast lane — Claude Code's `/fast`, Codex's
+    /// "priority" service tier. Offered only where `AgentDefaults.fastModeAvailable` says the lane
+    /// exists for this runtime and model; the server clamps it at dispatch either way. Absent
+    /// (nil) on older servers and on sessions that never set it.
+    public let fastMode: Bool?
     /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
@@ -263,6 +268,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Drives the breathing terminal glyph — see `SessionStatusGlyph.pulse`. Absent from older
     /// servers, which keeps the glyph still.
     public let runningBgJobCount: Int?
+    /// How many sub-agents and workflows the runtime started are still at work (the server's
+    /// Session.runningSubagents, counted): the parked-but-working state web calls "Running Agent".
+    /// Read off the session list; absent from older servers, which reads as none.
+    public let runningSubagentCount: Int?
     /// Whether the engine is generating on a turn nobody dispatched. A runtime restarts the model
     /// on its own when a background task reports in or a scheduled wake-up fires; those turns
     /// never reach the control plane's turn bookkeeping, so the session stays at AWAITING_INPUT
@@ -366,6 +375,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         model = try values.decodeIfPresent(String.self, forKey: .model)
         permissionMode = try values.decodeIfPresent(String.self, forKey: .permissionMode)
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
+        fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
@@ -374,6 +384,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
+        runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
@@ -393,11 +404,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 ownerItems: [SessionOwnerItem]? = nil, taskId: String? = nil,
                 branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
-                effort: String? = nil, source: String? = nil,
+                effort: String? = nil, fastMode: Bool? = nil, source: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
+                runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
@@ -427,6 +439,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.model = model
         self.permissionMode = permissionMode
         self.effort = effort
+        self.fastMode = fastMode
         self.source = source
         self.projectId = projectId
         self.projectTitle = projectTitle
@@ -435,6 +448,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastUserText = lastUserText
         self.runningBgCount = runningBgCount
         self.runningBgJobCount = runningBgJobCount
+        self.runningSubagentCount = runningSubagentCount
         self.engineTurnActive = engineTurnActive
         self.error = error
         self.endReason = endReason
@@ -664,6 +678,10 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let permissionMode: String?
     /// Provider-defined effort / variant value; nil omits the field and "" explicitly clears it.
     public let effort: String?
+    /// Start the session in the runtime's fast lane. Nil omits the field — what every session that
+    /// never picked one sends, and what the server reads as off. The composer draws the control
+    /// only where `AgentDefaults.fastModeAvailable` says the lane exists for this model.
+    public let fastMode: Bool?
     /// Seed the first turn as a `!cmd` shell turn (run on the runner, bypassing claude) instead
     /// of a normal message; nil/false → a normal prompt.
     public let shell: Bool?
@@ -671,6 +689,7 @@ public struct CreateSessionRequest: Codable, Sendable {
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
+                fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil) {
         self.prompt = prompt
         self.title = title
@@ -680,6 +699,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.model = model
         self.permissionMode = permissionMode
         self.effort = effort
+        self.fastMode = fastMode
         self.shell = shell
         self.attachmentIds = attachmentIds
     }
@@ -709,17 +729,26 @@ public struct BgShellDTO: Decodable, Sendable {
     public let status: String
     public let latestOutput: String?
     public let startedTs: String?
+    /// `shell`, `agent` or `workflow` — what launched it. Absent from older servers, which list shells only.
+    public let kind: String?
+    /// An agent's or workflow's last progress, carried by the notification that ended it.
+    public let progress: JSONValue?
 
     /// Map to the reducer's `BackgroundProc`: key by `toolUseId`, translate the web status vocab to
     /// the native one, and default a missing output to empty (the tray shows "No output captured yet").
     public func asBackgroundProc() -> BackgroundProc {
         BackgroundProc(id: toolUseId,
-                       command: command,
+                       command: command?.isEmpty == false ? command : nil,
                        description: description,
                        status: status == "done" ? "completed" : status,
                        outputTail: latestOutput ?? "",
-                       startedAt: startedTs)
+                       startedAt: startedTs,
+                       kind: kind,
+                       taskId: shellId)
     }
+
+    /// The progress this row ended with, for `seedBackground`.
+    public var taskProgress: TaskProgress? { TaskProgress.from(progress) }
 }
 
 public enum ApprovalBehavior: String, Codable, Sendable {
@@ -941,17 +970,6 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// POST /sessions/:id/share response — the minted (or, idempotently, the already-existing) public
-/// share token. The read-only page it unlocks lives at `<baseURL>/s/<shareToken>`.
-public struct ShareInfo: Codable, Equatable, Sendable {
-    public let shareToken: String
-    public let sharedAt: String
-    public init(shareToken: String, sharedAt: String) {
-        self.shareToken = shareToken
-        self.sharedAt = sharedAt
-    }
-}
-
 public struct AttachmentRef: Codable, Sendable {
     public let id: String
 }
@@ -964,6 +982,10 @@ public struct ResumeRequest: Codable, Sendable {
     public let model: String?
     public let permissionMode: String?
     public let effort: String?
+    /// Resume into the runtime's fast lane. The reviving process is built from this, so a dormant
+    /// session changes lanes here or not at all — same as effort, and carried on every resume the
+    /// way web carries it.
+    public let fastMode: Bool?
     /// Ids of pre-uploaded image attachments (already scoped to this session) to link to the
     /// reviving turn. nil omits the field (text-only resume). Without this a resume of a dormant
     /// session drops staged images — the durable `user` event then reconciles the optimistic
@@ -981,6 +1003,7 @@ public struct ResumeRequest: Codable, Sendable {
     public let stopSessionId: String?
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
+                fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil,
                 stopSessionId: String? = nil) {
         self.clientTurnId = clientTurnId
@@ -989,31 +1012,39 @@ public struct ResumeRequest: Codable, Sendable {
         self.model = model
         self.permissionMode = permissionMode
         self.effort = effort
+        self.fastMode = fastMode
         self.attachmentIds = attachmentIds
         self.provider = provider
         self.stopSessionId = stopSessionId
     }
 }
 
-/// PATCH /sessions/:id/config — change model / permission-mode / effort / provider mid-session.
+/// PATCH /sessions/:id/config — change model / permission-mode / effort / fast mode / provider
+/// mid-session.
 ///
 /// Mid-TURN too, for the first two: on the claude runtime the server hands model and permission
 /// mode to the resident engine over its control channel, so they take hold inside the turn that
-/// is already running. Effort and provider are decided when the process is built, so they wait for
-/// the re-spawn the server defers to the end of that turn (`ConsoleModel.applyConfig`).
+/// is already running. Effort, fast mode and provider are decided when the process is built — the
+/// CLI reads fast mode out of the settings file its process started with — so they wait for the
+/// re-spawn the server defers to the end of that turn (`ConsoleModel.applyConfig`).
 public struct ConfigUpdateRequest: Codable, Sendable {
     public let model: String?
     public let permissionMode: String?
     public let effort: String?
+    /// Turn the runtime's fast lane on or off. Sent as a real value rather than only when true,
+    /// because leaving a lane is as ordinary as joining one. The server refuses the lane for a
+    /// model that has none (`fastModeAvailable`, the same call the composer gates the row with).
+    public let fastMode: Bool?
     /// Re-point a live session at another provider identity on the SAME runtime CLI. The runner
     /// re-spawns with the new environment and --resume, so the conversation carries over.
     /// Cross-runtime is rejected server-side.
     public let provider: String?
     public init(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
-                provider: String? = nil) {
+                fastMode: Bool? = nil, provider: String? = nil) {
         self.model = model
         self.permissionMode = permissionMode
         self.effort = effort
+        self.fastMode = fastMode
         self.provider = provider
     }
 }

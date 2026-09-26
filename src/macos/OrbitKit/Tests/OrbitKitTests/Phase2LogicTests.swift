@@ -498,6 +498,15 @@ final class Phase2LogicTests: XCTestCase {
             surface: "App", model: "vendor-model", contextTokens: 94_500))
         XCTAssertTrue(noWindow.contains(
             ComposerStatusRow(label: "Context", value: "95k tokens (window not reported)")))
+
+        // Fast mode is named only while it is ON, and a snapshot that never set it draws nothing:
+        // off is what a session with no fast lane reads as too, so a row saying "off" would name a
+        // setting where none exists. Web parity (`localStatusRows`).
+        let inTheLane = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
+            surface: "App", effort: "max", fastMode: true))
+        XCTAssertTrue(inTheLane.contains(ComposerStatusRow(label: "Fast mode", value: "on")))
+        XCTAssertFalse(ComposerHostCommand.statusRows(ComposerStatusSnapshot(
+            surface: "App", effort: "max")).contains { $0.label == "Fast mode" })
     }
 
     func testSlashPickAndOpening() {
@@ -570,6 +579,34 @@ final class Phase2LogicTests: XCTestCase {
         let cleared = try JSONEncoder().encode(
             ResumeRequest(clientTurnId: "c2", content: "go", model: "m", effort: ""))
         XCTAssertTrue(String(decoding: cleared, as: UTF8.self).contains("\"effort\":\"\""))
+    }
+
+    /// Fast mode is stored on the session row the composer seeds from, and named on both requests
+    /// that can change it. The decode is `decodeIfPresent`, so a server that never heard of the
+    /// field leaves it nil — which the console reads as off, not as an error.
+    func testSessionDecodesFastModeAndTheRequestsCarryIt() throws {
+        let stored = try JSONDecoder().decode(
+            Session.self,
+            from: Data(#"{"id":"s1","status":"RUNNING","model":"claude-opus-5-5","fastMode":true}"#.utf8))
+        XCTAssertEqual(stored.fastMode, true)
+        let silent = try JSONDecoder().decode(
+            Session.self, from: Data(#"{"id":"s1","status":"RUNNING"}"#.utf8))
+        XCTAssertNil(silent.fastMode)
+
+        // A resume is the one moment a dormant session can leave the lane, so the value travels in
+        // both directions there — unlike the create, which sends it only while it is on.
+        let joined = try jsonObject(ResumeRequest(clientTurnId: "c1", content: "go", fastMode: true))
+        XCTAssertEqual(joined["fastMode"] as? Bool, true)
+        let left = try jsonObject(ResumeRequest(clientTurnId: "c2", content: "go", fastMode: false))
+        XCTAssertEqual(left["fastMode"] as? Bool, false)
+
+        // The mid-session push names it the way the other pills are named, and an untouched field
+        // stays omitted rather than being sent as a value the user never picked.
+        let pushed = try jsonObject(ConfigUpdateRequest(fastMode: false))
+        XCTAssertEqual(pushed["fastMode"] as? Bool, false)
+        XCTAssertFalse(pushed.keys.contains("provider"))
+        let untouched = try jsonObject(ConfigUpdateRequest(model: "m"))
+        XCTAssertFalse(untouched.keys.contains("fastMode"))
     }
 
     /// Reviving a dormant session must carry staged image ids so the server links them to the

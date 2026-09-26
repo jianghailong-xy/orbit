@@ -20,6 +20,7 @@ export * from './sessionCreatedTasks';
 export * from './source';
 export * from './task-start';
 export * from './watch';
+export * from './wiki';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
  *  freezes the web and macOS clients — one giant text node lays out synchronously on the
@@ -32,3 +33,5 @@ export const MAX_PROMPT_CHARS = 50_000;
  *  countdown from `deletedAt`; the apiserver reaper enforces the same window. Shared so
  *  the two never disagree. */
 export const TRASH_RETENTION_DAYS = 30;
+export * from './taskProgress';
+export * from './taskProgressCopy';

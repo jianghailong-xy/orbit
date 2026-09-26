@@ -19,10 +19,11 @@ import {
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
+import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import {
@@ -2297,7 +2298,10 @@ export class SessionsService {
    * quiet is a process, not work in progress, and the rail should not draw it as the latter. The
    * rail draws this as its own quieter mark: real work the workspace can be doing with nobody
    * generating in it, and the one thing `running` deliberately does not cover.
-   * `needsYou` is returned separately and wins the sidebar status slot.
+   * `needsYou` is returned separately, and a session it counts is in neither `running` nor `jobs`:
+   * the Session list draws that row with the waiting glyph, not the spinner or the breathing
+   * terminal, and the expanded sidebar shows its activity dot beside the count — where a turn
+   * blocked on you would otherwise light the dot for work that is not moving.
    * Sessions with no workspace belong to no row and are skipped.
    */
   async workspaceSessionCounts(ownerId: string) {
@@ -2314,8 +2318,9 @@ export class SessionsService {
         where: { ...open, status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } },
         _count: { _all: true },
       }),
-      this.prisma.session.groupBy({
-        by: ['workspaceId'],
+      // Rows rather than a `groupBy`, so a session that needs you can be taken back out by id.
+      // These are the sessions in flight right now — a handful even for a busy account.
+      this.prisma.session.findMany({
         where: {
           ...open,
           OR: [
@@ -2326,7 +2331,7 @@ export class SessionsService {
             },
           ],
         },
-        _count: { _all: true },
+        select: { id: true, workspaceId: true },
       }),
       // The third tally, and the only one that is neither "the model is generating" nor "somebody
       // is being asked": sessions with a background JOB in flight (Session.runningBgJobs — a
@@ -2342,7 +2347,7 @@ export class SessionsService {
       // busy account, and the rule applied here is the same one the session payload counts with.
       this.prisma.session.findMany({
         where: { ...open, runningBgJobs: { isEmpty: false } },
-        select: { workspaceId: true, runningBgJobs: true, runningBgJobActivity: true },
+        select: { id: true, workspaceId: true, runningBgJobs: true, runningBgJobActivity: true },
       }),
       // Only the blocked rows come back (a handful at most), so this stays a lookup, not a scan
       // of the whole list. This one counts prompts a human has to answer, which a self-driven
@@ -2399,18 +2404,6 @@ export class SessionsService {
     for (const session of active) {
       if (session.workspaceId) row(session.workspaceId).active = session._count._all;
     }
-    for (const group of running) {
-      if (group.workspaceId) row(group.workspaceId).running = group._count._all;
-    }
-    // One session is one row of this tally however many jobs it has in flight, as it has always
-    // been. What changed with the freshness rule is that a session whose jobs have ALL gone quiet
-    // is not one of them: the rail should stop showing work where nothing is moving. `undefined`
-    // for a job nobody has reported progress on is not quiet — see BgJobActivity.
-    for (const session of jobs) {
-      if (!session.workspaceId) continue;
-      if (freshRunningBgJobs(session.runningBgJobs, session.runningBgJobActivity).length === 0) continue;
-      row(session.workspaceId).jobs += 1;
-    }
     // One conversation is one row of this tally however many things are waiting on it: the number
     // is "sessions that need you", and a coordinator blocked on a tool call while a proposal is
     // also unanswered is still one place to go.
@@ -2427,6 +2420,21 @@ export class SessionsService {
       if (!session.approvals.some((a) => readByLiveBackgroundJob(a, session.runningBgShells))) continue;
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
+    }
+    // The activity tallies, after `needsYou` because a session counted there is counted only there
+    // (see the doc above).
+    for (const session of running) {
+      if (!session.workspaceId || needsYou.has(session.id)) continue;
+      row(session.workspaceId).running += 1;
+    }
+    // One session is one row of this tally however many jobs it has in flight, as it has always
+    // been. What changed with the freshness rule is that a session whose jobs have ALL gone quiet
+    // is not one of them: the rail should stop showing work where nothing is moving. `undefined`
+    // for a job nobody has reported progress on is not quiet — see BgJobActivity.
+    for (const session of jobs) {
+      if (!session.workspaceId || needsYou.has(session.id)) continue;
+      if (freshRunningBgJobs(session.runningBgJobs, session.runningBgJobActivity).length === 0) continue;
+      row(session.workspaceId).jobs += 1;
     }
     return [...counts.values()];
   }
@@ -2563,6 +2571,7 @@ export class SessionsService {
       lastUserText: string | null;
       mergeStatus: string | null;
       pinnedAt: Date | null;
+      shared: boolean;
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
       runningBgShells: string[];
@@ -2639,6 +2648,16 @@ export class SessionsService {
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
         s.merge_status    AS "mergeStatus",
         s.pinned_at       AS "pinnedAt",
+        -- Whether anyone with a link can open this session right now: a share_link (0306) that
+        -- was not turned off and has not run past its expiry, on a session that is not in the
+        -- trash (which pauses it). The list's globe (docs/share-links-design.md §8). At most one
+        -- such row per session, by share_link's partial unique index.
+        (s.deleted_at IS NULL AND EXISTS (
+          SELECT 1 FROM share_link sl
+           WHERE sl.session_id = s.id
+             AND sl.revoked_at IS NULL
+             AND (sl.expires_at IS NULL OR sl.expires_at > now())
+        )) AS "shared",
         COALESCE((
           SELECT json_agg(json_build_object(
                    'id', st.id, 'name', st.name, 'color', st.color,
@@ -2783,6 +2802,7 @@ export class SessionsService {
         lastUserText: r.lastUserText,
         mergeStatus: r.mergeStatus,
         pinnedAt: r.pinnedAt,
+        shared: r.shared === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
@@ -2893,6 +2913,13 @@ export class SessionsService {
         // from a project page has no other way to find its way back. At most one row (the unique
         // index behind Project.coordinatorSessionId), reached through that index.
         coordinatorForProject: { select: { id: true, title: true } },
+        // The public link, which lives in `share_link` since 0306: the one that has not ended and
+        // has not run past its expiry — at most one, by that table's partial unique index. It is
+        // still answered as `shareToken`/`sharedAt`, the names shipped clients read.
+        shareLinks: {
+          where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+          select: { token: true, createdAt: true },
+        },
       },
     });
     if (!session) throw new NotFoundException('session not found');
@@ -2921,6 +2948,10 @@ export class SessionsService {
     const {
       tagLinks,
       coordinatorForProject,
+      shareLinks,
+      // The retired columns (0306): never written since, so what they hold is at best stale.
+      shareToken: _retiredShareToken,
+      sharedAt: _retiredSharedAt,
       titleManagedByProject: _titleManagedByProject,
       titleBeforeProjectManagement: _titleBeforeProjectManagement,
       // Read, never spread: it is the input to the count below, and a client that wants to know
@@ -2945,36 +2976,9 @@ export class SessionsService {
       runningBgJobCount: freshRunningBgJobs(session.runningBgJobs, runningBgJobActivity).length,
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
+      shareToken: shareLinks?.[0]?.token ?? null,
+      sharedAt: shareLinks?.[0]?.createdAt ?? null,
     });
-  }
-
-  /**
-   * Enable a public read-only share link for this session: mint an unguessable `shareToken`
-   * (idempotent — returns the existing one if already shared). The token alone is the
-   * capability; anyone with the link can read the transcript with no login (see getShared).
-   */
-  async enableShare(ownerId: string, id: string): Promise<{ shareToken: string; sharedAt: Date }> {
-    const session = await this.prisma.session.findFirst({
-      where: { id, ownerId },
-      select: { shareToken: true, sharedAt: true },
-    });
-    if (!session) throw new NotFoundException('session not found');
-    if (session.shareToken && session.sharedAt) {
-      return { shareToken: session.shareToken, sharedAt: session.sharedAt };
-    }
-    const updated = await this.prisma.session.update({
-      where: { id },
-      data: { shareToken: randomBytes(24).toString('base64url'), sharedAt: new Date() },
-      select: { shareToken: true, sharedAt: true },
-    });
-    return { shareToken: updated.shareToken!, sharedAt: updated.sharedAt! };
-  }
-
-  /** Revoke the public share link (the token 404s afterwards). No-op if not shared. */
-  async disableShare(ownerId: string, id: string): Promise<void> {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
-    if (!session) throw new NotFoundException('session not found');
-    await this.prisma.session.update({ where: { id }, data: { shareToken: null, sharedAt: null } });
   }
 
   /**
@@ -3090,14 +3094,19 @@ export class SessionsService {
   }
 
   /**
-   * Resolve a public share token to its sanitized, read-only transcript. NO ownerId — the
-   * unguessable token IS the capability. Returns only what a viewer needs to render the
+   * The sanitized, read-only transcript of a session a public link opens. NO ownerId — the link
+   * was resolved from its token (ShareLinksService.resolve), which is the capability, and this is
+   * handed the session that link names. Returns only what a viewer needs to render the
    * conversation (title, workspace name, status, the event stream); never ownership, billing,
    * runner internals, or worktree/merge state. A trashed (deletedAt) session stops resolving.
+   *
+   * `events` is the transcript's TAIL page — the newest `limit` (default 200) — with `hasMore`,
+   * not the whole history: a coordinator's transcript is megabytes, and the anonymous door was
+   * handing all of it to whoever asked. Older events page in over getSharedEventPage.
    */
-  async getShared(token: string) {
+  async getSharedTranscript(sessionId: string, opts: { limit?: number; maxPayload?: number } = {}) {
     const session = await this.prisma.session.findFirst({
-      where: { shareToken: token, deletedAt: null },
+      where: { id: sessionId, deletedAt: null },
       select: {
         id: true,
         title: true,
@@ -3110,21 +3119,13 @@ export class SessionsService {
         workspace: { select: { name: true } },
       },
     });
-    if (!session) throw new NotFoundException('shared session not found');
+    if (!session) throw linkNotFound();
     const stateful = withSessionState(session);
     // A share is another historical transcript reader, so it observes the same replay contract as
     // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
     // persisted by an older API during a rolling deployment (or spend a public response on their
-    // repeated foreground-shell snapshots).
-    const events = await this.prisma.$queryRaw<
-      { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
-    >`
-      SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
-      FROM run_event
-      WHERE session_id = ${session.id}::uuid
-        AND ${replayableEventSql}
-      ORDER BY seq ASC
-    `;
+    // repeated foreground-shell snapshots). The page query is the owner's own (eventPage).
+    const { events, hasMore } = await this.eventPage(session.id, opts);
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
@@ -3135,14 +3136,41 @@ export class SessionsService {
       lifecycleState: stateful.lifecycleState,
       filingState: stateful.filingState,
       createdAt: session.createdAt,
-      events: events.map((e) => ({
-        seq: e.seq,
-        type: e.type,
-        payload: e.payload,
-        turnId: e.turnId ?? null,
-        ts: e.createdAt,
-      })),
+      events,
+      hasMore,
     };
+  }
+
+  /** getEventPage for a share link's session: an older page of the shared transcript
+   *  (`before`/`limit`), or its tail when `before` is absent. Same query, cap and truncation as the
+   *  owner's page. */
+  async getSharedEventPage(
+    sessionId: string,
+    opts: { before?: number; limit?: number; maxPayload?: number },
+  ) {
+    return this.eventPage(sessionId, opts);
+  }
+
+  /**
+   * getEventFull for a share link: one event's untrimmed payload, for a card that came back
+   * `truncated`. Behind the same replay fence as the shared pages, so a seq the transcript does
+   * not show (a progress ping, a live-only row) is not reachable by asking for it directly.
+   */
+  async getSharedEventFull(
+    sessionId: string,
+    seq: number,
+  ): Promise<{ seq: number; type: string; payload: unknown; turnId: string | null; ts: Date }> {
+    const [row] = await this.prisma.$queryRaw<
+      { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
+    >`
+      SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+      FROM run_event
+      WHERE session_id = ${sessionId}::uuid
+        AND seq = ${seq}
+        AND ${replayableEventSql}
+    `;
+    if (!row) throw new NotFoundException('event not found');
+    return { seq: row.seq, type: row.type, payload: row.payload, turnId: row.turnId ?? null, ts: row.createdAt };
   }
 
   /**
@@ -3179,6 +3207,25 @@ export class SessionsService {
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    return this.eventPage(id, opts);
+  }
+
+  /** getEventPage's query, for a session the caller has already resolved — by owner there, by
+   *  share link in getSharedTranscript / getSharedEventPage. */
+  private async eventPage(
+    id: string,
+    opts: { tail?: number; before?: number; limit?: number; maxPayload?: number },
+  ): Promise<{
+    events: {
+      seq: number;
+      type: string;
+      payload: unknown;
+      turnId: string | null;
+      ts: Date;
+      truncated?: true;
+    }[];
+    hasMore: boolean;
+  }> {
     const take = Math.min(Math.max(Math.trunc(opts.limit ?? opts.tail ?? 200), 1), 500);
     const before =
       typeof opts.before === 'number' && Number.isFinite(opts.before)
@@ -3399,7 +3446,8 @@ export class SessionsService {
 
   /**
    * The authoritative, complete list of background shells the session ever launched — every
-   * Bash(run_in_background), with output recovered from the workspace's persisted Read polls of the
+   * Bash(run_in_background), and the workspace's own background sub-agents and workflows (an async
+   * Agent call, a Workflow call) — with output recovered from the workspace's persisted Read polls of the
    * `.output` file. Derived server-side over ALL of the session's persisted events (not just the
    * client's loaded tail window), so the "Background processes" tray shows the same complete list
    * on every client regardless of how much transcript is loaded. Reuses the exact derivation the
@@ -3455,6 +3503,7 @@ export class SessionsService {
             AND (
               (payload->>'name' = 'Bash' AND payload->'input'->>'run_in_background' = 'true')
               OR (payload->>'name' = 'Read' AND payload->'input'->>'file_path' LIKE '%.output')
+              OR (payload->>'name' IN ('Agent', 'Task', 'Workflow') AND NOT (payload ? 'parentToolUseId'))
             )
           )
         )
@@ -3494,16 +3543,20 @@ export class SessionsService {
     return this.getLegacyArtifact(session.id, rawPath);
   }
 
+  /**
+   * The share link's artifact door serves only what is already stored. Everything else
+   * getLegacyArtifact does is the owner's: asking the runner (a turn in the owner's session and a
+   * request held up to 40s) and proving the path was mentioned (the whole run_event history read
+   * into memory) — neither is something an anonymous visitor should be able to start.
+   */
   async getLegacyArtifactForShared(
-    token: string,
+    sessionId: string,
     rawPath: string | undefined,
   ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
-    const session = await this.prisma.session.findFirst({
-      where: { shareToken: token, deletedAt: null },
-      select: { id: true },
-    });
-    if (!session) throw new NotFoundException('artifact not found');
-    return this.getLegacyArtifact(session.id, rawPath);
+    const resolved = await this.resolveLegacyArtifactPath(sessionId, rawPath);
+    const attached = await this.getLegacyArtifactAttachment(sessionId, path.basename(resolved.file));
+    if (!attached) throw new NotFoundException('artifact not found');
+    return attached;
   }
 
   private async getLegacyArtifact(

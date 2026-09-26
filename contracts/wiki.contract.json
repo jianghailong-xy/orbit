@@ -1,0 +1,957 @@
+{
+  "name": "orbit.wiki",
+  "contractVersion": 1,
+  "phase": 1,
+  "doc": "docs/wiki-contract.md",
+  "design": "docs/wiki-design.md",
+  "baseline": {
+    "mainCommit": "083d61fc5a853af1c0fc65b9b681eb37a8e8d56e"
+  },
+
+  "storage": {
+    "migration": "src/apiserver/prisma/migrations/0307_wiki/migration.sql",
+    "tables": [
+      "wiki_space",
+      "wiki_space_workspace",
+      "wiki_topic",
+      "wiki_entry",
+      "wiki_entry_revision",
+      "wiki_source",
+      "wiki_changeset",
+      "wiki_changeset_op",
+      "wiki_exposure"
+    ],
+    "closedSets": "Every closed set below is a CHECK constraint over TEXT, never an enum type (the 0259 practice), and admits exactly the values this file lists.",
+    "ids": "uuid(7), minted by Prisma. The database gives no id column a default.",
+    "tenancy": "Every table carries a non-null owner_id. wiki_space alone points at user (ON DELETE CASCADE); every other table reaches its parent through (parent_id, owner_id) -> parent(id, owner_id), ON DELETE CASCADE, so a child can never belong to a different owner than its parent, and deleting an owner still deletes every row through its spaces: the space for bindings, topics, entries and changesets; the entry for revisions and exposures; the revision for sources; the changeset for ops. A binding reaches its workspace the same way, through workspace(id, owner_id).",
+    "whyNotUser": "A foreign key check takes FOR KEY SHARE on the row it names, and the user row is rank 10 in docs/postgres-lock-order.md, the row lockOwnerTaskGraph holds FOR UPDATE. wiki_exposure is written from dequeueTurn with the session row (rank 30) already held, so a user key on it would take rank 10 after rank 30. Through the space, a wiki write locks only wiki rows.",
+    "locks": "Lock an entry with FOR NO KEY UPDATE (a plain UPDATE does), never FOR UPDATE: an op's and an exposure's foreign keys take KEY SHARE on the entry, which FOR UPDATE would block.",
+    "entryLinks": "supersedes_id and superseded_by_id point at wiki_entry(id, owner_id) with NO ACTION; both ends live in one space, so a space's cascade deletes them in one statement. wiki_changeset_op.entry_id and result_entry_id point at wiki_entry(id, owner_id) with ON DELETE CASCADE, because an op is reached from its space through its changeset and through its entries, and a NO ACTION check could run before the other cascade arrives.",
+    "historyRefs": "An id that points at Orbit's own history carries no foreign key: session, task, tool_call, conversation turn, run event, the user who authored a revision, the op a revision came from (wiki_entry_revision.changeset_op_id), and every wiki_source.ref. A deleted record leaves the id behind as a tombstone, and a wiki write takes no lock on those tables (the precedent is 0238's deciding_session_id; docs/postgres-lock-order.md I2).",
+    "singleWriter": "wiki_entry.status, trust, challenged and unsupported are written only by WikiService.applyOp and WikiService.recomputeFlags, and db-write-inventory registers those two writers and no other.",
+    "appendOnly": "wiki_entry_revision is only ever inserted. A revision is never updated; a change is a new revision.",
+    "search": {
+      "function": "wiki_entry_search_text(title, summary, aliases, fields)",
+      "index": "wiki_entry_search_trgm",
+      "method": "GIN gin_trgm_ops",
+      "text": "title, summary, the aliases and every string value inside fields, space-separated, with * and ` removed exactly as 0095 and stripMarks in sessions.service.ts remove them.",
+      "rule": "A query reaches the index only by calling the same function over the same four columns; any other spelling of the same text scans every row."
+    },
+    "exposureRetentionDays": 90
+  },
+
+  "space": {
+    "identity": "One space per owner and codebase. owner_id is the hard boundary: nothing is ever read, written, listed or counted across owners.",
+    "slug": {
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "uniqueWithin": "owner"
+    },
+    "repoUrlNorm": {
+      "rule": "The remote URL without its scheme, userinfo, trailing .git or trailing /, so both spellings of one repository compare equal.",
+      "examples": {
+        "git@github.com:a/b.git": "github.com/a/b",
+        "https://github.com/a/b": "github.com/a/b",
+        "https://github.com/a/b/": "github.com/a/b"
+      },
+      "uniqueWithin": "owner",
+      "absent": "NULL: a space with no repository behind it. Two such spaces never collide."
+    },
+    "rootCommitSha": "The repository's first root commit, 40 lowercase hex characters, once a runner reports it. It tells apart two repositories behind one URL; NULL until then.",
+    "binding": {
+      "table": "wiki_space_workspace",
+      "rule": "A workspace is bound to at most one space (workspace_id is unique) and only to a space of its own owner (the composite foreign key refuses any other).",
+      "automatic": "A workspace with a repo_url is bound on first use to its owner's space with the same repo_url_norm.",
+      "manual": "A workspace without a repo_url is bound by the owner in Wiki settings (POST /api/wiki/spaces/:id/workspaces).",
+      "unbound": "A session whose workspace is bound to no space is refused WIKI_SPACE_UNBOUND, with one sentence saying how to bind it.",
+      "projects": "A project reaches its space through its codebase's canonical repository URL. There is no project-to-space table."
+    },
+    "settings": {
+      "push": {
+        "type": "boolean",
+        "default": true,
+        "means": "Deliver <orbit_wiki_context> to the sessions of the space's workspaces. The owner decided on 2026-09-25 that it is on by default and that each space can turn it off."
+      },
+      "autoAcceptReinforce": {
+        "type": "boolean",
+        "default": true,
+        "means": "A non-owner reinforce applies at once. Off: it waits for review (effectPolicy)."
+      },
+      "reservedForPhase2": ["maintenance", "embedding"]
+    }
+  },
+
+  "kinds": {
+    "principle": {
+      "phase": 1,
+      "fields": {
+        "statement": { "type": "text", "required": true },
+        "rationale": { "type": "text", "required": true }
+      },
+      "ownerOnlyOps": ["add", "amend", "supersede"],
+      "amendable": true,
+      "push": "always",
+      "invalidation": "Only the owner revises it."
+    },
+    "convention": {
+      "phase": 1,
+      "fields": {
+        "rule": { "type": "text", "required": true },
+        "scope": { "type": "textList", "required": true, "minItems": 1 },
+        "exceptions": { "type": "text", "required": false }
+      },
+      "ownerOnlyOps": [],
+      "amendable": true,
+      "push": "always",
+      "invalidation": "The owner revises it, or one of its anchors stops verifying."
+    },
+    "decision": {
+      "phase": 1,
+      "fields": {
+        "context": { "type": "text", "required": true },
+        "decision": { "type": "text", "required": true },
+        "alternatives": {
+          "type": "objectList",
+          "required": true,
+          "minItems": 1,
+          "fields": {
+            "option": { "type": "text", "required": true },
+            "whyRejected": { "type": "text", "required": true }
+          }
+        },
+        "consequences": { "type": "text", "required": true },
+        "decidedAt": { "type": "date", "required": true }
+      },
+      "ownerOnlyOps": [],
+      "amendable": false,
+      "push": "relevance",
+      "invalidation": "Only superseded, never rewritten: an amend of a decision is refused WIKI_SCHEMA. What the push carries of it is the constraint its title and summary state."
+    },
+    "pitfall": {
+      "phase": 1,
+      "fields": {
+        "trigger": {
+          "type": "object",
+          "required": true,
+          "atLeastOneOf": ["paths", "commands", "errorSignature"],
+          "fields": {
+            "paths": { "type": "textList", "required": true },
+            "commands": { "type": "textList", "required": true },
+            "errorSignature": { "type": "text", "required": false }
+          }
+        },
+        "symptom": { "type": "text", "required": true },
+        "cause": { "type": "text", "required": true },
+        "fix": { "type": "text", "required": true },
+        "detector": { "type": "text", "required": false }
+      },
+      "ownerOnlyOps": [],
+      "amendable": true,
+      "push": "relevance",
+      "invalidation": "Retired once its fix lands. After 28 days with no push hit, no pull and no re-check it becomes pull-only (phase 2), and is kept."
+    },
+    "recipe": {
+      "phase": 1,
+      "fields": {
+        "steps": { "type": "textList", "required": true, "minItems": 1 },
+        "verify": {
+          "type": "object",
+          "required": true,
+          "fields": {
+            "command": { "type": "text", "required": true },
+            "expectedExit": { "type": "integer", "required": true, "min": 0, "max": 255 }
+          }
+        }
+      },
+      "ownerOnlyOps": [],
+      "amendable": true,
+      "push": "relevance",
+      "invalidation": "Re-verified before it is revised; a re-verification that fails retires it (phase 2)."
+    },
+    "concept": {
+      "phase": 1,
+      "fields": {
+        "definition": { "type": "text", "required": true },
+        "boundaries": { "type": "text", "required": true },
+        "notToConfuseWith": { "type": "text", "required": false }
+      },
+      "ownerOnlyOps": [],
+      "amendable": true,
+      "push": "never",
+      "invalidation": "One of its anchors stops verifying."
+    },
+    "assumption": {
+      "phase": 3,
+      "placeholder": true,
+      "sketch": "dependency { purl | cli | url }, contract, probe",
+      "push": "never",
+      "invalidation": "Its probe fails.",
+      "reserved": "The storage CHECK admits the word, so phase 3 needs no migration for it. Every phase-1 door refuses it: WIKI_SCHEMA on kind. It has no KIND_SPECS entry until phase 3 gives it one."
+    }
+  },
+
+  "fieldTypes": {
+    "text": "A string with something besides whitespace in it, at most limits.fieldTextMaxChars characters. pattern, when given, is a regular expression the whole string matches.",
+    "textList": "An array of text, at most limits.listMaxItems long and at least minItems (0 when absent).",
+    "date": "An ISO 8601 calendar date (YYYY-MM-DD) that exists, optionally followed by a time and a UTC offset.",
+    "integer": "A whole number within min and max when they are given.",
+    "object": "An object holding exactly the named fields. atLeastOneOf: of the fields it names, at least one holds a non-empty list or a text.",
+    "objectList": "An array of such objects, at most limits.listMaxItems long and at least minItems.",
+    "strictness": "A required field that is absent is an error, a key no schema names is an error, and an optional field that is present is held to its type. null reads as absent. Every error names its field by path, such as fields.alternatives[0].whyRejected."
+  },
+
+  "entryContent": {
+    "keys": ["kind", "title", "summary", "fields", "topics", "aliases", "anchors"],
+    "title": "Required text, at most limits.titleMaxChars characters.",
+    "summary": "Required text, at most limits.summaryMaxChars characters: one sentence, the one cards and the agent slice show.",
+    "fields": "Required: the kind's own fields (kinds.<kind>.fields).",
+    "topics": "Optional, at most limits.topicsMax topic slugs (space.slug's pattern). Anchor paths also place an entry under a topic through wiki_topic.path_prefixes.",
+    "aliases": "Optional, at most limits.aliasesMax synonyms, each at most limits.aliasMaxChars characters: Chinese and English spellings of the same idea, which is what keyword search matches on besides the text.",
+    "anchors": "Optional, at most limits.listMaxItems, each shaped as anchorTypes says.",
+    "kindIsFixed": "A lineage keeps its kind. Another kind is a supersede, which starts a new lineage."
+  },
+
+  "anchorTypes": {
+    "path": {
+      "fields": { "path": { "type": "text", "required": true } },
+      "states": ["verified", "missing"],
+      "check": "runner: git cat-file -e origin/main:<path>"
+    },
+    "symbol": {
+      "fields": {
+        "path": { "type": "text", "required": true },
+        "symbol": { "type": "text", "required": true },
+        "regionSha256": { "type": "text", "required": false, "pattern": "^[0-9a-f]{64}$" }
+      },
+      "states": ["verified", "changed", "missing"],
+      "check": "runner: git grep -n finds the symbol, and the hash of the lines after it is compared with regionSha256. A hot file is anchored by symbol, never whole."
+    },
+    "commit": {
+      "fields": { "sha": { "type": "text", "required": true, "pattern": "^[0-9a-f]{40}$" } },
+      "states": ["verified", "missing"],
+      "check": "runner: git merge-base --is-ancestor <sha> origin/main. It is always checked: a sha that is not an ancestor poisons what depends on it."
+    },
+    "criterion": {
+      "fields": {
+        "criterionId": { "type": "text", "required": true },
+        "semanticHash": { "type": "text", "required": false, "pattern": "^[0-9a-f]{64}$" }
+      },
+      "states": ["verified", "changed"],
+      "check": "server: the criterion's semanticHash is compared."
+    },
+    "merge_evidence": {
+      "fields": { "contentHash": { "type": "text", "required": true, "pattern": "^[0-9a-f]{64}$" } },
+      "states": ["verified", "missing"],
+      "check": "server: is that evidence still observed."
+    },
+    "command": {
+      "fields": {
+        "command": { "type": "text", "required": true },
+        "expectedExit": { "type": "integer", "required": true, "min": 0, "max": 255 }
+      },
+      "states": ["verified", "changed"],
+      "check": "the maintenance run runs it again (phase 2)."
+    },
+    "record": {
+      "fields": {
+        "ref": { "type": "text", "required": true, "pattern": "^orbit-(task|session|project|list):[0-9A-Za-z-]+$" }
+      },
+      "states": ["verified", "missing"],
+      "check": "server: does the record exist."
+    }
+  },
+  "anchorRules": {
+    "stored": "The server keeps each anchor's last check beside it (its state, the ref it was checked on and when). A proposer never sends those: an anchor carrying a key its type does not name is refused WIKI_SCHEMA.",
+    "gitOnRunner": "A check that needs git runs on a runner, in the maintenance run (phase 2). The apiserver runs no git.",
+    "invalidates": "changed or missing takes the entry out of the push at once and files a system challenge for Review, where the owner re-confirms (a new baseline), amends or retires it."
+  },
+  "anchorStates": {
+    "unchecked": "not checked yet: the state of every new anchor",
+    "verified": "the last check found it as recorded",
+    "changed": "the last check found it, but not as recorded",
+    "missing": "the last check did not find it"
+  },
+
+  "sourceKinds": {
+    "turn": "a conversation turn; { kind: 'turn', session: 'self' } cites the calling session",
+    "event": "a run event",
+    "tool_call": "a tool call",
+    "task": "a task",
+    "task_comment": "a task comment",
+    "approval": "an approval and its answer",
+    "evidence": "a revision of a task's completion evidence",
+    "owner_decision": "a decision the owner recorded",
+    "merge_receipt": "a merge receipt",
+    "criterion": "a project acceptance criterion",
+    "commit": "a git commit, by sha",
+    "note": "an owner's note, or an imported file (phase 2)",
+    "url": "a web page: only for an assumption (phase 3), and it taints the entry"
+  },
+  "sourceInput": {
+    "keys": ["kind", "ref", "session", "seq", "locator", "quote"],
+    "ref": "The cited record's id, or a commit's sha. Required, except by a turn that cites the calling session.",
+    "session": "Only the word self, and only on a turn: the calling session. Its current turn may not be stored yet, so its quote is verified when the session settles, and the Review card says whether it was.",
+    "seq": "Only beside session self: the event sequence number it cites, an integer from 0.",
+    "locator": "Optional object: where in the record, such as a sequence range or a field name.",
+    "quote": "Optional text, at most limits.quoteMaxChars characters, redacted before it is stored."
+  },
+  "sourceRules": {
+    "firstHand": "A source is a first-hand record. A wiki entry, a topic summary or any other view is never a source: citing knowledge with knowledge is how retrieval collapses into itself.",
+    "resolution": "Every source resolves among the owner's own rows, or the op is refused WIKI_SOURCE_UNRESOLVED.",
+    "quote": "A quote, whitespace-normalized, is a substring of the text of the record it cites, or the op is refused WIKI_QUOTE_NOT_FOUND.",
+    "required": "A non-owner add, amend, supersede or reinforce cites at least one source: a claim that cannot be cited is not ready (WIKI_SOURCE_UNRESOLVED). The owner's own writes may cite none.",
+    "attachedTo": "A source row hangs on the revision it supports. A reinforce adds rows to the entry's current revision and changes nothing else.",
+    "url": "Only an assumption may cite a url, and such a source is always tainted."
+  },
+  "sourceStates": {
+    "values": ["live", "trashed", "deleted"],
+    "initial": ["live"],
+    "terminal": ["deleted"],
+    "transitions": [
+      { "from": "live", "to": "trashed", "trigger": "the session it cites went to Trash: its entries leave the push, and are kept because the session can come back" },
+      { "from": "trashed", "to": "live", "trigger": "that session was restored from Trash" },
+      { "from": "trashed", "to": "deleted", "trigger": "that session was purged" },
+      { "from": "live", "to": "deleted", "trigger": "the record it cites was hard-deleted or purged" }
+    ],
+    "deleted": "Delete means forget: in the transaction that deletes the record, quote and quote_sha256 become NULL, and a confirmed entry that no live source supports any more is marked unsupported and leaves the push. The owner's own entries are not touched."
+  },
+
+  "states": {
+    "entry": {
+      "values": ["proposed", "active", "superseded", "retired", "rejected"],
+      "initial": ["proposed", "active"],
+      "born": {
+        "proposed": "an add or supersede that waits for review",
+        "active": "an add or supersede that applied at once: the owner's own"
+      },
+      "terminal": ["superseded", "retired", "rejected"],
+      "transitions": [
+        { "from": "proposed", "to": "active", "trigger": "the owner accepted the op that proposed it, as written or edited" },
+        { "from": "proposed", "to": "rejected", "trigger": "the owner rejected that op, or it expired or was withdrawn. The row stays, as a counter-example the next similar[] shows with its reason" },
+        { "from": "active", "to": "superseded", "trigger": "a supersede naming it applied; superseded_by_id names the successor, whose supersedes_id names it" },
+        { "from": "active", "to": "retired", "trigger": "a retire naming it applied" }
+      ],
+      "invariants": [
+        "superseded exactly when superseded_by_id is set",
+        "retired_at is set exactly when the status is terminal",
+        "trust is proposed exactly when the status is proposed or rejected"
+      ]
+    },
+    "op": {
+      "values": ["pending", "accepted", "edited", "rejected", "auto_applied", "conflict", "expired", "withdrawn"],
+      "initial": ["pending", "auto_applied"],
+      "terminal": ["accepted", "edited", "rejected", "auto_applied", "conflict", "expired", "withdrawn"],
+      "transitions": [
+        { "from": "pending", "to": "accepted", "trigger": "the owner accepted it and it applied" },
+        { "from": "pending", "to": "edited", "trigger": "the owner edited it, accepted the edit, and the edit applied" },
+        { "from": "pending", "to": "rejected", "trigger": "the owner rejected it, naming one of rejectReasons" },
+        { "from": "pending", "to": "conflict", "trigger": "the owner accepted it, but its baseRevision was no longer the entry's current revision, so nothing applied" },
+        { "from": "pending", "to": "expired", "trigger": "it waited limits.pendingExpiryDays days" },
+        { "from": "pending", "to": "withdrawn", "trigger": "its entry left active before the owner decided it (another op superseded or retired it), so it can no longer apply" }
+      ],
+      "invariants": [
+        "decided_at is set exactly when the decision is not pending",
+        "decision_reason is set exactly when the decision is rejected, and is one of rejectReasons"
+      ]
+    },
+    "changeset": {
+      "values": ["pending", "settled"],
+      "initial": ["pending", "settled"],
+      "terminal": ["settled"],
+      "transitions": [
+        { "from": "pending", "to": "settled", "trigger": "the last of its pending ops was decided, expired or withdrawn" }
+      ],
+      "invariants": [
+        "decided_at is set exactly when the changeset is settled",
+        "a pending changeset has an expires_at"
+      ],
+      "note": "A changeset every op of which applied at once is settled when it is recorded. A request none of whose ops passed records no changeset at all."
+    }
+  },
+
+  "trust": {
+    "values": ["owner", "confirmed", "proposed", "external"],
+    "meaning": {
+      "owner": "the owner wrote it: an owner's own add or supersede",
+      "confirmed": "an agent, a maintenance run, an import or a watch proposed it and the owner accepted it, as written or edited",
+      "proposed": "not accepted: every proposed entry and every rejected one",
+      "external": "it rests on web-derived sources (a phase-3 assumption citing a url). Never pushed"
+    },
+    "pushable": ["owner", "confirmed"],
+    "onApply": {
+      "ownerAddOrSupersede": "owner",
+      "acceptedAddSupersedeOrAmend": "confirmed",
+      "everyOtherAppliedOp": "unchanged"
+    },
+    "edited": "An owner who edits a proposal before accepting it is recorded as the author of the revision that results, and the entry's trust is still confirmed."
+  },
+
+  "ops": {
+    "add": {
+      "keys": { "entry": "required: entryContent", "sources": "a source list (sourceRules.required)" },
+      "creates": "a new lineage at revision 1: proposed, or active when it applies at once",
+      "baseRevision": "never"
+    },
+    "reinforce": {
+      "keys": { "entryId": "required", "sources": "required, at least one" },
+      "does": "adds sources to the entry's current revision; content, status and trust stay as they are",
+      "baseRevision": "never"
+    },
+    "amend": {
+      "keys": { "entryId": "required", "baseRevision": "required", "changes": "required: any of title, summary, fields, topics, aliases, anchors; a key given replaces that key whole, a key omitted carries over from baseRevision", "sources": "a source list (sourceRules.required)" },
+      "does": "a new revision of the same lineage; the kind stays",
+      "baseRevision": "required"
+    },
+    "supersede": {
+      "keys": { "entryId": "required", "baseRevision": "required", "entry": "required: entryContent", "sources": "a source list (sourceRules.required)" },
+      "does": "a new lineage that replaces the named one; when it applies, the named entry becomes superseded",
+      "baseRevision": "required"
+    },
+    "retire": {
+      "keys": { "entryId": "required", "baseRevision": "required", "reason": "required text", "sources": "optional" },
+      "does": "the entry leaves active for retired",
+      "baseRevision": "required"
+    },
+    "challenge": {
+      "keys": { "entryId": "required", "reason": "required text", "sources": "optional" },
+      "does": "sets challenged, which takes the entry out of the push at once. The owner answers it in Review: Re-confirm, Amend or Retire",
+      "baseRevision": "never"
+    }
+  },
+  "opRules": {
+    "compareAndSet": "amend, supersede and retire name the revision they were written against, and apply only while it is still the entry's current revision; otherwise WIKI_REVISION_CONFLICT with the current revision and a diff. There is deliberately no \"whatever is current\" spelling, as task_evidence_decide's evidenceRevision has none.",
+    "seq": "An op is numbered by its 0-based position in the request's ops, and every answer names it by that number.",
+    "reason": "A retire or a challenge says why in reason, which Review shows beside it."
+  },
+
+  "effectPolicy": {
+    "why": "Design section 4.2: only the owner's own writes and the two safe ops take effect at once; everything else waits for the owner in Review.",
+    "effects": {
+      "applied": "takes effect in the submitting transaction; the op is recorded auto_applied",
+      "pending": "recorded pending, and shown in Review until the owner decides it or it expires",
+      "appliedUnlessOff": "applied, unless the space's settings.autoAcceptReinforce is false, then pending"
+    },
+    "origins": {
+      "owner": { "add": "applied", "reinforce": "applied", "amend": "applied", "supersede": "applied", "retire": "applied", "challenge": "applied" },
+      "agent": { "add": "pending", "reinforce": "appliedUnlessOff", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" },
+      "maintenance": { "add": "pending", "reinforce": "appliedUnlessOff", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" },
+      "import": { "add": "pending", "reinforce": "appliedUnlessOff", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" },
+      "watch": { "add": "pending", "reinforce": "appliedUnlessOff", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" }
+    },
+    "tainted": { "add": "pending", "reinforce": "pending", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" },
+    "taintedRule": "An op is tainted when the calling session used WebFetch or WebSearch (codex's webSearch too) before it, or when a turn it cites comes from a tainted stretch. A tainted op of any origin but owner follows the tainted row instead of its origin's row, and its Review card carries the Web-derived warning.",
+    "challengeRule": "A challenge applies at once from every origin, tainted or not: it only raises a flag, and the flag's whole effect is to take the entry out of the push until the owner answers it.",
+    "decide": {
+      "route": "POST /api/wiki/changesets/:id/decide",
+      "actions": ["accept", "edit", "reject"],
+      "reject": "names one of rejectReasons, and may add a note",
+      "edit": "carries the owner's version, shaped as an amend's changes over the proposal",
+      "channel": "the user door only (agentSurface.decide)"
+    }
+  },
+
+  "rejectReasons": {
+    "not_true": "Not true",
+    "not_useful": "Not useful",
+    "duplicate": "Duplicate",
+    "too_specific": "Too specific"
+  },
+
+  "changesetOrigins": {
+    "owner": { "phase": 1, "means": "the owner's own write, on the user door" },
+    "agent": { "phase": 1, "means": "wiki_propose or orbit wiki propose from a session, or from a runner with no session (headless), on the runner door" },
+    "maintenance": { "phase": 2, "means": "a Wiki maintenance run of the space" },
+    "import": { "phase": 2, "means": "orbit wiki import: CLAUDE.md, AGENTS.md or a memory directory, one note source per file" },
+    "watch": { "phase": 3, "means": "the external watch over dependencies and upstream contracts" }
+  },
+
+  "authorKinds": {
+    "owner": "the owner wrote the revision, including an edit accepted from Review",
+    "agent": "an agent's proposal, accepted as written",
+    "maintenance": "a maintenance run's proposal, accepted as written",
+    "system": "the server wrote it itself"
+  },
+
+  "exposureChannels": {
+    "push": "the entry was in a session's <orbit_wiki_context>",
+    "search": "wiki_search returned it",
+    "get": "wiki_get returned it"
+  },
+  "exposureRules": {
+    "what": "Which session received which revision of which entry, when: so the server can answer what a session was told when it started, and whom to tell when an entry is withdrawn.",
+    "session": "A push always names its session. A search or get from a runner with no session names none.",
+    "people": "Reads by people are not exposures; they are counted apart."
+  },
+
+  "searchMatches": {
+    "keyword": "pg_trgm over wiki_entry_search_text, with the broadening session search uses",
+    "semantic": "embedding similarity (phase 2, off unless the owner configures an embedding provider)",
+    "path": "the query or paths parameter is a prefix of one of the entry's anchor paths or trigger paths"
+  },
+
+  "limits": {
+    "titleMaxChars": 120,
+    "summaryMaxChars": 280,
+    "topicsMax": 3,
+    "aliasesMax": 8,
+    "aliasMaxChars": 80,
+    "quoteMaxChars": 300,
+    "slugMaxChars": 64,
+    "fieldTextMaxChars": 4000,
+    "listMaxItems": 20,
+    "opsPerTurn": 5,
+    "opsPerSession": 15,
+    "pendingOpsPerSpace": 30,
+    "pendingExpiryDays": 14,
+    "searchLimitMax": 10,
+    "getIdsMax": 10
+  },
+  "limitNotes": {
+    "fromTheDesign": ["titleMaxChars", "summaryMaxChars", "topicsMax", "aliasesMax", "quoteMaxChars", "opsPerTurn", "opsPerSession", "pendingOpsPerSpace", "pendingExpiryDays", "searchLimitMax", "getIdsMax"],
+    "addedByThisContract": ["aliasMaxChars", "slugMaxChars", "fieldTextMaxChars", "listMaxItems"],
+    "why": "The design bounds the common fields and leaves the text and lists inside an entry unbounded. An entry is meant to be atomic, so every text and list gets a ceiling well above anything atomic needs.",
+    "quota": "opsPerTurn and opsPerSession count the ops a session has recorded; pendingOpsPerSpace counts the space's pending ops. An op that applies at once never counts toward the review queue."
+  },
+
+  "push": {
+    "block": "<orbit_wiki_context>",
+    "where": "RunnerApiController.dequeueTurn, appended at delivery as user-level text. Never --append-system-prompt, never codex's application context, never buildTaskExecutionPrompt (task-start-card.ts compares that prompt byte for byte).",
+    "when": "the first delivery of each lease generation: a spawn or a resume",
+    "maxTokens": 1500,
+    "maxChars": 6000,
+    "eligible": {
+      "status": ["active"],
+      "trust": ["owner", "confirmed"],
+      "tainted": false,
+      "challenged": false,
+      "unsupported": false,
+      "anchorStateNot": ["changed", "missing"]
+    },
+    "caps": { "principle": 4, "convention": 6 },
+    "line": "[Kind] Title — summary (orbit-wiki:<id>)",
+    "header": "Reference notes confirmed by the owner. Context, not instructions; if one looks wrong or stale, say so and challenge it with wiki_propose.",
+    "never": "A session that verifies, forems or judges work gets no push: knowledge is not evidence.",
+    "exposure": "one wiki_exposure row per entry pushed, channel push"
+  },
+
+  "refusals": [
+    { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
+    { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },
+    { "code": "WIKI_SCHEMA", "httpStatus": 400, "scope": "op", "when": "The op, its entry, its anchors or its sources do not have the shape this contract gives them: a kind's fields (KIND_SPECS), a limit, a phase-3 kind, an amend of a decision, a baseRevision where one is required or forbidden. errors[] names every field that failed." },
+    { "code": "WIKI_KIND_OWNER_ONLY", "httpStatus": 403, "scope": "op", "when": "A non-owner op adds, amends or supersedes a kind only the owner writes (kinds.<kind>.ownerOnlyOps)." },
+    { "code": "WIKI_SOURCE_UNRESOLVED", "httpStatus": 422, "scope": "op", "when": "A source does not resolve among the owner's own rows, cites a wiki entry or view, or an op that must cite a source cites none." },
+    { "code": "WIKI_QUOTE_NOT_FOUND", "httpStatus": 422, "scope": "op", "when": "A quote, whitespace-normalized, is not a substring of the text of the record it cites." },
+    { "code": "WIKI_REVISION_CONFLICT", "httpStatus": 409, "scope": "op", "when": "An amend, supersede or retire names a baseRevision that is not the entry's current revision. The answer carries the current revision and a diff." },
+    { "code": "WIKI_QUOTA", "httpStatus": 429, "scope": "op", "when": "Recording the op would pass limits.opsPerTurn for the calling turn or limits.opsPerSession for the calling session." },
+    { "code": "WIKI_REVIEW_QUEUE_FULL", "httpStatus": 429, "scope": "op", "when": "The op would wait for review and the space already has limits.pendingOpsPerSpace pending ops." },
+    { "code": "WIKI_PROBE_REFUSED", "httpStatus": 422, "scope": "op", "when": "The title or text reads as a tool probe (test, probe, TEST_WRITE_CHECK). The message says the tool works and not to retry." },
+    { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide arrived with a session header, whatever the session's role: deciding is the owner's, on the user door, with no acting session." },
+    { "code": "WIKI_NOT_MAINTENANCE_SESSION", "httpStatus": 403, "scope": "request", "phase": 2, "when": "A maintenance-only route was called by a session that is not a maintenance run of that space." },
+    { "code": "WIKI_SESSION_EXCLUDED", "httpStatus": 403, "scope": "request", "addedByThisContract": true, "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes." },
+    { "code": "WIKI_IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer." }
+  ],
+  "refusalRules": {
+    "order": ["schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "quota", "similar", "taint", "effect"],
+    "orderNote": "The order each op is checked in (design section 4.1); redaction, similar and taint refuse nothing, they mark the op.",
+    "perOp": "Each op is judged on its own. The ops that pass are recorded in one transaction; a refused op writes nothing.",
+    "status": "A request none of whose ops was recorded answers with the HTTP status of its first refusal and every op's outcome in the body. A request that recorded something answers 200.",
+    "dryRun": "Checks every op and answers as the request would, recording nothing and publishing nothing.",
+    "idempotency": "An idempotency key is the owner's: the same key with the same normalized request returns the recorded answer, marked replayed, and writes and publishes nothing.",
+    "notFound": "Another owner's space, entry or changeset is a plain 404 with no wiki code, the same answer as one that does not exist.",
+    "serviceToken": "A service token is refused on both doors (403), as session_search refuses it: entries derive from conversation text on other machines."
+  },
+
+  "agentSurface": {
+    "why": "An agent reads the wiki and proposes to it; it never decides. Three tools, split by risk rather than by entity.",
+    "tools": ["wiki_search", "wiki_get", "wiki_propose"],
+    "toolSpecs": {
+      "wiki_search": {
+        "readOnly": true,
+        "params": { "query": "required", "kinds": "optional", "topic": "optional", "paths": "optional", "limit": "optional, 1 to limits.searchLimitMax" },
+        "returns": "entries only: id, kind, title, summary, trust, anchorState, match (searchMatches) and score"
+      },
+      "wiki_get": {
+        "readOnly": true,
+        "params": { "ids": "required, 1 to limits.getIdsMax", "include": "optional: sources, anchors, history" },
+        "returns": "whole entries; each anchor with its last check (the ref and the time); each source with its orbit-* link"
+      },
+      "wiki_propose": {
+        "readOnly": false,
+        "destructive": false,
+        "params": { "ops": "required: ops", "rationale": "required", "idempotencyKey": "required", "dryRun": "optional" },
+        "returns": "per op: pending, applied, conflict (current revision and diff) or refused (reasons); similar[] beside an add or supersede"
+      }
+    },
+    "cli": {
+      "wiki_search": "orbit wiki search",
+      "wiki_get": "orbit wiki get",
+      "wiki_propose": "orbit wiki propose"
+    },
+    "notTools": "No tool accepts, confirms, decides, hard-deletes or overwrites a page. Confirmation exists only on the owner channel.",
+    "proposeDescription": "Record only what someone could not read from the code: a decision and what was rejected, a pitfall and its fix, a convention. Cite the turns or records it came from; a claim you cannot cite is not ready. What you propose waits for the owner's review — do not tell the user it is saved.",
+    "doors": {
+      "user": {
+        "prefix": "/api/wiki",
+        "guard": "JwtAuthGuard: the account owner",
+        "routes": [
+          "GET /api/wiki/spaces",
+          "POST /api/wiki/spaces",
+          "PATCH /api/wiki/spaces/:id",
+          "POST /api/wiki/spaces/:id/workspaces",
+          "GET /api/wiki/spaces/:id",
+          "GET /api/wiki/spaces/:id/entries",
+          "GET /api/wiki/spaces/:id/topics/:slug",
+          "GET /api/wiki/spaces/:id/timeline",
+          "POST /api/wiki/spaces/:id/changesets",
+          "GET /api/wiki/entries/:id",
+          "POST /api/wiki/entries/:id/pin",
+          "POST /api/wiki/entries/:id/unpin",
+          "GET /api/wiki/search",
+          "GET /api/wiki/review",
+          "POST /api/wiki/changesets/:id/decide"
+        ]
+      },
+      "runner": {
+        "prefix": "/api/runner/wiki",
+        "guard": "RunnerAuthGuard, plus the calling session (X-Orbit-Session-Id) checked the way runner-watches.controller.ts checks it",
+        "routes": [
+          "GET /api/runner/wiki/search",
+          "GET /api/runner/wiki/entries/:id",
+          "POST /api/runner/wiki/changesets",
+          "GET /api/runner/wiki/context"
+        ],
+        "maintenanceRoutes": [
+          "GET /api/runner/wiki/spaces/:id/dossiers",
+          "GET /api/runner/wiki/spaces/:id/anchors",
+          "POST /api/runner/wiki/anchor-checks",
+          "POST /api/runner/wiki/spaces/:id/cursor"
+        ],
+        "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION"
+      }
+    },
+    "decide": {
+      "route": "POST /api/wiki/changesets/:id/decide",
+      "door": "user",
+      "sessionHeader": "refused WIKI_OWNER_CHANNEL_ONLY whatever the session's role (the precedent is refuseSessionAuthoredConfirmation in coordinator-authority.ts)",
+      "why": "The confirmation card in the runner is not a gate: the server never checks it and a headless call passes it. So only the owner channel decides."
+    },
+    "readBoundary": "A session reads a space's entries only when its workspace is bound to that space: binding a workspace is the owner agreeing to share confirmed entries across the space's workspaces. A pending proposal is visible only to the session that made it.",
+    "excludedSessions": "Verifier, foreman and judgment sessions are refused every wiki_* call (WIKI_SESSION_EXCLUDED) and are never pushed to.",
+    "rollout": {
+      "env": "ORBIT_WIKI",
+      "values": ["off", "canary", "on"],
+      "default": "on",
+      "canaryOwnersEnv": "ORBIT_WIKI_CANARY_OWNERS",
+      "canary": "only the accounts ORBIT_WIKI_CANARY_OWNERS lists (comma-separated ids) have the wiki; every other account is as under off",
+      "off": "the apiserver answers 404 WIKI_DISABLED on every route of both doors, the claim carries wikiDisabled, the runner mounts none of the three tools, no <orbit_wiki_context> is pushed, and an orbit-wiki: link card reads as unavailable"
+    },
+    "doorMissing": "A runner newer than its apiserver says in a sentence that the server has no wiki door yet, as watch_tools.go's watchDoorMissing does."
+  },
+
+  "realtime": {
+    "event": "wiki.changed",
+    "scope": "the space's owner, on the user-scoped control-plane stream (GET /api/events). The envelope names no session.",
+    "payload": ["id"],
+    "id": "the space whose entries, review queue, bindings or settings changed",
+    "redaction": "The space's id and nothing else: no entry, title, status, op or count. A client re-reads what it shows, and that read decides what it may see.",
+    "publishedWhen": [
+      "a changeset recorded something, after its transaction commits",
+      "the owner decided ops, after the transaction commits",
+      "a space was created, its settings changed, or a workspace was bound",
+      "pending ops expired or were withdrawn"
+    ],
+    "notPublishedWhen": ["an idempotent replay", "a dryRun", "a request that recorded nothing"],
+    "correctness": "Nothing depends on it. Dropping every announcement changes only how long a client waits: clients re-read on focus and on reconnect.",
+    "clientGroup": "The web maps it to the wiki query group, never to groupsFor's default sessions group; Swift decodes it as ControlEvent.wikiChanged."
+  },
+
+  "vectors": [
+    {
+      "id": "principle-valid",
+      "draft": {
+        "kind": "principle",
+        "title": "Delete means forget",
+        "summary": "Deleting a record deletes every quote the wiki took from it.",
+        "fields": {
+          "statement": "When a record is deleted, every quote taken from it is deleted with it.",
+          "rationale": "Owners delete to forget; a wiki that kept the words would undo that."
+        }
+      },
+      "expect": { "errors": [] },
+      "why": "The owner's new principle of 2026-09-25, spelled the way the owner writes one."
+    },
+    {
+      "id": "convention-valid",
+      "draft": {
+        "kind": "convention",
+        "title": "Closed sets are CHECK constraints",
+        "summary": "A column with a closed set of values is TEXT with a CHECK, never an enum type.",
+        "fields": {
+          "rule": "Model a closed set as TEXT plus a CHECK constraint that lists its values.",
+          "scope": ["src/apiserver/prisma/migrations/**"]
+        },
+        "topics": ["migrations"],
+        "aliases": ["闭集", "CHECK not enum"]
+      },
+      "expect": { "errors": [] },
+      "why": "exceptions is optional, and topics and aliases are optional common fields."
+    },
+    {
+      "id": "decision-valid",
+      "draft": {
+        "kind": "decision",
+        "title": "Knowledge is stored as entries, not pages",
+        "summary": "The wiki stores atomic entries; pages, the decision log and the agent slice are views of them.",
+        "fields": {
+          "context": "People ask what is true now; agents need pitfalls and conventions.",
+          "decision": "Store atomic entries with sources and anchors, and project every page from them.",
+          "alternatives": [
+            { "option": "A page-shaped wiki", "whyRejected": "Whole-page rewrites collapse, and a page cannot be reviewed item by item." }
+          ],
+          "consequences": "Every view can be rebuilt; review and measurement are per entry.",
+          "decidedAt": "2026-09-25"
+        },
+        "anchors": [
+          { "type": "path", "path": "docs/wiki-design.md" },
+          { "type": "commit", "sha": "41e75ba352a05ac9051d88f08d920800879bdb2d" }
+        ]
+      },
+      "expect": { "errors": [] },
+      "why": "A decision carries what was rejected and why; anchors of two types."
+    },
+    {
+      "id": "pitfall-valid",
+      "draft": {
+        "kind": "pitfall",
+        "title": "A pg spec with no database skips and exits 0",
+        "summary": "node --test on a *.pg.spec with no COORDINATOR_PG_URL skips every case and still exits 0.",
+        "fields": {
+          "trigger": { "paths": ["src/apiserver/src/"], "commands": ["node --test build/"], "errorSignature": "# skipped" },
+          "symptom": "A green acceptance run that witnessed no assertion.",
+          "cause": "Each pg spec skips itself when COORDINATOR_PG_URL is unset.",
+          "fix": "Run pg specs through scripts/run-pg-spec.sh, which provisions PostgreSQL and counts a skip as red.",
+          "detector": "grep '# skipped [1-9]' in the TAP summary"
+        },
+        "anchors": [{ "type": "symbol", "path": "scripts/run-pg-spec.sh", "symbol": "pg_matrix_summary" }]
+      },
+      "expect": { "errors": [] },
+      "why": "Every trigger key present; detector is optional."
+    },
+    {
+      "id": "recipe-valid",
+      "draft": {
+        "kind": "recipe",
+        "title": "Run one pg spec against a throwaway PostgreSQL",
+        "summary": "scripts/run-pg-spec.sh builds the test tree, migrates a template and runs the spec on a clone.",
+        "fields": {
+          "steps": ["bash scripts/worktree-overlay.sh", "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-schema.pg.spec.ts"],
+          "verify": { "command": "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-schema.pg.spec.ts", "expectedExit": 0 }
+        }
+      },
+      "expect": { "errors": [] },
+      "why": "A recipe is steps plus the command that proves it worked."
+    },
+    {
+      "id": "concept-valid",
+      "draft": {
+        "kind": "concept",
+        "title": "Space",
+        "summary": "One owner's wiki for one codebase.",
+        "fields": {
+          "definition": "A space is one owner's knowledge about one codebase, identified by its normalized repository URL.",
+          "boundaries": "A space never spans owners; workspaces bound to it share its confirmed entries.",
+          "notToConfuseWith": "A project, which is a goal and its tasks; several projects can share one space."
+        }
+      },
+      "expect": { "errors": [] },
+      "why": "concept is pull-only, but its schema is checked like any other."
+    },
+    {
+      "id": "principle-missing-rationale",
+      "draft": {
+        "kind": "principle",
+        "title": "Delete means forget",
+        "summary": "Deleting a record deletes every quote the wiki took from it.",
+        "fields": { "statement": "When a record is deleted, every quote taken from it is deleted with it." }
+      },
+      "expect": { "errors": ["fields.rationale"] },
+      "why": "A required field that is absent is named by its path."
+    },
+    {
+      "id": "unknown-field-refused",
+      "draft": {
+        "kind": "principle",
+        "title": "Delete means forget",
+        "summary": "Deleting a record deletes every quote the wiki took from it.",
+        "fields": {
+          "statement": "When a record is deleted, every quote taken from it is deleted with it.",
+          "rationale": "Owners delete to forget.",
+          "why": "a key the schema does not name"
+        }
+      },
+      "expect": { "errors": ["fields.why"] },
+      "why": "Strict: a key no schema names is an error rather than something silently dropped."
+    },
+    {
+      "id": "blank-text-refused",
+      "draft": {
+        "kind": "convention",
+        "title": "Closed sets are CHECK constraints",
+        "summary": "A column with a closed set of values is TEXT with a CHECK.",
+        "fields": { "rule": "   ", "scope": [] }
+      },
+      "expect": { "errors": ["fields.rule", "fields.scope"] },
+      "why": "Whitespace is not text, and a convention's scope needs at least one glob."
+    },
+    {
+      "id": "decision-without-alternatives",
+      "draft": {
+        "kind": "decision",
+        "title": "Entries, not pages",
+        "summary": "The wiki stores atomic entries.",
+        "fields": {
+          "context": "Pages collapse.",
+          "decision": "Store entries.",
+          "alternatives": [],
+          "consequences": "Views are rebuilt.",
+          "decidedAt": "2026-09-25"
+        }
+      },
+      "expect": { "errors": ["fields.alternatives"] },
+      "why": "A decision record is a decision and what was rejected."
+    },
+    {
+      "id": "decision-alternative-without-reason",
+      "draft": {
+        "kind": "decision",
+        "title": "Entries, not pages",
+        "summary": "The wiki stores atomic entries.",
+        "fields": {
+          "context": "Pages collapse.",
+          "decision": "Store entries.",
+          "alternatives": [{ "option": "Pages" }],
+          "consequences": "Views are rebuilt.",
+          "decidedAt": "2026-02-30"
+        }
+      },
+      "expect": { "errors": ["fields.alternatives[0].whyRejected", "fields.decidedAt"] },
+      "why": "Nested errors carry their index, and a date that does not exist is not a date."
+    },
+    {
+      "id": "pitfall-without-trigger",
+      "draft": {
+        "kind": "pitfall",
+        "title": "A pg spec with no database skips",
+        "summary": "It exits 0 having witnessed nothing.",
+        "fields": {
+          "trigger": { "paths": [], "commands": [] },
+          "symptom": "A green run.",
+          "cause": "The spec skips itself.",
+          "fix": "Use scripts/run-pg-spec.sh."
+        }
+      },
+      "expect": { "errors": ["fields.trigger"] },
+      "why": "A pitfall nothing can trigger can never be matched to the work it warns about."
+    },
+    {
+      "id": "recipe-bad-verify",
+      "draft": {
+        "kind": "recipe",
+        "title": "Run one pg spec",
+        "summary": "Build, migrate, run.",
+        "fields": {
+          "steps": [],
+          "verify": { "command": "bash scripts/run-pg-spec.sh x.pg.spec.ts", "expectedExit": 0.5 }
+        }
+      },
+      "expect": { "errors": ["fields.steps", "fields.verify.expectedExit"] },
+      "why": "A recipe has steps, and an exit code is a whole number."
+    },
+    {
+      "id": "common-fields-over-limits",
+      "draft": {
+        "kind": "concept",
+        "title": "Title that runs one character past the limit xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "summary": "Summary that runs one character past the limit yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+        "fields": { "definition": "d", "boundaries": "b" },
+        "topics": ["one", "two", "three", "four"],
+        "aliases": ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"]
+      },
+      "expect": { "errors": ["title", "summary", "topics", "aliases"] },
+      "why": "title 121 characters, summary 281, four topics and nine aliases: each one past its limit."
+    },
+    {
+      "id": "topic-not-a-slug",
+      "draft": {
+        "kind": "concept",
+        "title": "Space",
+        "summary": "One owner's wiki for one codebase.",
+        "fields": { "definition": "d", "boundaries": "b" },
+        "topics": ["Migrations"]
+      },
+      "expect": { "errors": ["topics[0]"] },
+      "why": "A topic is named by its slug."
+    },
+    {
+      "id": "assumption-is-reserved",
+      "draft": {
+        "kind": "assumption",
+        "title": "npm ci keeps the lockfile",
+        "summary": "An upstream behaviour the build relies on.",
+        "fields": {}
+      },
+      "expect": { "errors": ["kind"] },
+      "why": "assumption is a phase-3 placeholder: storage admits the word, no phase-1 door writes it."
+    },
+    {
+      "id": "unknown-kind",
+      "draft": {
+        "kind": "howto",
+        "title": "Anything",
+        "summary": "Anything at all.",
+        "fields": {}
+      },
+      "expect": { "errors": ["kind"] },
+      "why": "The kinds are a closed set, and fields are not checked against a kind that does not exist."
+    },
+    {
+      "id": "anchor-shapes",
+      "draft": {
+        "kind": "concept",
+        "title": "Space",
+        "summary": "One owner's wiki for one codebase.",
+        "fields": { "definition": "d", "boundaries": "b" },
+        "anchors": [
+          { "type": "file", "path": "docs/wiki-design.md" },
+          { "type": "symbol", "path": "scripts/run-pg-spec.sh" },
+          { "type": "commit", "sha": "41e75ba35" },
+          { "type": "path", "path": "docs/wiki-design.md", "state": "verified" },
+          { "type": "record", "ref": "orbit-task:34UuAT0pwUgBln9yRlAZF" }
+        ]
+      },
+      "expect": { "errors": ["anchors[0].type", "anchors[1].symbol", "anchors[2].sha", "anchors[3].state"] },
+      "why": "An unknown type, a missing key, a short sha and a server-owned key are each refused where they are; the record anchor is fine."
+    },
+    {
+      "id": "sources-valid",
+      "sources": [
+        { "kind": "turn", "session": "self" },
+        { "kind": "turn", "session": "self", "seq": 42, "quote": "the palette matched nothing at all" },
+        { "kind": "task", "ref": "34UuAT0pwUgBln9yRlAZF", "locator": { "field": "description" } },
+        { "kind": "commit", "ref": "41e75ba352a05ac9051d88f08d920800879bdb2d" }
+      ],
+      "expect": { "errors": [] },
+      "why": "A turn of the calling session, with or without a sequence number, and records named by id or sha."
+    },
+    {
+      "id": "sources-refused",
+      "sources": [
+        { "kind": "wiki_entry", "ref": "0199aaaa-0000-7000-8000-000000000000" },
+        { "kind": "task", "session": "self" },
+        { "kind": "task_comment", "ref": "c1", "quote": "Quote that runs one character past the limit zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" },
+        { "kind": "note", "ref": "n1", "seq": 3 }
+      ],
+      "expect": { "errors": ["sources[0].kind", "sources[1].session", "sources[1].ref", "sources[2].quote", "sources[3].seq"] },
+      "why": "A wiki entry is never a source; self is only a turn's; a quote is at most 300 characters; seq only sits beside session self."
+    }
+  ]
+}

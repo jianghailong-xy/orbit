@@ -270,6 +270,11 @@ public enum RunEventType: String, Codable, Sendable {
     case queuedTurnsChanged = "queued_turns_changed"
     case backgroundTask = "background_task"
     case backgroundOutput = "background_output"
+    /// How far a background sub-agent or workflow has got — relayed from Claude Code's
+    /// `task_started`/`task_progress` frames, keyed by the launching Agent/Workflow call's
+    /// `toolUseId`. Live-only: each one restates the whole picture, and the last one rides the
+    /// durable `background_task` that ends the task as its `progress`.
+    case taskProgress = "task_progress"
     /// The server refusing to replay this connection's gap: the cursor is further behind than
     /// `SSE_GAP_CAP` (1000 renderable events), so instead of history it sends this one order —
     /// throw the loaded window away and re-seed from a tail page. Rides seq 0 like the other
@@ -288,7 +293,7 @@ public enum RunEventType: String, Codable, Sendable {
     public var isDurable: Bool {
         switch self {
         case .textDelta, .thinkingDelta, .toolOutput, .approvalRequest, .approvalResolved,
-             .queuedTurnsChanged, .backgroundOutput, .resync:
+             .queuedTurnsChanged, .backgroundOutput, .taskProgress, .resync:
             return false
         default:
             return true

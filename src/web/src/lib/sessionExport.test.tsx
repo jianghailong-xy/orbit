@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenItemDeliveryCard as Delivery, TaskStartCard as StartCard } from '@orbit/shared';
-import type { RunEvent } from '../components/Transcript';
+import type { PublicLinkResolver, RunEvent } from '../components/Transcript';
 import { encodeId } from './idCodec';
 import { exportSessionHtml, type ExportSession } from './sessionExport';
 import { TASK_START_LABEL, TASK_START_OPEN_TASK } from './taskStartCard';
@@ -25,7 +25,8 @@ vi.mock('highlight.js/styles/github.css?raw', () => ({ default: '' }));
  * Two things are held here, and they are different. The export does not throw — each case below is
  * one of the three shapes that used to take it down. And every link it leaves behind is a whole URL,
  * which is not a cosmetic difference: the file is opened from disk, offline, where the router's own
- * path (`/tasks/<id>`) resolves against the filesystem and goes nowhere.
+ * path (`/tasks/<id>`) resolves against the filesystem and goes nowhere. Saved from the public page,
+ * the file links no further than that page does (its PublicLinkResolver): the rest are words.
  */
 
 const ORIGIN = window.location.origin;
@@ -137,11 +138,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Export these events the way the shared page's Download HTML button does, and read the file back. */
-async function exported(events: RunEvent[]): Promise<string> {
+/** Export these events, and read the file back. The shared page's Download HTML button passes its
+ *  link resolver too (SharedSessionPage). */
+async function exported(events: RunEvent[], linkResolver: PublicLinkResolver | null = null): Promise<string> {
   // The shared page passes the token-scoped attachment fetcher here; these transcripts carry no
   // images, so nothing is ever asked of it.
-  await exportSessionHtml(SESSION, events, async () => 'data:image/png;base64,');
+  await exportSessionHtml(SESSION, events, async () => 'data:image/png;base64,', linkResolver);
   expect(blobs, 'the export produced no file').toHaveLength(1);
   return blobs[0].text();
 }
@@ -181,6 +183,17 @@ describe('exporting a session that names Orbit objects', () => {
     const links = bodyLinks(html);
     expect(links).toContain(`${ORIGIN}/tasks/${encodeId(CONFLICTED_TASK)}`);
     expect(links).toContain(`${ORIGIN}/sessions/${encodeId(FAILED_SESSION)}`);
+    expect(html).toContain('Open the failed session ↗');
+  });
+
+  it('saved from a session link, leaves each of those links its words and no address', async () => {
+    // A session link shares nothing the session names, so its resolver answers null for all of it.
+    const html = await exported([REFERENCE, STARTED, DELIVERED], () => null);
+
+    expect(bodyLinks(html)).toEqual([]);
+    expect(html).toContain('Fix the login redirect');
+    expect(html).toContain(TASK_START.project!.title);
+    expect(html).toContain(TASK_START_OPEN_TASK);
     expect(html).toContain('Open the failed session ↗');
   });
 });

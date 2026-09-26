@@ -59,7 +59,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Alert, Button, Empty, Modal, Popover, Spin, Tooltip } from 'antd';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   expandRunMarks,
@@ -79,7 +79,8 @@ import {
   type ProjectSettledMark,
   type ProjectTaskMark,
 } from '../lib/projectDependencyGraph';
-import type { ProjectGraphOverview } from '../lib/projectDependencyGraph';
+import type { ProjectDependencyGraphResponse, ProjectGraphOverview } from '../lib/projectDependencyGraph';
+import { PublicLinkResolverCtx, publicDestination } from '../lib/publicLinks';
 import { projectDependencyGraphQuery } from '../lib/queries';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -134,6 +135,39 @@ export type ProjectFlowNode = TaskFlowNode | GroupFlowNode | FoldFlowNode;
 
 /** React Flow disables pointer events on non-interactive node wrappers; these contain links. */
 const INTERACTIVE_NODE_STYLE = { pointerEvents: 'all' } as const;
+
+/**
+ * The way from a mark into one task's page. In the app that is the task's own route. On a public
+ * project page (PublicLinkResolverCtx) it is wherever the link's scope sends it — the task's public
+ * page when the link shares task pages — and otherwise nowhere: the same box, read but not opened.
+ */
+function TaskLink({
+  taskId,
+  className,
+  children,
+  ...rest
+}: {
+  taskId: string;
+  className: string;
+  children: ReactNode;
+  'aria-label'?: string;
+}) {
+  const resolve = useContext(PublicLinkResolverCtx);
+  const to = `/tasks/${taskId}`;
+  const dest = resolve ? publicDestination(to, resolve) : to;
+  if (dest == null) {
+    return (
+      <span className={className} {...rest}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <Link className={className} to={dest} {...rest}>
+      {children}
+    </Link>
+  );
+}
 
 /**
  * One task, drawn.
@@ -192,9 +226,9 @@ function TaskNode({ data }: NodeProps<TaskFlowNode>) {
           isConnectable={false}
         />
       )}
-      <Link
+      <TaskLink
         className="pdg-task-main nodrag nopan"
-        to={`/tasks/${data.task.id}`}
+        taskId={data.task.id}
         aria-label={
           tone === 'ready' || tone === 'blocked'
             ? `${data.task.title}, ${status}, ${meta}`
@@ -203,7 +237,7 @@ function TaskNode({ data }: NodeProps<TaskFlowNode>) {
       >
         <span className="pdg-task-title">{data.task.title}</span>
         <span className="pdg-task-meta">{meta}</span>
-      </Link>
+      </TaskLink>
       {data.hasOutgoing && (
         <Handle
           type="source"
@@ -270,10 +304,10 @@ function MotifSamples({ mark }: { mark: ProjectMotifMark }) {
         {mark.instanceCount.toLocaleString()} instances · {mark.taskCount.toLocaleString()} tasks
       </div>
       {mark.samples.map((sample) => (
-        <Link key={sample.taskId} className="pdg-fold-sample" to={`/tasks/${sample.taskId}`}>
+        <TaskLink key={sample.taskId} className="pdg-fold-sample" taskId={sample.taskId}>
           <span className="pdg-fold-sample-title">{sample.title}</span>
           <TaskStatusPill status={sample.status} running={sample.running} queued={sample.queued} />
-        </Link>
+        </TaskLink>
       ))}
     </div>
   );
@@ -390,14 +424,14 @@ function GroupNode({ data }: NodeProps<GroupFlowNode>) {
           isConnectable={false}
         />
       )}
-      <Link
+      <TaskLink
         className="pdg-group-header nodrag nopan"
-        to={`/tasks/${data.task.id}`}
+        taskId={data.task.id}
         aria-label={`${data.task.title}, ${taskStatusLabel(live.status, live.running, live.queued)}, ${data.memberCount} subtask${data.memberCount === 1 ? '' : 's'}`}
       >
         <span className="pdg-group-title">{data.task.title}</span>
         <TaskStatusPill status={live.status} running={live.running} queued={live.queued} />
-      </Link>
+      </TaskLink>
       {data.hasOutgoing && (
         <Handle
           type="source"
@@ -889,7 +923,17 @@ function ProjectFlow(props: {
   );
 }
 
-export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
+/**
+ * `data` draws a graph already in hand — a public project page's, which its link carries — instead
+ * of reading the project's own; nothing is fetched then.
+ */
+export function ProjectDependencyGraph({
+  projectId,
+  data,
+}: {
+  projectId: string;
+  data?: ProjectDependencyGraphResponse;
+}) {
   const [fullScreen, setFullScreen] = useState(false);
   // A portrait phone has far more height than width. Advancing dependencies down the canvas there
   // turns the old tiny horizontal ribbon into a readable plan that uses the modal's long axis.
@@ -901,7 +945,10 @@ export function ProjectDependencyGraph({ projectId }: { projectId: string }) {
   const [focusMarkId, setFocusMarkId] = useState<string | null>(null);
   // The mark under the pointer, if any. Kept out here so both canvases answer a hover the same way.
   const [hoverMarkId, setHoverMarkId] = useState<string | null>(null);
-  const graph = useQuery(projectDependencyGraphQuery(projectId));
+  const query = useQuery({ ...projectDependencyGraphQuery(projectId), enabled: !data });
+  const graph = data
+    ? { data, isLoading: false, isError: false as const, error: null, refetch: query.refetch }
+    : query;
   // The node hands its own first member over, because a settled fold is made on this side and is
   // therefore not in `graph.data` to be looked up.
   const onToggleRun = useCallback((markId: string, firstMemberId: string | null) => {

@@ -466,11 +466,11 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-api.controller.ts#dequeueTurn',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE (rank 30), then conversation_turn FOR UPDATE SKIP LOCKED and the claim UPDATE (rank 60).',
+    locks: 'session FOR UPDATE (rank 30), then conversation_turn FOR UPDATE SKIP LOCKED and the claim UPDATE (rank 60). The wiki context this delivery may carry (wiki/wiki-push.ts) writes only wiki_exposure rows (rank 60) under the KEY SHARE its entry foreign keys take, so it adds no edge above the lock already held. Every other read the delivery makes — the session context, the references, a list\'s conditions, the background jobs, a coordinator\'s role — is a plain SELECT on the row already locked.',
     identity: 'The runner and lease generation asking; the claimed turn is chosen inside.',
     isolation: '',
     attempts: 4,
-    replay: "A deadlock victim's claim never happened — the row is still queued — so a re-run claims from the state that exists rather than reporting a turn it does not own.",
+    replay: "A deadlock victim's claim never happened — the row is still queued — so a re-run claims from the state that exists rather than reporting a turn it does not own. Each block appended to the delivery is re-decided from rows read inside the closure, and the wiki exposure rows a rolled-back attempt wrote go with it, so a retry records the same deliveries once.",
     effects: 'None. Nothing is sent to the runner until this returns.',
     answer: 'Typed 503; the runner polls again and the turn is still queued.',
   },
@@ -1026,6 +1026,56 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside.',
     answer: 'Typed 503 from the global boundary.',
   },
+  // ── Orbit Wiki (migration 0307, docs/wiki-design.md §4). Every unit below locks wiki rows and
+  //    nothing else: 0307's header works through why the wiki's children reach their owner through
+  //    the space rather than the user row, so a propose or a decide takes no rank-10 key lock and
+  //    adds no edge to the canonical order (docs/postgres-lock-order.md). Only the two space units
+  //    below touch the user relation at all, and they take it FOR KEY SHARE in a transaction that
+  //    holds nothing else — which is what makes them safe to run from a runner door. ─────────────
+  {
+    at: 'wiki/wiki.service.ts#submitChangeset',
+    shape: 'TX_RETRIED',
+    locks: 'wiki_changeset (rank 60, the row this call creates) then wiki_changeset_op (60) then, for the ops that write now, wiki_entry and its children: wiki_entry_revision (60), wiki_source (60) and the entry rows a supersede or a retire names. Every entry row is taken by a plain UPDATE — FOR NO KEY UPDATE — never FOR UPDATE, because an op or an exposure that names it takes KEY SHARE through its foreign key and FOR UPDATE would block that. The entry self-references (supersedes_id, superseded_by_id) and the op-to-entry keys take the same KEY SHARE, and a supersede updates the two entries in one direction only. Reads of session, workspace, conversation_turn, run_event, tool_call, task and task_comment happen unlocked and before any write: at READ COMMITTED they take no lock at all, and they are what decides the writes that follow.',
+    identity: 'The owner and the idempotency key, through the unique index over (owner_id, idempotency_key), plus the digest of the normalized request stored beside it. A key that arrives again with the same digest is answered from the changeset it recorded and writes nothing; a key that arrives with another digest is refused WIKI_IDEMPOTENCY_KEY_REUSED. Two identical requests racing insert the same key: one loses the unique index, which is a permanent answer rather than a transient one, and the caller that re-issues it then reads the winner\'s recorded answer.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything a second attempt needs is re-read inside the closure: the space and its settings, the entry an op names and its current revision, the sources it cites and their text, whether the calling session read the web, and how many ops the space already has waiting. Nothing is decided from a value read before the transaction. The writes are therefore a function of the committed world at the attempt, and the first attempt\'s changeset, ops, revisions and sources all roll back with it — the changeset INSERT included, which is why a re-run cannot record the same submission twice.',
+    effects: 'None inside. The `wiki.changed` announcement a recorded changeset will publish belongs after the commit, is not implemented yet (T7), and nothing depends on it either way: a client re-reads on focus and on reconnect.',
+    answer: 'Typed 503 from the global boundary. The request is safe to issue again: the idempotency key is the caller\'s, and a caller that sent none gets one changeset per issue, which is what it asked for.',
+  },
+  {
+    at: 'wiki/wiki.service.ts#decide',
+    shape: 'TX_RETRIED',
+    locks: 'wiki_changeset (60) and its ops (60), then the wiki_entry each decided op names, by plain UPDATE, and whatever the op applies: wiki_entry_revision (60), wiki_source (60), the entry a supersede names, and the ops of an entry that left active (withdrawn in the same statement that wrote the status). A challenge decision takes the entry row twice for the same reason every other branch does — once to write the flag and once to recompute it from the decision just recorded.',
+    identity: 'The changeset and each op id, with the op\'s own decision as the compare-and-set: only an op still PENDING is decidable, and a second press, another window pressing the same card, or a decision racing the op\'s expiry matches no row and is told the op is already decided. The changeset settles in the same transaction, from a count of the ops still pending.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The changeset, its ops and the entry each op names are re-read inside the closure, so a retried attempt re-decides against the committed world; a compare-and-set that no longer holds is recorded as `conflict` and applies nothing, which is the same answer a second attempt reaches. Nothing outside the transaction was told anything before it committed.',
+    effects: 'None inside. The owner\'s answer is the fact; a client waiting on it re-reads.',
+    answer: 'Typed 503 from the global boundary; the owner presses again, and an op already decided is told so rather than decided twice.',
+  },
+  {
+    at: 'wiki/wiki.service.ts#createSpace',
+    shape: 'TX_RETRIED',
+    locks: 'wiki_space, with its foreign key to the user row taken FOR KEY SHARE (rank 10) — the only wiki write that touches that relation, and it holds nothing else, so it cannot be the second edge of a cycle. The `owner_id` of every wiki table is what 0307 argues keeps it that way.',
+    identity: 'The owner and the repository URL norm, through the unique index over (owner_id, repo_url_norm); the slug is made unique within the owner by the same transaction that reads the taken ones.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The taken slugs and the existing space for that repository are read inside the closure, so a re-run after a conflict re-decides both against the committed set. A second creator of the same space loses the unique index, which is a permanent answer.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary; the owner is told the space already exists when it does.',
+  },
+  {
+    at: 'wiki/wiki.service.ts#bindOnFirstUse',
+    shape: 'TX_RETRIED',
+    locks: 'wiki_space and wiki_space_workspace, the space under the user foreign key FOR KEY SHARE (rank 10) and the binding under both of its own; the workspace row is read unlocked first and is not written.',
+    identity: 'The workspace id (`workspace_id` is unique over the binding) and the owner plus repository URL for the space. A workspace that already has a binding finds its own row; a space that already exists is found rather than made.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Both lookups happen inside the closure, so a re-run after a conflict finds what the winner committed rather than making a second space or a second binding.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary; the next call binds or finds the row.',
+  },
 ];
 
 export interface TransactionParticipant {
@@ -1166,6 +1216,29 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/project-integration-line.ts#bind', under: 'configureProjectIntegration and startOnFirstIntegration' },
   { at: 'projects/project-integration-line.ts#configureProjectIntegration', under: "projects.configureIntegration and projects.update — the account owner's integration settings, under the binding lock taken after the project row when that write holds one" },
   { at: 'projects/project-integration-line.ts#startOnFirstIntegration', under: 'the transaction that queues a project’s first integration — it takes the same binding lock and writes only that row' },
+  // Orbit Wiki (0307). Every one of these runs inside `submitChangeset`, `decide`,
+  // `createSpace` or `bindOnFirstUse` above, in the order that unit states, and takes no lock its
+  // caller did not already take. `applyOp` and `recomputeFlags` are the ONLY two that write
+  // `wiki_entry.status`, `trust`, `challenged` and `unsupported` — contracts/wiki.contract.json
+  // `storage.singleWriter` — which is why they are listed as participants with their caller named
+  // rather than left to the scan's own reading.
+  { at: 'wiki/wiki.service.ts#createSpaceRow', under: 'wiki.createSpace and wiki.bindOnFirstUse — it is the one statement pair that makes a space, and it does it under the same user-key read both of those units argue for' },
+  { at: 'wiki/wiki.service.ts#recordChangeset', under: 'wiki.submitChangeset — one transaction per submission, so the changeset and every op of it are written under the idempotency identity that unit states or not at all' },
+  { at: 'wiki/wiki.service.ts#recordOp', under: 'wiki.submitChangeset — one op\'s row and the effect the contract\'s policy gives it, decided against the reads the same closure made' },
+  { at: 'wiki/wiki.service.ts#applyOp', under: 'wiki.submitChangeset and wiki.decide — THE writer of an entry\'s status, trust, challenged and unsupported (storage.singleWriter), reached identically by an agent\'s proposal that applies at once, the owner\'s own write, and the owner\'s acceptance of a proposal' },
+  { at: 'wiki/wiki.service.ts#recomputeFlags', under: 'wiki.submitChangeset and wiki.decide, through applyOp — the second and last writer of those four columns: it derives them from what is now true of the entry (its live sources, its open challenges) rather than from what the op asked for' },
+  { at: 'wiki/wiki.service.ts#insertRevision', under: 'wiki.submitChangeset and wiki.decide, through applyOp — the append-only revision a change adds, never a rewrite of one (storage.appendOnly); its foreign key to the entry takes that row KEY SHARE and the entry is already held BY the same transaction' },
+  { at: 'wiki/wiki.service.ts#insertSources', under: 'wiki.submitChangeset and wiki.decide, through applyOp and insertRevision — the first-hand records a revision rests on, written once with the revision they support' },
+  { at: 'wiki/wiki.service.ts#writeOpDecision', under: 'wiki.decide — the owner\'s answer on one op row, after whatever it applied, so what the op did and what was decided about it are one fact' },
+  { at: 'wiki/wiki.service.ts#settleChangeset', under: 'wiki.decide — the changeset\'s own terminal marker, written in the same transaction as the last decision that emptied its queue' },
+  // The wiki's opening context, appended to what `dequeueTurn` is about to deliver (design §7.1).
+  // It runs inside that unit's rank-30 Session transaction and reads unlocked: the session's
+  // workspace binding, its space's settings, the space's eligible entries, and the task or first
+  // message its relevance is weighed against — all plain SELECTs before any row is written. Its
+  // one write is the exposure ledger, one row per line sent, and 0307's own comment is why it is
+  // safe there: the composite `(entry_id, owner_id)` foreign key takes KEY SHARE on the rank-60
+  // entry row rather than reaching the rank-10 user row this transaction must never wait on.
+  { at: 'wiki/wiki-push.ts#appendWikiContext', under: 'runnerApi.dequeueTurn — inside the rank-30 Session transaction that already holds this session\'s row FOR UPDATE; it writes only wiki_exposure rows (rank 60) under the entry keys their foreign key takes, so its locks are ascending and its caller\'s retry re-runs it from the rows as the committed world leaves them' },
   // Test-only, and reachable only from the harness's own transaction.
 ];
 
@@ -1383,8 +1456,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/sessions.service.ts#create", class: "INSERT", statements: 2, note: "Two statements: the session INSERT, then the attachment adoption. An attachment left unadopted is orphaned rather than wrongly attached, which is why this has never needed to be atomic." },
   { at: "sessions/sessions.service.ts#createAutoTags", class: "INSERT", statements: 1 },
   { at: "sessions/sessions.service.ts#decideApproval", class: "ONE_ROW_CAS", statements: 1 },
-  { at: "sessions/sessions.service.ts#disableShare", class: "ONE_ROW_BY_KEY", statements: 1 },
-  { at: "sessions/sessions.service.ts#enableShare", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "sessions/sessions.service.ts#enqueueLegacyArtifactRequest", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "sessions/sessions.service.ts#persistLegacyArtifactAttachment", class: "INSERT", statements: 1 },
   { at: "sessions/sessions.service.ts#pin", class: "ONE_ROW_BY_KEY", statements: 1 },
@@ -1392,6 +1463,10 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/sessions.service.ts#rename", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "sessions/sessions.service.ts#spawnFromSession", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "sessions/sessions.service.ts#unpin", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "share-links/share-links.service.ts#change", class: "ONE_ROW_CAS", statements: 1, note: "Guarded on `revoked_at IS NULL`: a link turned off between the owner's read and this write matches nothing, and the PUT reads again rather than changing a link that has ended." },
+  { at: "share-links/share-links.service.ts#end", class: "MANY_ROWS", statements: 2, note: "Two statements, not atomic with each other: the links past their expiry are settled EXPIRED, then the rest are TURNED_OFF. Each only matches rows still open, so a re-issue changes nothing, and a link that expires between the two is recorded TURNED_OFF — ended either way. One root has at most one open link; only the bulk turn-off (an explicit id list, `POST /share-links/turn-off`) matches several." },
+  { at: "share-links/share-links.service.ts#insert", class: "INSERT", statements: 1, note: "A second link for a root that already has an open one is a unique violation on that root's partial index (0306), answered by reading again and finding the winner — the one way two PUTs racing on the same root converge on one link without a transaction." },
+  { at: "share-links/share-links.service.ts#recordView", class: "ONE_ROW_BY_KEY", statements: 1, note: "`view_count + 1` in the statement itself, so concurrent visitors each count; `updated_at` is deliberately not touched — it records the owner's changes, not visits." },
   { at: "task-lists/task-lists.service.ts#console", class: "ONE_ROW_CAS", statements: 1 },
   { at: "task-lists/task-lists.service.ts#create", class: "INSERT", statements: 1 },
   { at: "tasks/tasks.service.ts#addComment", class: "INSERT", statements: 1 },
@@ -1431,6 +1506,12 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "workspaces/workspaces.service.ts#requestRepoCleanup", class: "ONE_ROW_CAS", statements: 1 },
   { at: "workspaces/workspaces.service.ts#setOrchestrationForAll", class: "MANY_ROWS", statements: 1, note: "A whole-owner sweep. It is the widest single statement here and the one most able to be a deadlock victim; there is no ordering to impose because it names no ids." },
   { at: "workspaces/workspaces.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1 },
+  // The wiki's two owner-settings writes (0307). Both are deliberately outside a transaction: each
+  // touches one row of one of the owner's own spaces, neither is part of anybody else's fact, and a
+  // settings write that does not arrive changes nothing a reader decides from — the space's entries
+  // and its review queue are untouched by either.
+  { at: "wiki/wiki.service.ts#updateSpace", class: "ONE_ROW_BY_KEY", statements: 1, note: "The space's settings (push, autoAcceptReinforce) and its title. One UPDATE predicated on the space and its owner, which is what makes another account's id write nothing; the settings themselves are merged from the row as it was read a moment before, so a concurrent settings write to the OTHER key survives rather than being overwritten by this one's snapshot." },
+  { at: "wiki/wiki.service.ts#bindWorkspace", class: "ONE_ROW_CAS", statements: 1, note: "The manual half of the binding (§2.1): one upsert keyed by the workspace, whose unique index is what makes a workspace belong to at most one space. The workspace and the space are read first, each owner-scoped, so another account's workspace or space is a 404 rather than a row written; the upsert's `update` half is what re-binds a workspace the owner moved to another space." },
 ];
 
 export interface TriggerWriteSource {

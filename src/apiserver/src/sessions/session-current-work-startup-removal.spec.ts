@@ -159,7 +159,10 @@ const GATE_FILES = [
 
 test('(h) no compose service, no resident process, and the files it lived in shrank', () => {
   const compose = read('docker-compose.yml');
-  const services = [...compose.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((match) => match[1]);
+  // Top-level `x-*` blocks are Compose extension fields (the `x-logging` anchor), never services.
+  const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
+  const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)]
+    .map((match) => match[1]);
   assert.deepEqual(services, [
     'postgres', 'pgbackup', 'apiserver', 'web', 'gateway', 'pg-socket',
   ], 'the removal must not have added a service');

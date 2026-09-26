@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>04 public project</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+ .mapt { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; font-size: 12.5px; line-height: 1.7; }
+ .mapt h4 { margin: 0 0 4px; font-size: 12.5px; }
+ .mapt ol { margin: 0; padding-left: 20px; }
+ .keep { color: var(--success); } .drop { color: var(--error); }
+ .m-mark { outline-offset: 5px; }
+ .pv { overflow: visible; }
+ .pv-bar.m-mark { outline-offset: -3px; }
+</style></head>
+<body class="m"><div class="m-sheet" id="sheet">
+<h1 class="m-h1">4 · 公开项目页：和 app 里的项目页同一套区块、同一个顺序，只做减法</h1>
+<p class="m-sub">/s/&lt;token&gt; · 桌面宽 1280（内容列 1040，和 /projects/:id 一样）。真实数据：项目「Claude 账号池」，2026-09-25 08:00 的状态；按图 3 的默认勾选（Task pages 开，Comments / Conversations 关）。</p>
+<div class="m-stage">
+ <div class="m-stage-l"><span class="m-k new">新</span> 访客看到的项目页</div>
+ <div class="pv">
+  <div class="pv-bar m-mark"><span class="m-n">1</span>
+   <span class="pv-brand">Orbit</span>
+   <div class="pv-crumbs"><span class="pv-kind">Project</span><span class="here">Claude 账号池：按订阅配额均衡派发</span></div>
+   <div class="pv-right"><span class="pv-live"><i></i>Live · updated 1m ago</span><span class="pv-badge">Read-only</span></div>
+  </div>
+  <div class="pv-body"><div class="pv-narrow">
+   <div class="m-mark" style="display:block"><span class="m-n">2</span>
+    <h2 class="pv-title">Claude 账号池：按订阅配额均衡派发</h2>
+    <div class="pv-meta"><span class="tag blue">Open</span><span>12 tasks</span><span class="dot">·</span><span>Started Sep 5</span><span class="dot">·</span><span>Last activity 1m ago</span></div>
+   </div>
+   <div class="pv-grid">
+    <div class="a-card m-mark"><span class="m-n">3</span>
+     <div class="a-card-h"><span class="a-card-t">Work overview</span><span class="a-hint">12 tasks · 14 dependencies</span></div>
+     <div class="wo-grid">
+      <div class="wo-cell"><div class="wo-l">● Running</div><div class="wo-n">2</div><div class="wo-f">active sessions</div></div>
+      <div class="wo-cell"><div class="wo-l">▲ Ready</div><div class="wo-n">0</div><div class="wo-f">can start now</div></div>
+      <div class="wo-cell"><div class="wo-l">□ Waiting</div><div class="wo-n">0</div><div class="wo-f">waiting on dependencies</div></div>
+      <div class="wo-cell"><div class="wo-l" style="color:var(--brand)">⟳ Integrating</div><div class="wo-n">0</div><div class="wo-f">checks running on the combined tree</div></div>
+      <div class="wo-cell"><div class="wo-l" style="color:var(--success)">⎇ On project branch</div><div class="wo-n">0</div><div class="wo-f">not on main yet</div></div>
+      <div class="wo-cell"><div class="wo-l" style="color:var(--success)">✓ On main</div><div class="wo-n">10</div><div class="wo-f">landed on main</div></div>
+     </div>
+     <div class="wo-bar"><i style="width:16.6%;background:var(--brand)"></i><i style="width:83.4%;background:var(--success-solid)"></i></div>
+    </div>
+    <div class="a-card">
+     <div class="a-card-h"><span class="a-card-t">Goal</span></div>
+     <div class="md fade"><p>把一组同厂商的 Claude 订阅凭据表达成一个可派发的池身份，在派发时按 5 小时窗口占用率选出额度最松的成员，使单个账号打满不再让工作停到窗口重置。</p><p>现状（2026-09-05 对 main 核对过）：</p><ul><li>多账号本身配得了：ModelProvider 一行一个凭据，pickFreeSlug 自动给出 anthropic / anthropic-2（src/apiserver/src/providers/provider-slug.ts:41），ownerId 非空即个人 BYOK。</li><li>配额数据已在采：BYOK 订阅 token（sk-ant-oat…）由服务端探 /api/oauth/usage、2 分钟缓存；runner 本机登录由 heartbeat 上报 runner.plan_usage。</li><li>但配额只接了刹车、没有方向盘：quotaGate 和 auto-retry.service.ts:285 打满就把工作压到 resetsAt。</li></ul></div>
+     <div class="more">Show more</div>
+    </div>
+    <div class="a-card m-mark"><span class="m-n">4</span>
+     <div class="a-card-h"><span class="a-card-t">Task graph</span><span class="a-hint">Prerequisite → dependent</span></div>
+     <div class="tg" style="height:170px;width:996px">
+<svg width="996" height="170"><defs><marker id="ar" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#b8bec8"/></marker></defs><path d="M730,33.0 C750.0,33.0 750.0,33.0 766,33.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M226,85.0 C246.0,85.0 246.0,85.0 262,85.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M478,85.0 C498.0,85.0 498.0,85.0 514,85.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M478,85.0 C498.0,85.0 498.0,137.0 514,137.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M478,85.0 C624.0,85.0 624.0,85.0 766,85.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M478,137.0 C624.0,137.0 624.0,85.0 766,85.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M730,137.0 C750.0,137.0 750.0,85.0 766,85.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M730,85.0 C750.0,85.0 750.0,85.0 766,85.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M730,137.0 C750.0,137.0 750.0,137.0 766,137.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M730,85.0 C750.0,85.0 750.0,137.0 766,137.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M226,85.0 C246.0,85.0 246.0,137.0 262,137.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M226,33.0 C246.0,33.0 246.0,33.0 262,33.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M226,33.0 C372.0,33.0 372.0,33.0 514,33.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/><path d="M478,33.0 C498.0,33.0 498.0,33.0 514,33.0" fill="none" stroke="#b8bec8" stroke-width="1.4" marker-end="url(#ar)"/></svg>
+<div class="tg-n done" style="left:14px;top:16px;width:212px"><span class="g done">✓</span><b>T1</b><span class="t">池身份与迁移</span></div><div class="tg-n done" style="left:14px;top:68px;width:212px"><span class="g done">✓</span><b>T3b</b><span class="t">放开池 slug 的写入口</span></div><div class="tg-n done" style="left:14px;top:120px;width:212px"><span class="g done">✓</span><b>T-land</b><span class="t">落地</span></div><div class="tg-n done" style="left:266px;top:16px;width:212px"><span class="g done">✓</span><b>T2</b><span class="t">选择器纯函数</span></div><div class="tg-n done" style="left:266px;top:68px;width:212px"><span class="g done">✓</span><b>T5</b><span class="t">可见性</span></div><div class="tg-n done" style="left:266px;top:120px;width:212px"><span class="g done">✓</span><b>T6</b><span class="t">安全边界</span></div><div class="tg-n done" style="left:518px;top:16px;width:212px"><span class="g done">✓</span><b>T3</b><span class="t">claim 接线</span></div><div class="tg-n done" style="left:518px;top:68px;width:212px"><span class="g done">✓</span><b>T5b</b><span class="t">原生端</span></div><div class="tg-n done" style="left:518px;top:120px;width:212px"><span class="g done">✓</span><b>T6b</b><span class="t">准入闭环</span></div><div class="tg-n done" style="left:770px;top:16px;width:212px"><span class="g done">✓</span><b>T4</b><span class="t">刹车让路</span></div><div class="tg-n run" style="left:770px;top:68px;width:212px"><span class="g run">◐</span><b>T7</b><span class="t">合并边界</span></div><div class="tg-n run" style="left:770px;top:120px;width:212px"><span class="g run">◐</span><b>T8</b><span class="t">收尾</span></div></div>
+     <div class="tg-legend">Click a task to open its page.</div>
+    </div>
+    <div class="a-card m-mark"><span class="m-n">5</span>
+     <div class="a-card-h"><span class="a-card-t">Acceptance criteria</span><span class="a-hint">5 of 7 met</span></div>
+     <div class="a-hint" style="margin:-4px 0 6px">7 criteria stated. Whether one is met is read off the work filed under it; nothing in Orbit judges the criteria themselves.</div>
+     <div class="cr"><span class="cr-n met">1</span><div><div class="cr-t">同一 owner 的多行 Anthropic 订阅 provider 可以归入一个池，且该池是能写进 Agent/Session.provider 的可派发身份，读写往返与 slug 唯一性约束都成立。</div><div class="cr-s"><span class="ok">Met by its work</span><span class="dot">·</span><span>on main</span></div></div></div><div class="cr"><span class="cr-n met">2</span><div><div class="cr-t">派发时选中的凭据是池内 5 小时窗口 utilization 最低且未打满的那一行，选择逻辑是可单测的纯函数而非写死在 queue.service 里。</div><div class="cr-s"><span class="ok">Met by its work</span><span class="dot">·</span><span>on main</span></div></div></div><div class="cr"><span class="cr-n met">3</span><div><div class="cr-t">同一会话的后续 turn 默认继续用上次选中的凭据，只有该凭据打满或不可用时才重选。</div><div class="cr-s"><span class="ok">Met by its work</span><span class="dot">·</span><span>on main</span></div></div></div><div class="cr"><span class="cr-n met">4</span><div><div class="cr-t">当会话的 provider 是池且池内仍有未打满的成员时，quotaGate 与 auto-retry 不再把工作压到 resetsAt。</div><div class="cr-s"><span class="ok">Met by its work</span><span class="dot">·</span><span>on main</span></div></div></div><div class="cr"><span class="cr-n unmet">5</span><div><div class="cr-t">客户端能看到池内每个成员各自的窗口占用，以及当前会话实际跑在哪一个成员上。</div><div class="cr-s"><span class="no">Not met by its work</span><span class="dot">·</span><span>no merge receipt either way</span><span class="dot">·</span><span>waiting on <a class="lnk" href="#">T8 收尾</a></span><span class="status-pill running"><span class="spin"></span>Running</span></div></div></div><div class="cr"><span class="cr-n met">6</span><div><div class="cr-t">安全边界不回退：个人 BYOK 池只对其 owner 的会话解析，非 Anthropic 端点或非订阅 token 的行既不被探测也不能成为池成员，且凭据不出现在任何浏览器可见的载荷里。</div><div class="cr-s"><span class="ok">Met by its work</span><span class="dot">·</span><span>on main</span></div></div></div><div class="cr"><span class="cr-n unmet">7</span><div><div class="cr-t">合并边界上 full-api 整轮相对合并前 baseline 无新增失败。</div><div class="cr-s"><span class="no">Not met by its work</span><span class="dot">·</span><span>no merge receipt either way</span><span class="dot">·</span><span>waiting on <a class="lnk" href="#">T7 合并边界</a></span><span class="status-pill running"><span class="spin"></span>Running</span></div></div></div>
+    </div>
+    <div class="a-card m-mark"><span class="m-n">6</span>
+     <div class="a-card-h"><span class="a-card-t">Tasks</span><span class="a-hint">12</span></div>
+     <div class="band">Running <span>2</span></div><div class="tr"><span class="t">T8 收尾：各端统一「池不可用」口径，修掉 poolAccount 测试桩</span><span class="x">waits 2</span><span class="status-pill running"><span class="spin"></span>Running</span><span class="chev">›</span></div><div class="tr"><span class="t">T7 合并边界：full-api 整轮对齐 baseline</span><span class="x">waits 4</span><span class="status-pill running"><span class="spin"></span>Running</span><span class="chev">›</span></div><div class="band">Landed <span>10</span></div><div class="tr dim"><span class="t">T6b 准入闭环：编辑成员同样过准入、入口拒绝无可用成员的池、回落不再静默、会话载荷不外泄</span><span class="x">waits 1 · blocks 2</span><span class="status-pill done"><span class="status-dot"></span>Done</span><span class="chev">›</span></div><div class="tr dim"><span class="t">T5b 原生端：iOS/macOS 新会话选择器列出账号池，状态栏显示实际成员及其配额</span><span class="x">waits 1 · blocks 2</span><span class="status-pill done"><span class="status-dot"></span>Done</span><span class="chev">›</span></div><div class="tr dim"><span class="t">T6 安全边界：跨 owner、准入与凭据不外泄的回归断言</span><span class="x">waits 1 · blocks 1</span><span class="status-pill done"><span class="status-dot"></span>Done</span><span class="chev">›</span></div><div class="tr dim"><span class="t">T5 可见性：/providers 的 Account pools 段与会话状态栏</span><span class="x">waits 1 · blocks 3</span><span class="status-pill done"><span class="status-dot"></span>Done</span><span class="chev">›</span></div><div class="tr dim"><span class="t">T3b 放开池 slug 的写入口：会话/任务/可选列表接受自己的池，reloadProviderEnv 解析到成员</span><span class="x">blocks 2</span><span class="status-pill done"><span class="status-dot"></span>Done</span><span class="chev">›</span></div><div class="more">Show 5 more</div>
+    </div>
+   </div>
+  </div></div>
+  <div class="pv-foot">Shared from Orbit · read-only</div>
+ </div>
+ <ul class="m-notes">
+  <li><span class="m-n">1</span><span><b>三种公开页共用一条页头。</b>依次是品牌、对象类型、面包屑，右边是 <b>Live · updated 1m ago</b>（或 Snapshot · as of …）和 Read-only。会话页再多一个 Download HTML。</span></li>
+  <li><span class="m-n">2</span><span><b>页头块照搬 app 的项目页</b>：标题、状态 Tag、任务数。Record as done、Record as cancelled、Delete project 三个动作去掉，补上开始时间和最近活动时间。</span></li>
+  <li><span class="m-n">3</span><span><b>Work overview 独占一行。</b>右边的 Coordinator 卡整张不出现（Workspace、Wake-ups、Self-started 都是内部信息），「Dispatch needs attention · Check providers」横幅也不出现。勾了 Conversations 时，这里会多一行「Coordinator conversation ›」。</span></li>
+  <li><span class="m-n">4</span><span><b>任务图还是 app 里那个组件。</b>节点点开是 /s/&lt;token&gt;/t/&lt;id&gt; 的公开任务页；没勾 Task pages 时，节点只能看不能点。</span></li>
+  <li><span class="m-n">5</span><span><b>判据卡的文案一字不改</b>（Met by its work / Not met by its work / on main）。没达成的判据点名是哪个任务卡着它，并链到那个任务的公开页。</span></li>
+  <li><span class="m-n">6</span><span><b>Tasks 沿用 app 的分带</b>（Running / Landed…），去掉「New task」和每行 180 字的判据摘录；摘录要进任务页才看得到。</span></li>
+ </ul>
+</div>
+<div class="m-stage" style="margin-top:22px">
+ <div class="m-stage-l"><span class="m-k">对照</span> app 项目页的 16 个区块 → 公开页（顺序不变）</div>
+ <div class="mapt">
+  <div><h4 class="keep">保留（7）</h4><ol>
+   <li>Header（去掉三个动作）</li><li>Work overview（去掉横幅）</li><li>Goal</li><li>Task graph（节点链到公开任务页）</li><li>Chain progress（链式项目才有）</li><li>Acceptance criteria</li><li>Tasks（去掉 New task 和判据摘录）</li></ol></div>
+  <div><h4 class="drop">不出现（9）</h4><ol>
+   <li>Integration line：分支名、领先几个提交、合并检查</li><li>Open items：所有者的待办</li><li>Promotion card：Merge to main</li><li>Coordinator questions</li><li>Coordinator 卡（勾了 Conversations 时换成一个链接）</li><li>Blockers</li><li>Run queue</li><li>Instructions（写给 agent 的）</li><li>Cross-project crossings</li></ol></div>
+ </div>
+</div>
+</div></body></html>

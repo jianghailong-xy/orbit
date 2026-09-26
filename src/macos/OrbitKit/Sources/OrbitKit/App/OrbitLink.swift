@@ -137,7 +137,9 @@ public enum OrbitLinkParser {
         }
     }
 
-    /// The reference form an agent writes: `orbit-(task|session|project|list):<id>`.
+    /// The reference form an agent writes: `orbit-(task|session|project|list|wiki):<id>`. A wiki
+    /// entry is reached ONLY this way: its page URL names a space as well, so the path table above
+    /// leaves `/wiki/…` to stay the URL it is (the shared fixture's last case).
     public static func target(forReference reference: String) -> OrbitLinkTarget? {
         let prefix = "orbit-"
         guard reference.hasPrefix(prefix) else { return nil }
@@ -154,13 +156,22 @@ public enum OrbitLinkParser {
     /// The card's link back to the deployment's own page for an object — the destination a project
     /// with no coordinator session falls back to, and the `Open in Safari` / `Copy link` target on
     /// every card.
-    public static func pageURL(for target: OrbitLinkTarget, baseURL: URL) -> URL? {
+    ///
+    /// A wiki entry's page is its space's and its own together (`/wiki/<space>/e/<id>`), and only
+    /// the server's answer names the space: with no `wikiSpaceSlug` there is no page to give, and nil
+    /// is the answer — `/wiki/<id>` is not a page this deployment serves.
+    public static func pageURL(for target: OrbitLinkTarget, baseURL: URL,
+                               wikiSpaceSlug: String? = nil) -> URL? {
         var base = baseURL.absoluteString
         while base.hasSuffix("/") { base.removeLast() }
         // The public spelling, which is what the deployment's own routes are written in: either
         // spelling is accepted by the API, but a URL a person copies should be the one the app
         // itself would produce.
         let id = PublicID.toPublic(target.id)
+        if target.kind == .wiki {
+            guard let slug = wikiSpaceSlug, !slug.isEmpty else { return nil }
+            return URL(string: "\(base)/\(target.kind.pathSegment)/\(slug)/e/\(id)")
+        }
         return URL(string: "\(base)/\(target.kind.pathSegment)/\(id)")
     }
 

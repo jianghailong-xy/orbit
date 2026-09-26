@@ -10,7 +10,6 @@ import {
 } from '../lib/acceptanceConfirmation';
 import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, PROVENANCE_TITLE } from './CriteriaDecisionCard';
-import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
 /**
  * WHY this project is not DONE — the projection, rendered.
@@ -38,13 +37,20 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
  * of its own: a client that decided which criteria have landed would be a second statement of the
  * rule, and the two would drift.
  *
- * ONE DOOR, AND IT IS NOT "DONE"
- * ------------------------------
- * The only press here is `Confirm the criteria`, and it appears only when the set standing today
- * is unconfirmed — the derivation's second input, and the one thing on this card a person supplies
- * (`POST /projects/:id/acceptance/confirmation`, the same door the start card presses, with the
- * browser's credential and no acting session). Every other clause is work rather than a decision,
- * so it is a sentence and "Chat about this", not a button.
+ * TWO PRESSES, AND NEITHER IS "DONE"
+ * ----------------------------------
+ * `Confirm the criteria` appears only when the set standing today is unconfirmed — the derivation's
+ * second input, and the one thing on this card only a person supplies (`POST
+ * /projects/:id/acceptance/confirmation`, the same door the start card presses, with the browser's
+ * credential and no acting session). Every other clause is work rather than a decision, and the
+ * work is not the reader's: `Ask the coordinator to handle it` hands the card's own facts to the
+ * conversation that coordinates this project — the conversation this card is drawn in — which is
+ * the one place the work can start from.
+ *
+ * Until 2026-09-25 that second press was `Chat about this`, which put the same facts in the
+ * composer and waited for a person to type before anything reached the agent. That is this
+ * delivery with a step in front of it, and two labels for one act is a rule a reader has to learn;
+ * the composer is still below for anything the card does not carry.
  *
  * THE SETTLED STATE IS DERIVED TOO
  * --------------------------------
@@ -123,13 +129,21 @@ export const SETTLEMENT_RULE =
   'Orbit records a project done by itself — no press, no agent — when every stated criterion is '
   + 'met by work that has landed and counts, under a criteria set you have confirmed.';
 
-/** The one press on this card. It is the derivation's second input, not a status write. */
+/** The one press on this card that is a DECISION. It is the derivation's second input, not a
+ *  status write. */
 export const SETTLEMENT_CONFIRM_ACTION = 'Confirm the criteria';
-/** Shown under the actions: what the secondary does rather than what it says. */
-export const SETTLEMENT_CHAT_HINT =
-  '“Chat about this” hands the card’s own facts to the composer below — the blocked criteria, what '
-  + 'Orbit says each is waiting on, and what would clear them.';
-/** The settled state: the derivation stopped withholding, which is the whole of "done" here. */
+/** The card's other press, and the one every withheld clause shares: it hands the card's own facts
+ *  to the conversation that coordinates the project — the conversation this card is drawn in. Work
+ *  is not a decision, but it is also not the reader's, so it goes where it can be started. */
+export const SETTLEMENT_DELEGATE_ACTION = 'Ask the coordinator to handle it';
+/** Shown under the actions: what that press does rather than what it says. */
+export const SETTLEMENT_DELEGATE_HINT =
+  '“Ask the coordinator to handle it” sends the card’s own facts into this conversation — the '
+  + 'blocked criteria, what Orbit says each is waiting on, and what would clear them — and the '
+  + 'coordinator picks it up from there.';
+/** The settled state: the derivation stopped withholding, which is the whole of "done" here. It
+ *  is the card's HEADING in that state — the question above it is the state's question, and a card
+ *  that has stopped withholding must not go on asking it. */
 export const SETTLEMENT_SETTLED_TITLE = 'Orbit recorded this project done.';
 export const SETTLEMENT_SETTLED_BODY =
   'Every stated criterion is met by work that has landed and counts, under a criteria set you have '
@@ -140,8 +154,6 @@ export const SETTLEMENT_SETTLED_PROVENANCE =
 /** The refusal of the one press, when the confirmation door refuses. */
 export const SETTLEMENT_NOT_RECORDED = 'The criteria were not confirmed';
 export const SETTLEMENT_SHOW_LESS = 'Show less';
-export const SETTLEMENT_CHAT_PREFIX = 'Talking about this project: ';
-export const SETTLEMENT_CHAT_PLACEHOLDER = 'What is still missing?';
 /** How many criteria a block lists before folding the rest behind a toggle. */
 export const SETTLEMENT_PREVIEW = 3;
 
@@ -348,8 +360,10 @@ function ordinalOf(project: SettlementProjectDocument, criterion: SettlementCrit
  * The card. Presentational apart from which rows are folded: it issues no request, so a render can
  * assert what each state puts on screen.
  *
- * One press and one way through, and the press appears only when the clause it clears is the one
- * withholding settlement: a button that cannot change anything is worse than no button.
+ * `Confirm the criteria` appears only when the clause it clears is the one withholding settlement: a
+ * button that cannot change anything is worse than no button. `Ask the coordinator to handle it`
+ * has no such condition — every withheld clause is work, and the conversation this card is drawn in
+ * is where the work starts.
  */
 export function ProjectSettlementCard({
   project,
@@ -359,7 +373,7 @@ export function ProjectSettlementCard({
   error = null,
   keys = false,
   onConfirm,
-  onChatAbout,
+  onDelegate,
 }: {
   /** The project document, with the projection on it. */
   project: SettlementProjectDocument;
@@ -372,7 +386,8 @@ export function ProjectSettlementCard({
   /** Whether this card holds the keyboard — see `CardHotkey.ts`. A static render never does. */
   keys?: boolean;
   onConfirm: () => void;
-  onChatAbout: () => void;
+  /** The conversation's own way of handing the card's facts to the agent that owns this project. */
+  onDelegate: () => void;
 }): JSX.Element {
   const [openClause, setOpenClause] = useState<SettlementClause | null>(null);
   const projection = project.derivedDone;
@@ -384,7 +399,11 @@ export function ProjectSettlementCard({
   return (
     <div className="approval-card project-settlement">
       <div className="approval-head project-settlement-head">
-        <span className="project-settlement-heading">{SETTLEMENT_HEADING}</span>
+        {/* The heading belongs to the STATE: a card whose projection stopped withholding says so
+            in its heading instead of asking a question its own body has already answered. */}
+        <span className="project-settlement-heading">
+          {settled ? SETTLEMENT_SETTLED_TITLE : SETTLEMENT_HEADING}
+        </span>
         <span className="criteria-provenance" title={PROVENANCE_TITLE}>
           {PROVENANCE_LABEL}
         </span>
@@ -396,9 +415,7 @@ export function ProjectSettlementCard({
               {`${project.title} · every stated criterion is met by work that has landed, under the `
                 + 'set you confirmed'}
             </div>
-            <p className="project-settlement-settled">
-              <b>{SETTLEMENT_SETTLED_TITLE}</b> {SETTLEMENT_SETTLED_BODY}
-            </p>
+            <p className="project-settlement-settled">{SETTLEMENT_SETTLED_BODY}</p>
             <p className="project-settlement-settled-provenance">{SETTLEMENT_SETTLED_PROVENANCE}</p>
           </>
         ) : (
@@ -500,11 +517,13 @@ export function ProjectSettlementCard({
               {keys && !busy && confirmable && <span className="approval-kbd">{ENTER_HINT}</span>}
             </button>
           ) : null}
-          <button type="button" className="card-action card-action--secondary" onClick={onChatAbout}>
-            {OWNER_SEND_BACK_ACTION}
+          {/* Wears the slot `Chat about this` wore — the same delivery, one step shorter — so the
+              chord it carried comes with it. */}
+          <button type="button" className="card-action card-action--secondary" onClick={onDelegate}>
+            {SETTLEMENT_DELEGATE_ACTION}
             {keys && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
           </button>
-          <span className="project-settlement-hint">{SETTLEMENT_CHAT_HINT}</span>
+          <span className="project-settlement-hint">{SETTLEMENT_DELEGATE_HINT}</span>
         </div>
       )}
     </div>
@@ -523,13 +542,15 @@ const CONFIRMATION_CLAUSE = 'STANDARD_SET_UNCONFIRMED';
  */
 export function SessionProjectSettlementCard({
   projectId,
-  onChatAbout,
+  onDelegate,
 }: {
   /** The project this session coordinates. Ordinary sessions have none and get no card. */
   projectId: string | null | undefined;
-  /** Arms the bottom composer to talk about this card, given what the next send should carry as
-   *  context. Nothing here is a door, and the card stays put. */
-  onChatAbout?: (talk: { projectId: string; projectTitle: string; facts: string }) => void;
+  /** Hands the card's facts to the agent that owns this project, as a turn in this conversation —
+   *  the conversation that coordinates it, so the facts are the whole message: they open by naming
+   *  the project they are about (`projectSettlementContext`). The card stays put: what it says is
+   *  still true. */
+  onDelegate?: (talk: { facts: string }) => void;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const project = projectId ?? '';
@@ -572,20 +593,18 @@ export function SessionProjectSettlementCard({
   // The two presses, named once so that the buttons and the keys make the same one — the same
   // guards, whether the press came from a finger or the keyboard. Each key follows its own
   // button's liveness, and the two are not dead together: the confirmation is offered only while
-  // the set is one nobody has stood behind, and talking about it never depends on that
+  // the set is one nobody has stood behind, and handing the work over never depends on that
   // (`CardHotkey.ts`).
   const standing = standingRead.data ?? null;
   const confirmSet = (): void => {
     if (!standing || standing.confirmed || confirm.isPending) return;
     confirm.mutate(standing.currentVersion.digest);
   };
-  const chatAbout = (): void => {
+  // `useDecisionCardKeys` still calls this slot `onChatAbout`: it is the second press on every
+  // decision card, and this file is the one that stopped handing it to a composer.
+  const delegate = (): void => {
     if (document === null) return;
-    onChatAbout?.({
-      projectId: project,
-      projectTitle: document.title || project,
-      facts: projectSettlementContext(document),
-    });
+    onDelegate?.({ facts: projectSettlementContext(document) });
   };
   const offersConfirmation = document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false;
   const confirmable = standing != null && standing.state !== 'CONFIRMED';
@@ -594,7 +613,7 @@ export function SessionProjectSettlementCard({
     confirmEnabled: asking && offersConfirmation && confirmable && !confirm.isPending,
     chatEnabled: asking,
     onConfirm: confirmSet,
-    onChatAbout: chatAbout,
+    onChatAbout: delegate,
   });
 
   if (!shown || document === null) return null;
@@ -608,7 +627,7 @@ export function SessionProjectSettlementCard({
       error={confirm.isError ? confirm.error : null}
       keys={keys}
       onConfirm={confirmSet}
-      onChatAbout={chatAbout}
+      onDelegate={delegate}
     />
   );
 }

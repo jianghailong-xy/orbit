@@ -72,6 +72,7 @@ Usage:
   orbit agent <command>             Inspect and configure agents (when enabled)
   orbit provider <command>          List the providers a session or task may run on
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
+  orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
   orbit capabilities [--json]       Show the CLI capabilities available to agents
@@ -189,6 +190,7 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"provider":  providerHelp,
 	"notify":    notifyHelp,
 	"watch":     watchHelp,
+	"wiki":      wikiHelp,
 	"token":     tokenHelp,
 	"host":      hostHelp,
 	"capabilities": `orbit capabilities — show agent-safe Orbit CLI capabilities
@@ -240,6 +242,7 @@ var leafHelpFamilies = map[string]bool{
 	"task-list": true,
 	"project":   true,
 	"watch":     true,
+	"wiki":      true,
 	"session":   true,
 	"provider":  true,
 	// `agent` has had per-action help since it shipped and has never been able to print it —
@@ -342,6 +345,11 @@ func main() {
 	case "watch":
 		if err := cmdWatchCLI(args[1:], os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit watch:", err)
+			os.Exit(1)
+		}
+	case "wiki":
+		if err := cmdWikiCLI(args[1:], os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit wiki:", err)
 			os.Exit(1)
 		}
 	case "token":

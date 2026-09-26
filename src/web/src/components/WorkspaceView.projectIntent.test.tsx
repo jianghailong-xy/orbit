@@ -230,38 +230,42 @@ describe('New Session project intent', () => {
 });
 
 describe('the existing composer control inventory', () => {
-  it('still defines exactly the six named pills and no seventh one', () => {
+  it('still defines exactly three toolbar pills and the four fields behind the model control', () => {
     // Visibility is state-dependent (Workspace belongs to an unlocked draft; Provider to a
-    // live/resumable session; Fast mode to a Claude model that has a fast lane), so no honest
-    // runtime fixture paints them all at once. Assert the owned JSX block instead: a task may add
-    // the one dismiss button above it, but a config control may not appear in or disappear from
-    // the existing row without being named here.
+    // live/resumable session; Speed to a model that has a fast lane), so no honest runtime fixture
+    // paints them all at once. Assert the owned source instead: a task may add the one dismiss
+    // button above the card, but a config control may not appear in or disappear from the
+    // toolbar — or from the model control's menu — without being named here.
     //
-    // Six since fast mode joined the row. Deliberately a whole-inventory assertion rather than a
-    // ">= 5": the point is that adding a control is a decision somebody has to write down, and a
-    // count that only grew would let the next one arrive unnamed.
+    // Three pills since provider, model, effort and fast mode folded into one model control
+    // (Workspace, Mode, Model); the menu behind it carries the four fields. Deliberately a
+    // whole-inventory assertion rather than a ">= N": the point is that adding a control is a
+    // decision somebody has to write down, and a count that only grew would let the next one
+    // arrive unnamed.
     const source = readFileSync(resolve(process.cwd(), 'src/components/WorkspaceView.tsx'), 'utf8');
-    const start = source.indexOf('<div className="composer-pills">');
+    const start = source.indexOf('<div className="composer-toolbar">');
     const end = source.indexOf('{shownPlanUsage &&', start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
-    const pills = source.slice(start, end);
+    const toolbar = source.slice(start, end);
+    const menuStart = source.indexOf("const modelMenuItems: MenuProps['items'] = [");
+    const menuEnd = source.indexOf('\n  ];\n', menuStart);
+    expect(menuStart).toBeGreaterThan(-1);
+    expect(menuEnd).toBeGreaterThan(menuStart);
+    const menu = source.slice(menuStart, menuEnd);
 
     expect({
-      workspace: pills.includes('title="Workspace"'),
-      permission: pills.includes('title={configHints.permissionMode}'),
-      provider: pills.includes('title={configHints.provider}'),
-      model: pills.includes('title={configHints.model}'),
-      effort: pills.includes('title={configHints.effort}'),
-      fastMode: pills.includes('title={configHints.fastMode}'),
-    }).toEqual({
-      workspace: true,
-      permission: true,
-      provider: true,
-      model: true,
-      effort: true,
-      fastMode: true,
-    });
-    expect(pills.match(/<span className="composer-pill(?: [^"]*)?">/g) ?? []).toHaveLength(6);
+      workspace: toolbar.includes('title="Workspace"'),
+      permission: toolbar.includes('title={configHints.permissionMode}'),
+      model: toolbar.includes('title={configHints.model}'),
+    }).toEqual({ workspace: true, permission: true, model: true });
+    expect(toolbar.match(/<span className="composer-pill(?: [^"]*)?">/g) ?? []).toHaveLength(3);
+    expect({
+      provider: menu.includes('title={configHints.provider}'),
+      model: menu.includes('key: `model:${option.value}`'),
+      effort: menu.includes('title={configHints.effort}'),
+      fastMode: menu.includes('title={configHints.fastMode}'),
+    }).toEqual({ provider: true, model: true, effort: true, fastMode: true });
+    expect(menu.match(/key: '(provider|effort|speed)',/g) ?? []).toHaveLength(3);
   });
 });

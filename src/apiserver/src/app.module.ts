@@ -22,12 +22,14 @@ import { RunnersModule } from './runners/runners.module';
 import { RunnerApiModule } from './runner-api/runner-api.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { SharedModule } from './shared/shared.module';
+import { ShareLinksModule } from './share-links/share-links.module';
 import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
 import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconciler-http.module';
 import { WatchEvaluatorModule } from './watches/watch-evaluator.module';
 import { WatchDeliveryModule } from './watches/watch-delivery.module';
 import { ScheduledWakeupModule } from './runner-api/scheduled-wakeup.module';
+import { WikiModule } from './wiki/wiki.module';
 
 @Module({
   imports: [
@@ -52,12 +54,14 @@ import { ScheduledWakeupModule } from './runner-api/scheduled-wakeup.module';
     RunnerApiModule,
     AttachmentsModule,
     SharedModule,
+    ShareLinksModule,
     PushModule,
     ProvidersModule,
     OutcomeReconcilerHttpModule,
     WatchEvaluatorModule,
     WatchDeliveryModule,
     ScheduledWakeupModule,
+    WikiModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

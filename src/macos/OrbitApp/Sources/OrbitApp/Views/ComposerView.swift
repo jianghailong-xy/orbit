@@ -111,9 +111,9 @@ struct ComposerView: View {
     @State private var pickedPhotos: [PhotosPickerItem] = []
     #endif
 
-    // The composer bar is pinned to the screen bottom, so iOS opens this Menu upward and presents
-    // its items in reverse. Feed the list reversed on iOS so it reads top-to-bottom (Opus → Haiku)
-    // exactly like the web composer. macOS drops the menu down, so keep the source order there.
+    // The models of the current provider, in catalog order (Opus → Haiku). The model control's
+    // menu is `.menuOrder(.fixed)`, so they read top to bottom in this order on both platforms —
+    // the web menu's order — rather than being reversed when iOS opens the menu upward.
     private var modelMenuItems: [ModelOption] {
         if !console.providerCapabilitiesResolved {
             return [ModelOption(
@@ -130,11 +130,7 @@ struct ComposerView: View {
                 name: AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
-        #if os(iOS)
-        return Array(models.reversed())
-        #else
         return models
-        #endif
     }
 
     /// Every mode, on every engine. A mode this engine cannot honor is still the user's stored
@@ -240,11 +236,14 @@ struct ComposerView: View {
                 .background(.blue.opacity(0.1), in: Capsule())
             }
 
-            // One rounded box wrapping the + menu, the growing field, and send — mirrors the web
-            // composer's single bordered `.composer-box` instead of three separate controls. Shell
-            // mode is reached by a `!` prefix (the + menu's Shell item inserts it), not a toggle.
-            HStack(alignment: .center, spacing: 6) {
-                addMenu
+            // The composer card: staged attachments, the text across the whole width, and a toolbar
+            // pinned to its foot — `+` and the mode on the left; the model control, the usage gauges
+            // and Send on the right (web parity: `.composer-box` / `.composer-toolbar`). The text grows
+            // upward and the toolbar never moves, so `+` and Send stay where the thumb left them however
+            // long the message gets. Shell mode is reached by a `!` prefix (the + menu's Shell item
+            // inserts it), not a toggle.
+            VStack(alignment: .leading, spacing: 0) {
+                ComposerAttachmentsView(console: console)
 
                 inputField
                     .onChange(of: console.slashToken) { _, new in
@@ -259,96 +258,30 @@ struct ComposerView: View {
                             console.composerText = String(text.prefix(ComposerLogic.maxPromptChars))
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 15)
+                    .padding(.bottom, 8)
 
-                // One primary button that morphs between Send and Stop, mirroring the web composer
-                // (`showStop`): while a turn is running and there's nothing staged to send it's a
-                // Stop (interrupt); the moment the user types a follow-up it becomes Send again so
-                // the message can queue mid-turn. The running check reads the session's AUTHORITATIVE
-                // status (the live control-plane record the nav-bar title uses), not the stream-
-                // derived `console.state.status` — that never reaches `.running` on a cold open of an
-                // already-running session, so the stop affordance used to never appear.
-                if ComposerLogic.showsInterrupt(
-                    session: app.session(id: console.sessionID)?.effectiveRunStatus,
-                    stream: console.state.status,
-                    hasText: !console.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                    hasAttachments: !console.pendingAttachments.isEmpty,
-                    replying: console.replyContext != nil) {
-                    Button { Task { await console.interrupt() } } label: {
-                        Image(systemName: "stop.circle.fill")
-                            .font(sendGlyphFont)
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Stop the current turn")
-                } else {
-                    // With something typed while a turn generates, Send steers — the message joins
-                    // the turn that is running. "Stop this and do THIS instead" is the other intent
-                    // people have at that moment and cannot be expressed by typing, so on the desktop
-                    // it gets its own control, beside Send rather than instead of it (web parity).
-                    //
-                    // Not on iOS: a phone composer has room for exactly one primary action, and two
-                    // same-weight circles with no hover tooltip to tell them apart read as a duplicate
-                    // Send. There, Send is the only button while a turn runs — and its meaning is
-                    // steer/queue into THAT turn, not stop it; Stop stays the empty-draft morph
-                    // (`showsInterrupt`).
-                    #if !os(iOS)
-                    if ComposerLogic.offersInterruptAndSend(
-                        session: app.session(id: console.sessionID)?.effectiveRunStatus,
-                        stream: console.state.status,
-                        canSend: console.canSend,
-                        ordinaryDraft: !ComposerLogic.parseShell(console.composerText).shell
-                            && !(ComposerHostCommand.commandName(in: console.composerText).map { ComposerHostCommand.isLocal($0) } ?? false),
-                        replying: console.replyContext != nil,
-                        busy: console.sending) {
-                        Button { Task { await console.interruptAndSend() } } label: {
-                            Image(systemName: "stop.circle")
-                                .font(sendGlyphFont)
-                                .foregroundStyle(Color.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Stop the current turn and send this instead")
-                        .accessibilityLabel("Stop and send")
-                    }
-                    #endif
-                    Button {
-                        // Capture the authoritative status at tap time so a mid-turn send is labeled
-                        // "Queued" (the Stop button reads the same source) — see ComposerLogic.willQueue.
-                        let status = app.session(id: console.sessionID)?.effectiveRunStatus
-                        Task { await console.send(authoritative: status) }
-                    } label: {
-                        // A send that arrives while an attachment is still uploading waits for the
-                        // bytes (ConsoleModel.send) rather than dropping it. Spin in place — same
-                        // footprint, so nothing reflows — so that wait doesn't read as a dead tap.
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(sendGlyphFont)
-                            .foregroundStyle(console.canSend ? Color.accentColor : Color.secondary)
-                            .opacity(console.waitingForUploads ? 0 : 1)
-                            .overlay {
-                                if console.waitingForUploads { ProgressView().controlSize(.small) }
-                            }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!console.canSend)
-                }
+                toolbar
             }
-            .padding(.vertical, 9)
-            .padding(.horizontal, 12)
-            // Elevated, softly-rounded surface so the field reads as a premium floating card
-            // rather than a hairline box: a `.continuous` (squircle) curve, an own fill, and a
-            // soft drop shadow. Focus deepens the border toward the accent and lifts the shadow
-            // a touch instead of flipping to a hard blue outline.
+            // Elevated, softly-rounded surface so the card reads as a premium floating surface rather
+            // than a hairline box: a `.continuous` (squircle) curve, an own fill, and a soft drop
+            // shadow. Focus deepens the border toward the accent and lifts the shadow a touch instead
+            // of flipping to a hard blue outline. The corner is `cardRadius` because the toolbar's two
+            // round ends sit 8pt in from the edges with their centres 24pt from both — on the
+            // corner's own centre.
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
                     .fill(Color.editorSurface)
                     .shadow(color: .black.opacity(boxFocused ? 0.12 : 0.06),
                             radius: boxFocused ? 7 : 4, y: 1.5)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(boxFocused ? 0.22 : 0.10), lineWidth: 1)
             }
             .animation(.easeOut(duration: 0.15), value: boxFocused)
-            // The `/` menu FLOATS above the box instead of sitting in the band's stack (web parity:
+            // The `/` menu FLOATS above the card instead of sitting in the band's stack (web parity:
             // `.composer-slash-menu` is absolutely positioned at `bottom: 100% + 6px`). In flow it
             // pushed the git bar and the transcript upward the moment a `/` was typed and dropped
             // them back on every keystroke that emptied the match list; as an overlay it covers the
@@ -364,166 +297,9 @@ struct ComposerView: View {
                     slashMenu.offset(y: -(slashCardHeight + 6))
                 }
             }
-            // The footer below is a LATER sibling of this box, so it paints over anything the box
-            // overlays — the floating card included, which is how the model/effort row came to show
-            // through it. Raise the box (and with it the card) above the rest of the stack.
+            // Raise the card (and with it the floating `/` card) above the notices stacked over it,
+            // so nothing in this stack paints across the menu.
             .zIndex(1)
-
-            // Footer controls, laid out like the web composer: permission mode on the left,
-            // then the provider · model · effort · plan-usage cluster on the right. Each
-            // control is a borderless "text · chevron" menu (web parity, like the reference
-            // composer's "Auto") rather than a macOS bordered popup button. A change on a live
-            // session is pushed immediately in the menu action (applyConfig → PATCH /config);
-            // doing it there instead of via .onChange means a server config sync writing these
-            // values back doesn't echo a redundant PATCH.
-            HStack(spacing: 10) {
-                Menu {
-                    ForEach(permissionModeMenuItems, id: \.self) { mode in
-                        Button {
-                            console.permissionMode = mode
-                            // An explicit pick — the draft's create path remembers it as the
-                            // account default, which the untouched seed must not overwrite.
-                            console.permissionModeWasEdited = true
-                            Task { await console.applyConfig(permissionMode: mode.rawValue) }
-                        } label: {
-                            menuItemLabel(AgentDefaults.label(mode), selected: mode == console.permissionMode)
-                        }
-                        .disabled(!modeRunnable(mode))
-                    }
-                } label: {
-                    menuLabel(AgentDefaults.label(console.permissionMode))
-                }
-                .footerMenuChrome()
-
-                // Lowest priority, so it is the first thing to give way when the row is full: an
-                // HStack offers every child an equal share of what is left, and a Spacer at the
-                // default priority took one of those shares while the labels beside it truncated.
-                // With room to spare it still takes everything left over, exactly as before.
-                Spacer().layoutPriority(-1)
-
-                // No agent name here (web parity): the agent can't be picked from the footer on any
-                // client, and it is already named where the choice is made — the navigation bar's
-                // switcher on iOS, the Agents sidebar/hero on macOS.
-
-                // Only when there is somewhere to go: a second account with the same vendor, or
-                // another endpoint on the same CLI. One entry means no switch is possible, and the
-                // menu is left out rather than shown inert.
-                if console.providerSwitchChoices.count > 1 {
-                    Menu {
-                        ForEach(console.providerSwitchChoices) { choice in
-                            // A choice this runner can't run stays listed and carries its reason
-                            // (web parity): hiding it turns "not signed in on this machine" into
-                            // "Orbit lost my provider". The running one is exempt — it is the
-                            // closed menu's own label, and a parenthetical would live in the
-                            // footer of every turn.
-                            let blocked = choice.unavailable != nil && choice.slug != console.provider
-                            // An account pool the server says cannot run at all: no runner
-                            // fixes that, so it is greyed out with its reason instead.
-                            let fixable = blocked && choice.fixEngine != nil
-                            let reason = choice.unavailable ?? ""
-                            let fix = fixable ? ", sign in →" : ""
-                            Button {
-                                // Picking a blocked row isn't a switch — it's a request for the
-                                // sign-in that would make it one, so go to that runner's Engines
-                                // section rather than doing nothing.
-                                if fixable {
-                                    if let rid = console.runnerID { app.route(to: .runner(rid)) }
-                                } else if !blocked {
-                                    Task { await console.selectProvider(choice.slug) }
-                                }
-                            } label: {
-                                menuItemLabel(
-                                    blocked ? "\(choice.label) — \(reason)\(fix)" : choice.label,
-                                    selected: choice.slug == console.provider)
-                            }
-                            .disabled(blocked && !fixable)
-                        }
-                    } label: {
-                        menuLabel(AgentDefaults.providerName(console.provider,
-                                                             configured: console.configuredProviders))
-                    }
-                    .footerMenuChrome()
-                }
-
-                Menu {
-                    ForEach(modelMenuItems) { m in
-                        Button {
-                            // An OpenCode variant is model-defined: a model switch can strip it.
-                            let resetEffort = !AgentDefaults.supportsEffort(
-                                console.effort, for: console.provider, model: m.id,
-                                catalog: console.modelCatalog)
-                            let clampedPermissionMode = console.selectModel(m.id)
-                            let permissionMode = clampedPermissionMode
-                                ? console.permissionMode.rawValue
-                                : nil
-                            if resetEffort { console.effort = .default }
-                            Task {
-                                await console.applyConfig(
-                                    model: m.id, permissionMode: permissionMode,
-                                    effort: resetEffort ? Effort.default.rawValue : nil)
-                            }
-                        } label: {
-                            menuItemLabel(m.name, selected: m.id == console.modelID)
-                        }
-                    }
-                } label: {
-                    menuLabel(
-                        !console.providerCapabilitiesResolved && console.isDraft
-                            ? "Runtime default"
-                            : AgentDefaults.friendlyName(
-                                console.modelID, for: console.provider,
-                                catalog: console.modelCatalog,
-                                configured: console.configuredProviders))
-                }
-                .footerMenuChrome()
-                .disabled(!console.providerCapabilitiesResolved)
-
-                Menu {
-                    ForEach(effortMenuItems) { e in
-                        Button {
-                            console.selectEffort(e)
-                            Task { await console.applyConfig(effort: e.rawValue) }
-                            // Remember this as the account default so the next new session (here or
-                            // on web) starts at it — the cross-device port of web's localStorage write.
-                            app.rememberDefaultEffort(e.rawValue)
-                        } label: {
-                            menuItemLabel(e.label, selected: e == console.effort)
-                        }
-                    }
-                } label: {
-                    menuLabel(console.effort.label)
-                }
-                .footerMenuChrome()
-
-                // A session on an account pool spends one of its accounts at a time: name that
-                // account beside the quota, which is that account's own (web parity — the pool's
-                // name is the provider menu's, and says nothing about whose quota this is).
-                if let pool = console.currentPool, let account = console.poolAccount {
-                    let help = ProviderPools.accountHelp(pool: pool, account: account)
-                    Text(account.member.label)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: 140)
-                        .help(help)
-                        .accessibilityLabel(help)
-                }
-                if let usage = console.planUsage {
-                    PlanUsageIndicator(usage: usage)
-                }
-
-                // Context stays visible even before the first turn reports tokens — a New Session
-                // reads 0%. Rightmost pill, to the right of plan usage.
-                if !(console.provider == "opencode" && console.modelID.isEmpty) {
-                    ContextWindowIndicator(tokens: console.state.contextTokens ?? 0,
-                                           reportedWindow: console.state.contextWindow,
-                                           model: console.modelID, provider: console.provider,
-                                           modelCatalog: console.modelCatalog,
-                                           configured: console.configuredProviders)
-                }
-            }
-            // Footer pickers are tappable controls, not metadata — list-subtitle size on iOS (15pt)
-            // for comfortable targets; macOS keeps the dense web-parity caption.
-            .font(.orbitListSubtitle)
         }
         // No gutter, surface or vertical padding of its own: the enclosing `ComposerBand` owns all
         // three for every member of the stack, so this can't drift away from the bars above it.
@@ -583,8 +359,7 @@ struct ComposerView: View {
             .textFieldStyle(.plain)
             .font(.orbitControl)
             .lineLimit(1...6)
-            // Fill the available width; vertical centering comes from the HStack's .center alignment,
-            // so the placeholder, the + and the send button all sit on one centerline.
+            // Fill the card's width: the text runs across the whole card, above the toolbar.
             .frame(maxWidth: .infinity, alignment: .leading)
             .focused($inputFocused)
             .onSubmit { onReturn() }
@@ -602,6 +377,346 @@ struct ComposerView: View {
                 return .handled
             }
         #endif
+    }
+
+    // MARK: the toolbar (web parity: `.composer-toolbar`)
+
+    /// The composer card's radius: the toolbar's two round ends are 32pt controls 8pt in from the
+    /// card's edges, so their centres sit 24pt from both — on the corner radius's own centre.
+    private static let cardRadius: CGFloat = 24
+
+    /// The card's foot: `+` and the permission mode on the left; the model control, the two usage
+    /// gauges and Send on the right. Everything on it keeps its natural width except the model's
+    /// name, which is the one thing that gives way when a phone runs out of room.
+    private var toolbar: some View {
+        HStack(spacing: 8) {
+            addMenu
+            modeMenu
+            // Lowest priority, so it is the first thing to give way when the row is full: an
+            // HStack offers every child an equal share of what is left, and a Spacer at the
+            // default priority took one of those shares while the labels beside it truncated.
+            // With room to spare it still takes everything left over.
+            Spacer(minLength: 8).layoutPriority(-1)
+            modelMenu
+            // A session on an account pool spends one of its accounts at a time: name that account
+            // beside the quota, which is that account's own (web parity — the pool's name is the
+            // model control's provider row, and says nothing about whose quota this is). Beside
+            // the gauge rather than inside the model control's menu: the two read as one pair.
+            if let pool = console.currentPool, let account = console.poolAccount {
+                let help = ProviderPools.accountHelp(pool: pool, account: account)
+                Text(account.member.label)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 140)
+                    .help(help)
+                    .accessibilityLabel(help)
+            }
+            if let usage = console.planUsage {
+                PlanUsageIndicator(usage: usage)
+            }
+            // Context stays visible even before the first turn reports tokens — a New Session
+            // reads 0%. Rightmost gauge, next to Send.
+            if !(console.provider == "opencode" && console.modelID.isEmpty) {
+                ContextWindowIndicator(tokens: console.state.contextTokens ?? 0,
+                                       reportedWindow: console.state.contextWindow,
+                                       model: console.modelID, provider: console.provider,
+                                       modelCatalog: console.modelCatalog,
+                                       configured: console.configuredProviders)
+            }
+            sendControls
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+        // The toolbar's words are tappable controls, not metadata — list-subtitle size on iOS (15pt)
+        // for comfortable targets; macOS keeps the dense web-parity caption.
+        .font(.orbitListSubtitle)
+    }
+
+    /// Send, or Stop while a turn runs — the toolbar's right end, in a 32pt frame so its centre sits
+    /// on the card's corner centre whatever size the glyph is on this platform.
+    @ViewBuilder
+    private var sendControls: some View {
+        // One primary button that morphs between Send and Stop, mirroring the web composer
+        // (`showStop`): while a turn is running and there's nothing staged to send it's a
+        // Stop (interrupt); the moment the user types a follow-up it becomes Send again so
+        // the message can queue mid-turn. The running check reads the session's AUTHORITATIVE
+        // status (the live control-plane record the nav-bar title uses), not the stream-
+        // derived `console.state.status` — that never reaches `.running` on a cold open of an
+        // already-running session, so the stop affordance used to never appear.
+        if ComposerLogic.showsInterrupt(
+            session: app.session(id: console.sessionID)?.effectiveRunStatus,
+            stream: console.state.status,
+            hasText: !console.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            hasAttachments: !console.pendingAttachments.isEmpty,
+            replying: console.replyContext != nil) {
+            Button { Task { await console.interrupt() } } label: {
+                Image(systemName: "stop.circle.fill")
+                    .font(sendGlyphFont)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Stop the current turn")
+        } else {
+            // With something typed while a turn generates, Send steers — the message joins
+            // the turn that is running. "Stop this and do THIS instead" is the other intent
+            // people have at that moment and cannot be expressed by typing, so on the desktop
+            // it gets its own control, beside Send rather than instead of it (web parity).
+            //
+            // Not on iOS: a phone composer has room for exactly one primary action, and two
+            // same-weight circles with no hover tooltip to tell them apart read as a duplicate
+            // Send. There, Send is the only button while a turn runs — and its meaning is
+            // steer/queue into THAT turn, not stop it; Stop stays the empty-draft morph
+            // (`showsInterrupt`).
+            #if !os(iOS)
+            if ComposerLogic.offersInterruptAndSend(
+                session: app.session(id: console.sessionID)?.effectiveRunStatus,
+                stream: console.state.status,
+                canSend: console.canSend,
+                ordinaryDraft: !ComposerLogic.parseShell(console.composerText).shell
+                    && !(ComposerHostCommand.commandName(in: console.composerText).map { ComposerHostCommand.isLocal($0) } ?? false),
+                replying: console.replyContext != nil,
+                busy: console.sending) {
+                Button { Task { await console.interruptAndSend() } } label: {
+                    Image(systemName: "stop.circle")
+                        .font(sendGlyphFont)
+                        .foregroundStyle(Color.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Stop the current turn and send this instead")
+                .accessibilityLabel("Stop and send")
+            }
+            #endif
+            Button {
+                // Capture the authoritative status at tap time so a mid-turn send is labeled
+                // "Queued" (the Stop button reads the same source) — see ComposerLogic.willQueue.
+                let status = app.session(id: console.sessionID)?.effectiveRunStatus
+                Task { await console.send(authoritative: status) }
+            } label: {
+                // A send that arrives while an attachment is still uploading waits for the
+                // bytes (ConsoleModel.send) rather than dropping it. Spin in place — same
+                // footprint, so nothing reflows — so that wait doesn't read as a dead tap.
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(sendGlyphFont)
+                    .foregroundStyle(console.canSend ? Color.accentColor : Color.secondary)
+                    .opacity(console.waitingForUploads ? 0 : 1)
+                    .overlay {
+                        if console.waitingForUploads { ProgressView().controlSize(.small) }
+                    }
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!console.canSend)
+        }
+    }
+
+    /// The permission mode, on the toolbar's left where the web composer has it. It outranks the
+    /// model control for room (`layoutPriority(2)` over the chrome's 1), so a long model name is
+    /// what truncates — never the mode, which says how much the agent may do on its own.
+    private var modeMenu: some View {
+        Menu {
+            ForEach(permissionModeMenuItems, id: \.self) { mode in
+                Button {
+                    console.permissionMode = mode
+                    // An explicit pick — the draft's create path remembers it as the
+                    // account default, which the untouched seed must not overwrite.
+                    console.permissionModeWasEdited = true
+                    Task { await console.applyConfig(permissionMode: mode.rawValue) }
+                } label: {
+                    menuItemLabel(AgentDefaults.label(mode), selected: mode == console.permissionMode)
+                }
+                .disabled(!modeRunnable(mode))
+            }
+        } label: {
+            menuLabel(AgentDefaults.label(console.permissionMode))
+        }
+        .footerMenuChrome()
+        .layoutPriority(2)
+    }
+
+    /// Provider, model and effort are one control, written the way the reference composer writes
+    /// "model · effort": "Opus 5.5 Max" (web parity: `.composer-model-chip` and `modelMenuItems`).
+    /// The menu lists the current provider's models, and puts the rarer choices — the provider and
+    /// the effort — one level down, each captioned with its current value. A change on a live
+    /// session is pushed immediately in the item's action (applyConfig → PATCH /config); doing it
+    /// there instead of via .onChange means a server config sync writing these values back doesn't
+    /// echo a redundant PATCH. `.menuOrder(.fixed)` keeps it reading top to bottom the way the web
+    /// menu does, whichever way the system opens it.
+    private var modelMenu: some View {
+        Menu {
+            // Only when there is somewhere to go: a second account with the same vendor, or
+            // another endpoint on the same CLI. One entry means no switch is possible, and the row
+            // is left out rather than shown inert.
+            if console.providerSwitchChoices.count > 1 {
+                Menu {
+                    ForEach(console.providerSwitchChoices) { choice in
+                        // A choice this runner can't run stays listed and carries its reason
+                        // (web parity): hiding it turns "not signed in on this machine" into
+                        // "Orbit lost my provider". The running one is exempt — it is the row's
+                        // own caption, and a parenthetical there would sit under every turn.
+                        let blocked = choice.unavailable != nil && choice.slug != console.provider
+                        // An account pool the server says cannot run at all: no runner fixes
+                        // that, so it is greyed out with its reason instead.
+                        let fixable = blocked && choice.fixEngine != nil
+                        let reason = choice.unavailable ?? ""
+                        let fix = fixable ? ", sign in →" : ""
+                        Button {
+                            // Picking a blocked row isn't a switch — it's a request for the
+                            // sign-in that would make it one, so go to that runner's Engines
+                            // section rather than doing nothing.
+                            if fixable {
+                                if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                            } else if !blocked {
+                                Task { await console.selectProvider(choice.slug) }
+                            }
+                        } label: {
+                            menuItemLabel(
+                                blocked ? "\(choice.label) — \(reason)\(fix)" : choice.label,
+                                selected: choice.slug == console.provider)
+                        }
+                        .disabled(blocked && !fixable)
+                    }
+                } label: {
+                    Text("Provider")
+                    Text(AgentDefaults.providerName(console.provider,
+                                                    configured: console.configuredProviders))
+                }
+                Divider()
+            }
+            ForEach(modelMenuItems) { m in
+                Button {
+                    // An OpenCode variant is model-defined: a model switch can strip it.
+                    let resetEffort = !AgentDefaults.supportsEffort(
+                        console.effort, for: console.provider, model: m.id,
+                        catalog: console.modelCatalog)
+                    let clampedPermissionMode = console.selectModel(m.id)
+                    let permissionMode = clampedPermissionMode
+                        ? console.permissionMode.rawValue
+                        : nil
+                    if resetEffort { console.effort = .default }
+                    Task {
+                        await console.applyConfig(
+                            model: m.id, permissionMode: permissionMode,
+                            effort: resetEffort ? Effort.default.rawValue : nil)
+                    }
+                } label: {
+                    menuItemLabel(m.name, selected: m.id == console.modelID)
+                }
+                // No model space until the provider identity resolves: the row shows the value it
+                // will run with, and cannot be switched yet.
+                .disabled(!console.providerCapabilitiesResolved)
+            }
+            Divider()
+            Menu {
+                ForEach(effortMenuItems) { e in
+                    Button {
+                        console.selectEffort(e)
+                        Task { await console.applyConfig(effort: e.rawValue) }
+                        // Remember this as the account default so the next new session (here or
+                        // on web) starts at it — the cross-device port of web's localStorage write.
+                        app.rememberDefaultEffort(e.rawValue)
+                    } label: {
+                        menuItemLabel(e.label, selected: e == console.effort)
+                    }
+                }
+            } label: {
+                Text("Effort")
+                Text(console.effort.label)
+            }
+            // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
+            // tier both exist on some models and not others, so a row drawn regardless would be a
+            // control whose only outcome is being ignored — the server clamps it at dispatch either
+            // way. A session that stored `true` and then moved to a model without a lane keeps the
+            // stored value while the row is away, so going back to a model that has one restores
+            // what was asked for rather than silently dropping it. Web parity: same gate, same two
+            // rows (Standard / Fast), same `fastMode` field on the config.
+            if fastModeUsable {
+                Menu {
+                    ForEach([false, true], id: \.self) { on in
+                        Button {
+                            console.fastMode = on
+                            Task { await console.applyConfig(fastMode: on) }
+                        } label: {
+                            menuItemLabel(on ? "Fast" : "Standard",
+                                          selected: on == console.fastMode)
+                        }
+                    }
+                } label: {
+                    Text("Speed")
+                    Text(console.fastMode ? "Fast" : "Standard")
+                }
+            }
+        } label: {
+            modelChipLabel
+        }
+        .menuOrder(.fixed)
+        .footerMenuChrome()
+    }
+
+    /// The model's name as the chip shows it: "Runtime default" for a draft whose provider has not
+    /// resolved yet, else the catalog's friendly name.
+    private var modelDisplayName: String {
+        !console.providerCapabilitiesResolved && console.isDraft
+            ? "Runtime default"
+            : AgentDefaults.friendlyName(
+                console.modelID, for: console.provider,
+                catalog: console.modelCatalog,
+                configured: console.configuredProviders)
+    }
+
+    /// "Opus 5.5 Max": the model in the label colour, the effort after it in the secondary one.
+    /// Explicit `Color`s rather than the hierarchical `.primary` / `.secondary`, which inside an
+    /// iOS menu label resolve against the control's tint. On iOS the name truncates and the effort
+    /// never does; macOS draws a borderless menu's label as one title, so it gets one `Text`.
+    @ViewBuilder
+    private var modelChipLabel: some View {
+        #if os(iOS)
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Text(modelDisplayName)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Text(chipEffortLabel)
+                .foregroundStyle(Color.secondary)
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .contentShape(Rectangle())
+        #else
+        (Text(modelDisplayName).fontWeight(.semibold).foregroundStyle(Color.primary)
+            + Text(" ")
+            + Text(chipEffortLabel).foregroundStyle(Color.secondary))
+            .lineLimit(1)
+        #endif
+    }
+
+    /// The effort half of the chip, with the fast lane appended while the session is in one —
+    /// "Max · Fast". Web parity (`.composer-model-effort`); the lane is named there too rather than
+    /// given a pill of its own, so the chip keeps saying one thing about the model.
+    private var chipEffortLabel: String {
+        fastModeUsable && console.fastMode ? "\(console.effort.label) · Fast" : console.effort.label
+    }
+
+    /// Whether this session has a fast lane to offer at all — Claude Code's `/fast` on the models
+    /// that carry it, Codex's "Fast" service tier on a model whose row in this runner's catalogue
+    /// advertises it. Asked of the RUNTIME, never the provider slug, for the same reason the other
+    /// capability questions ask that way: a configured (BYOK) identity borrows one. Unresolved
+    /// means no, which is the safe direction — a row that appears and then vanishes is worse than
+    /// one that appears a moment late, and the server polices the same fact at dispatch.
+    /// Web parity (`fastModeUsable`).
+    private var fastModeUsable: Bool {
+        console.providerCapabilitiesResolved
+            && AgentDefaults.fastModeAvailable(
+                runtime: AgentDefaults.runtime(for: console.provider,
+                                               configured: console.configuredProviders),
+                model: console.modelID,
+                catalog: console.modelCatalog)
     }
 
     // MARK: + menu (mirrors the web composer's `+` dropdown)
@@ -650,15 +765,12 @@ struct ComposerView: View {
             Image(systemName: "plus")
                 .font(addGlyphFont)
                 .foregroundStyle(.secondary)
-                #if os(iOS)
-                // Even bumped up, the glyph alone sits under the 44pt HIG tap minimum and the Menu's
-                // `.fixedSize()` hugs it. On touch, give it a 34×34 square hit area with the whole
-                // rect tappable and the glyph centered — even padding all round, no lopsided gap
-                // before the field. The 34pt height matches the send glyph's row so the composer box
-                // doesn't grow taller. macOS (pointer input) keeps the tight glyph.
-                .frame(width: 34, height: 34)
+                // The toolbar's left end: a 32pt square, the same frame Send has on the right, so
+                // the glyph's centre sits on the card's corner centre (8pt of toolbar padding + 16).
+                // The whole square is tappable, and its explicit size is also what keeps this Menu
+                // from ever measuring zero (see `footerMenuChrome`).
+                .frame(width: 32, height: 32)
                 .contentShape(Rectangle())
-                #endif
         }
         .borderlessMenuStyle()
         .menuIndicator(.hidden)
@@ -700,11 +812,18 @@ struct ComposerView: View {
             .contentShape(Rectangle())
     }
 
-    /// A menu row with a leading checkmark on the current selection — a Picker draws this for free,
-    /// a Menu of Buttons has to render it explicitly.
+    /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
+    /// a Menu of Buttons has to render it explicitly. Trailing, not leading (`Label(_:systemImage:)`,
+    /// the natural spelling): a leading icon takes a column on the selected row only, so that row's
+    /// text starts one checkmark to the right of every sibling's, which is what the phone report
+    /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
-        if selected { Label(text, systemImage: "checkmark") } else { Text(text) }
+        HStack(spacing: 8) {
+            Text(text)
+            Spacer(minLength: 12)
+            if selected { Image(systemName: "checkmark") }
+        }
     }
 
     // MARK: `/` autocomplete menu
@@ -849,11 +968,10 @@ struct ComposerView: View {
 }
 
 /// The staged attachments a message is about to carry: 48² thumbnails for images, name + size
-/// chips for other files. Its own view because it does NOT live inside the composer box's stack —
-/// the console places it at the top of the composer chrome, above the background tray and the git
-/// bar (web parity: `.composer-attachments` is the first child of `.workspace-composer`), so a
-/// screenshot you just added reads as part of the message you're sending rather than as something
-/// buried under the diff chip.
+/// chips for other files. It sits at the top of the composer card, above the text it goes out with
+/// (web parity: `.composer-attachments` is the first row of `.composer-box`), so a screenshot you
+/// just added reads as part of the message you're sending — not as one more strip of the band,
+/// separated from the text by the watching card, the tray and the git bar.
 struct ComposerAttachmentsView: View {
     let console: ConsoleModel
     @Namespace private var previewNS
@@ -878,9 +996,10 @@ struct ComposerAttachmentsView: View {
                 ForEach(console.pendingAttachments) { attachmentChip($0, previews: previews) }
                 Spacer(minLength: 0)
             }
-            // Gutter comes from the enclosing `ComposerBand`; this only owns its gap to the next
-            // member, and only while it is actually on screen.
-            .padding(.bottom, .composerBandGap)
+            // Inset from the card's edges; the text below brings its own top padding, so this
+            // row owns no gap beneath it.
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
             // The staged images are one group: tapping any of them opens a pager over all of them,
             // the same way this turn's attachments will page together once the message lands.
             .imagePreview($previewTarget, images: previews, ns: previewNS)
@@ -1076,20 +1195,35 @@ private final class PlaceholderTextView: UITextView {
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
     @State private var showDetail = false
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
+    /// See `ComposerFooterDetailLayout.showsGaugeNumbers`.
+    private var gaugeShowsNumber: Bool {
+        #if os(iOS)
+        ComposerFooterDetailLayout.showsGaugeNumbers(horizontalSizeClass: horizontalSizeClass)
+        #else
+        true
+        #endif
+    }
 
     var body: some View {
         if let pct = usage.primaryPercent {
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
-                    UsageBar(percent: pct).frame(width: 26, height: 4)
-                    // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
-                    // flexible view in the footer, so without this a tight row wraps "12%" onto
-                    // two lines instead of truncating the (lineLimit-1) name/menu labels.
-                    Text("\(pct)%").foregroundStyle(.secondary).fixedSize()
+                    UsageBar(percent: pct).frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
+                    if gaugeShowsNumber {
+                        // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
+                        // flexible view in the toolbar, so without this a tight row wraps "12%" onto
+                        // two lines instead of truncating the (lineLimit-1) model name.
+                        Text("\(pct)%").foregroundStyle(.secondary).fixedSize()
+                    }
                 }
             }
             .buttonStyle(.plain)
             .help("Plan usage \(pct)%")
+            .accessibilityLabel("Plan usage \(pct)%")
             .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage))
         }
     }
@@ -1108,6 +1242,18 @@ private func fmtTokens(_ n: Int) -> String {
 /// counts. Distinct from plan usage — that's the subscription rate limit, this is the session's
 /// live context occupancy (the figure Claude Code's own gauge shows).
 private struct ContextWindowIndicator: View {
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
+    /// See `ComposerFooterDetailLayout.showsGaugeNumbers`.
+    private var gaugeShowsNumber: Bool {
+        #if os(iOS)
+        ComposerFooterDetailLayout.showsGaugeNumbers(horizontalSizeClass: horizontalSizeClass)
+        #else
+        true
+        #endif
+    }
     let tokens: Int
     /// The window this session reported alongside its tokens, when it did — the runner reads it
     /// off the CLI that produced the count, so the pair describes one model at one moment.
@@ -1138,14 +1284,18 @@ private struct ContextWindowIndicator: View {
     var body: some View {
         Button { showDetail.toggle() } label: {
             HStack(spacing: 5) {
-                UsageRing(percent: pct).frame(width: 14, height: 14)
-                // See PlanUsageIndicator: pin the pill to its ideal width so a tight footer never
-                // wraps the "%" onto a second line.
-                Text(headline).foregroundStyle(.secondary).fixedSize()
+                UsageRing(percent: pct).frame(width: gaugeShowsNumber ? 14 : 16,
+                                              height: gaugeShowsNumber ? 14 : 16)
+                if gaugeShowsNumber {
+                    // See PlanUsageIndicator: pin the pill to its ideal width so a tight toolbar
+                    // never wraps the "%" onto a second line.
+                    Text(headline).foregroundStyle(.secondary).fixedSize()
+                }
             }
         }
         .buttonStyle(.plain)
         .help(helpText)
+        .accessibilityLabel(helpText)
         .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct, known: known))
     }
 
@@ -1168,6 +1318,14 @@ private enum ComposerFooterDetailLayout {
     static let popoverWidth: CGFloat = 320
 
     static func usesPopover(horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
+        horizontalSizeClass == .regular
+    }
+
+    /// Whether the two gauges print their numbers beside their shapes. A phone's toolbar has room
+    /// for the shapes only — the ring and the bar still say how full they are, and the number is a
+    /// tap away in their detail and read out by their accessibility label — while a regular-width
+    /// iPad (and macOS) keeps it. Web parity: `.composer-usage-pct` is hidden at ≤600px.
+    static func showsGaugeNumbers(horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
         horizontalSizeClass == .regular
     }
 }

@@ -38,6 +38,8 @@ type supervisedSession struct {
 	settled []TurnCompleteRequest
 	// The file names of attachments the runner uploaded, in arrival order.
 	uploads []string
+	// The path of every request the runner made, in arrival order.
+	paths []string
 }
 
 // superviseClaudeSession registers the session active, as a claim does, with one message
@@ -50,6 +52,13 @@ func superviseClaudeSession(t *testing.T, pool *sessionPool, script ...fakeStep)
 // superviseClaudeSessionIn is the same run in an execDir the test names, for a script that has to
 // speak about a file the test wrote into the session's checkout (see reply_attachments_test.go).
 func superviseClaudeSessionIn(t *testing.T, pool *sessionPool, execDir string, script ...fakeStep) *supervisedSession {
+	t.Helper()
+	return superviseClaudeSessionUntil(t, pool, execDir, context.Background(), script...)
+}
+
+// superviseClaudeSessionUntil is the same run under a runner whose stop the test decides: shutdown
+// is what runLoop's loopCtx is to a supervisor.
+func superviseClaudeSessionUntil(t *testing.T, pool *sessionPool, execDir string, shutdown context.Context, script ...fakeStep) *supervisedSession {
 	t.Helper()
 	fake := newFakeClaude(t, script...)
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -72,7 +81,7 @@ func superviseClaudeSessionIn(t *testing.T, pool *sessionPool, execDir string, s
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runInteractiveSession(NewTransport(api.URL, "runner-token"), job, ctx, context.Background(),
+		runInteractiveSession(NewTransport(api.URL, "runner-token"), job, ctx, shutdown,
 			s.execDir, nil, pool, live)
 		pool.finish(live)
 	}()
@@ -88,6 +97,9 @@ func superviseClaudeSessionIn(t *testing.T, pool *sessionPool, execDir string, s
 }
 
 func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	s.paths = append(s.paths, r.URL.Path)
+	s.mu.Unlock()
 	switch {
 	case strings.HasSuffix(r.URL.Path, "/inbox"):
 		deadline := time.Now().Add(20 * time.Millisecond)
@@ -138,6 +150,18 @@ func (s *supervisedSession) queue(turn RunInboxResponse) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.inbox = append(s.inbox, turn)
+}
+
+// requested reports whether the runner has made a request whose path ends in suffix.
+func (s *supervisedSession) requested(suffix string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, path := range s.paths {
+		if strings.HasSuffix(path, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *supervisedSession) countEvents(match func(RunEvent) bool) int {

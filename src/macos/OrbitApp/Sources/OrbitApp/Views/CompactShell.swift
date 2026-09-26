@@ -300,6 +300,7 @@ private struct CompactSections: View {
                         case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
                         case .watches:                      FollowingListView(rowNavigation: .push)
                         case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
+                        case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)
                         // The other sections' pages ride their own stacks, not this one.
                         default:                         EmptyView()
                         }
@@ -318,6 +319,21 @@ private struct CompactSections: View {
                         switch node {
                         case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)
                         default:                            EmptyView()
+                        }
+                    }
+            }
+
+        // WIKI — the space's home → an entry's page, or Review (the amber banner's destination). The
+        // path IS the section's stack, like every section here.
+        case .wiki:
+            NavigationStack(path: $model.nav.path) {
+                WikiHomeView(rowNavigation: .push)
+                    .drawerToggle(open: openDrawer)
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)
+                        case .wikiReview:             WikiReviewView()
+                        default:                      EmptyView()
                         }
                     }
             }
@@ -644,6 +660,8 @@ private struct NavigationDrawer: View {
                 ForEach(AppSection.workSections) { section in
                     if section == .projects {
                         projectsRow
+                    } else if section == .wiki {
+                        wikiRow
                     } else {
                         sectionRow(section)
                     }
@@ -667,6 +685,9 @@ private struct NavigationDrawer: View {
             // The rail's first row counts the projects waiting on you, and its last rows are the
             // open projects: fetch them with the drawer rather than waiting for the section.
             .task { await model.projects?.load() }
+            // The Wiki row counts the proposals waiting for review — the spaces list, fetched with
+            // the drawer for the same reason.
+            .task { await model.wiki?.loadSpaces() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
@@ -824,6 +845,43 @@ private struct NavigationDrawer: View {
                             .font(.orbitMeta.weight(.semibold))
                             .foregroundStyle(.orange)
                             .accessibilityLabel("\(waiting) waiting on you")
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+    }
+
+    // MARK: Wiki
+
+    /// The Wiki: what the work learned, after the work itself. The amber number is the proposals
+    /// waiting for review, summed over every space — the web sidebar's count, the home page banner's
+    /// and Review's — written the way the Projects row writes its own, and nothing at all at zero.
+    /// Opening the Wiki never clears it: only deciding a proposal does. Selected whenever the Wiki is
+    /// what is showing, since the drawer has no rows below it for the Wiki's pages.
+    private var wikiRow: some View {
+        let selected = model.selectedSection == .wiki
+        let waiting = model.wiki?.proposalsToReview ?? 0
+        return Button {
+            model.selectedSection = .wiki
+            model.nav.popToRoot()
+            close()
+        } label: {
+            pill(selected: selected) {
+                HStack(spacing: 12) {
+                    Image(systemName: AppSection.wiki.systemImage)
+                        .frame(width: 24)
+                        .foregroundStyle(selected ? Color.accentColor : .primary)
+                    Text(AppSection.wiki.title)
+                        .fontWeight(selected ? .semibold : .regular)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    if waiting > 0 {
+                        Text("\(waiting)")
+                            .font(.orbitMeta.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel(WikiCopy.proposalsToReview(waiting))
                     }
                 }
             }

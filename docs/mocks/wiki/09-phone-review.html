@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>09 phone review</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="phone-mock.css">
+<style>
+  /* web: the page under the fixed top bar, the card, and the bar pinned to the bottom */
+  .rv-web-scroll { position: absolute; top: 48px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  .rv-back { font-size: 13px; color: var(--brand); display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+  .rv-sub { margin-top: 2px; font-size: 13px; color: var(--text-2); }
+  .wp-seg span b { margin-left: 5px; font-weight: 600; color: var(--text-3); }
+  .rv-field { padding: 0 0 9px; }
+  .rv-field:last-child { padding-bottom: 0; }
+  .rv-field .k { font-size: 12px; line-height: 18px; color: var(--text-3); }
+  .rv-field .v { font-size: 13.5px; line-height: 20px; color: var(--text-1); }
+  .rv-field .v code, .wp-warnstrip code { font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 12px; background: var(--fill-muted); border-radius: 4px; padding: 0 4px; }
+  .rv-h { font-size: 12.5px; font-weight: 650; color: var(--text-1); margin-bottom: 6px; display: flex; gap: 8px; align-items: baseline; }
+  .rv-h span { font-weight: 400; color: var(--text-3); }
+  .rv-auto { margin-top: 12px; }
+  .rv-auto .h { font-size: 13.5px; font-weight: 650; color: var(--text-1); }
+  .rv-auto .hint { margin-top: 2px; font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
+  .aa-row { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; }
+  .aa-row.first { border-top: 0; }
+  .aa-row .ic { color: var(--success); font-size: 14px; margin-top: 3px; }
+  .aa-row b { font-weight: 600; color: var(--text-1); }
+  .aa-row .d { color: var(--text-3); font-size: 12.5px; }
+  .aa-ask { margin-top: 4px; padding: 8px 10px; border-radius: 8px; background: var(--fill-inset); font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+  .aa-ask b { color: var(--text-1); font-weight: 600; }
+  /* iOS: scroll area between nav and the floating toolbar */
+  .rv-ios-scroll { position: absolute; top: 116px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  .rv-end { display: flex; flex-direction: column; justify-content: flex-end; }
+  .rv-end > * { flex-shrink: 0; }
+  .rv-web-scroll.rv-end { padding-bottom: 16px; }
+  .rv-ios-scroll.rv-end { padding-bottom: 30px; }
+  .rv-pagecard { position: relative; margin: 0 24px 0 16px; border-radius: 26px; background: #fff; overflow: hidden; }
+  .rv-peek { position: absolute; top: 34px; left: 386px; width: 300px; height: 900px; border-radius: 26px; background: #fff; }
+  .rv-ios-sec { position: relative; padding: 13px 16px 14px; }
+  .rv-ios-sec + .rv-ios-sec::before { content: ""; position: absolute; top: 0; left: 16px; right: 16px; height: .5px; background: #E3E3E6; }
+  .rv-ios-h { font-size: 15px; line-height: 20px; font-weight: 600; margin-bottom: 4px; display: flex; gap: 6px; align-items: baseline; }
+  .rv-ios-h span { font-size: 13px; font-weight: 400; color: #8A8A8D; }
+  .rv-ios-f + .rv-ios-f { margin-top: 10px; }
+  .io-aa-h { padding: 18px 32px 8px; font-size: 17px; font-weight: 700; }
+  .io-aa { display: flex; gap: 10px; }
+  .io-aa .sf { color: #35C759; font-size: 16px; margin-top: 2px; stroke-width: 2.4; }
+  .io-aa b { font-weight: 600; }
+  .io-aa .d { font-size: 15px; line-height: 20px; color: #8A8A8D; }
+  /* thumbnails of cards 2 and 3 */
+  .th-cap { font: 12px/1.5 "Noto Sans CJK SC", sans-serif; color: #6b7280; padding: 10px 14px 6px; }
+  .th-ios { background: #F2F2F7; padding: 0 0 12px; }
+  .th-web { background: var(--bg-base); padding: 0 16px 12px; }
+  .menu-stage-web { position: relative; height: 430px; background: var(--bg-base); }
+  .menu-stage-ios { position: relative; height: 462px; background: #F2F2F7; }
+</style>
+</head>
+<body class="m">
+<script src="phone-mock-antd.js"></script>
+<script src="phone-mock.js"></script>
+<div class="m-sheet pb-sheet">
+  <h1 class="m-h1 zh">09 · Review：逐条审提议（web 手机 ｜ iOS ｜ 说明）</h1>
+  <p class="pb-lede zh">三张提议卡的字与桌面图 04 逐字相同，只是排成手机的样子：一张卡占满宽，一次只看一张——<b>头（操作 · 类型 · 来源会话 · 时间）→ 标题 → 字段 → Sources → Anchors → Similar entries</b>，卡片末尾 <b>Accept · Edit · Reject▾</b> 整宽竖排（Accept 实心、在最上）。卡片上方 <b>1 of 3</b>：iOS 左右滑换卡，web 手机用 <b>Previous / Next</b>。
+    ①② 是两张真实截屏（首屏、滑到底）；桌面右栏的 Auto-accept 在手机上接在卡片后面；④ 是另外两张卡，第三张顶上是琥珀的 <b>Web-derived</b> 警示条。时间写成 Orbit 的格式（9/13），桌面稿会统一过来。</p>
+  <div class="pb-legend zh"><span class="pb-tag sys">iOS 系统</span>系统控件与习惯 <span class="pb-tag con">Orbit 一致性</span>沿用现成组件 / 用词 <span class="pb-tag co">协调性</span>同一个词、同一个数在各处口径一致 <span class="pb-tag new">新词</span>要你拍板 <span class="pb-tag ref">借鉴</span>参考产品 <span class="pb-tag done">已定</span>owner 已拍板 <span class="pb-tag later">另议</span>不在这次范围</div>
+
+  <div class="pb-grid">
+    <div class="pb-colhead">web 手机 <span>· 390×844 · /wiki/review</span></div>
+    <div class="pb-colhead">iOS <span>· 402×874pt · 从横幅 push 进来</span></div>
+    <div class="pb-colhead zh">说明</div>
+
+    <!-- ① first screen -->
+    <div class="pb-band zh"><span class="pb-bn">1</span>首屏 <small>· 页头 · 筛选 · 1 of 3 · 提议卡 1（ADD · Pitfall）· 按钮在卡片末尾（见 ②）</small></div>
+
+    <div class="pb-web tall" data-name="web-first">
+      <div class="wp-topbar"><span class="wp-toggle"><i data-ant="menu"></i></span><span class="wp-topname">Orbit</span></div>
+      <div class="rv-web-scroll">
+        <div class="wp-page" style="padding-top:12px">
+          <div class="rv-back">← Wiki</div>
+          <h1 class="page-title">Review</h1>
+          <div class="rv-sub">3 proposals from 2 sessions · oldest 2h</div>
+          <div class="wp-seg"><span class="on">All<b>3</b></span><span>Add<b>1</b></span><span>Amend<b>1</b></span><span>Retire<b>1</b></span></div>
+          <div class="wp-pager"><span class="wp-btn" style="color:var(--text-4);background:var(--bg-subtle)"><i data-ant="left"></i>Previous</span><span class="pos">1 of 3</span><span class="wp-btn">Next<i data-ant="right"></i></span></div>
+          <div class="wp-rcard">
+            <div class="wp-rsec">
+              <div class="wp-rhead"><span class="wk-op add">ADD</span><span style="color:var(--text-1);font-weight:600">Pitfall</span></div>
+              <div class="wp-rhead" style="margin-top:6px"><i data-ant="message"></i>Proposed by <a>Orbit wiki review</a> · 12m ago</div>
+              <div class="wp-rtitle">Secret redaction lets ENV_VAR=value secrets through</div>
+            </div>
+            <div class="wp-rsec">
+              <div class="rv-field"><div class="k">Trigger</div><div class="v">A watch delivery fails with an error that quotes an environment assignment such as <code>POSTGRES_PASSWORD=…</code></div></div>
+              <div class="rv-field"><div class="k">Symptom</div><div class="v">The value is stored in the delivery's <code>lastError</code> and shown on the watch and the dead-letter list unredacted.</div></div>
+              <div class="rv-field"><div class="k">Cause</div><div class="v">The key pattern starts with <code>\b</code>, and <code>_</code> is a word character, so <code>\bpassword</code> never matches inside <code>POSTGRES_PASSWORD</code>.</div></div>
+              <div class="rv-field"><div class="k">Fix</div><div class="v">Let the key follow <code>_</code> as well as a word boundary, and add <code>POSTGRES_PASSWORD=hunter2</code> to the redaction spec.</div></div>
+            </div>
+            <div class="wp-rsec">
+              <div class="rv-h">Sources <span>1</span></div>
+              <div class="olc-quote" style="margin-top:0"><span class="wk-mono">POSTGRES_PASSWORD=hunter2 =&gt; POSTGRES_PASSWORD=hunter2</span><div class="who"><span class="src">Tool call output · <span class="wk-mono">redactErrorText()</span> in Orbit wiki review</span><span class="ver">quote verified ✓</span></div></div>
+            </div>
+            <div class="wp-rsec">
+              <div class="rv-h">Anchors <span>1</span></div>
+              <div class="wk-anchors"><div class="wk-anc"><i data-ant="aim aim"></i><div class="tx"><div class="p">src/apiserver/src/watches/<wbr><span class="nb">watch-redaction.ts:120</span></div><span class="wk-anchor ok"><i data-ant="check"></i><span class="wk-mono">4db4f9f</span></span></div></div></div>
+            </div>
+            <div class="wp-rsec">
+              <div class="rv-h" style="margin:0">Similar entries <span>None · compared with 96 entries</span></div>
+            </div>
+            <div class="card-actions wp-cardacts"><button class="card-action card-action--primary">Accept</button><button class="card-action card-action--secondary">Edit</button><button class="card-action card-action--secondary">Reject<i data-ant="down"></i></button><span class="note">Accepting makes it Confirmed</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios full grouped" data-name="ios-first">
+      <div data-ios="status"></div>
+      <div class="io-nav"><span class="io-glass l"><i data-sf="back"></i></span><div class="io-navtitle"><b>Review</b><span>3 proposals from 2 sessions · oldest 2h</span></div></div>
+      <div class="rv-ios-scroll">
+        <div class="io-seg"><span class="on">All 3</span><span>Add 1</span><span>Amend 1</span><span>Retire 1</span></div>
+        <div class="io-pager"><span class="io-dots"><i class="on"></i><i></i><i></i></span><span>1 of 3</span></div>
+        <div class="rv-peek" data-clip></div>
+        <div class="rv-pagecard">
+          <div class="rv-ios-sec">
+            <div class="io-rhead"><span class="io-op add">ADD</span><span style="color:#000;font-weight:600">Pitfall</span></div>
+            <div class="io-rhead" style="margin-top:7px"><i data-sf="bubble"></i>Proposed by <a>Orbit wiki review</a> · 12m ago</div>
+            <div class="io-rtitle">Secret redaction lets ENV_VAR=value secrets through</div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-f"><div class="io-lbl">Trigger</div><div class="io-val">A watch delivery fails with an error that quotes an environment assignment such as <code>POSTGRES_PASSWORD=…</code></div></div>
+            <div class="rv-ios-f"><div class="io-lbl">Symptom</div><div class="io-val">The value is stored in the delivery's <code>lastError</code> and shown on the watch and the dead-letter list unredacted.</div></div>
+            <div class="rv-ios-f"><div class="io-lbl">Cause</div><div class="io-val">The key pattern starts with <code>\b</code>, and <code>_</code> is a word character, so <code>\bpassword</code> never matches inside <code>POSTGRES_PASSWORD</code>.</div></div>
+            <div class="rv-ios-f"><div class="io-lbl">Fix</div><div class="io-val">Let the key follow <code>_</code> as well as a word boundary, and add <code>POSTGRES_PASSWORD=hunter2</code> to the redaction spec.</div></div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-h">Sources <span>1</span></div>
+            <div class="io-quote" style="margin-top:0"><span class="mono">POSTGRES_PASSWORD=hunter2 =&gt; POSTGRES_PASSWORD=hunter2</span><div class="who"><span class="src">Tool call output · <span class="mono">redactErrorText()</span> in Orbit wiki review</span><span class="ver">quote verified ✓</span></div></div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-h">Anchors <span>1</span></div>
+            <div class="io-anc"><i data-sf="scope"></i><div class="tx"><div class="io-path wrap">src/apiserver/src/watches/<wbr><span class="nb">watch-redaction.ts:120</span></div><div class="io-ok" style="margin-top:3px"><i data-sf="check"></i><code>4db4f9f</code></div></div></div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-h" style="margin:0">Similar entries <span>None · compared with 96 entries</span></div>
+          </div>
+          <div class="io-acts"><span class="io-btn prom">Accept</span><span class="io-btn">Edit</span><span class="io-btn">Reject<i data-sf="chev-d"></i></span><div class="io-actnote">Accepting makes it Confirmed</div></div>
+        </div>
+      </div>
+      <div class="io-home"></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span>页头、筛选、卡片内容与桌面 04 逐字相同：<span class="en">Review</span> / <span class="en">“3 proposals from 2 sessions · oldest 2h”</span>（这个 3 = 抽屉 Wiki 行的 3 = 首页横幅的 3）；筛选 <span class="en">All 3 · Add 1 · Amend 1 · Retire 1</span>——不叫 <span class="en">Change</span>，因为 <span class="en">Changed</span> 是锚点状态的词（琥珀，等复核）；<span class="en">Amend</span> 这一档装 <span class="en">AMEND</span> 与 <span class="en">SUPERSEDE</span> 两种卡。</p>
+      <p><span class="pb-tag sys">iOS 系统</span>标题 + 副标题在导航栏（iOS 26 的 <code>navigationSubtitle</code>，与会话页标题两行同一写法）；筛选是分段控件；卡片横向分页，<span class="en">1 of 3</span> 配页点，右边露出下一张的边——一眼知道能左右滑。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>web 手机：返回链接 <span class="en">← Wiki</span> 照项目详情页的 <span class="en">← Projects</span>；分段用整宽 Segmented（Projects 手机工具栏的做法）；web 没有可靠的横滑手势，所以用 <span class="en">Previous / Next</span> 两个普通按钮夹着 <span class="en">1 of 3</span>，位置和 iOS 的页点对齐。</p>
+      <p><span class="pb-tag done">已定（owner 09-25）</span><b>按钮沿用 Orbit 现有决策卡的规矩</b>：主键在前——<span class="en">Accept</span>（实心 tint）· <span class="en">Edit</span> · <span class="en">Reject▾</span>；手机两端都在卡片末尾整宽竖排，<span class="en">Accept</span> 在最上。依据：与桌面 04、审批卡（<code>ApprovalCards</code>）、证据决策卡（<code>EvidenceDecisionCard</code>）同一顺序；同一个组件各端一致，不另开新规矩。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>iOS 照 <code>ApprovalActions</code> 的 <code>VStack(spacing: 10)</code>——代码注释写明竖排的两个理由：三个按钮挤不进一行，而且竖排让破坏性的按钮不在主键一拇指之内（<span class="en">“keeps a destructive Deny from sitting a thumb-width from Allow”</span>）。<span class="en">Accept</span> 是 <code>.borderedProminent</code>，<span class="en">Edit / Reject▾</span> 是 <code>.bordered</code>，系统默认高度、整宽。web 手机照 <code>ApprovalPanel</code> 在 ≤600px 的竖排：<code>.card-actions</code> 改列排、<code>.card-action</code> 整宽。所以首屏看不到按钮——读到卡片末尾才做决定，见 ②。</p>
+      <p><span class="pb-tag co">协调性</span>卡头 <span class="en">“Proposed by Orbit wiki review · 12m ago”</span> 与条目 History 的 <span class="en">“Proposed by session …”</span> 同一个动词；<span class="en">ADD / AMEND / RETIRE</span> 标签与桌面同色（绿 / 蓝 / 灰）。字段名与条目详情（图 08）一致，接受后这张卡就是条目的 r1。</p>
+      <p><span class="pb-tag ref">借鉴</span>GitHub Copilot memory 的逐条批准；一次一张、滑走下一张的节奏借 Photos 的整理 / 邮件分拣。</p>
+    </div>
+
+    <!-- ② scrolled to the bottom -->
+    <div class="pb-band zh"><span class="pb-bn">2</span>滑到底 <small>· Sources · Anchors · Similar entries · 按钮 · Auto-accept</small></div>
+
+    <div class="pb-web tall" data-name="web-bottom">
+      <div class="wp-topbar" style="position:relative;z-index:3"><span class="wp-toggle"><i data-ant="menu"></i></span><span class="wp-topname">Orbit</span></div>
+      <div class="rv-web-scroll rv-end">
+        <div class="wp-page" style="padding-top:0;padding-bottom:0">
+          <div class="wp-rcard">
+            <div class="wp-rsec">
+              <div class="rv-field"><div class="k">Cause</div><div class="v">The key pattern starts with <code>\b</code>, and <code>_</code> is a word character, so <code>\bpassword</code> never matches inside <code>POSTGRES_PASSWORD</code>.</div></div>
+              <div class="rv-field"><div class="k">Fix</div><div class="v">Let the key follow <code>_</code> as well as a word boundary, and add <code>POSTGRES_PASSWORD=hunter2</code> to the redaction spec.</div></div>
+            </div>
+            <div class="wp-rsec">
+              <div class="rv-h">Sources <span>1</span></div>
+              <div class="olc-quote" style="margin-top:0"><span class="wk-mono">POSTGRES_PASSWORD=hunter2 =&gt; POSTGRES_PASSWORD=hunter2</span><div class="who"><span class="src">Tool call output · <span class="wk-mono">redactErrorText()</span> in Orbit wiki review</span><span class="ver">quote verified ✓</span></div></div>
+            </div>
+            <div class="wp-rsec">
+              <div class="rv-h">Anchors <span>1</span></div>
+              <div class="wk-anchors"><div class="wk-anc"><i data-ant="aim aim"></i><div class="tx"><div class="p">src/apiserver/src/watches/<wbr><span class="nb">watch-redaction.ts:120</span></div><span class="wk-anchor ok"><i data-ant="check"></i><span class="wk-mono">4db4f9f</span></span></div></div></div>
+            </div>
+            <div class="wp-rsec">
+              <div class="rv-h" style="margin:0">Similar entries <span>None · compared with 96 entries</span></div>
+            </div>
+            <div class="card-actions wp-cardacts"><button class="card-action card-action--primary">Accept</button><button class="card-action card-action--secondary">Edit</button><button class="card-action card-action--secondary">Reject<i data-ant="down"></i></button><span class="note">Accepting makes it Confirmed</span></div>
+          </div>
+          <div class="wp-card rv-auto">
+            <div class="h">Auto-accept</div>
+            <div class="hint">These apply without asking you, and still show in Recently changed.</div>
+            <div class="aa-row first" style="margin-top:4px"><i data-ant="check"></i><div><b>Reinforce</b><div class="d">Adds a source to an existing entry</div></div></div>
+            <div class="aa-row"><i data-ant="check"></i><div><b>Challenge</b><div class="d">Flags an entry for re-check; changes nothing</div></div></div>
+            <div class="aa-ask"><b>Always asks you</b> · Add, Amend and Retire, and anything a session proposed after reading the web.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios full grouped" data-name="ios-bottom">
+      <div data-ios="status" style="position:relative;z-index:3;background:#F2F2F7"></div>
+      <div class="io-nav" style="z-index:3;background:#F2F2F7"><span class="io-glass l"><i data-sf="back"></i></span><div class="io-navtitle"><b>Review</b><span>1 of 3 · Add · Pitfall</span></div></div>
+      <div class="rv-ios-scroll rv-end">
+        <div class="rv-pagecard">
+          <div class="rv-ios-sec">
+            <div class="rv-ios-f"><div class="io-lbl">Fix</div><div class="io-val">Let the key follow <code>_</code> as well as a word boundary, and add <code>POSTGRES_PASSWORD=hunter2</code> to the redaction spec.</div></div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-h">Sources <span>1</span></div>
+            <div class="io-quote" style="margin-top:0"><span class="mono">POSTGRES_PASSWORD=hunter2 =&gt; POSTGRES_PASSWORD=hunter2</span><div class="who"><span class="src">Tool call output · <span class="mono">redactErrorText()</span> in Orbit wiki review</span><span class="ver">quote verified ✓</span></div></div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-h">Anchors <span>1</span></div>
+            <div class="io-anc"><i data-sf="scope"></i><div class="tx"><div class="io-path wrap">src/apiserver/src/watches/<wbr><span class="nb">watch-redaction.ts:120</span></div><div class="io-ok" style="margin-top:3px"><i data-sf="check"></i><code>4db4f9f</code></div></div></div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-h" style="margin:0">Similar entries <span>None · compared with 96 entries</span></div>
+          </div>
+          <div class="io-acts"><span class="io-btn prom">Accept</span><span class="io-btn">Edit</span><span class="io-btn">Reject<i data-sf="chev-d"></i></span><div class="io-actnote">Accepting makes it Confirmed</div></div>
+        </div>
+        <div class="io-aa-h">Auto-accept</div>
+        <div class="io-card" style="margin-right:24px">
+          <div class="io-cr"><div class="io-lbl" style="font-size:15px;line-height:20px">These apply without asking you, and still show in Recently changed.</div></div>
+          <div class="io-cr"><div class="io-aa"><i data-sf="check"></i><div><b>Reinforce</b><div class="d">Adds a source to an existing entry</div></div></div></div>
+          <div class="io-cr"><div class="io-aa"><i data-sf="check"></i><div><b>Challenge</b><div class="d">Flags an entry for re-check; changes nothing</div></div></div></div>
+          <div class="io-cr"><div class="io-val" style="margin:0;font-size:15px;line-height:20px;color:#3C3C43"><b>Always asks you</b> · Add, Amend and Retire, and anything a session proposed after reading the web.</div></div>
+        </div>
+      </div>
+      <div class="io-home"></div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span>卡 1 的四栏、出处、锚点与桌面 04 逐字相同：这是 watch 投递失败时错误文本里带出的 <code>POSTGRES_PASSWORD=…</code> 被存进 <code>lastError</code>；出处是 <code>redactErrorText()</code> 那次 tool call 的输出，等宽引文 + <span class="en">quote verified ✓</span>；锚点 <code>watch-redaction.ts:120</code> <span class="en">✓ 4db4f9f</span>。</p>
+      <p><span class="pb-tag co">协调性</span><span class="en">Similar entries: None · compared with 96 entries</span> 照样写出来——「查过重了」和「没查」是两回事；96 与首页 <span class="en">96 entries</span> 同一个数。按钮下面一行 <span class="en">Accepting makes it Confirmed</span>（桌面写在按钮行右边，竖排后落在按钮下面，与 <code>.card-actions</code> 里的先后一致）。</p>
+      <p><span class="pb-tag co">协调性</span><b>Auto-accept</b> = 桌面右栏那张卡，逐字照抄，手机上接在卡片后面：<span class="en">Reinforce</span>（加一条出处）、<span class="en">Challenge</span>（只标记待复核，不改内容）不问你；<span class="en">Always asks you</span> 写明其余一律进队列。</p>
+      <p><span class="pb-tag sys">iOS 系统</span>滑到底后分段与页点随内容滚走，导航栏副标题改成 <span class="en">“1 of 3 · Add · Pitfall”</span>，保证任何滚动位置都知道在看哪一张。三个按钮在卡片末尾，Auto-accept 接在卡片后面，用 insetGrouped 卡，勾用系统绿。</p>
+      <p><span class="pb-tag new">新词</span><span class="en">Similar entries、Auto-accept、Reinforce、Challenge</span>。</p>
+    </div>
+
+    <!-- ③ Reject reasons -->
+    <div class="pb-band zh"><span class="pb-bn">3</span>Reject 的理由 <small>· 一次按键里就把原因带回给 agent</small></div>
+
+    <div class="pb-web" data-name="web-reject">
+      <div class="menu-stage-web">
+        <div class="wp-page" style="padding-top:12px">
+          <div class="wp-rcard" style="margin-top:0;border-top-left-radius:0;border-top-right-radius:0">
+            <div class="wp-rsec"><div class="rv-h" style="margin:0">Similar entries <span>None · compared with 96 entries</span></div></div>
+            <div class="card-actions wp-cardacts"><button class="card-action card-action--primary">Accept</button><button class="card-action card-action--secondary">Edit</button><button class="card-action card-action--secondary" style="border-color:var(--brand);color:var(--text-1);background:var(--bg-hover)">Reject<i data-ant="up"></i></button><span class="note">Accepting makes it Confirmed</span></div>
+          </div>
+        </div>
+        <div class="wp-dropdown" style="left:30px;top:211px;width:236px">
+          <div>Not true</div>
+          <div>Not useful</div>
+          <div>Duplicate</div>
+          <div>Too specific</div>
+          <div class="foot">The reason goes back to the session that proposed it.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios grouped" data-name="ios-reject">
+      <div class="menu-stage-ios">
+        <div class="rv-pagecard" style="margin:12px 16px 0;border-radius:0 0 26px 26px">
+          <div class="rv-ios-sec"><div class="rv-ios-h" style="margin:0">Similar entries <span>None · compared with 96 entries</span></div></div>
+          <div class="io-acts"><span class="io-btn prom">Accept</span><span class="io-btn">Edit</span><span class="io-btn on">Reject<i data-sf="chev-d"></i></span><div class="io-actnote">Accepting makes it Confirmed</div></div>
+        </div>
+        <div class="io-menu" style="left:32px;top:186px;width:262px;background:#FAFAFC">
+          <div class="io-mhead">The reason goes back to the session that proposed it.</div>
+          <div class="io-msep" style="margin-left:0"></div>
+          <div class="io-mi">Not true<i data-sf="x"></i></div>
+          <div class="io-msep"></div>
+          <div class="io-mi">Not useful<i data-sf="thumbdown"></i></div>
+          <div class="io-msep"></div>
+          <div class="io-mi">Duplicate<i data-sf="copy"></i></div>
+          <div class="io-msep"></div>
+          <div class="io-mi">Too specific<i data-sf="search"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span>四个理由与脚注与桌面 04 逐字相同：<span class="en">Not true / Not useful / Duplicate / Too specific</span>，<span class="en">“The reason goes back to the session that proposed it.”</span></p>
+      <p><span class="pb-tag sys">iOS 系统</span><span class="en">Reject</span> 是 <code>Menu</code>：点一下弹出四个理由，选中即拒绝并换下一张；菜单挂在 <span class="en">Reject▾</span> 下面展开（它是竖排的最后一个）。那句说明放在菜单顶部——iOS 菜单只有标题位、没有脚注位；web 与桌面一样放在下拉底部。</p>
+      <p><span class="pb-tag con">Orbit 一致性</span>拒绝带原因，是任务确认卡「拒绝 + 为什么」的同一思路（拒绝不带一句话，agent 只知道被拒）；这里原因是封闭的四选一，不弹输入框。</p>
+      <p><span class="pb-tag co">协调性</span>按下 <span class="en">Accept</span>：卡片滑走、下一张滑入，页头与抽屉的数字同时 3 → 2；条目以 <span class="en">Confirmed</span> 进入 wiki（卡尾那句说的就是这个），History 第一行是 <span class="en">“Proposed by Orbit wiki review”</span>。</p>
+      <p><span class="pb-tag new">新词</span><span class="en">Not true / Not useful / Duplicate / Too specific</span>。</p>
+    </div>
+
+    <!-- ④ cards 2 and 3 -->
+    <div class="pb-band zh"><span class="pb-bn">4</span>另外两张 <small>· ② RETIRE · Wiki maintenance　③ AMEND · Upgrade deploy（Web-derived）</small></div>
+
+    <div class="pb-web" data-name="web-thumbs">
+      <div class="th-web">
+        <div class="th-cap zh" style="padding-left:0">2 of 3 · RETIRE · 来自 Wiki maintenance</div>
+        <div class="wp-rcard" style="margin-top:0">
+          <div class="wp-rsec">
+            <div class="wp-rhead"><span class="wk-op retire">RETIRE</span><span style="color:var(--text-1);font-weight:600">Pitfall</span></div>
+            <div class="wp-rhead" style="margin-top:6px"><i data-ant="sync"></i>Proposed by <a>Wiki maintenance</a> · 2h ago</div>
+            <div class="wp-rtitle">Retire “Claude's ScheduleWakeup is lost when the engine is recycled”</div>
+          </div>
+          <div class="wp-rsec">
+            <div class="rv-field"><div class="k">Reason</div><div class="v">Fix landed: wakeups are held by the server (<code>1125c445a</code> on main)</div></div>
+            <div class="rv-field"><div class="k">Evidence</div>
+              <div class="orbit-link-card" style="margin:2px 0 0">
+                <div class="olc-head"><span class="olc-kind"><span class="olc-tile"><i data-ant="merge"></i></span>Merge receipt</span><span class="olc-state is-done">On main</span></div>
+                <div class="olc-title"><a>feat(wakeups): hold a session's scheduled wakeup on the server, and refuse Claude's ScheduleWakeup</a></div>
+                <div class="olc-line"><span class="olc-line-text">1125c445a · main · 9/13</span></div>
+              </div></div>
+            <div class="rv-field"><div class="k">After</div><div class="v">Agents stop getting this entry. It stays in History, struck through, and points to “Wakeups are held by the server”.</div></div>
+          </div>
+          <div class="card-actions wp-cardacts"><button class="card-action card-action--primary">Retire</button><button class="card-action card-action--secondary">Keep</button></div>
+        </div>
+
+        <div class="th-cap zh" style="padding:18px 0 6px">3 of 3 · AMEND · 来自会话 Upgrade deploy</div>
+        <div class="wp-rcard" style="margin-top:0">
+          <div class="wp-warnstrip"><i data-ant="global"></i><div><b>Web-derived</b> · this session read 2 web pages before proposing. Accepting shows it to agents.<a>Show the pages</a></div></div>
+          <div class="wp-rsec">
+            <div class="wp-rhead"><span class="wk-op amend">AMEND</span><span style="color:var(--text-1);font-weight:600">Recipe</span></div>
+            <div class="wp-rhead" style="margin-top:6px"><i data-ant="message"></i>Proposed by <a>Upgrade deploy</a> · 1h ago</div>
+            <div class="wp-rtitle">Deploy apiserver and web</div>
+            <div class="chat-diff" style="margin-top:8px">
+              <div class="diff-hunk">Steps · r3 → proposed r4</div>
+              <div class="diff-line diff-ctx"><span class="diff-ln">1</span><span class="diff-sign"> </span><span class="diff-text">Run /upgrade from a clean checkout</span></div>
+              <div class="diff-line diff-ctx"><span class="diff-ln">2</span><span class="diff-sign"> </span><span class="diff-text">Verify: curl -fsS <span class="nb">https://orbitd.io/api/health</span> <span class="nb">→ exit 0</span></span></div>
+              <div class="diff-line diff-add"><span class="diff-ln">3</span><span class="diff-sign">+</span><span class="diff-text">Refreshing the Postgres image is <span class="nb">opt-in:</span> <span class="nb">--pull-base</span></span></div>
+            </div>
+          </div>
+          <div class="wp-rsec">
+            <div class="rv-h">Sources <span>1</span></div>
+            <div class="olc-quote" style="margin-top:0">“Refreshing the postgres/gateway base images is opt-in via --pull-base.”<div class="who"><span class="src">Tool output · <span class="wk-mono">.claude/skills/upgrade/SKILL.md</span> in Upgrade deploy</span><span class="ver">quote verified ✓</span></div></div>
+          </div>
+          <div class="wp-rsec">
+            <div class="rv-h">Anchors <span>1</span></div>
+            <div class="wk-anchors"><div class="wk-anc"><i data-ant="aim aim"></i><div class="tx"><div class="p">.claude/skills/upgrade/SKILL.md</div><span class="wk-anchor ok"><i data-ant="check"></i><span class="wk-mono">4db4f9f</span></span></div></div></div>
+          </div>
+          <div class="card-actions wp-cardacts"><button class="card-action card-action--primary">Accept</button><button class="card-action card-action--secondary">Edit</button><button class="card-action card-action--secondary">Reject<i data-ant="down"></i></button><span class="note">Web-derived is never auto-accepted</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-ios grouped" data-name="ios-thumbs">
+      <div class="th-ios">
+        <div class="th-cap zh" style="padding-left:32px">2 of 3 · RETIRE · 来自 Wiki maintenance</div>
+        <div class="rv-pagecard" style="margin-right:16px">
+          <div class="rv-ios-sec">
+            <div class="io-rhead"><span class="io-op retire">RETIRE</span><span style="color:#000;font-weight:600">Pitfall</span></div>
+            <div class="io-rhead" style="margin-top:7px"><i data-sf="gear"></i>Proposed by <a>Wiki maintenance</a> · 2h ago</div>
+            <div class="io-rtitle">Retire “Claude's ScheduleWakeup is lost when the engine is recycled”</div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-f"><div class="io-lbl">Reason</div><div class="io-val">Fix landed: wakeups are held by the server (<code>1125c445a</code> on main)</div></div>
+            <div class="rv-ios-f"><div class="io-lbl">Evidence</div>
+              <div class="io-quote" style="background:#fff;box-shadow:inset 0 0 0 1px rgba(60,60,67,.16);margin-top:4px">
+                <div class="io-lk"><span class="io-tile"><i data-sf="merge"></i></span>Merge receipt<span class="io-lpill green">On main</span></div>
+                <div class="io-lkt">feat(wakeups): hold a session's scheduled wakeup on the server, and refuse Claude's ScheduleWakeup</div>
+                <div class="io-lline">1125c445a · main · 9/13</div>
+              </div></div>
+            <div class="rv-ios-f"><div class="io-lbl">After</div><div class="io-val">Agents stop getting this entry. It stays in History, struck through, and points to “Wakeups are held by the server”.</div></div>
+          </div>
+          <div class="io-acts"><span class="io-btn prom">Retire</span><span class="io-btn">Keep</span></div>
+        </div>
+
+        <div class="th-cap zh" style="padding:18px 16px 6px 32px">3 of 3 · AMEND · 来自会话 Upgrade deploy</div>
+        <div class="rv-pagecard" style="margin-right:16px">
+          <div class="io-warn"><i data-sf="globe"></i><div><b>Web-derived</b> · this session read 2 web pages before proposing. Accepting shows it to agents.<a>Show the pages</a></div></div>
+          <div class="rv-ios-sec">
+            <div class="io-rhead"><span class="io-op amend">AMEND</span><span style="color:#000;font-weight:600">Recipe</span></div>
+            <div class="io-rhead" style="margin-top:7px"><i data-sf="bubble"></i>Proposed by <a>Upgrade deploy</a> · 1h ago</div>
+            <div class="io-rtitle">Deploy apiserver and web</div>
+            <div class="io-diff">
+              <div class="hunk">Steps · r3 → proposed r4</div>
+              <div class="ctx"><span class="ln">1</span><span class="sg"> </span><span class="tx">Run /upgrade from a clean checkout</span></div>
+              <div class="ctx"><span class="ln">2</span><span class="sg"> </span><span class="tx">Verify: curl -fsS <span class="nb">https://orbitd.io/api/health</span> <span class="nb">→ exit 0</span></span></div>
+              <div class="add"><span class="ln">3</span><span class="sg">+</span><span class="tx">Refreshing the Postgres image is <span class="nb">opt-in:</span> <span class="nb">--pull-base</span></span></div>
+            </div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-h">Sources <span>1</span></div>
+            <div class="io-quote" style="margin-top:0">“Refreshing the postgres/gateway base images is opt-in via --pull-base.”<div class="who"><span class="src">Tool output · <span class="mono">.claude/skills/upgrade/SKILL.md</span> in Upgrade deploy</span><span class="ver">quote verified ✓</span></div></div>
+          </div>
+          <div class="rv-ios-sec">
+            <div class="rv-ios-h">Anchors <span>1</span></div>
+            <div class="io-anc"><i data-sf="scope"></i><div class="tx"><div class="io-path wrap">.claude/skills/upgrade/SKILL.md</div><div class="io-ok" style="margin-top:3px"><i data-sf="check"></i><code>4db4f9f</code></div></div></div>
+          </div>
+          <div class="io-acts"><span class="io-btn prom">Accept</span><span class="io-btn">Edit</span><span class="io-btn">Reject<i data-sf="chev-d"></i></span><div class="io-actnote">Web-derived is never auto-accepted</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pb-note">
+      <p><span class="pb-tag co">协调性</span>两张卡与桌面 04 逐字相同。退役卡：<span class="en">Reason</span>、<span class="en">Evidence</span>（链接卡新类型 <span class="en">Merge receipt</span>，状态 <span class="en">On main</span>，<code>1125c445a</code> 真实存在）、<span class="en">After</span>（接受后会怎样）；按钮 <span class="en">Retire</span>（主键）在上、<span class="en">Keep</span> 在下。</p>
+      <p><span class="pb-tag co">协调性</span>修改卡：diff 头 <span class="en">Steps · r3 → proposed r4</span>，三行照抄，只加了第 3 行；出处是仓库里 upgrade skill 的原文；按钮下面一行 <span class="en">Web-derived is never auto-accepted</span>（桌面写在按钮行右边）。修订号与条目 History 的 r1 / r2 同一套编号。</p>
+      <p><span class="pb-tag co">协调性</span><b>琥珀警示条</b>画在卡片最顶上、整宽，带 <span class="en">Show the pages</span>：琥珀 = 要你本人看一眼（和横幅、抽屉数字同一种琥珀）；这类提议永远不会自动接受。<span class="en">Web-derived</span><span class="pb-new">新词</span></p>
+      <p><span class="pb-tag con">Orbit 一致性</span>web 的 diff 直接用会话 Edit 工具卡的 <code>.chat-diff</code>（行号 + 符号 + 绿底），证据卡是 <code>.orbit-link-card</code>；iOS 的证据是链接卡骨架放在描边框里，diff 用等宽 + 行号 + 「+」绿底，不单靠颜色区分。</p>
+      <p><span class="pb-tag ref">借鉴</span>GitHub PR review 的逐文件红绿 diff；ADR 的 <span class="en">Superseded / Retired</span> 状态。</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

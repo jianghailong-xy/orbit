@@ -206,6 +206,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		"ORBIT_TASK_ID="+publicID(job.TaskID),   // empty => no "current task"
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
+		envWiki+"="+wikiEnv(job.WikiDisabled),
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
 	)
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a

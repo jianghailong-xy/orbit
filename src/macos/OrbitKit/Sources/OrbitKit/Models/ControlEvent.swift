@@ -24,6 +24,11 @@ public enum ControlEventType: String, Codable, Sendable {
     case taskListChanged = "task.list.changed"
     case tagChanged = "tag.changed"
     case providerChanged = "provider.changed"
+    /// One of the owner's wiki spaces changed — a proposal recorded, ops decided in Review, the
+    /// space's settings or bindings moved. USER-scoped like the three above. `data` names the SPACE
+    /// and nothing else (contract `realtime.redaction`): a nudge to re-read the Wiki pages and the
+    /// Review queue, never the session list, and nothing depends on it arriving at all.
+    case wikiChanged = "wiki.changed"
     case notification = "notification"
     case unknown
 

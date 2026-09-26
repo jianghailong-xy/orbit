@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>composer-web</title>
+<style>
+  :root {
+    --bg-base: #ffffff; --bg-hover: #f5f6f7; --border: #dee0e3; --border-subtle: #eceef1;
+    --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e;
+    --brand: #3370ff; --warning-solid: #fa8c16; --error-solid: #d4380d; --error: #cf3b35;
+    --ph: #b3b8bf;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 1330px; padding: 36px 40px 40px; background: #eef0f3; color: var(--text-1);
+    font-family: "Nimbus Sans", "Noto Sans CJK SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  h1 { font-size: 26px; font-weight: 700; }
+  .lede { margin-top: 8px; font-size: 15px; color: #4b5260; line-height: 1.55; max-width: 1200px; }
+  h2 { font-size: 17px; font-weight: 700; margin: 28px 0 12px; display: flex; align-items: baseline; gap: 10px; }
+  h2 small { font-size: 13px; font-weight: 400; color: #6b7280; }
+  .row { display: flex; gap: 22px; align-items: flex-start; }
+  .cap { font-size: 14px; font-weight: 700; margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; }
+  .cap span { font-weight: 400; color: #6b7280; font-size: 12.5px; }
+  .notes { flex: 1; background: #fff; border-radius: 14px; padding: 16px 20px; font-size: 13.5px; line-height: 1.6; color: #2b303b; box-shadow: 0 0 0 1px rgba(0,0,0,0.06); }
+  .notes h3 { font-size: 14px; margin: 0 0 6px; }
+  .notes ul { padding-left: 18px; }
+  .notes ul + h3 { margin-top: 12px; }
+  .legend { margin-top: 10px; font-size: 12.5px; color: #4b5260; line-height: 1.55; }
+  .legend b { color: #1f2329; }
+
+  /* ── pane crop: transcript tail + composer band ── */
+  .pane { position: relative; width: 860px; flex: none; background: var(--bg-base); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.06); padding: 0 24px 18px; }
+  .pane::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 40px; z-index: 1; background: linear-gradient(#fff, rgba(255,255,255,0)); }
+  .tail { padding: 26px 0 8px; font-size: 14px; line-height: 1.7; color: var(--text-1); }
+  .wc { border-top: 1px solid var(--border-subtle); padding-top: 12px; margin-top: 8px; }
+
+  /* ── current (main) ── */
+  .obox { display: flex; align-items: flex-end; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 6px; }
+  .obox .plus { width: 24px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--text-1); }
+  .obox .ta { flex: 1; font-size: 14px; line-height: 22px; padding: 4px 11px 4px 2px; color: var(--ph); }
+  .obtn { width: 32px; height: 32px; border-radius: 6px; background: var(--brand); display: flex; align-items: center; justify-content: center; flex: none; }
+  .obtn.off { background: rgba(0,0,0,0.04); box-shadow: inset 0 0 0 1px #d9d9d9; }
+  .opills { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--text-2); }
+  .opills .p { padding: 1px 7px 1px 13px; line-height: 22px; }
+  .opills .sp { flex: 1; }
+  .use { display: inline-flex; align-items: center; gap: 6px; padding-right: 6px; font-variant-numeric: tabular-nums; }
+  .ubar { width: 26px; height: 4px; border-radius: 2px; background: var(--border-subtle); overflow: hidden; }
+  .ubar > span { display: block; height: 100%; background: var(--brand); border-radius: 2px; }
+
+  /* ── new card ── */
+  .card { position: relative; background: #fff; border-radius: 24px;
+    box-shadow: 0 0 0 1px #e3e5e8, 0 2px 10px rgba(31,35,41,0.05), 0 10px 30px rgba(31,35,41,0.04); }
+  .card.focus { box-shadow: 0 0 0 1px #c9cdd4, 0 3px 14px rgba(31,35,41,0.08), 0 12px 34px rgba(31,35,41,0.05); }
+  .card.shell { box-shadow: 0 0 0 1px var(--error), 0 2px 10px rgba(31,35,41,0.05); }
+  .atts { display: flex; gap: 8px; padding: 12px 14px 0; }
+  .att { position: relative; width: 52px; height: 52px; border-radius: 12px; background: linear-gradient(135deg,#dfe7ff,#f4f6fb 55%,#e9ecf2); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
+  .att::before { content: ""; position: absolute; left: 8px; top: 9px; right: 8px; height: 5px; border-radius: 3px; background: #c7d3f5; box-shadow: 0 10px 0 #d6dbe6, 0 20px 0 #d6dbe6, 0 30px 0 #d6dbe6; }
+  .att .x { position: absolute; top: -5px; right: -5px; width: 18px; height: 18px; border-radius: 9px; background: #fff; box-shadow: 0 0 0 1px var(--border); color: var(--text-2); font-size: 11px; line-height: 18px; text-align: center; }
+  .att.file { width: auto; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 12px; background: var(--bg-hover); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+  .att.file::before { display: none; }
+  .att.file .fn { font-size: 13px; line-height: 17px; }
+  .att.file .fs { font-size: 11.5px; color: var(--text-3); }
+  .field { padding: 14px 20px 4px; font-size: 15px; line-height: 24px; min-height: 42px; color: var(--text-1); }
+  .field .ph { color: var(--ph); }
+  .field.mono { font-family: "DejaVu Sans Mono", monospace; font-size: 14px; color: var(--error); }
+  .caret { display: inline-block; width: 1.5px; height: 18px; background: var(--text-1); vertical-align: -3px; margin-left: 1px; }
+  .toolbar { display: flex; align-items: center; height: 48px; padding: 6px 8px 8px; font-size: 13px; line-height: 18px; }
+  .ic { flex: none; width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: var(--text-1); }
+  .ic.prompt { color: var(--error); font-family: "DejaVu Sans Mono", monospace; font-weight: 700; font-size: 15px; background: #fdecea; }
+  .pill { flex: none; padding: 5px 8px; border-radius: 8px; color: var(--text-2); font-weight: 500; white-space: nowrap; }
+  .pill.ws { color: var(--text-1); display: flex; align-items: center; gap: 5px; }
+  .pill.ws .d { width: 7px; height: 7px; border-radius: 4px; background: #34c759; }
+  .pill.hover { background: var(--bg-hover); }
+  .sp { flex: 1 1 auto; min-width: 12px; }
+  .chip { display: flex; align-items: baseline; gap: 5px; padding: 5px 8px; border-radius: 8px; white-space: nowrap; }
+  .chip b { font-weight: 600; color: var(--text-1); }
+  .chip i { font-style: normal; color: var(--text-2); }
+  .chip.open { background: var(--bg-hover); }
+  .meters { display: flex; align-items: center; gap: 14px; margin: 0 6px 0 10px; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .m { display: inline-flex; align-items: center; gap: 6px; }
+  .send { flex: none; margin-left: 6px; width: 32px; height: 32px; border-radius: 16px; background: var(--brand); display: flex; align-items: center; justify-content: center; }
+  .send.off { background: #d5d8dd; }
+
+  /* dropdown */
+  .dd { position: absolute; z-index: 5; width: 250px; background: #fff; border-radius: 12px; padding: 4px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08), 0 3px 6px -4px rgba(0,0,0,0.12), 0 9px 28px 8px rgba(0,0,0,0.05); font-size: 14px; }
+  .di { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 8px; }
+  .di.act { background: var(--bg-hover); }
+  .di .ck { width: 14px; display: flex; }
+  .di .t { flex: 1; }
+  .di .v { color: var(--text-3); font-size: 13px; }
+  .di .ch { color: var(--text-3); }
+  .ds { height: 1px; background: var(--border-subtle); margin: 4px 8px; }
+  .dnote { position: absolute; z-index: 6; font-size: 11.5px; color: #7c3aed; font-weight: 700; }
+</style>
+</head>
+<body>
+<h1>Orbit 输入框 · 同一套结构在 web 桌面</h1>
+<p class="lede">和 iPhone 同一套分组：卡片圆角 24，字在上，控件行在下（+ · Mode ··· 模型·力度 · 读数 · 发送）。区别只有一处：桌面宽度够，Plan 和 Context <b>保留百分比数字</b>。
+web 手机宽度（≤600px）跟 iPhone 效果图一模一样。</p>
+
+<h2>现状 × 新设计 <small>860px 宽的会话窗格；左：现在 main 上按 index.css 实际数值复刻；数据是你这个会话的配置</small></h2>
+<div class="row">
+  <div>
+    <div class="cap">现状 <span>框里只有 + 和发送；6 个设置排在框外一行 12px 灰字</span></div>
+    <div class="pane">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="wc">
+        <div class="obox">
+          <div class="plus"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1.5v11M1.5 7h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+          <div class="ta">Reply…</div>
+          <div class="obtn off"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 12V2.5M3 6.3 7 2.3l4 4" stroke="rgba(0,0,0,0.25)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        </div>
+        <div class="opills">
+          <span class="p">Auto</span><span class="sp"></span>
+          <span class="p">orbitd@Claude</span><span class="p">Opus 5.5</span><span class="p">Max</span>
+          <span class="use"><span class="ubar"><span style="width:22%"></span></span>22%</span>
+          <span class="use"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--border-subtle)" stroke-width="2.5"/><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34.6" stroke-dashoffset="20.4" transform="rotate(-90 7 7)"/></svg>41%</span>
+        </div>
+      </div>
+    </div>
+    <div class="cap" style="margin-top:22px">新设计 ① 空闲 <span>一张卡；聚焦不再换成蓝框，描边加深即可（shell 模式的红框保留，它是唯一有颜色的边）</span></div>
+    <div class="pane">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="wc">
+        <div class="card">
+          <div class="field"><span class="ph">Reply…</span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+            <span class="pill">Auto</span>
+            <span class="sp"></span>
+            <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters">
+              <span class="m"><span class="ubar"><span style="width:22%"></span></span>22%</span>
+              <span class="m"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--border-subtle)" stroke-width="2.5"/><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34.6" stroke-dashoffset="20.4" transform="rotate(-90 7 7)"/></svg>41%</span>
+            </span>
+            <div class="send off"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <h3>web 这边具体变什么</h3>
+    <ul>
+      <li><b>框</b>：r10 → r24，1px 描边 + 两层很淡的阴影；聚焦时描边从品牌蓝改成加深的灰，和 iOS 一致。</li>
+      <li><b>字</b>：14px → 15px，独占整宽。「+」和发送从字的左右两边挪到下面的控件行。</li>
+      <li><b>发送</b>：32px 的圆（现在是 r6 的方块）；颜色仍是品牌蓝。</li>
+      <li><b>设置</b>：Provider、Model、Effort、Fast 四个下拉合成一个「Opus 5.5 Max」按钮，下拉里分组（见 ③）。</li>
+      <li><b>读数</b>：Plan 条和 Context 环带着百分比，挪进控件行，放在发送键左边；Context 仍然在最右（紧挨发送）。</li>
+      <li><b>附件</b>：从条带最上面挪进卡里（见 ②）。</li>
+    </ul>
+    <h3>不变的</h3>
+    <ul>
+      <li>「+」菜单的内容与顺序、<code>/</code> <code>#</code> <code>@</code> 补全浮层、拖拽改高度、Enter 发送 / Shift+Enter 换行、历史 ↑↓。</li>
+      <li>上面那叠条（Watching、Background、分支条、回复条、项目意图条）的位置和样式。</li>
+      <li>停止 / 排队 / 回复的判定逻辑，只换外观。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="row" style="margin-top:24px">
+  <div>
+    <div class="cap">② 输入中 · 带附件 <span>附件在卡里；卡随字往上长，控件行不动</span></div>
+    <div class="pane">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="wc">
+        <div class="card focus">
+          <div class="atts">
+            <div class="att"><span class="x">✕</span></div>
+            <div class="att file"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M10.5 4.5 5.4 9.6a1.6 1.6 0 0 0 2.3 2.3l5.6-5.6a3 3 0 0 0-4.2-4.2L3.4 7.8a4.3 4.3 0 0 0 6.1 6.1l4-4" fill="none" stroke="var(--text-3)" stroke-width="1.4" stroke-linecap="round"/></svg><span><span class="fn">gateway.log</span><br><span class="fs">184 KB</span></span></div>
+          </div>
+          <div class="field">先别发 beta。把输入框改成两行卡片：上面打字，下面一排控件，附件也放进卡里。<br>三端一起改：web、iOS、macOS，结构一致<span class="caret"></span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+            <span class="pill">Auto</span>
+            <span class="sp"></span>
+            <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters"><span class="m"><span class="ubar"><span style="width:22%"></span></span>22%</span><span class="m"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--border-subtle)" stroke-width="2.5"/><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34.6" stroke-dashoffset="20.4" transform="rotate(-90 7 7)"/></svg>41%</span></span>
+            <div class="send"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes" style="flex:none;width:368px">
+    <h3>② 附件为什么挪进卡里</h3>
+    <p>现在附件排在整个条带的最上面，中间隔着 Watching、Background、分支条才到输入框。代码注释里写的初衷就是「让截图读起来是这条消息的一部分」，放进卡里才真正做到。</p>
+    <h3 style="margin-top:12px">③ 合并下拉的规则</h3>
+    <p>Provider 只在有 ≥2 个可选时出现，二级项里保留现在的「未登录 → sign in →」提示。模型只列当前 Provider 的。换 Provider 或换模型时，不支持的 Effort / Auto 自动回落，这些逻辑都照旧。</p>
+  </div>
+</div>
+
+<div class="row" style="margin-top:24px">
+  <div>
+    <div class="cap">③ 点「Opus 5.5 Max」 <span>一个下拉，分三组；二级项悬停展开</span></div>
+    <div class="pane" style="padding-top:330px">
+      <div class="dd" style="right:118px;bottom:96px">
+        <div class="di"><span class="ck"></span><span class="t">Provider</span><span class="v">orbitd@Claude</span><span class="ch">›</span></div>
+        <div class="ds"></div>
+        <div class="di act"><span class="ck"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 7.4 5.6 10.5 11.5 3.5" fill="none" stroke="var(--brand)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="t">Opus 5.5</span></div>
+        <div class="di"><span class="ck"></span><span class="t">Opus 5</span></div>
+        <div class="di"><span class="ck"></span><span class="t">Fable 5.1</span></div>
+        <div class="di"><span class="ck"></span><span class="t">Sonnet 5</span></div>
+        <div class="di"><span class="ck"></span><span class="t">Haiku 4.5</span></div>
+        <div class="ds"></div>
+        <div class="di"><span class="ck"></span><span class="t">Effort</span><span class="v">Max</span><span class="ch">›</span></div>
+        <div class="di" style="box-shadow:inset 0 0 0 1.5px #a78bfa"><span class="ck"></span><span class="t">Speed</span><span class="v">Standard</span><span class="ch">›</span></div>
+      </div>
+      <div class="dnote" style="left:318px;bottom:104px;width:160px;line-height:1.4;text-align:right">紫框：Speed 只在模型有 Fast 时出现（替代现在单独的 Fast 下拉）</div>
+      <div class="wc">
+        <div class="card">
+          <div class="field"><span class="ph">Reply…</span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+            <span class="pill">Auto</span>
+            <span class="sp"></span>
+            <span class="chip open"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters"><span class="m"><span class="ubar"><span style="width:22%"></span></span>22%</span><span class="m"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--border-subtle)" stroke-width="2.5"/><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34.6" stroke-dashoffset="20.4" transform="rotate(-90 7 7)"/></svg>41%</span></span>
+            <div class="send off"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes" style="flex:none;width:368px">
+    <h3>macOS</h3>
+    <p>同 web 桌面，读数带数字。macOS 独有的「停止并发送」按钮（运行中且有草稿时出现）放在发送键左边，还是 32pt 描边圆。</p>
+    <h3 style="margin-top:12px">web 手机（≤600px）</h3>
+    <p>跟 iPhone 效果图一模一样：读数只留图形，放不下时只截断模型名。现在手机上「+」和发送各占 40px 方块，改成卡内同心布局后，还是 44pt 的点击区。</p>
+  </div>
+</div>
+
+<div class="row" style="margin-top:24px">
+  <div style="width:614px">
+    <div class="cap">④ 新会话草稿 <span>工作区选择器排在 Mode 左边；Context 在第一轮前读「—」</span></div>
+    <div class="pane" style="width:614px;padding:0 20px 16px">
+      <div class="tail" style="font-size:13px;color:var(--text-3)">（新会话：上方是 Provider 选择）</div>
+      <div class="wc">
+        <div class="card">
+          <div class="field"><span class="ph">Send this workspace a task…</span></div>
+          <div class="toolbar">
+            <div class="ic"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+            <span class="pill ws"><span class="d"></span>orbit</span>
+            <span class="pill" style="padding-left:2px">Auto</span>
+            <span class="sp"></span>
+            <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters"><span class="m"><span class="ubar"><span style="width:22%"></span></span>22%</span><span class="m"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--border-subtle)" stroke-width="2.5"/></svg>—</span></span>
+            <div class="send off"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="width:614px">
+    <div class="cap">⑤ shell 模式 <span>照旧：红框 + 红色等宽字；「+」变成 ❯，点它退出</span></div>
+    <div class="pane" style="width:614px;padding:0 20px 16px">
+      <div class="tail" style="font-size:13px;color:var(--text-3)">…</div>
+      <div class="wc">
+        <div class="card shell">
+          <div class="field mono">!git log --oneline -5<span class="caret" style="background:var(--error)"></span></div>
+          <div class="toolbar">
+            <div class="ic prompt">❯</div>
+            <span class="pill">Auto</span>
+            <span class="sp"></span>
+            <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+            <span class="meters"><span class="m"><span class="ubar"><span style="width:22%"></span></span>22%</span><span class="m"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--border-subtle)" stroke-width="2.5"/><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34.6" stroke-dashoffset="20.4" transform="rotate(-90 7 7)"/></svg>41%</span></span>
+            <div class="send"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.title = 'H ' + document.documentElement.scrollHeight;
+</script>
+</body>
+</html>

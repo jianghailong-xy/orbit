@@ -151,3 +151,88 @@ describe('selectBackgroundDerivationEvents', () => {
     expect(selectBackgroundDerivationEvents(events).map((e) => e.seq)).toEqual([5, 6]);
   });
 });
+
+// The workspace's own background sub-agents and workflows, in Claude Code's own wording (claude
+// 2.1.282, copied from a production session whose tray showed none of them while they ran).
+describe('background sub-agents and workflows', () => {
+  const AGENT_ACK =
+    'Async agent launched successfully. (This tool result is internal metadata — never quote or paste' +
+    ' any part of it, including the agentId below, into a user-facing reply.) agentId: a05fc3596d22b3d3e';
+  const WORKFLOW_RECEIPT =
+    'Workflow launched in background. Task ID: w2f3yv1s8\nSummary: 3 competing designs; 2 judges\n' +
+    'Transcript dir: /root/.claude/projects/x/subagents/workflows/wf_37d4e19e-c97';
+  const call = (seq: number, id: string, name: string, input: object, parentToolUseId?: string): BgDeriveEvent => ({
+    seq,
+    type: RunEventType.TOOL_USE,
+    ts: `2026-09-25T08:00:${String(seq).padStart(2, '0')}.000Z`,
+    payload: { id, name, input, ...(parentToolUseId ? { parentToolUseId } : {}) },
+  });
+  const result = (seq: number, id: string, content: unknown, parentToolUseId?: string): BgDeriveEvent => ({
+    seq,
+    type: RunEventType.TOOL_RESULT,
+    payload: { toolUseId: id, content, ...(parentToolUseId ? { parentToolUseId } : {}) },
+  });
+  const events: BgDeriveEvent[] = [
+    call(1, 'tu_agent', 'Agent', { description: 'Deep-read wikova', run_in_background: true }),
+    result(2, 'tu_agent', [{ type: 'text', text: AGENT_ACK }]),
+    // One the sub-agent started: its end is reported to that sub-agent, never to this stream.
+    call(3, 'tu_nested', 'Agent', { description: 'Crawler research' }, 'tu_agent'),
+    result(4, 'tu_nested', AGENT_ACK.replace('a05fc3596d22b3d3e', 'a286710e930e01d6b'), 'tu_agent'),
+    // An Agent run inline answers in its own result and has nothing running.
+    call(5, 'tu_inline', 'Agent', { description: 'Quick lookup' }),
+    result(6, 'tu_inline', 'Here is my research report.'),
+    call(7, 'tu_wf', 'Workflow', { resumeFromRunId: 'wf_37d4e19e-c97' }),
+    result(8, 'tu_wf', WORKFLOW_RECEIPT),
+    ...noise(9, 'tu_read', 'Read', { file_path: '/repo/a.ts' }),
+    // The agent resumed with SendMessage stops again, announced without its call's id.
+    { seq: 20, type: RunEventType.BACKGROUND_TASK, payload: { toolUseId: '', shellId: 'a05fc3596d22b3d3e', status: 'completed' } },
+  ];
+
+  it('lists them from their receipts, running until their notification, titled by what they are', () => {
+    const shells = deriveBackgroundShells(events, { sessionLive: true });
+    expect(shells.map((s) => [s.kind, s.shellId, s.description, s.status])).toEqual([
+      ['agent', 'a05fc3596d22b3d3e', 'Deep-read wikova', 'done'],
+      ['workflow', 'w2f3yv1s8', '3 competing designs; 2 judges', 'running'],
+    ]);
+  });
+
+  it('keeps the last progress a workflow ended with', () => {
+    const ended = deriveBackgroundShells(
+      [
+        ...events,
+        {
+          seq: 30,
+          type: RunEventType.BACKGROUND_TASK,
+          payload: {
+            toolUseId: 'tu_wf',
+            shellId: 'w2f3yv1s8',
+            status: 'completed',
+            progress: {
+              toolUseId: 'tu_wf',
+              taskType: 'local_workflow',
+              agents: [{ index: 4, label: 'design:page-wiki', state: 'done', toolCalls: 34 }],
+              phases: [{ index: 1, title: 'Design' }],
+            },
+          },
+        },
+      ],
+      { sessionLive: true },
+    );
+    const wf = ended.find((s) => s.kind === 'workflow');
+    expect(wf?.status).toBe('done');
+    expect(wf?.progress?.agents).toEqual([{ index: 4, label: 'design:page-wiki', state: 'done', toolCalls: 34 }]);
+  });
+
+  it('narrows to them losslessly', () => {
+    const ctx = { sessionLive: true };
+    expect(deriveBackgroundShells(selectBackgroundDerivationEvents(events), ctx)).toEqual(
+      deriveBackgroundShells(events, ctx),
+    );
+    // The nested call is not read at all; the inline one is read and found to hold nothing.
+    expect(
+      selectBackgroundDerivationEvents(events)
+        .filter((e) => e.type === RunEventType.TOOL_USE)
+        .map((e) => (e.payload as { id: string }).id),
+    ).toEqual(['tu_agent', 'tu_inline', 'tu_wf']);
+  });
+});

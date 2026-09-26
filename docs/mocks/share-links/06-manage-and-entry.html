@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>06 manage and entry points</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+ .lrow { grid-template-columns: 26px minmax(0, 1fr) 200px 120px 100px 230px; }
+ .banner2 { display:flex; align-items:center; gap:10px; background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 8px; padding: 9px 12px; font-size: 13px; margin: 4px 0 10px; }
+ .banner2 b { font-weight: 600; }
+ .entry { display:grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); gap: 22px; align-items: start; }
+ .frame { border: 1px solid #dde0e6; border-radius: 10px; background: #fff; padding: 14px 16px; position: relative; }
+ .hdr { display:flex; align-items:center; gap:10px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
+ .hdr .lnk2 { color: var(--brand); }
+ .sharebtn { display:inline-flex; align-items:center; gap:6px; height: 26px; padding: 0 10px; border-radius: 999px; background: #e8f7ec; color: var(--success); font-weight: 600; font-size: 12.5px; }
+ .srow { display:flex; align-items:center; gap:8px; padding: 8px 10px; border-radius: 8px; font-size: 13.5px; }
+ .srow.sel { background: #eef3ff; }
+ .srow .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+ .srow .tm { font-size: 12px; color: var(--text-3); display:inline-flex; align-items:center; gap:5px; }
+ .m-mark { outline-offset: 4px; }
+</style></head>
+<body class="m"><div class="m-sheet" id="sheet">
+<h1 class="m-h1">6 · 一个地方看见所有公开的东西，每个对象上都看得出「已公开」</h1>
+<p class="m-sub">管理页用 Following 页的结构（page-title + 说明 + 带计数的 tab + 卡片行），放在 Settings 里的「Shared links」<span class="ref">借鉴 ChatGPT「Shared links · Manage」、Claude「Shared chats」</span>。会话行都是这台部署上真实开着的链接（挑了不含路径和人名的标题），项目和任务两行是新能力的示意。</p>
+<div class="m-stage">
+ <div class="m-stage-l"><span class="m-k new">新</span> Settings → Shared links（/settings/shared-links）</div>
+ <div class="frame" style="padding:18px 22px">
+  <h1 class="page-title">Shared links</h1>
+  <div class="a-hint" style="font-size:13px">Everything you’ve made viewable by link. Anyone who has one of these links can open what it includes — no sign-in.</div>
+  <div class="ftabs"><span class="on">Active <b>26</b></span><span>Paused <b>1</b></span><span>Ended <b>0</b></span><span style="margin-left:auto;color:var(--error)">Turn off all…</span></div>
+  <div class="banner2 m-mark"><span class="m-n">1</span><span>⚠</span><span><b>19 links are for sessions completed more than 30 days ago.</b> They still open for anyone who has them.</span><span class="btn sm" style="margin-left:auto">Review</span><span class="btn sm">Turn off these 19</span></div>
+  <div class="lrow head"><span></span><span>Shared item</span><span>Includes</span><span>Updates</span><span>Views</span><span></span></div>
+  <div class="m-mark" style="display:block"><span class="m-n">2</span><div class="lrow"><span class="ico p">P</span><div style="min-width:0"><div class="ti">Claude 账号池：按订阅配额均衡派发</div><div class="sub">Project · Open · 12 tasks</div></div>
+<div><span class="chipx">Overview</span><span class="chipx">Task pages</span></div><div class="tiny">Live</div><div class="tiny">14 · 2h ago<div class="muted">since Sep 25</div></div>
+<div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div><div class="lrow"><span class="ico t">T</span><div style="min-width:0"><div class="ti">T6 安全边界：跨 owner、准入与凭据不外泄的回归断言</div><div class="sub">Task · Done · in Claude 账号池</div></div>
+<div><span class="chipx">Overview</span><span class="chipx">Comments</span><span class="chipx warn">Conversations</span></div><div class="tiny">Live · until Oct 2</div><div class="tiny">3 · 12m ago<div class="muted">since Sep 25</div></div>
+<div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div><div class="lrow"><span class="ico s">S</span><div style="min-width:0"><div class="ti">子代理模型由伺服器端設定</div><div class="sub">Session · Completed Sep 22</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Sep 21</div></div>
+<div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div><div class="lrow"><span class="ico s">S</span><div style="min-width:0"><div class="ti">总结最近提交变更</div><div class="sub">Session · Completed Sep 18</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Sep 18</div></div>
+<div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div><div class="lrow"><span class="ico s">S</span><div style="min-width:0"><div class="ti">跨平台Agent记忆共享方案</div><div class="sub">Session · Open</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Aug 6</div></div>
+<div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div><div class="lrow"><span class="ico s">S</span><div style="min-width:0"><div class="ti">iOS发送失败不重试</div><div class="sub">Session · Open</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Aug 4</div></div>
+<div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div><div class="lrow"><span class="ico s">S</span><div style="min-width:0"><div class="ti">Web 上的 tag 功能是否可以对齐 iOS</div><div class="sub">Session · Completed Jul 14</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Jul 14</div></div>
+<div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div></div>
+  <div class="more" style="margin:10px 0 0 4px">Show 19 more</div>
+  <div class="sec-t" style="margin-top:16px">Paused</div>
+  <div class="lrow m-mark"><span class="m-n">3</span><span class="ico s">S</span><div style="min-width:0"><div class="ti">Coordinator 使用设计</div><div class="sub"><span class="paused">Paused · in Trash</span> — restoring the session turns this link back on</div></div>
+   <div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Sep 7</div></div>
+   <div class="acts2"><span class="btn sm text danger">Turn off</span></div></div>
+ </div>
+</div>
+
+<div class="m-stage" style="margin-top:22px">
+ <div class="m-stage-l"><span class="m-k new">新</span> 各处入口统一成两个词：「Copy link」是给自己的登录链接，「Share…」是公开设置</div>
+ <div class="entry">
+  <div class="col">
+   <div class="frame m-mark"><span class="m-n">4</span>
+    <div class="m-where">项目页头（/projects/:id）</div>
+    <div style="font-size:22px;font-weight:650;margin-bottom:6px">Claude 账号池：按订阅配额均衡派发</div>
+    <div class="hdr"><span class="tag blue">Open</span><span>12 tasks</span><span class="lnk2">Record as done</span><span class="lnk2">Record as cancelled</span>
+     <span style="margin-left:auto" class="sharebtn"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg> Shared · Live</span><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Copy link</span><span style="color:var(--error)">Delete project</span></div>
+   </div>
+   <div class="frame m-mark"><span class="m-n">5</span>
+    <div class="m-where">会话列表（已公开的会话在时间旁多一个地球，悬停提示 “Shared · anyone with the link”）</div>
+    <div class="srow"><span class="status-pill done"><span class="status-dot"></span>Done</span><span class="t">子代理模型由伺服器端設定</span><span class="tm" style="color:var(--success)"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span><span class="tm">3d ago</span></div>
+    <div class="srow sel"><span class="status-pill running"><span class="spin"></span>Running</span><span class="t">T8 收尾：各端统一「池不可用」口径</span><span class="tm">12m</span></div>
+    <div class="srow"><span class="status-pill done"><span class="status-dot"></span>Done</span><span class="t">总结最近提交变更</span><span class="tm" style="color:var(--success)"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span><span class="tm">Sep 18</span></div>
+   </div>
+  </div>
+  <div class="row" style="gap:18px">
+   <div class="frame m-mark" style="flex:1"><span class="m-n">6</span>
+    <div class="m-where">会话 ⋯ 菜单（已有的位置）</div>
+    <div class="menu" style="width:100%">
+     <div class="it"><span class="ic">✓</span>Complete</div>
+     <div class="dv"></div>
+     <div class="it"><span class="ic"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>Copy link</div>
+     <div class="it hl"><span class="ic" style="color:var(--success)"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>Share…<span class="aux">Live link</span></div>
+     <div class="it"><span class="ic"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>Download HTML</div>
+     <div class="dv"></div>
+     <div class="it danger"><span class="ic">🗑</span>Delete</div>
+    </div>
+   </div>
+   <div class="frame m-mark" style="flex:1"><span class="m-n">7</span>
+    <div class="m-where">任务面板 ⋯（今天只有 Delete）</div>
+    <div class="menu" style="width:100%">
+     <div class="it"><span class="ic"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>Copy link</div>
+     <div class="it hl"><span class="ic"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>Share…</div>
+     <div class="it"><span class="ic">⧉</span>Copy as Markdown<span class="d2"></span></div>
+     <div class="dv"></div>
+     <div class="it danger"><span class="ic">🗑</span>Delete task</div>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<ul class="m-notes">
+ <li><span class="m-n">1</span><span><b>替所有者盯着过期的公开。</b>这台部署上有 19 个链接对应的会话在 30 天前就已完成，链接却还开着。清单顶部把这件事说出来，提供一键关闭。</span></li>
+ <li><span class="m-n">2</span><span><b>一行一个链接。</b>每行写清是什么、露出了哪几层（Conversations 用琥珀色标出）、Live 还是 Snapshot、何时到期、被打开了几次。动作只有三个：Copy、Settings（打开图 3 的对话框）、Turn off。</span></li>
+ <li><span class="m-n">3</span><span><b>暂停的链接单独一组。</b>会话在回收站里时链接处于暂停状态，这里写明「restoring turns it back on」，不让它悄悄复活。</span></li>
+ <li><span class="m-n">4</span><span><b>对象页头有状态胶囊。</b>公开着时显示「Shared · Live」，点开是对话框；没公开时显示一个「Share」按钮。「Copy link」放在旁边，复制的是登录链接。</span></li>
+ <li><span class="m-n">5</span><span><b>列表里一眼看出哪些是公开的。</b>现在只有打开会话菜单才能看到「Share · link active」。</span></li>
+ <li><span class="m-n">6</span><span><b>导出和公开分开。</b>会话菜单加回「Download HTML」，存档不需要先公开；公开页上的下载按钮保留。这是对 7 月 1 日那次「并入分享页」决定的一个修正，需要你拍板。</span></li>
+ <li><span class="m-n">7</span><span><b>任务和项目多一个「Copy as Markdown」。</b>把状态、判据、进度拼成一段文字，贴进 IM 或 PR，不需要公开任何东西 <span class="ref">借鉴 Linear「Copy as Markdown」</span>。</span></li>
+</ul>
+</div></body></html>

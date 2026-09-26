@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { Alert, Button, Spin, Typography } from 'antd';
 import { Link } from 'react-router-dom';
+import type { ProjectIntegrationView } from '@orbit/shared';
 import { api } from '../api';
+import { projectIntegrationQuery } from '../lib/queries';
 
 /**
  * Where a project's work stands, and — when none of it is moving — why (the header card of the
@@ -225,6 +228,98 @@ export function panoramaBucketValue(buckets: ProjectPanoramaBuckets, key: Bucket
  */
 export function stalledOnReady(buckets: ProjectPanoramaBuckets): boolean {
   return buckets.ready > 0 && buckets.running === 0;
+}
+
+/**
+ * The landing in flight, in the words the card's live line uses — the one row that says what the
+ * platform itself is doing while a project's numbers stand still.
+ *
+ * The card needed it because its own counts cannot say it: a landing holds no task session, so
+ * `Running` is 0 through the four minutes it takes, and the only non-zero cell is `Integrating`
+ * whose footnote is a term of art. The owner read exactly that page on 2026-09-25 and concluded the
+ * project had stopped.
+ */
+export interface LandingLine {
+  /** The task being landed, `N jobs` when more than one is in flight, or null when the job names no
+   *  single task (a promotion, a merge check) — the row then draws its word and state alone. */
+  what: string | null;
+  /** Whether the combined-tree checks are running, as opposed to the job still waiting its turn.
+   *  What the ring's spin and the two brand-blue words are drawn from; the `state` word is what
+   *  carries the same fact to a reader who cannot use motion. */
+  running: boolean;
+  /** "checking" or "queued". */
+  state: string;
+  /** "1m 20s". See `landingClock`. */
+  clock: string;
+}
+
+/** The row's first word, and the whole of what the line is about. */
+export const LANDING_WORD = 'Landing';
+
+/**
+ * "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
+ *
+ * Not `formatSpan`, deliberately, and the difference is the point: that one rounds to the largest
+ * unit it needs, so a landing two minutes in reads "2m" and then "2m" again a minute later. This
+ * number is watched while it moves — it is what says the four minutes are passing rather than
+ * stalled — so the seconds are the part that has to be there. Minutes are not folded into hours
+ * either: a wait is read here in the unit it started in, and "65m 0s" says "over an hour" as
+ * honestly as "1h 5m" does.
+ */
+export function landingClock(ms: number): string {
+  const whole = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(whole / 60)}m ${whole % 60}s`;
+}
+
+/**
+ * The line, or null when nothing is landing — which is what removes the row from the card.
+ *
+ * `inFlight` is the server's answer to "is anything in flight", so the whole row is drawn from it
+ * rather than from the two counts: the counts and the job they count are read together, and a row
+ * that appeared on a count while having no job to describe would have to invent one.
+ *
+ * The name slot takes the job's task, or the COUNT when there is more than one: "Landing 2 jobs"
+ * says what a single task's title would have pretended to — that this is the oldest of several, not
+ * the only thing the queue is doing.
+ */
+export function landingLine(view: ProjectIntegrationView, now: number): LandingLine | null {
+  const inFlight = view.inFlight;
+  if (!inFlight) return null;
+  const running = inFlight.state === 'RUNNING';
+  const jobs = view.integratingCount + view.queuedCount;
+  const startedAt = Date.parse(inFlight.startedAt);
+  return {
+    what: jobs > 1 ? `${jobs} jobs` : inFlight.taskTitle,
+    running,
+    state: running ? 'checking' : 'queued',
+    // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
+    // stays up and counts from zero, which is the one thing it can still say truthfully.
+    clock: landingClock(Number.isFinite(startedAt) ? now - startedAt : 0),
+  };
+}
+
+/**
+ * The live line itself: a ring, what is being landed, which half of the wait it is in, and how long
+ * it has been there.
+ *
+ * The ring SPINS while the checks run and stands still while the job is queued, and its colour
+ * follows the same two states — but neither is the only channel: `checking` and `queued` are the
+ * words, and `prefers-reduced-motion` takes the spin away without touching them.
+ */
+function LandingRow({ line }: { line: LandingLine }) {
+  return (
+    <div className={line.running ? 'project-landing project-landing-running' : 'project-landing'}>
+      <span className="project-landing-ring">
+        <Glyph shape="spinner" color="currentColor" size={13} />
+      </span>
+      <span className="project-landing-word">{LANDING_WORD}</span>
+      {/* Always drawn, even empty: it is the row's flexible middle, and the one that keeps the state
+          and the clock against the right edge whether or not the job has a name. */}
+      <span className="project-landing-what">{line.what}</span>
+      <span className="project-landing-state">{line.state}</span>
+      <span className="project-landing-clock">{line.clock}</span>
+    </div>
+  );
 }
 
 /** A status marker as a SHAPE. `aria-hidden` because the cell's own text already names the status —
@@ -488,6 +583,7 @@ function Card({ hint, children }: { hint?: string; children: ReactNode }) {
     <section
       className="project-work-overview"
       aria-label="Work overview"
+      data-project-block="work-overview"
       style={{
         background: 'var(--bg-raised)',
         border: '1px solid var(--border-subtle)',
@@ -522,8 +618,23 @@ export function ProjectPanoramaHeader({
   integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
 }) {
   const panorama = useQuery({ ...projectPanoramaQuery(projectId), enabled: Boolean(projectId) });
-  const buckets = panorama.data?.buckets;
-  const stalled = buckets ? stalledOnReady(buckets) : false;
+
+  // The landing the line below reports on, from the same read the page's own integration row makes
+  // — one query key, so the card mounting this is not a second request. It is read here rather than
+  // handed in because the row is drawn inside this card, and a card that only knew there was a line
+  // (the `integrationLine` prop) could not say what the line is doing.
+  const integration = useQuery({ ...projectIntegrationQuery(projectId), enabled: Boolean(projectId) });
+  const inFlight = integration.data?.inFlight ?? null;
+  // The clock counts in SECONDS while something is landing, rather than stepping with the 30s poll
+  // above: a number that jumped half a minute at a time would read as the stalled page this row
+  // exists to disprove. The interval runs only while there is something to count.
+  const counting = inFlight !== null;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!counting) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [counting]);
 
   // `isPending`, not `isLoading`: a first render that has not dispatched its fetch yet (which is
   // every static render, and the first paint of a live one) is pending with `fetchStatus: 'idle'`,
@@ -557,8 +668,40 @@ export function ProjectPanoramaHeader({
     );
   }
 
-  const { shape } = panorama.data;
-  const loaded = panorama.data.buckets;
+  return (
+    <ProjectPanoramaCard
+      panorama={panorama.data}
+      projectStatus={projectStatus}
+      integrationLine={integrationLine}
+      landing={integration.data ? landingLine(integration.data, now) : null}
+    />
+  );
+}
+
+/**
+ * The card itself, drawn from a panorama already in hand — the header above once its read answers,
+ * and a public project page from the panorama its link carries. `banners: false` leaves out the two
+ * banners, which speak to the project's owner: "Dispatch needs attention" sends them to their
+ * providers, and "Ready to wrap up" asks them to confirm the outcome (docs/share-links-design.md §7).
+ */
+export function ProjectPanoramaCard({
+  panorama,
+  projectStatus,
+  integrationLine,
+  banners = true,
+  landing = null,
+}: {
+  panorama: ProjectPanorama;
+  projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED';
+  integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
+  banners?: boolean;
+  /** The landing in flight, from the header's own integration read. A public project page has no
+   *  such read, so it draws the card without the row. */
+  landing?: LandingLine | null;
+}) {
+  const { shape } = panorama;
+  const loaded = panorama.buckets;
+  const stalled = stalledOnReady(loaded);
   const lanes = reportsIntegrationLanes(loaded)
     ? integrationLanes(loaded, integrationLine ?? null)
     : null;
@@ -592,6 +735,14 @@ export function ProjectPanoramaHeader({
         shape.edgeCount === 1 ? 'y' : 'ies'
       }`}
     >
+      {/* Above the cells, because it is the card's one moving part: what the platform is doing with
+          work that is already done, while every count over it stands still. It draws nothing at all
+          when nothing is landing — an empty state here would be a permanent "0 jobs" row. */}
+      {landing ? (
+        <div style={{ marginBottom: 12 }}>
+          <LandingRow line={landing} />
+        </div>
+      ) : null}
       <div
         style={{
           display: 'grid',
@@ -629,7 +780,7 @@ export function ProjectPanoramaHeader({
             // The one cell that changes colour, and only in the state this card is about: ready
             // work with nothing serving it. The amber is a second reading of the banner below, not
             // the thing that says it.
-            attention={lane.key === 'ready' && stalled}
+            attention={banners && lane.key === 'ready' && stalled}
           />
         ))}
       </div>
@@ -638,11 +789,11 @@ export function ProjectPanoramaHeader({
         <BucketMeter buckets={loaded} segments={lanes ?? undefined} />
       </div>
 
-      {stalled ? (
+      {banners && stalled ? (
         <StalledBanner buckets={loaded} />
       ) : null}
 
-      {wrappingUp ? <WrappingUpBanner settled={settled} /> : null}
+      {banners && wrappingUp ? <WrappingUpBanner settled={settled} /> : null}
     </Card>
   );
 }

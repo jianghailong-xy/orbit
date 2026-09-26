@@ -26,8 +26,9 @@ struct ConsoleView: View {
     // mirroring how web's console header reads `selected` off the cached session list; macOS shows
     // that status in the in-transcript `statusBar` instead.
     @Environment(AppModel.self) private var appModel
-    #if os(iOS)
+    /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
+    #if os(iOS)
     /// Tapping the nav-bar title renames the session (web double-clicks its header title). Seeded
     /// from the session's own title — not `SessionHeader.title`, whose agent-name fallback would
     /// otherwise be typed in as if it were the name.
@@ -54,6 +55,16 @@ struct ConsoleView: View {
 
     /// Gathers the session's pages when a thumbnail is tapped — never while the transcript renders or
     /// streams — and opens the viewer on the tapped one.
+    /// Read through the observed model, so an Agent or Workflow card re-renders when the progress,
+    /// the tray or a sub-agent's list moves — and no other row does.
+    private func taskActivity(_ console: ConsoleModel) -> TaskActivityLookup {
+        TaskActivityLookup(
+            consoleID: ObjectIdentifier(console),
+            progress: { console.state.taskProgress[$0] },
+            isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
+            subagentItems: { console.state.subagentItems[$0] ?? [] })
+    }
+
     private func sessionImagePreview(_ console: ConsoleModel) -> SessionImagePreview {
         let fetched = fetchedToolImages
         return SessionImagePreview(
@@ -91,11 +102,10 @@ struct ConsoleView: View {
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
-                    // Error, staged attachments, background tray, git bar, composer — web's order
-                    // (`workspace-composer`). The image you just added tops the stack rather than
-                    // sitting between the tray and the composer, where it read as another piece of
-                    // session chrome instead of part of the message about to be sent. The band owns
-                    // the gutter and the gaps; members only say whether they are on screen.
+                    // Error, background tray, git bar, composer — web's order (`workspace-composer`).
+                    // Staged attachments are not a member: they sit inside the composer's card, above
+                    // the text they go out with. The band owns the gutter and the gaps; members only
+                    // say whether they are on screen.
                     ComposerBand {
                         // Errors only, and sticky until the ✕ — this row is in flow, so anything that
                         // comes and goes on a timer here shoves the composer around while the user is
@@ -136,10 +146,9 @@ struct ConsoleView: View {
                                 onDismiss: dismiss)
                                 .padding(.bottom, .composerBandGap)
                         }
-                        ComposerAttachmentsView(console: console)
                         // What this session waits on — a watch, not a process — above the real shells.
                         WatchingCardStack(sessionID: console.sessionID)
-                        BackgroundTrayView(procs: console.state.background)
+                        BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
                         // The tasks this session's agent created, beside the code the bar below
                         // carries — the session's two kinds of output, together.
                         CreatedTasksCard(console: console)
@@ -160,6 +169,8 @@ struct ConsoleView: View {
                 // One full-screen viewer for the whole transcript: a thumbnail anywhere in it opens here
                 // and pages across every image in the session, in transcript order (web parity).
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
+                // The workspace's background agents and workflows, for the cards that draw them.
+                .environment(\.taskActivity, taskActivity(console))
                 .imagePreview($imagePreviewTarget, images: imagePreviewPages, ns: imagePreviewNS,
                               store: registry.attachments)
             } else {
@@ -230,13 +241,24 @@ struct ConsoleView: View {
                 .accessibilityLabel("Share session")
             }
         }
-        .sheet(isPresented: $showShare) {
-            if let baseURL = appModel.baseURL {
-                ShareSheet(sessionID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)
+        .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
+        #else
+        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
+        // `.primaryAction` there, as the project and task pages' menus do.
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showShare = true } label: {
+                    Label("Share session", systemImage: "square.and.arrow.up")
+                }
+                .help("Share a read-only link to this session")
             }
         }
-        .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
         #endif
+        .sheet(isPresented: $showShare) {
+            if let baseURL = appModel.baseURL {
+                ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)
+            }
+        }
     }
 }
 

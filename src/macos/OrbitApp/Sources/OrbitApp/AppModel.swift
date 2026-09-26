@@ -162,6 +162,18 @@ final class AppModel {
             }
         }
     }
+    /// The wiki entry whose page fills the Wiki pane — the row the three-column shells select, and the
+    /// page the compact stack pushes. A read of the section's stack.
+    var selectedWikiEntryID: String? {
+        get { nav.selectedWikiEntryID }
+        set {
+            if let id = newValue {
+                nav.replaceTop(with: .wikiEntry(entryID: id))
+            } else if case .wikiEntry = nav.path.last {
+                nav.pop()
+            }
+        }
+    }
     /// iOS only: whether Tasks has pushed the searchable directory of every named task list.
     /// The drawer shows only a compact preview; the directory is the second page this section
     /// pushes, and pushing it is what leaves the leading edge to the system back-swipe while it is
@@ -356,6 +368,8 @@ final class AppModel {
     private(set) var watches: WatchesModel?
     /// The account's projects: the Projects section and the drawer's project rows.
     private(set) var projects: ProjectsModel?
+    /// The account's wiki: the Wiki section, the drawer's Wiki row and every entry page.
+    private(set) var wiki: WikiModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
     #if os(macOS)
@@ -406,6 +420,7 @@ final class AppModel {
         #endif
         watches = watchesModel
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
+        wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
@@ -718,6 +733,9 @@ final class AppModel {
                         nudgeCreatedTasks()
                         // No event carries a watch either: re-read the list the stream can't replay.
                         if let watches { Task { await watches.load() } }
+                        // `wiki.changed` has no replay either, and nothing depends on it arriving:
+                        // re-read what the Wiki has loaded, the drawer's number with it.
+                        if let wiki { Task { await wiki.reloadLoaded() } }
                         // Runners has neither push nor poll: a list that failed while offline
                         // would otherwise stay on its error until someone pulls to refresh.
                         if let runners, runners.loadState.lastLoadFailed {
@@ -818,6 +836,12 @@ final class AppModel {
                 scheduleLibraryRefresh(.tasks)
                 scheduleControlRefresh()
             }
+        // A wiki space changed — a proposal filed, ops decided, a binding moved. The event names the
+        // space and nothing else, so the loaded Wiki re-reads what it shows (the drawer's number
+        // included). It moves no session row: falling through to the snapshot below would be the web's
+        // `groupsFor` default of `['sessions']`, a list refetch for an event about something else.
+        case .wikiChanged:
+            wiki?.nudge()
         // AgentsModel.load() fetches the provider catalog with the list; provider edits do not
         // change task-row membership or live overlays.
         case .providerChanged:
@@ -1380,6 +1404,8 @@ final class AppModel {
         case .skills, .runners, .following, .admin, .settings: return nav.sectionAtRoot
         // A project's page over the index: the same one read.
         case .projects: return nav.sectionAtRoot
+        // An entry's page, or Review, over the Wiki's home: the same one read.
+        case .wiki: return nav.sectionAtRoot
         }
     }
 
@@ -1759,9 +1785,26 @@ final class AppModel {
         show(.console(sessionID: id, origin: .list), agent: agent)
     }
 
-    /// The project's page on the web, for the share sheet.
+    /// Open one wiki entry's page from outside the Wiki's home — an `orbit-wiki:` link. On a phone a
+    /// link in a conversation pushes it over that console, so the back swipe returns to it; anywhere
+    /// else it opens in the Wiki section, the home at the root and the entry on top.
+    func openWikiEntry(_ id: String, overConsole: Bool = false) {
+        if overConsole {
+            push(.wikiEntry(entryID: id))
+            return
+        }
+        selectedSection = .wiki
+        nav.path = [.wikiEntry(entryID: id)]
+    }
+
+    /// The project's page on the web — a signed-in address, for the project menu's Copy Link.
     func projectWebURL(_ projectID: String) -> URL? {
         baseURL?.appendingPathComponent("projects").appendingPathComponent(PublicID.toPublic(projectID))
+    }
+
+    /// The task's page on the web — a signed-in address, for the task menu's Copy Link.
+    func taskWebURL(_ taskID: String) -> URL? {
+        baseURL?.appendingPathComponent("tasks").appendingPathComponent(PublicID.toPublic(taskID))
     }
 
     /// Put `node` on screen in the Agents section — the one transition every Agents entry point

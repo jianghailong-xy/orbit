@@ -86,11 +86,30 @@ test('the public shared transcript applies the same historical replay fence', as
   };
   const service = new SessionsService(prisma as never, {} as never, {} as never);
 
-  const shared = await service.getShared('share-token');
+  const shared = await service.getSharedTranscript(SESSION);
 
   assert.deepEqual(shared.events, []);
+  assert.equal(shared.hasMore, false);
+  // A tail page since the share stopped returning the whole history: the owner's page query,
+  // fenced before its LIMIT, read newest-first and handed back in seq order.
+  assertReplayFence(captured, 'DESC');
+});
+
+test('a shared transcript event fetched by seq sits behind the same fence', async () => {
+  let captured: TaggedQuery | undefined;
+  const prisma = {
+    session: { findFirst: async () => ({ id: SESSION }) },
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      captured = { strings, values };
+      return [];
+    },
+  };
+  const service = new SessionsService(prisma as never, {} as never, {} as never);
+
+  await assert.rejects(service.getSharedEventFull(SESSION, 7), /event not found/);
+
   assert.ok(captured);
-  assert.match(renderedQuery(captured), /type NOT IN \([?, ]+\)[\s\S]*ORDER BY seq ASC/);
+  assert.match(renderedQuery(captured), /seq = \?[\s\S]*type NOT IN \([?, ]+\)/);
   assert.ok(captured.values.includes(replayableEventSql));
 });
 

@@ -190,6 +190,9 @@ type sessionPool struct {
 	// outlives supervisors, and a session that stays cold has none.
 	hostless map[string][]*bgJob
 	changed  chan struct{}
+	// closedForUpdate is set once, by closeForUpdate, when this runner has decided to re-execute
+	// into a newer release; from then on no turn begins here (waitActive).
+	closedForUpdate bool
 }
 
 func newSessionPool(max int) *sessionPool {
@@ -640,6 +643,43 @@ func (p *sessionPool) activeCountLocked() int {
 		}
 	}
 	return n
+}
+
+// turnsInFlightLocked counts the sessions a turn is running in right now: every permit holder — a
+// permit is taken at the claim and handed back only once the turn's /turn-complete has landed, so a
+// message, a `!` shell and an EXECUTABLE acceptance command are all counted from claim to settle —
+// and every engine running a turn of its own, which holds no permit (selfDrivenTurn).
+func (p *sessionPool) turnsInFlightLocked() int {
+	n := 0
+	for _, s := range p.sessions {
+		if s.active || s.selfDrivenTurn {
+			n++
+		}
+	}
+	return n
+}
+
+// closeForUpdate is the only way a self-update gets to stop this runner: it succeeds only while no
+// turn is in flight, and from then on no turn begins here. Otherwise it reports how many turns are
+// running and changes nothing, and the update waits for a later check.
+//
+// The owner's rule (2026-09-25): an automatic update never evicts a running turn — the drain is
+// for the water to run out by itself, not for pouring out what is still running. Stopping first
+// and draining after had torn EXECUTABLE acceptance commands down within seconds of "update
+// available", each reported as exit -1 and judged FAILED.
+//
+// Both halves are decided under one lock, so "nothing is running" is still true when the runner
+// stops. A claim that lands after this gets its permit, but waitActive holds its turn back until
+// the stop that follows, and the turn stays RUNNING for the updated runner to reclaim — the path
+// a claim racing any runner stop already takes. It never starts, so there is nothing to tear down.
+func (p *sessionPool) closeForUpdate() (turnsInFlight int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if n := p.turnsInFlightLocked(); n > 0 {
+		return n
+	}
+	p.closedForUpdate = true
+	return 0
 }
 
 func (p *sessionPool) residentCountLocked() int {
@@ -1140,6 +1180,9 @@ func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 // waitActive keeps a cold supervisor cheap while its Orbit session remains
 // AWAITING_INPUT. shutdown is separate from session cancellation: shutdown must
 // detach without /complete, while a real cancel must finalize normally.
+//
+// Once the pool is closed for an update, a permit no longer starts a turn: the
+// wait goes on until the stop that follows, and ends on shutdown like any other.
 func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Context) bool {
 	for {
 		p.mu.Lock()
@@ -1147,7 +1190,7 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			p.mu.Unlock()
 			return false
 		}
-		if s.active {
+		if s.active && !p.closedForUpdate {
 			p.mu.Unlock()
 			return true
 		}
