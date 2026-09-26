@@ -2,7 +2,8 @@ import { uuidToBase62 } from '@orbit/shared';
 
 import { dispatchRefusalNextStep } from '../tasks/task-dispatch-refusal';
 import { SettledCriterionReport, WakeFact } from './coordinator-wake';
-import type { StandardSetConfirmationStanding } from './project-acceptance';
+import { criterionKeyOf } from './project-acceptance';
+import type { DerivedProjectDoneReading } from './project-done-derived';
 
 /**
  * What a coordinator is TOLD about a committed fact — in either of the two places one can be told.
@@ -243,6 +244,29 @@ function settledCriteriaOf(fact: WakeFact): SettledCriterionReport[] {
   return Array.isArray(criteria) ? criteria as SettledCriterionReport[] : [];
 }
 
+/**
+ * One line per criterion the projection is holding back: the clauses it trips, then the
+ * satisfaction lane's unmet codes, named by the words the roster carries for it when it has them.
+ */
+function renderWithheldCriteria(fact: WakeFact, reading: DerivedProjectDoneReading): string {
+  const texts = new Map(settledCriteriaOf(fact).map((criterion) => [criterion.key, criterion.text]));
+  const unmet = new Map(reading.satisfaction.map((row) => [
+    row.definitionId, row.unmet.map((reason) => reason.clause),
+  ]));
+  return reading.derived.criteria
+    .filter((criterion) => criterion.withheld.length > 0)
+    .map((criterion) => {
+      const key = criterionKeyOf(criterion.definitionId);
+      const text = texts.get(key);
+      const codes = unmet.get(criterion.definitionId) ?? [];
+      return (
+        `- ${text ? `「${text}」（key ${key}）` : `key ${key}`}：${criterion.withheld.join('、')}`
+        + `；unmet：${codes.length > 0 ? codes.join('、') : '无'}`
+      );
+    })
+    .join('\n');
+}
+
 /** One line per criterion, then one per criterion for the work that served it. */
 function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): string {
   return criteria
@@ -333,10 +357,19 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  * answered. On 2026-09-25 (project 34JNIW4b31ujSVqEG784v) the message asked anyway, and a
  * coordinator doing what it said would have sent the owner looking for a card that was not there.
  *
- * So `confirmation` — the standing, read by the delivery as it writes these words — decides the
- * text. CONFIRMED says when the owner confirmed and that nothing is left to do, and carries no
- * roster: the roster is in the card for the question, and there is no question. Unconfirmed, or
- * confirmed about criteria that have since been edited, reads exactly as it always has.
+ * So `reading` — the projection and the standing it was folded from, read by the delivery as it
+ * writes these words — decides the text, and a confirmation is not taken for DONE. The fact is
+ * derived from the serving tasks' STATUSES; the projection also asks whether each settled by its
+ * own declared criterion, on the revision of the criterion that stands, and by a session that did
+ * not write that criterion. So:
+ *
+ *   * DONE — says when the owner confirmed and that nothing is left to do, and carries no roster:
+ *     the roster is in the card for the question, and there is no question;
+ *   * CONFIRMED and still held back — says the confirmation is not what is missing, names what is
+ *     (`withheld`, and each held criterion's clauses and unmet codes), and where to read the rest.
+ *     It says neither DONE, which it is not, nor "confirm", which is done;
+ *   * not confirmed, or confirmed about criteria that have since been edited — reads exactly as it
+ *     always has.
  *
  * WHAT IS NOT DELIVERED HERE ANY MORE
  * ===================================
@@ -350,13 +383,36 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
 export function buildCoordinatorDeliveryMessage(
   fact: WakeFact,
   projectTitle: string,
-  /** Where the project stands on owner confirmation. Only `PROJECT_ACCEPTANCE_LANDED` reads it, and
-   *  absent reads as not confirmed. */
-  confirmation?: StandardSetConfirmationStanding | null,
+  /** The projection and the standing it was folded from. Only `PROJECT_ACCEPTANCE_LANDED` reads it,
+   *  and absent reads as not confirmed. */
+  reading?: DerivedProjectDoneReading | null,
 ): string {
   const projectId = uuidToBase62(fact.projectId);
   if (fact.event === 'PROJECT_ACCEPTANCE_LANDED') {
-    const confirmedAt = confirmation?.confirmed ? confirmation.confirmation?.confirmedAt : undefined;
+    const standing = reading?.standing;
+    const confirmedAt = standing?.confirmed ? standing.confirmation?.confirmedAt : undefined;
+    if (reading && confirmedAt && !reading.derived.done) {
+      const held = renderWithheldCriteria(fact, reading);
+      return (
+        `【项目「${projectTitle}」的验收标准都已落地，这一版也已确认，但项目还没有投影成 DONE】\n\n`
+        + `${describeWakeFact(fact)}\n\n`
+        + `现在这一版标准集，就是账号所有者 ${confirmedAt.toISOString()} 确认过的那一版`
+        + '（CONFIRM_ACCEPTANCE_CRITERIA）：确认不缺，这里没有要确认的东西，这个会话里也不会出现确认卡。\n\n'
+        + `但项目还没有投影成 DONE，扣住它的是 ${reading.derived.withheld.join('、')}。`
+        + '上面那句「每一条都已满足」只看服务任务的状态；投影还要看每个任务按它自己声明的完成条件是否算完成、'
+        + '声明的是不是这条标准现在的版本，以及写这条标准的会话是否也在产出它的证据。'
+        + (held ? `被扣住的标准：\n${held}` : '')
+        + '\n\n'
+        + `还缺什么、卡在哪个任务上，自己读：project_get（projectId 传 ${projectId}）返回的 derivedDone `
+        + '给出 withheld 和每条标准的答案，每条验收标准上的 unmet 给出每个 unmet 码和卡住它的任务；'
+        + `task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
+        + 'DONE 不是谁写的一列：缺的补上之后，服务端自己把它投影出来。project_update 的 status 你也写不了：'
+        + '带会话的请求写这个字段会被整条拒掉（PROJECT_STATUS_NOT_SESSION_WRITABLE）。\n\n'
+        + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+        + '所以以你自己刚读到的库里状态为准。'
+      );
+    }
+    // Confirmed, and the projection agrees: DONE.
     if (confirmedAt) {
       return (
         `【项目「${projectTitle}」的验收标准已全部满足并落地，已按账号所有者的确认记为 DONE】\n\n`

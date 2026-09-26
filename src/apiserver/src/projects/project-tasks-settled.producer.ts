@@ -73,8 +73,9 @@ export interface SettledProjectDelivery {
  *     conditions, together, express the goal. A conversation opened for that question would be a
  *     conversation with nobody in it, and the project already names the one a person is in. When
  *     the owner has already confirmed the version that stands there is nothing to ask, and the
- *     message says so instead: the delivery reads that standing as it writes the words
- *     (`buildCoordinatorDeliveryMessage`), so it changes neither this fact's key nor its terminal.
+ *     message says so instead — with DONE, or with what the projection is still holding back: the
+ *     delivery reads the projection as it writes the words (`buildCoordinatorDeliveryMessage`), so
+ *     it changes neither this fact's key nor its terminal.
  *   * Anything else → `PROJECT_TASKS_SETTLED`, and the judgment session that event has always
  *     opened, on the protocol that tells it to go and look at `main`. That branch is untouched,
  *     because it is the branch the card is NOT for: a project whose work is not all on the branch

@@ -81,6 +81,13 @@ import { WakeDispositionService } from './wake-disposition.service';
  * they were: the message is compared, whole, with what the card has always rendered for the fact
  * the ledger recorded — a confirmation that is missing or stale changes nothing about it.
  *
+ * (4) is the control that keeps (1)'s DONE honest. The fact is derived from the serving tasks'
+ * STATUSES, and the projection asks more of them — among other things that each one declared the
+ * revision of its criterion that stands. So a criterion tightened after its work was filed, and
+ * then confirmed by the owner as it now reads, leaves a confirmed project the projection is still
+ * holding back: the message may neither report DONE nor ask for a confirmation that is on record,
+ * and says what IS missing instead.
+ *
  * Not destructive: every case owns freshly generated ids and asserts over its own project.
  */
 const URL = process.env.COORDINATOR_PG_URL;
@@ -368,14 +375,18 @@ async function recordLandingThroughTheDoor(stack: Stack, f: Fixture, taskId: str
  *
  * Answers the readings a case needs from either side of that receipt: the projection's withheld
  * clauses just before it, and every message the standing conversation was sent because of it.
+ * `afterFiling` runs once the work is filed and before any of it settles — where (4) moves the
+ * ruler under a declaration that has already been made.
  */
 async function walkToTheLastReceipt(
   stack: Stack,
   f: Fixture,
   [routing, suite]: StatedAcceptanceCriterion[],
+  { afterFiling }: { afterFiling?: () => Promise<void> } = {},
 ) {
   const routingWork = await serve(stack, f, routing!.key, '把路由改对并合进 main');
   const suiteWork = await serve(stack, f, suite!.key, '把全量服务测试跑绿并合进 main');
+  await afterFiling?.();
   await recordLanding(stack, f, routingWork, 'routing');
   await settle(stack.db, routingWork);
   await settle(stack.db, suiteWork);
@@ -578,6 +589,64 @@ test('(3) confirmed, then a criterion was edited: the confirmation is stale and 
       assert.match(message, /请账号所有者在这个会话里的那张确认卡上确认/);
       assert.equal(message, theCardAsItWas(wake, f),
         'a stale confirmation changed the card: it must read exactly as it always has');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(4) confirmed, but a serving task declared an older revision: not DONE, and the message says why',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const f = await fixture(stack, 'confirmed-declaration-stale');
+      const [routing, suite] = await state(stack, f, [
+        { text: ROUTING, verificationMethod: METHOD },
+        { text: SUITE, verificationMethod: METHOD },
+      ]);
+
+      let confirmedAt: Date | undefined;
+      const { withheldBefore, message } = await walkToTheLastReceipt(stack, f, [routing!, suite!], {
+        // The order that strands a declaration: the work is filed, THEN one criterion steps up the
+        // ladder, THEN the owner confirms the set as it now reads. The confirmation is current; the
+        // routing work still declares the revision it was filed against.
+        afterFiling: async () => {
+          const before = [
+            { id: routing!.definitionId, text: ROUTING, verificationMethod: METHOD },
+            { id: suite!.definitionId, text: SUITE, verificationMethod: METHOD },
+          ];
+          const after = [
+            { id: routing!.definitionId, text: ROUTING, verificationMethod: STRICTER },
+            { id: suite!.definitionId, text: SUITE, verificationMethod: METHOD },
+          ];
+          assert.equal(classifyCriteriaEdit(before, after), 'ADDITIVE');
+          await state(stack, f, after);
+          confirmedAt = await confirm(stack, f);
+        },
+      });
+
+      assert.equal(await standingOf(stack, f), 'CONFIRMED',
+        'the owner confirmed the version that stands, so nothing here is about the confirmation');
+      assert.deepEqual(withheldBefore, ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED']);
+      // The receipt landed the last criterion's work and the projection still holds DONE back:
+      // the routing work declared a revision its criterion no longer carries.
+      assert.equal(await storedStatus(stack.db, f), ProjectStatus.OPEN,
+        'a stale declaration is unmet work, whatever the task’s status says');
+      assert.deepEqual(await withheld(stack, f), ['CRITERION_UNSATISFIED']);
+
+      // ── what the coordinator was told ──────────────────────────────────────────────────────
+      assert.doesNotMatch(message, /记为 DONE/,
+        'the message reports DONE for a project the projection is still holding back');
+      assert.doesNotMatch(message, ASKS_FOR_THE_CARD,
+        'the version that stands is confirmed, so there is no card — and the message sent the '
+        + 'coordinator to one');
+      assert.doesNotMatch(message, /请账号所有者/);
+      assert.ok(message.includes(confirmedAt!.toISOString()),
+        'the message does not say WHEN the owner confirmed the version that stands');
+      // What IS missing, in the projection's own words, and where the rest of it is read.
+      assert.match(message, /CRITERION_UNSATISFIED/);
+      assert.match(message, /DECLARATION_STALE/);
+      assert.match(message, /derivedDone/);
+      assert.match(message, /unmet/);
     } finally {
       await stack.db.$disconnect();
     }

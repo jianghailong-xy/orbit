@@ -21,7 +21,13 @@ import {
   projectAcceptanceLandedFact,
   projectTasksSettledFact,
 } from './coordinator-wake';
-import { standardSetConfirmationStanding } from './project-acceptance';
+import {
+  criterionKeyOf,
+  standardSetConfirmationStanding,
+  type StandardSetConfirmationStanding,
+} from './project-acceptance';
+import type { CriterionUnmetClause } from './project-criterion-satisfaction';
+import { deriveProjectDone, type DerivedProjectDoneReading } from './project-done-derived';
 
 const PROJECT = randomUUID();
 const TASK = randomUUID();
@@ -222,51 +228,112 @@ test('the confirmation card sends the owner to the card in this conversation, no
   assert.doesNotMatch(who, /你来确认|由你确认|你去确认/);
 });
 
+/** One criterion, and the fact saying it is satisfied and landed, keyed as the producer keys it. */
+const DEFINITION = randomUUID();
+const LANDED_ONE = projectAcceptanceLandedFact(
+  PROJECT,
+  [{ taskId: TASK, status: 'DONE' }],
+  [{ key: criterionKeyOf(DEFINITION), text: '条件 ab12', satisfied: true, landing: 'LANDED', serving: [] }],
+)!;
+const VERSION = { digest: 'a'.repeat(64), material: [] };
+const CONFIRMATION = {
+  criteriaDigest: VERSION.digest,
+  criteriaMaterial: [],
+  confirmedAt: new Date('2026-09-25T04:37:25.000Z'),
+  confirmedById: randomUUID(),
+};
+
+/** What the delivery reads, by hand: a standing, and the projection folded over it with the one
+ *  criterion answering as the satisfaction lane says. */
+function readingOf(
+  standing: StandardSetConfirmationStanding,
+  unmet: CriterionUnmetClause[] = [],
+): DerivedProjectDoneReading {
+  const satisfied = unmet.length === 0;
+  return {
+    standing,
+    derived: deriveProjectDone([{
+      definitionId: DEFINITION,
+      satisfied,
+      landing: 'LANDED',
+      independence: 'INDEPENDENT',
+      conflicts: [],
+      remedy: null,
+    }], standing.state),
+    satisfaction: [{
+      definitionId: DEFINITION,
+      ordinal: 1,
+      revision: 1,
+      satisfied,
+      unmet: unmet.map((clause) => ({ clause, heldUpBy: [] })),
+    }],
+  };
+}
+
 /**
- * The same fact once the owner has ALREADY confirmed the version that stands. No client draws a
- * card then — `settlementHeldOnConfirmation` holds one only while the standing can be answered —
- * so the message may not send anybody to one: it says when the set was confirmed and that nothing
- * is left to do. A standing that is not CONFIRMED, never confirmed or confirmed about criteria
- * edited since, reads exactly as the card does with no standing at all.
+ * The same fact once the owner has ALREADY confirmed the version that stands and the projection
+ * settles it. No client draws a card then — `settlementHeldOnConfirmation` holds one only while
+ * the standing can be answered — so the message may not send anybody to one: it says when the set
+ * was confirmed and that nothing is left to do. A standing that is not CONFIRMED, never confirmed
+ * or confirmed about criteria edited since, reads exactly as the card does with no reading at all.
  *
  * The end-to-end half, over the receipt door and the stored column, is
  * `project-acceptance-landed-confirmed.pg.spec.ts`; this one runs where that one skips.
  */
-test('a confirmed standard set leaves the landed card nothing to ask', () => {
-  const landed = projectAcceptanceLandedFact(
-    PROJECT,
-    [{ taskId: TASK, status: 'DONE' }],
-    [{ key: 'ab12', text: '条件 ab12', satisfied: true, landing: 'LANDED', serving: [] }],
-  )!;
-  const version = { digest: 'a'.repeat(64), material: [] };
-  const confirmation = {
-    criteriaDigest: version.digest,
-    criteriaMaterial: [],
-    confirmedAt: new Date('2026-09-25T04:37:25.000Z'),
-    confirmedById: randomUUID(),
-  };
+test('a confirmed standard set the projection settles leaves the landed card nothing to ask', () => {
   const notice = buildCoordinatorDeliveryMessage(
-    landed, '验收闭环', standardSetConfirmationStanding(version, confirmation),
+    LANDED_ONE, '验收闭环', readingOf(standardSetConfirmationStanding(VERSION, CONFIRMATION)),
   );
 
   assert.doesNotMatch(notice, /确认卡上确认/);
   assert.doesNotMatch(notice, /请账号所有者/);
   assert.ok(notice.includes('2026-09-25T04:37:25.000Z'), 'the notice does not say when it was confirmed');
+  assert.match(notice, /记为 DONE/);
   assert.match(notice, /无需任何动作/);
   assert.match(notice, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
   assert.doesNotMatch(notice, /你应该|你需要|请先|接下来你/);
   assert.equal(notice.includes('PASS'), false);
 
-  const card = buildCoordinatorDeliveryMessage(landed, '验收闭环');
-  for (const standing of [
-    standardSetConfirmationStanding(version, null),
-    standardSetConfirmationStanding({ digest: 'b'.repeat(64), material: [] }, confirmation),
+  const card = buildCoordinatorDeliveryMessage(LANDED_ONE, '验收闭环');
+  const stale = standardSetConfirmationStanding({ digest: 'b'.repeat(64), material: [] }, CONFIRMATION);
+  for (const reading of [
+    readingOf(standardSetConfirmationStanding(VERSION, null)),
+    readingOf(stale),
+    readingOf(stale, ['DECLARATION_STALE']),
   ]) {
     assert.equal(
-      buildCoordinatorDeliveryMessage(landed, '验收闭环', standing), card,
-      `a ${standing.state} standing changed the card`,
+      buildCoordinatorDeliveryMessage(LANDED_ONE, '验收闭环', reading), card,
+      `a ${reading.standing.state} standing changed the card`,
     );
   }
+});
+
+/**
+ * Confirmed, and the projection still holds DONE back — here because the work declared a revision
+ * of its criterion that no longer stands, which the fact (derived from task statuses) cannot see.
+ * The confirmation is not what is missing, so the message asks for none; the project is not DONE,
+ * so it does not say so; it names what the projection is holding back and where to read the rest.
+ */
+test('a confirmed standard set the projection still holds back is not reported DONE', () => {
+  const notice = buildCoordinatorDeliveryMessage(
+    LANDED_ONE,
+    '验收闭环',
+    readingOf(standardSetConfirmationStanding(VERSION, CONFIRMATION), ['DECLARATION_STALE']),
+  );
+
+  assert.doesNotMatch(notice, /记为 DONE/);
+  assert.doesNotMatch(notice, /无需任何动作/);
+  assert.doesNotMatch(notice, /确认卡上确认/);
+  assert.doesNotMatch(notice, /请账号所有者/);
+  assert.ok(notice.includes('2026-09-25T04:37:25.000Z'), 'the notice does not say when it was confirmed');
+  // What is missing, clause by clause, on the criterion it is missing from.
+  assert.match(notice, /扣住它的是 CRITERION_UNSATISFIED/);
+  assert.match(notice, /「条件 ab12」[^\n]*CRITERION_UNSATISFIED[^\n]*unmet：DECLARATION_STALE/);
+  // And where the rest of it is read.
+  assert.match(notice, /project_get[^\n]*derivedDone/);
+  assert.match(notice, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
+  assert.doesNotMatch(notice, /你应该|你需要|请先|接下来你/);
+  assert.equal(notice.includes('PASS'), false);
 });
 
 test('a judgment session is filed under a different title from the conversation', () => {
