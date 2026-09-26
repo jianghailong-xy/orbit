@@ -14,6 +14,17 @@ struct TasksListView: View {
     /// to the selection shape, which is what the split shells want.
     var rowNavigation: SessionRowNavigation = .selection
     @State private var taskToDelete: TaskItem?
+    #if os(iOS)
+    /// Select Tasks: the web's checkboxes and bulk bar, as the system's edit mode and a bottom bar.
+    @State private var selecting = false
+    @State private var selectedIDs: Set<String> = []
+    @State private var batchConfirm: TaskBatchAction?
+    /// The title switcher's sheet — the directory of lists, the Sessions page's workspace sheet's shape.
+    @State private var showListsSheet = false
+    @State private var showLabelsSheet = false
+    /// Batches' search: the field under the bar narrows the labels while Batches is showing.
+    @State private var labelQuery = ""
+    #endif
 
     var body: some View {
         if let tasks = model.tasks {
@@ -24,15 +35,26 @@ struct TasksListView: View {
                 #endif
                 if let error = tasks.errorText { errorBanner(error, tasks: tasks) }
                 if let conflict = tasks.runConflict { runConflictBanner(conflict, tasks: tasks) }
-                if let creator = tasks.creatorFilter { creatorChip(creator, tasks: tasks) }
                 #if !os(iOS)
+                if let creator = tasks.creatorFilter { creatorChip(creator, tasks: tasks) }
                 toolbar(tasks)
                 Divider()
                 #endif
                 taskList(tasks, selection: listSelection)
             }
+            #if os(iOS)
+            // The Sessions list's bar, which the Projects list took too: nothing in the middle — the
+            // title is the switcher beside ☰ — and the search field held under the bar rather than
+            // floating at the bottom of the phone. `.inline` even with no title, so the page does not
+            // reserve a large-title band (see `AgentContentColumn`).
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: tasks.viewMode == .batches ? $labelQuery : $tasks.searchText,
+                        placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: tasks.viewMode == .batches ? TaskListCopy.searchLabels : TaskListCopy.searchTasks)
+            #else
             .navigationTitle(tasks.scopeTitle)
             .searchable(text: $tasks.searchText, prompt: "Search tasks")
+            #endif
             .task { await navigationRefreshLoop(tasks) }
             .task(id: tasks.queryKey) { await listRefreshLoop(tasks) }
             .confirmationDialog("Delete this task?", isPresented: deletePresented,
@@ -54,81 +76,201 @@ struct TasksListView: View {
                 Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
             }
             #if os(iOS)
-            .toolbar {
-                // Match the compact Sessions list: keep the content surface for rows and move
-                // secondary controls into small, familiar navigation-bar menus. A long list name
-                // can now never compete with the status and sort controls for horizontal space.
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Section("Status") {
-                            ForEach(tasks.availableFilters) { filter in
-                                Button { tasks.filter = filter } label: {
-                                    if tasks.filter == filter {
-                                        Label("\(filter.title) (\(tasks.overview.count(for: filter)))",
-                                              systemImage: "checkmark")
-                                    } else {
-                                        Text("\(filter.title) (\(tasks.overview.count(for: filter)))")
-                                    }
-                                }
-                            }
-                        }
-
-                        Menu {
-                            scopeButton(.all, title: "All tasks", tasks: tasks)
-                            if tasks.unlistedCount > 0 || tasks.scope == .unlisted {
-                                scopeButton(.unlisted, title: "No list (\(tasks.unlistedCount))", tasks: tasks)
-                            }
-                            if !tasks.activeLists.isEmpty {
-                                Section("Lists") {
-                                    ForEach(tasks.activeLists) { list in
-                                        scopeButton(.list(list.id),
-                                                    title: "\(list.title) (\(list.taskCount))", tasks: tasks)
-                                    }
-                                }
-                            }
-                            if !tasks.completedLists.isEmpty {
-                                Section("Completed lists") {
-                                    ForEach(tasks.completedLists) { list in
-                                        scopeButton(.list(list.id),
-                                                    title: "\(list.title) (\(list.taskCount))", tasks: tasks)
-                                    }
-                                }
-                            }
-                        } label: {
-                            Label("List: \(tasks.scopeTitle)", systemImage: "list.bullet")
-                        }
-                    } label: {
-                        Image(systemName: compactFilterIcon(tasks))
-                    }
-                    .accessibilityLabel("Task filters, \(tasks.scopeTitle), \(tasks.filter.title)")
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Section("Sort by") {
-                            ForEach(TaskSort.allCases) { sort in
-                                Button { tasks.sort = sort } label: {
-                                    if tasks.sort == sort { Label(sort.title, systemImage: "checkmark") }
-                                    else { Text(sort.title) }
-                                }
-                            }
-                        }
-                        Button { tasks.descending.toggle() } label: {
-                            Label(tasks.descending ? "Descending" : "Ascending",
-                                  systemImage: tasks.descending ? "arrow.down" : "arrow.up")
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
-                    }
-                    .accessibilityLabel("Sort by \(tasks.sort.title), "
-                                        + (tasks.descending ? "descending" : "ascending"))
+            .toolbar { compactToolbar(tasks) }
+            .environment(\.editMode, .constant(selecting ? .active : .inactive))
+            .sheet(isPresented: $showListsSheet) {
+                TaskListsDirectoryView(tasks: tasks, inSheet: true)
+            }
+            .sheet(isPresented: $showLabelsSheet) {
+                TaskLabelsSheet(rows: tasks.labelSummary?.items ?? [], initial: tasks.labelFilter) {
+                    tasks.applyLabels($0)
                 }
             }
+            .confirmationDialog(batchTitle(batchConfirm), isPresented: batchPresented,
+                                titleVisibility: .visible, presenting: batchConfirm) { action in
+                batchButtons(action, tasks: tasks)
+            } message: { action in
+                Text(batchMessage(action))
+            }
+            .onChange(of: tasks.viewMode) { _, mode in
+                if mode == .batches { Task { await tasks.loadLabelSummary() } }
+                endSelecting()
+            }
+            .onChange(of: tasks.queryKey) { _, _ in selectedIDs.removeAll() }
             #endif
         } else {
             ProgressView()
         }
     }
+
+    #if os(iOS)
+    /// The bar: the title switcher beside ☰ and one trailing button — the Sessions list's
+    /// arrangement — or, while selecting, the system's edit-mode bar with the bulk actions below.
+    @ToolbarContentBuilder
+    private func compactToolbar(_ tasks: TasksModel) -> some ToolbarContent {
+        if selecting {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(allSelected(tasks) ? TaskListCopy.deselectAll : TaskListCopy.selectAll) {
+                    if allSelected(tasks) { selectedIDs.removeAll() }
+                    else { selectedIDs = Set((tasks.visiblePinned + tasks.visibleRest).map(\.id)) }
+                }
+            }
+            ToolbarItem(placement: .principal) {
+                Text(TaskListCopy.selected(selectedIDs.count)).font(.headline)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") { endSelecting() }.fontWeight(.semibold)
+            }
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button(TaskListCopy.run) { batchConfirm = .run }
+                Spacer()
+                Button(TaskListCopy.stop) { batchConfirm = .stop }
+                Spacer()
+                Button(TaskListCopy.setAssignee) { batchConfirm = .assign }
+                Spacer()
+                Button(TaskListCopy.delete, role: .destructive) { batchConfirm = .delete }
+            }
+        } else {
+            // The same switcher the Sessions list draws for its workspace, at the leading slot and
+            // off the shared glass (`.sharedBackgroundVisibility(.hidden)`, iOS 26), so ☰ keeps
+            // its own circle and the name sits on the bar. What it switches is which tasks the
+            // page lists: All tasks, No list, or one list — the directory of lists, as a sheet.
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarLeading) { scopeSwitcher(tasks) }
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .topBarLeading) { scopeSwitcher(tasks) }
+            }
+            ToolbarItem(placement: .topBarTrailing) { optionsMenu(tasks) }
+        }
+    }
+
+    private func scopeSwitcher(_ tasks: TasksModel) -> some View {
+        WorkspaceTitleSwitcher(name: tasks.scopeTitle, subject: "Tasks", maxNameWidth: 210) {
+            showListsSheet = true
+        }
+    }
+
+    /// The one trailing button, with the Sessions list's icon (filled while a label narrows the
+    /// page, as that list fills it for a tag): the web's row checkboxes, its Tasks | Batches
+    /// switch, its column-header sort and its Labels picker, in one menu.
+    private func optionsMenu(_ tasks: TasksModel) -> some View {
+        @Bindable var tasks = tasks
+        return Menu {
+            Button { beginSelecting() } label: {
+                Label(TaskListCopy.selectTasks, systemImage: "checkmark.circle")
+            }
+            .disabled(tasks.viewMode == .batches)
+            Section(TaskListCopy.viewAs) {
+                Toggle(isOn: Binding(get: { tasks.viewMode == .tasks },
+                                     set: { if $0 { tasks.viewMode = .tasks } })) {
+                    Text(TaskListCopy.tasksView)
+                }
+                // Two Texts so the second reads as the item's subtitle (a `Label` drops it).
+                Toggle(isOn: Binding(get: { tasks.viewMode == .batches },
+                                     set: { if $0 { tasks.viewMode = .batches } })) {
+                    Text(TaskListCopy.batchesView)
+                    Text(TaskListCopy.groupedByLabel)
+                }
+            }
+            Menu {
+                Picker(TaskListCopy.sortBy, selection: $tasks.sort) {
+                    ForEach(TaskSort.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Order", selection: $tasks.descending) {
+                    Text("Descending").tag(true)
+                    Text("Ascending").tag(false)
+                }
+            } label: {
+                Text(TaskListCopy.sortBy)
+                Text(TaskListCopy.restHeader(sort: tasks.sort, descending: tasks.descending))
+            }
+            Button { showLabelsSheet = true } label: {
+                Label(TaskListCopy.filterByLabel, systemImage: "tag")
+            }
+        } label: {
+            Image(systemName: tasks.labelFilter.isEmpty
+                  ? "line.3.horizontal.decrease"
+                  : "line.3.horizontal.decrease.circle.fill")
+        }
+        .accessibilityLabel("Task options")
+    }
+
+    private func beginSelecting() {
+        selectedIDs.removeAll()
+        selecting = true
+        // Set assignee offers the agents by name, as the task page's picker does.
+        if model.agents?.items.isEmpty == true { Task { await model.agents?.load() } }
+    }
+
+    private func endSelecting() {
+        selecting = false
+        selectedIDs.removeAll()
+    }
+
+    private func allSelected(_ tasks: TasksModel) -> Bool {
+        let all = Set((tasks.visiblePinned + tasks.visibleRest).map(\.id))
+        return !all.isEmpty && all.isSubset(of: selectedIDs)
+    }
+
+    private var batchPresented: Binding<Bool> {
+        Binding(get: { batchConfirm != nil }, set: { if !$0 { batchConfirm = nil } })
+    }
+
+    /// The bulk bar's questions, in the web's words where the web asks them.
+    private func batchTitle(_ action: TaskBatchAction?) -> String {
+        let n = selectedIDs.count
+        switch action {
+        case .run?:    return "Run \(n) selected task\(n == 1 ? "" : "s")?"
+        case .stop?:   return "Stop selected tasks?"
+        case .assign?: return TaskListCopy.setAssignee
+        case .delete?: return "Delete \(n) selected task\(n == 1 ? "" : "s")?"
+        case nil:      return ""
+        }
+    }
+
+    private func batchMessage(_ action: TaskBatchAction) -> String {
+        switch action {
+        case .run:
+            return "At most \(batchConcurrency) run at once; the rest queue and start as slots free up."
+        case .stop:
+            return "Cancels each selected task's running or queued run."
+        case .assign:
+            return "Set the assignee (responsible workspace) for \(selectedIDs.count) selected task(s)."
+        case .delete:
+            return "Runs still in flight are stopped. This action cannot be undone."
+        }
+    }
+
+    /// The web's default for one batch: a few at once, never more than the batch.
+    private var batchConcurrency: Int { max(1, min(selectedIDs.count, 3)) }
+
+    @ViewBuilder
+    private func batchButtons(_ action: TaskBatchAction, tasks: TasksModel) -> some View {
+        let ids = Array(selectedIDs)
+        switch action {
+        case .run:
+            Button(TaskListCopy.run) { finishBatch { await tasks.batchRun(ids, maxConcurrent: batchConcurrency) } }
+        case .stop:
+            Button(TaskListCopy.stop, role: .destructive) { finishBatch { await tasks.batchStop(ids) } }
+        case .assign:
+            ForEach(model.orderedAgents) { agent in
+                Button(agent.name) { finishBatch { await tasks.batchAssign(ids, assigneeId: agent.id) } }
+            }
+            Button(TaskListCopy.unassigned) { finishBatch { await tasks.batchAssign(ids, assigneeId: nil) } }
+        case .delete:
+            Button(TaskListCopy.delete, role: .destructive) { finishBatch { await tasks.batchDelete(ids) } }
+        }
+        Button("Cancel", role: .cancel) { batchConfirm = nil }
+    }
+
+    private func finishBatch(_ operation: @escaping () async -> Bool) {
+        batchConfirm = nil
+        Task {
+            if await operation() { endSelecting() }
+        }
+    }
+    #endif
 
     private var deletePresented: Binding<Bool> {
         Binding(
@@ -158,24 +300,6 @@ struct TasksListView: View {
         )
     }
 
-    #if os(iOS)
-    private func compactFilterIcon(_ tasks: TasksModel) -> String {
-        tasks.scope == .all && tasks.filter == .runnable
-            ? "line.3.horizontal.decrease"
-            : "line.3.horizontal.decrease.circle.fill"
-    }
-
-    private func scopeButton(_ scope: TaskScope, title: String, tasks: TasksModel) -> some View {
-        Button {
-            model.selectedTaskID = nil
-            tasks.selectScope(scope)
-        } label: {
-            if tasks.scope == scope { Label(title, systemImage: "checkmark") }
-            else { Text(title) }
-        }
-    }
-    #endif
-
     @ViewBuilder
     private func toolbar(_ tasks: TasksModel) -> some View {
         @Bindable var tasks = tasks
@@ -185,7 +309,8 @@ struct TasksListView: View {
                 if tasks.unlistedCount > 0 || tasks.scope == .unlisted {
                     Text("No list (\(tasks.unlistedCount))").tag(TaskScope.unlisted)
                 }
-                ForEach(tasks.lists) { list in
+                // A project's lists are reached from that project's page: their tasks are not here.
+                ForEach(tasks.lists.filter { !TaskListLogic.isProjectOnlyList($0) }) { list in
                     Text("\(list.title) (\(list.taskCount))").tag(TaskScope.list(list.id))
                 }
             }
@@ -219,42 +344,164 @@ struct TasksListView: View {
         .padding(.vertical, 7)
     }
 
+    @ViewBuilder
     private func taskList(_ tasks: TasksModel, selection: Binding<String?>?) -> some View {
-        List(selection: selection) {
-            #if os(iOS)
-            // The progress overview scrolls with the content instead of permanently consuming
-            // vertical space. Zero row insets let its own 12pt padding line up with the list rows.
-            if tasks.overview.total > 0 {
-                TaskProgressSummary(overview: tasks.overview)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-            }
-            #endif
-            ForEach(tasks.visible) { task in
-                taskRow(tasks, task)
-            }
-            if tasks.hasMore {
-                Button {
-                    Task { await tasks.loadMore() }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if tasks.loadingMore { ProgressView().controlSize(.small) }
-                        Text(tasks.loadingMore ? "Loading…" : "Load more")
-                        Spacer()
-                    }
-                }
-                .disabled(tasks.loadingMore)
+        #if os(iOS)
+        // Selecting swaps the list's selection for a set — the system's multi-select, in edit mode —
+        // so the same rows can be checked instead of opened.
+        Group {
+            if selecting {
+                List(selection: $selectedIDs) { compactListContent(tasks) }
+            } else {
+                List(selection: selection) { compactListContent(tasks) }
             }
         }
         .orbitRevealSurface()
-        #if os(iOS)
-        // Sessions use a calm, full-width plain list on iPhone. Tasks now share that surface
-        // instead of inheriting inset-grouped cards from the split-view environment.
+        // Sessions use a calm, full-width plain list on iPhone; Tasks share that surface.
         .listStyle(.plain)
-        #endif
         .overlay { emptyOverlay(tasks) }
+        #else
+        List(selection: selection) {
+            ForEach(tasks.visible) { task in
+                taskRow(tasks, task)
+            }
+            if tasks.hasMore { loadMoreRow(tasks) }
+        }
+        .orbitRevealSurface()
+        .overlay { emptyOverlay(tasks) }
+        #endif
     }
+
+    private func loadMoreRow(_ tasks: TasksModel) -> some View {
+        Button {
+            Task { await tasks.loadMore() }
+        } label: {
+            HStack {
+                Spacer()
+                if tasks.loadingMore { ProgressView().controlSize(.small) }
+                Text(tasks.loadingMore ? "Loading…" : "Load more")
+                Spacer()
+            }
+        }
+        .disabled(tasks.loadingMore)
+    }
+
+    #if os(iOS)
+    /// The web page's blocks in its order — progress, the line about projects, the tabs, the
+    /// scope's tokens, then Happening now over the rest of the rows (or Batches in their place).
+    @ViewBuilder
+    private func compactListContent(_ tasks: TasksModel) -> some View {
+        headerRows(tasks)
+        if tasks.viewMode == .batches {
+            batchRows(tasks)
+        } else {
+            let pinned = tasks.visiblePinned
+            if !pinned.isEmpty {
+                TaskListSectionHeader(title: TaskListCopy.happeningNow, count: tasks.pinnedTotal)
+                    .listRowSeparator(.hidden)
+                    .selectionDisabled()
+                ForEach(pinned) { task in taskRow(tasks, task) }
+            }
+            let rest = tasks.visibleRest
+            if !rest.isEmpty {
+                TaskListSectionHeader(title: TaskListCopy.restHeader(sort: tasks.sort, descending: tasks.descending))
+                    .listRowSeparator(.hidden)
+                    .selectionDisabled()
+                ForEach(rest) { task in taskRow(tasks, task) }
+            }
+            if tasks.hasMore { loadMoreRow(tasks).selectionDisabled() }
+        }
+    }
+
+    @ViewBuilder
+    private func headerRows(_ tasks: TasksModel) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // A list's own page: the conversation it is steered from, where the web puts it
+            // beside the title.
+            if case .list(let listID) = tasks.scope, tasks.creatorFilter == nil {
+                TaskSteeringSessionButton(opening: tasks.openingConsole) {
+                    Task {
+                        if let sessionID = await tasks.openListConsole(listID) {
+                            model.route(to: .session(sessionID))
+                        }
+                    }
+                }
+            }
+            if tasks.overview.total > 0 { TaskProgressLine(overview: tasks.overview) }
+            if tasks.projectScope != nil, let inProjects = tasks.overview.inProjects, inProjects.tasks > 0 {
+                // The drawer's Projects row: the index, not wherever that section was left.
+                TaskScopeNote(inProjects: inProjects) {
+                    model.selectedSection = .projects
+                    model.nav.popToRoot()
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .selectionDisabled()
+        if tasks.viewMode == .tasks {
+            TaskFilterChips(filters: tasks.availableFilters, overview: tasks.overview,
+                            selected: tasks.filter) { tasks.selectFilter($0) }
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 4, trailing: 0))
+                .listRowSeparator(.hidden)
+                .selectionDisabled()
+        }
+        if tasks.creatorFilter != nil || !tasks.labelFilter.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    if let creator = tasks.creatorFilter {
+                        TaskScopeToken(text: SessionCreatedTasksCopy.createdIn(creator.sessionTitle)) {
+                            tasks.clearCreatorFilter()
+                        }
+                    }
+                    ForEach(tasks.labelFilter, id: \.self) { label in
+                        TaskScopeToken(text: label) { tasks.removeLabel(label) }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+            .listRowSeparator(.hidden)
+            .selectionDisabled()
+        }
+    }
+
+    /// Batches: each label's progress, the web's table as rows. Tapping one lists that batch, as a
+    /// web row click does.
+    @ViewBuilder
+    private func batchRows(_ tasks: TasksModel) -> some View {
+        let summary = tasks.labelSummary
+        let rows = matchingBatches(summary)
+        TaskListSectionHeader(title: TaskListCopy.batchesView, count: summary?.labelTotal, hint: TaskListCopy.byLabel)
+            .listRowSeparator(.hidden)
+        ForEach(rows, id: \.label) { row in
+            Button {
+                tasks.applyLabels([row.label])
+                tasks.viewMode = .tasks
+            } label: {
+                TaskBatchRow(row: row)
+            }
+            .buttonStyle(.plain)
+        }
+        if let summary, summary.truncated {
+            Text(TaskListCopy.showingLargest(summary.items.count, of: summary.labelTotal))
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .listRowSeparator(.hidden)
+        }
+    }
+
+    /// The batches the field under the bar leaves: a label containing what was typed.
+    private func matchingBatches(_ summary: TaskLabelSummary?) -> [TaskLabelRow] {
+        let all: [TaskLabelRow] = summary?.items ?? []
+        let needle = labelQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return all }
+        return all.filter { $0.label.localizedCaseInsensitiveContains(needle) }
+    }
+    #endif
 
     /// One row, wrapped for the container it is in — the same shape as `AgentPanes.sessionRow`. The
     /// row view itself is the same either way, actions included; what changes is who moves the
@@ -264,6 +511,19 @@ struct TasksListView: View {
     @ViewBuilder
     private func taskRow(_ tasks: TasksModel, _ task: TaskItem) -> some View {
         let row = TaskRowView(task: task)
+        #if os(iOS)
+        if selecting {
+            row.tag(task.id)
+        } else {
+            navigableRow(tasks, task, row)
+        }
+        #else
+        navigableRow(tasks, task, row)
+        #endif
+    }
+
+    @ViewBuilder
+    private func navigableRow(_ tasks: TasksModel, _ task: TaskItem, _ row: TaskRowView) -> some View {
         switch rowNavigation {
         case .selection:
             rowActions(row, tasks, task).tag(task.id)
@@ -350,14 +610,17 @@ struct TasksListView: View {
                                        description: Text(error))
                 Button("Retry") { Task { await tasks.load() } }
             }
-        } else if tasks.visible.isEmpty {
+        } else if tasks.viewMode == .batches {
+            if tasks.labelSummary?.items.isEmpty == true {
+                ContentUnavailableView(TaskListCopy.batchesView, systemImage: "tag",
+                                       description: Text(TaskListCopy.noLabels))
+            }
+        } else if tasks.visible.isEmpty && tasks.visiblePinned.isEmpty {
             let query = tasks.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             ContentUnavailableView(
-                query.isEmpty
-                    ? (tasks.filter == .runnable ? "No tasks are ready" : "No tasks")
-                    : "No matching tasks",
-                systemImage: query.isEmpty ? "checklist" : "magnifyingglass",
-                description: query.isEmpty ? nil : Text("No task title matches “\(query)”.")
+                query.isEmpty ? TaskListLogic.emptyTitle(scope: tasks.scope, filter: tasks.filter)
+                              : TaskListCopy.noneMatch(query),
+                systemImage: query.isEmpty ? "checklist" : "magnifyingglass"
             )
         }
     }
@@ -453,14 +716,37 @@ struct TasksListView: View {
 /// useful as a quick switcher while giving large workspaces a native searchable, grouped surface.
 struct TaskListsDirectoryView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     let tasks: TasksModel
+    /// Opened from the Tasks page's title switcher, as the Sessions page opens its workspace sheet:
+    /// it offers All tasks too, and picking closes the sheet rather than popping a page.
+    var inSheet = false
     @State private var query = ""
 
     var body: some View {
+        if inSheet {
+            NavigationStack {
+                directory
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { dismiss() }.fontWeight(.semibold)
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+        } else {
+            directory
+        }
+    }
+
+    private var directory: some View {
         List {
             if normalizedQuery.isEmpty {
                 Section {
-                    scopeRow(.unlisted, title: "No List", count: tasks.unlistedCount,
+                    if inSheet {
+                        scopeRow(.all, title: TaskListCopy.allTasks, count: nil, systemImage: "checklist")
+                    }
+                    scopeRow(.unlisted, title: TaskListCopy.noList, count: tasks.unlistedCount,
                              systemImage: "tray")
                 }
             }
@@ -478,9 +764,9 @@ struct TaskListsDirectoryView: View {
             }
         }
         .listStyle(.plain)
-        .navigationTitle("Task Lists")
-        .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $query, prompt: "Search lists")
+        .navigationTitle(TaskListCopy.taskListsTitle)
+        .navigationBarTitleDisplayMode(inSheet ? .inline : .large)
+        .searchable(text: $query, prompt: TaskListCopy.searchLists)
         .refreshable { await tasks.loadNavigation() }
         .overlay {
             if !normalizedQuery.isEmpty
@@ -502,12 +788,13 @@ struct TaskListsDirectoryView: View {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    // A project's lists are reached from that project's page: their tasks are not on Tasks.
     private var matchingActiveLists: [TaskListSummary] {
-        matching(tasks.activeLists)
+        matching(tasks.switcherActiveLists)
     }
 
     private var matchingCompletedLists: [TaskListSummary] {
-        matching(tasks.completedLists)
+        matching(tasks.switcherCompletedLists)
     }
 
     private func matching(_ lists: [TaskListSummary]) -> [TaskListSummary] {
@@ -580,7 +867,7 @@ struct TaskListsDirectoryView: View {
     private func open(_ scope: TaskScope) {
         model.selectedTaskID = nil
         tasks.selectScope(scope)
-        model.taskListsDirectoryPresented = false
+        if inSheet { dismiss() } else { model.taskListsDirectoryPresented = false }
     }
 }
 
@@ -666,46 +953,76 @@ struct TaskRowView: View {
     }
 
     #if os(iOS)
-    /// The same two-line rhythm as the compact Session row: identity and recency on top,
-    /// state and owner below. Keeping titles to one line makes a long batch of similarly named
-    /// tasks much faster to scan while the detail screen remains the place for the full title.
+    /// The compact Session row's rhythm: the title and its time on top; below, the status pill (the
+    /// web row's and the task page's) and ONE phrase — whichever is true first of waiting on you, a
+    /// failed prerequisite, a running one, a scheduled start — else who it is assigned to, then its
+    /// first label. The comment count is gone: the web row never showed it, and its `Label` pulled
+    /// the row's separator over to its own text, leaving a stub of a line at the trailing edge.
     private var compactRow: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
                 Text(task.title).lineLimit(1)
-                if TaskListLogic.isBlocked(task) {
-                    Image(systemName: "lock.fill")
-                        .font(.orbitMeta)
-                        .foregroundStyle(task.dependencyState == "BLOCKED_FAILED" ? .red : .secondary)
-                }
                 Spacer(minLength: 8)
-                if let relativeTime {
-                    Text(relativeTime)
+                if let time = TaskListLogic.rowTime(task) {
+                    Text(time)
                         .font(.orbitMeta)
                         .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
             HStack(spacing: 7) {
                 TaskStatusPill(pill: TaskListLogic.pill(task))
-                Text(task.assignee?.name ?? "Unassigned")
-                    .font(.orbitListSubtitle)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                if let count = task.commentCount, count > 0 {
-                    Label("\(count)", systemImage: "text.bubble")
-                        .font(.orbitMeta)
+                phrase
+                if let label = task.labels?.first {
+                    Text(label)
+                        .font(.orbitMeta.weight(.medium))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 5))
+                        .layoutPriority(-1)
                 }
+                Spacer(minLength: 0)
             }
         }
         .padding(.vertical, 2)
+        // The separator starts under the title, whatever the row holds.
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .accessibilityElement(children: .combine)
     }
 
-    private var relativeTime: String? {
-        guard let timestamp = task.updatedAt ?? task.createdAt else { return nil }
-        return RelativeTime.format(timestamp)
+    @ViewBuilder
+    private var phrase: some View {
+        switch TaskListLogic.rowPhrase(task) {
+        case .waitingForConfirmation?:
+            Text(OwnerConfirmations.waitingForConfirmation)
+                .font(.orbitListSubtitle.weight(.medium))
+                .foregroundStyle(.orange)
+                .lineLimit(1)
+        case .prerequisiteCancelled?:
+            HStack(spacing: 4) {
+                Image(systemName: "lock.fill").font(.orbitMeta)
+                Text(TaskListCopy.prerequisiteCancelled).font(.orbitListSubtitle).lineLimit(1)
+            }
+            .foregroundStyle(.red)
+        case .waitingForPrerequisites?:
+            HStack(spacing: 4) {
+                Image(systemName: "lock.fill").font(.orbitMeta)
+                Text(TaskListCopy.waitingForPrerequisites).font(.orbitListSubtitle).lineLimit(1)
+            }
+            .foregroundStyle(.secondary)
+        case .starts(let local)?:
+            Text(TaskListCopy.startsPrefix + local)
+                .font(.orbitListSubtitle)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        case nil:
+            Text(task.assignee?.name ?? TaskListCopy.unassigned)
+                .font(.orbitListSubtitle)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
     }
     #endif
 }
@@ -716,7 +1033,10 @@ struct TaskStatusPill: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if pill.kind == .running { ProgressView().controlSize(.mini) }
+            // The session list's spinner, not `ProgressView`: that one bridges to a UIKit activity
+            // indicator that draws blank once a List row is detached and reattached (open a task,
+            // come back, and a running pill had lost its spinner) — see `SpinnerGlyph`.
+            if pill.kind == .running { SpinnerGlyph(color: color).scaleEffect(0.7).frame(width: 9, height: 9) }
             else { Circle().fill(color).frame(width: 6, height: 6) }
             Text(pill.label).font(.orbitMeta)
         }

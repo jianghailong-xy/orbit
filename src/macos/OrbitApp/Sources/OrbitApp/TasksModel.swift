@@ -25,8 +25,27 @@ final class TasksModel {
     /// created (`creatorSessionId` on the page, its counts and its events). Set by
     /// `showCreated(in:)`, dropped by the chip's ✕ or by picking a scope.
     private(set) var creatorFilter: TaskCreatorFilter?
-    var filter: TaskFilter = .runnable
+    /// The tab the page opens on is the one the reader last picked, else All — the web's rule, so
+    /// both clients open an account onto the same list. Only a chip writes it back
+    /// (`selectFilter`); a session's View all showing everything is not the reader choosing All.
+    var filter: TaskFilter = TaskListLogic.initialFilter(
+        remembered: UserDefaults.standard.string(forKey: TasksModel.filterDefaultsKey))
+    static let filterDefaultsKey = "orbit.tasks.filter"
     var searchText = ""
+    /// The labels the page is narrowed to. A scope like the list, not a filter over loaded rows:
+    /// the server applies labels before it counts, so the chips narrow with the rows (web `labels`).
+    private(set) var labelFilter: [String] = []
+    /// Tasks or Batches — the web's segmented control, kept in the one trailing menu here.
+    var viewMode: TaskListViewMode = .tasks
+    /// Happening now: running, queued, in progress or failed, fetched apart from the paged rows,
+    /// which are newest-first and would never reach them (`GET /tasks/active`).
+    private(set) var pinned: [TaskItem] = []
+    private(set) var pinnedTotal = 0
+    /// Every label in scope with its tallies — Batches, and the labels sheet's choices.
+    private(set) var labelSummary: TaskLabelSummary?
+    private(set) var openingConsole = false
+    private var pinnedGeneration = 0
+    private var labelsGeneration = 0
     var sort: TaskSort = .created {
         didSet {
             guard sort != oldValue else { return }
@@ -131,13 +150,50 @@ final class TasksModel {
     /// response and made every event-driven refresh repeat it.
     var queryKey: String {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "\(scope.id)|\(filter.rawValue)|\(q)|\(creatorFilter?.sessionID ?? "")"
+        return "\(scope.id)|\(filter.rawValue)|\(q)|\(creatorFilter?.sessionID ?? "")|\(labelFilter.joined(separator: ","))"
     }
 
-    /// What the scope counts are read for: the list scope and the creator scope together, since both
-    /// narrow them.
+    /// What the scope counts are read for: the list, creator and label scopes together, since all
+    /// three narrow them.
     private var countsScope: String {
-        "\(scope.id)|\(creatorFilter?.sessionID ?? "")"
+        "\(scope.id)|\(creatorFilter?.sessionID ?? "")|\(labelFilter.joined(separator: ","))"
+    }
+
+    /// The `projectId` every read of this page sends: `none` on the browsing scopes (the tasks filed
+    /// under no project), nothing on a list the reader opened or one conversation's tasks.
+    var projectScope: String? {
+        TaskListLogic.projectScope(scope, creatorSessionID: creatorFilter?.sessionID)
+    }
+
+    /// Whether Happening now is pinned over the rows (web: the unfiltered tab of a browsing view).
+    var pinsHappeningNow: Bool {
+        viewMode == .tasks
+            && TaskListLogic.pinsHappeningNow(filter: filter, creatorSessionID: creatorFilter?.sessionID,
+                                              labels: labelFilter)
+    }
+
+    /// The pinned rows, ranked by live state (running, queued, in progress, failed) — the web's
+    /// `compareTasksBy(status)` over the complete strip.
+    var visiblePinned: [TaskItem] {
+        guard pinsHappeningNow else { return [] }
+        return TaskListLogic.sorted(pinned, by: .status, descending: false)
+    }
+
+    /// The rows below Happening now: the page's own, less any row already pinned above them — the
+    /// same row twice reads as two tasks.
+    var visibleRest: [TaskItem] {
+        let pinnedKeys = Set(visiblePinned.map { PublicID.storageKey($0.id) })
+        guard !pinnedKeys.isEmpty else { return visible }
+        return visible.filter { !pinnedKeys.contains(PublicID.storageKey($0.id)) }
+    }
+
+    /// The lists the title switcher offers: the owner's own, not a project's (those are reached
+    /// from the project's page, and their tasks are not on this one).
+    var switcherActiveLists: [TaskListSummary] {
+        activeLists.filter { !TaskListLogic.isProjectOnlyList($0) }
+    }
+    var switcherCompletedLists: [TaskListSummary] {
+        completedLists.filter { !TaskListLogic.isProjectOnlyList($0) }
     }
 
     func item(_ id: String) -> TaskItem? {
@@ -146,17 +202,35 @@ final class TasksModel {
 
     func isMutating(_ id: String) -> Bool { mutatingTaskIDs.contains(id) }
 
-    /// Switch list scope as one UI transaction. Web scopes filter/search state to the route, so a
-    /// newly opened list starts at Ready with a clean search and created-desc ordering.
+    /// Switch list scope as one UI transaction. The web keeps the tab the reader last picked across
+    /// scopes and scopes the search and labels to the route, so a newly opened list keeps its tab,
+    /// starts with a clean search and no labels, and orders newest-first.
     func selectScope(_ newScope: TaskScope) {
         guard scope != newScope || creatorFilter != nil else { return }
         resetSnapshot()
         scope = newScope
         creatorFilter = nil
-        filter = .runnable
+        labelFilter = []
         searchText = ""
         sort = .created
         descending = true
+    }
+
+    /// A chip: the tab, remembered for the next time the page opens.
+    func selectFilter(_ newFilter: TaskFilter) {
+        filter = newFilter
+        UserDefaults.standard.set(newFilter.rawValue, forKey: Self.filterDefaultsKey)
+    }
+
+    /// Narrow the page to these labels (all of them, as the server reads it), or widen it back.
+    func applyLabels(_ labels: [String]) {
+        guard labels != labelFilter else { return }
+        resetSnapshot()
+        labelFilter = labels
+    }
+
+    func removeLabel(_ label: String) {
+        applyLabels(labelFilter.filter { $0 != label })
     }
 
     /// `View all in Tasks ›` on a session's card: everything that session created, on every status —
@@ -165,6 +239,7 @@ final class TasksModel {
         resetSnapshot()
         scope = .all
         creatorFilter = creator
+        labelFilter = []
         filter = .all
         searchText = ""
         sort = .created
@@ -201,6 +276,10 @@ final class TasksModel {
         eventSeedRetryKey = nil
         eventSeedRetryNotBefore = .distantPast
         errorText = nil
+        // The strip and the label table are read for a scope too; the next `load` reads both again.
+        pinned = []
+        pinnedTotal = 0
+        labelSummary = nil
     }
 
     /// The section, not its list column, owns event-driven work. On compact iPhone navigation the
@@ -248,6 +327,10 @@ final class TasksModel {
         defer { if generation == listGeneration { loading = false } }
 
         scheduleCountsRefresh(force: refreshCounts)
+        // The strip and the label table are their own bounded reads, beside the page rather than
+        // in front of it: the first rows never wait on them.
+        Task { await self.loadPinned() }
+        if viewMode == .batches || labelSummary == nil { Task { await self.loadLabelSummary() } }
 
         do {
             // Deep links can select a list before the navigation summaries arrive. Fetch only its
@@ -268,7 +351,9 @@ final class TasksModel {
                                                   listId: scope.listQueryValue,
                                                   query: query.isEmpty ? nil : query,
                                                   counts: .none,
-                                                  creatorSessionId: creatorFilter?.sessionID)
+                                                  creatorSessionId: creatorFilter?.sessionID,
+                                                  projectId: projectScope,
+                                                  labels: labelFilter)
             guard generation == listGeneration, key == queryKey else { return false }
             items = response.items
             // Be liberal toward a transitional server that still includes this block, but current
@@ -318,13 +403,16 @@ final class TasksModel {
         let generation = countsGeneration
         let listID = scope.listQueryValue
         let creatorID = creatorFilter?.sessionID
+        let projectID = projectScope
+        let labels = labelFilter
         let coveredInvalidationVersion = countsInvalidationVersion
         countsTask?.cancel()
         pendingForcedCountsRefresh = false
         countsScopeKey = key
         countsTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            let response = try? await self.api.taskCounts(listId: listID, creatorSessionId: creatorID)
+            let response = try? await self.api.taskCounts(listId: listID, creatorSessionId: creatorID,
+                                                          projectId: projectID, labels: labels)
             guard !Task.isCancelled,
                   self.countsGeneration == generation,
                   self.countsScope == key else { return }
@@ -364,7 +452,9 @@ final class TasksModel {
                                                   listId: scope.listQueryValue,
                                                   query: query.isEmpty ? nil : query,
                                                   counts: .none,
-                                                  creatorSessionId: creatorFilter?.sessionID)
+                                                  creatorSessionId: creatorFilter?.sessionID,
+                                                  projectId: projectScope,
+                                                  labels: labelFilter)
             guard generation == listGeneration, key == queryKey else { return }
             let existing = Set(items.map(\.id))
             items.append(contentsOf: response.items.filter { !existing.contains($0.id) })
@@ -389,10 +479,88 @@ final class TasksModel {
             lists = response
         }
         guard generation == navigationGeneration else { return }
-        // This surface needs one number, not the scope-wide status/running/Ready aggregate block.
-        if let response = try? await api.taskPage(limit: 1, listId: "none", counts: .total),
+        // This surface needs one number, not the scope-wide status/running/Ready aggregate block —
+        // counted over the tasks outside projects, the scope the No list page lists.
+        if let response = try? await api.taskPage(limit: 1, listId: "none", counts: .total, projectId: "none"),
            generation == navigationGeneration {
             unlistedCount = response.total ?? 0
+        }
+    }
+
+    /// Happening now, for the scope on screen. Bounded by the server (50, with the true total), so
+    /// it is re-read whole rather than patched.
+    func loadPinned() async {
+        pinnedGeneration &+= 1
+        let generation = pinnedGeneration
+        let key = queryKey
+        guard pinsHappeningNow else {
+            pinned = []
+            pinnedTotal = 0
+            return
+        }
+        guard let response = try? await api.activeTasks(listId: scope.listQueryValue, projectId: projectScope),
+              generation == pinnedGeneration, key == queryKey else { return }
+        pinned = response.items
+        pinnedTotal = response.total
+    }
+
+    /// The label table for the scope on screen — Batches, and the labels sheet's choices.
+    func loadLabelSummary() async {
+        labelsGeneration &+= 1
+        let generation = labelsGeneration
+        let scopeID = scope.id
+        guard let response = try? await api.taskLabels(listId: scope.listQueryValue, projectId: projectScope),
+              generation == labelsGeneration, scopeID == scope.id else { return }
+        labelSummary = response
+    }
+
+    // MARK: several at once (Select Tasks)
+
+    /// Run the selected tasks, at most `maxConcurrent` at once, under one press's name — drawn here,
+    /// at the gesture, exactly as `execute` draws its own (`BatchExecuteRequest.triggerId`).
+    func batchRun(_ ids: [String], maxConcurrent: Int) async -> Bool {
+        let triggerId = PublicID.newToken()
+        return await batch { try await self.api.batchExecute(
+            BatchExecuteRequest(taskIds: ids, maxConcurrent: maxConcurrent, triggerId: triggerId)) }
+    }
+
+    func batchStop(_ ids: [String]) async -> Bool {
+        await batch { try await self.api.batchStop(BatchStopRequest(taskIds: ids)) }
+    }
+
+    func batchAssign(_ ids: [String], assigneeId: String?) async -> Bool {
+        await batch { try await self.api.batchAssign(BatchAssignRequest(taskIds: ids, assigneeId: assigneeId)) }
+    }
+
+    func batchDelete(_ ids: [String]) async -> Bool {
+        await batch { try await self.api.batchDelete(BatchDeleteRequest(taskIds: ids)) }
+    }
+
+    /// One bulk write, then the whole page read again: a bulk write moves rows across tabs and
+    /// tallies at once, which is exactly what the incremental per-row path is not for.
+    private func batch(_ operation: @escaping () async throws -> Void) async -> Bool {
+        errorText = nil
+        do {
+            try await operation()
+            await refresh()
+            return true
+        } catch {
+            errorText = friendly(error)
+            return false
+        }
+    }
+
+    /// A list's steering session: the one durable conversation the list is steered from, resolved
+    /// or created by the server. Answers its id, or nil with the server's reason on screen.
+    func openListConsole(_ listID: String) async -> String? {
+        guard !openingConsole else { return nil }
+        openingConsole = true
+        defer { openingConsole = false }
+        do {
+            return try await api.openTaskListConsole(listID)
+        } catch {
+            errorText = friendly(error)
+            return nil
         }
     }
 
@@ -464,6 +632,8 @@ final class TasksModel {
     private func performChangedTaskRefresh(_ ids: Set<String>) async {
         guard sectionActive else { return }
         await performChangedTaskPageRefresh(ids)
+        // The strip is bounded and ranked by live state, so a changed task re-reads it whole.
+        if pinsHappeningNow { await loadPinned() }
         // Detail is independent from the list request generation. Even if a periodic page load
         // superseded the row pass (or the row endpoint failed), the selected detail must still be
         // read after this event; `loadDetail` rechecks the live selection before committing.
@@ -535,7 +705,9 @@ final class TasksModel {
             filter: filter,
             search: searchText,
             hasMore: nextCursor != nil,
-            creatorSessionID: creatorFilter?.sessionID
+            creatorSessionID: creatorFilter?.sessionID,
+            outsideProjectsOnly: projectScope == "none",
+            labels: labelFilter
         )
         items = result.items
         return result.needsPageReconcile
@@ -550,7 +722,9 @@ final class TasksModel {
                                                   listId: scope.listQueryValue,
                                                   query: query.isEmpty ? nil : query,
                                                   counts: .none,
-                                                  creatorSessionId: creatorFilter?.sessionID)
+                                                  creatorSessionId: creatorFilter?.sessionID,
+                                                  projectId: projectScope,
+                                                  labels: labelFilter)
             guard generation == listGeneration, key == queryKey else { return }
             items = response.items
             nextCursor = response.nextCursor

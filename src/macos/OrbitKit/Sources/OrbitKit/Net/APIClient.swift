@@ -655,26 +655,50 @@ public final class APIClient: @unchecked Sendable {
     /// `creatorSessionId` scopes the page to the tasks one session created — where that session's
     /// "Tasks created here" card sends View all. A scope like `listId`, so it narrows the counts
     /// (`taskCounts`) too.
+    /// `projectId` is a project's tasks, or `"none"` for the tasks filed under no project — the
+    /// Tasks page's scope. `labels` narrows to the tasks carrying all of them, counts included; sent
+    /// repeated so a label may contain a comma.
     public func taskPage(cursor: String? = nil, limit: Int = 200, status: String? = nil,
                          listId: String? = nil, query: String? = nil,
                          counts: TaskPageCountsMode = .full,
-                         creatorSessionId: String? = nil) async throws -> TaskPage {
+                         creatorSessionId: String? = nil,
+                         projectId: String? = nil,
+                         labels: [String] = []) async throws -> TaskPage {
         var q = [URLQueryItem(name: "limit", value: String(limit))]
         if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let status { q.append(URLQueryItem(name: "status", value: status)) }
         if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
         if let creatorSessionId { q.append(URLQueryItem(name: "creatorSessionId", value: creatorSessionId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        for label in labels { q.append(URLQueryItem(name: "labels", value: label)) }
         if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
         if counts != .full { q.append(URLQueryItem(name: "counts", value: counts.rawValue)) }
         return try await getCancellable("tasks/page", query: q)
     }
     /// Scope-wide tab/progress totals are independent from page filter/search. Keeping them on
     /// their own cancellable request lets rapid query changes reuse one in-flight scope read.
-    public func taskCounts(listId: String? = nil, creatorSessionId: String? = nil) async throws -> TaskPageCounts {
+    public func taskCounts(listId: String? = nil, creatorSessionId: String? = nil,
+                           projectId: String? = nil, labels: [String] = []) async throws -> TaskPageCounts {
         var q: [URLQueryItem] = []
         if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
         if let creatorSessionId { q.append(URLQueryItem(name: "creatorSessionId", value: creatorSessionId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        for label in labels { q.append(URLQueryItem(name: "labels", value: label)) }
         return try await getCancellable("tasks/counts", query: q)
+    }
+    /// Happening now: running, queued, in progress and failed, in scope — bounded, with its total.
+    public func activeTasks(listId: String? = nil, projectId: String? = nil) async throws -> ActiveTasksPage {
+        var q: [URLQueryItem] = []
+        if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        return try await getCancellable("tasks/active", query: q)
+    }
+    /// Every label in scope with its tallies — the web's Batches table.
+    public func taskLabels(listId: String? = nil, projectId: String? = nil) async throws -> TaskLabelSummary {
+        var q: [URLQueryItem] = []
+        if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        return try await getCancellable("tasks/labels", query: q)
     }
     public func task(_ id: String) async throws -> TaskItem { try await get("tasks/\(id)") }
     /// One list-row-shaped task for a `task.changed` event. Unlike `task(_:)`, this deliberately
@@ -728,12 +752,18 @@ public final class APIClient: @unchecked Sendable {
         // control plane kept saying "being answered right now" has to be told that.
         throw lastError ?? APIError.invalidResponse
     }
-    /// AUDIT (H2H): no shell calls this — neither macOS nor iOS has a bulk-Run surface — so it
-    /// carries no press id. Whoever adds that surface must add `triggerId` to
-    /// `BatchExecuteRequest` and draw it at the gesture, exactly as `executeTask` does.
+    /// The iPhone's Select Tasks › Run. The press is named in the request (`triggerId`), drawn at
+    /// the gesture exactly as `executeTask`'s is, so the 401 refresh-and-retry resends one press.
     public func batchExecute(_ req: BatchExecuteRequest) async throws { try await postRaw("tasks/batch-execute", body: req) }
     public func batchStop(_ req: BatchStopRequest) async throws { try await postRaw("tasks/batch-stop", body: req) }
     public func batchAssign(_ req: BatchAssignRequest) async throws { try await postRaw("tasks/batch-assign", body: req) }
+    public func batchDelete(_ req: BatchDeleteRequest) async throws { try await postRaw("tasks/batch-delete", body: req) }
+    /// A list's steering session: the one durable conversation the list is steered from, resolved
+    /// or created by the server. Answers the session id.
+    public func openTaskListConsole(_ id: String) async throws -> String {
+        let console: TaskListConsole = try await post("task-lists/\(id)/console", body: [String: String]())
+        return console.sessionId
+    }
     public func addTaskComment(taskID: String, _ req: CreateTaskCommentRequest) async throws { try await postRaw("tasks/\(taskID)/comments", body: req) }
     public func removeTaskComment(taskID: String, commentID: String) async throws { try await deleteRaw("tasks/\(taskID)/comments/\(commentID)") }
     public func addTaskDependency(taskID: String, _ req: AddDependencyRequest) async throws { try await postRaw("tasks/\(taskID)/dependencies", body: req) }

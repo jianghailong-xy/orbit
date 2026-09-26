@@ -122,7 +122,7 @@ final class CreatedTasksWiringTests: XCTestCase {
             XCTAssertTrue(try slice(model, from: start, to: end).contains(scoped), "\(start) reads unscoped")
         }
         let counts = try slice(model, from: "private func scheduleCountsRefresh(", to: "func loadMore() async {")
-        XCTAssertTrue(counts.contains("taskCounts(listId: listID, creatorSessionId: creatorID)"))
+        XCTAssertTrue(counts.contains("taskCounts(listId: listID, creatorSessionId: creatorID,"))
         XCTAssertTrue(counts.contains("let key = countsScope"), "counts are keyed by both scopes")
         XCTAssertTrue(try slice(model, from: "private func applyChangedTask(", to: "\n    }")
             .contains("creatorSessionID: creatorFilter?.sessionID"))
