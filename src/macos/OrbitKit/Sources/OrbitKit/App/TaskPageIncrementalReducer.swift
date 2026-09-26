@@ -33,6 +33,10 @@ public enum TaskPageIncrementalReducer {
     ///   reconciliation from the caller.
     /// - `creatorSessionID` is the page's `creatorSessionId` scope: a task another session (or no
     ///   session) created is not on such a page, however well it matches the rest.
+    /// - `outsideProjectsOnly` is the page's `projectId=none` scope: a project's task is on that
+    ///   project's page, not on this one, however well it matches the rest.
+    /// - `labels` is the page's label scope: a row carries every one of them or is not on the page
+    ///   (the server's `hasEvery`).
     public static func reduce(items: [TaskItem],
                               changed: TaskItem?,
                               taskID: String,
@@ -40,7 +44,9 @@ public enum TaskPageIncrementalReducer {
                               filter: TaskFilter,
                               search: String,
                               hasMore: Bool,
-                              creatorSessionID: String? = nil) -> Result {
+                              creatorSessionID: String? = nil,
+                              outsideProjectsOnly: Bool = false,
+                              labels: [String] = []) -> Result {
         let taskKey = PublicID.storageKey(taskID)
         let existingIndex = items.firstIndex { PublicID.storageKey($0.id) == taskKey }
 
@@ -55,6 +61,8 @@ public enum TaskPageIncrementalReducer {
 
         let belongs = matches(changed, scope: scope, filter: filter, search: search)
             && matchesCreator(changed, creatorSessionID)
+            && (!outsideProjectsOnly || changed.projectId == nil)
+            && Set(labels).isSubset(of: Set(changed.labels ?? []))
         if let existingIndex {
             var next = items
             if belongs {
