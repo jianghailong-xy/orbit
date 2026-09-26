@@ -228,6 +228,41 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
                           + "and its refusal")
     }
 
+    /// The press closes the card for the version it signed, and for no other. The set can move after
+    /// it — the owner's own yes to a held proposal moves it — and the version standing then asks the
+    /// same question again. 2026-09-27: confirmed on the iPhone at 21:42 UTC, an edit to criterion 7
+    /// approved there at 21:54, and the conversation drew nothing to press while its row in the list
+    /// read "Waiting for approval": the first press had closed the card for good.
+    func testAVersionThatMovesAfterAPressHereAsksAgain() throws {
+        let console = try source(Self.consolePath)
+        let press = try section(console, from: "func confirmStandardSet() async {",
+                                to: "\n    // MARK: the project's two owner cards")
+        XCTAssertTrue(statements(press).joined(separator: " ").contains("confirmedHereDigest = digest"),
+                      "the press no longer records which version it closed the card for, so no "
+                          + "later version can be told apart from it")
+
+        let refresh = try section(console,
+                                  from: "func refreshRulerQuestions(force: Bool = false) async {",
+                                  to: "\n    /// Whether this project is waiting to be started")
+        let reads = statements(refresh)
+        let reopen = try XCTUnwrap(reads.firstIndex(of: "reopenConfirmationForANewVersion()"),
+                                   "the read no longer lets the card back in for a new version")
+        let deliver = try XCTUnwrap(reads.firstIndex(of: "deliver(.acceptanceConfirmation)"))
+        XCTAssertLessThan(reopen, deliver,
+                          "the card has to be let back in before it is delivered, or the delivery is "
+                              + "refused by the press that closed it")
+
+        let reopening = statements(try section(
+            console, from: "private func reopenConfirmationForANewVersion() {", to: "\n    }\n"))
+            .joined(separator: " ")
+        XCTAssertTrue(reopening.contains("standing != signed"),
+                      "only a DIFFERENT version reopens it: a read that left before the press landed "
+                          + "still shows the signed one, and must not bring the answered card back")
+        XCTAssertTrue(reopening.contains(
+            "closedCards.remove(DeliveredDecisionCard(kind: .acceptanceConfirmation).id)"),
+                      "and what it lets back in is the confirmation card's own id")
+    }
+
     // MARK: what the app draws with it
 
     /// The row reaches the screen: the switch dispatches it, the card draws the line and the stamp
