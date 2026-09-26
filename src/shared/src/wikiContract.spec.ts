@@ -247,7 +247,8 @@ describe('wiki contract', () => {
       expect(r.addedByThisContract, `${r.code} is not in design §5.4 and does not say it was added`).toBe(true);
     }
     // A code mentioned anywhere in the prose is a declared one: a typo here would be a refusal nobody sends.
-    const mentioned = new Set(JSON.stringify(CONTRACT).match(/WIKI_[A-Z_]+/gu));
+    // An environment variable that merely contains one (`ORBIT_WIKI_CANARY_OWNERS`) is not a code.
+    const mentioned = new Set(JSON.stringify(CONTRACT).match(/(?<![A-Z_])WIKI_[A-Z_]+/gu));
     for (const code of mentioned) expect(codes, `${code} is mentioned but not declared`).toContain(code);
     // Tenancy and the owner channel keep their answers.
     const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code).httpStatus;

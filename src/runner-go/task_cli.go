@@ -2837,7 +2837,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// it keeps seeing no session_* capability.
 	includeHeadlessSession := service != nil || (!includeOrchestration && ctx.SessionID == "")
 	if service != nil {
-		ctx.ServiceToken = &cliServiceTokenContext{Scopes: service.Scopes, AgentID: service.AgentID}
+		ctx.ServiceToken = &cliServiceTokenContext{Scopes: service.Scopes, AgentID: service.WorkspaceID}
 	}
 	descriptors := make(map[string]map[string]interface{})
 	for _, d := range toolDescriptors(false, includeOrchestration || includeHeadlessSession) {

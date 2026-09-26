@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { WikiHome } from '../components/WikiHome';
 import type { WikiChangeset, WikiEntry, WikiSpaceWithUsage, WikiTimeline } from '../lib/wiki';
+import { WIKI_DISABLED_NOTE, WIKI_NO_SPACES } from '../lib/wiki';
 import { WikiPage } from './WikiPage';
 
 vi.hoisted(() => {
@@ -141,9 +142,13 @@ const REVIEW = [
   },
 ] as unknown as WikiChangeset[];
 
-function paint(route: 'home' | 'topic', path: string, seeds: { entries?: WikiEntry[] } = {}): string {
+function paint(
+  route: 'home' | 'topic',
+  path: string,
+  seeds: { entries?: WikiEntry[]; spaces?: unknown } = {},
+): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(['wiki', 'spaces'], [{ ...SPACE, pendingOps: 3 }]);
+  client.setQueryData(['wiki', 'spaces'], 'spaces' in seeds ? seeds.spaces : [{ ...SPACE, pendingOps: 3 }]);
   client.setQueryData(['wiki', 'space', SPACE_ID], SPACE);
   client.setQueryData(['wiki', 'space', SPACE_ID, 'entries'], seeds.entries ?? ENTRIES);
   client.setQueryData(['wiki', 'space', SPACE_ID, 'timeline'], TIMELINE);
@@ -268,5 +273,16 @@ describe('a topic page', () => {
     expect(html).toContain('Project DONE is a projection, not a gate');
     expect(html).toContain('no longer sent to agents');
     expect(html).toContain('wk-erow sup');
+  });
+});
+
+describe('the Wiki, for an account the server has not switched it on for', () => {
+  it('says so on every route, instead of drawing a wiki with nothing in it', () => {
+    for (const path of ['/wiki', '/wiki/orbit', '/wiki/review', '/wiki/orbit/t/tasks-dispatch']) {
+      const html = paint('topic', path, { spaces: null });
+      expect(html, path).toContain(WIKI_DISABLED_NOTE);
+      expect(html, path).not.toContain(WIKI_NO_SPACES);
+      expect(html, path).not.toContain('>Principles<');
+    }
   });
 });

@@ -14,6 +14,7 @@ import { WikiTopicPage } from '../components/WikiTopicPage';
 import { wikiEntriesQuery, wikiEntryQuery, wikiSpaceQuery, wikiSpacesQuery } from '../lib/queries';
 import { routeId } from '../lib/idCodec';
 import {
+  WIKI_DISABLED_NOTE,
   WIKI_NO_SPACES,
   WIKI_NO_SUCH_SPACE,
   WIKI_SEARCH_PLACEHOLDER,
@@ -59,6 +60,15 @@ export function WikiPage({ route }: { route: WikiRoute }) {
     [spaces.data, asked],
   );
 
+  // The server has not switched the wiki on for this account (WIKI_DISABLED): every route below it
+  // would be refused, so the page says why instead of drawing a wiki with nothing in it.
+  if (spaces.data === null) {
+    return (
+      <WikiFrame space={null}>
+        <WikiEmpty>{WIKI_DISABLED_NOTE}</WikiEmpty>
+      </WikiFrame>
+    );
+  }
   // Review's own route carries no space and asks across every one of them, which is a different
   // question from the one its /wiki/:space/review sibling asks (see `wikiReviewQuery`).
   if (route === 'review' && !asked) {

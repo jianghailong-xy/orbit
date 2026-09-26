@@ -639,7 +639,10 @@
     "rollout": {
       "env": "ORBIT_WIKI",
       "values": ["off", "canary", "on"],
-      "off": "the apiserver answers 404 WIKI_DISABLED, the claim carries wikiDisabled, and the runner mounts none of the three tools"
+      "default": "on",
+      "canaryOwnersEnv": "ORBIT_WIKI_CANARY_OWNERS",
+      "canary": "only the accounts ORBIT_WIKI_CANARY_OWNERS lists (comma-separated ids) have the wiki; every other account is as under off",
+      "off": "the apiserver answers 404 WIKI_DISABLED on every route of both doors, the claim carries wikiDisabled, the runner mounts none of the three tools, no <orbit_wiki_context> is pushed, and an orbit-wiki: link card reads as unavailable"
     },
     "doorMissing": "A runner newer than its apiserver says in a sentence that the server has no wiki door yet, as watch_tools.go's watchDoorMissing does."
   },

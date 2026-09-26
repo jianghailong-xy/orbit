@@ -49,9 +49,10 @@ function space(pendingOps: number): WikiSpaceRow {
   };
 }
 
-function paint(spaces: WikiSpaceRow[], path = '/'): string {
+/** `null` is the server's WIKI_DISABLED (`wikiSpacesQuery`); `undefined` is a read not answered yet. */
+function paint(spaces: WikiSpaceRow[] | null | undefined, path = '/'): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(['wiki', 'spaces'], spaces);
+  if (spaces !== undefined) client.setQueryData(['wiki', 'spaces'], spaces);
   client.setQueryData(['user', 'me'], { id: 'user', email: 'a@b.c', name: 'wikova', createdAt: '', role: 'MEMBER' });
   client.setQueryData(['workspaces'], []);
   client.setQueryData(['runners'], []);
@@ -106,5 +107,22 @@ describe('the sidebar’s Wiki entry', () => {
   it('marks the row as the open one on a wiki route', () => {
     const html = paint([space(1)], '/wiki/orbit');
     expect(html).toContain('aria-current="page"');
+  });
+});
+
+describe('the sidebar, for an account the server has not switched the wiki on for', () => {
+  it('has no Wiki row in either form, and keeps every other row', () => {
+    const html = paint(null);
+    expect(html).not.toContain('>Wiki<');
+    expect(html).not.toContain('title="Wiki"');
+    expect(html).not.toContain('anticon-book');
+    expect(html).toContain('>Projects<');
+    expect(html).toContain('>Runners<');
+  });
+
+  it('offers no Wiki row before the server has answered, either', () => {
+    const html = paint(undefined);
+    expect(html).not.toContain('>Wiki<');
+    expect(html).toContain('>Projects<');
   });
 });

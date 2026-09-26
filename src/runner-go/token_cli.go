@@ -25,7 +25,7 @@ const envServiceToken = "ORBIT_SERVICE_TOKEN"
 const tokenHelp = `orbit token — service credentials for headless processes
 
 Usage:
-  orbit token mint --scope SCOPE[,SCOPE...] [--agent-id ID] [--ttl DURATION] [--label TEXT] [--json]
+  orbit token mint --scope SCOPE[,SCOPE...] [--workspace-id ID] [--ttl DURATION] [--label TEXT] [--json]
   orbit token list [--json]
   orbit token revoke TOKEN_ID [--json]
 
@@ -34,19 +34,20 @@ The destructive verbs (interrupt, merge, end, complete) are not grantable at all
 
 A minted token is printed once and never stored by the CLI. Put it in the launchd/cron
 environment as ORBIT_SERVICE_TOKEN; ` + "`orbit session`" + ` uses it in place of the runner
-credential and the control plane confines it to its scopes, this runner, and its agent.
+credential and the control plane confines it to its scopes, this runner, and its workspace.
 `
 
 var tokenActionHelp = map[string]string{
 	"mint": `orbit token mint — mint a service credential for a headless process
 
 Usage:
-  orbit token mint --scope SCOPE[,SCOPE...] [--agent-id ID] [--ttl DURATION] [--label TEXT] [--json]
+  orbit token mint --scope SCOPE[,SCOPE...] [--workspace-id ID] [--ttl DURATION] [--label TEXT] [--json]
 
 Options:
   --scope SCOPE[,SCOPE...]  Repeatable. session:get | session:list | session:send | session:create
-  --agent-id ID             Confine the token to one agent. REQUIRED with session:create, so a
-                            leaked token can only ever start the agent it was minted for.
+  --workspace-id ID         Confine the token to one workspace. REQUIRED with session:create, so a
+                            leaked token can only ever start the workspace it was minted for.
+                            --agent-id is the old name for the same flag.
   --ttl DURATION            Lifetime, e.g. 24h, 30m, 90d (default 24h, max 90d)
   --label TEXT              Shown by 'orbit token list' to identify it later
   --json
@@ -134,7 +135,8 @@ func cliTokenMint(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit token mint")
 	var scopes repeatableFlag
 	fs.Var(&scopes, "scope", "granted scope (repeatable, comma-separated)")
-	agentID := fs.String("agent-id", "", "confine the token to one agent")
+	workspaceID := fs.String("workspace-id", "", "confine the token to one workspace")
+	agentID := fs.String("agent-id", "", "old name for --workspace-id")
 	label := fs.String("label", "", "human label")
 	ttl := fs.String("ttl", "", "lifetime, e.g. 24h (default 24h, max 90d)")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
@@ -152,15 +154,24 @@ func cliTokenMint(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	body := map[string]interface{}{"scopes": requested, "ttlSeconds": ttlSeconds}
+	pin, pinned := strings.TrimSpace(*workspaceID), flagWasSet(fs, "workspace-id")
 	if flagWasSet(fs, "agent-id") {
-		if err := validatePathSegmentID(strings.TrimSpace(*agentID)); err != nil {
-			return fmt.Errorf("agent %w", err)
+		if pinned {
+			return fmt.Errorf("--workspace-id and --agent-id are the same flag; pass one")
 		}
-		body["agentId"] = strings.TrimSpace(*agentID)
+		pin, pinned = strings.TrimSpace(*agentID), true
+	}
+	body := map[string]interface{}{"scopes": requested, "ttlSeconds": ttlSeconds}
+	if pinned {
+		if err := validatePathSegmentID(pin); err != nil {
+			return fmt.Errorf("workspace %w", err)
+		}
+		// The control plane's name since the Agent → Workspace rename; the servers that shipped it
+		// read `agentId` as no pin at all, refusing a create token and minting a read one unconfined.
+		body["workspaceId"] = pin
 	} else if contains(requested, "session:create") {
 		// Fail here rather than round-tripping: the pin is the whole authorization for create.
-		return fmt.Errorf("--agent-id is required with the session:create scope")
+		return fmt.Errorf("--workspace-id is required with the session:create scope")
 	}
 	if flagWasSet(fs, "label") {
 		if strings.TrimSpace(*label) == "" {
@@ -180,21 +191,21 @@ func cliTokenMint(args []string, out io.Writer) error {
 		return writeCLIRawJSON(out, raw, true)
 	}
 	var minted struct {
-		ID        string   `json:"id"`
-		Token     string   `json:"token"`
-		Scopes    []string `json:"scopes"`
-		AgentID   string   `json:"agentId"`
-		ExpiresAt string   `json:"expiresAt"`
+		ID          string   `json:"id"`
+		Token       string   `json:"token"`
+		Scopes      []string `json:"scopes"`
+		WorkspaceID string   `json:"workspaceId"`
+		ExpiresAt   string   `json:"expiresAt"`
 	}
 	if err := json.Unmarshal(raw, &minted); err != nil {
 		return writeCLIRawJSON(out, raw, false)
 	}
-	fmt.Fprintf(out, "id:      %s\n", minted.ID)
-	fmt.Fprintf(out, "scopes:  %s\n", strings.Join(minted.Scopes, ", "))
-	if minted.AgentID != "" {
-		fmt.Fprintf(out, "agent:   %s\n", minted.AgentID)
+	fmt.Fprintf(out, "id:        %s\n", minted.ID)
+	fmt.Fprintf(out, "scopes:    %s\n", strings.Join(minted.Scopes, ", "))
+	if minted.WorkspaceID != "" {
+		fmt.Fprintf(out, "workspace: %s\n", minted.WorkspaceID)
 	}
-	fmt.Fprintf(out, "expires: %s\n", minted.ExpiresAt)
+	fmt.Fprintf(out, "expires:   %s\n", minted.ExpiresAt)
 	fmt.Fprintf(out, "\n%s\n\n", minted.Token)
 	fmt.Fprintf(out, "Shown once. Put it in the job environment as %s=<token>.\n", envServiceToken)
 	fmt.Fprintf(out, "Revoke with: orbit token revoke %s\n", minted.ID)
@@ -307,9 +318,9 @@ func contains(values []string, needle string) bool {
 // ── Reading the token this process was given ───────────────────────────────
 
 type serviceTokenClaims struct {
-	Scopes  []string `json:"scopes"`
-	AgentID string   `json:"agentId"`
-	Exp     int64    `json:"exp"`
+	Scopes      []string `json:"scopes"`
+	WorkspaceID string   `json:"workspaceId"`
+	Exp         int64    `json:"exp"`
 }
 
 // currentServiceToken returns the token in the environment, if any. It is passed straight to the

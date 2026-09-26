@@ -437,6 +437,7 @@ function AccountRow({
   runner,
   account,
   duplicateOf,
+  lastOfGroup,
   signIn,
   onSignIn,
 }: {
@@ -445,6 +446,9 @@ function AccountRow({
   /** The account already signed in above that this slot turned out to hold too
    *  (duplicateAccounts). Absent for the slot that made the sign-in. */
   duplicateOf?: RunnerEngineAccount;
+  /** The last account under this engine: where the rail's spine ends rather than carrying on to a
+   *  row that isn't there (.re-acct-end). */
+  lastOfGroup?: boolean;
   signIn: string | null;
   onSignIn: (panel: string | null) => void;
 }) {
@@ -480,7 +484,7 @@ function AccountRow({
   const toggle = () => onSignIn(signIn === panel ? null : panel);
 
   return (
-    <div className="re-row re-acct">
+    <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}`}>
       <div className="re-id">
         <span className="re-rail" aria-hidden="true" />
         <div style={{ minWidth: 0 }}>
@@ -685,12 +689,13 @@ function RunnerEngineCard({
                 onSignIn={setSignIn}
                 focused={engine === focusEngine}
               />
-              {accounts.map((account) => (
+              {accounts.map((account, index) => (
                 <AccountRow
                   key={account.id}
                   runner={runner}
                   account={account}
                   duplicateOf={repeats.get(account.id)}
+                  lastOfGroup={index === accounts.length - 1}
                   signIn={signIn}
                   onSignIn={setSignIn}
                 />

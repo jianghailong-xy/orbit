@@ -4,7 +4,17 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SEARCH_FOOT_IDLE, SEARCH_FOOT_SEARCHING, SEARCH_GROUP_SESSIONS, SEARCH_PLACEHOLDER, SEARCH_WIKI_GROUP, SessionSearch, openSessionSearch } from './SessionSearch';
+import {
+  SEARCH_FOOT_IDLE,
+  SEARCH_FOOT_SEARCHING,
+  SEARCH_FOOT_SEARCHING_SESSIONS,
+  SEARCH_GROUP_SESSIONS,
+  SEARCH_PLACEHOLDER,
+  SEARCH_PLACEHOLDER_SESSIONS,
+  SEARCH_WIKI_GROUP,
+  SessionSearch,
+  openSessionSearch,
+} from './SessionSearch';
 
 /**
  * ⌘K's Wiki group — mock 05d.
@@ -183,5 +193,35 @@ describe('⌘K with the wiki above the sessions', () => {
     await mount();
     await type('exit');
     expect(texts('.ssearch-foot')[0]).toContain(SEARCH_FOOT_SEARCHING);
+  });
+});
+
+describe('⌘K for an account the server has not switched the wiki on for', () => {
+  /** Every wiki route answers this account 404 WIKI_DISABLED, the spaces read among them. */
+  const refusing = (url: string) =>
+    url.startsWith('/api/wiki/')
+      ? ({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+          json: async () => ({ code: 'WIKI_DISABLED', message: 'The Orbit wiki is not on for this account' }),
+          text: async () => '{"code":"WIKI_DISABLED"}',
+        } as unknown as Response)
+      : url.startsWith('/api/sessions/search')
+        ? okJson(sessionAnswer)
+        : okJson({});
+
+  it('is the session palette it was before the wiki, and never asks the wiki anything', async () => {
+    fetchMock.mockImplementation(async (url: string) => refusing(url));
+    await mount();
+    expect(document.querySelector('.ssearch-input')?.getAttribute('placeholder')).toBe(SEARCH_PLACEHOLDER_SESSIONS);
+    await type('exit');
+    const asked = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(asked.filter((url) => url.startsWith('/api/wiki/search'))).toEqual([]);
+    expect(asked.some((url) => url.startsWith('/api/sessions/search'))).toBe(true);
+    expect(texts('.wk-pal-group')).toEqual([]);
+    expect(inDoc('.ssearch-row')).toHaveLength(1);
+    expect(texts('.ssearch-foot')[0]).toContain(SEARCH_FOOT_SEARCHING_SESSIONS);
+    expect(document.querySelector('.ssearch-input')?.getAttribute('placeholder')).toBe(SEARCH_PLACEHOLDER_SESSIONS);
   });
 });

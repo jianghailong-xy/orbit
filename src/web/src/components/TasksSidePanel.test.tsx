@@ -93,12 +93,15 @@ describe('TasksSidePanel nav', () => {
   });
 
   it('renders TOP-derived items in both the collapsed rail and the expanded nav', () => {
-    // The rail maps TOP directly; the expanded section maps navItems, which starts from TOP —
-    // so a TOP entry reaches both surfaces without either render site needing its own list.
+    // Both surfaces start from one list derived from TOP — `topItems`, which is TOP less the Wiki for
+    // an account the server has not switched it on for. The rail maps it directly; the expanded
+    // section maps navItems, which starts from it — so a TOP entry reaches both surfaces without
+    // either render site needing its own list.
+    expect(source).toContain("const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');");
     expect(source).toMatch(
-      /const navItems(?:\s*:\s*TopNavItem\[\])?\s*=\s*\n?\s*me\.data\?\.role === 'ADMIN'\s*\n?\s*\?\s*\[\.\.\.TOP,/,
+      /const navItems(?:\s*:\s*TopNavItem\[\])?\s*=\s*\n?\s*me\.data\?\.role === 'ADMIN'\s*\n?\s*\?\s*\[\.\.\.topItems,/,
     );
-    expect(source).toContain('{TOP.map((t) => (');
+    expect(source).toContain('{topItems.map((t) => (');
     expect(source).toContain('{navItems.map((t) => (');
   });
 

@@ -40,7 +40,7 @@ export function SessionCreatedTasksStrip({ sessionId }: { sessionId: string }) {
     <div className={`bg-tray${open ? ' bg-open' : ''}`}>
       <div className="bg-tray-row" onClick={toggle}>
         <CheckSquareOutlined className="bg-tray-ico" />
-        <span className="bg-tray-title">{COPY.title}</span>
+        <span className="bg-tray-title ct-head">{COPY.title}</span>
         {single ? (
           <>
             <span className="ct-one" title={single.title}>

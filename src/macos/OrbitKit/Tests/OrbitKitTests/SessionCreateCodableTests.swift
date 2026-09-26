@@ -11,7 +11,7 @@ final class SessionCreateCodableTests: XCTestCase {
         let obj = try jsonObject(CreateSessionRequest(prompt: "do it", agentId: "ag1"))
         XCTAssertEqual(obj["prompt"] as? String, "do it")
         XCTAssertEqual(obj["agentId"] as? String, "ag1")
-        for key in ["title", "assignedRunnerId", "provider", "model", "permissionMode", "effort", "shell", "attachmentIds"] {
+        for key in ["title", "assignedRunnerId", "provider", "model", "permissionMode", "effort", "fastMode", "shell", "attachmentIds"] {
             XCTAssertFalse(obj.keys.contains(key), "expected \(key) omitted")
         }
     }
@@ -27,14 +27,18 @@ final class SessionCreateCodableTests: XCTestCase {
         XCTAssertFalse(inherited.keys.contains("provider"))
     }
 
-    /// A fully-configured draft sends every pill plus the shell flag.
+    /// A fully-configured draft sends every pill plus the shell flag. Fast mode is the one pill
+    /// sent only while it is ON: like `shell`, an untouched Speed row means the lane was never
+    /// asked for, and the server reads the absent field as off — so a draft that never picked one
+    /// must not start sending `false` and turning it into a stored decision.
     func testCreateEncodesAllFields() throws {
         let obj = try jsonObject(CreateSessionRequest(
             prompt: "ls", agentId: "ag1", model: "claude-opus-4-8",
-            permissionMode: "dontAsk", effort: "high", shell: true))
+            permissionMode: "dontAsk", effort: "high", fastMode: true, shell: true))
         XCTAssertEqual(obj["model"] as? String, "claude-opus-4-8")
         XCTAssertEqual(obj["permissionMode"] as? String, "dontAsk")
         XCTAssertEqual(obj["effort"] as? String, "high")
+        XCTAssertEqual(obj["fastMode"] as? Bool, true)
         XCTAssertEqual(obj["shell"] as? Bool, true)
     }
 
