@@ -97,13 +97,39 @@ final class WorktreeCommitToastWiringTests: XCTestCase {
                       "nothing failed here, so the card that says so must not change tone")
     }
 
-    func testTheFailedCommitBranchIsUnchanged() throws {
+    /// For an error, `commitResultMessage` is the runner's plain sentence about why and what to do
+    /// (it is null for an error from an older runner), so the card leads with it and falls back to
+    /// git's words — through the same `commitFailure` the bar renders, never a second reading of it.
+    func testAFailedCommitLeadsWithTheRunnersPlainSentence() throws {
         let branch = try errorBranch()
         XCTAssertTrue(
-            branch.contains(#"message: "Commit failed", detail: Self.trimmed(new.commitError)"#),
-            "a failed commit reports the git error, and the error is the fact the user has to act on. "
-                + "Branch as written: \(branch)")
-        XCTAssertFalse(branch.contains("commitResultMessage"),
-                       "the runner's success line must not leak into the failure card")
+            branch.contains("WorktreeBarLogic.commitFailure(commitStatus: new.commitStatus, "
+                + "commitError: new.commitError, commitResultMessage: new.commitResultMessage)"),
+            "the failure card has to read the failure the way the bar does. Branch as written: \(branch)")
+        XCTAssertTrue(
+            branch.contains(#"message: "Commit failed", detail: failure?.why, tone: .error"#),
+            "and say it under THIS headline, in the error tone. Branch as written: \(branch)")
+    }
+
+    private static let barPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/WorktreeBar.swift"
+
+    /// The bar's failure panel is wired to the same reading, and its "Resolve in session" hands the
+    /// failure to the session with the bar's own `why` — detaching either is what turns this red.
+    func testTheBarsCommitFailurePanelIsWired() throws {
+        let bar = flat(try source(Self.barPath))
+        XCTAssertTrue(
+            bar.contains("WorktreeBarLogic.commitFailure(commitStatus: d.commitStatus, "
+                + "commitError: d.commitError, commitResultMessage: d.commitResultMessage)"),
+            "the bar no longer reads a failed commit through WorktreeBarLogic.commitFailure")
+        XCTAssertTrue(
+            bar.contains("WorktreeCommitFailureView(console: console, failure: commitFailure, branch: branch)"),
+            "the bar no longer renders the commit failure panel")
+        XCTAssertTrue(
+            bar.contains("console.worktree.resolveCommitInSession(branch: branch, why: failure.why)"),
+            "\"Resolve in session\" no longer hands the failure to the session")
+        let model = flat(try source(Self.modelPath))
+        XCTAssertTrue(
+            model.contains("WorktreeBarLogic.resolveCommitPrompt(branch: branch, why: why)"),
+            "the hand-off no longer sends the prompt web sends")
     }
 }

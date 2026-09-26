@@ -25,7 +25,7 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { RunnerStatus, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -77,6 +77,9 @@ const EVICTED =
   'the engine was evicted for this commit: it was running MCP servers the agent configured itself (agent-fs, agent-browser)';
 /** What git says when a commit fails. */
 const GIT_FAILED = "fatal: Unable to create '/work/.git/index.lock': File exists.";
+/** What runner-go says, in plain words, about a commit that met a held index lock (worktree.go). */
+const LOCK_HELD =
+  "A git process (pid 48213) has held this worktree's index lock for 3 minutes. Retry once it finishes, or hand it to the session.";
 
 /** A response, kept as text as well as JSON: a body that failed to parse has to be readable. */
 interface Answer {
@@ -257,6 +260,96 @@ test('the message of a commit result is read back from the session it settled', 
     assert.equal(session.worktreeDirty, true, 'a failed commit leaves the work uncommitted');
     assert.ok(session.commitResultMessage == null,
       `a failed commit's message was copied beside commitError: ${JSON.stringify(session.commitResultMessage)}`);
+  });
+
+  // What a failed commit says in plain words rides beside git's, not instead of it: the bar leads
+  // with the runner's sentence and keeps git's words behind "Show git output".
+  await t.test('error with a summary: the runner\'s sentence is commitResultMessage, git\'s stays commitError', async () => {
+    const commit = await claimedCommit();
+    await report(commit.sessionId, {
+      operationId: commit.operationId,
+      leaseOwner: commit.leaseOwner,
+      status: 'error',
+      message: GIT_FAILED,
+      summary: `  ${LOCK_HELD}  `,
+    });
+
+    const session = await read(commit.sessionId);
+    assert.equal(session.commitStatus, 'error');
+    assert.equal(session.commitError, GIT_FAILED, 'git\'s words must survive beside the summary');
+    assert.equal(session.commitResultMessage, LOCK_HELD,
+      'the runner\'s plain sentence about a failed commit cannot be read back from GET /api/sessions/:id');
+  });
+
+  /** The runner's heartbeat, carrying only what these cases are about. */
+  async function beat(expiredCommitErrors: unknown[]): Promise<void> {
+    const answer = await send('POST', '/runner/heartbeat', RUNNER_TOKEN, {
+      status: RunnerStatus.ONLINE,
+      idleCapacity: 1,
+      expiredCommitErrors,
+    });
+    assert.ok(answer.status === 200 || answer.status === 201, `heartbeat answered ${answer.status}: ${answer.text}`);
+  }
+
+  /** A commit the runner reported as failed on a held index lock. */
+  async function failedCommit(): Promise<{ sessionId: string; operationId: string; leaseOwner: string }> {
+    const commit = await claimedCommit();
+    await report(commit.sessionId, {
+      operationId: commit.operationId,
+      leaseOwner: commit.leaseOwner,
+      status: 'error',
+      message: GIT_FAILED,
+      summary: LOCK_HELD,
+    });
+    assert.equal((await read(commit.sessionId)).commitStatus, 'error', 'the fixture must start from a settled error');
+    return commit;
+  }
+
+  await t.test('a failed commit the runner reports expired is dropped from the session', async () => {
+    const commit = await failedCommit();
+    await beat([{ sessionId: commit.sessionId, operationId: commit.operationId }]);
+
+    const session = await read(commit.sessionId);
+    assert.equal(session.commitStatus, null, 'an error whose reason has gone away still shows on the bar');
+    assert.equal(session.commitError, null);
+    assert.equal(session.commitResultMessage, null);
+    assert.equal(session.worktreeDirty, true, 'dropping the error must leave the uncommitted work for Commit');
+  });
+
+  await t.test('an expiry report clears nothing but the exact failed attempt it names', async () => {
+    // Another attempt's id: the error on the row is not the one the runner watched.
+    const other = await failedCommit();
+    await beat([{ sessionId: other.sessionId, operationId: randomUUID() }]);
+    assert.equal((await read(other.sessionId)).commitStatus, 'error',
+      'an expiry report about a different attempt cleared this one');
+
+    // A newer click: the attempt is pending again, and the stale report must not touch it.
+    const pressed = await failedCommit();
+    const again = await send('POST', `/sessions/${uuidToBase62(pressed.sessionId)}/commit`, USER_TOKEN);
+    assert.equal(again.status, 201, `POST /api/sessions/:id/commit answered ${again.status}: ${again.text}`);
+    await beat([{ sessionId: pressed.sessionId, operationId: pressed.operationId }]);
+    assert.equal((await read(pressed.sessionId)).commitStatus, 'pending',
+      'an expiry report about the previous attempt cancelled the commit just requested');
+
+    // Another runner's session: a runner speaks only for the sessions assigned to it.
+    const foreign = await failedCommit();
+    const otherRunner = randomUUID();
+    await prisma.runner.create({
+      data: { id: otherRunner, name: 'another machine', ownerId, tokenHash: sha256(`token-${otherRunner}`) },
+    });
+    await prisma.session.update({ where: { id: foreign.sessionId }, data: { assignedRunnerId: otherRunner } });
+    await beat([{ sessionId: foreign.sessionId, operationId: foreign.operationId }]);
+    const row = await prisma.session.findUniqueOrThrow({ where: { id: foreign.sessionId }, select: { commitStatus: true } });
+    assert.equal(row.commitStatus, 'error', 'a runner cleared the commit error of a session assigned to another runner');
+
+    // Ids that are not UUIDs are dropped before they reach a query, and do not sink the rest.
+    const good = await failedCommit();
+    await beat([
+      { sessionId: 'not-a-uuid', operationId: good.operationId },
+      { sessionId: good.sessionId, operationId: good.operationId },
+    ]);
+    assert.equal((await read(good.sessionId)).commitStatus, null,
+      'a malformed entry beside a good one kept the good one from being cleared');
   });
 
   await t.test('pressing Commit again clears the message the previous commit left', async () => {

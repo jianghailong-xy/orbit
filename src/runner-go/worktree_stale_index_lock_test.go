@@ -111,7 +111,10 @@ func TestTheSharedRepositorysIndexLockIsNeverBroken(t *testing.T) {
 
 	for name, breakLock := range map[string]func(string) (bool, string){
 		"finalize": breakStaleIndexLock,
-		"commit":   breakAbandonedIndexLock,
+		"commit": func(dir string) (bool, string) {
+			d := breakAbandonedIndexLock(dir)
+			return d.Broke, d.Why
+		},
 	} {
 		broke, why := breakLock(repo)
 		if broke {

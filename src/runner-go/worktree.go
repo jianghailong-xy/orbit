@@ -1852,10 +1852,13 @@ func gitPathExists(dir, name string) bool {
 }
 
 // commitOutcome is what commitWorktree reports: "committed" advanced the branch, "nochange"
-// means the tree was already clean, "error" means a precondition failed / git errored.
+// means the tree was already clean, "error" means a precondition failed / git errored. For an error,
+// Summary is one plain sentence for the person who asked for the commit — why, and what to do —
+// beside git's own words in Message.
 type commitOutcome struct {
 	Status  string
 	Message string
+	Summary string
 }
 
 // commitIndexLockWait is how long, all told, one commit waits for another process to let go of
@@ -1882,10 +1885,10 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	// gitIndex runs a git command that takes the index lock, and runs it again while another
 	// process holds that lock — for commitIndexLockWait across the whole commit. A lock still
 	// there after that which nothing is using will never be let go of, however long a commit
-	// waits: that one is removed (breakAbandonedIndexLock) and the command run once more. cleared
-	// says what was removed; kept says why a lock was left alone.
+	// waits: that one is removed (breakAbandonedIndexLock) and the command run once more. lock is
+	// what was decided about the last lock that outlasted the wait.
 	var lockWaited time.Duration
-	var cleared, kept string
+	var lock lockDecision
 	gitIndex := func(args ...string) error {
 		_, err := git(wtPath, args...)
 		for err != nil && indexLockHeld(err) && lockWaited < commitIndexLockWait {
@@ -1899,23 +1902,34 @@ func commitWorktree(req CommitCommand) commitOutcome {
 			lockWaited += time.Since(retried)
 		}
 		if err != nil && indexLockHeld(err) {
-			broke, why := breakAbandonedIndexLock(wtPath)
-			if !broke {
-				kept = why
+			lock = breakAbandonedIndexLock(wtPath)
+			if !lock.Broke {
 				return err
 			}
-			cleared = why
-			logln("commit for session", req.SessionID, "broke", why)
+			logln("commit for session", req.SessionID, "broke", lock.Why)
 			_, err = git(wtPath, args...)
 		}
 		return err
 	}
+	fail := func(err error) commitOutcome {
+		failedCommits.record(req, wtPath, err)
+		out := commitOutcome{Status: "error", Message: commitFailure(err, lock)}
+		switch {
+		case !indexLockHeld(err):
+		case lock.Broke:
+			out.Summary = "Something took this worktree's index lock again as soon as an abandoned one was cleared. Retry in a moment, or hand it to the session."
+		default:
+			out.Summary = lock.Summary
+		}
+		return out
+	}
 	if err := gitIndex("add", "-A"); err != nil {
-		return commitOutcome{Status: "error", Message: commitFailure(err, kept)}
+		return fail(err)
 	}
 	// `diff --cached --quiet` exits 0 when nothing is staged → the tree is already clean.
 	if _, err := git(wtPath, "diff", "--cached", "--quiet"); err == nil {
-		return commitOutcome{Status: "nochange", Message: clearedIndexLockNote(cleared)}
+		failedCommits.clear(req.SessionID)
+		return commitOutcome{Status: "nochange", Message: clearedIndexLockNote(lock)}
 	}
 	// Summarize the staged diff into a real Conventional-Commits message (one-shot headless
 	// Claude); fall back to a diffstat subject, then the bare branch slug, so the history
@@ -1926,10 +1940,11 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	if err := gitIndex(
 		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
 		"commit", "--no-verify", "-m", msg); err != nil {
-		return commitOutcome{Status: "error", Message: commitFailure(err, kept)}
+		return fail(err)
 	}
+	failedCommits.clear(req.SessionID)
 	logln(fmt.Sprintf("committed worktree changes for session %s onto %s", req.SessionID, req.Branch))
-	return commitOutcome{Status: "committed", Message: clearedIndexLockNote(cleared)}
+	return commitOutcome{Status: "committed", Message: clearedIndexLockNote(lock)}
 }
 
 // indexLockHeld reports whether git refused because another process holds the index lock. The
@@ -1971,6 +1986,14 @@ func stageForFinalize(dir string) error {
 	return retried
 }
 
+// lockDecision is what breakIndexLock found and did: Why in words a log line can carry, and
+// Summary in words the person who asked for the commit can act on.
+type lockDecision struct {
+	Broke   bool
+	Why     string
+	Summary string
+}
+
 // breakStaleIndexLock removes a checkout's own index.lock when every cheap piece of evidence says
 // no live git is using it, and reports what it did (or why it declined) in words a log line can
 // carry. Three conditions, each of which a real holder fails:
@@ -1987,7 +2010,8 @@ func stageForFinalize(dir string) error {
 // stageForFinalize). What it buys is bounded: the fallback when it declines is the honest report
 // that staging failed, which is what the caller already does.
 func breakStaleIndexLock(dir string) (bool, string) {
-	return breakIndexLock(dir, false)
+	d := breakIndexLock(dir, false)
+	return d.Broke, d.Why
 }
 
 // breakAbandonedIndexLock is breakStaleIndexLock for a checkout whose session may still be running
@@ -1996,18 +2020,21 @@ func breakStaleIndexLock(dir string) (bool, string) {
 // open: git keeps index.lock open from the moment it creates it until it renames it over the index
 // or removes it, so an open descriptor is exactly what a lock somebody is using has, however long it
 // has sat empty (a git hashing a very large tree on a loaded machine).
-func breakAbandonedIndexLock(dir string) (bool, string) {
+func breakAbandonedIndexLock(dir string) lockDecision {
 	return breakIndexLock(dir, true)
 }
 
-func breakIndexLock(dir string, unlessOpen bool) (bool, string) {
+func breakIndexLock(dir string, unlessOpen bool) lockDecision {
+	const retry = " Retry once it finishes, or hand it to the session."
 	gitDir, err := git(dir, "rev-parse", "--absolute-git-dir")
 	if err != nil || gitDir == "" {
-		return false, "a checkout whose git dir could not be resolved"
+		return lockDecision{Why: "a checkout whose git dir could not be resolved",
+			Summary: "Orbit could not find this worktree's git directory, so it left the index lock alone. Hand it to the session."}
 	}
 	common, err := git(dir, "rev-parse", "--git-common-dir")
 	if err != nil || common == "" {
-		return false, "a checkout whose shared git dir could not be resolved"
+		return lockDecision{Why: "a checkout whose shared git dir could not be resolved",
+			Summary: "Orbit could not find this worktree's git directory, so it left the index lock alone. Hand it to the session."}
 	}
 	if !filepath.IsAbs(common) {
 		common = filepath.Join(dir, common)
@@ -2015,46 +2042,103 @@ func breakIndexLock(dir string, unlessOpen bool) (bool, string) {
 	if filepath.Clean(gitDir) == filepath.Clean(common) {
 		// The shared checkout's index, which concurrent sessions and the person at the keyboard
 		// are both entitled to be holding. Never ours to break.
-		return false, "the shared repository's index.lock in " + gitDir
+		return lockDecision{Why: "the shared repository's index.lock in " + gitDir,
+			Summary: "The index lock belongs to the shared repository, which Orbit never removes." + retry}
 	}
 	lock := filepath.Join(gitDir, "index.lock")
 	info, err := os.Lstat(lock)
 	if err != nil {
-		return false, "no index.lock at " + lock
+		return lockDecision{Why: "no index.lock at " + lock,
+			Summary: "This worktree's index lock was let go a moment ago. Retry the commit."}
 	}
 	if !info.Mode().IsRegular() || info.Size() != 0 {
-		return false, fmt.Sprintf("%s, which is %d bytes and so is being written", lock, info.Size())
+		return lockDecision{Why: fmt.Sprintf("%s, which is %d bytes and so is being written", lock, info.Size()),
+			Summary: "A git process is writing this worktree's index right now." + retry}
 	}
-	if age := time.Since(info.ModTime()); age < staleIndexLockAge {
-		return false, fmt.Sprintf("%s, untouched for only %s of the %s that makes a lock abandoned", lock, age.Truncate(time.Second), staleIndexLockAge)
+	age := time.Since(info.ModTime())
+	if age < staleIndexLockAge {
+		return lockDecision{
+			Why:     fmt.Sprintf("%s, untouched for only %s of the %s that makes a lock abandoned", lock, age.Truncate(time.Second), staleIndexLockAge),
+			Summary: "Something took this worktree's index lock " + humanDuration(age) + " ago and still holds it. Retry in a moment, or hand it to the session.",
+		}
 	}
 	state := "empty, untouched since " + info.ModTime().UTC().Format(time.RFC3339)
 	if unlessOpen {
 		holder, err := indexLockHolder(lock)
 		if err != nil {
-			return false, fmt.Sprintf("%s, whose holders could not be listed: %v", lock, err)
+			return lockDecision{Why: fmt.Sprintf("%s, whose holders could not be listed: %v", lock, err),
+				Summary: "Orbit could not check whether anything still uses this worktree's index lock, so it left the lock alone. Retry, or hand it to the session."}
 		}
-		if holder != "" {
-			return false, fmt.Sprintf("%s, which %s has open", lock, holder)
+		if holder != nil {
+			return lockDecision{Why: fmt.Sprintf("%s, which %s has open", lock, holder),
+				Summary: holder.sentence() + " has held this worktree's index lock for " + humanDuration(age) + "." + retry}
 		}
 		state += ", open in no process"
 	}
 	if err := os.Remove(lock); err != nil {
-		return false, fmt.Sprintf("%s, which could not be removed: %v", lock, err)
+		reason := err.Error()
+		var pathErr *os.PathError
+		if errors.As(err, &pathErr) {
+			reason = pathErr.Err.Error()
+		}
+		return lockDecision{Why: fmt.Sprintf("%s, which could not be removed: %v", lock, err),
+			Summary: "Orbit could not remove this worktree's abandoned index lock (" + reason + "). Hand it to the session."}
 	}
-	return true, fmt.Sprintf("the abandoned index.lock at %s (%s)", lock, state)
+	return lockDecision{Broke: true, Why: fmt.Sprintf("the abandoned index.lock at %s (%s)", lock, state),
+		Summary: "Cleared a git lock left in this worktree " + humanDuration(age) + " ago by a git process that is no longer running."}
+}
+
+// lockHolder is a process that has an index.lock open.
+type lockHolder struct {
+	name string // its command name, where the platform says
+	pid  string
+}
+
+func (h *lockHolder) String() string {
+	if h.name == "" {
+		return "pid " + h.pid
+	}
+	return h.name + " (pid " + h.pid + ")"
+}
+
+// sentence names the holder at the start of a sentence for the person who asked for the commit.
+func (h *lockHolder) sentence() string {
+	switch h.name {
+	case "git":
+		return "A git process (pid " + h.pid + ")"
+	case "":
+		return "A process (pid " + h.pid + ")"
+	}
+	return "A process named " + h.name + " (pid " + h.pid + ")"
+}
+
+// humanDuration says d the way a sentence does: "12 seconds", "3 minutes", "8 hours", "2 days".
+func humanDuration(d time.Duration) string {
+	unit, n := "second", d/time.Second
+	switch {
+	case d >= 48*time.Hour:
+		unit, n = "day", d/(24*time.Hour)
+	case d >= time.Hour:
+		unit, n = "hour", d/time.Hour
+	case d >= time.Minute:
+		unit, n = "minute", d/time.Minute
+	}
+	if n <= 1 {
+		return "1 " + unit
+	}
+	return strconv.FormatInt(int64(n), 10) + " " + unit + "s"
 }
 
 // commitFailure is what a failed commit says: git's own words and, when git was still refusing on
-// the index lock once the commit had waited for it, why the commit gave up — kept, the reason the
-// lock was not safe to remove.
-func commitFailure(err error, kept string) string {
+// the index lock once the commit had waited for it, why the commit gave up — the reason the lock was
+// not safe to remove.
+func commitFailure(err error, lock lockDecision) string {
 	message := clip(gitStderr(err), 1000)
 	if indexLockHeld(err) {
 		message += "\nthe commit waited " + commitIndexLockWait.String() + " for this checkout's index.lock and" +
 			" it was still held"
-		if kept != "" {
-			message += "; it was not safe to remove: " + kept
+		if !lock.Broke && lock.Why != "" {
+			message += "; it was not safe to remove: " + lock.Why
 		}
 		message += ". Nothing was committed."
 	}
@@ -2064,11 +2148,99 @@ func commitFailure(err error, kept string) string {
 // clearedIndexLockNote is what a commit that had to remove an abandoned index.lock says about it:
 // that lock is why every earlier commit in this checkout failed, and removing it is the one thing
 // the commit did that nobody asked for.
-func clearedIndexLockNote(cleared string) string {
-	if cleared == "" {
+func clearedIndexLockNote(lock lockDecision) string {
+	if !lock.Broke {
 		return ""
 	}
-	return "Removed " + cleared + " before committing."
+	return lock.Summary
+}
+
+// failedCommits remembers what each session's last failed commit was stuck on, so the heartbeat
+// can tell the control plane once that stops being true and the worktree bar can drop an error that
+// no longer describes the checkout: the lock it met is gone, or the branch has moved since.
+var failedCommits = &failedCommitRegistry{bySession: map[string]failedCommit{}}
+
+// failedCommitMemory bounds how long a failure is watched. A day-old error is not coming back to
+// life, and every one still watched costs each heartbeat a look at its checkout.
+const failedCommitMemory = 24 * time.Hour
+
+type failedCommit struct {
+	operationID string
+	worktree    string
+	lock        string // the index.lock that refused it, when that is why it failed
+	head        string // the branch tip when it failed
+	at          time.Time
+}
+
+type failedCommitRegistry struct {
+	mu        sync.Mutex
+	bySession map[string]failedCommit
+}
+
+func (r *failedCommitRegistry) record(req CommitCommand, wtPath string, err error) {
+	if req.OperationID == "" {
+		return // nothing the control plane could match a report against
+	}
+	f := failedCommit{operationID: req.OperationID, worktree: wtPath, at: time.Now()}
+	f.head, _ = git(wtPath, "rev-parse", "HEAD")
+	if indexLockHeld(err) {
+		if gitDir, gitErr := git(wtPath, "rev-parse", "--absolute-git-dir"); gitErr == nil && gitDir != "" {
+			f.lock = filepath.Join(gitDir, "index.lock")
+		}
+	}
+	r.mu.Lock()
+	r.bySession[req.SessionID] = f
+	r.mu.Unlock()
+}
+
+func (r *failedCommitRegistry) clear(sessionID string) {
+	r.mu.Lock()
+	delete(r.bySession, sessionID)
+	r.mu.Unlock()
+}
+
+// expired lists the failures whose reason no longer holds. It only reads: forget drops them once
+// the control plane has been told, so a heartbeat that fails to send tells it on the next one.
+func (r *failedCommitRegistry) expired(ctx context.Context) []CommitErrorExpiry {
+	r.mu.Lock()
+	watched := make(map[string]failedCommit, len(r.bySession))
+	for id, f := range r.bySession {
+		if time.Since(f.at) > failedCommitMemory {
+			delete(r.bySession, id)
+			continue
+		}
+		watched[id] = f
+	}
+	r.mu.Unlock()
+	var out []CommitErrorExpiry
+	for id, f := range watched {
+		gone := false
+		if f.lock != "" {
+			_, err := os.Lstat(f.lock)
+			gone = errors.Is(err, os.ErrNotExist)
+		}
+		if !gone && f.head != "" && ctx.Err() == nil {
+			head, err := gitCtx(ctx, f.worktree, "rev-parse", "HEAD")
+			gone = err == nil && head != "" && head != f.head
+		}
+		if gone {
+			out = append(out, CommitErrorExpiry{SessionID: id, OperationID: f.operationID})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SessionID < out[j].SessionID })
+	return out
+}
+
+// forget drops what the control plane has now been told, unless a newer failure of the same
+// session has replaced it in the meantime.
+func (r *failedCommitRegistry) forget(reported []CommitErrorExpiry) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range reported {
+		if f, ok := r.bySession[e.SessionID]; ok && f.operationID == e.OperationID {
+			delete(r.bySession, e.SessionID)
+		}
+	}
 }
 
 // commitMsgModel is the Claude alias used to summarize a commit's diff — a fast, cheap tier is

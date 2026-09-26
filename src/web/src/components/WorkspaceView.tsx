@@ -324,6 +324,7 @@ import {
   type AcceptedUserTurn,
 } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
+import { commitFailureCopy, resolveCommitPrompt } from '../lib/commitFailure';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
 import {
   composerDraftAfterSend,
@@ -1628,6 +1629,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // payload mints another key; a verbatim retry lets the server return its committed receipt.
   const sendOperationRef = useRef<LogicalSendToken | null>(null);
   const resolveConflictOperationRef = useRef<LogicalSendToken | null>(null);
+  const resolveCommitOperationRef = useRef<LogicalSendToken | null>(null);
   // Images already sent, keyed by their turnId. The runner echoes only the turn's text,
   // so these local previews are joined back into the user bubble (and the queued bubble)
   // to show the sent image in the transcript. Object URLs are revoked on session switch.
@@ -2190,7 +2192,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           sessionTitle: operation.title,
           event: 'commit-result',
           headline: 'Commit failed',
-          detail: d.commitError ?? 'See the status bar for details.',
+          // The runner's plain sentence when it gave one; git's words otherwise (commitFailureCopy).
+          detail: commitFailureCopy(d.commitError, d.commitResultMessage).why,
           tone: 'error',
         });
       }
@@ -5061,6 +5064,44 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         tone: 'error',
       }),
   });
+  // Hand a failed commit to the session: its own agent can see what refused the commit (a held
+  // index.lock, most often), clear it and commit — what the runner will not do unasked. resume()
+  // clears the settled commit error, so the bar offers Commit afresh while the agent works.
+  const resolveCommitMut = useMutation({
+    mutationFn: (vars: SessionToastTarget & { branch: string; why: string }) => {
+      const content = resolveCommitPrompt(vars.branch, vars.why);
+      const operation = logicalSendToken(resolveCommitOperationRef.current, {
+        operation: 'resolve-commit',
+        sessionId: vars.id,
+        branch: vars.branch,
+        content,
+      });
+      resolveCommitOperationRef.current = operation;
+      return resumeSession(vars.id, content, undefined, undefined, undefined, operation.clientTurnId);
+    },
+    onSuccess: (_d, vars) => {
+      resolveCommitOperationRef.current = null;
+      message.sessionNotice({
+        sessionId: vars.id,
+        sessionTitle: vars.title,
+        event: 'resolve-commit',
+        headline: 'Handed the commit to the session',
+        tone: 'info',
+        icon: 'sync',
+      });
+      void qc.invalidateQueries({ queryKey: ['session', vars.id] });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    onError: (e: Error, vars) =>
+      message.sessionNotice({
+        sessionId: vars.id,
+        sessionTitle: vars.title,
+        event: 'resolve-commit-error',
+        headline: 'Could not hand the commit to the session',
+        detail: e.message,
+        tone: 'error',
+      }),
+  });
   // Commit a live session's uncommitted worktree changes onto its branch. Like merge it runs
   // on the runner (heartbeat round-trip) and the outcome lands on commitStatus/worktreeDirty;
   // committing is safe/local so it fires directly (no confirm). Invalidate detail so 'pending'
@@ -7702,6 +7743,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     title: selectedSession?.title ?? 'Untitled session',
                     branch: detailForSelected.branch!,
                     target,
+                  })
+              : undefined
+          }
+          resolvingCommit={resolveCommitMut.isPending}
+          onResolveCommitInSession={
+            selectedId && detailForSelected?.branch
+              ? () =>
+                  resolveCommitMut.mutate({
+                    id: selectedId,
+                    title: selectedSession?.title ?? 'Untitled session',
+                    branch: detailForSelected.branch!,
+                    why: commitFailureCopy(
+                      detailForSelected.commitError,
+                      detailForSelected.commitResultMessage,
+                    ).why,
                   })
               : undefined
           }

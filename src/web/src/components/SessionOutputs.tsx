@@ -1,12 +1,13 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Drawer, Dropdown, Input, Segmented, theme, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
-import { FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
+import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RunnerRepoHealth } from '@orbit/shared';
 import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
 import { copyText } from '../lib/clipboard';
+import { commitFailureCopy } from '../lib/commitFailure';
 import { sessionDiffQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import hljs from 'highlight.js/lib/core';
@@ -58,6 +59,8 @@ export function SessionOutputs({
   resolving,
   onCommit,
   committing,
+  onResolveCommitInSession,
+  resolvingCommit,
   onAdopt,
   adopting,
   turnActive,
@@ -93,6 +96,10 @@ export function SessionOutputs({
    *  live worktree is dirty. The outcome surfaces via detail.commitStatus/worktreeDirty. */
   onCommit?: () => void;
   committing?: boolean;
+  /** Provided by the parent; on a failed commit, hands it to the session: its agent finds what
+   *  stopped the commit (a held index.lock, most often), clears it, and commits. */
+  onResolveCommitInSession?: () => void;
+  resolvingCommit?: boolean;
   /** Provided by the parent (owns the mutation); enables the "Adopt branch" action shown when the
    *  worktree's real HEAD (detail.worktreeBranch) has diverged from the tracked `branch`. Adopting
    *  re-points the session to that branch so Merge/diff act on the real work. */
@@ -256,9 +263,13 @@ export function SessionOutputs({
       {failed && (
         <div className="wt-merge wt-bar-fail">
           {detail.commitStatus === 'error' ? (
-            <span className="wt-merge-err" title={detail.commitError ?? undefined}>
-              {detail.commitError || 'Commit failed — try again.'}
-            </span>
+            <CommitFailure
+              key={detail.commitError ?? ''}
+              error={detail.commitError}
+              summary={detail.commitResultMessage}
+              onResolveInSession={onResolveCommitInSession}
+              resolving={resolvingCommit}
+            />
           ) : detail.mergeStatus === 'conflict' ? (
             <div className="wt-merge-manual">
               <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
@@ -641,6 +652,64 @@ function MergeButton({
         </button>
       </Dropdown>
     </span>
+  );
+}
+
+/** A failed commit, said the way the person who pressed Commit needs it: what happened, why, and
+ *  what to do — with git's own words one click away for whoever is debugging (commitFailureCopy).
+ *  Keyed on the error by its parent, so a new failure starts with git's words folded again. */
+function CommitFailure({
+  error,
+  summary,
+  onResolveInSession,
+  resolving,
+}: {
+  error?: string | null;
+  summary?: string | null;
+  onResolveInSession?: () => void;
+  resolving?: boolean;
+}) {
+  const [showGit, setShowGit] = useState(false);
+  const copy = commitFailureCopy(error, summary);
+  return (
+    <div className="wt-commit-fail">
+      <div className="wt-commit-fail-head">
+        <ExclamationCircleFilled className="wt-commit-fail-icon" aria-hidden="true" />
+        {copy.headline}
+      </div>
+      <div className="wt-commit-fail-why">{copy.why}</div>
+      {(onResolveInSession || copy.gitOutput) && (
+        <div className="wt-commit-fail-acts">
+          {onResolveInSession && (
+            <button
+              type="button"
+              className="wt-merge-btn wt-merge-btn-failed"
+              disabled={resolving}
+              onClick={(e) => {
+                e.stopPropagation();
+                onResolveInSession();
+              }}
+            >
+              {resolving ? 'Resuming…' : 'Resolve in session'}
+            </button>
+          )}
+          {copy.gitOutput && (
+            <button
+              type="button"
+              className="wt-commit-fail-toggle"
+              aria-expanded={showGit}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowGit((shown) => !shown);
+              }}
+            >
+              {showGit ? 'Hide git output ▾' : 'Show git output ▸'}
+            </button>
+          )}
+        </div>
+      )}
+      {showGit && copy.gitOutput && <pre className="wt-commit-fail-git">{copy.gitOutput}</pre>}
+    </div>
   );
 }
 

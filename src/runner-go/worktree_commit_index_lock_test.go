@@ -3,6 +3,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -84,6 +86,9 @@ func TestCommitRetriesOnIndexLock(t *testing.T) {
 				t.Fatalf("the error does not say why the commit failed (missing %q): %q", want, res.Message)
 			}
 		}
+		if !strings.HasPrefix(res.Summary, "Something took this worktree's index lock ") || !strings.HasSuffix(res.Summary, " ago and still holds it. Retry in a moment, or hand it to the session.") {
+			t.Fatalf("the summary must say, in plain words, that the lock is young and still held: %q", res.Summary)
+		}
 		if head := mustGit(t, c.checkout, "rev-parse", "HEAD"); head != c.before {
 			t.Fatal("the branch moved under a commit that reported an error")
 		}
@@ -110,8 +115,11 @@ func TestCommitRemovesAnAbandonedIndexLock(t *testing.T) {
 	if _, err := git(c.checkout, "cat-file", "-e", "HEAD:work.txt"); err != nil {
 		t.Fatalf("the commit does not carry the checkout's work: %v", err)
 	}
-	if !strings.Contains(res.Message, "Removed the abandoned index.lock at "+lock) {
-		t.Fatalf("the commit must say which lock it removed, got %q", res.Message)
+	if want := "Cleared a git lock left in this worktree 2 minutes ago by a git process that is no longer running."; res.Message != want {
+		t.Fatalf("the commit must say, in plain words, what it removed and how old it was:\n got %q\nwant %q", res.Message, want)
+	}
+	if _, err := os.Stat(lock); !os.IsNotExist(err) {
+		t.Fatalf("the abandoned lock must be gone: %v", err)
 	}
 }
 
@@ -137,6 +145,9 @@ func TestCommitLeavesAnIndexLockSomebodyHasOpen(t *testing.T) {
 		if !strings.Contains(res.Message, want) {
 			t.Fatalf("the error must say why the lock was left alone (missing %q): %q", want, res.Message)
 		}
+	}
+	if want := "(pid " + strconv.Itoa(os.Getpid()) + ") has held this worktree's index lock for 2 minutes. Retry once it finishes, or hand it to the session."; !strings.HasPrefix(res.Summary, "A ") || !strings.HasSuffix(res.Summary, want) {
+		t.Fatalf("the summary must name who holds the lock and for how long, in plain words: %q", res.Summary)
 	}
 	if _, err := os.Stat(lock); err != nil {
 		t.Fatalf("a lock somebody has open must still be there: %v", err)
@@ -197,4 +208,136 @@ func (c *indexLockCheckout) holdIndexLock(t *testing.T) func() error {
 		t.Fatalf("git was not stopped by the index lock this test holds (err=%v)", err)
 	}
 	return release
+}
+
+// TestAFailedCommitExpiresWhenItsReasonDoes: the worktree bar used to keep a failed commit's error
+// until the next click, long after it stopped being true — on 2026-09-25 it still said the lock was
+// held two hours after the agent had removed it and committed. The runner remembers what each
+// failure was stuck on and reports, for exactly that operation, once the lock is gone or the branch
+// has moved, so the control plane can drop the error.
+func TestAFailedCommitExpiresWhenItsReasonDoes(t *testing.T) {
+	failOnLock := func(t *testing.T, id string) (*indexLockCheckout, func() error, CommitCommand) {
+		t.Helper()
+		c := newIndexLockCheckout(t, id)
+		release := c.holdIndexLock(t)
+		req := CommitCommand{SessionID: c.id, Branch: c.branch, OperationID: "op-" + id}
+		t.Cleanup(func() { failedCommits.clear(c.id) })
+		if res := commitWorktree(req); res.Status != "error" {
+			t.Fatalf("commit = %q (%s), want an error while the lock is held", res.Status, res.Message)
+		}
+		return c, release, req
+	}
+	reported := func(id string) []CommitErrorExpiry {
+		var mine []CommitErrorExpiry
+		for _, e := range failedCommits.expired(context.Background()) {
+			if e.SessionID == id {
+				mine = append(mine, e)
+			}
+		}
+		return mine
+	}
+
+	t.Run("the lock it met is let go", func(t *testing.T) {
+		c, release, req := failOnLock(t, "expirelock")
+		if got := reported(c.id); len(got) != 0 {
+			t.Fatalf("reported %+v while the lock that failed the commit is still held", got)
+		}
+		if err := release(); err != nil {
+			t.Fatal(err)
+		}
+		got := reported(c.id)
+		if len(got) != 1 || got[0].OperationID != req.OperationID {
+			t.Fatalf("reported %+v, want exactly the failed operation %q once its lock is gone", got, req.OperationID)
+		}
+		failedCommits.forget(got)
+		if again := reported(c.id); len(again) != 0 {
+			t.Fatalf("reported %+v again after the control plane was told", again)
+		}
+	})
+
+	t.Run("the branch moves while the lock stays", func(t *testing.T) {
+		c, _, req := failOnLock(t, "expirehead")
+		// Somebody commits past the failure without the index: plumbing takes no index lock.
+		tree := mustGit(t, c.checkout, "rev-parse", "HEAD^{tree}")
+		next := mustGit(t, c.checkout, "-c", "user.email=t@orbit", "-c", "user.name=T", "commit-tree", tree, "-p", "HEAD", "-m", "moved")
+		mustGit(t, c.checkout, "update-ref", "refs/heads/"+c.branch, next)
+		got := reported(c.id)
+		if len(got) != 1 || got[0].OperationID != req.OperationID {
+			t.Fatalf("reported %+v, want the failed operation %q once the branch has moved past it", got, req.OperationID)
+		}
+	})
+
+	t.Run("a commit that goes through ends the watch", func(t *testing.T) {
+		c, release, req := failOnLock(t, "expireok")
+		if err := release(); err != nil {
+			t.Fatal(err)
+		}
+		if res := commitWorktree(req); res.Status != "committed" {
+			t.Fatalf("commit = %q (%s), want committed once the lock is let go", res.Status, res.Message)
+		}
+		if got := reported(c.id); len(got) != 0 {
+			t.Fatalf("reported %+v for a session whose commit has since gone through", got)
+		}
+	})
+
+	t.Run("a newer failure is not forgotten for an older report", func(t *testing.T) {
+		c, release, req := failOnLock(t, "expirenewer")
+		if err := release(); err != nil {
+			t.Fatal(err)
+		}
+		stale := reported(c.id)
+		c.holdIndexLock(t)
+		newer := CommitCommand{SessionID: c.id, Branch: c.branch, OperationID: req.OperationID + "-2"}
+		if res := commitWorktree(newer); res.Status != "error" {
+			t.Fatalf("second commit = %q, want an error", res.Status)
+		}
+		failedCommits.forget(stale)
+		failedCommits.mu.Lock()
+		f, ok := failedCommits.bySession[c.id]
+		failedCommits.mu.Unlock()
+		if !ok || f.operationID != newer.OperationID {
+			t.Fatalf("the newer failure %q was forgotten for a report about %q (%+v)", newer.OperationID, req.OperationID, f)
+		}
+	})
+}
+
+// TestHeartbeatCarriesExpiredCommitErrors: the report rides the heartbeat, and is forgotten only
+// once a heartbeat carrying it was accepted — one that fails to send carries it again next time.
+func TestHeartbeatCarriesExpiredCommitErrors(t *testing.T) {
+	c := newIndexLockCheckout(t, "expirebeat")
+	release := c.holdIndexLock(t)
+	req := CommitCommand{SessionID: c.id, Branch: c.branch, OperationID: "op-expirebeat"}
+	t.Cleanup(func() { failedCommits.clear(c.id) })
+	if res := commitWorktree(req); res.Status != "error" {
+		t.Fatalf("commit = %q, want an error while the lock is held", res.Status)
+	}
+	if err := release(); err != nil {
+		t.Fatal(err)
+	}
+	carried := func(r HeartbeatRequest) bool {
+		for _, e := range r.ExpiredCommitErrors {
+			if e.SessionID == c.id && e.OperationID == req.OperationID {
+				return true
+			}
+		}
+		return false
+	}
+	pool := newSessionPool(1)
+	telemetry := newHeartbeatTelemetryProbe(time.Second, func(context.Context, []heartbeatTelemetryTarget) []heartbeatTelemetrySample { return nil })
+	var sent []HeartbeatRequest
+	failing := func(r HeartbeatRequest) (*HeartbeatResponse, error) {
+		sent = append(sent, r)
+		return nil, errors.New("offline")
+	}
+	accepting := func(r HeartbeatRequest) (*HeartbeatResponse, error) {
+		sent = append(sent, r)
+		return &HeartbeatResponse{}, nil
+	}
+	_, _, _ = sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{}, failing)
+	_, _, _ = sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{}, accepting)
+	_, _, _ = sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{}, accepting)
+	if len(sent) != 3 || !carried(sent[0]) || !carried(sent[1]) || carried(sent[2]) {
+		t.Fatalf("carried per heartbeat = %v %v %v, want true (failed to send), true (accepted), then false",
+			carried(sent[0]), carried(sent[1]), carried(sent[2]))
+	}
 }

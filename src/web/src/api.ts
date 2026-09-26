@@ -1217,9 +1217,11 @@ export interface SessionDetail {
   worktreeDirty?: boolean | null;
   commitStatus?: 'pending' | 'committed' | 'nochange' | 'error' | null;
   commitError?: string | null;
-  /** What the runner said alongside a terminal commit status — which background jobs were live in
-   *  the checkout while it committed, and what it did about them. Null/absent when it said nothing
-   *  (older runners, or nothing worth saying), which reads as "no detail line". */
+  /** What the runner said alongside a terminal commit status. For a commit that went through:
+   *  which background jobs were live in the checkout while it committed, and what it did about them
+   *  (an abandoned index.lock it cleared, say). For 'error': its plain sentence about why and what to
+   *  do, while git's own words stay in commitError. Null/absent when it said nothing (older runners,
+   *  or nothing worth saying), which reads as "no detail line". */
   commitResultMessage?: string | null;
   // Public read-only sharing: the token behind the `/s/<token>` link that opens this session now,
   // or null when none does (never shared, turned off, or past its expiry). Drives the header's
