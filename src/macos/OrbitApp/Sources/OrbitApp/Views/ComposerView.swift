@@ -865,9 +865,14 @@ struct ComposerView: View {
                         requestFocus()
                     } label: {
                         HStack(spacing: 6) {
+                            // Name and kind never give way (web: `.composer-slash-name` and
+                            // `-type` are `flex: none`); the description truncates. Left to the
+                            // stack's even split, `/security-review` wrapped on a phone.
                             Text("/\(item.name)").font(.callout.monospaced())
+                                .lineLimit(1).layoutPriority(1)
                             Text(item.type == "skill" ? "skill" : item.type == "local" ? "local" : "cmd")
                                 .font(.orbitMeta).foregroundStyle(.secondary)
+                                .fixedSize()
                             if let d = item.description, !d.isEmpty {
                                 Text(d).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
                             }
