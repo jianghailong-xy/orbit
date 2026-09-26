@@ -1834,24 +1834,16 @@ func bridgeKimiPermission(ctx context.Context, t *Transport, job *ClaimedSession
 	if err != nil {
 		return kimiCancelledPermissionResult()
 	}
-	for {
-		if ctx.Err() != nil {
-			return kimiCancelledPermissionResult()
-		}
-		decision, pollErr := t.pollApproval(ctx, job.SessionID, approvalID)
-		if pollErr != nil {
-			return kimiCancelledPermissionResult()
-		}
-		if decision.Status == "PENDING" {
-			continue
-		}
-		optionID := kimiPermissionOption(options, decision, question)
-		if optionID == "" {
-			return kimiCancelledPermissionResult()
-		}
-		return map[string]interface{}{
-			"outcome": map[string]interface{}{"outcome": "selected", "optionId": optionID},
-		}
+	decision, err := awaitApprovalDecision(ctx, t, job.SessionID, approvalID)
+	if err != nil {
+		return kimiCancelledPermissionResult()
+	}
+	optionID := kimiPermissionOption(options, decision, question)
+	if optionID == "" {
+		return kimiCancelledPermissionResult()
+	}
+	return map[string]interface{}{
+		"outcome": map[string]interface{}{"outcome": "selected", "optionId": optionID},
 	}
 }
 
