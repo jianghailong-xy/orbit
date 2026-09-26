@@ -61,17 +61,18 @@ final class WatchWiringTests: XCTestCase {
                        "the strip took back View/Edit/Pause/Stop — controls belong to the detail page")
         XCTAssertTrue(card.contains("model.selectedSection = .following"),
                       "the strip's only action is the way to the Following page")
-        // The one line the strip is by default: the fixed label, the lone target by name or the
-        // targets by count, and the soonest deadline (`WatchProjection.stripLabel` et al, held to
-        // the browser's `STRIP_*` declarations by `WatchStripCopyParityTests`).
+        // The one line the strip is by default: the fixed label, the lone target by name with where
+        // it stands, or what several need beside Tasks created here's sentence
+        // (`WatchProjection.stripLabel` et al, held to the browser's `STRIP_*` declarations and to
+        // `watch-strip.fixture.json` by `WatchStripCopyParityTests`).
         XCTAssertTrue(card.contains("WatchProjection.stripLabel"))
         XCTAssertTrue(card.contains("WatchProjection.targetTitle(kind:"))
-        XCTAssertTrue(card.contains("summary.lineTime(now: now)"))
-        // Opened, each watch reads as the browser's rows, in the browser's order.
-        XCTAssertTrue(card.contains("WatchRowLabel.until"))
-        XCTAssertTrue(card.contains("WatchProjection.checked(for: watch, now: now)"))
-        XCTAssertTrue(card.contains("WatchProjection.stripThen"))
-        XCTAssertTrue(card.contains("WatchProjection.expiresIn(for: watch, now: now)"))
+        XCTAssertTrue(card.contains("summary.lineParts"))
+        XCTAssertTrue(card.contains("WatchProjection.stripPill(target)"))
+        XCTAssertTrue(card.contains("WatchProjection.stripGlyph(target)"))
+        // Opened, each watch is the browser's one sentence, and the line it adds while unchecked.
+        XCTAssertTrue(card.contains("WatchProjection.stripSentence(for: watch, now: now)"))
+        XCTAssertTrue(card.contains("WatchProjection.stripStaleLine(for: watch, now: now)"))
         for borrowed in ["BackgroundTrayView", "bgRunningLabel", "Background process", "\"terminal\""] {
             XCTAssertFalse(card.contains(borrowed), "the Watching card borrows \(borrowed)")
         }
