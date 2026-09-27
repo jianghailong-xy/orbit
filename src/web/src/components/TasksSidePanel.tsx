@@ -819,10 +819,10 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 /**
  * One open project in the rail's Projects group. The same two facts the iPhone drawer marks a
  * project row with (OrbitKit `drawerMark`), each in the slot this rail already gives it: work in
- * flight is the breathing dot at the head, where the task-list rows drew theirs and a Workspace
- * draws its activity; the items waiting on you are the amber count at the far end, the pill a
- * Workspace counts its waiting sessions with. Both can show at once — they answer different
- * questions.
+ * flight is the breathing dot in the icon column, where a Workspace draws its folder and its
+ * activity, so the title lines up with the Workspace names rather than indenting past them; the
+ * items waiting on you are the amber count at the far end, the pill a Workspace counts its waiting
+ * sessions with. Both can show at once — they answer different questions.
  */
 export function ProjectRow({
   project,
@@ -837,8 +837,10 @@ export function ProjectRow({
   const needsYou = projectNeedsYouCount(project);
   const waiting = `${needsYou} waiting on you`;
   return (
-    <div className={`tp-item inset ${active ? 'active' : ''}`} onClick={() => onOpen(project)}>
-      <span className={`tp-list-dot ${working ? 'running' : ''}`} title={working ? 'Running' : undefined} />
+    <div className={`tp-item tp-project ${active ? 'active' : ''}`} onClick={() => onOpen(project)}>
+      <span className="tp-ico tp-project-mark">
+        <span className={`tp-list-dot ${working ? 'running' : ''}`} title={working ? 'Running' : undefined} />
+      </span>
       <span className="tp-label">{project.title}</span>
       {needsYou > 0 && (
         <span className="tp-count needs-you" title={waiting} aria-label={waiting}>

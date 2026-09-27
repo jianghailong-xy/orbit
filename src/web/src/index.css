@@ -693,9 +693,6 @@ body {
   outline: 2px solid var(--brand);
   outline-offset: -2px;
 }
-.tp-item.inset {
-  padding-left: 30px;
-}
 .tp-ico {
   display: flex;
   font-size: 16px;
@@ -870,6 +867,16 @@ body {
   background: var(--dot-idle);
   flex: none;
   margin-right: 8px;
+}
+/* An open project's dot sits in the icon column, centred where the Workspace folders stand, so its
+   title lines up with the Workspace names instead of indenting past them. */
+.tp-project-mark {
+  width: 16px;
+  justify-content: center;
+  align-items: center;
+}
+.tp-project-mark .tp-list-dot {
+  margin-right: 0;
 }
 .tp-list-dot.running {
   background: var(--brand);
