@@ -143,11 +143,15 @@ export function poolFallbackNotice(pool: { label: string }): string {
   return `Fell back to the Claude default (this runner's own login) — no account in the pool "${pool.label}" can run`;
 }
 
+/**
+ * Never a possessive on the label: a label such as `Zhang Min · Plus` would take the 's on its plan,
+ * not on the account.
+ */
 function whyLeft(from: PoolSwitchFrom, now: Date): string {
-  if (from.refused) return `${from.label}'s key was refused`;
+  if (from.refused) return `the key for ${from.label} was refused`;
   if (!from.enabled) return `${from.label} is disabled`;
   const spent = spentWindow(from.usage, now);
-  return spent ? `${from.label}'s ${spent} window is spent` : `${from.label} is unavailable`;
+  return spent ? `the ${spent} window on ${from.label} is spent` : `${from.label} is unavailable`;
 }
 
 /** Every Claude window a member can spend, with the name the transcript gives it. */
