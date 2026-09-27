@@ -561,10 +561,12 @@ describe('TasksSidePanel project rows', () => {
       />,
     );
 
-  it('is an inset row with the title and a quiet dot, and nothing at the far end', () => {
+  it('is a row with a quiet dot in the icon column, the title, and nothing at the far end', () => {
     const html = row();
-    expect(html).toContain('class="tp-item inset "');
-    expect(html).toContain('<span class="tp-list-dot "></span>');
+    expect(html).toContain('class="tp-item tp-project "');
+    // The dot takes the icon column the Workspace folders stand in, so the title lines up with the
+    // Workspace names above it instead of indenting past them.
+    expect(html).toContain('<span class="tp-ico tp-project-mark"><span class="tp-list-dot "></span></span>');
     expect(html).toContain('<span class="tp-label">Wikids AI 游戏模块：狼人杀 MVP</span>');
     expect(html).not.toContain('tp-count');
   });
@@ -592,6 +594,12 @@ describe('TasksSidePanel project rows', () => {
   });
 
   it('lights as the open one', () => {
-    expect(row({}, true)).toContain('class="tp-item inset active"');
+    expect(row({}, true)).toContain('class="tp-item tp-project active"');
+  });
+
+  it('keeps the dot to the icon column’s own width, with no inset pushing the title right', () => {
+    expect(styles).toMatch(/\.tp-project-mark \{[^}]*width: 16px;[^}]*justify-content: center;/);
+    expect(styles).toMatch(/\.tp-project-mark \.tp-list-dot \{\s*margin-right: 0;/);
+    expect(styles).not.toMatch(/\.tp-item\.inset \{/);
   });
 });

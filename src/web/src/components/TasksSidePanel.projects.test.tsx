@@ -119,7 +119,7 @@ async function visit(path: string): Promise<void> {
 
 /** The group's rows as the reader sees them: title, dot, amber count, and whether it is lit. */
 const projectRows = () =>
-  [...container!.querySelectorAll('.tp-group .tp-item.inset')].map((row) => ({
+  [...container!.querySelectorAll('.tp-group .tp-project')].map((row) => ({
     title: row.querySelector('.tp-label')?.textContent,
     working: row.querySelector('.tp-list-dot')!.classList.contains('running'),
     needsYou: row.querySelector('.tp-count.needs-you')?.textContent ?? null,
@@ -191,7 +191,7 @@ describe('the sidebar’s Projects group', () => {
     await visit('/projects');
     expect(currentEntry()).toBe('Projects');
 
-    const fineweb = [...container!.querySelectorAll('.tp-group .tp-item.inset')].find((row) =>
+    const fineweb = [...container!.querySelectorAll('.tp-group .tp-project')].find((row) =>
       row.textContent?.includes('FineWeb'),
     ) as HTMLElement;
     await act(async () => fineweb.click());
