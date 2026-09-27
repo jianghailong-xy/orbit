@@ -263,6 +263,9 @@ agent（MCP / CLI）、owner（web / iOS / CLI）、维护作业、导入，全�
 - **过期**：待审 14 天后变成 `expired`。被拒的条目保留，作为反例：以后 agent 的 `similar[]` 会看到「曾被拒：理由」。
 - **审阅模式（阶段 2，owner 2026-09-26 定）**：上表是 Manual 模式。space 可切到 Tiered 或 Automatic，由模式直接应用上表扣下的
   add / amend（标 Auto 或 Unreviewed），安全底线任何模式都不放开；规则、抽检与整次撤回见契约 `reviewModes`（`docs/wiki-contract.md` §7.3）。
+  **Automatic 先核实再生效**（owner 2026-09-27，判据 7 第 3 版）：Automatic 收下的 op 先等核实，由 `orbit wiki verify` 用干净的
+  Claude Code 调本地模型对照出处给出 supported / partial / unsupported / duplicate，按结论生效、标 Unreviewed、拒绝或并入已有条目；
+  没有结论的不生效，拒绝率超阈值自动退回 Tiered；Automatic 默认不发抽检卡（见契约 `reviewModes.verification`，§7.4）。
 
 ### 4.3 出处（sources）
 
@@ -513,7 +516,7 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
 
 - `orbit wiki import --from ~/.claude/projects/<p>/memory`（或 CLAUDE.md、AGENTS.md）。每个文件成为一个 `note` 出处，由导入会话提议条目，是否进 Review 由 space 的审阅模式决定（见下）。
 - owner 的 1,075 条记忆笔记可以作为冷启动种子。
-- 导入的是 agent 写的二手内容：Manual 模式下全部进 Review；Tiered 与 Automatic 模式下按审阅模式生效（§4.2 末条），安全底线照常。
+- 导入的是 agent 写的二手内容：Manual 模式下全部进 Review；Tiered 模式下按审阅模式生效，Automatic 模式下先等核实、按核实结论生效（§4.2 末条），安全底线照常。
 
 ### 8.4 互联网巡检（阶段 3，见 §11）
 

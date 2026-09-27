@@ -13,7 +13,8 @@ import (
 // composition inside a session. Like the MCP tools they act for the session they run in — what a
 // session may read is what its bound workspace shares, and a proposal is recorded against it — so
 // there is no headless form: at a terminal outside a session there is nowhere to read from and
-// nobody to propose as.
+// nobody to propose as. `orbit wiki verify` (wiki_verify.go) is the one verb with no tool beside it:
+// it runs a model, which is a runner's work rather than a tool call's.
 
 const wikiHelp = `orbit wiki — read the Orbit wiki and propose to it
 
@@ -22,10 +23,12 @@ Usage:
   orbit wiki get <id>[,<id>...] [--include WHAT]... [--json]
   orbit wiki propose (--ops JSON | --ops-file -) [--rationale TEXT | --rationale-file -]
                      [--idempotency-key KEY] [--dry-run] [--json]
+  orbit wiki verify --space ID [--model MODEL] [--max N] [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
 fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. An agent's write
-is a proposal that waits for the owner in Review, so never report one as saved.
+is a proposal that waits for the owner in Review — or, in an automatic space, for its verification,
+which 'orbit wiki verify' runs with the local model — so never report one as saved.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -87,6 +90,28 @@ An op is one of add / reinforce / amend / supersede / retire / challenge, and ci
 came from. Record only what someone could not read from the code; a claim you cannot cite is not
 ready. What this writes waits for the owner — do not tell the user it is saved.
 `,
+	"verify": `orbit wiki verify — have the local model verify what this session proposed into an automatic space
+
+Usage:
+  orbit wiki verify --space ID [--model MODEL] [--max N] [--json]
+
+Options:
+  --space ID               The automatic space this session proposed into. Required
+  --model MODEL            The model to verify with. Default: ANTHROPIC_MODEL, the model this
+                           session's provider names, at its ANTHROPIC_BASE_URL
+  --max N                  Verify at most N ops in this run; the rest keep waiting for the next
+  --json                   Print the run's summary as JSON
+
+` + wikiVerifyPrecondition + `
+
+Each op this session proposed that waits for its verification is handed, with the text of every
+record it cites, to a clean Claude Code (--bare, no tools, no MCP server, an empty HOME and
+CLAUDE_CONFIG_DIR, the token from ANTHROPIC_AUTH_TOKEN through an apiKeyHelper), and the model
+answers supported, partial, unsupported or duplicate. Each verdict is reported as soon as it is
+read. An answer that is not exactly a verdict reports nothing and counts as a failure; the command
+stops at the first 401 from the model's endpoint and when the space is no longer automatic, and
+exits non-zero when any op it looked at was left without a verdict.
+`,
 }
 
 // wikiCLICapabilities are listed inside a session only (SessionOnly): every one of them reads or
@@ -128,6 +153,22 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 			"--dry-run (dryRun)",
 			"--json",
 		},
+		Mutates:     true,
+		SessionOnly: true,
+	},
+	{
+		// A verb with no MCP tool beside it (contract `agentSurface.verify.tool`): it runs a model,
+		// which is a runner's work, so its description is its own rather than a descriptor's.
+		Tool:  "wiki_verify",
+		Argv:  []string{"orbit", "wiki", "verify"},
+		Usage: "orbit wiki verify --space ID [--model MODEL] [--max N] [--json]",
+		Arguments: []string{
+			"--space <id> (required; the automatic space this session proposed into)",
+			"--model <model> (default ANTHROPIC_MODEL, the model this session's provider names)",
+			"--max <n> (verify at most n ops this run)",
+			"--json",
+		},
+		Description: wikiVerifyDescription,
 		Mutates:     true,
 		SessionOnly: true,
 	},
@@ -190,6 +231,8 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliWikiGet(args[1:], out, ctx)
 	case "propose":
 		return cliWikiPropose(args[1:], in, out, ctx)
+	case "verify":
+		return cliWikiVerify(args[1:], out, ctx)
 	default:
 		panic("unreachable wiki command")
 	}

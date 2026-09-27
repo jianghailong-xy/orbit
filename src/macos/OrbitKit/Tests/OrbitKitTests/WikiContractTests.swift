@@ -144,6 +144,22 @@ final class WikiContractTests: XCTestCase {
         XCTAssertEqual(try strings(modes["values"], "reviewModes.values"), ["manual", "tiered", "automatic"])
     }
 
+    /// Automatic's verification (revision 3): the op that waits for its verdict is a decision of its own,
+    /// never the forward-compat floor, and a trail's verdict is one of the contract's four.
+    func testTheVerificationDecisionAndVerdictsAreTheContracts() throws {
+        let modes = try object(contract()["reviewModes"], "reviewModes")
+        let verification = try object(modes["verification"], "reviewModes.verification")
+        XCTAssertEqual(Array(try object(verification["verdicts"], "reviewModes.verification.verdicts").keys).sorted(),
+                       known(WikiVerificationVerdict.self).sorted())
+        let waiting = #"{"id":"op","decision":"verifying","verification":null}"#
+        XCTAssertEqual(try JSONDecoder().decode(WikiChangesetOp.self, from: Data(waiting.utf8)).decision, .verifying)
+        let verified = #"{"id":"op","decision":"rejected","decisionReason":"duplicate","verification":{"verdict":"duplicate","reason":"The space already says this.","model":"qwen3.8-27b-fp8","at":"2026-09-27T04:00:00.000Z","duplicateOf":"34VrJeVspTnzi2Ye6i8bz"}}"#
+        let op = try JSONDecoder().decode(WikiChangesetOp.self, from: Data(verified.utf8))
+        XCTAssertEqual(op.verification?.verdict, .duplicate)
+        XCTAssertEqual(op.verification?.model, "qwen3.8-27b-fp8")
+        XCTAssertEqual(op.verification?.duplicateOf, "34VrJeVspTnzi2Ye6i8bz")
+    }
+
     /// What an anchor is written with is exactly what the contract's anchor types name, and `type`.
     func testAnAnchorIsWrittenWithTheContractsKeys() throws {
         let types = try object(contract()["anchorTypes"], "anchorTypes")
