@@ -3071,6 +3071,14 @@ export class WikiService {
     const summary = typeof draft.summary === 'string' ? draft.summary : '';
     const text = `${title} ${summary}`.trim();
     if (text === '') return [];
+    // The five first, and a rejection's reason only for them: the reason is a lookup per row, and it
+    // belongs to what is returned, not to every entry the trigram index lets through to its recheck.
+    //
+    // The draft's text reaches the planner as an InitPlan's output, `(SELECT $n::text)`, rather than
+    // as a constant. Given a constant, the planner prices `%` by running it against every value in
+    // the index expression's statistics — a hundred and more trigram extractions, 10–30 ms of
+    // planning per op on production — to arrive at the plan it chooses anyway once migration 0313
+    // has priced the test: the trigram index.
     const rows = await tx.$queryRaw<
       Array<{
         id: string;
@@ -3082,24 +3090,29 @@ export class WikiService {
         rejectedReason: string | null;
       }>
     >(Prisma.sql`
-      SELECT e."id" AS "id",
-             e."kind" AS "kind",
-             e."title" AS "title",
-             e."status" AS "status",
-             e."trust" AS "trust",
-             similarity(wiki_entry_search_text(e."title", e."summary", e."aliases", e."fields"), ${text})::float8 AS "score",
+      SELECT n."id" AS "id",
+             n."kind" AS "kind",
+             n."title" AS "title",
+             n."status" AS "status",
+             n."trust" AS "trust",
+             n."score" AS "score",
              (SELECT o."decision_reason"
                 FROM "wiki_changeset_op" o
-               WHERE o."result_entry_id" = e."id" AND o."decision" = 'rejected'
+               WHERE o."result_entry_id" = n."id" AND o."decision" = 'rejected'
                ORDER BY o."decided_at" DESC NULLS LAST
                LIMIT 1) AS "rejectedReason"
-        FROM "wiki_entry" e
-       WHERE e."owner_id" = ${ownerId}::uuid
-         AND e."space_id" = ${spaceId}::uuid
-         AND (${exclude}::uuid IS NULL OR e."id" <> ${exclude}::uuid)
-         AND wiki_entry_search_text(e."title", e."summary", e."aliases", e."fields") % ${text}
-       ORDER BY "score" DESC, e."recorded_at" DESC
-       LIMIT 5
+        FROM (
+          SELECT e."id", e."kind", e."title", e."status", e."trust", e."recorded_at" AS "recordedAt",
+                 similarity(wiki_entry_search_text(e."title", e."summary", e."aliases", e."fields"), (SELECT ${text}::text))::float8 AS "score"
+            FROM "wiki_entry" e
+           WHERE e."owner_id" = ${ownerId}::uuid
+             AND e."space_id" = ${spaceId}::uuid
+             AND (${exclude}::uuid IS NULL OR e."id" <> ${exclude}::uuid)
+             AND wiki_entry_search_text(e."title", e."summary", e."aliases", e."fields") % (SELECT ${text}::text)
+           ORDER BY "score" DESC, e."recorded_at" DESC
+           LIMIT 5
+        ) n
+       ORDER BY n."score" DESC, n."recordedAt" DESC
     `);
     // A neighbour a verification rejected says why in the verifier's own words as well (contract
     // `reviewModes.verification.verdicts.unsupported`): read beside the query above rather than inside
