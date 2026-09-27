@@ -1,0 +1,45 @@
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+-- What testing a wiki entry's text against a trigram query really costs, told to the planner.
+--
+-- WHY
+-- ---
+-- Every add in a changeset looks up its near neighbours (WikiService.nearNeighbours):
+-- `wiki_entry_search_text(title, summary, aliases, fields) % $text` over the space. Evaluated on a
+-- row, that is ~0.1 ms: the function assembles a few hundred bytes of text, and pg_trgm then
+-- extracts the trigrams of all of it — slow for mixed CJK and Latin text, where every multibyte
+-- character is classified and lower-cased on its own. The planner priced it at the default COST of
+-- 100, a quarter of a page read, so reading every row of the space and testing each looked cheaper
+-- than `wiki_entry_search_trgm` for any query with the usual hundred or so trigrams. On production
+-- (2,606 entries, 2026-09-27) 19 of 20 sampled drafts were planned as a sequential scan and took
+-- 290–470 ms each; the same drafts through the trigram index took 3–38 ms. A changeset is one
+-- interactive transaction that Prisma closes after 5 s, which is why a large space could only take
+-- one to three ops at a time.
+--
+-- WHAT CHANGES
+-- ------------
+-- COST 10000 — 10,000 × cpu_operator_cost, the price of 25 page reads: one call, and the trigram test
+-- on its result that every caller performs (the function exists only to be matched by trigram). With
+-- it a plan that tests every row of a space costs what it takes,
+-- and a trigram index scan, rechecking only the entries that share enough trigrams with the query,
+-- wins wherever there is anything to avoid. Keyword search's ILIKE over the same expression
+-- (wiki-retrieval.ts) is priced by the same number, and is steered the same way.
+--
+-- A `CREATE OR REPLACE FUNCTION "wiki_entry_search_text"` resets COST to 100: a later migration that
+-- re-declares the function must say COST 10000 again. wiki-scale.pg.spec.ts goes red if the
+-- neighbour lookup goes back to a scan.
+--
+-- WHAT IS NOT TOUCHED
+-- -------------------
+-- The function's body, arguments and volatility are unchanged, so `wiki_entry_search_trgm`, built
+-- over a call to it, is untouched and still matched by every query that repeats that call. No table,
+-- column, constraint, index, trigger or type is created, altered or dropped, and nothing outside the
+-- wiki is named. No row is read, written or locked.
+--
+-- NUMBERING, RE-RUNNABILITY
+-- -------------------------
+-- 0313: the highest number on origin/main was 0311 when this was written (2026-09-27), and 0312 is
+-- claimed by the Automatic verification branch (`0312_wiki_verification`). Setting COST is
+-- idempotent: the statement can run twice.
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+
+ALTER FUNCTION "wiki_entry_search_text"(TEXT, TEXT, TEXT[], JSONB) COST 10000;
