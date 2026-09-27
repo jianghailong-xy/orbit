@@ -21,6 +21,11 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     /// plain assistant text, but neither an error to act on nor a reply: a pause, with a retry the
     /// server has already armed.
     case autoRetry(AutoRetryNotice)
+    /// A heads-up carried on a `system` event (`payload.notice`): the turn worked, but something
+    /// about it needs saying — the session moved to another account in its pool, fell back to the
+    /// runner's own login, left edits in the shared checkout. A calm note, not an error: nothing is
+    /// broken (web parity: `NoticeNode`).
+    case notice(id: String, message: String)
 
     public var id: String {
         switch self {
@@ -32,6 +37,7 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .error(let id, _): return id
         case .authError(let id, _): return id
         case .autoRetry(let n): return n.id
+        case .notice(let id, _): return id
         }
     }
 }

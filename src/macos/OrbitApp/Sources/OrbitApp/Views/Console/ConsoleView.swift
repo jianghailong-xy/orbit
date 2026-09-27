@@ -1270,6 +1270,11 @@ struct TranscriptItemView: View {
                 Label(notice.message, systemImage: "clock.fill")
                     .foregroundStyle(.secondary).textSelection(.enabled)
             }
+        case .notice(_, let message):
+            // A heads-up, not a failure — web's `.chat-notice`: the warning tone at label size,
+            // behind the triangle.
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
         }
     }
 
