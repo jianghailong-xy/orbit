@@ -63,15 +63,20 @@ type SessionRow = Record<string, unknown>;
  *  `{ taskId: null }` branch, and a fake that let a missing relation through would report the
  *  predicate as working when it excluded every session that has no task at all. */
 function matchesBranch(row: SessionRow, cond: Record<string, unknown>): boolean {
-  return Object.entries(cond).every(([key, expected]) => {
-    if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
-      const related = row[key] as Record<string, unknown> | null | undefined;
-      if (!related) return false;
-      return Object.entries(expected as Record<string, unknown>)
-        .every(([k, v]) => (related[k] ?? null) === v);
-    }
-    return (row[key] ?? null) === expected;
-  });
+  return Object.entries(cond).every(([key, expected]) => matchesField(row[key], expected));
+}
+
+/** One field of a branch: a scalar, `{ not: value }`, or a to-one relation filter, nested as deep as
+ *  the `where` goes (the cancelled-project veto reads `task.project.status`). */
+function matchesField(actual: unknown, expected: unknown): boolean {
+  if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
+    if ('not' in expected) return (actual ?? null) !== (expected as { not: unknown }).not;
+    const related = actual as Record<string, unknown> | null | undefined;
+    if (!related) return false;
+    return Object.entries(expected as Record<string, unknown>)
+      .every(([k, v]) => matchesField(related[k], v));
+  }
+  return (actual ?? null) === expected;
 }
 
 /** Every `AND` clause of a `where`, each of which is itself an OR of branches. The dispatch-hold
@@ -1133,6 +1138,38 @@ test('a session whose task is not paused still retries, and a paused one does no
     assert.deepEqual(resumed.map((r) => r.id), ['session-free'],
       'the runnable one is resumed, and it is the only one');
     assert.equal(rows[0].retryAt, PAST, 'the paused one is still armed for after the pause');
+  });
+
+/** A task-bound WORK session on a task filed under a project, which is `status`. */
+function projectWork(id: string, status: 'OPEN' | 'CANCELLED'): SessionRow {
+  return row({
+    id,
+    taskId: `task-${id}`,
+    startsTaskWork: true,
+    task: {
+      terminalReason: null, supersededByTaskId: null, verifies: null,
+      dispatchHold: false,
+      projectId: `project-${status}`,
+      project: { status },
+    },
+  });
+}
+
+test('a cancelled project stops the sweep from resuming its task\'s work, and an open one does not',
+  async () => {
+    // The other standing veto every run door applies (projectNotCancelledSql), asked where the hold
+    // is asked: at the instant of the resume, so a project cancelled after the retry was armed is
+    // honoured without the arm ever having known.
+    const { service, resumed, rows } = makeService([
+      projectWork('session-cancelled', 'CANCELLED'),
+      projectWork('session-open', 'OPEN'),
+    ]);
+    await service.sweep(NOW);
+    assert.deepEqual(resumed.map((r) => r.id), ['session-open'],
+      'the open project\'s work is resumed, and it is the only one');
+    // Deferred, like a pause: reopening the project lets the arm fire on the next sweep.
+    assert.equal(rows[0].retryAt, PAST, 'the cancelled one is still armed');
+    assert.equal(rows[0].retryAttempts, 0, 'and no attempt is spent on it');
   });
 
 test('a paused task\'s salvage conversation still gets its answer re-sent', async () => {

@@ -1430,9 +1430,9 @@ struct ProjectDetailView: View {
                 unfinished += b.awaitingVerification + b.failed
             }
             let stays = unfinished == 1 ? "task stays" : "tasks stay"
-            return "\(unfinished) unfinished \(stays) filed under it."
+            return "\(unfinished) unfinished \(stays) filed under it and won’t start. A run already going is not stopped."
         default:
-            return "Reopening puts this project back to Open and changes nothing else: its tasks, its stated criteria and its history stay as they are."
+            return "Reopening puts this project back to Open, so its tasks can start again, and changes nothing else: its tasks, its stated criteria and its history stay as they are."
         }
     }
 

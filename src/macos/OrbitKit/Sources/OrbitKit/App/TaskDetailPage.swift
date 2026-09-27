@@ -36,6 +36,11 @@ public enum TaskDetailCopy {
     public static let createdFromLabel = "Created from"
     public static let createdLabel = "Created"
 
+    /// Under the project line when that project was cancelled: no door starts its tasks. The web
+    /// panel's `PROJECT_CANCELLED_NOTE`.
+    public static let projectCancelledNote =
+        "The project was cancelled, so this task won’t start. Reopen the project to run it."
+
     // MARK: start at (`TaskScheduleEditor.tsx`)
 
     /// What the row reads while nothing is scheduled — the web's datetime box is simply empty.
