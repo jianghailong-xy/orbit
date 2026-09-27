@@ -152,7 +152,9 @@ export class ProjectAcceptanceService {
 
   /**
    * `CONFIRM_ACCEPTANCE_CRITERIA`: the account owner says this exact version of the standard set
-   * expresses the goal. The one writer this HUMAN_ONLY action has.
+   * expresses the goal. The one door this HUMAN_ONLY action has; the only other writer of its rows
+   * is `ProjectsService.decideCriteriaChange`, carrying a confirmation over an edit the owner
+   * approved there.
    *
    * Two rules, in the order a caller can act on them.
    *
