@@ -45,7 +45,7 @@ import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { RealtimeService } from '../realtime/realtime.service';
 import { WikiController } from './wiki.controller';
 import { WikiRetrieval } from './wiki-retrieval';
-import { WikiService } from './wiki.service';
+import { normalizeRepoUrl, slugFromText, WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -235,7 +235,25 @@ async function workspace(
     shape.repoUrl ?? null,
     shape.env ? JSON.stringify(shape.env) : null,
   ]);
+  if (shape.repoUrl) await manualSpaceFor(h, ownerId, shape.repoUrl);
   return id;
+}
+
+/**
+ * The space a repository's sessions bind to on first use, made beforehand as a MANUAL one — the row
+ * binding on first use would make, bar its review mode. This file pins phase 1's write path, which is
+ * exactly what a Manual space does (contract `reviewModes.meaning.manual`), while a space made on
+ * first use is Tiered now; what the other modes do is `wiki-review-mode.pg.spec.ts`'s. Two spellings
+ * of one repository are one space, so the second call finds the first's row and adds none.
+ */
+async function manualSpaceFor(h: Harness, ownerId: string, repoUrl: string): Promise<void> {
+  const norm = normalizeRepoUrl(repoUrl);
+  assert.ok(norm, `${repoUrl} normalizes to nothing`);
+  await h.sql.query(
+    `INSERT INTO "wiki_space"("id","owner_id","slug","title","repo_url_norm","settings")
+     VALUES ($1,$2,$3,'spec',$4,$5) ON CONFLICT DO NOTHING`,
+    [randomUUID(), ownerId, slugFromText(norm!), norm, JSON.stringify({ reviewMode: 'manual' })],
+  );
 }
 
 async function session(
@@ -297,13 +315,18 @@ async function task(
   return id;
 }
 
-/** A space the owner makes through the door, so the fixture is exercised the way a client uses it. */
+/**
+ * A space the owner makes through the door, so the fixture is exercised the way a client uses it —
+ * and switches to Manual, the phase-1 write path this file pins (see `manualSpaceFor`).
+ */
 async function space(h: Harness, who: Account, repoUrl?: string): Promise<string> {
   const answer = await call(h, { bearer: who.bearer }, 'POST', '/wiki/spaces', {
     title: 'The orbit repository',
     ...(repoUrl ? { repoUrl } : {}),
   });
   expectStatus(answer, 201, 'the owner creates a space');
+  const manual = await call(h, { bearer: who.bearer }, 'PATCH', `/wiki/spaces/${answer.body.id}`, { reviewMode: 'manual' });
+  expectStatus(manual, 200, 'the owner switches the space to Manual');
   return answer.body.id as string;
 }
 

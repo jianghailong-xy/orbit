@@ -218,8 +218,14 @@ type sessionMeta struct {
 	CodexStateLayout    string `json:"codexStateLayout,omitempty"`
 	CodexStatePartition string `json:"codexStatePartition,omitempty"`
 	CodexStateHome      string `json:"codexStateHome,omitempty"`
-	WorkDir             string `json:"workDir"`
-	Title               string `json:"title"`
+	// ClaudeConfigDir is the CLAUDE_CONFIG_DIR this session runs with when it is not the one the
+	// runner's own environment resolves — a session on one of the machine's Claude accounts. Where
+	// it is written is where the CLI keeps that conversation's transcript, so it is what every
+	// reader of the session's transcripts has to resolve through, and what a removal refuses to
+	// delete while the session is running.
+	ClaudeConfigDir string `json:"claudeConfigDir,omitempty"`
+	WorkDir         string `json:"workDir"`
+	Title           string `json:"title"`
 }
 
 func runtimeProvider(job *ClaimedSession) string {
@@ -284,11 +290,20 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 	// Generic writes happen before the provider starts and on cold claims. Preserve
 	// the Codex state scope learned by an earlier successful start so a resume never
 	// falls back from runner-shared state to a stale legacy session directory.
-	if layout == "" {
+	claudeDir := claudeSessionConfigDirToRecord(job, execDir)
+	if layout == "" || claudeDir == "" {
 		if existing := readSessionMeta(filepath.Join(scratch, "meta.json")); existing != nil {
-			layout = existing.CodexStateLayout
-			partition = existing.CodexStatePartition
-			codexHome = existing.CodexStateHome
+			if layout == "" {
+				layout = existing.CodexStateLayout
+				partition = existing.CodexStatePartition
+				codexHome = existing.CodexStateHome
+			}
+			// Same reason as the Codex scope above: a write that happens where the account is not
+			// in hand — a generic one, or a claim that names no account — must not erase which
+			// directory this session's conversation is in.
+			if claudeDir == "" {
+				claudeDir = existing.ClaudeConfigDir
+			}
 		}
 	}
 	meta := sessionMeta{
@@ -298,12 +313,31 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 		CodexStateLayout:    layout,
 		CodexStatePartition: partition,
 		CodexStateHome:      codexHome,
+		ClaudeConfigDir:     claudeDir,
 		WorkDir:             execDir,
 		Title:               job.Title,
 	}
 	if b, err := json.Marshal(meta); err == nil {
 		_ = writeFileAtomically(filepath.Join(scratch, "meta.json"), b, 0o644)
 	}
+}
+
+// claudeSessionConfigDirToRecord is the CLAUDE_CONFIG_DIR a session's own environment names, when
+// that is not the directory the runner's own environment resolves: a session dispatched onto one of
+// the machine's Claude accounts. Empty for every other session — including a claude one on Default,
+// whose directory the reader resolves for itself — so the record only ever names an account.
+func claudeSessionConfigDirToRecord(job *ClaimedSession, execDir string) string {
+	if runtimeProvider(job) != providerClaude {
+		return ""
+	}
+	dir, err := claudeSessionAccountDir(job.Agent.Env, execDir)
+	if err != nil || dir == "" {
+		return ""
+	}
+	if own, err := effectiveClaudeConfigDir(os.Environ(), execDir); err == nil && own == dir {
+		return ""
+	}
+	return dir
 }
 
 func writeFileAtomically(path string, data []byte, perm os.FileMode) error {
@@ -760,7 +794,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// that finishes between turns still clears from the "Background processes" tray. (Claude
 	// only — Codex has no such transcript; the glob would simply never match.)
 	if runtimeProvider(job) == providerClaude {
-		bg.startTranscriptWatcher(job.SessionUUID)
+		// The account's own config directory when dispatch named one: the transcript is written
+		// wherever that session's CLI keeps its state, not necessarily in the runner's own.
+		configDir, err := claudeSessionAccountDir(job.Agent.Env, execDir)
+		if err != nil {
+			logln("claude transcript watcher: cannot resolve the config dir:", err)
+			configDir = ""
+		}
+		bg.startTranscriptWatcher(job.SessionUUID, configDir)
 	}
 	// The door the agent's background jobs come in through, served for the life of
 	// this session run rather than of any one engine: a job outlives the engine

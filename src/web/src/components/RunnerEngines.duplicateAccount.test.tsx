@@ -30,6 +30,7 @@ const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
 
 const DEFAULT: RunnerEngineAccount = {
   id: 'default',
+  home: '/root/.codex',
   codexHome: '/root/.codex',
   auth: 'yes',
   fingerprintPrefix: 'cxa1_9f3a41c7',
@@ -37,6 +38,7 @@ const DEFAULT: RunnerEngineAccount = {
 const WORK: RunnerEngineAccount = {
   id: '3fa91c2e',
   name: 'Work',
+  home: '/root/.orbit/codex-accounts/3fa91c2e',
   codexHome: '/root/.orbit/codex-accounts/3fa91c2e',
   auth: 'yes',
   fingerprintPrefix: 'cxa1_2b7e9013',
@@ -44,6 +46,7 @@ const WORK: RunnerEngineAccount = {
 const PERSONAL: RunnerEngineAccount = {
   id: '7c21de40',
   name: 'Personal',
+  home: '/root/.orbit/codex-accounts/7c21de40',
   codexHome: '/root/.orbit/codex-accounts/7c21de40',
   auth: 'yes',
   fingerprintPrefix: 'cxa1_4d5c8b26',
@@ -52,12 +55,14 @@ const PERSONAL: RunnerEngineAccount = {
 // one: the field is absent entirely, which is not the same as two slots agreeing.
 const DEFAULT_UNREAD: RunnerEngineAccount = {
   id: 'default',
+  home: '/root/.codex',
   codexHome: '/root/.codex',
   auth: 'yes',
 };
 const WORK_UNREAD: RunnerEngineAccount = {
   id: '3fa91c2e',
   name: 'Work',
+  home: '/root/.orbit/codex-accounts/3fa91c2e',
   codexHome: '/root/.orbit/codex-accounts/3fa91c2e',
   auth: 'yes',
 };
@@ -209,7 +214,7 @@ describe('one Codex account signed into two slots', () => {
       apiMock.mock.calls
         .filter(([, options]) => (options?.method ?? 'GET') === 'DELETE')
         .map(([path]) => path),
-    ).toEqual([`/runners/${RUNNER_ID}/codex-accounts/3fa91c2e`]);
+    ).toEqual([`/runners/${RUNNER_ID}/accounts/codex/3fa91c2e`]);
   });
 });
 

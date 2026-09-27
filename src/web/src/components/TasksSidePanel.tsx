@@ -24,7 +24,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type {
   PlanUsage,
-  RunnerCodexAccountRemoveState,
+  RunnerAccountRemoveState,
   RunnerEngineHealth,
   RunnerInstallState,
   RunnerModelCatalog,
@@ -224,7 +224,9 @@ export interface Runner {
   install?: RunnerInstallState | null;
   // The Codex account removal this runner has in flight, if any: which slot is going, and what the
   // machine said when it would not.
-  codexAccountRemove?: RunnerCodexAccountRemoveState | null;
+  /** The account removal in flight on this runner: which engine's store, which slot, and — when the
+   *  machine refused — what it said. */
+  accountRemove?: RunnerAccountRemoveState | null;
 }
 
 interface Workspace {

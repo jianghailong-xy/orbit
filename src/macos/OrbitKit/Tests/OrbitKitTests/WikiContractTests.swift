@@ -125,11 +125,23 @@ final class WikiContractTests: XCTestCase {
         }
     }
 
-    /// Only these are handed to agents, which is what a retired or rejected entry's card says it is not.
+    /// Only these are handed to agents, which is what a retired or rejected entry's card says it is not:
+    /// what a review mode applied is handed on as `auto`, and never as `unreviewed`.
     func testThePushableTrustIsTheContracts() throws {
         let trust = try object(contract()["trust"], "trust")
         XCTAssertEqual(try strings(trust["pushable"], "trust.pushable"),
-                       [WikiTrust.owner.rawValue, WikiTrust.confirmed.rawValue])
+                       [WikiTrust.owner.rawValue, WikiTrust.confirmed.rawValue, WikiTrust.auto.rawValue])
+    }
+
+    /// The review modes' two trusts are words of their own, never the forward-compat floor, and their
+    /// labels are the ones the web shows (`WikiCopyParityTests` holds the two to each other).
+    func testTheReviewModesTrustsDecodeAndSayAutoAndUnreviewed() throws {
+        let decoded = try JSONDecoder().decode([WikiTrust].self, from: Data(#"["auto","unreviewed"]"#.utf8))
+        XCTAssertEqual(decoded, [.auto, .unreviewed])
+        XCTAssertEqual(WikiCopy.trustLabel(.auto), "Auto")
+        XCTAssertEqual(WikiCopy.trustLabel(.unreviewed), "Unreviewed")
+        let modes = try object(contract()["reviewModes"], "reviewModes")
+        XCTAssertEqual(try strings(modes["values"], "reviewModes.values"), ["manual", "tiered", "automatic"])
     }
 
     /// What an anchor is written with is exactly what the contract's anchor types name, and `type`.

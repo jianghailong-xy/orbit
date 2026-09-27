@@ -39,8 +39,8 @@ function codex(defaultAuth: Auth, workAuth: Auth, overrides: Record<string, unkn
       // The engine's own answer is Default's: the runner asks it in its own environment.
       auth: defaultAuth,
       accounts: [
-        { id: 'default', codexHome: DEFAULT_HOME, auth: defaultAuth },
-        { id: WORK, name: 'Work', codexHome: WORK_HOME, auth: workAuth, email: EMAIL, accountId: ACCOUNT_ID },
+        { id: 'default', home: DEFAULT_HOME, codexHome: DEFAULT_HOME, auth: defaultAuth },
+        { id: WORK, name: 'Work', home: WORK_HOME, codexHome: WORK_HOME, auth: workAuth, email: EMAIL, accountId: ACCOUNT_ID },
       ],
       ...overrides,
     } as RunnerEngineHealth,
@@ -171,7 +171,7 @@ test('a workspace on Default is judged on Default, and named as such only among 
     assert.ok(!err.message.includes('CODEX_HOME'), err.message);
   }
   // The only account: the refusal reads exactly as it did before accounts.
-  for (const accounts of [[{ id: 'default', codexHome: DEFAULT_HOME, auth: 'no' }], undefined]) {
+  for (const accounts of [[{ id: 'default', home: DEFAULT_HOME, codexHome: DEFAULT_HOME, auth: 'no' }], undefined]) {
     const err = await refusal({
       codexAccount: null,
       engines: [{ engine: 'codex', installed: true, auth: 'no', ...(accounts ? { accounts } : {}) }],

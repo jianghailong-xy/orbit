@@ -86,15 +86,40 @@ function cleanAbsolutePath(path: string): string | null {
   return '/' + parts.join('/');
 }
 
+/** The directory one account lives in, under whichever name its report carries it (home, or the
+ *  codex-named field an older runner sends). */
+export function accountDir(account: RunnerEngineAccount): string {
+  return account.home ?? account.codexHome ?? '';
+}
+
+/** The variables that mean a run brings a credential of its own rather than spending a login the
+ *  machine holds, per engine. Read where the run is judged: such a run spends no account's
+ *  subscription, so no account's quota holds it back. */
+const OWN_CREDENTIAL_KEYS: Partial<Record<string, readonly string[]>> = {
+  codex: ['CODEX_API_KEY', 'OPENAI_API_KEY', 'OPENAI_BASE_URL'],
+  claude: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN'],
+};
+
+/** The directory an engine's own login lives in when the run names none: what its CLI resolves
+ *  (CODEX_HOME else ~/.codex; CLAUDE_CONFIG_DIR else ~/.claude). */
+const ENGINE_DEFAULT_DIR: Partial<Record<string, (home: string | undefined) => string | undefined>> = {
+  codex: (home) => (home === undefined ? undefined : `${home}/.codex`),
+  claude: (home) => (home === undefined ? undefined : `${home}/.claude`),
+};
+
 /**
- * Which of a runner's Codex accounts a session spends, from the env it runs with (the workspace env
- * dispatch hands the runner) and the accounts that runner reports, resolved the way the runner
- * resolves it (codexSessionAccountSlot, src/runner-go/codex_state.go): no CODEX_HOME is Default, and a
- * CODEX_HOME — set, or moved by HOME — is the account living there. null when the session spends no
- * account's subscription this runner reports: a CODEX_API_KEY or OPENAI_* of its own (the variables
- * codexResetAccountOverride counts), or a CODEX_HOME none of its accounts lives in.
+ * Which of a runner's accounts a session spends, from the env it runs with (the workspace env
+ * dispatch hands the runner) and the accounts that runner reports — resolved the way the runner
+ * resolves it: no config-directory variable is Default, and one that is set (or moved by HOME) is
+ * the account living there. Engines that keep no login per directory have no account to name, and
+ * answer null.
+ *
+ * null means the session spends no account's subscription this runner reports: a credential of its
+ * own (OWN_CREDENTIAL_KEYS — what the runner's hasInjectedCredentials reads), or a directory none
+ * of its accounts lives in.
  */
-export function codexAccountOfEnv(
+export function accountOfEnv(
+  provider: string | null | undefined,
   env: Readonly<Record<string, unknown>> | null | undefined,
   accounts: readonly RunnerEngineAccount[] | null | undefined,
 ): string | null {
@@ -103,15 +128,27 @@ export function codexAccountOfEnv(
     const value = vars[key];
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
   };
-  if (Object.keys(vars).some((key) => (key === 'CODEX_API_KEY' || key.startsWith('OPENAI_')) && set(key))) {
-    return null;
-  }
-  const home = set('HOME');
-  const codexHome = set('CODEX_HOME') ?? (home === undefined ? undefined : `${home}/.codex`);
-  if (codexHome === undefined) return CODEX_DEFAULT_ACCOUNT;
-  const where = cleanAbsolutePath(codexHome);
+  const own = OWN_CREDENTIAL_KEYS[provider ?? ''];
+  const defaultDir = ENGINE_DEFAULT_DIR[provider ?? ''];
+  if (!own || !defaultDir) return null;
+  if (Object.keys(vars).some((key) => own.includes(key) && set(key))) return null;
+  const varName = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+  const dir = set(varName) ?? defaultDir(set('HOME'));
+  if (dir === undefined) return CODEX_DEFAULT_ACCOUNT;
+  const where = cleanAbsolutePath(dir);
   if (where === null) return null;
-  return (accounts ?? []).find((account) => cleanAbsolutePath(account.codexHome) === where)?.id ?? null;
+  return (accounts ?? []).find((account) => cleanAbsolutePath(accountDir(account)) === where)?.id ?? null;
+}
+
+/**
+ * Which of a runner's Codex accounts a session spends (accountOfEnv). The runner resolves it the
+ * same way (codexSessionAccountSlot, src/runner-go/codex_state.go).
+ */
+export function codexAccountOfEnv(
+  env: Readonly<Record<string, unknown>> | null | undefined,
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+): string | null {
+  return accountOfEnv('codex', env, accounts);
 }
 
 /**

@@ -89,6 +89,11 @@ function makeController(
           (row) => row.toolUseId != null && args.where.toolUseId.in.includes(String(row.toolUseId)),
         ),
     },
+    // A returned call collects its still-PENDING card (reapApprovalsOfReturnedCalls); these
+    // sessions have none.
+    approval: {
+      updateManyAndReturn: async () => [],
+    },
     conversationTurn: {
       findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
         Object.entries(stored.turnContents ?? {})

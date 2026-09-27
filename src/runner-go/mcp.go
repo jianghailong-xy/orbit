@@ -1361,25 +1361,49 @@ func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}
 	}
 	// Unbounded, exactly like permissionPrompt: this asks a human who may be asleep, and a deadline
 	// here would turn "not answered yet" into a refusal nobody gave.
+	dec, err := awaitApprovalDecision(context.Background(), t, sessionID, id)
+	if err != nil {
+		return "", fmt.Errorf("approval poll failed: %w", err)
+	}
+	if dec.Status == "ALLOWED" {
+		return "", nil
+	}
+	if dec.Message != "" {
+		return dec.Message, nil
+	}
+	return "denied by the user", nil
+}
+
+// awaitApprovalDecision reads a card until it is no longer PENDING, and is the one loop every reader
+// of an approval waits in — the Claude permission prompt, the Codex and Kimi bridges, the DAG card
+// and the create cards. A failed poll that says nothing about the card (approvalPollIsAnswered) is
+// waited out and the card read again; one that does answer it ends the wait with its error, and so
+// does ctx. There is no other bound: the card is a human's to answer, and they may be asleep.
+//
+// One loop because the rule has to be the same everywhere, and a copy is where it went missing:
+// 2026-09-16 put the retry into the create cards' loop alone, and on 2026-09-26 the permission
+// prompt's own loop still ended on a deploy's first 502 — the engine asked again, the owner
+// approved the second card, and the first sat PENDING on the conversation's row.
+func awaitApprovalDecision(ctx context.Context, t *Transport, sessionID, approvalID string) (*ApprovalDecisionResponse, error) {
 	for {
-		dec, err := t.pollApproval(context.Background(), sessionID, id)
-		if err != nil {
-			if approvalPollIsAnswered(err) {
-				return "", fmt.Errorf("approval poll failed: %w", err)
+		dec, err := t.pollApproval(ctx, sessionID, approvalID)
+		if err == nil {
+			if dec.Status != "PENDING" {
+				return dec, nil
 			}
-			time.Sleep(approvalPollRetryDelay)
-			continue
+			continue // the server's long-poll window elapsed undecided
 		}
-		switch dec.Status {
-		case "PENDING":
-			continue
-		case "ALLOWED":
-			return "", nil
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
-		if dec.Message != "" {
-			return dec.Message, nil
+		if approvalPollIsAnswered(err) {
+			return nil, err
 		}
-		return "denied by the user", nil
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(approvalPollRetryDelay):
+		}
 	}
 }
 
@@ -1596,28 +1620,24 @@ func (s *mcpServer) proposeDag(args map[string]interface{}) map[string]interface
 	}
 	// Unbounded, exactly like permissionPrompt: this asks a human who may be asleep, and a
 	// deadline here would turn "not answered yet" into a silent abandonment of the restructure.
-	for {
-		dec, err := s.t.pollApproval(context.Background(), s.sessionID, id)
-		if err != nil {
-			return toolResult("approval poll failed: "+err.Error(), true)
-		}
-		switch dec.Status {
-		case "ALLOWED":
-			applied, err := s.t.dagApply(listID, body)
-			if err != nil {
-				// Approved but unapplicable: the graph moved while the card was open. Say so
-				// plainly — the alternative is an agent that believes it restructured the list.
-				return toolResult("approved, but applying failed: "+err.Error(), true)
-			}
-			return toolResult(prettyJSON(applied), false)
-		case "DENIED":
-			msg := dec.Message
-			if msg == "" {
-				msg = "denied by the user"
-			}
-			return toolResult("the human rejected this DAG change: "+msg, false)
-		}
+	dec, err := awaitApprovalDecision(context.Background(), s.t, s.sessionID, id)
+	if err != nil {
+		return toolResult("approval poll failed: "+err.Error(), true)
 	}
+	if dec.Status == "ALLOWED" {
+		applied, err := s.t.dagApply(listID, body)
+		if err != nil {
+			// Approved but unapplicable: the graph moved while the card was open. Say so
+			// plainly — the alternative is an agent that believes it restructured the list.
+			return toolResult("approved, but applying failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(applied), false)
+	}
+	msg := dec.Message
+	if msg == "" {
+		msg = "denied by the user"
+	}
+	return toolResult("the human rejected this DAG change: "+msg, false)
 }
 
 // permissionPrompt is claude's --permission-prompt-tool: it registers the gated tool
@@ -1626,8 +1646,10 @@ func (s *mcpServer) proposeDag(args map[string]interface{}) map[string]interface
 //
 //	{"behavior":"allow","updatedInput":{...}}  or  {"behavior":"deny","message":"..."}
 //
-// Fails CLOSED (deny) on any transport error — a control-plane outage must never
-// silently auto-approve a gated action.
+// Fails CLOSED — a control-plane outage never approves anything. A failed poll that says
+// nothing about the card is waited out and the card read again (awaitApprovalDecision),
+// since the card is still on the owner's screen; one that does answer it, or any decision
+// but an allow, denies.
 func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]interface{} {
 	if s.sessionID == "" {
 		return toolResult(denyJSON("no session context (ORBIT_SESSION_ID unset)"), false)
@@ -1644,30 +1666,25 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 	// may be asleep, and a self-imposed deadline turns "not answered yet" into a hard
 	// deny. Nothing leaks — this server is claude's stdio child, so cancelling the
 	// session kills claude, our stdin hits EOF and the process exits mid-poll.
-	for {
-		dec, err := s.t.pollApproval(context.Background(), s.sessionID, id)
-		if err != nil {
-			return toolResult(denyJSON("approval poll failed: "+err.Error()), false)
-		}
-		switch dec.Status {
-		case "ALLOWED":
-			// AskUserQuestion's "answer" rides back as updatedInput.answers (question
-			// text -> picked labels); claude reads it and formats the tool result.
-			if getString(args, "tool_name") == "AskUserQuestion" {
-				return toolResult(allowJSON(askQuestionInput(args["input"], dec.Answers), nil), false)
-			}
-			// "Allow + remember same kind": add session-scoped permission rules so
-			// claude's own engine auto-allows future matching calls without re-prompting.
-			return toolResult(allowJSON(args["input"], rememberPermissions(dec.resolveRememberRules())), false)
-		case "DENIED":
-			msg := dec.Message
-			if msg == "" {
-				msg = "denied by the user"
-			}
-			return toolResult(denyJSON(msg), false)
-		}
-		// PENDING: the server's long-poll window elapsed undecided — re-poll.
+	dec, err := awaitApprovalDecision(context.Background(), s.t, s.sessionID, id)
+	if err != nil {
+		return toolResult(denyJSON("approval poll failed: "+err.Error()), false)
 	}
+	if dec.Status == "ALLOWED" {
+		// AskUserQuestion's "answer" rides back as updatedInput.answers (question
+		// text -> picked labels); claude reads it and formats the tool result.
+		if getString(args, "tool_name") == "AskUserQuestion" {
+			return toolResult(allowJSON(askQuestionInput(args["input"], dec.Answers), nil), false)
+		}
+		// "Allow + remember same kind": add session-scoped permission rules so
+		// claude's own engine auto-allows future matching calls without re-prompting.
+		return toolResult(allowJSON(args["input"], rememberPermissions(dec.resolveRememberRules())), false)
+	}
+	msg := dec.Message
+	if msg == "" {
+		msg = "denied by the user"
+	}
+	return toolResult(denyJSON(msg), false)
 }
 
 // askQuestionInput rebuilds AskUserQuestion's input for an allow decision: the

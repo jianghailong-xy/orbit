@@ -1211,8 +1211,8 @@ final class ConsoleModel {
     /// to a resident Claude Code over its control channel (`set_model` / `set_permission_mode`) as
     /// a `setconfig` the inbox delivers mid-turn, so they take hold where the running turn stands.
     /// Those control frames are the claude runtime's alone — a Codex / Kimi / OpenCode session
-    /// still re-spawns for all of them. Web says as much in the pill tooltips (`configPillHints`);
-    /// nothing here shows the difference yet, so this comment is where the two clients agree on it.
+    /// still re-spawns for all of them. Neither client shows the difference, so this comment is
+    /// where it is written down.
     func applyConfig(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                      fastMode: Bool? = nil, provider: String? = nil) async {
         guard isLive else { return }
@@ -2258,6 +2258,9 @@ final class ConsoleModel {
     /// Cards answered or set aside HERE. They do not come back in this window: what is true now is
     /// a fact about the criteria, and what happened is the line left in the conversation.
     private var closedCards: Set<String> = []
+    /// The version of the standard set a press HERE confirmed — the one version the confirmation
+    /// card's entry in `closedCards` is about (`reopenConfirmationForANewVersion`).
+    private var confirmedHereDigest: String?
     private var loadingRuler = false
     /// When the reads above last came back. A card's own `.task` re-fires every time the List
     /// recycles that row back on screen, so scrolling past the card must not be a way to spend
@@ -2527,7 +2530,10 @@ final class ConsoleModel {
         if let merged = try? await api.mergedPromotions(projectID: projectID) {
             adoptPromotionReceipts(merged)
         }
-        if settlementHeldOnConfirmation { deliver(.acceptanceConfirmation) }
+        if settlementHeldOnConfirmation {
+            reopenConfirmationForANewVersion()
+            deliver(.acceptanceConfirmation)
+        }
         // A press that arrived before this read now has its row to land on.
         scrollToPendingOwnerItem()
         lastRulerRead = Date()
@@ -2554,6 +2560,22 @@ final class ConsoleModel {
         guard projectStatus == "OPEN" else { return false }
         guard !projectCriteria.isEmpty else { return false }
         return projectTaskCount > 0
+    }
+
+    /// Let the confirmation card back in when the version standing is not the one a press here
+    /// confirmed. The press closes the card for this window (`closedCards`), which is right for the
+    /// version it signed and wrong for the next one: the set can move again after it — the owner's
+    /// own yes to a held proposal moves it — and that version asks the same question again.
+    /// 2026-09-27: the account owner confirmed on their iPhone at 21:42 UTC and approved an edit to
+    /// criterion 7 there at 21:54; the conversation then drew nothing to press while its row in the
+    /// list read "Waiting for approval". A read still showing the signed version — one that left
+    /// before the press landed — changes nothing.
+    private func reopenConfirmationForANewVersion() {
+        guard let signed = confirmedHereDigest,
+              let standing = acceptanceConfirmation?.currentVersion.digest,
+              standing != signed else { return }
+        confirmedHereDigest = nil
+        closedCards.remove(DeliveredDecisionCard(kind: .acceptanceConfirmation).id)
     }
 
     /// Put a question into this conversation once, anchored where OrbitKit's rule puts it: where it
@@ -2834,6 +2856,7 @@ final class ConsoleModel {
             let standing = try await api.confirmAcceptanceCriteria(projectID: projectID,
                                                                    criteriaDigest: digest)
             acceptanceConfirmation = standing
+            confirmedHereDigest = digest
             close(.acceptanceConfirmation)
         } catch {
             statusMessage = "That confirmation was not recorded — \(APIClient.failureReason(error))."

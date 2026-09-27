@@ -329,6 +329,13 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
         })),
       },
       {
+        // 0311: the review mode that applied an op at once. Manual applies nothing the policy held back,
+        // so it is the one mode the column never names.
+        table: 'wiki_changeset_op', column: 'applied_by_mode', constraint: 'wiki_changeset_op_applied_by_mode_chk',
+        values: CONTRACT.reviewModes.values.filter((mode: string) => mode !== 'manual'),
+        write: (mode) => insert(client, 'wiki_changeset_op', opRow({ id: PROBE, applied_by_mode: mode })),
+      },
+      {
         table: 'wiki_changeset_op', column: 'decision_reason', constraint: 'wiki_changeset_op_decision_reason_chk',
         values: Object.keys(CONTRACT.rejectReasons),
         write: (reason) => insert(client, 'wiki_changeset_op', opRow({
@@ -514,6 +521,14 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
     await refuses(op({ seq: -1 }), 'wiki_changeset_op_seq_chk', 'ops are numbered from 0');
     await refuses(op({ payload: JSON.stringify(['add']) }), 'wiki_changeset_op_payload_chk', 'a payload is an object');
     await refuses(op({ similar: JSON.stringify({}) }), 'wiki_changeset_op_similar_chk', 'similar is a list');
+    // 0311: only an add or an amend is ever applied by a review mode, and only such an op is a spot check.
+    await refuses(op({ op: 'retire', entry_id: ENTRY, base_revision: 1, applied_by_mode: 'automatic' }),
+      'wiki_changeset_op_applied_by_mode_op_chk', 'a review mode applied an op that ends a lineage');
+    await refuses(op({ op: 'supersede', entry_id: ENTRY, base_revision: 1, applied_by_mode: 'tiered' }),
+      'wiki_changeset_op_applied_by_mode_op_chk', 'a review mode applied an op that ends a lineage');
+    await refuses(op({ spot_check: true }), 'wiki_changeset_op_spot_check_chk',
+      'a spot check of an op no review mode applied');
+    await admits(client, () => op({ op: 'amend', entry_id: ENTRY, base_revision: 1, applied_by_mode: 'tiered', spot_check: true })());
     await insert(client, 'wiki_changeset_op', opRow());
     await refuses(op({}), 'wiki_changeset_op_changeset_seq_key', 'two ops at one place in one changeset');
   });

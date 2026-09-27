@@ -622,6 +622,14 @@ export function SessionAcceptanceConfirmationCard({
   // A press made HERE gives the card up: the question is answered. A confirmation made at ANOTHER
   // end does not — that card stays where it is, going stale in place, because a reader halfway
   // through it must not watch it vanish while somebody else answers (`shown`).
+  //
+  // The press answers the version it signed and no other. The set can move after it — the owner's
+  // own yes to a held proposal moves it — and the version standing then asks again; keyed to the
+  // press alone, the card stayed gone while the session's row read "Waiting for approval". Only a
+  // standing that names a different version brings it back: one this page could not read is not
+  // news about the set.
+  const answeredHere =
+    confirm.isSuccess && (standing === null || standing.currentVersion.digest === confirm.variables);
   const title = document?.title || project;
 
   // The two presses, named once so that the buttons and the keys make the same one. What each needs
@@ -646,7 +654,7 @@ export function SessionAcceptanceConfirmationCard({
   // A press in flight, or one the door has taken, is not a card that can be answered: the two
   // answers are dead together, and the second one leaves by the composer rather than by a press
   // here, which changes where the reason is typed and not whether this card can be answered.
-  const asking = shown && !confirm.isSuccess;
+  const asking = shown && !answeredHere;
   const keys = useDecisionCardKeys({
     confirmEnabled: asking && !confirm.isPending && acceptanceConfirmationAnswerable(standing),
     chatEnabled: asking && standing !== null,
@@ -654,7 +662,7 @@ export function SessionAcceptanceConfirmationCard({
     onChatAbout: talkAbout,
   });
 
-  if (!shown || confirm.isSuccess) return null;
+  if (!shown || answeredHere) return null;
   return (
     <AcceptanceConfirmationCard
       standing={standing}

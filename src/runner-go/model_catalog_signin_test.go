@@ -167,7 +167,7 @@ func TestCatalogRefreshKeepsWhatASignedOutEngineStillLists(t *testing.T) {
 	health := probedEngines(
 		EngineHealthReport{Engine: providerClaude, Installed: true, Auth: "no"},
 		EngineHealthReport{Engine: providerCodex, Installed: true, Auth: "no",
-			Accounts: []EngineAccountReport{{ID: codexAccountDefaultSlot, Auth: "no"}}},
+			Accounts: []EngineAccountReport{{ID: accountSlotDefaultID, Auth: "no"}}},
 	)
 	claude, codex := &fakeCatalogCLI{models: claudeModels}, &fakeCatalogCLI{models: codexModels}
 	var log catalogLog
@@ -195,11 +195,11 @@ func TestCatalogRefreshStillLogsAFailureOfAnEngineNotKnownSignedOut(t *testing.T
 		{"not probed yet", providerKimi, &engineHealthProbe{}},
 		{"Codex with Default signed out but another account signed in", providerCodex, probedEngines(EngineHealthReport{
 			Engine: providerCodex, Installed: true, Auth: "no",
-			Accounts: []EngineAccountReport{{ID: codexAccountDefaultSlot, Auth: "no"}, {ID: "work", Auth: "yes"}},
+			Accounts: []EngineAccountReport{{ID: accountSlotDefaultID, Auth: "no"}, {ID: "work", Auth: "yes"}},
 		})},
 		{"Codex with Default signed out and another account unknown", providerCodex, probedEngines(EngineHealthReport{
 			Engine: providerCodex, Installed: true, Auth: "no",
-			Accounts: []EngineAccountReport{{ID: codexAccountDefaultSlot, Auth: "no"}, {ID: "work", Auth: "unknown"}},
+			Accounts: []EngineAccountReport{{ID: accountSlotDefaultID, Auth: "no"}, {ID: "work", Auth: "unknown"}},
 		})},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -230,7 +230,7 @@ func TestEngineProbeAsksForTheCatalogWhenASignedOutEngineSignsIn(t *testing.T) {
 	}
 	codexAccounts := func(def, work string) []EngineHealthReport {
 		return []EngineHealthReport{{Engine: providerCodex, Installed: true, Auth: def, Accounts: []EngineAccountReport{
-			{ID: codexAccountDefaultSlot, Auth: def}, {ID: "work", Auth: work},
+			{ID: accountSlotDefaultID, Auth: def}, {ID: "work", Auth: work},
 		}}}
 	}
 	for _, tc := range []struct {

@@ -490,8 +490,8 @@ test("a Codex session waits on the quota of the account its workspace runs on, n
         installed: true,
         auth: 'yes',
         accounts: [
-          { id: 'default', codexHome: '/root/.codex', auth: 'yes' },
-          { id: '3fa91c2e', name: 'Work', codexHome: workHome, auth: 'yes' },
+          { id: 'default', home: '/root/.codex', codexHome: '/root/.codex', auth: 'yes' },
+          { id: '3fa91c2e', name: 'Work', home: workHome, codexHome: workHome, auth: 'yes' },
         ],
       },
     ],

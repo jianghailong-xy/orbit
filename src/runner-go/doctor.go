@@ -217,10 +217,20 @@ func engineVersion(binPath string) string {
 func probeAuth(bin, binPath string) authState {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	return probeAuthIn(ctx, bin, binPath, nil)
+}
+
+// probeAuthIn is probeAuth asked with env as the CLI's environment (nil: this process's own), so one
+// account's config directory can be asked instead of the runner's — the same reason codexLoginStatus
+// takes an env. Claude's answer is the one that has to be asked this way: its login lives in
+// CLAUDE_CONFIG_DIR, so a probe without it would answer for Default whatever account was meant.
+func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authState {
 	switch bin {
 	case providerClaude:
 		// Parse stdout regardless of exit code — the JSON carries the answer.
-		out, _ := exec.CommandContext(ctx, binPath, "auth", "status").Output()
+		cmd := exec.CommandContext(ctx, binPath, "auth", "status")
+		cmd.Env = env
+		out, _ := cmd.Output()
 		var s struct {
 			LoggedIn *bool `json:"loggedIn"`
 		}
@@ -232,7 +242,9 @@ func probeAuth(bin, binPath string) authState {
 		}
 		return authNo
 	case providerCodex:
-		return codexLoginStatus(ctx, binPath, nil)
+		// nil env is this process's own, which is what Default's answer is about; an account's own
+		// directory arrives as a CODEX_HOME in env (codexSlotLoginStatus).
+		return codexLoginStatus(ctx, binPath, env)
 	case providerKimi:
 		return probeKimiACPAuth(ctx, binPath)
 	case providerOpenCode:

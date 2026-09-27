@@ -1,7 +1,8 @@
 import { ConflictException } from '@nestjs/common';
 import { type LoginEngine, type RunnerEngineHealth } from '@orbit/shared';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
-import { CODEX_DEFAULT_ACCOUNT, codexAccountOnRunner } from '../providers/codex-account';
+import { accountDir } from '@orbit/shared';
+import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from '../providers/account';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
 
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
@@ -58,45 +59,47 @@ interface SessionLogin {
   /** Codex only: how the refusal names the account. Absent when the machine has just the one, so
    *  a refusal there reads exactly as it did before accounts. */
   name?: string;
-  /** Codex only: the account's CODEX_HOME when it is not the runner's own. A sign-in typed on the
-   *  machine has to run in it, or it signs in Default instead. */
-  codexHome?: string;
+  /** The account's own directory, when it is not the runner's: a sign-in typed on the machine has
+   *  to run in it — a CODEX_HOME, a CLAUDE_CONFIG_DIR — or it signs in Default instead. */
+  dir?: string;
 }
 
 /**
- * Which Codex sign-in this session runs on, or null when the runner's report cannot say.
+ * Which account's sign-in this session runs on, or null when the runner's report cannot say.
  *
- * Resolved the way dispatch resolves it (resolveProviderExec): an account the workspace picked
- * that this runner reports runs the session in that account's CODEX_HOME, and is found with the
- * same lookup (codexAccountOnRunner); anything else runs in the session's own environment. That is
- * Default, whose sign-in is the engine's own answer: the runner probes the engine in its own
- * environment, which is what selects Default.
+ * Resolved the way dispatch resolves it (resolveProviderExec): an account the workspace picked that
+ * this runner reports runs the session in that account's own directory, and is found with the same
+ * lookup (accountOnRunner); anything else runs in the session's own environment. That is Default,
+ * whose sign-in is the engine's own answer: the runner probes the engine in its own environment,
+ * which is what selects Default.
  *
  * Not judged:
  *   - a picked account this runner does not report (the workspace moved machines, the slot was
  *     removed, the runner is too old to list accounts). Dispatch falls back to Default for it, and
  *     a refusal over Default's sign-in would be about an account nobody picked;
- *   - a CODEX_HOME typed into the workspace's environment, with no reported account picked to
+ *   - a config directory typed into the workspace's environment, with no reported account picked to
  *     replace it: the session runs in that directory, and the runner reports sign-ins by account,
  *     not by directory.
  */
-function codexSessionLogin(
-  codex: RunnerEngineHealth,
+function sessionAccountLogin(
+  engine: LoginEngine,
+  health: RunnerEngineHealth,
   account: string | null | undefined,
   workspaceEnv: unknown,
   runnerEngines: unknown,
 ): SessionLogin | null {
   const pick = account?.trim();
-  if (pick && pick !== CODEX_DEFAULT_ACCOUNT) {
-    const slot = codexAccountOnRunner(pick, runnerEngines);
+  if (pick && pick !== DEFAULT_ACCOUNT) {
+    const slot = accountOnRunner(engine, pick, runnerEngines);
     if (!slot) return null;
     // Named the way the Providers page names its row, which is never who the account is: its
     // email and id stay on the machine, and the runner reports neither.
-    return { auth: slot.auth, name: slot.name ? `"${slot.name}"` : slot.id, codexHome: slot.codexHome };
+    return { auth: slot.auth, name: slot.name ? `"${slot.name}"` : slot.id, dir: accountDir(slot) };
   }
   const env = (workspaceEnv && typeof workspaceEnv === 'object' ? workspaceEnv : {}) as Record<string, unknown>;
-  if (typeof env.CODEX_HOME === 'string' && env.CODEX_HOME.trim() !== '') return null;
-  return { auth: codex.auth, ...((codex.accounts?.length ?? 0) > 1 ? { name: '"Default"' } : {}) };
+  const varName = accountEnvVar(engine);
+  if (varName && typeof env[varName] === 'string' && (env[varName] as string).trim() !== '') return null;
+  return { auth: health.auth, ...((health.accounts?.length ?? 0) > 1 ? { name: '"Default"' } : {}) };
 }
 
 /**
@@ -154,9 +157,9 @@ export function signedOutEngineRefusal(args: {
   bringsOwnCredentials: boolean;
   /** The workspace's custom environment, which the runner layers onto the engine process. */
   workspaceEnv?: unknown;
-  /** The Codex account this session runs on (Workspace.codexAccount today); absent or null is
-   *  Default. Only a Codex session reads it. */
-  codexAccount?: string | null;
+  /** The accounts this session's workspace pins it to, one per engine that keeps accounts
+   *  (Workspace.codexAccount / Workspace.claudeAccount). Absent or null is Default. */
+  accounts?: { codexAccount?: string | null; claudeAccount?: string | null } | null;
   runner: EnginePreflightRunner;
   nowMs?: number;
 }): string | null {
@@ -174,20 +177,23 @@ export function signedOutEngineRefusal(args: {
   const engines = sanitizeRunnerEngines(args.runner.engines);
   const health = engines?.find((e) => e.engine === args.runtime);
   if (!health?.installed) return null;
-  // Codex keeps one sign-in per account, and the one judged is the one this session runs on.
-  const login: SessionLogin | null =
-    args.runtime === 'codex'
-      ? codexSessionLogin(health, args.codexAccount, args.workspaceEnv, args.runner.engines)
-      : { auth: health.auth };
+  // An engine that keeps one sign-in per account is judged on the account this session runs on;
+  // one that keeps a single login is judged on that.
+  const account = args.runtime === 'claude' ? args.accounts?.claudeAccount : args.accounts?.codexAccount;
+  const login: SessionLogin | null = accountEnvVar(args.runtime)
+    ? sessionAccountLogin(args.runtime, health, account, args.workspaceEnv, args.runner.engines)
+    : { auth: health.auth };
   if (login?.auth !== 'no') return null;
 
   const label = ENGINE_LABELS[args.runtime];
   const machine = args.runner.displayName || args.runner.name || 'this runner';
   if (login.name) {
     // Quoted the way the runner quotes it in its own sign-in hints (loginCommandIn).
-    const command = login.codexHome
-      ? `CODEX_HOME='${login.codexHome.replace(/'/g, `'"'"'`)}' ${LOGIN_COMMANDS[args.runtime]}`
-      : LOGIN_COMMANDS[args.runtime];
+    const varName = accountEnvVar(args.runtime);
+    const command =
+      login.dir && varName
+        ? `${varName}='${login.dir.replace(/'/g, `'"'"'`)}' ${LOGIN_COMMANDS[args.runtime]}`
+        : LOGIN_COMMANDS[args.runtime];
     return (
       `${label} account ${login.name} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
       `Sign it in from the Providers page, or run \`${command}\` on that machine, then start this session again.`

@@ -70,9 +70,9 @@ final class OrbitLinkCards {
         OrbitLinkDestination.tap(for: ref, preview: readings[ref.target.key]?.preview, baseURL: baseURL)
     }
 
-    /// The deployment's own page for an object: what a long press copies, and what a project with no
-    /// coordinator session opens. A wiki entry's page takes its space too, which only its read names —
-    /// so an entry nothing has answered for has no page to offer yet.
+    /// The deployment's own page for an object: what a long press copies. A wiki entry's page takes its
+    /// space too, which only its read names — so an entry nothing has answered for has no page to offer
+    /// yet.
     func pageURL(for ref: OrbitLinkRef) -> URL? {
         OrbitLinkParser.pageURL(for: ref.target, baseURL: baseURL,
                                 wikiSpaceSlug: readings[ref.target.key]?.preview.wiki?.spaceSlug)
@@ -92,18 +92,6 @@ final class OrbitLinkCards {
     /// that brings a new row — so a card follows the object it describes without a poll of its own.
     func refreshStale(now: Date = Date()) {
         request(now: now)
-    }
-
-    /// The server's own answer for one link, read now when it is not in hand. For the one question
-    /// that has to be answered before anything is drawn: where a project's card leads.
-    func preview(for ref: OrbitLinkRef) async -> LinkPreview? {
-        let key = ref.target.key
-        refs[key] = ref
-        askedAt[key] = Date()
-        guard let preview = (await store.previews(for: [ref]))[key] else { return nil }
-        readings[key] = Reading(content: OrbitLinkCardContent.preview(ref, preview, host: host),
-                                preview: preview)
-        return preview
     }
 
     /// Forget everything, for a sign-out or a server change: a card read from one account is not one
@@ -188,30 +176,21 @@ extension AppModel {
         return true
     }
 
-    /// Where a link goes. A task, a session and a task list are known from the link alone; a project
-    /// leads to the conversation that coordinates it — an id only a read can give — and to the
-    /// deployment's own page when there is no coordinator session, or no card store to read through,
-    /// which is the same answer: this client cannot show that project.
+    /// Where a link goes: every kind is known from the link alone — a task, a session, a task list, a
+    /// wiki entry and a project each have a page in this app.
     func openOrbitLink(_ ref: OrbitLinkRef, overConsole: Bool = false) {
-        if let destination = OrbitLinkDestination.inApp(for: ref.target) {
-            return open(destination, overConsole: overConsole)
-        }
-        guard let linkCards else { return openPage(for: ref) }
-        Task { @MainActor in
-            let preview = await linkCards.preview(for: ref)
-            open(OrbitLinkDestination.tap(for: ref, preview: preview, baseURL: linkCards.baseURL),
-                 overConsole: overConsole)
-        }
+        open(OrbitLinkDestination.inApp(for: ref.target), overConsole: overConsole)
     }
 
-    /// Every destination an Orbit link can have, applied in one place. A task, a session or a wiki
-    /// entry opened from a phone's conversation is pushed over it (`openFromConversation`,
-    /// `openWikiEntry`); a task list is a scope of the Tasks page rather than a page of its own, so it
-    /// routes there wherever the link is.
+    /// Every destination an Orbit link can have, applied in one place. A task, a session, a project
+    /// or a wiki entry opened from a phone's conversation is pushed over it (`openFromConversation`,
+    /// `openProjectFromConversation`, `openWikiEntry`); a task list is a scope of the Tasks page
+    /// rather than a page of its own, so it routes there wherever the link is.
     func open(_ destination: OrbitLinkDestination, overConsole: Bool = false) {
         switch destination {
         case .task(let id):      openFromConversation(.task(id), overConsole: overConsole)
         case .session(let id):   openFromConversation(.session(id), overConsole: overConsole)
+        case .project(let id):   openProjectFromConversation(id, overConsole: overConsole)
         case .list(let id):      route(to: .list(id))
         case .wikiEntry(let id): openWikiEntry(id, overConsole: overConsole)
         case .web(let url):      openExternal(url)
@@ -226,12 +205,5 @@ extension AppModel {
         #elseif os(iOS)
         UIApplication.shared.open(url)
         #endif
-    }
-
-    private func openPage(for ref: OrbitLinkRef) {
-        guard let baseURL, let url = OrbitLinkParser.pageURL(for: ref.target, baseURL: baseURL) else {
-            return
-        }
-        open(.web(url))
     }
 }

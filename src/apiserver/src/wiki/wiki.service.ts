@@ -5,14 +5,20 @@ import {
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_KINDS,
   WIKI_LIMITS,
+  WIKI_MACHINE_TRUST,
   WIKI_REJECT_REASONS,
+  WIKI_REVIEW_RULES,
   WIKI_SOURCE_KINDS,
   validateWikiEntryChanges,
   validateWikiEntryDraft,
   validateWikiSources,
   toUuid,
-  wikiOpEffect,
+  uuidToBase62,
+  wikiReviewEffect,
+  wikiSpaceSettings,
+  wikiTieredBasis,
   type WikiAnchorInput,
+  type WikiAnchorState,
   type WikiChangesetOrigin,
   type WikiDecideAction,
   type WikiEntryChanges,
@@ -25,15 +31,21 @@ import {
   type WikiRejectReason,
   type WikiRefusal,
   type WikiRefusalCode,
+  type WikiReviewEffect,
+  type WikiReviewMode,
   type WikiSimilar,
   type WikiSourceKind,
+  type WikiSpaceSettings,
+  type WikiTieredBasis,
   type WikiTrust,
 } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
 import { redactSecrets } from '../common/secret-redaction';
+import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { canonicalRepoUrl } from '../projects/project-integration-line';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
@@ -44,7 +56,14 @@ type Tx = Prisma.TransactionClient;
  *
  * EVERYTHING THAT WRITES A WIKI ROW COMES THROUGH HERE. `submitChangeset` is what an agent's
  * proposal, the owner's own edit, a maintenance run and an import all reach; `decide` is the owner's
- * answer to what waits in Review. No other service writes `wiki_entry`.
+ * answer to what waits in Review; and `revertChangeset` and `rejectEntry` are the owner's answer to
+ * what a space's review mode applied without waiting (contract `reviewModes`). No other service
+ * writes `wiki_entry`.
+ *
+ * WHAT APPLIES AT ONCE is the effect policy's answer first and the space's review mode's second
+ * (`wikiReviewEffect`): Manual is phase 1 exactly; Tiered and Automatic apply an add or an amend of
+ * what the machine wrote, never past the floors — a principle, a tainted op, a change to what the
+ * owner wrote or confirmed, the circuit breaker and thirty ops a changeset hold in every mode.
  *
  * THE ENTRY'S STATE HAS EXACTLY TWO WRITERS. `applyOp` and `recomputeFlags` are the only functions
  * that write `wiki_entry.status`, `trust`, `challenged` and `unsupported` — the Wikova lesson
@@ -77,6 +96,12 @@ export interface WikiPrincipal {
   sessionId: string | null;
   /** The tool call this proposal came from, when the door knows it. */
   toolCallId: string | null;
+  /**
+   * Who authors the revisions the write makes (contract `authorKinds`), when the origin alone does not
+   * say: a one-off import the server runs itself is `system`. Left out, the owner's write is the
+   * owner's and everything else an agent's.
+   */
+  authorKind?: WikiAuthor['authorKind'];
 }
 
 /**
@@ -192,6 +217,10 @@ interface ResolvedSource {
   quote: string | null;
   quoteVerified: boolean;
   tainted: boolean;
+  /** The record is the owner's own words: a turn they sent, or an AskUserQuestion they answered. */
+  ownerWords: boolean;
+  /** The session the record belongs to, where it belongs to one: what "independent sessions" count. */
+  sessionId: string | null;
 }
 
 /** An entry's content, as it is about to be written. */
@@ -216,8 +245,12 @@ interface PreparedOp {
   payload: Record<string, unknown>;
   similar: WikiSimilar[];
   tainted: boolean;
-  /** The effect policy's answer (§4.2): does this op take effect before the owner sees it? */
+  /** The effect policy's answer (§4.2), under the space's review mode: does this op take effect before the owner sees it? */
   applied: boolean;
+  /** Set when the REVIEW MODE applied it (contract `reviewModes.effect`): the mode, and the trust it leaves. */
+  byMode: WikiReviewEffect['byMode'];
+  /** Drawn into Review as a spot check (`reviewModes.spotChecks`): applied, and still waiting for the owner. */
+  spotCheck: boolean;
   /**
    * Whether the op goes on waiting for the owner's answer after it has taken effect.
    *
@@ -233,12 +266,13 @@ interface PreparedOp {
 }
 
 /**
- * One thing to apply to an entry. `promote` and `reject` are not wiki ops: they are what the owner's
- * acceptance and refusal do to a proposal, and they go through `applyOp` for the one reason that
- * matters — the entry's status has exactly one writer.
+ * One thing to apply to an entry. `promote`, `confirm` and `reject` are not wiki ops: they are what
+ * the owner's acceptance and refusal do to a proposal, or to what a review mode applied at once, and
+ * they go through `applyOp` for the one reason that matters — the entry's status and trust have
+ * exactly one writer.
  */
 interface WikiApplyInstruction {
-  op: WikiOp | 'promote' | 'reject';
+  op: WikiOp | 'promote' | 'confirm' | 'reject';
   entryId: string | null;
   draft: PreparedDraft | null;
   changes: WikiEntryChanges | null;
@@ -252,8 +286,45 @@ interface WikiApplyInstruction {
    */
   proposed?: boolean;
   /** What a promotion leaves behind: `owner` for the owner's own write, `confirmed` for everything
-   *  else — an agent's proposal the owner accepted, edited or not (contract `trust.onApply`). */
+   *  else — an agent's proposal the owner accepted, edited or not (contract `trust.onApply`) — and
+   *  `auto` or `unreviewed` for an add the space's review mode applied. */
   promotedTrust?: WikiTrust;
+  /** An amend's trust afterwards, when it changes it: what a review mode leaves, `confirmed` once the
+   *  owner has put their hand to an entry the machine wrote, `unreviewed` for a revision a revert or a
+   *  rejected spot check restored. Left out, an amend keeps the trust it found. */
+  trustAfter?: WikiTrust;
+}
+
+/**
+ * What a changeset's ops are held to besides their own checks (contract `limitNotes.quota`,
+ * `reviewModes.floors`): the space's mode and settings, the review queue, the ops that wait for the
+ * owner, and the circuit breaker's reading. Read once when the changeset begins and advanced as each
+ * op is recorded, so every op is judged against the ones before it in the same request.
+ */
+interface ChangesetBudget {
+  mode: WikiReviewMode;
+  autoAcceptReinforce: boolean;
+  /** The space's pending ops, spot checks included: the review queue. */
+  pendingInSpace: number;
+  /** Ops that wait for the owner: this request's so far, and the calling session's before it. */
+  waitingInRequest: number;
+  waitingInSession: number;
+  /** The space's active entries when the changeset began, and the entries the mode changed in it. */
+  activeAtStart: number;
+  changedByMode: Set<string>;
+  /** How many ops the space's review mode had applied before this one: what the spot-check draw counts. */
+  appliedByModeBefore: number;
+}
+
+/** A revert's restorations, by entry: the sources of the revision each amend puts back. */
+type Restorations = ReadonlyMap<string, readonly ResolvedSource[]>;
+
+/** What a spot-check rejection did to the space's mode, for the one notification it earns. */
+interface ReviewModeTrip {
+  spaceId: string;
+  title: string;
+  rejected: number;
+  window: number;
 }
 
 // ── Pure helpers ────────────────────────────────────────────────────────────────────────────────
@@ -308,6 +379,43 @@ export function looksLikeProbe(title: string, texts: readonly string[]): boolean
   if (/TEST_WRITE_CHECK/iu.test(trimmed)) return true;
   if (texts.some((text) => /TEST_WRITE_CHECK/iu.test(text))) return true;
   return /^(?:test|testing|probe|ping)[\s:_-]*\d*$/iu.test(trimmed);
+}
+
+/**
+ * Is this conversation turn the owner's own words (contract `reviewModes.tiered.auto.ownerWords`)?
+ *
+ * A message or a steer the user door filed with an explicit routing intent, under a key no part of
+ * the control plane mints. The runner door — a coordinator's send, an agent's steer, whatever key it
+ * was handed — files no intent at all, and every turn Orbit queues on its own account is keyed in a
+ * namespace of its own (`isOrbitAuthoredTurn`), so neither can read as the owner. What this leaves
+ * out on purpose: a turn from a client that sends no intent (the Apple apps, today) is not
+ * recognized, and its entry reads Unreviewed until the owner confirms it — a false negative costs a
+ * label, a false positive would push an agent's claim as the owner's.
+ */
+export function isOwnerTurn(turn: { kind: string; sendIntent: string | null; clientTurnId: string }): boolean {
+  if (turn.kind !== 'message' && turn.kind !== 'steer') return false;
+  return turn.sendIntent !== null && !isOrbitAuthoredTurn(turn.clientTurnId);
+}
+
+/** An AskUserQuestion a person answered: the approval route writes `decided_by_id`, and nothing else does. */
+function isOwnerAnswer(approval: { toolName: string; status: string; answers: unknown; decidedById: string | null }): boolean {
+  return approval.toolName === 'AskUserQuestion' && approval.status === 'ALLOWED' && approval.answers !== null
+    && approval.decidedById !== null;
+}
+
+/**
+ * Is the op a review mode applies at 0-based `position` among the space's the one its block of
+ * `spotCheckEvery` draws (contract `reviewModes.spotChecks.trigger`)?
+ *
+ * Exactly one per block, at a place read off a digest of the space and the block's number: the same
+ * space and position always answer the same, so a retried transaction or a replay draws the same op,
+ * and nothing about the draw depends on when it ran.
+ */
+export function isSpotCheckDraw(spaceId: string, position: number): boolean {
+  const every = WIKI_REVIEW_RULES.spotCheckEvery;
+  const block = Math.floor(position / every);
+  const drawn = parseInt(sha256(`wiki-spot-check:${spaceId}:${block}`).slice(0, 8), 16) % every;
+  return position % every === drawn;
 }
 
 /** JSON with object keys sorted, so the same content digests the same however a client spelled it. */
@@ -424,6 +532,8 @@ const CHANGESET_SELECT = {
       resultEntryId: true,
       resultRevision: true,
       decidedAt: true,
+      appliedByMode: true,
+      spotCheck: true,
     },
     orderBy: { seq: 'asc' },
   },
@@ -491,6 +601,8 @@ export function changesetView(row: ChangesetRow): Record<string, unknown> {
       resultEntryId: op.resultEntryId,
       resultRevision: op.resultRevision,
       decidedAt: op.decidedAt?.toISOString() ?? null,
+      appliedByMode: op.appliedByMode,
+      spotCheck: op.spotCheck,
     })),
   };
 }
@@ -526,6 +638,10 @@ export class WikiService {
     // it is defaulted, and the specs that construct this service by hand do not each have to stub a
     // hub they never read. `RealtimeModule` is global, so Nest injects the real one by type.
     private readonly realtime: RealtimeService = undefined as unknown as RealtimeService,
+    // The one notification the review modes send: a space the spot checks sent back to Manual
+    // (contract `reviewModes.spotChecks.trip`). Best-effort and after the commit, like the nudge
+    // above, and defaulted for the same reason.
+    private readonly push: PushService = undefined as unknown as PushService,
   ) {}
 
   // ── Spaces (§2.1) ─────────────────────────────────────────────────────────────────────────────
@@ -631,6 +747,11 @@ export class WikiService {
         slug: candidate,
         title: title.trim().slice(0, WIKI_LIMITS.titleMaxChars) || candidate,
         repoUrlNorm,
+        // Written out, review mode included: a space made from here on is Tiered (criterion 7's
+        // default). A space made BEFORE review modes has no `reviewMode` key and reads as Manual
+        // (`wikiSpaceSettings`) — deliberately not backfilled to Tiered, because until Wiki settings
+        // can show the mode and switch it (criterion 8) a space that started applying its agents'
+        // proposals would be a change of behaviour its owner could neither see nor undo.
         settings: { ...WIKI_DEFAULT_SPACE_SETTINGS },
       },
       select: { id: true },
@@ -664,7 +785,7 @@ export class WikiService {
     }
     return spaces.map((space) => ({
       ...space,
-      settings: { ...WIKI_DEFAULT_SPACE_SETTINGS, ...(space.settings as object) },
+      settings: wikiSpaceSettings(space.settings),
       createdAt: space.createdAt.toISOString(),
       updatedAt: space.updatedAt.toISOString(),
       pendingOps: counts.get(space.id) ?? 0,
@@ -703,22 +824,44 @@ export class WikiService {
     if (!space) throw new NotFoundException('no such wiki space');
     return {
       ...space,
-      settings: { ...WIKI_DEFAULT_SPACE_SETTINGS, ...(space.settings as object) },
+      settings: wikiSpaceSettings(space.settings),
       createdAt: space.createdAt.toISOString(),
       updatedAt: space.updatedAt.toISOString(),
     };
   }
 
-  /** The two settings phase 1 reads: whether the space pushes, and whether a reinforce applies at once. */
+  /**
+   * The owner's settings: whether the space pushes, whether a reinforce applies at once, and its
+   * review mode.
+   *
+   * THE REVIEW MODE IS THE OWNER CHANNEL'S, like a decide (contract `space.settings.reviewMode`): a
+   * request that would change it and carries a session header is refused WIKI_OWNER_CHANNEL_ONLY
+   * before anything is read, whatever the session's role — which mode applies an agent's writes is
+   * never something an agent sets. Setting the mode the space already has changes nothing, so the
+   * spot checks' window (which counts from the last change) is not restarted by it.
+   */
   async updateSpace(
     ownerId: string,
     spaceId: string,
-    input: { push?: boolean; autoAcceptReinforce?: boolean; title?: string },
+    input: { push?: boolean; autoAcceptReinforce?: boolean; reviewMode?: WikiReviewMode; title?: string },
+    actingSessionId: string | null = null,
   ) {
+    if (input.reviewMode !== undefined && actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        "a space's review mode is the account owner's to set, through an owner channel with no acting session: "
+          + 'report which mode the space should run in, and let a person switch it.',
+      );
+    }
     const current = await this.requireSpace(ownerId, spaceId);
-    const settings = { ...(current.settings as Record<string, unknown>) };
+    const settings: Record<string, unknown> = { ...current.settings };
     if (input.push !== undefined) settings.push = input.push;
     if (input.autoAcceptReinforce !== undefined) settings.autoAcceptReinforce = input.autoAcceptReinforce;
+    if (input.reviewMode !== undefined && input.reviewMode !== current.settings.reviewMode) {
+      settings.reviewMode = input.reviewMode;
+      settings.reviewModeChangedAt = new Date().toISOString();
+      settings.reviewModeChangedBy = 'owner' satisfies WikiSpaceSettings['reviewModeChangedBy'];
+    }
     await this.prisma.wikiSpace.updateMany({
       where: { id: spaceId, ownerId },
       data: { settings: settings as Prisma.InputJsonValue, ...(input.title ? { title: input.title } : {}) },
@@ -843,18 +986,42 @@ export class WikiService {
     input: WikiProposeInput,
     requestSha256: string | null,
     literals: readonly string[],
+    restorations: Restorations | null = null,
   ): Promise<Record<string, unknown>> {
     const dryRun = input.dryRun === true;
-    const settings = { ...WIKI_DEFAULT_SPACE_SETTINGS, ...(space.settings as object) };
-    const autoAcceptReinforce = settings.autoAcceptReinforce !== false;
-    const sessionOps = principal.sessionId
-      ? await tx.wikiChangesetOp.count({
-          where: { ownerId: principal.ownerId, changeset: { sessionId: principal.sessionId } },
-        })
-      : 0;
-    let pendingInSpace = await tx.wikiChangesetOp.count({
-      where: { ownerId: principal.ownerId, decision: 'pending', changeset: { spaceId: space.id } },
-    });
+    const settings = wikiSpaceSettings(space.settings);
+    const mode = settings.reviewMode;
+    const budget: ChangesetBudget = {
+      mode,
+      autoAcceptReinforce: settings.autoAcceptReinforce !== false,
+      pendingInSpace: await tx.wikiChangesetOp.count({
+        where: { ownerId: principal.ownerId, decision: 'pending', changeset: { spaceId: space.id } },
+      }),
+      waitingInRequest: 0,
+      // What waited for the owner is what the effect policy held back: every op a session recorded
+      // that was not applied at once — by the policy (`auto_applied`) or by the mode.
+      waitingInSession: principal.sessionId
+        ? await tx.wikiChangesetOp.count({
+            where: {
+              ownerId: principal.ownerId,
+              changeset: { sessionId: principal.sessionId },
+              appliedByMode: null,
+              decision: { not: 'auto_applied' },
+            },
+          })
+        : 0,
+      // Only a mode other than Manual applies anything the breaker and the draw count, so a Manual
+      // space pays for neither read.
+      activeAtStart: mode === 'manual'
+        ? 0
+        : await tx.wikiEntry.count({ where: { ownerId: principal.ownerId, spaceId: space.id, status: 'active' } }),
+      changedByMode: new Set<string>(),
+      appliedByModeBefore: mode === 'manual'
+        ? 0
+        : await tx.wikiChangesetOp.count({
+            where: { ownerId: principal.ownerId, appliedByMode: { not: null }, changeset: { spaceId: space.id } },
+          }),
+    };
     // The changeset is created before its ops: an op's row is what a revision came from, and both must
     // exist before the first entry is written.
     const changesetId = dryRun
@@ -884,20 +1051,33 @@ export class WikiService {
     for (let seq = 0; seq < ops.length; seq += 1) {
       let outcome: WikiOpOutcome;
       try {
-        if (seq >= WIKI_LIMITS.opsPerTurn || (principal.sessionId !== null && sessionOps + seq + 1 > WIKI_LIMITS.opsPerSession)) {
+        if (seq >= WIKI_LIMITS.opsPerChangeset) {
           return refuse(
             'WIKI_QUOTA',
-            `a session records at most ${WIKI_LIMITS.opsPerTurn} ops in one turn and ${WIKI_LIMITS.opsPerSession} `
-              + 'in its life: record the rest in another turn',
+            `a changeset holds at most ${WIKI_LIMITS.opsPerChangeset} ops: submit the rest in another one`,
           );
         }
-        const prepared = await this.prepareOp(tx, principal, space.id, seq, ops[seq], pendingInSpace, autoAcceptReinforce, literals);
-        outcome = await this.recordOp(tx, principal, space.id, changesetId, seq, prepared, dryRun);
+        const prepared = await this.prepareOp(tx, principal, space.id, seq, ops[seq], budget, literals);
+        if (prepared.byMode) {
+          // The spot check (`reviewModes.spotChecks`): one in every block of the ops the mode applies,
+          // drawn by position. A full review queue skips the draw instead of refusing what the mode
+          // applied: the queue's cap is the owner's attention, and a spot check spends it too.
+          prepared.spotCheck = isSpotCheckDraw(space.id, budget.appliedByModeBefore)
+            && budget.pendingInSpace < WIKI_LIMITS.pendingOpsPerSpace;
+          budget.appliedByModeBefore += 1;
+        }
+        outcome = await this.recordOp(tx, principal, space.id, changesetId, seq, prepared, dryRun, restorations);
         // What keeps the changeset open is the OP's decision, not its outcome: a challenge takes effect
-        // at once and still waits for the owner's answer.
-        if (outcome.status === 'pending' || (outcome.status === 'applied' && prepared.waitsForOwner)) {
+        // at once and still waits for the owner's answer, and so does a spot check.
+        const waits = prepared.waitsForOwner || prepared.spotCheck;
+        if (outcome.status === 'pending' || (outcome.status === 'applied' && waits)) {
           pending += 1;
-          pendingInSpace += 1;
+          budget.pendingInSpace += 1;
+        }
+        // The quotas count what the POLICY held back; a spot check is the server's own draw.
+        if (prepared.waitsForOwner) budget.waitingInRequest += 1;
+        if (prepared.byMode) {
+          budget.changedByMode.add(outcome.status === 'applied' && outcome.entryId ? outcome.entryId : `seq:${seq}`);
         }
         if (outcome.status !== 'refused') recorded += 1;
       } catch (error) {
@@ -934,8 +1114,7 @@ export class WikiService {
     spaceId: string,
     seq: number,
     raw: unknown,
-    pendingInSpace: number,
-    autoAcceptReinforce: boolean,
+    budget: ChangesetBudget,
     literals: readonly string[],
   ): Promise<PreparedOp> {
     const op = (raw ?? {}) as Record<string, unknown>;
@@ -1006,17 +1185,51 @@ export class WikiService {
       );
     }
 
-    // 7. Quota: what this op costs, and what the review queue already holds.
+    // 7. The effect, under the space's review mode (contract `reviewModes.effect`), and then what it
+    //    costs: the ops that wait for the owner, the review queue, and the circuit breaker. The taint is
+    //    read before any of them because a tainted op WAITS: a space at its cap must not take in what the
+    //    policy was going to apply, only for the mark to turn it into a queue entry.
     const tainted = await this.isTainted(tx, principal, sources);
-    const applied =
-      wikiOpEffect({ origin: principal.origin, op: opName, tainted, autoAcceptReinforce }) === 'applied';
-    // The taint is read before the queue is checked because a tainted op WAITS: a space at its cap must
-    // not take in what the policy was going to apply, only for the mark to turn it into a queue entry.
-    if (!applied && pendingInSpace >= WIKI_LIMITS.pendingOpsPerSpace) {
+    const reviewing = budget.mode !== 'manual' && principal.origin !== 'owner';
+    const decided = wikiReviewEffect({
+      mode: budget.mode,
+      origin: principal.origin,
+      op: opName,
+      tainted,
+      autoAcceptReinforce: budget.autoAcceptReinforce,
+      target: reviewing && opName === 'amend' && target ? await this.reviewTarget(tx, principal.ownerId, target) : null,
+      basis: reviewing && budget.mode === 'tiered' && writtenKind && (opName === 'add' || opName === 'amend')
+        ? tieredBasisOf(writtenKind, opName === 'amend' ? target : null, redacted.value.changes, sources)
+        : null,
+    });
+    const applied = decided.effect === 'applied';
+    const waitsForOwner = !applied || opName === 'challenge';
+    // The two quotas protect the review queue, so they count only what waits for it (limitNotes.quota):
+    // an op that applies at once is bounded by the changeset's size and the breaker instead.
+    if (
+      waitsForOwner
+      && (budget.waitingInRequest >= WIKI_LIMITS.opsPerTurn
+        || (principal.sessionId !== null && budget.waitingInSession + budget.waitingInRequest >= WIKI_LIMITS.opsPerSession))
+    ) {
+      return refuse(
+        'WIKI_QUOTA',
+        `a session records at most ${WIKI_LIMITS.opsPerTurn} ops that wait for review in one turn and `
+          + `${WIKI_LIMITS.opsPerSession} in its life: record the rest in another turn`,
+      );
+    }
+    if (!applied && budget.pendingInSpace >= WIKI_LIMITS.pendingOpsPerSpace) {
       return refuse(
         'WIKI_REVIEW_QUEUE_FULL',
         `this space already holds ${WIKI_LIMITS.pendingOpsPerSpace} ops waiting for review: the owner decides `
           + 'some of them before more can queue behind them',
+      );
+    }
+    if (decided.byMode && breakerTrips(budget, opName === 'amend' ? (target?.id ?? null) : null)) {
+      return refuse(
+        'WIKI_QUOTA',
+        `circuit breaker: this changeset has already changed ${budget.changedByMode.size} of the space's `
+          + `${budget.activeAtStart} active entries, and one changeset may change at most `
+          + `${WIKI_REVIEW_RULES.breakerMaxChangedPercent}% of them — submit the rest in another changeset`,
       );
     }
 
@@ -1034,7 +1247,9 @@ export class WikiService {
       similar,
       tainted,
       applied,
-      waitsForOwner: !applied || opName === 'challenge',
+      byMode: decided.byMode,
+      spotCheck: false,
+      waitsForOwner,
       sources,
       draft: draft ? preparedDraft(draft) : null,
       changes: (redacted.value.changes ?? null) as WikiEntryChanges | null,
@@ -1050,6 +1265,7 @@ export class WikiService {
     seq: number,
     prepared: PreparedOp,
     dryRun: boolean,
+    restorations: Restorations | null = null,
   ): Promise<WikiOpOutcome> {
     const similar = prepared.similar.length > 0 ? prepared.similar : undefined;
     // An add and a supersede write their lineage even when the owner has not accepted it yet: the entry
@@ -1071,18 +1287,24 @@ export class WikiService {
               similar: prepared.similar as unknown as Prisma.InputJsonValue,
               tainted: prepared.tainted,
               decision: 'pending',
+              appliedByMode: prepared.byMode?.mode ?? null,
+              spotCheck: prepared.spotCheck,
             },
             select: { id: true },
           })
         ).id;
     const author: WikiAuthor = {
-      // An agent's proposal is authored by the session that made it; the owner's own write by the owner.
-      authorKind: principal.origin === 'owner' ? 'owner' : 'agent',
+      // An agent's proposal is authored by the session that made it; the owner's own write by the owner;
+      // and a write the server makes on its own account says so (`principal.authorKind`).
+      authorKind: principal.authorKind ?? (principal.origin === 'owner' ? 'owner' : 'agent'),
       authorUserId: principal.origin === 'owner' ? principal.userId : null,
       authorSessionId: principal.sessionId,
       authorToolCallId: principal.toolCallId,
       changesetOpId: opRowId,
     };
+    // A revert's amend puts a revision back (`reviewModes.revert`): with the sources that revision
+    // rested on, and the entry out of the push until somebody looks at it again.
+    const restored = prepared.op === 'amend' && prepared.entryId ? restorations?.get(prepared.entryId) : undefined;
     // A dry run takes the whole path and writes NOTHING — no op row, and no entry either, which is the
     // half that is easy to get wrong: an add that creates its lineage is a write like any other.
     const written = writesNow && !dryRun
@@ -1092,17 +1314,20 @@ export class WikiService {
           draft: prepared.draft,
           changes: prepared.changes,
           payload: prepared.payload,
-          sources: prepared.sources,
+          sources: restored ?? prepared.sources,
           tainted: prepared.tainted,
           proposed: !prepared.applied,
-          promotedTrust: principal.origin === 'owner' ? 'owner' : 'confirmed',
+          promotedTrust: principal.origin === 'owner' ? 'owner' : (prepared.byMode?.trust ?? 'confirmed'),
+          trustAfter: restored ? 'unreviewed' : prepared.byMode?.trust,
         }, author)
       : null;
     if (opRowId) {
       await tx.wikiChangesetOp.updateMany({
         where: { id: opRowId, ownerId: principal.ownerId },
         data: {
-          ...(prepared.waitsForOwner ? { decision: 'pending' } : { decision: 'auto_applied', decidedAt: new Date() }),
+          ...(prepared.waitsForOwner || prepared.spotCheck
+            ? { decision: 'pending' }
+            : { decision: 'auto_applied', decidedAt: new Date() }),
           ...(written ? { resultEntryId: written.entryId, resultRevision: written.revision } : {}),
         },
       });
@@ -1145,15 +1370,19 @@ export class WikiService {
           select: CHANGESET_SELECT,
         });
         if (!changeset) throw new NotFoundException('no such changeset');
+        let rejectedSpotCheck = false;
         for (const decision of decisions) {
-          await this.applyDecision(tx, ownerId, userId, changeset, decision);
+          if (await this.applyDecision(tx, ownerId, userId, changeset, decision)) rejectedSpotCheck = true;
         }
         await this.settleChangeset(tx, ownerId, changesetId);
+        // In the same transaction as the rejection that could take the rate over: a space is sent back
+        // to Manual by the fact that did it, or not at all (`reviewModes.spotChecks.trip`).
+        const trip = rejectedSpotCheck ? await this.tripIfRejecting(tx, ownerId, changeset.spaceId) : null;
         const row = await tx.wikiChangeset.findFirstOrThrow({
           where: { id: changesetId, ownerId },
           select: CHANGESET_SELECT,
         });
-        return changesetView(row);
+        return { view: changesetView(row), trip };
       },
       loggedRetry(this.logger, 'wiki.decide'),
     );
@@ -1161,18 +1390,263 @@ export class WikiService {
     // review queue and its entries, so the nudge names the SPACE — the same event either write path
     // sends, and the id and nothing else about it (contract `realtime.redaction`). A decide the
     // service refused threw before reaching here and announces nothing.
-    this.realtime?.publishWikiChanged(ownerId, String(decided.spaceId));
-    return decided;
+    this.realtime?.publishWikiChanged(ownerId, String(decided.view.spaceId));
+    if (decided.trip) this.announceTrip(ownerId, decided.trip);
+    return decided.view;
   }
 
-  /** One op's answer: what the owner decided, and what it applied. */
+  /**
+   * Undo, as the owner, every op of one changeset the space's review mode applied at once and the
+   * owner has not answered (contract `reviewModes.revert`): a run, taken back in one press.
+   *
+   * THE OWNER CHANNEL ONLY, like a decide. And through the one write path: the undoing is the
+   * owner's own changeset — a retire for each add, an amend for each entry an amend changed —
+   * recorded by `recordChangeset` and applied by `applyOp` like any other, so the history shows what
+   * was taken back and by whom. It is keyed `revert:<changeset id>`, so a second press answers with
+   * the first rather than writing again.
+   *
+   * WHAT IT DOES NOT TOUCH, and names in `skipped`: an entry that is no longer active, and an entry
+   * changed again after the run changed it — putting back a revision somebody has since built on
+   * would throw their change away with the run's.
+   */
+  async revertChangeset(
+    ownerId: string,
+    userId: string,
+    changesetId: string,
+    actingSessionId: string | null,
+  ): Promise<Record<string, unknown>> {
+    if (actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        'taking back what the wiki applied is the account owner\'s, through an owner channel with no acting '
+          + 'session: report what should be reverted, and let a person revert it.',
+      );
+    }
+    const literals = await this.envLiterals(this.prisma, ownerId);
+    const answer = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const changeset = await tx.wikiChangeset.findFirst({ where: { id: changesetId, ownerId }, select: CHANGESET_SELECT });
+        if (!changeset) throw new NotFoundException('no such changeset');
+        const idempotencyKey = `revert:${changeset.id}`;
+        const earlier = await tx.wikiChangeset.findFirst({ where: { ownerId, idempotencyKey }, select: CHANGESET_SELECT });
+        if (earlier) {
+          return { revertedChangesetId: changeset.id, changesetId: earlier.id, replayed: true, ops: recordedOutcomes(earlier), skipped: [] };
+        }
+        const space = await tx.wikiSpace.findFirstOrThrow({
+          where: { id: changeset.spaceId, ownerId },
+          select: { id: true, settings: true },
+        });
+        const undone = changeset.ops.filter(
+          (op) => op.appliedByMode !== null && (op.decision === 'auto_applied' || (op.decision === 'pending' && op.spotCheck)),
+        );
+        const ops: Record<string, unknown>[] = [];
+        const skipped: Array<{ entryId: string; reason: string }> = [];
+        const reason = `Reverted with the run that applied it (changeset ${uuidToBase62(changeset.id)}).`;
+        for (const op of undone.filter((row) => row.op === 'add' && row.resultEntryId)) {
+          const entry = await this.ownEntryById(tx, ownerId, op.resultEntryId!);
+          if (entry?.status !== 'active') {
+            skipped.push({ entryId: op.resultEntryId!, reason: 'no longer active' });
+            continue;
+          }
+          ops.push({ op: 'retire', entryId: entry.id, baseRevision: entry.currentRevision, reason });
+        }
+        // An entry the run amended more than once goes back to where the run found it, in one amend.
+        const amended = new Map<string, { from: number; to: number }>();
+        for (const op of undone.filter((row) => row.op === 'amend' && row.entryId)) {
+          const seen = amended.get(op.entryId!);
+          amended.set(op.entryId!, {
+            from: Math.min(seen?.from ?? op.baseRevision!, op.baseRevision!),
+            to: Math.max(seen?.to ?? 0, op.resultRevision ?? 0),
+          });
+        }
+        const restorations = new Map<string, ResolvedSource[]>();
+        for (const [entryId, span] of amended) {
+          const entry = await this.ownEntryById(tx, ownerId, entryId);
+          if (entry?.status !== 'active' || entry.currentRevision !== span.to) {
+            skipped.push({ entryId, reason: entry?.status !== 'active' ? 'no longer active' : 'changed again since' });
+            continue;
+          }
+          const before = await tx.wikiEntryRevision.findFirstOrThrow({
+            where: { entryId, ownerId, revision: span.from },
+            select: { id: true, title: true, summary: true, fields: true, topics: true, aliases: true, anchors: true },
+          });
+          restorations.set(entryId, await this.sourcesOfRevision(tx, ownerId, before.id));
+          ops.push({
+            op: 'amend',
+            entryId,
+            baseRevision: entry.currentRevision,
+            changes: {
+              title: before.title,
+              summary: before.summary,
+              fields: before.fields,
+              topics: before.topics,
+              aliases: before.aliases,
+              anchors: before.anchors,
+            },
+          });
+        }
+        // The run's own open spot checks go with it: there is nothing left for the owner to check.
+        await tx.wikiChangesetOp.updateMany({
+          where: { changesetId: changeset.id, ownerId, decision: 'pending', spotCheck: true },
+          data: { decision: 'withdrawn', decidedAt: new Date() },
+        });
+        await this.settleChangeset(tx, ownerId, changeset.id);
+        if (ops.length === 0) {
+          return { revertedChangesetId: changeset.id, changesetId: null, replayed: false, ops: [], skipped };
+        }
+        const principal: WikiPrincipal = { origin: 'owner', ownerId, userId, sessionId: null, toolCallId: null };
+        const rationale = `Revert of changeset ${uuidToBase62(changeset.id)}: what its review mode applied at once, taken back.`;
+        const recorded = await this.recordChangeset(
+          tx,
+          principal,
+          space,
+          ops,
+          { ops, rationale, idempotencyKey },
+          sha256(canonicalJson({ spaceId: space.id, ops, rationale })),
+          literals,
+          restorations,
+        );
+        return { revertedChangesetId: changeset.id, ...recorded, skipped };
+      },
+      loggedRetry(this.logger, 'wiki.revertChangeset'),
+    );
+    if (answer.replayed !== true) {
+      const spaceId = await this.prisma.wikiChangeset.findFirst({ where: { id: changesetId, ownerId }, select: { spaceId: true } });
+      if (spaceId) this.realtime?.publishWikiChanged(ownerId, spaceId.spaceId);
+    }
+    return answer;
+  }
+
+  /**
+   * The owner's Reject of an entry a review mode applied and nobody has confirmed — trust `auto` or
+   * `unreviewed` — from the entry itself rather than from a card (contract `reviewModes.entryReject`).
+   *
+   * The entry becomes rejected, a counter-example with its reason exactly like a rejected proposal,
+   * and the rejection is recorded on the op that made it: the add the mode applied. When that add is
+   * an open spot check, this IS its answer, and it counts toward the spot checks' reject rate like one
+   * given on the card. Anything else answers 409: a proposal is rejected in Review, and what the owner
+   * wrote or confirmed is retired, never rejected.
+   */
+  async rejectEntry(
+    ownerId: string,
+    userId: string,
+    entryId: string,
+    input: { reason?: WikiRejectReason; note?: string },
+    actingSessionId: string | null,
+  ): Promise<Record<string, unknown>> {
+    if (actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        'rejecting what the wiki holds is the account owner\'s, through an owner channel with no acting session: '
+          + 'report what should be rejected, and let a person reject it.',
+      );
+    }
+    const reason = input.reason;
+    if (!reason || !WIKI_REJECT_REASONS.includes(reason)) {
+      return refuse('WIKI_SCHEMA', `reject names a reason: ${WIKI_REJECT_REASONS.join(', ')}`);
+    }
+    const done = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const entry = await this.ownEntryById(tx, ownerId, entryId);
+        if (!entry) throw new NotFoundException('no such wiki entry');
+        const made = entry.status === 'active' && WIKI_MACHINE_TRUST.includes(entry.trust as WikiTrust)
+          ? await tx.wikiChangesetOp.findFirst({
+              where: { ownerId, resultEntryId: entry.id, op: 'add', appliedByMode: { not: null } },
+              select: { id: true, changesetId: true, spotCheck: true, decision: true },
+            })
+          : null;
+        if (!made) {
+          throw new ConflictException(
+            'only an entry the review mode applied, and nobody has confirmed, is rejected from the entry: '
+              + 'a proposal is rejected in Review, and what the owner wrote or confirmed is retired',
+          );
+        }
+        await this.applyOp(tx, ownerId, entry.spaceId, {
+          op: 'reject',
+          entryId: entry.id,
+          draft: null,
+          changes: null,
+          payload: {},
+          sources: [],
+          tainted: entry.tainted,
+        }, { authorKind: 'owner', authorUserId: userId, authorSessionId: null, authorToolCallId: null, changesetOpId: made.id });
+        await this.writeOpDecision(tx, ownerId, made.id, {
+          decision: 'rejected',
+          decisionReason: reason,
+          decisionNote: input.note ?? null,
+        });
+        await this.settleChangeset(tx, ownerId, made.changesetId);
+        const trip = made.spotCheck ? await this.tripIfRejecting(tx, ownerId, entry.spaceId) : null;
+        const after = await this.ownEntryById(tx, ownerId, entry.id);
+        return { view: entryView(after!), trip };
+      },
+      loggedRetry(this.logger, 'wiki.rejectEntry'),
+    );
+    this.realtime?.publishWikiChanged(ownerId, String(done.view.spaceId));
+    if (done.trip) this.announceTrip(ownerId, done.trip);
+    return done.view;
+  }
+
+  /**
+   * Send the space back to Manual when the spot checks say its review mode is not to be trusted
+   * (contract `reviewModes.spotChecks.window` and `trip`), and say whether THIS call did it.
+   *
+   * The rate is read over the latest answered spot checks recorded since the mode last changed, so a
+   * mode the owner has just turned back on starts from a clean window. The switch is a compare-and-set
+   * on the mode inside the caller's transaction, and merged into the settings in SQL rather than
+   * written from a snapshot: of two rejections racing, the second finds the space already Manual and
+   * reports nothing, which is what makes the owner's notification a once-only one; and an owner's
+   * concurrent change to another setting survives it.
+   */
+  private async tripIfRejecting(tx: Tx, ownerId: string, spaceId: string): Promise<ReviewModeTrip | null> {
+    const space = await tx.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { title: true, settings: true } });
+    if (!space) return null;
+    const settings = wikiSpaceSettings(space.settings);
+    if (settings.reviewMode === 'manual') return null;
+    const since = settings.reviewModeChangedAt ? new Date(settings.reviewModeChangedAt) : new Date(0);
+    const window = WIKI_REVIEW_RULES.spotCheckWindow;
+    const answered = await tx.wikiChangesetOp.findMany({
+      where: {
+        ownerId,
+        spotCheck: true,
+        decision: { in: ['accepted', 'edited', 'rejected'] },
+        changeset: { spaceId, createdAt: { gte: since } },
+      },
+      orderBy: [{ decidedAt: 'desc' }, { id: 'desc' }],
+      take: window,
+      select: { decision: true },
+    });
+    const rejected = answered.filter((row) => row.decision === 'rejected').length;
+    if (rejected * 100 <= window * WIKI_REVIEW_RULES.spotCheckMaxRejectPercent) return null;
+    const change = JSON.stringify({
+      reviewMode: 'manual',
+      reviewModeChangedAt: new Date().toISOString(),
+      reviewModeChangedBy: 'spot_checks',
+    } satisfies Partial<WikiSpaceSettings>);
+    const switched = await tx.$executeRaw`
+      UPDATE "wiki_space"
+         SET "settings" = "settings" || ${change}::jsonb, "updated_at" = now()
+       WHERE "id" = ${spaceId}::uuid
+         AND "owner_id" = ${ownerId}::uuid
+         AND "settings"->>'reviewMode' IN ('tiered', 'automatic')`;
+    return switched === 1 ? { spaceId, title: space.title, rejected, window } : null;
+  }
+
+  /** The owner's one notification for a space the spot checks sent back to Manual. After the commit. */
+  private announceTrip(ownerId: string, trip: ReviewModeTrip): void {
+    void this.push?.notifyWikiReviewModeTripped({ ownerId, ...trip });
+  }
+
+  /** One op's answer: what the owner decided, and what it applied. True for a rejected spot check. */
   private async applyDecision(
     tx: Tx,
     ownerId: string,
     userId: string,
     changeset: ChangesetRow,
     decision: WikiDecisionInput,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const op = changeset.ops.find((row) => row.id === decision.opId);
     if (!op) throw new NotFoundException('no such op in this changeset');
     if (op.decision !== 'pending') {
@@ -1183,6 +1657,7 @@ export class WikiService {
     // Taken here, not left to the row: one call may name the same op twice, and the snapshot it decides
     // from was read before the first decision wrote.
     op.decision = 'deciding';
+    if (op.spotCheck) return this.answerSpotCheck(tx, ownerId, userId, changeset, op, decision);
     const opName = op.op as WikiOp;
     // The lineage the decision is ABOUT. An add has no target of its own, and a supersede's `entry_id`
     // names the entry it replaces — in both cases the row the op created is `result_entry_id`, and it
@@ -1217,7 +1692,7 @@ export class WikiService {
         decisionReason: reason,
         decisionNote: decision.note ?? null,
       });
-      return;
+      return false;
     }
     const editing = decision.action === 'edit';
     // An edit arrives shaped as an amend's changes, whatever op it answers (`effectPolicy.decide.edit`):
@@ -1264,7 +1739,7 @@ export class WikiService {
           resultRevision: promoted.revision,
         });
         if (entryId) await this.recomputeFlags(tx, ownerId, entryId);
-        return;
+        return false;
       }
       const errors = validateWikiEntryChanges(edited, kind, 'changes');
       if (errors.length > 0) {
@@ -1272,13 +1747,15 @@ export class WikiService {
       }
     }
     // Compare-and-set at the moment it applies: the entry may have moved while the op waited.
+    let machineTarget = false;
     if ((opName === 'amend' || opName === 'supersede' || opName === 'retire') && op.entryId) {
       const target = await this.ownEntryById(tx, ownerId, op.entryId);
       if (!target) throw new NotFoundException('no such wiki entry');
       if (op.baseRevision !== target.currentRevision) {
         await this.writeOpDecision(tx, ownerId, op.id, { decision: 'conflict', decisionNote: null });
-        return;
+        return false;
       }
+      machineTarget = target.status === 'active' && WIKI_MACHINE_TRUST.includes(target.trust as WikiTrust);
     }
     // An edit of an amend is the owner's changes laid over the proposal's, as an add's is over its
     // draft above: a key the owner left alone is the proposal's, not the entry's. And the proposal's
@@ -1299,6 +1776,9 @@ export class WikiService {
       sources,
       tainted: op.tainted,
       promotedTrust: 'confirmed',
+      // An amend the owner accepted into an entry the machine wrote is theirs to vouch for now
+      // (`trust.onApply.acceptedAddSupersedeOrAmend`); into any other entry, it keeps the trust it found.
+      ...(opName === 'amend' && machineTarget ? { trustAfter: 'confirmed' as const } : {}),
     }, editing ? ownerAuthor : { ...ownerAuthor, authorKind: 'agent', authorUserId: null, authorSessionId: changeset.sessionId, authorToolCallId: changeset.toolCallId });
     await this.writeOpDecision(tx, ownerId, op.id, {
       decision: editing ? 'edited' : 'accepted',
@@ -1309,6 +1789,119 @@ export class WikiService {
     // After the decision is on the row, not before: a challenge is answered by the decision itself, so
     // the flags have to be recomputed against the world the decision just made.
     if (entryId) await this.recomputeFlags(tx, ownerId, entryId);
+    return false;
+  }
+
+  /**
+   * The owner's answer to a spot check (contract `reviewModes.spotChecks.answers`). The op's effect
+   * already stands, so accepting confirms it, editing lays the owner's changes over it, and rejecting
+   * undoes it — an add's entry rejected, an amend's entry put back to the revision it replaced. An
+   * entry that changed after the op applied is not answered for it: `conflict`, as a proposal whose
+   * base moved is. True when it recorded a rejection, which is what the reject rate counts.
+   */
+  private async answerSpotCheck(
+    tx: Tx,
+    ownerId: string,
+    userId: string,
+    changeset: ChangesetRow,
+    op: ChangesetRow['ops'][number],
+    decision: WikiDecisionInput,
+  ): Promise<boolean> {
+    if (decision.action === 'reject' && (!decision.reason || !WIKI_REJECT_REASONS.includes(decision.reason))) {
+      return refuse('WIKI_SCHEMA', `reject names a reason: ${WIKI_REJECT_REASONS.join(', ')}`);
+    }
+    const entryId = op.resultEntryId ?? op.entryId;
+    const entry = entryId ? await this.ownEntryById(tx, ownerId, entryId) : null;
+    if (!entry || entry.status !== 'active' || entry.currentRevision !== op.resultRevision) {
+      await this.writeOpDecision(tx, ownerId, op.id, { decision: 'conflict', decisionNote: null });
+      return false;
+    }
+    const owner: WikiAuthor = {
+      authorKind: 'owner',
+      authorUserId: userId,
+      authorSessionId: null,
+      authorToolCallId: null,
+      changesetOpId: op.id,
+    };
+    const proposed = (op.payload ?? {}) as Record<string, unknown>;
+    const bare = { draft: null, changes: null, sources: [], tainted: op.tainted } as const;
+    if (decision.action === 'accept') {
+      await this.applyOp(tx, ownerId, changeset.spaceId, { ...bare, op: 'confirm', entryId: entry.id, payload: proposed }, owner);
+      await this.writeOpDecision(tx, ownerId, op.id, { decision: 'accepted', decisionNote: decision.note ?? null });
+      return false;
+    }
+    if (decision.action === 'edit') {
+      // The owner's changes laid over what the op wrote: an add's whole draft, an amend's changes.
+      const edited = (decision.edited ?? {}) as WikiEntryChanges;
+      const payload = op.op === 'add'
+        ? mergeDraft((proposed.entry ?? {}) as Record<string, unknown>, edited)
+        : { ...((proposed.changes ?? {}) as Record<string, unknown>), ...(edited as Record<string, unknown>) };
+      const errors = op.op === 'add'
+        ? validateWikiEntryDraft(payload, 'entry')
+        : validateWikiEntryChanges(payload, entry.kind as WikiKind, 'changes');
+      if (errors.length > 0) {
+        return refuse('WIKI_SCHEMA', "the owner's edit does not have the shape this contract gives it", errors);
+      }
+      const written = await this.applyOp(tx, ownerId, changeset.spaceId, {
+        op: 'amend',
+        entryId: entry.id,
+        draft: null,
+        changes: null,
+        payload,
+        sources: await this.sourcesOfOp(tx, ownerId, changeset.sessionId, proposed),
+        tainted: op.tainted,
+        trustAfter: 'confirmed',
+      }, owner);
+      await this.writeOpDecision(tx, ownerId, op.id, {
+        decision: 'edited',
+        decisionNote: decision.note ?? null,
+        resultEntryId: written.entryId,
+        resultRevision: written.revision,
+      });
+      return false;
+    }
+    if (op.op === 'add') {
+      await this.applyOp(tx, ownerId, changeset.spaceId, { ...bare, op: 'reject', entryId: entry.id, payload: proposed }, owner);
+    } else {
+      await this.restoreRevision(tx, ownerId, changeset.spaceId, entry.id, op.baseRevision!, owner);
+    }
+    await this.writeOpDecision(tx, ownerId, op.id, {
+      decision: 'rejected',
+      decisionReason: decision.reason,
+      decisionNote: decision.note ?? null,
+    });
+    return true;
+  }
+
+  /**
+   * Put an earlier revision's content back as the entry's next revision, with the sources that
+   * revision rested on, and leave the entry unreviewed (`trust.onApply.undoneByRevertOrSpotCheck`):
+   * what the owner has just said about the change it undoes is reason enough to take the entry out
+   * of the push until somebody looks at it again.
+   */
+  private async restoreRevision(
+    tx: Tx,
+    ownerId: string,
+    spaceId: string,
+    entryId: string,
+    revision: number,
+    author: WikiAuthor,
+  ): Promise<{ entryId: string; revision: number | null }> {
+    const before = await tx.wikiEntryRevision.findFirstOrThrow({
+      where: { entryId, ownerId, revision },
+      select: { id: true, title: true, summary: true, fields: true, topics: true, aliases: true, anchors: true },
+    });
+    const { id, ...content } = before;
+    return this.applyOp(tx, ownerId, spaceId, {
+      op: 'amend',
+      entryId,
+      draft: null,
+      changes: null,
+      payload: { changes: content },
+      sources: await this.sourcesOfRevision(tx, ownerId, id),
+      tainted: false,
+      trustAfter: 'unreviewed',
+    }, author);
   }
 
   /** The op's row, in the state its decision left it (contract `states.op`). */
@@ -1366,10 +1959,14 @@ export class WikiService {
     author: WikiAuthor,
   ): Promise<{ entryId: string; revision: number | null }> {
     const now = new Date();
-    /** An entry that left active takes its unanswered ops with it: they can no longer apply. */
+    /**
+     * An entry that left active takes its unanswered ops with it: they can no longer apply. That
+     * includes the spot check of the add that made it, which names the entry as its result rather
+     * than as its target.
+     */
     const withdrawPendingOps = (entryId: string) =>
       tx.wikiChangesetOp.updateMany({
-        where: { entryId, ownerId, decision: 'pending' },
+        where: { ownerId, decision: 'pending', OR: [{ entryId }, { resultEntryId: entryId, spotCheck: true }] },
         data: { decision: 'withdrawn', decidedAt: new Date() },
       });
     const supersedeTarget = async (targetId: string, successorId: string) => {
@@ -1450,6 +2047,7 @@ export class WikiService {
             aliases: merged.aliases,
             anchors: merged.anchors as unknown as Prisma.InputJsonValue,
             ...(instruction.tainted ? { tainted: true } : {}),
+            ...(instruction.trustAfter ? { trust: instruction.trustAfter } : {}),
           },
         });
         if (applied.count !== 1) {
@@ -1493,9 +2091,26 @@ export class WikiService {
         await this.recomputeFlags(tx, ownerId, instruction.entryId!);
         return { entryId: instruction.entryId!, revision: null };
       }
-      case 'reject': {
+      case 'confirm': {
+        // The owner looked at what a review mode applied and kept it (a spot check accepted): it is now
+        // as trusted as a proposal they accepted. Only a live entry the machine wrote moves.
         await tx.wikiEntry.updateMany({
-          where: { id: instruction.entryId!, ownerId, status: 'proposed' },
+          where: { id: instruction.entryId!, ownerId, status: 'active', trust: { in: [...WIKI_MACHINE_TRUST] } },
+          data: { trust: 'confirmed' },
+        });
+        await this.recomputeFlags(tx, ownerId, instruction.entryId!);
+        return { entryId: instruction.entryId!, revision: null };
+      }
+      case 'reject': {
+        // A proposal, or a live entry a review mode applied that nobody has confirmed (contract
+        // `states.entry`: active -> rejected). Anything the owner wrote or confirmed is retired instead,
+        // never rejected, so the predicate is what keeps this from reaching it.
+        await tx.wikiEntry.updateMany({
+          where: {
+            id: instruction.entryId!,
+            ownerId,
+            OR: [{ status: 'proposed' }, { status: 'active', trust: { in: [...WIKI_MACHINE_TRUST] } }],
+          },
           data: { status: 'rejected', trust: 'proposed', retiredAt: now, validTo: now },
         });
         await withdrawPendingOps(instruction.entryId!);
@@ -1667,6 +2282,8 @@ export class WikiService {
         quote,
         quoteVerified: verified,
         tainted: found.tainted,
+        ownerWords: found.ownerWords,
+        sessionId: found.sessionId,
       });
     }
     return { resolved };
@@ -1685,10 +2302,19 @@ export class WikiService {
     tx: Tx,
     principal: WikiPrincipal,
     source: { kind: WikiSourceKind; ref?: string; session?: 'self'; seq?: number },
-  ): Promise<{ ref: string; text: string | null; locator?: Record<string, unknown>; tainted: boolean } | null> {
+  ): Promise<{
+    ref: string;
+    text: string | null;
+    locator?: Record<string, unknown>;
+    tainted: boolean;
+    ownerWords: boolean;
+    sessionId: string | null;
+  } | null> {
     if (!(WIKI_SOURCE_KINDS as readonly string[]).includes(source.kind)) return null;
     const ownerScoped = { session: { ownerId: principal.ownerId } };
     const ref = source.ref === undefined ? undefined : refAsUuid(source.ref);
+    /** What tells the owner's own turn from anybody else's (`isOwnerTurn`). */
+    const turnAuthor = { kind: true, sendIntent: true, clientTurnId: true } as const;
     switch (source.kind) {
       case 'turn': {
         if (source.session === 'self') {
@@ -1696,22 +2322,30 @@ export class WikiService {
           const turn = await tx.conversationTurn.findFirst({
             where: { sessionId: principal.sessionId, ...(source.seq === undefined ? {} : { seq: source.seq }) },
             orderBy: { seq: 'desc' },
-            select: { id: true, content: true, seq: true },
+            select: { id: true, content: true, seq: true, ...turnAuthor },
           });
           return {
             ref: principal.sessionId,
             text: turn?.content ?? null,
             locator: { seq: source.seq ?? turn?.seq ?? null, ...(turn ? { turnId: turn.id } : {}) },
             tainted: false,
+            ownerWords: turn ? isOwnerTurn(turn) : false,
+            sessionId: principal.sessionId,
           };
         }
         if (!ref) return null;
         const turn = await tx.conversationTurn.findFirst({
           where: { id: ref, ...ownerScoped },
-          select: { id: true, content: true, sessionId: true },
+          select: { id: true, content: true, sessionId: true, ...turnAuthor },
         });
         if (!turn) return null;
-        return { ref: turn.id, text: turn.content ?? '', tainted: await this.sessionWasTainted(tx, turn.sessionId) };
+        return {
+          ref: turn.id,
+          text: turn.content ?? '',
+          tainted: await this.sessionWasTainted(tx, turn.sessionId),
+          ownerWords: isOwnerTurn(turn),
+          sessionId: turn.sessionId,
+        };
       }
       case 'event': {
         if (!ref) return null;
@@ -1720,16 +2354,28 @@ export class WikiService {
           select: { id: true, type: true, payload: true, sessionId: true },
         });
         if (!event) return null;
-        return { ref: event.id, text: eventText(event.type, event.payload), tainted: await this.sessionWasTainted(tx, event.sessionId) };
+        return {
+          ref: event.id,
+          text: eventText(event.type, event.payload),
+          tainted: await this.sessionWasTainted(tx, event.sessionId),
+          ownerWords: false,
+          sessionId: event.sessionId,
+        };
       }
       case 'tool_call': {
         if (!ref) return null;
         const call = await tx.toolCall.findFirst({
           where: { id: ref, ...ownerScoped },
-          select: { id: true, output: true },
+          select: { id: true, output: true, sessionId: true },
         });
         if (!call) return null;
-        return { ref: call.id, text: call.output === null ? null : asText(call.output), tainted: false };
+        return {
+          ref: call.id,
+          text: call.output === null ? null : asText(call.output),
+          tainted: false,
+          ownerWords: false,
+          sessionId: call.sessionId,
+        };
       }
       case 'task': {
         if (!ref) return null;
@@ -1738,7 +2384,7 @@ export class WikiService {
           select: { id: true, title: true, description: true },
         });
         if (!task) return null;
-        return { ref: task.id, text: `${task.title}\n${task.description ?? ''}`, tainted: false };
+        return { ref: task.id, text: `${task.title}\n${task.description ?? ''}`, tainted: false, ownerWords: false, sessionId: null };
       }
       case 'task_comment': {
         if (!ref) return null;
@@ -1747,17 +2393,23 @@ export class WikiService {
           select: { id: true, body: true },
         });
         if (!comment) return null;
-        return { ref: comment.id, text: comment.body, tainted: false };
+        return { ref: comment.id, text: comment.body, tainted: false, ownerWords: false, sessionId: null };
       }
       case 'approval': {
         if (!ref) return null;
         const approval = await tx.approval.findFirst({
           where: { id: ref, ...ownerScoped },
-          select: { id: true, answers: true, message: true, sessionId: true },
+          select: { id: true, answers: true, message: true, sessionId: true, toolName: true, status: true, decidedById: true },
         });
         if (!approval) return null;
         const text = [approval.answers === null ? '' : asText(approval.answers), approval.message ?? ''].join('\n');
-        return { ref: approval.id, text, tainted: await this.sessionWasTainted(tx, approval.sessionId) };
+        return {
+          ref: approval.id,
+          text,
+          tainted: await this.sessionWasTainted(tx, approval.sessionId),
+          ownerWords: isOwnerAnswer(approval),
+          sessionId: approval.sessionId,
+        };
       }
       case 'commit': {
         if (!ref) return null;
@@ -1771,7 +2423,7 @@ export class WikiService {
           select: { id: true },
         });
         if (!receipt) return null;
-        return { ref, text: null, tainted: false };
+        return { ref, text: null, tainted: false, ownerWords: false, sessionId: null };
       }
       default:
         return null;
@@ -1876,6 +2528,25 @@ export class WikiService {
     }));
   }
 
+  /** A revision's live sources, as the revision that puts its content back cites them again. */
+  private async sourcesOfRevision(tx: Tx, ownerId: string, revisionId: string): Promise<ResolvedSource[]> {
+    const rows = await tx.wikiSource.findMany({
+      where: { revisionId, ownerId, state: 'live' },
+      orderBy: { createdAt: 'asc' },
+      select: { kind: true, ref: true, locator: true, quote: true, quoteVerified: true, tainted: true },
+    });
+    return rows.map((row) => ({
+      kind: row.kind as WikiSourceKind,
+      ref: row.ref,
+      locator: row.locator as Prisma.InputJsonValue,
+      quote: row.quote,
+      quoteVerified: row.quoteVerified,
+      tainted: row.tainted,
+      ownerWords: false,
+      sessionId: null,
+    }));
+  }
+
   /** The sources of an op being applied at decide time, resolved against the session that proposed it. */
   private async sourcesOfOp(
     tx: Tx,
@@ -1888,6 +2559,23 @@ export class WikiService {
     const principal: WikiPrincipal = { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null };
     const { resolved } = await this.resolveSources(tx, principal, raw, { required: false });
     return resolved;
+  }
+
+  /**
+   * What the review mode's floor needs to know of an amend's entry (contract
+   * `reviewModes.floors.ownerVouchedWaits`): whether the owner wrote or confirmed it — its trust, or
+   * any revision of it the owner authored — and whether it is live with the machine's trust, which is
+   * all a mode ever amends.
+   */
+  private async reviewTarget(
+    tx: Tx,
+    ownerId: string,
+    target: EntryRow,
+  ): Promise<{ ownerVouched: boolean; machineWritten: boolean }> {
+    const machineWritten = target.status === 'active' && WIKI_MACHINE_TRUST.includes(target.trust as WikiTrust);
+    if (target.trust === 'owner' || target.trust === 'confirmed') return { ownerVouched: true, machineWritten };
+    const ownerRevisions = await tx.wikiEntryRevision.count({ where: { entryId: target.id, ownerId, authorKind: 'owner' } });
+    return { ownerVouched: ownerRevisions > 0, machineWritten };
   }
 
   /** One of the owner's entries in this space, or a plain 404 (§10.1). */
@@ -2067,6 +2755,11 @@ export class WikiService {
    *
    * What is left out is what changed nothing: a pending op (Review shows it, and it may never apply),
    * a rejected one, an expired one, and one withdrawn behind an entry that left active.
+   *
+   * AN OP A REVIEW MODE APPLIED changed the wiki when it was recorded, so it is dated by its
+   * changeset, and it is listed while it waits as a spot check too: its effect already stands, and a
+   * timeline that dropped every tenth such change until the owner answered its card would be wrong
+   * about what the wiki holds.
    */
   async getTimeline(ownerId: string, spaceId: string, limit = 20): Promise<Record<string, unknown>> {
     await this.requireSpace(ownerId, spaceId);
@@ -2076,6 +2769,8 @@ export class WikiService {
         op: string;
         decision: string;
         origin: string;
+        appliedByMode: string | null;
+        spotCheck: boolean;
         at: Date;
         entryId: string | null;
         title: string | null;
@@ -2091,7 +2786,9 @@ export class WikiService {
              o."op" AS "op",
              o."decision" AS "decision",
              c."origin" AS "origin",
-             o."decided_at" AS "at",
+             o."applied_by_mode" AS "appliedByMode",
+             o."spot_check" AS "spotCheck",
+             CASE WHEN o."applied_by_mode" IS NULL THEN o."decided_at" ELSE c."created_at" END AS "at",
              e."id" AS "entryId",
              e."title" AS "title",
              e."kind" AS "kind",
@@ -2108,9 +2805,11 @@ export class WikiService {
           ON successor."id" = e."superseded_by_id" AND successor."owner_id" = e."owner_id"
        WHERE o."owner_id" = ${ownerId}::uuid
          AND c."space_id" = ${spaceId}::uuid
-         AND o."decision" IN ('accepted', 'edited', 'auto_applied')
-         AND o."decided_at" IS NOT NULL
-       ORDER BY o."decided_at" DESC, o."id" DESC
+         AND (
+           (o."decision" IN ('accepted', 'edited', 'auto_applied') AND o."decided_at" IS NOT NULL)
+           OR (o."spot_check" AND o."decision" = 'pending')
+         )
+       ORDER BY "at" DESC, o."id" DESC
        LIMIT ${Math.min(Math.max(limit, 1), 100)}::int
     `);
     return {
@@ -2119,6 +2818,8 @@ export class WikiService {
         op: row.op,
         decision: row.decision,
         origin: row.origin,
+        appliedByMode: row.appliedByMode,
+        spotCheck: row.spotCheck,
         at: row.at.toISOString(),
         entryId: row.entryId,
         title: row.title,
@@ -2301,6 +3002,45 @@ function requiresSource(op: WikiOp, principal: WikiPrincipal): boolean {
   return op === 'add' || op === 'amend' || op === 'supersede' || op === 'reinforce';
 }
 
+/**
+ * Tiered's reading of what an add or an amend leaves (contract `reviewModes.tiered`), for
+ * `wikiTieredBasis`.
+ *
+ * The owner's words count only with a verified quote. An add's anchors have never been checked; an
+ * amend keeps its entry's last check only when it leaves the anchors alone. And a recipe's verify
+ * command is re-run by a maintenance run that reports nothing back yet, so no recipe is
+ * machine-verified until one does: that reading is `false`, stated here rather than left out, so the
+ * report has one place to land.
+ */
+function tieredBasisOf(
+  kind: WikiEntryKind,
+  target: { anchorState: string } | null,
+  changes: unknown,
+  sources: readonly ResolvedSource[],
+): WikiTieredBasis | null {
+  const reanchored = changes !== null && typeof changes === 'object' && (changes as Record<string, unknown>).anchors !== undefined;
+  return wikiTieredBasis({
+    kind,
+    ownerWords: sources.some((source) => source.ownerWords && source.quoteVerified),
+    anchorState: target && !reanchored ? (target.anchorState as WikiAnchorState) : 'unchecked',
+    sessions: new Set(sources.map((source) => source.sessionId).filter((id): id is string => id !== null)).size,
+    recipeVerified: false,
+  });
+}
+
+/**
+ * Would applying this op pass the circuit breaker (contract `reviewModes.floors.circuitBreaker`)?
+ *
+ * What is counted is the distinct entries the mode changes in the changeset — every add is a new
+ * one, an amend of an entry already changed here is not — against the active entries the space held
+ * when the changeset began. Below `breakerMinActiveEntries` there is no breaker at all.
+ */
+function breakerTrips(budget: ChangesetBudget, amendedEntryId: string | null): boolean {
+  if (amendedEntryId !== null && budget.changedByMode.has(amendedEntryId)) return false;
+  if (budget.activeAtStart < WIKI_REVIEW_RULES.breakerMinActiveEntries) return false;
+  return (budget.changedByMode.size + 1) * 100 > budget.activeAtStart * WIKI_REVIEW_RULES.breakerMaxChangedPercent;
+}
+
 /** The op's sources as submitted. */
 function rawOpSources(op: Record<string, unknown>): unknown[] {
   return Array.isArray(op.sources) ? op.sources : [];
@@ -2453,7 +3193,11 @@ function recordedOutcomes(changeset: ChangesetRow): WikiOpOutcome[] {
   return changeset.ops.map((op) => {
     const similar = op.similar as unknown as WikiSimilar[];
     const decided = op.decision === 'pending' ? undefined : op.decision;
-    if (op.decision === 'pending' || op.decision === 'rejected' || op.decision === 'expired' || op.decision === 'withdrawn' || op.decision === 'conflict') {
+    // An op a review mode applied was applied when it was recorded, a spot check's included, whatever
+    // the owner has made of it since.
+    const waited = op.appliedByMode === null
+      && (op.decision === 'pending' || op.decision === 'rejected' || op.decision === 'expired' || op.decision === 'withdrawn' || op.decision === 'conflict');
+    if (waited) {
       return { seq: op.seq, status: 'pending', opId: op.id, entryId: op.resultEntryId ?? op.entryId, similar, ...(decided ? { decision: decided } : {}) } as WikiOpOutcome;
     }
     return {

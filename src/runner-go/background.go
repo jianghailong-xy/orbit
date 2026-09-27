@@ -473,7 +473,10 @@ func (b *bgTailer) noteEngineBackgroundShell(toolUseID, shellID string) {
 	b.holdFor(toolUseID, shellID, true)
 }
 
-func (b *bgTailer) startTranscriptWatcher(sessionUUID string) {
+// startTranscriptWatcher tails the transcript of one session, in the config directory that session
+// runs in: a session dispatched onto one of the machine's Claude accounts keeps its transcript in
+// that account's directory, so the default one would simply never match.
+func (b *bgTailer) startTranscriptWatcher(sessionUUID, configDir string) {
 	b.mu.Lock()
 	if b.stopping {
 		b.mu.Unlock()
@@ -483,7 +486,7 @@ func (b *bgTailer) startTranscriptWatcher(sessionUUID string) {
 	b.mu.Unlock()
 	go func() {
 		defer b.wg.Done()
-		b.watchJSONL(sessionUUID)
+		b.watchJSONL(sessionUUID, configDir)
 	}()
 }
 
@@ -807,7 +810,7 @@ func asString(v interface{}) string {
 //
 // The first pass reads the whole file (self-healing any shell already stale from a prior runner);
 // later passes read only what was appended. Bound to the session context — it stops with the run.
-func (b *bgTailer) watchJSONL(sessionUUID string) {
+func (b *bgTailer) watchJSONL(sessionUUID, configDir string) {
 	if sessionUUID == "" {
 		return
 	}
@@ -817,7 +820,7 @@ func (b *bgTailer) watchJSONL(sessionUUID string) {
 	var offset int64
 	for {
 		if path == "" {
-			path = findClaudeTranscript(sessionUUID) // may not exist until the first turn writes it
+			path = findClaudeTranscriptIn(configDir, sessionUUID) // may not exist until the first turn writes it
 		}
 		if path != "" {
 			offset = b.scanTranscript(path, offset)
@@ -936,14 +939,16 @@ func userTextFromJSONL(line string) string {
 // findClaudeTranscript resolves the transcript path for a Claude session by its UUID. Globbing
 // on the filename avoids reproducing Claude's cwd→directory escaping; the UUID is unique.
 func findClaudeTranscript(sessionUUID string) string {
-	base := os.Getenv("CLAUDE_CONFIG_DIR")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return ""
-		}
-		base = filepath.Join(home, ".claude")
+	base, err := effectiveClaudeConfigDir(os.Environ(), "")
+	if err != nil {
+		return ""
 	}
+	return findClaudeTranscriptIn(base, sessionUUID)
+}
+
+// findClaudeTranscriptIn is findClaudeTranscript within one config directory: the account a session
+// runs on keeps its transcript in that account's directory.
+func findClaudeTranscriptIn(base, sessionUUID string) string {
 	matches, _ := filepath.Glob(filepath.Join(base, "projects", "*", sessionUUID+".jsonl"))
 	if len(matches) > 0 {
 		return matches[0]

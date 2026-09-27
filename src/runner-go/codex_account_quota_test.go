@@ -86,7 +86,7 @@ func storeSlotUsage(usage *codexAccountUsage, id string, read *PlanUsage) {
 
 func TestCodexAccountQuotaSessionSlotIsTheCodexHomeItRunsIn(t *testing.T) {
 	home, orbitHome := codexAccountSlotTestHomes(t)
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,16 +99,16 @@ func TestCodexAccountQuotaSessionSlotIsTheCodexHomeItRunsIn(t *testing.T) {
 		slot     string // empty: no slot's subscription
 	}{
 		// The three the task names: no CODEX_HOME, Default's, an added slot's.
-		{"no CODEX_HOME", nil, execDir, codexAccountDefaultSlot},
-		{"CODEX_HOME names Default", map[string]string{"CODEX_HOME": defaultHome}, execDir, codexAccountDefaultSlot},
-		{"CODEX_HOME names an added slot", map[string]string{"CODEX_HOME": work.CodexHome}, execDir, work.ID},
+		{"no CODEX_HOME", nil, execDir, accountSlotDefaultID},
+		{"CODEX_HOME names Default", map[string]string{"CODEX_HOME": defaultHome}, execDir, accountSlotDefaultID},
+		{"CODEX_HOME names an added slot", map[string]string{"CODEX_HOME": work.Dir}, execDir, work.ID},
 		// Resolved as codex resolves it: relative to where the session runs.
-		{"a relative CODEX_HOME that lands on the slot", map[string]string{"CODEX_HOME": work.ID}, filepath.Dir(work.CodexHome), work.ID},
+		{"a relative CODEX_HOME that lands on the slot", map[string]string{"CODEX_HOME": work.ID}, filepath.Dir(work.Dir), work.ID},
 		{"CODEX_HOME names some other directory", map[string]string{"CODEX_HOME": t.TempDir()}, execDir, ""},
 		{"HOME moves CODEX_HOME", map[string]string{"HOME": t.TempDir()}, execDir, ""},
 		{"CODEX_HOME names a slot this runner never added", map[string]string{"CODEX_HOME": filepath.Join(orbitHome, "codex-accounts", "0badf00d")}, execDir, ""},
 		// A key of the session's own spends no slot's subscription, whichever CODEX_HOME it runs in.
-		{"an added slot with a CODEX_API_KEY", map[string]string{"CODEX_HOME": work.CodexHome, "CODEX_API_KEY": "orbit-test-codex-api-key"}, execDir, ""},
+		{"an added slot with a CODEX_API_KEY", map[string]string{"CODEX_HOME": work.Dir, "CODEX_API_KEY": "orbit-test-codex-api-key"}, execDir, ""},
 		{"Default with an OPENAI_ variable", map[string]string{"OPENAI_BASE_URL": "https://provider.example.invalid/v1"}, execDir, ""},
 	} {
 		t.Run(row.name, func(t *testing.T) {
@@ -145,11 +145,11 @@ func TestCodexAccountQuotaSessionRateLimitsFeedOnlyTheirOwnSlot(t *testing.T) {
 		}},
 		map[string]interface{}{"method": "item/agentMessage/delta", "params": map[string]interface{}{"delta": handled}},
 	)
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
-	answerInCodexHome(t, work.CodexHome, "rateLimits.json", codexAccountQuotaRead(8))
+	answerInCodexHome(t, work.Dir, "rateLimits.json", codexAccountQuotaRead(8))
 
 	// Each account as its own probe reads it: Default's windows with its reset block, Work's without.
 	reads := newCodexAccountUsage(codexResetTestLeaseOwner)
@@ -160,7 +160,7 @@ func TestCodexAccountQuotaSessionRateLimitsFeedOnlyTheirOwnSlot(t *testing.T) {
 	if defaultRead.RateLimitReset == nil || defaultRead.Primary == nil || defaultRead.Primary.Utilization != 100 {
 		t.Fatalf("Default's read produced %+v", defaultRead)
 	}
-	workRead, _, err := fetchCodexAccountPlanUsage(context.Background(), work.CodexHome)
+	workRead, _, err := fetchCodexAccountPlanUsage(context.Background(), work.Dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestCodexAccountQuotaSessionRateLimitsFeedOnlyTheirOwnSlot(t *testing.T) {
 		usage := newCodexAccountUsage(codexResetTestLeaseOwner)
 		usage.def.store(defaultRead)
 		before := usage.def.snapshot()
-		runCodexSessionUntilHandled(t, inbox.URL, map[string]string{"CODEX_HOME": work.CodexHome}, usage.mergeCodexRateLimits, handled)
+		runCodexSessionUntilHandled(t, inbox.URL, map[string]string{"CODEX_HOME": work.Dir}, usage.mergeCodexRateLimits, handled)
 		// Not one field of Default's snapshot moved: windows, reset block, fetch time.
 		if got := usage.def.snapshot(); !reflect.DeepEqual(got, before) {
 			t.Fatalf("Work's session wrote into Default's snapshot: %+v, want %+v", got, before)
@@ -234,11 +234,11 @@ func TestCodexAccountQuotaEachSlotIsReadInItsOwnHomeAndPartition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
-	answerInCodexHome(t, work.CodexHome, "rateLimits.json", codexAccountQuotaRead(8))
+	answerInCodexHome(t, work.Dir, "rateLimits.json", codexAccountQuotaRead(8))
 
 	// One pass the way run makes it: Default's probe, then every listed slot's.
 	ctx := context.Background()
@@ -304,8 +304,8 @@ func TestCodexAccountQuotaEachSlotIsReadInItsOwnHomeAndPartition(t *testing.T) {
 	workSpawns := 0
 	for _, spawn := range fake.spawns(t) {
 		want := codexStatePartitionDir(defaultHome)
-		if spawn.CodexHome == work.CodexHome {
-			want = codexStatePartitionDir(work.CodexHome)
+		if spawn.CodexHome == work.Dir {
+			want = codexStatePartitionDir(work.Dir)
 			workSpawns++
 		} else if spawn.CodexHome != "" && spawn.CodexHome != defaultHome {
 			t.Fatalf("an app-server ran in CODEX_HOME %s", spawn.CodexHome)
@@ -318,7 +318,7 @@ func TestCodexAccountQuotaEachSlotIsReadInItsOwnHomeAndPartition(t *testing.T) {
 		t.Fatal("no app-server ran in Work's CODEX_HOME")
 	}
 	// Nothing was copied from Default's login into Work, and Default's was not touched.
-	if _, err := os.Lstat(filepath.Join(work.CodexHome, "auth.json")); !os.IsNotExist(err) {
+	if _, err := os.Lstat(filepath.Join(work.Dir, "auth.json")); !os.IsNotExist(err) {
 		t.Fatalf("Work's CODEX_HOME has an auth.json: %v", err)
 	}
 	info, err := os.Stat(sentinel)
@@ -340,20 +340,20 @@ func TestCodexAccountQuotaSlotReadHoldsItsOwnPartitionsHandshakeLock(t *testing.
 	fixture := codexResetReadFixture(t, "details-complete")
 	fake := newFakeCodexBinary(t, fixture.account, fixture.rateLimits)
 	fake.useAsRunnerDefault(t)
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
-	answerInCodexHome(t, work.CodexHome, "rateLimits.json", codexAccountQuotaRead(8))
+	answerInCodexHome(t, work.Dir, "rateLimits.json", codexAccountQuotaRead(8))
 	ctx := context.Background()
 	// The first read bootstraps the slot's partition; later ones take only the handshake lock.
-	if _, _, err := fetchCodexAccountPlanUsage(ctx, work.CodexHome); err != nil {
+	if _, _, err := fetchCodexAccountPlanUsage(ctx, work.Dir); err != nil {
 		t.Fatal(err)
 	}
 	workSpawns := func() int {
 		n := 0
 		for _, spawn := range fake.spawns(t) {
-			if spawn.CodexHome == work.CodexHome {
+			if spawn.CodexHome == work.Dir {
 				n++
 			}
 		}
@@ -374,7 +374,7 @@ func TestCodexAccountQuotaSlotReadHoldsItsOwnPartitionsHandshakeLock(t *testing.
 	read := func() chan error {
 		done := make(chan error, 1)
 		go func() {
-			usage, _, err := fetchCodexAccountPlanUsage(ctx, work.CodexHome)
+			usage, _, err := fetchCodexAccountPlanUsage(ctx, work.Dir)
 			if err == nil && (usage.Primary == nil || usage.Primary.Utilization != 8) {
 				err = fmt.Errorf("Work's read came back as %+v, not its own 8%%", usage)
 			}
@@ -397,7 +397,7 @@ func TestCodexAccountQuotaSlotReadHoldsItsOwnPartitionsHandshakeLock(t *testing.
 	})
 
 	t.Run("its own partition's lock does", func(t *testing.T) {
-		unlock := lock(t, work.CodexHome)
+		unlock := lock(t, work.Dir)
 		before := workSpawns()
 		done := read()
 		select {
@@ -429,7 +429,7 @@ func TestCodexAccountQuotaSlotReadHoldsItsOwnPartitionsHandshakeLock(t *testing.
 // longer read or reported. A session's rate limits reach a slot's snapshot before its first read.
 func TestCodexAccountQuotaFollowsTheSlotsTheRunnerHas(t *testing.T) {
 	codexAccountSlotTestHomes(t)
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,11 +454,11 @@ func TestCodexAccountQuotaFollowsTheSlotsTheRunnerHas(t *testing.T) {
 		t.Fatalf("snapshot %+v", got)
 	}
 
-	personal, err := createCodexAccountSlot("Personal")
+	personal, err := codexAccountKind.create("Personal")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.RemoveAll(work.CodexHome); err != nil {
+	if err := os.RemoveAll(work.Dir); err != nil {
 		t.Fatal(err)
 	}
 	usage.syncSlots(context.Background(), start)

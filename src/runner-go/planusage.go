@@ -21,7 +21,9 @@ import (
 // uses the app-server account/rateLimits/read protocol method. Both are best-effort:
 // failures degrade to "no usage reported" and never disturb the heartbeat.
 
-const (
+var (
+	// planUsageURL is where one Claude login's quota is read. A var so a test can point it at its
+	// own server and prove which login's token went out.
 	planUsageURL = "https://api.anthropic.com/api/oauth/usage"
 	// While the runner has ≥1 active session, refresh at most this often. Kept well
 	// clear of a per-minute cadence on purpose: several busy runners behind one egress
@@ -124,9 +126,12 @@ type planUsageProbe struct {
 	codexReset *codexResetReader
 }
 
+// newClaudePlanUsageProbe reads the usage of the login the runner's own environment selects — the
+// machine's Default account.
 func newClaudePlanUsageProbe() *planUsageProbe {
 	return &planUsageProbe{client: &http.Client{}, name: "claude plan-usage", fetch: fetchClaudePlanUsage}
 }
+
 
 // newCodexPlanUsageProbe reads Codex usage for the runner process whose heartbeat leaseOwner is
 // leaseOwner: the generation of every rate-limit reset block the probe reads.
@@ -284,19 +289,24 @@ func nextPlanUsageResetAfter(usage *PlanUsage, after time.Time) (time.Time, bool
 	return best, !best.IsZero()
 }
 
-// claudeCredentialsPath resolves where Claude Code stores OAuth creds, honoring
-// CLAUDE_CONFIG_DIR (which the CLI itself respects) and otherwise ~/.claude — the
-// same HOME the runner spawns claude under, so the token always matches.
-func claudeCredentialsPath() string {
-	dir := os.Getenv("CLAUDE_CONFIG_DIR")
-	if dir == "" {
-		dir = filepath.Join(userHome(), ".claude")
+// claudeCredentialsPathIn is where Claude Code stores one login's OAuth creds, honoring
+// CLAUDE_CONFIG_DIR (which the CLI itself respects) and otherwise ~/.claude — the same HOME the
+// runner spawns claude under, so the token always matches. configDir names one account's
+// directory, and is empty for the login the runner's own environment selects.
+func claudeCredentialsPathIn(configDir string) string {
+	if configDir == "" {
+		configDir = os.Getenv("CLAUDE_CONFIG_DIR")
 	}
-	return filepath.Join(dir, ".credentials.json")
+	if configDir == "" {
+		configDir = filepath.Join(userHome(), ".claude")
+	}
+	return filepath.Join(configDir, ".credentials.json")
 }
 
-func claudeOAuthToken() (string, error) {
-	b, err := claudeCredentialsJSON()
+func claudeCredentialsPath() string { return claudeCredentialsPathIn("") }
+
+func claudeOAuthTokenIn(configDir string) (string, error) {
+	b, err := claudeCredentialsJSONIn(configDir)
 	if err != nil {
 		return "", err
 	}
@@ -314,17 +324,21 @@ func claudeOAuthToken() (string, error) {
 	return c.ClaudeAiOauth.AccessToken, nil
 }
 
-// claudeCredentialsJSON returns the raw {"claudeAiOauth":{...}} blob Claude Code
-// stores. On Linux that's the .credentials.json file; on macOS the CLI keeps it in
-// the login Keychain instead, leaving no file — so fall back to the Keychain when the
-// file read fails. The original file error is preserved when the fallback also fails,
-// so the logged reason stays accurate on non-mac hosts.
-func claudeCredentialsJSON() ([]byte, error) {
-	b, err := os.ReadFile(claudeCredentialsPath())
+// claudeCredentialsJSONIn returns the raw {"claudeAiOauth":{...}} blob Claude Code stores. On
+// Linux that's the .credentials.json file; on macOS the CLI keeps it in the login Keychain
+// instead, leaving no file — so fall back to the Keychain when the file read fails. The original
+// file error is preserved when the fallback also fails, so the logged reason stays accurate on
+// non-mac hosts.
+//
+// The Keychain fallback is the machine's own login only: the item is a single one for the whole
+// user, with nothing naming an account, so an added account that fell back to it would report the
+// machine's quota as its own. A slot with no file has no reading, and says so.
+func claudeCredentialsJSONIn(configDir string) ([]byte, error) {
+	b, err := os.ReadFile(claudeCredentialsPathIn(configDir))
 	if err == nil {
 		return b, nil
 	}
-	if runtime.GOOS == "darwin" {
+	if configDir == "" && runtime.GOOS == "darwin" {
 		if kb, kerr := keychainCredentials(); kerr == nil {
 			return kb, nil
 		}
@@ -344,10 +358,15 @@ func keychainCredentials() ([]byte, error) {
 	return out, nil
 }
 
+// fetchClaudePlanUsage reads the machine's own login (newClaudePlanUsageProbe).
 func fetchClaudePlanUsage(ctx context.Context, client *http.Client) (*PlanUsage, error) {
+	return fetchClaudePlanUsageIn(ctx, client, "")
+}
+
+func fetchClaudePlanUsageIn(ctx context.Context, client *http.Client, configDir string) (*PlanUsage, error) {
 	// Read the token fresh every cycle: Claude Code rotates it in place, so a cached
 	// token would go stale. A 401 here just means we'll pick up the refreshed one next.
-	token, err := claudeOAuthToken()
+	token, err := claudeOAuthTokenIn(configDir)
 	if err != nil {
 		return nil, err
 	}

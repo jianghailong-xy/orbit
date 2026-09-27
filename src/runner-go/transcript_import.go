@@ -257,14 +257,15 @@ func compactSummaryText(content interface{}) string {
 // want — a previous import may have left a copy under a dead checkout — so the import step
 // tries candidates until one passes the workspace check.
 func findClaudeTranscripts(sessionUUID string) []string {
-	base := os.Getenv("CLAUDE_CONFIG_DIR")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil || home == "" {
-			return nil
-		}
-		base = filepath.Join(home, ".claude")
+	base, err := effectiveClaudeConfigDir(os.Environ(), "")
+	if err != nil {
+		return nil
 	}
+	return findClaudeTranscriptsIn(base, sessionUUID)
+}
+
+// findClaudeTranscriptsIn is findClaudeTranscripts within one config directory.
+func findClaudeTranscriptsIn(base, sessionUUID string) []string {
 	matches, _ := filepath.Glob(filepath.Join(base, "projects", "*", sessionUUID+".jsonl"))
 	return matches
 }
@@ -337,6 +338,13 @@ func runTranscriptImport(ctx context.Context, t *Transport, job *ClaimedSession,
 		}
 		return err
 	}
+	// This session's own account decides which config directory its transcript belongs in — the
+	// one it is resumed from — while the transcript being imported comes from whichever directory
+	// the CLI that wrote it used (a person's terminal, typically: the runner's default).
+	dstBase, baseErr := claudeSessionAccountDir(job.Agent.Env, execDir)
+	if baseErr != nil {
+		return fail(fmt.Errorf("cannot resolve the claude config dir for the session: %v", baseErr))
+	}
 	src := ""
 	if p, err := claudeTranscriptPath(*job.ImportSourceCwd, job.SessionUUID); err == nil && isRegularFile(p) {
 		src = p
@@ -370,7 +378,7 @@ func runTranscriptImport(ctx context.Context, t *Transport, job *ClaimedSession,
 			lastErr = fmt.Errorf("the transcript was recorded in %s, outside the workspace %s", cwd, workDir)
 			continue
 		}
-		dst, derr := claudeTranscriptPath(execDir, job.SessionUUID)
+		dst, derr := claudeTranscriptPathIn(dstBase, execDir, job.SessionUUID)
 		if derr != nil {
 			return fail(fmt.Errorf("cannot place the transcript for the session: %v", derr))
 		}

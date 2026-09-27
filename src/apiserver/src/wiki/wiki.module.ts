@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PushModule } from '../push/push.module';
 import { WikiController } from './wiki.controller';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
@@ -14,6 +15,9 @@ import { WikiService } from './wiki.service';
  * user door answer from one WikiService and one WikiRetrieval.
  */
 @Module({
+  // For the one notification the review modes send (a space the spot checks sent back to Manual):
+  // PushService is a sender with no feature state, not a Sessions or Projects service.
+  imports: [PushModule],
   controllers: [WikiController],
   providers: [WikiService, WikiRetrieval],
   exports: [WikiService, WikiRetrieval],

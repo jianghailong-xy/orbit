@@ -18,7 +18,7 @@ import (
 // codexRemoveSlotHome is the slot's CODEX_HOME, or "" once it is gone.
 func codexRemoveSlotHome(t *testing.T, id string) string {
 	t.Helper()
-	home, err := codexAccountSlotHome(id)
+	home, err := codexAccountKind.home(id)
 	if err != nil {
 		return ""
 	}
@@ -32,7 +32,7 @@ func assertSlotGone(t *testing.T, id string) {
 	if home := codexRemoveSlotHome(t, id); home != "" {
 		t.Fatalf("slot %s still resolves to %s", id, home)
 	}
-	slots, err := listCodexAccountSlots()
+	slots, err := codexAccountKind.list()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func assertSlotGone(t *testing.T, id string) {
 			t.Fatalf("slot %s is still listed: %+v", id, slots)
 		}
 	}
-	for _, path := range []string{filepath.Join(machineHome(), "codex-accounts", id), codexAccountSlotMetaPath(filepath.Join(machineHome(), "codex-accounts"), id)} {
+	for _, path := range []string{filepath.Join(machineHome(), "codex-accounts", id), accountSlotMetaPath(filepath.Join(machineHome(), "codex-accounts"), id)} {
 		if _, err := os.Lstat(path); !os.IsNotExist(err) {
 			t.Fatalf("%s is still on disk (err %v)", path, err)
 		}
@@ -51,13 +51,13 @@ func assertSlotGone(t *testing.T, id string) {
 // addedSlotIDs is every account this machine added, in the order the runner lists them.
 func addedSlotIDs(t *testing.T) []string {
 	t.Helper()
-	slots, err := listCodexAccountSlots()
+	slots, err := codexAccountKind.list()
 	if err != nil {
 		t.Fatal(err)
 	}
 	var ids []string
 	for _, slot := range slots {
-		if slot.ID != codexAccountDefaultSlot {
+		if slot.ID != accountSlotDefaultID {
 			ids = append(ids, slot.ID)
 		}
 	}
@@ -74,16 +74,16 @@ func TestCodexAccountSlotRemoveDeletesTheSlotAndStopsItsProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// A slot Codex has been in: whatever the CLI keeps in its CODEX_HOME, credentials included.
-	signInCodexHome(t, work.CodexHome)
-	if err := os.MkdirAll(filepath.Join(work.CodexHome, "sessions"), 0o700); err != nil {
+	signInCodexHome(t, work.Dir)
+	if err := os.MkdirAll(filepath.Join(work.Dir, "sessions"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(work.CodexHome, "sessions", "thread.jsonl"), []byte("{}\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(work.Dir, "sessions", "thread.jsonl"), []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,7 +110,7 @@ func TestCodexAccountSlotRemoveDeletesTheSlotAndStopsItsProbe(t *testing.T) {
 	if _, ok := usage.slots[work.ID]; ok {
 		t.Fatal("the runner still keeps the removed account's usage probe")
 	}
-	if slots, err := listCodexAccountSlots(); err != nil || len(slots) != 1 || slots[0].ID != codexAccountDefaultSlot {
+	if slots, err := codexAccountKind.list(); err != nil || len(slots) != 1 || slots[0].ID != accountSlotDefaultID {
 		t.Fatalf("slots = %+v (%v), want Default alone", slots, err)
 	}
 	// Default is untouched: removing another account is not about Default's CODEX_HOME at all.
@@ -136,32 +136,32 @@ func TestCodexAccountSlotRemoveRefusesDefault(t *testing.T) {
 	}
 
 	usage := newCodexAccountUsage(codexResetTestLeaseOwner)
-	err = removeCodexAccount(usage, codexAccountDefaultSlot, nil)
+	err = removeCodexAccount(usage, accountSlotDefaultID, nil)
 	if err == nil || !strings.Contains(err.Error(), "cannot be removed") {
 		t.Fatalf("removing Default = %v, want a refusal naming it", err)
 	}
 	if now, err := os.ReadFile(sentinel); err != nil || string(now) != string(before) {
 		t.Fatalf("Default's credentials are %s (%v)", now, err)
 	}
-	if got := codexRemoveSlotHome(t, codexAccountDefaultSlot); got != defaultHome {
+	if got := codexRemoveSlotHome(t, accountSlotDefaultID); got != defaultHome {
 		t.Fatalf("Default resolves to %q, want %q", got, defaultHome)
 	}
 }
 
 func TestCodexAccountSlotRemoveRefusesASlotALiveSessionIsIn(t *testing.T) {
 	_, orbitHome := codexAccountSlotTestHomes(t)
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
-	signInCodexHome(t, work.CodexHome)
+	signInCodexHome(t, work.Dir)
 	// A session this runner is running, stuck to the slot: its meta records the CODEX_HOME its
 	// state was first opened under, which is the slot's own (codexSessionAccountEnv).
 	const sessionID = "019fc086-c7c7-7c92-8215-778ad8a6280a"
-	writeSessionInCodexHome(t, orbitHome, sessionID, work.CodexHome)
+	writeSessionInCodexHome(t, orbitHome, sessionID, work.Dir)
 	liveHomes := codexSessionAccountHomes([]string{sessionID})
-	if !liveHomes[work.CodexHome] {
-		t.Fatalf("the live session's CODEX_HOME is not %q: %+v", work.CodexHome, liveHomes)
+	if !liveHomes[work.Dir] {
+		t.Fatalf("the live session's CODEX_HOME is not %q: %+v", work.Dir, liveHomes)
 	}
 
 	usage := newCodexAccountUsage(codexResetTestLeaseOwner)
@@ -176,10 +176,10 @@ func TestCodexAccountSlotRemoveRefusesASlotALiveSessionIsIn(t *testing.T) {
 		t.Fatalf("removing a slot a live session is in = %v, want a refusal naming the session", err)
 	}
 	// Refused, not half-done: the account and its credentials are exactly where they were.
-	if home := codexRemoveSlotHome(t, work.ID); home != work.CodexHome {
-		t.Fatalf("slot %s resolves to %q, want %q", work.ID, home, work.CodexHome)
+	if home := codexRemoveSlotHome(t, work.ID); home != work.Dir {
+		t.Fatalf("slot %s resolves to %q, want %q", work.ID, home, work.Dir)
 	}
-	if _, err := os.Stat(filepath.Join(work.CodexHome, "auth.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(work.Dir, "auth.json")); err != nil {
 		t.Fatalf("the refused removal took the account's credentials: %v", err)
 	}
 	if loops[workProbe].Err() != nil {

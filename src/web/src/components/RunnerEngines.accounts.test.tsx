@@ -26,6 +26,7 @@ const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
 
 const DEFAULT: RunnerEngineAccount = {
   id: 'default',
+  home: '/root/.codex',
   codexHome: '/root/.codex',
   auth: 'yes',
   fingerprintPrefix: 'cxa1_9f3a41c7',
@@ -33,6 +34,7 @@ const DEFAULT: RunnerEngineAccount = {
 const WORK: RunnerEngineAccount = {
   id: '3fa91c2e',
   name: 'Work',
+  home: '/root/.orbit/codex-accounts/3fa91c2e',
   codexHome: '/root/.orbit/codex-accounts/3fa91c2e',
   auth: 'no',
 };
