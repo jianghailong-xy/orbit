@@ -4786,8 +4786,9 @@ html[data-theme='dark'] .session-tag-chip {
 }
 /* The composer is one card: staged attachments, then the text across the whole width, then a
    row of controls pinned to its foot (`.composer-toolbar`), so the text grows upward and never
-   moves the `+` or Send. 24px corners, because the two round controls at the foot have their
-   centres 24px from both edges — on the corner's own centre. Focus deepens
+   moves the `+` or Send. 24px corners, and 24px is also where everything inside starts: the
+   corner's curve meets the straight edge 24px in, and the thumbnails, the text and the `+`'s left
+   arm all begin on that line (see `.composer-field` and `.composer-toolbar`). Focus deepens
    the rim instead of turning it blue: the only coloured rim a composer has is shell mode's. */
 .composer-box {
   position: relative;
@@ -4874,8 +4875,8 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-1);
   background: var(--bg-hover);
 }
-/* The `+` and Send are the toolbar's two ends: 32px circles whose centres sit 24px in from the
-   card's outer edges (1px of border + 7px of toolbar padding + half of 32). */
+/* The `+` and Send are the toolbar's two ends: 32px circles, placed by the toolbar's side padding
+   so the `+`'s left arm starts on the text's line (see `.composer-toolbar`). */
 .composer-box .composer-attach-btn.ant-btn,
 .composer-box .composer-send.ant-btn {
   flex: none;
@@ -4923,7 +4924,8 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 15px;
   line-height: 1.6;
   letter-spacing: normal;
-  padding: 12px 16px 2px;
+  /* 1px of border + 23 = 24: the text starts where the card's corner stops curving. */
+  padding: 12px 23px 2px;
   border: 0;
   margin: 0;
   white-space: pre-wrap;
@@ -5090,13 +5092,16 @@ html[data-theme='dark'] .session-tag-chip {
 }
 /* The card's foot: `+`, workspace (a draft's only), mode — then, right-aligned, the model
    control, the usage gauges and Send. One line, always: on a phone the gauges drop their
-   numbers and the model's name gives way before anything else does (see the 600px block). */
+   numbers and the model's name gives way before anything else does (see the 600px block).
+   The side padding lines the `+` up with the text: its glyph's left arm is 9.57px into the 32px
+   button ((32 - 16) / 2 to the icon, then 1.57 of PlusOutlined's own margin), so 1px of border
+   + 13.43 + 9.57 = 24, the text's edge. Send mirrors it on the right. */
 .composer-toolbar {
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
-  padding: 4px 7px 7px;
+  padding: 4px 13.43px 7px;
 }
 /* One quiet text size for the toolbar's words. AntD's borderless Selects otherwise render
    their value at 14px / colorText — a size and a shade heavier than the model's effort and the
@@ -5238,11 +5243,11 @@ html[data-theme='dark'] .session-tag-chip {
     min-width: 36px;
     height: 36px;
   }
-  /* 1px of border + 5px of padding + half of 36 keeps both ends' centres 24px from the card's
-     outer edges. */
+  /* The bigger circle puts the glyph 2px further into it, so 2px less padding keeps the `+`'s left
+     arm on the text's line: 1 + 11.43 + (36 - 16) / 2 + 1.57 = 24. */
   .composer-toolbar {
     gap: 2px;
-    padding: 2px 5px 5px;
+    padding: 2px 11.43px 5px;
   }
   .composer-toolbar .composer-pill:not(.composer-model-pill) {
     padding-left: 3px;
@@ -5534,12 +5539,13 @@ button.composer-usage:focus-visible {
 
 /* Staged attachments — a row of thumbnail chips at the top of the composer card, above the text
    they go out with. Each chip reuses the .composer-pill shape (rounded, bordered) sized to a small
-   thumbnail. */
+   thumbnail. Inset like the text (`.composer-field`), so the first thumbnail and the text share
+   their left edge. */
 .composer-attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 12px 14px 0;
+  padding: 12px 23px 0;
 }
 .composer-attach {
   position: relative;
