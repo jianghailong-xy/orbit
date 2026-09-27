@@ -38,7 +38,7 @@ type codexStateSelection struct {
 	Shared    bool
 }
 
-func ensurePrivateCodexDir(dir string) error {
+func ensurePrivateDir(dir string) error {
 	if err := os.MkdirAll(dir, machineHomePerm); err != nil {
 		return err
 	}
@@ -128,11 +128,11 @@ func ensureSharedCodexStateDir(partition string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := ensurePrivateCodexDir(root); err != nil {
+	if err := ensurePrivateDir(root); err != nil {
 		return "", err
 	}
 	dir := filepath.Join(root, partition)
-	if err := ensurePrivateCodexDir(dir); err != nil {
+	if err := ensurePrivateDir(dir); err != nil {
 		return "", err
 	}
 	return dir, nil
@@ -143,7 +143,7 @@ func ensureLegacyCodexStateDir(scratch string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := ensurePrivateCodexDir(dir); err != nil {
+	if err := ensurePrivateDir(dir); err != nil {
 		return "", err
 	}
 	return dir, nil
@@ -209,21 +209,21 @@ func codexSessionAccountSlot(agentEnv map[string]string, processEnv []string, ex
 	if err != nil {
 		return "", false
 	}
-	def, err := defaultCodexAccountSlot()
+	def, err := defaultAccountSlot(codexAccountKind)
 	if err != nil {
 		return "", false
 	}
-	if home == def.CodexHome {
-		return codexAccountDefaultSlot, true
+	if home == def.Dir {
+		return accountSlotDefaultID, true
 	}
 	// An added slot is the directory named by its id right under the runner's codex-accounts root,
 	// and only while it still is one.
-	root, err := codexAccountsDir()
+	root, err := accountSlotsDir(codexAccountKind)
 	if err != nil || filepath.Dir(home) != root {
 		return "", false
 	}
 	id := filepath.Base(home)
-	if slotHome, err := codexAccountSlotHome(id); err != nil || slotHome != home {
+	if slotHome, err := codexAccountKind.home(id); err != nil || slotHome != home {
 		return "", false
 	}
 	return id, true

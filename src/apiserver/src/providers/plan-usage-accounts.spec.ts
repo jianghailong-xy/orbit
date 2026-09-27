@@ -20,7 +20,7 @@ import { storeRefreshedCodexResetBlock } from '../runner-api/codex-reset-plan-us
 import { RunnerApiController, type RetryPlanTransaction } from '../runner-api/runner-api.controller';
 import { transactionDouble } from '../test-support/prisma-transaction-double';
 import { resolveProviderExec } from './custom-provider';
-import { runCodexAccount, sanitizePlanUsageAccounts } from './plan-usage-accounts';
+import { runAccount, sanitizePlanUsageAccounts } from './plan-usage-accounts';
 
 /**
  * Codex plan usage by account. A runner with more than one Codex account reports Default's quota as
@@ -225,6 +225,17 @@ test('an account entry is stored as that account’s own windows, under an id a 
   assert.deepEqual(sanitizePlanUsageAccounts({ provider: AgentProvider.CODEX, accounts: { default: work(1) } }), { provider: AgentProvider.CODEX });
   const plain = { provider: AgentProvider.CODEX, primary: window(5, DEFAULT_RESET) } as PlanUsage;
   assert.equal(sanitizePlanUsageAccounts(plain), plain, 'a report without accounts is passed through untouched');
+  // Each account's own windows ride under its engine's snapshot, and are sanitized the same way
+  // there — Claude Code keeps a login per CLAUDE_CONFIG_DIR too.
+  const claudeNested = sanitizePlanUsageAccounts({
+    claude: {
+      provider: AgentProvider.CLAUDE,
+      fiveHour: window(12, DEFAULT_RESET),
+      accounts: { [WORK]: { provider: AgentProvider.CLAUDE, fiveHour: window(44, DEFAULT_RESET) } },
+    },
+  });
+  assert.deepEqual(Object.keys(claudeNested.claude!.accounts!), [WORK]);
+  assert.equal(claudeNested.claude!.fiveHour!.utilization, 12, "Default's own window is untouched");
 
   const h = harness();
   await h.heartbeat({ ...beat(62, null), planUsage: { codex: { ...beat(62, null).planUsage!.codex!, accounts: reported.accounts } } });
@@ -232,15 +243,24 @@ test('an account entry is stored as that account’s own windows, under an id a 
   assert.equal(h.account(WORK)!.rateLimitReset, undefined, 'no block is stored under an account');
 });
 
-/** The runner's report of its engines: Codex with Default and Work. */
+/** The runner's report of its engines: Codex and Claude Code, each with Default and Work. */
 const ENGINES: RunnerEngineHealth[] = [
   {
     engine: 'codex',
     installed: true,
     auth: 'yes',
     accounts: [
-      { id: 'default', codexHome: '/root/.codex', auth: 'yes' },
-      { id: WORK, name: 'Work', codexHome: WORK_HOME, auth: 'yes' },
+      { id: 'default', home: '/root/.codex', codexHome: '/root/.codex', auth: 'yes' },
+      { id: WORK, name: 'Work', home: WORK_HOME, codexHome: WORK_HOME, auth: 'yes' },
+    ],
+  },
+  {
+    engine: 'claude',
+    installed: true,
+    auth: 'yes',
+    accounts: [
+      { id: 'default', home: '/root/.claude', auth: 'yes' },
+      { id: WORK, name: 'Work', home: WORK_HOME, auth: 'yes' },
     ],
   },
 ];
@@ -298,16 +318,30 @@ test('a quota-killed run is armed by the quota of the account it spends, never b
 });
 
 test("the gates' question — which account does this run spend — is its workspace's, on its runner", () => {
-  assert.equal(runCodexAccount('codex', null, null, ENGINES), 'default');
-  assert.equal(runCodexAccount('codex', { CODEX_HOME: WORK_HOME }, null, ENGINES), WORK);
-  assert.equal(runCodexAccount('codex', { CODEX_HOME: '/srv/elsewhere' }, null, ENGINES), null);
-  assert.equal(runCodexAccount('codex', { CODEX_API_KEY: 'sk-test' }, null, ENGINES), null);
+  assert.equal(runAccount('codex', null, { codexAccount: null }, ENGINES), 'default');
+  assert.equal(runAccount('codex', { CODEX_HOME: WORK_HOME }, { codexAccount: null }, ENGINES), WORK);
+  assert.equal(runAccount('codex', { CODEX_HOME: '/srv/elsewhere' }, { codexAccount: null }, ENGINES), null);
+  assert.equal(runAccount('codex', { CODEX_API_KEY: 'sk-test' }, { codexAccount: null }, ENGINES), null);
   // Accounts are Codex's; any other provider's gate asks as before.
-  assert.equal(runCodexAccount('claude', { CODEX_HOME: WORK_HOME }, WORK, ENGINES), undefined);
+  // Claude keeps a login per directory too: the account its own variable selects is the one judged,
+  // and the codex-named variable says nothing about it.
+  assert.equal(
+    runAccount('claude', { CLAUDE_CONFIG_DIR: WORK_HOME }, { claudeAccount: WORK }, ENGINES),
+    WORK,
+  );
+  // The workspace's pick wins over the env it sits beside (dispatch injects it the same way), and
+  // the codex-named variable says nothing about a Claude account.
+  assert.equal(runAccount('claude', { CODEX_HOME: WORK_HOME }, { claudeAccount: WORK }, ENGINES), WORK);
+  // With nothing picked, the env's own CLAUDE_CONFIG_DIR is the account.
+  assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: WORK_HOME }, {}, ENGINES), WORK);
+  assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: '/srv/elsewhere' }, {}, ENGINES), null);
+  assert.equal(runAccount('claude', { ANTHROPIC_AUTH_TOKEN: 'tok' }, { claudeAccount: WORK }, ENGINES), null);
+  // Kimi keeps one login for the whole machine: there is no account to judge a run by.
+  assert.equal(runAccount('kimi', { KIMI_CODE_HOME: WORK_HOME }, { claudeAccount: WORK }, ENGINES), undefined);
 
   const usage: PlanUsage = { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } };
   const spent = (env: Record<string, string> | null) =>
-    planUsageBlockedUntil(usage, 'codex', NOW, runCodexAccount('codex', env, null, ENGINES));
+    planUsageBlockedUntil(usage, 'codex', NOW, runAccount('codex', env, { codexAccount: null }, ENGINES));
   assert.deepEqual(spent(null), new Date(DEFAULT_RESET));
   assert.equal(spent({ CODEX_HOME: WORK_HOME }), null);
   assert.equal(spent({ CODEX_HOME: '/srv/elsewhere' }), null);
@@ -343,14 +377,14 @@ function dispatchedOn(
 test("a workspace that picked an account its runner reports is judged by that account's snapshot: Default's spent quota does not hold it back", async () => {
   // The pick is what the run spends, whatever CODEX_HOME the workspace's env was given by hand.
   for (const env of [null, { CODEX_HOME: '/root/.codex' }, { CODEX_HOME: '/srv/elsewhere' }]) {
-    assert.equal(runCodexAccount('codex', env, WORK, ENGINES), WORK);
+    assert.equal(runAccount('codex', env, { codexAccount: WORK }, ENGINES), WORK);
     assert.equal(dispatchedOn(env, WORK), WORK);
   }
   // A key of the run's own still spends no account, there as at dispatch.
-  assert.equal(runCodexAccount('codex', { CODEX_API_KEY: 'sk-test' }, WORK, ENGINES), null);
+  assert.equal(runAccount('codex', { CODEX_API_KEY: 'sk-test' }, { codexAccount: WORK }, ENGINES), null);
   assert.equal(dispatchedOn({ CODEX_API_KEY: 'sk-test' }, WORK), null);
 
-  const onWork = runCodexAccount('codex', null, WORK, ENGINES);
+  const onWork = runAccount('codex', null, { codexAccount: WORK }, ENGINES);
   assert.equal(planUsageBlockedUntil(DEFAULT_SPENT, 'codex', NOW, onWork), null);
   assert.deepEqual(planUsageBlockedUntil(WORK_SPENT, 'codex', NOW, onWork), new Date(WORK_RESET));
   assert.equal(planUsageReported(DEFAULT_SPENT, 'codex', onWork), true);
@@ -362,17 +396,17 @@ test("a workspace that picked an account its runner reports is judged by that ac
 test('a workspace that picked an account its runner does not report is judged by Default, where dispatch runs it', async () => {
   /** A runner too old to list its accounts. */
   const unlisted: RunnerEngineHealth[] = [{ engine: 'codex', installed: true, auth: 'yes' }];
-  assert.equal(runCodexAccount('codex', null, GONE, ENGINES), 'default');
+  assert.equal(runAccount('codex', null, { codexAccount: GONE }, ENGINES), 'default');
   assert.equal(dispatchedOn(null, GONE), 'default');
-  assert.equal(runCodexAccount('codex', null, WORK, unlisted), 'default');
+  assert.equal(runAccount('codex', null, { codexAccount: WORK }, unlisted), 'default');
   assert.equal(dispatchedOn(null, WORK, unlisted), 'default');
 
-  const onGone = runCodexAccount('codex', null, GONE, ENGINES);
+  const onGone = runAccount('codex', null, { codexAccount: GONE }, ENGINES);
   assert.deepEqual(planUsageBlockedUntil(DEFAULT_SPENT, 'codex', NOW, onGone), new Date(DEFAULT_RESET));
   assert.equal(planUsageBlockedUntil(WORK_SPENT, 'codex', NOW, onGone), null);
   assert.ok(withinJitterOf(await retryAtFor(null, DEFAULT_SPENT, GONE), DEFAULT_RESET), 'the run waits for Default');
   // A CODEX_HOME the env was given is then what the run spends, as it is without a pick.
-  assert.equal(runCodexAccount('codex', { CODEX_HOME: WORK_HOME }, GONE, ENGINES), WORK);
+  assert.equal(runAccount('codex', { CODEX_HOME: WORK_HOME }, { codexAccount: GONE }, ENGINES), WORK);
   assert.equal(dispatchedOn({ CODEX_HOME: WORK_HOME }, GONE), WORK);
 });
 
@@ -389,7 +423,7 @@ test('a workspace that picked no account is judged by its env, as before account
   for (const env of envs) {
     // No pick, and Default picked by name, are one choice.
     for (const pick of [null, undefined, 'default']) {
-      assert.equal(runCodexAccount('codex', env, pick, ENGINES), codexAccountOfEnv(env, accounts), `${JSON.stringify(env)} / ${pick}`);
+      assert.equal(runAccount('codex', env, { codexAccount: pick }, ENGINES), codexAccountOfEnv(env, accounts), `${JSON.stringify(env)} / ${pick}`);
       assert.equal(dispatchedOn(env, pick), codexAccountOfEnv(env, accounts), `${JSON.stringify(env)} / ${pick}`);
     }
   }

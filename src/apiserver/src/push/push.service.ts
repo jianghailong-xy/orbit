@@ -500,6 +500,88 @@ export class PushService {
     }
   }
 
+  /**
+   * Tell the owner a wiki space's spot checks sent it back to Manual (wiki contract
+   * `reviewModes.spotChecks.trip`): too many of what its review mode applied at once were rejected.
+   *
+   * Once per trip, and that is the caller's to guarantee, not this method's: the switch to Manual is a
+   * compare-and-set on the space, and only the transaction that won it calls here, after it commits.
+   * No badge — nothing here is waiting for a reply. Best-effort like the others: a failure is logged,
+   * never thrown, and the space is Manual whether or not the phone rang.
+   */
+  async notifyWikiReviewModeTripped(input: {
+    ownerId: string;
+    spaceId: string;
+    title: string;
+    rejected: number;
+    window: number;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      if (tokens.length === 0) return;
+      const auth = this.authToken();
+      if (!auth) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: 'Wiki switched to Manual',
+            body: `${input.title}: ${input.rejected} of the last ${input.window} spot checks were rejected, so `
+              + 'nothing applies without your review until you switch the mode back.',
+          },
+          sound: 'default',
+          'thread-id': `wiki-${input.spaceId}`,
+        },
+        wikiSpaceID: input.spaceId,
+        kind: 'wiki-review-mode-manual',
+      });
+      await this.deliver(tokens, body, 'alert', '10', auth);
+    } catch (err) {
+      this.log.warn(`wiki review-mode notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Tell the owner an Automatic wiki space's verification sent it back to Tiered (wiki contract
+   * `reviewModes.verification.fallback`): too many of the latest proposals its verifier checked had
+   * no support in their own sources.
+   *
+   * Once per trip on the same terms as the spot checks' notice above: the switch is a compare-and-set
+   * on the space, and only the transaction that won it calls here, after it commits. No badge, and
+   * best-effort — the space is Tiered whether or not the phone rang.
+   */
+  async notifyWikiVerificationTripped(input: {
+    ownerId: string;
+    spaceId: string;
+    title: string;
+    unsupported: number;
+    window: number;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      if (tokens.length === 0) return;
+      const auth = this.authToken();
+      if (!auth) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: 'Wiki switched to Tiered',
+            body: `${input.title}: ${input.unsupported} of the last ${input.window} verified proposals had no support in `
+              + 'their sources, so the space went back to Tiered until you switch it to Automatic again.',
+          },
+          sound: 'default',
+          'thread-id': `wiki-${input.spaceId}`,
+        },
+        wikiSpaceID: input.spaceId,
+        kind: 'wiki-review-mode-tiered',
+      });
+      await this.deliver(tokens, body, 'alert', '10', auth);
+    } catch (err) {
+      this.log.warn(`wiki verification notify failed: ${(err as Error).message}`);
+    }
+  }
+
   /** Session IDs that currently "need your reply" for this owner — the badge is this set's size.
    *  Mirrors the client's SessionGrouping.needsYou: an Open, non-ending RUNNING session with at
    *  least one PENDING approval, plus the coordinator conversations carrying one of the four owner

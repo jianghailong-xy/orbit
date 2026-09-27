@@ -136,6 +136,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       installMode: true,
       // The account-removal relay, beside the install one: the Providers page reads a machine's
       // refusal from here (RunnerCodexAccountRemoveState).
+      accountRemoveEngine: true,
       codexAccountRemoveAccount: true,
       codexAccountRemoveStatus: true,
       codexAccountRemoveMessage: true,

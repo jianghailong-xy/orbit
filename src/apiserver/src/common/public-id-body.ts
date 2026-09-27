@@ -32,9 +32,14 @@ import { PUBLIC_ID_FIELDS, uuidToBase62 } from '@orbit/shared';
  * once so the next exit is a call rather than a re-derivation.
  */
 
-/** `sessionId` → `sessionPublicId`, `taskIds` → `taskPublicIds`. Two names carry no `Id` suffix
- *  to rewrite, so they say what they become. */
-const IRREGULAR: Readonly<Record<string, string>> = { id: 'publicId', mentions: 'mentionPublicIds' };
+/** `sessionId` → `sessionPublicId`, `taskIds` → `taskPublicIds`. The names that carry no `Id` suffix
+ *  to rewrite say what they become. */
+const IRREGULAR: Readonly<Record<string, string>> = {
+  id: 'publicId',
+  mentions: 'mentionPublicIds',
+  duplicateOf: 'duplicateOfPublicId',
+  verificationDuplicateOf: 'verificationDuplicateOfPublicId',
+};
 
 const TWIN: ReadonlyMap<string, string> = new Map(
   [...PUBLIC_ID_FIELDS].map((field) => [

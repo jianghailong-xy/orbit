@@ -1071,7 +1071,10 @@ interface ProjectListAttention {
                       nextEscalationAt: Date } | null;
 }
 // 列表行另有 integration: { line: 'MAIN' | 'PROJECT_BRANCH'; ref: string } | null
+// 以及 coordinatorActivity: { working: boolean; lastTurnAt: Date | null } | null（未绑定协调会话为 null）
 ```
+
+`coordinatorActivity.working` 与会话列表的转圈同一判定：RUNNING，或 AWAITING_INPUT 且引擎自起回合 / 子代理在跑，并且没有 PENDING 的审批卡。web 侧栏的 Projects 分组用它点亮行首蓝点，并按「任务写入与协调会话回合取较新」排序（iPhone 抽屉从实时会话列表得到同一事实）。
 
 `ESCALATED` = 负责人为 OWNER、且 `assignee_reason ∈ {ESCALATED, COORDINATOR_ENDED, CHAIN_LIMIT, HANDED_OVER, NO_COORDINATOR}` 的例外类待办。
 

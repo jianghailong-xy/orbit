@@ -42,10 +42,10 @@ import {
   type ClaudeHistoryResult,
 } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { meQuery, providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
+import { providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
-import { CodexAccountSelect, offersCodexAccount } from '../components/CodexAccountSelect';
+import { AccountSelect, offersAccount } from '../components/AccountSelect';
 import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
 import { useToast } from '../lib/toast';
@@ -66,10 +66,10 @@ interface Workspace {
   /** Which Codex account on its runner this workspace's Codex sessions run on: the id of a slot the
    *  runner added. null = Default, the runner's own CODEX_HOME. */
   codexAccount?: string | null;
+  claudeAccount?: string | null;
   runnerId?: string | null;
   enabled?: boolean;
   enableWorktree?: boolean;
-  enableOrchestration?: boolean;
   /** Default a new session under this workspace inherits. null = inherit the account default.
    *  The permission mode is deliberately NOT here — it belongs to the run (Session), with an
    *  account-level default. */
@@ -126,11 +126,6 @@ export function RunnerDetailPage() {
   // Configured providers (custom slugs) are used to resolve the provider label and effective
   // Runtime-owned model shown in each workspace row.
   const configuredProviders = useQuery(providersQuery()).data ?? [];
-  // The account's "grant orchestration to new agents" answer (Settings). Read here because this
-  // form posts every field explicitly — an unseeded switch would send `false` and quietly beat
-  // the default the user just set.
-  const orchestrationDefault =
-    useQuery(meQuery()).data?.preferences?.defaultEnableOrchestration ?? false;
 
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
@@ -175,10 +170,10 @@ export function RunnerDetailPage() {
   const [fWorkDir, setFWorkDir] = useState('');
   const [fRepoUrl, setFRepoUrl] = useState('');
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
-  const [fEnableOrchestration, setFEnableOrchestration] = useState(false);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
   // null = Default, the runner's own Codex account.
   const [fCodexAccount, setFCodexAccount] = useState<string | null>(null);
+  const [fClaudeAccount, setFClaudeAccount] = useState<string | null>(null);
   // The Claude session id the Import section carries (edit mode only — importing needs the
   // workspace to exist). Reset with the rest of the form so a stale id can't leak across picks.
   const [importId, setImportId] = useState('');
@@ -188,7 +183,7 @@ export function RunnerDetailPage() {
   // offer at all rather than an empty one.
   const [history, setHistory] = useState<ClaudeHistoryResult | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>('none');
-  // The long tail (orchestration / env / instructions) stays folded until asked for, and
+  // The long tail (env / instructions) stays folded until asked for, and
   // edits are tracked so Cancel can't discard them silently.
   const [advOpen, setAdvOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -203,11 +198,11 @@ export function RunnerDetailPage() {
         workDir: fWorkDir.trim() || undefined,
         repoUrl: fRepoUrl.trim() || undefined,
         enableWorktree: fEnableWorktree,
-        enableOrchestration: fEnableOrchestration,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
         ),
         codexAccount: fCodexAccount,
+        claudeAccount: fClaudeAccount,
       };
       return editing
         ? api<Workspace>(`/workspaces/${editing.id}`, { method: 'PATCH', body })
@@ -269,12 +264,12 @@ export function RunnerDetailPage() {
           // silently dropped it would put the project binding back where it was before this field.
           repoUrl: a.repoUrl ?? undefined,
           enableWorktree: a.enableWorktree ?? false,
-          enableOrchestration: a.enableOrchestration ?? false,
           effort: a.effort ?? null,
           env: a.env ?? {},
           // Same machine, so the same account: a copy that fell back to Default would spend another
           // account's quota without anyone having chosen that.
           codexAccount: a.codexAccount ?? null,
+          claudeAccount: a.claudeAccount ?? null,
           runnerId,
         },
       }),
@@ -384,9 +379,9 @@ export function RunnerDetailPage() {
     setFWorkDir(a?.workDir ?? '');
     setFRepoUrl(a?.repoUrl ?? '');
     setFEnableWorktree(a?.enableWorktree ?? false);
-    setFEnableOrchestration(a ? (a.enableOrchestration ?? false) : orchestrationDefault);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setFCodexAccount(a?.codexAccount ?? null);
+    setFClaudeAccount(a?.claudeAccount ?? null);
     setImportId('');
     setHistory(null);
     setImportMode('none');
@@ -449,7 +444,11 @@ export function RunnerDetailPage() {
       runner?.runtimeDefaultModels,
     );
     // Folded away, the disclosure still has to say whether anything is hidden behind it.
-    const advCount = (fEnv.length ? 1 : 0) + (fAppend.trim() ? 1 : 0) + (fCodexAccount ? 1 : 0);
+    const advCount =
+      (fEnv.length ? 1 : 0) +
+      (fAppend.trim() ? 1 : 0) +
+      (fCodexAccount ? 1 : 0) +
+      (fClaudeAccount ? 1 : 0);
     // What the runner last found at this path. It answers for the *saved* path, so an edited
     // field says so instead of showing a verdict about a directory that is no longer named
     // here — a stale ✓ against a typo would be worse than no answer at all.
@@ -564,19 +563,6 @@ export function RunnerDetailPage() {
         }}
       />
 
-      {/* Sits beside isolation rather than under Advanced: both answer "what is this workspace
-          allowed to do", and this is the one with a security consequence — a workspace that can
-          drive other sessions shouldn't be a setting you have to go looking for. */}
-      <SettingRow
-        label="Session orchestration"
-        desc="Let this workspace's sessions spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused. Enable only for trusted orchestrator workspaces."
-        checked={fEnableOrchestration}
-        onChange={(v) => {
-          setFEnableOrchestration(v);
-          setDirty(true);
-        }}
-      />
-
       {/* Model is not a workspace field: it resolves from the runtime/provider this project last
           ran on. Stated read-only because the row displays it — otherwise it reads as a setting
           someone forgot to make editable. Mode and effort are deliberately not here: they are
@@ -662,15 +648,28 @@ export function RunnerDetailPage() {
       </div>
       {advOpen && (
         <div className="rd-adv-body">
-          {runner && offersCodexAccount(runner, fCodexAccount) && (
-            <CodexAccountSelect
+          {runner && offersAccount(runner, 'codex', fCodexAccount) && (
+            <AccountSelect
+              engine="codex"
               runner={runner}
               value={fCodexAccount}
               onChange={(next) => {
                 setFCodexAccount(next);
                 setDirty(true);
               }}
-              envCodexHome={fEnv.find((r) => r.key.trim() === 'CODEX_HOME')?.value}
+              envDir={fEnv.find((r) => r.key.trim() === 'CODEX_HOME')?.value}
+            />
+          )}
+          {runner && offersAccount(runner, 'claude', fClaudeAccount) && (
+            <AccountSelect
+              engine="claude"
+              runner={runner}
+              value={fClaudeAccount}
+              onChange={(next) => {
+                setFClaudeAccount(next);
+                setDirty(true);
+              }}
+              envDir={fEnv.find((r) => r.key.trim() === 'CLAUDE_CONFIG_DIR')?.value}
             />
           )}
           <div className="rd-form-field">

@@ -63,7 +63,10 @@ import { WikiController } from '../wiki/wiki.controller';
 // says otherwise". An allowlist would let a param nobody classified through unchecked. UUID
 // exceptions are route-specific below: a generic `requestId` exemption would also silently exempt
 // future public request-row addresses.
-const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug']);
+const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine']);
+// `engine` is a provider name (`claude`, `codex`), the engine whose account store a removal is
+// about: DELETE /runners/:id/accounts/:engine/:account. The service refuses anything that is not a
+// login engine — an id here would be addressed as a name no engine answers to.
 
 const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {};
 

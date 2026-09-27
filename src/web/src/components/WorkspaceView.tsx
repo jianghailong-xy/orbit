@@ -138,7 +138,6 @@ import {
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
 import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
-import { configPillHints } from '../lib/configApply';
 import {
   decideContextSeed,
   dirtyContextSeed,
@@ -1465,8 +1464,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const isStandalone = useMediaQuery('(display-mode: standalone)');
   // Touch devices have no hover, so a tap that shows a Tooltip never gets the mouseleave
   // that dismisses it — the bubble lingers on screen (e.g. an "Unpin" tip stuck after a
-  // pin tap, or a composer pill's tip stacked over the Select it just opened). Suppress
-  // these tooltips where hover is unavailable; every gated control already labels itself.
+  // pin tap). Suppress these tooltips where hover is unavailable; every gated control
+  // already labels itself.
   // The same reading decides how a menu opens a level down: on hover where the pointer can
   // hover, on a tap where it cannot (the composer model menu's `triggerSubMenuAction`).
   const canHover = useMediaQuery('(hover: hover)');
@@ -6122,10 +6121,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   );
   // Whether this session has a fast lane to offer at all — Claude's `/fast` on the models that
   // carry it, Codex's "Fast" service tier on a model whose row in this runner's catalogue
-  // advertises it. The runtime, never the slug, for the same reason the timing hints ask by
-  // runtime: a configured (BYOK) identity borrows one. Unresolved means no, which is the safe
-  // direction: a pill that appears and then vanishes is worse than one that appears a moment
-  // late, and this is the same fact the server polices at dispatch.
+  // advertises it. The runtime, never the slug: a configured (BYOK) identity borrows one.
+  // Unresolved means no, which is the safe direction: a pill that appears and then vanishes is
+  // worse than one that appears a moment late, and this is the same fact the server polices at
+  // dispatch.
   const fastModeUsable =
     shownProviderCapabilitiesResolved &&
     fastModeAvailable(
@@ -6154,13 +6153,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         : undefined,
     [shownProvider, shownProviderIsBuiltin, shownModel, runner.runsAsRoot, runner.modelCatalog],
   );
-  const shownModeSemantics = permissionSemanticsFor(shownMode);
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
-  // online to act on it), and none of them aborts the running turn. WHEN the change lands is no
-  // longer one answer for all four, so it is derived per field rather than stated here — see
-  // `configPillHints`: model, permission mode and effort reach the running engine over its
-  // control channel, and only a provider waits for the re-spawn the inbox defers to the end of
-  // the turn.
+  // online to act on it), and none of them aborts the running turn. When the change lands is the
+  // server's call (SessionsService.updateConfig): model, permission mode and effort reach a
+  // resident Claude Code over its control channel, and everything else waits for the re-spawn the
+  // inbox defers to the end of the turn.
   // When not live they're freely editable (pre-session config).
   // Workspace stays fixed once the session exists (it's never re-assigned on resume).
   const configEditable = selectedTrashed || selectedMissing ? false : live ? runner.online : true;
@@ -6175,23 +6172,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     workspacesForRunner.find((a) => a.id === shownWorkspaceId)?.name ??
     selected?.workspace?.name ??
     lockedWorkspace?.name;
-  // Per-control hints derived from the same state that drives enable/disable, so the help
-  // can't drift from behaviour (this used to be one hard-coded paragraph on the whole row).
-  // One table for the four config pills: what each controls, why it's unavailable when it is,
-  // and — since the answer differs per field — when a change to it actually takes effect.
   const composerDisabled = selectedTrashed || selectedMissing;
-  const configHints = configPillHints({
-    live,
-    runnerOnline: !!runner.online,
-    trashed: selectedTrashed,
-    missing: selectedMissing,
-    // The runtime, never the slug: a configured (BYOK) identity borrows one, and until the
-    // provider list has answered it borrows an unknown, which promises nothing.
-    runtime: shownProviderCapabilitiesResolved
-      ? runtimeForProvider(shownProvider, configuredProviders)
-      : undefined,
-    permissionNote: shownModeSemantics?.note,
-  });
   // Switching session leaves whatever history recall was in progress; reset the cursor
   // so the next Up starts fresh from the (per-session) history.
   useEffect(() => {
@@ -6366,7 +6347,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           {
             key: 'provider',
             label: (
-              <span className="scope-menu-row" title={configHints.provider}>
+              <span className="scope-menu-row">
                 Provider
                 {menuValue(providerSwitchChoices.find((c) => c.slug === shownProvider)?.label ?? shownProvider)}
               </span>
@@ -6413,7 +6394,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     {
       key: 'effort',
       label: (
-        <span className="scope-menu-row" title={configHints.effort}>
+        <span className="scope-menu-row">
           Effort
           {menuValue(shownEffortLabel)}
         </span>
@@ -6440,7 +6421,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           {
             key: 'speed',
             label: (
-              <span className="scope-menu-row" title={configHints.fastMode}>
+              <span className="scope-menu-row">
                 Speed
                 {menuValue(shownFastMode ? 'Fast' : 'Standard')}
               </span>
@@ -8261,113 +8242,104 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {/* The workspace is only a Select when it can actually be picked (new, unlocked
                 session); once read-only it shows as a static pill left of Model below. */}
             {!workspaceReadOnly && (
-              <Tooltip title="Workspace" open={hoverTipOpen}>
-                <span className="composer-pill composer-pill-workspace">
-                  <Select
-                    size="small"
-                    variant="borderless"
-                    suffixIcon={null}
-                    value={shownWorkspaceId}
-                    onChange={setWorkspaceId}
-                    options={workspacesForRunner.map((a) => ({ value: a.id, label: a.name }))}
-                    placeholder="Default"
-                    disabled={live || !!lockedWorkspaceId}
-                    popupMatchSelectWidth={false}
-                  />
-                </span>
-              </Tooltip>
-            )}
-            {/* Tooltip wraps the span (not the Select): a disabled Select has no pointer
-                events, so the parent span is what surfaces the reason on hover. With the
-                icons gone, the tooltip also names what each pill controls. */}
-            <Tooltip title={configHints.permissionMode} open={hoverTipOpen}>
-              <span className="composer-pill">
+              <span className="composer-pill composer-pill-workspace">
                 <Select
                   size="small"
                   variant="borderless"
                   suffixIcon={null}
-                  value={shownMode}
-                  onChange={(v) => {
-                    if (live) {
-                      configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] });
-                    } else {
-                      modeSeedState.current = dirtyContextSeed(modelContextKey);
-                      setMode(v);
-                    }
-                  }}
-                  options={MODE_OPTIONS.map((m) => {
-                    // A mode this ENGINE cannot honor is still offered, and never disabled: it is the
-                    // user's stored intent, and it starts being enforced the moment the session moves
-                    // to an engine that can — it just must not read as a guarantee it isn't, so the
-                    // option carries the caveat. The wording comes from the shared table rather than
-                    // being rebuilt here: a picker that re-derives it is a picker that can contradict
-                    // what dispatch will do.
-                    //
-                    // A mode this RUNNER cannot run is the one exception, and disabled rather than
-                    // annotated, because the premise above does not hold for it: a session cannot move
-                    // to another machine, so Bypass on a root runner is not a mode awaiting its moment
-                    // — claude exits during startup and the session never produces anything. Disabled
-                    // and not hidden, so the reason is visible instead of the option silently missing.
-                    const semantics = permissionSemanticsFor(m);
-                    const runnable = permissionModeAvailableOnRunner(
-                      MODE_TO_PERMISSION[m],
-                      runner.runsAsRoot,
-                    );
-                    const shortNote = semantics?.shortNote;
-                    return {
-                      value: m,
-                      label: shortNote ? `${m} — ${shortNote}` : m,
-                      disabled: !runnable,
-                    };
-                  })}
-                  disabled={!configEditable}
+                  value={shownWorkspaceId}
+                  onChange={setWorkspaceId}
+                  options={workspacesForRunner.map((a) => ({ value: a.id, label: a.name }))}
+                  placeholder="Default"
+                  disabled={live || !!lockedWorkspaceId}
                   popupMatchSelectWidth={false}
                 />
               </span>
-            </Tooltip>
+            )}
+            <span className="composer-pill">
+              <Select
+                size="small"
+                variant="borderless"
+                suffixIcon={null}
+                value={shownMode}
+                onChange={(v) => {
+                  if (live) {
+                    configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] });
+                  } else {
+                    modeSeedState.current = dirtyContextSeed(modelContextKey);
+                    setMode(v);
+                  }
+                }}
+                options={MODE_OPTIONS.map((m) => {
+                  // A mode this ENGINE cannot honor is still offered, and never disabled: it is the
+                  // user's stored intent, and it starts being enforced the moment the session moves
+                  // to an engine that can — it just must not read as a guarantee it isn't, so the
+                  // option carries the caveat. The wording comes from the shared table rather than
+                  // being rebuilt here: a picker that re-derives it is a picker that can contradict
+                  // what dispatch will do.
+                  //
+                  // A mode this RUNNER cannot run is the one exception, and disabled rather than
+                  // annotated, because the premise above does not hold for it: a session cannot move
+                  // to another machine, so Bypass on a root runner is not a mode awaiting its moment
+                  // — claude exits during startup and the session never produces anything. Disabled
+                  // and not hidden, so the reason is visible instead of the option silently missing.
+                  const semantics = permissionSemanticsFor(m);
+                  const runnable = permissionModeAvailableOnRunner(
+                    MODE_TO_PERMISSION[m],
+                    runner.runsAsRoot,
+                  );
+                  const shortNote = semantics?.shortNote;
+                  return {
+                    value: m,
+                    label: shortNote ? `${m} — ${shortNote}` : m,
+                    disabled: !runnable,
+                  };
+                })}
+                disabled={!configEditable}
+                popupMatchSelectWidth={false}
+              />
+            </span>
             <span className="composer-pill-spacer" />
             {/* Provider, model, effort and — on a model with a fast lane — speed are one control, the
                 way a reference composer writes "model · effort" as one button: the model in the
                 label's colour, the effort after it in the secondary one. The menu behind it
-                (`modelMenuItems`) keeps each field's own rules and tooltip. */}
-            <Tooltip title={configHints.model} open={hoverTipOpen}>
-              <span className="composer-pill composer-model-pill">
-                <Dropdown
-                  trigger={['click']}
-                  placement="topRight"
-                  disabled={!configEditable}
-                  // Rows that open a level down open on hover where the pointer can hover, the way
-                  // the browser's own menus do — and on a tap where it cannot, because a phone has
-                  // no hover to give: one row, two gestures, decided by the pointer.
-                  // They open to the right — and on a phone, where the control sits near the
-                  // right edge, there is no right: shift the level back inside the screen rather
-                  // than let it hang off the edge (and widen the page with it).
-                  menu={{
-                    className: 'composer-model-menu',
-                    items: modelMenuItems,
-                    triggerSubMenuAction: canHover ? 'hover' : 'click',
-                    builtinPlacements: {
-                      rightTop: {
-                        points: ['tl', 'tr'],
-                        overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
-                      },
+                (`modelMenuItems`) keeps each field's own rules. */}
+            <span className="composer-pill composer-model-pill">
+              <Dropdown
+                trigger={['click']}
+                placement="topRight"
+                disabled={!configEditable}
+                // Rows that open a level down open on hover where the pointer can hover, the way
+                // the browser's own menus do — and on a tap where it cannot, because a phone has
+                // no hover to give: one row, two gestures, decided by the pointer.
+                // They open to the right — and on a phone, where the control sits near the
+                // right edge, there is no right: shift the level back inside the screen rather
+                // than let it hang off the edge (and widen the page with it).
+                menu={{
+                  className: 'composer-model-menu',
+                  items: modelMenuItems,
+                  triggerSubMenuAction: canHover ? 'hover' : 'click',
+                  builtinPlacements: {
+                    rightTop: {
+                      points: ['tl', 'tr'],
+                      overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
                     },
-                  }}
+                  },
+                }}
+              >
+                <button
+                  type="button"
+                  className="composer-model-chip"
+                  disabled={!configEditable}
+                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}`}
                 >
-                  <button
-                    type="button"
-                    className="composer-model-chip"
-                    disabled={!configEditable}
-                    aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}`}
-                  >
-                    <span className="composer-model-name">{shownModelLabel}</span>
-                    <span className="composer-model-effort">
-                      {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
-                    </span>
-                  </button>
-                </Dropdown>
-              </span>
-            </Tooltip>
+                  <span className="composer-model-name">{shownModelLabel}</span>
+                  <span className="composer-model-effort">
+                    {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
+                  </span>
+                </button>
+              </Dropdown>
+            </span>
             {shownPool && shownPoolAccount && (
               <Tooltip
                 title={
@@ -8402,37 +8374,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               />
             )}
             {showStop ? (
-              <Tooltip title="Stop the current turn">
-                <Button
-                  className="composer-send"
-                  type="primary"
-                  shape="circle"
-                  icon={<StopSquareIcon />}
-                  onClick={() => selected && control.mutate(selected.id)}
-                  aria-label="Stop"
-                />
-              </Tooltip>
+              <Button
+                className="composer-send"
+                type="primary"
+                shape="circle"
+                icon={<StopSquareIcon />}
+                onClick={() => selected && control.mutate(selected.id)}
+                aria-label="Stop"
+              />
             ) : (
-              <Tooltip
-                title={
-                  sameSessionSendBlocked
-                    ? sameSessionSendBlockedCopy
-                    : defaultSendIntent === 'CURRENT_WORK'
-                      ? 'Add to current work'
-                      : 'Send as next turn'
-                }
-              >
-                <Button
-                  className="composer-send"
-                  type="primary"
-                  shape="circle"
-                  icon={<ArrowUpOutlined />}
-                  disabled={!canSend}
-                  loading={send.isPending}
-                  onClick={() => onSend()}
-                  aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
-                />
-              </Tooltip>
+              <Button
+                className="composer-send"
+                type="primary"
+                shape="circle"
+                icon={<ArrowUpOutlined />}
+                disabled={!canSend}
+                loading={send.isPending}
+                onClick={() => onSend()}
+                aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+              />
             )}
           </div>
         </div>

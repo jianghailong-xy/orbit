@@ -12,7 +12,14 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { WIKI_DECIDE_ACTIONS, WIKI_REJECT_REASONS, type WikiDecideAction, type WikiRejectReason } from '@orbit/shared';
+import {
+  WIKI_DECIDE_ACTIONS,
+  WIKI_REJECT_REASONS,
+  WIKI_REVIEW_MODES,
+  type WikiDecideAction,
+  type WikiRejectReason,
+  type WikiReviewMode,
+} from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 
 /**
@@ -45,7 +52,7 @@ export class CreateWikiSpaceDto {
   slug?: string;
 }
 
-/** PATCH /api/wiki/spaces/:id — the two settings phase 1 reads (§2.1 settings). */
+/** PATCH /api/wiki/spaces/:id — the owner's settings (§2.1 settings, contract `space.settings`). */
 export class UpdateWikiSpaceDto {
   @IsOptional()
   @IsBoolean()
@@ -54,6 +61,16 @@ export class UpdateWikiSpaceDto {
   @IsOptional()
   @IsBoolean()
   autoAcceptReinforce?: boolean;
+
+  /** The owner channel's alone: a request that carries a session header is refused WIKI_OWNER_CHANNEL_ONLY. */
+  @IsOptional()
+  @IsIn(WIKI_REVIEW_MODES)
+  reviewMode?: WikiReviewMode;
+
+  /** Whether an Automatic space sends its owner spot checks at all. The owner channel's alone, like the mode. */
+  @IsOptional()
+  @IsBoolean()
+  automaticSpotChecks?: boolean;
 
   @IsOptional()
   @IsString()
@@ -119,6 +136,33 @@ export class WikiOpDecisionDto {
   @IsString()
   @MaxLength(2_000)
   note?: string;
+}
+
+/**
+ * POST /api/wiki/entries/:id/reject — the owner's Reject of an entry a review mode applied and nobody
+ * has confirmed (contract `reviewModes.entryReject`). The reason is checked by the service too, so
+ * the contract's WIKI_SCHEMA answer is the one a caller that sends none is given.
+ */
+export class WikiEntryRejectDto {
+  @IsOptional()
+  @IsIn(WIKI_REJECT_REASONS)
+  reason?: WikiRejectReason;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_000)
+  note?: string;
+}
+
+/**
+ * POST /api/runner/wiki/spaces/:id/verifications — verdicts on the calling session's own ops
+ * (contract `reviewModes.verification.report`). `@Allow()`d and left to WikiService like `ops`: each
+ * verdict is judged on its own, a malformed one is refused WIKI_SCHEMA naming its field while the
+ * others are still recorded, and the one-off import calls the same service method with no DTO at all.
+ */
+export class WikiVerificationReportDto {
+  @Allow()
+  verdicts?: unknown;
 }
 
 /** The owner's answer to one pending op, or to several of one changeset in one call. */

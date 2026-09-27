@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Runner } from '@prisma/client';
 import { createHmac } from 'node:crypto';
+import { orchestrationEnabled } from '../common/orchestration-switch';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -45,7 +46,8 @@ type OrchestrationClaims = {
  * ORBIT_ALLOW_ORCHESTRATION is a discovery/runtime UX gate, not an authorization
  * boundary: a workspace can alter its child-process environment. The control plane
  * therefore verifies a signed credential bound to the calling session and runner,
- * then re-checks the session and its current workspace configuration for every request.
+ * then re-checks the session, its workspace and the owner's Session orchestration switch for
+ * every request.
  * A discovered session id alone is therefore insufficient. The runner's OS account is
  * still the trust boundary: sibling processes that can inspect each other's environments
  * or runner config are not isolated from one another.
@@ -138,11 +140,11 @@ export class RunnerOrchestrationAuthorizer {
         deletedAt: null,
         cancelRequestedAt: null,
         status: { in: OPEN_SESSION_STATUSES },
-        workspace: { enableOrchestration: true, deletedAt: null },
+        workspace: { deletedAt: null },
       },
-      select: { id: true },
+      select: { id: true, owner: { select: { preferences: true } } },
     });
-    if (!session) {
+    if (!session || !orchestrationEnabled(session.owner)) {
       throw new ForbiddenException('orchestration is not enabled for this session');
     }
     return session.id;

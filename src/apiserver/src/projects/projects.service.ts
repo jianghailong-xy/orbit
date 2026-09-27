@@ -19,6 +19,7 @@ import {
   type CoordinatorFuseUsage,
   type CoordinatorWakeups,
   deriveSessionLifecycleState,
+  type ProjectListCoordinatorActivity,
   RunEventType,
   SessionLifecycleState,
   type SessionFilingState,
@@ -26,6 +27,7 @@ import {
   toUuid,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
+import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -384,6 +386,15 @@ const COORDINATION_INCLUDE = {
  * client parsed and discarded. The task total is absent too: the rollup already visits every
  * scoped task and returns that count, so asking Prisma for a second aggregate only repeats work.
  */
+/** The coordinator conversation's columns `coordinatorActivityOf` reads, and nothing else of it. */
+const COORDINATOR_ACTIVITY_SELECT = {
+  status: true,
+  engineTurnActive: true,
+  runningSubagents: true,
+  lastTurnAt: true,
+  _count: { select: { approvals: { where: { status: 'PENDING' } } } },
+} satisfies Prisma.SessionSelect;
+
 const PROJECT_LIST_SELECT = {
   id: true,
   title: true,
@@ -392,6 +403,8 @@ const PROJECT_LIST_SELECT = {
   createdAt: true,
   updatedAt: true,
   ...COORDINATION_INCLUDE,
+  // At most one row apiece, joined by its own unique key, like the two above.
+  coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
 const ACCEPTANCE_DEFINITIONS_INCLUDE = {
@@ -522,6 +535,25 @@ function withCoordination<T extends WithCoordination>(
     // can only mean "nothing has rotated", and a 500 on a read would be the wrong way to say that.
     coordinatorGeneration: runtime?.coordinatorGeneration ?? 0n,
   };
+}
+
+/**
+ * What the coordinator's conversation is doing, as a list row states it.
+ *
+ * `working` is the session list's spinner, so the two cannot disagree about one conversation: a
+ * dispatched turn, a turn the runtime started for itself, or a sub-agent it started still going —
+ * and not while a card on it waits for an answer, which the list draws as waiting instead
+ * (OrbitKit's `SessionStatusGlyph`, the web's `StatusIcon`).
+ */
+function coordinatorActivityOf(
+  session: Prisma.SessionGetPayload<{ select: typeof COORDINATOR_ACTIVITY_SELECT }> | null | undefined,
+): ProjectListCoordinatorActivity<Date> | null {
+  if (!session) return null;
+  const working =
+    session._count.approvals === 0 &&
+    (isSessionGenerating(session) ||
+      (session.status === RunStatus.AWAITING_INPUT && session.runningSubagents.length > 0));
+  return { working, lastTurnAt: session.lastTurnAt };
 }
 
 type WithAcceptanceDefinitions = {
@@ -1537,7 +1569,8 @@ export class ProjectsService {
    * ── THE DECISION DOOR ──────────────────────────────────────────────────────────────────────
    *
    * The account owner answering one held criteria proposal. `APPROVE` applies the edit that was
-   * held, advances the seal and records the approval, all inside ONE transaction; `REJECT`
+   * held, advances the seal and records the approval — carrying the owner's confirmation to the
+   * new seal when it named the one the edit started from — all inside ONE transaction; `REJECT`
    * settles the proposal and touches no criterion.
    *
    * TWO KEYS, AND THEY BIND DIFFERENT THINGS
@@ -1739,9 +1772,39 @@ export class ProjectsService {
         // the definition's BEFORE trigger out of the assertion AND its verification method, and
         // the hash this service computes elsewhere covers the assertion alone. A `resultingSeal`
         // calculated here would be a second recipe, and the one that disagrees.
-        resultingSeal = standardSetVersion(criteriaFromDefinitions(
+        const resulting = standardSetVersion(criteriaFromDefinitions(
           await ProjectsService.acceptanceDefinitions(tx, projectId),
-        )).digest;
+        ));
+        resultingSeal = resulting.digest;
+
+        // THE CONFIRMATION MOVES WITH THE EDIT — when, and only when, it named the set this answer
+        // started from. A confirmation stops counting once the criteria move so that nobody is on
+        // record approving words they never saw (`criteria-seal-additive.pg.spec.ts`). An edit
+        // answered HERE is not that: this door takes the confirmation door's credential rule, the
+        // token says which edit was read, and the seal check above says it was read against the
+        // set that stands. An owner who confirmed that set and has just approved this change has
+        // had every word of the result in front of them, so asking them to confirm it again asks
+        // nothing new (2026-09-27: every approval on one project was followed by that second
+        // press, one of them eight seconds later). Everything else is still asked: a set nobody
+        // has confirmed — confirming is also what starts a project, which an approval must not do
+        // — and one an unheld edit already moved past its confirmation, whose words this approval
+        // never showed anybody. In this transaction, so no read sees the new criteria without it.
+        const confirmed = await tx.projectStandardSetConfirmation.findFirst({
+          where: { projectId },
+          orderBy: [{ confirmedAt: 'desc' }, { id: 'desc' }],
+          select: { criteriaDigest: true },
+        });
+        if (confirmed?.criteriaDigest === currentSeal) {
+          await tx.projectStandardSetConfirmation.create({
+            data: {
+              projectId,
+              ownerId,
+              confirmedById: ownerId,
+              criteriaDigest: resulting.digest,
+              criteriaMaterial: resulting.material as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
       }
 
       const row = await tx.projectCriteriaDecision.create({
@@ -1822,9 +1885,10 @@ export class ProjectsService {
       applied: decided.row.decision === 'APPROVE',
       acceptanceCriteriaItems: acceptanceCriteriaItemsOf(decided.definitions),
       // The second consequence of an APPROVE, handed back on the same response so the caller sees
-      // it rather than discovering it: the seal moved, so the confirmation that named the old one
-      // is STALE and the project has stopped projecting DONE. That is not an extra; it is the half
-      // of this decision the caller did not ask for.
+      // it rather than discovering it: the seal moved, so the confirmation either moved with it —
+      // the owner had confirmed the set this answer started from — or still names the old one, is
+      // STALE, and the project has stopped projecting DONE. That is not an extra; it is the half of
+      // this decision the caller did not ask for.
       confirmation: await this.acceptance.standardSetConfirmation(ownerId, projectId),
       reply,
     };
@@ -2271,7 +2335,7 @@ export class ProjectsService {
       readProjectListAttention(this.prisma, ownerId, status),
       readProjectIntegrationLines(this.prisma, projects.map((project) => project.id)),
     ]);
-    return projects.map((project) => {
+    return projects.map(({ coordinatorSession, ...project }) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, seven zero
       // buckets and no activity rather than making every client handle two shapes.
       const { taskCount, ...rollup } = rollups.get(project.id) ?? emptyProjectListRollup();
@@ -2289,6 +2353,9 @@ export class ProjectsService {
         // common case — a project nobody has decided a line for — so a client draws its row from
         // one shape, and never has to tell "no line yet" from "this server does not report lines".
         integration: integration.get(project.id) ?? null,
+        // What moves a project that its task rollup cannot see: the coordinator working. Null on a
+        // project with no coordinator bound.
+        coordinatorActivity: coordinatorActivityOf(coordinatorSession),
       };
     });
   }

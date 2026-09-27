@@ -153,7 +153,14 @@ export function rrfFuse(legs: ReadonlyArray<{ match: WikiSearchMatch; ids: reado
 }
 
 /** Trust, strongest first (design §6.1's first tiebreak). `external` is last: it is Web-derived. */
-const TRUST_RANK: Readonly<Record<WikiTrust, number>> = { owner: 4, confirmed: 3, proposed: 2, external: 1 };
+const TRUST_RANK: Readonly<Record<WikiTrust, number>> = {
+  owner: 6,
+  confirmed: 5,
+  auto: 4,
+  unreviewed: 3,
+  proposed: 2,
+  external: 1,
+};
 
 /** How much an anchor is worth as a tiebreak: a checked one beats an unchecked one, and a broken
  *  one is the weakest thing an entry can carry. */

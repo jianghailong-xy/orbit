@@ -81,6 +81,7 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
 import {
   batchActiveTurns,
@@ -712,8 +713,8 @@ export class SessionsService {
     // The workspace's own environment, which may carry the provider credential that makes the
     // runner's engine sign-in irrelevant — see the sign-in preflight below.
     let workspaceEnv: unknown;
-    // The Codex account the workspace's sessions run on, whose sign-in the preflight below judges.
-    let codexAccount: string | null | undefined;
+    // The accounts the workspace pins its sessions to, whose sign-ins the preflight below judges.
+    let accountChoices: { codexAccount?: string | null; claudeAccount?: string | null } | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -723,6 +724,7 @@ export class SessionsService {
           enabled: true,
           env: true,
           codexAccount: true,
+          claudeAccount: true,
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -737,17 +739,17 @@ export class SessionsService {
       assignedRunnerId = workspace.runnerId ?? undefined;
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
-      codexAccount = workspace.codexAccount;
+      accountChoices = workspace;
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true },
+        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
-      codexAccount = workspace.codexAccount;
+      accountChoices = workspace;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
@@ -914,7 +916,7 @@ export class SessionsService {
         runtime,
         bringsOwnCredentials: borrowedRuntime != null,
         workspaceEnv,
-        codexAccount,
+        accounts: accountChoices,
         runner: targetRunner,
       });
     // Typed, not a bare 409: this is an availability condition — the engine is signed out on a
@@ -1502,12 +1504,13 @@ export class SessionsService {
         id: true,
         rootSessionId: true,
         spawnDepth: true,
-        workspace: { select: { enableOrchestration: true } },
+        workspaceId: true,
+        owner: { select: { preferences: true } },
       },
     });
     if (!parent) throw new NotFoundException('parent session not found');
-    if (!parent.workspace?.enableOrchestration) {
-      throw new ForbiddenException('orchestration is not enabled for this workspace');
+    if (!parent.workspaceId || !orchestrationEnabled(parent.owner)) {
+      throw new ForbiddenException('orchestration is not enabled for this account');
     }
     if (parent.spawnDepth >= SessionsService.MAX_SPAWN_DEPTH) {
       throw new ForbiddenException(`spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`);
@@ -7057,8 +7060,7 @@ export class SessionsService {
       // driven over ACP/JSON-RPC, opencode runs one process per turn, and none of their session
       // loops has an arm for the kind — one filed there is acked on delivery and applied by
       // nobody, which is worse than the wait this split removed. For them the live half stays
-      // what it always was: part of the re-spawn, effort included (web `appliesMidTurn` promises
-      // the same).
+      // what it always was: part of the re-spawn, effort included.
       //
       // Asked of the RUNTIME, the way deliverSteer asks its own question, and read off
       // `resolveProviderExec` — whose `provider` IS that runtime (`execRuntime`), resolved after

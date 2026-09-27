@@ -37,7 +37,7 @@ const codexAccountDispatchUp = "orbit-test: the codex session is up"
 type codexAccountDispatchMachine struct {
 	fake        *fakeCodexBinary
 	defaultHome string
-	work        codexAccountSlot
+	work        accountSlot
 }
 
 func newCodexAccountDispatchMachine(t *testing.T) *codexAccountDispatchMachine {
@@ -77,11 +77,11 @@ func newCodexAccountDispatchMachine(t *testing.T) *codexAccountDispatchMachine {
 		t.Fatalf("the runner resolves codex to %q, not the fake", path)
 	}
 
-	work, err := createCodexAccountSlot("Work")
+	work, err := codexAccountKind.create("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defaultHome, err := codexAccountSlotHome(codexAccountDefaultSlot)
+	defaultHome, err := codexAccountKind.home(accountSlotDefaultID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,12 +266,12 @@ func TestCodexAccountDispatchRunsTheClaimedSessionInItsSlot(t *testing.T) {
 	for _, door := range []string{"claim", "reclaim"} {
 		t.Run(door, func(t *testing.T) {
 			m := newCodexAccountDispatchMachine(t)
-			m.signIn(t, m.work.CodexHome)
+			m.signIn(t, m.work.Dir)
 			const sessionID = "7c1e5a90-3b2d-4f6e-9a8c-1d2e3f4a5b6c"
-			url := codexAccountDispatchControlPlane(t, sessionID, map[string]string{"CODEX_HOME": m.work.CodexHome, "RUST_LOG": "warn"})
+			url := codexAccountDispatchControlPlane(t, sessionID, map[string]string{"CODEX_HOME": m.work.Dir, "RUST_LOG": "warn"})
 			job := claimedThrough(t, door, url)
-			if got := job.Agent.Env["CODEX_HOME"]; got != m.work.CodexHome {
-				t.Fatalf("the %s decoded CODEX_HOME %q, want the slot's %q", door, got, m.work.CodexHome)
+			if got := job.Agent.Env["CODEX_HOME"]; got != m.work.Dir {
+				t.Fatalf("the %s decoded CODEX_HOME %q, want the slot's %q", door, got, m.work.Dir)
 			}
 			scratch := t.TempDir()
 			if up, errs := runCodexAccountDispatchSession(t, url, job, scratch); !up {
@@ -279,19 +279,19 @@ func TestCodexAccountDispatchRunsTheClaimedSessionInItsSlot(t *testing.T) {
 			}
 
 			// Signed in was asked of the slot, never of Default (whose answer is "signed out").
-			if asked := m.askedToSignIn(t); len(asked) != 1 || asked[0] != m.work.CodexHome {
-				t.Fatalf("`codex login status` ran in %v, want the slot %s", asked, m.work.CodexHome)
+			if asked := m.askedToSignIn(t); len(asked) != 1 || asked[0] != m.work.Dir {
+				t.Fatalf("`codex login status` ran in %v, want the slot %s", asked, m.work.Dir)
 			}
 			// Both app-servers — the state bootstrap and the session's own — ran in the slot, on the
 			// slot's state partition.
-			partition := codexAccountDispatchPartitionDir(t, m.work.CodexHome)
+			partition := codexAccountDispatchPartitionDir(t, m.work.Dir)
 			spawns := m.appServers(t)
 			if len(spawns) < 2 {
 				t.Fatalf("want the state bootstrap and the session's app-server, got %d spawns: %+v", len(spawns), spawns)
 			}
 			for i, spawn := range spawns {
-				if spawn.CodexHome != m.work.CodexHome {
-					t.Fatalf("app-server %d ran with CODEX_HOME %q, want the slot %q", i, spawn.CodexHome, m.work.CodexHome)
+				if spawn.CodexHome != m.work.Dir {
+					t.Fatalf("app-server %d ran with CODEX_HOME %q, want the slot %q", i, spawn.CodexHome, m.work.Dir)
 				}
 				if got := spawn.sqliteHome(t); got != partition {
 					t.Fatalf("app-server %d opened state %s, want the slot's partition %s", i, got, partition)
@@ -299,12 +299,12 @@ func TestCodexAccountDispatchRunsTheClaimedSessionInItsSlot(t *testing.T) {
 			}
 			// The session remembers the slot as its account, so every later spawn of it stays there.
 			meta := readSessionMeta(filepath.Join(scratch, "meta.json"))
-			if meta == nil || meta.CodexStateLayout != codexStateLayoutShared || meta.CodexStateHome != m.work.CodexHome ||
-				meta.CodexStatePartition != codexStatePartition(m.work.CodexHome) {
+			if meta == nil || meta.CodexStateLayout != codexStateLayoutShared || meta.CodexStateHome != m.work.Dir ||
+				meta.CodexStatePartition != codexStatePartition(m.work.Dir) {
 				t.Fatalf("session meta %+v, want the slot's shared state", meta)
 			}
 			// Default's state was never opened, and never made: the two accounts share nothing.
-			if codexStatePartition(m.defaultHome) == codexStatePartition(m.work.CodexHome) {
+			if codexStatePartition(m.defaultHome) == codexStatePartition(m.work.Dir) {
 				t.Fatal("Default and the slot map to one partition")
 			}
 			if _, err := os.Stat(codexAccountDispatchPartitionDir(t, m.defaultHome)); !errors.Is(err, fs.ErrNotExist) {
@@ -331,7 +331,7 @@ func TestCodexAccountDispatchWithoutAnAccountRunsOnDefault(t *testing.T) {
 			t.Fatalf("app-server %d ran in %q on %s, want Default %q on %s", i, spawn.CodexHome, spawn.sqliteHome(t), m.defaultHome, partition)
 		}
 	}
-	if _, err := os.Stat(codexAccountDispatchPartitionDir(t, m.work.CodexHome)); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(codexAccountDispatchPartitionDir(t, m.work.Dir)); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("the slot's state partition exists (%v): a session on Default opened it", err)
 	}
 }
@@ -343,13 +343,13 @@ func TestCodexAccountDispatchRefusesASessionWhoseSlotIsSignedOut(t *testing.T) {
 	m := newCodexAccountDispatchMachine(t)
 	m.signIn(t, m.defaultHome)
 	const sessionID = "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d"
-	url := codexAccountDispatchControlPlane(t, sessionID, map[string]string{"CODEX_HOME": m.work.CodexHome})
+	url := codexAccountDispatchControlPlane(t, sessionID, map[string]string{"CODEX_HOME": m.work.Dir})
 	up, errs := runCodexAccountDispatchSession(t, url, claimedThrough(t, "claim", url), t.TempDir())
 	if up || len(errs) == 0 || !strings.HasPrefix(errs[0], "Failed to authenticate") {
 		t.Fatalf("a session on a signed-out slot came up=%v with errors %v, want the signed-out refusal", up, errs)
 	}
-	if asked := m.askedToSignIn(t); len(asked) != 1 || asked[0] != m.work.CodexHome {
-		t.Fatalf("`codex login status` ran in %v, want the slot %s", asked, m.work.CodexHome)
+	if asked := m.askedToSignIn(t); len(asked) != 1 || asked[0] != m.work.Dir {
+		t.Fatalf("`codex login status` ran in %v, want the slot %s", asked, m.work.Dir)
 	}
 	if spawns := m.appServers(t); len(spawns) != 0 {
 		t.Fatalf("a refused session spawned %d app-servers", len(spawns))
@@ -362,8 +362,8 @@ func TestCodexAccountDispatchRefusesASessionWhoseSlotIsSignedOut(t *testing.T) {
 // signed in yet, and that is no reason to refuse a session that is not moving.
 func TestCodexAccountDispatchKeepsASessionOnTheSlotItStartedIn(t *testing.T) {
 	m := newCodexAccountDispatchMachine(t)
-	m.signIn(t, m.work.CodexHome)
-	other, err := createCodexAccountSlot("Other")
+	m.signIn(t, m.work.Dir)
+	other, err := codexAccountKind.create("Other")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,19 +371,19 @@ func TestCodexAccountDispatchKeepsASessionOnTheSlotItStartedIn(t *testing.T) {
 	scratch := t.TempDir()
 	// What its first spawn wrote before the engine came up: the slot, as its account.
 	started := &ClaimedSession{SessionID: sessionID, SessionUUID: sessionID, Provider: providerCodex}
-	writeSessionMetaWithCodexState(scratch, started, t.TempDir(), codexStateLayoutShared, codexStatePartition(m.work.CodexHome), m.work.CodexHome)
+	writeSessionMetaWithCodexState(scratch, started, t.TempDir(), codexStateLayoutShared, codexStatePartition(m.work.Dir), m.work.Dir)
 
-	url := codexAccountDispatchControlPlane(t, sessionID, map[string]string{"CODEX_HOME": other.CodexHome})
+	url := codexAccountDispatchControlPlane(t, sessionID, map[string]string{"CODEX_HOME": other.Dir})
 	if up, errs := runCodexAccountDispatchSession(t, url, claimedThrough(t, "claim", url), scratch); !up {
 		t.Fatalf("the session was not resumed on the account it started in: %v", errs)
 	}
-	if asked := m.askedToSignIn(t); len(asked) != 1 || asked[0] != m.work.CodexHome {
-		t.Fatalf("`codex login status` ran in %v, want the account the session started in, %s", asked, m.work.CodexHome)
+	if asked := m.askedToSignIn(t); len(asked) != 1 || asked[0] != m.work.Dir {
+		t.Fatalf("`codex login status` ran in %v, want the account the session started in, %s", asked, m.work.Dir)
 	}
-	partition := codexAccountDispatchPartitionDir(t, m.work.CodexHome)
+	partition := codexAccountDispatchPartitionDir(t, m.work.Dir)
 	for i, spawn := range m.appServers(t) {
-		if spawn.CodexHome != m.work.CodexHome || spawn.sqliteHome(t) != partition {
-			t.Fatalf("app-server %d ran in %q on %s, want %q on %s", i, spawn.CodexHome, spawn.sqliteHome(t), m.work.CodexHome, partition)
+		if spawn.CodexHome != m.work.Dir || spawn.sqliteHome(t) != partition {
+			t.Fatalf("app-server %d ran in %q on %s, want %q on %s", i, spawn.CodexHome, spawn.sqliteHome(t), m.work.Dir, partition)
 		}
 	}
 }

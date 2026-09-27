@@ -468,7 +468,7 @@ export class DecideCriteriaChangeDto {
   "applied": true,                  // 仅 APPROVE 为 true
   "acceptanceCriteriaItems": [ /* 这一刻在册的标准，形状同 project_get */ ],
   "confirmation": {                 // 抄 standardSetConfirmationStanding 的形状
-    "state": "STALE",               // APPROVE 之后必然 STALE：seal 动了
+    "state": "STALE",               // 底版未被确认时 STALE；底版正是最新确认的那版时为 CONFIRMED（见下）
     "confirmed": false,
     "currentVersion": { "digest": "<64 hex>", "material": [ … ] },
     "confirmation": { "criteriaDigest": "…", "confirmedAt": "…", "confirmedById": "…" }
@@ -478,6 +478,13 @@ export class DecideCriteriaChangeDto {
 
 响应把 `confirmation` 一起带回来，是为了让调用方**当场看见 APPROVE 的第二个后果**：
 削弱生效 ⇒ seal 前进 ⇒ 旧确认失效 ⇒ 项目退出 DONE。这不是附赠信息，是这次改动最重要的那一半。
+
+> **2026-09-27 改：批准时确认随之顺延。** 若批准时最新一条确认正好是 `baseSeal` 那一版，决定门在同一
+> 事务里为 `resultingSeal` 追加一条确认（`confirmedById` = 答题的所有者），`state` 为 `CONFIRMED`：
+> 所有者确认过底版、又亲手批准了这次改动，结果里每个字都经过所有者本人，再问一次不带来任何新信息
+> （线上一个项目三次批准后各被追问一次，其中一次相隔 8 秒）。底版未被确认（中间有过没问所有者就落地的
+> 加严），或项目从未确认过（确认同时是开工），则照旧不写，`STALE` / `UNCONFIRMED`。
+> 加严（ADDITIVE）编辑不经所有者，仍然要求重新确认，七.1 不变。
 
 ### 5.5 事务边界
 

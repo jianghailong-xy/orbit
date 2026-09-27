@@ -245,7 +245,6 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       runnerId,
       name: `${label}-workspace`,
       enabled: true,
-      enableOrchestration: true,
     },
   });
   await db.session.create({

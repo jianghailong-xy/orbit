@@ -4,12 +4,11 @@ import Foundation
 /// (`NavNode.settingsPage`). The runners list is the one page that predates these and keeps its own
 /// frame (`NavNode.settingsRunners`).
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case orchestration, providers, notifications, sharedLinks, changePassword, admin
+    case providers, notifications, sharedLinks, changePassword, admin
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
         switch self {
-        case .orchestration:  return SettingsHome.title(.orchestration)
         case .providers:      return SettingsHome.title(.providers)
         case .notifications:  return SettingsHome.title(.notifications)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
@@ -95,16 +94,16 @@ public enum SettingsHome {
     }
 
     /// The page a row opens. Nil for the rows that are answered in place: the two pickers, which
-    /// are menus on the row itself, and the two lines that only say something.
+    /// are menus on the row itself, the orchestration switch — one for the whole account, so the
+    /// row is the switch — and the two lines that only say something.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
-        case .orchestration:  return .orchestration
         case .providers:      return .providers
         case .notifications:  return .notifications
         case .sharedLinks:    return .sharedLinks
         case .changePassword: return .changePassword
         case .admin:          return .admin
-        case .runners, .defaultPermission, .appearance, .email, .instance: return nil
+        case .runners, .defaultPermission, .orchestration, .appearance, .email, .instance: return nil
         }
     }
 
@@ -115,12 +114,6 @@ public enum SettingsHome {
         guard !runners.isEmpty else { return "None" }
         let online = runners.filter { $0.online == true }.count
         return "\(online) of \(runners.count) online"
-    }
-
-    /// "7 of 8" — how many agents hold the orchestration grant now. Nil before there are any, so the
-    /// row never reads "0 of 0" as if that were an answer.
-    public static func orchestrationValue(granted: Int, total: Int) -> String? {
-        total > 0 ? "\(granted) of \(total)" : nil
     }
 
     /// "25 active" — the links that open for anyone who has them.
@@ -179,30 +172,10 @@ public enum SettingsCopy {
 
     // MARK: Session orchestration (the web page's card)
 
-    public static let grantToNew = "Grant it to new agents"
-    public static let grantToNewHint = "An agent you create from now on starts able to spawn and manage other sessions via the orbit MCP session tools. Existing agents are untouched."
-    public static let applyToExisting = "Apply to existing agents"
-    public static let turnOnForAll = "Turn on for all"
-    public static let turnOffForAll = "Turn off for all"
-    public static let loadingAgents = "Loading your agents…"
-    public static let noAgents = "No agents yet."
-    public static let grantedTail = "can orchestrate now. Each keeps its own switch afterwards."
-    public static let confirmAllDetail = "Every agent's sessions will be able to spawn and drive other sessions. Grant this only if you trust what each of them runs."
-
-    /// "7 of 8 can orchestrate now. Each keeps its own switch afterwards."
-    public static func grantedLine(granted: Int, total: Int) -> String {
-        "\(granted) of \(total) \(grantedTail)"
-    }
-
-    /// "Let all 8 agents orchestrate?"
-    public static func confirmAllTitle(total: Int) -> String {
-        "Let all \(total) agents orchestrate?"
-    }
-
-    /// "Enabled on 8 agents." — what the press actually wrote.
-    public static func appliedLine(enabled: Bool, updated: Int) -> String {
-        "\(enabled ? "Enabled" : "Disabled") on \(updated) agent\(updated == 1 ? "" : "s")."
-    }
+    /// The account's one switch, where a form has room to label and explain it (macOS). On iOS the
+    /// row is the switch, under the row's own name.
+    public static let letSessionsOrchestrate = "Let sessions orchestrate"
+    public static let letSessionsOrchestrateHint = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
 
     // MARK: Change password (the web's Profile page)
 

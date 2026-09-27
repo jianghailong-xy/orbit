@@ -141,20 +141,26 @@ type EngineHealthReport struct {
 	Accounts []EngineAccountReport `json:"accounts,omitempty"`
 }
 
-// EngineAccountReport mirrors @orbit/shared RunnerEngineAccount: one Codex account slot and its
-// own `codex login status`. Nothing here names the account itself — no email, no account id: the
-// name is the one the user gave the slot, and the fingerprint is a prefix of the non-reversible
-// one the rate-limit reset already reports (docs/codex-rate-limit-reset-contract.md §3).
+// EngineAccountReport mirrors @orbit/shared RunnerEngineAccount: one account slot and its own
+// answer to the CLI's status question. Nothing here names the account itself — no email, no
+// account id: the name is the one the user gave the slot, and the fingerprint, where there is one,
+// is a prefix of the non-reversible one Codex's rate-limit reset already reports
+// (docs/codex-rate-limit-reset-contract.md §3).
 type EngineAccountReport struct {
 	// "default", or the id of a slot this runner added — what LoginCommand.Account names.
 	ID string `json:"id"`
 	// What the user called the account; empty for Default, and for a slot whose record is lost.
 	Name string `json:"name,omitempty"`
-	// The slot's CODEX_HOME on this machine, absolute.
-	CodexHome string `json:"codexHome"`
+	// The directory this account's login lives in, absolute: a Codex account's CODEX_HOME, a Claude
+	// account's CLAUDE_CONFIG_DIR.
+	Dir string `json:"home"`
+	// The same directory under Codex's historical field name, and empty for every other engine. A
+	// control plane older than `home` drops an account whose codexHome is empty, so until no such
+	// replica can serve a response the field keeps travelling (codexHomeOf).
+	CodexHome string `json:"codexHome,omitempty"`
 	Auth      string `json:"auth"` // "yes" | "no" | "unknown"
 	// cxa1_ and the first 8 hex digits of the account's fingerprint, when this runner has read
-	// one for it; omitted otherwise.
+	// one for it; omitted otherwise. Codex only.
 	FingerprintPrefix string `json:"fingerprintPrefix,omitempty"`
 }
 
@@ -302,7 +308,11 @@ type HeartbeatResponse struct {
 	// whenever no removal is in flight for this runner. Only a runner that declares
 	// codex-account-remove/v1 is ever handed one: a runner that ignored it would leave a slot the
 	// page has already said goodbye to.
-	CodexAccountRemoveRequest *CodexAccountRemoveCommand `json:"codexAccountRemoveRequest,omitempty"`
+	CodexAccountRemoveRequest *AccountRemoveCommand `json:"codexAccountRemoveRequest,omitempty"`
+	// AccountRemoveRequest is the same request naming its engine: what the control plane sends for
+	// every engine whose accounts this runner can remove, including Codex. The codex-named field
+	// above stays for a control plane older than accounts-per-engine.
+	AccountRemoveRequest *AccountRemoveCommand `json:"accountRemoveRequest,omitempty"`
 	// An engine CLI the user asked to install from the web. Nil on older control planes, and
 	// whenever no install is in flight for this runner.
 	InstallRequest *InstallCommand `json:"installRequest,omitempty"`
@@ -525,7 +535,10 @@ type LoginCommand struct {
 // CodexAccountRemoveCommand mirrors @orbit/shared: the Codex account slot the control plane asked
 // this runner to remove. Redelivered every heartbeat until the runner reports an outcome, so
 // carrying it out twice has to be the same as carrying it out once.
-type CodexAccountRemoveCommand struct {
+type AccountRemoveCommand struct {
+	// The engine whose account store holds the slot (codex, claude). Empty on the field older
+	// control planes use, which only ever meant Codex.
+	Engine string `json:"engine,omitempty"`
 	// "default", or the id of a slot this runner added. Default is never removable.
 	Account string `json:"account"`
 	// Identifies this request (the server's codexAccountRemoveAt), so a report can be matched to the
@@ -533,10 +546,13 @@ type CodexAccountRemoveCommand struct {
 	Attempt string `json:"attempt,omitempty"`
 }
 
-// CodexAccountRemoveResultRequest is the runner's word on a removal: "done" once the slot's
+// AccountRemoveResultRequest is the runner's word on a removal: "done" once the slot's
 // directory and record are gone, or "failed" with the machine's own reason — Default, a slot a live
 // session is in, or a directory that would not go away.
-type CodexAccountRemoveResultRequest struct {
+type AccountRemoveResultRequest struct {
+	// The engine the removal was for; empty when it was answered on the codex-named route an older
+	// control plane reads.
+	Engine  string `json:"engine,omitempty"`
 	Account string `json:"account"`
 	Status  string `json:"status"` // "done" | "failed"
 	Message string `json:"message,omitempty"`
@@ -824,7 +840,7 @@ type ClaimedSession struct {
 	// so the `orbit mcp` server can attribute task work and resolve the current task.
 	AgentID string `json:"agentId,omitempty"`
 	TaskID  string `json:"taskId,omitempty"`
-	// AllowOrchestration mirrors the agent's enableOrchestration; injected as
+	// AllowOrchestration mirrors the account's Session orchestration switch; injected as
 	// ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes the session_* tools.
 	AllowOrchestration bool `json:"allowOrchestration,omitempty"`
 	// WatchesDisabled is set when Watch is not switched on for this session's owner (the apiserver's

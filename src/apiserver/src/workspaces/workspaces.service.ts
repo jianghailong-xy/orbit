@@ -10,7 +10,7 @@ import { Prisma } from '@prisma/client';
 import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { CODEX_DEFAULT_ACCOUNT } from '../providers/codex-account';
+import { DEFAULT_ACCOUNT } from '../providers/account';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
 import {
   isBlockingRepoState,
@@ -19,13 +19,10 @@ import {
 } from '../common/runner-repo-health';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
 
-/** Shape of the account-level preferences this service reads (users.controller owns the rest). */
-type OrchestrationPreference = { defaultEnableOrchestration?: unknown };
-
 /** Default is stored as NULL however the request spelled it: one value means "no other account". */
-function storedCodexAccount(value: string | null | undefined): string | null | undefined {
+function storedAccountChoice(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
-  return value === null || value === CODEX_DEFAULT_ACCOUNT ? null : value;
+  return value === null || value === DEFAULT_ACCOUNT ? null : value;
 }
 
 @Injectable()
@@ -48,27 +45,9 @@ export class WorkspacesService {
     if (!runner) throw new ForbiddenException('runner not found');
   }
 
-  /**
-   * The account-level answer to "should a workspace I make next be allowed to orchestrate?"
-   * (Settings → Session orchestration). A seed only: it decides what the new row is written with,
-   * and from then on the row is the authority — exactly how defaultPermissionMode seeds a session.
-   * Consulted solely when the create request itself names no value, so an explicit `false` from a
-   * form always wins over an account default of on.
-   */
-  private async defaultEnableOrchestration(ownerId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: ownerId },
-      select: { preferences: true },
-    });
-    const prefs = (user?.preferences ?? {}) as OrchestrationPreference;
-    return prefs.defaultEnableOrchestration === true;
-  }
-
   async create(ownerId: string, dto: CreateWorkspaceDto) {
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
-    const enableOrchestration =
-      dto.enableOrchestration ?? (await this.defaultEnableOrchestration(ownerId));
     const workspace = await this.prisma.workspace.create({
       data: {
         ownerId,
@@ -93,11 +72,11 @@ export class WorkspacesService {
         // itself (canonicalRepoUrl), so nothing here has to agree with that function's shape.
         repoUrl: dto.repoUrl,
         env: (dto.env ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-        codexAccount: storedCodexAccount(dto.codexAccount) ?? null,
+        codexAccount: storedAccountChoice(dto.codexAccount) ?? null,
+        claudeAccount: storedAccountChoice(dto.claudeAccount) ?? null,
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
         enableWorktree: dto.enableWorktree ?? false,
-        enableOrchestration,
         defaultMergeTarget: dto.defaultMergeTarget,
       },
     });
@@ -289,12 +268,12 @@ export class WorkspacesService {
       enabled: dto.enabled,
       autoInitGit: dto.autoInitGit,
       enableWorktree: dto.enableWorktree,
-      enableOrchestration: dto.enableOrchestration,
       canCreateTasks: dto.canCreateTasks,
       canDelegate: dto.canDelegate,
       maxConcurrentTasks: dto.maxConcurrentTasks,
       defaultMergeTarget: dto.defaultMergeTarget,
-      codexAccount: storedCodexAccount(dto.codexAccount),
+      codexAccount: storedAccountChoice(dto.codexAccount),
+      claudeAccount: storedAccountChoice(dto.claudeAccount),
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {
@@ -308,23 +287,6 @@ export class WorkspacesService {
     }
     const workspace = await this.prisma.workspace.update({ where: { id }, data });
     return withProviderSeed([workspace], await lastProviderByWorkspace(this.prisma, [id]))[0];
-  }
-
-  /**
-   * Grant or revoke session orchestration across every live workspace this account owns.
-   *
-   * The grant stays per workspace — this writes each row rather than introducing an account-level
-   * switch the authorizer would consult — because the enforced bit has to stay revocable one
-   * workspace at a time (runner-orchestration-authorizer reads it live, per claim and per spawn).
-   * What this removes is only the clicking: turning it on for a fleet used to mean opening every
-   * workspace's editor in turn, and the "off" direction doubles as a kill switch for the account.
-   */
-  async setOrchestrationForAll(ownerId: string, enabled: boolean) {
-    const { count } = await this.prisma.workspace.updateMany({
-      where: { ownerId, deletedAt: null },
-      data: { enableOrchestration: enabled },
-    });
-    return { updated: count };
   }
 
   /**

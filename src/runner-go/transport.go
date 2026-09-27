@@ -74,6 +74,8 @@ func init() {
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		codexAccountRemoveCapabilityV1,
+		claudeAccountLoginCapabilityV1,
+		claudeAccountRemoveCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -632,9 +634,15 @@ func (t *Transport) loginResult(b LoginResultRequest) error {
 	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
 }
 
-// codexAccountRemoveResult reports what a heartbeat-delivered account removal came to.
-func (t *Transport) codexAccountRemoveResult(b CodexAccountRemoveResultRequest) error {
+// codexAccountRemoveResult reports what a heartbeat-delivered account removal came to, on the route
+// a control plane older than accounts-per-engine reads — the one that handed the request over.
+func (t *Transport) codexAccountRemoveResult(b AccountRemoveResultRequest) error {
 	return t.do(nil, "POST", "/runner/codex-account-remove-result", b, nil, 15*time.Second)
+}
+
+// accountRemoveResult reports one on the engine-tagged route: the same body, with the engine named.
+func (t *Transport) accountRemoveResult(b AccountRemoveResultRequest) error {
+	return t.do(nil, "POST", "/runner/account-remove-result", b, nil, 15*time.Second)
 }
 
 // installResult reports one step of a browser-requested engine install: the command being run,
@@ -2017,6 +2025,35 @@ func (t *Transport) getWikiEntry(sessionID, id, include string) (json.RawMessage
 func (t *Transport) proposeWikiChangeset(sessionID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.doHeaders(nil, http.MethodPost, "/runner/wiki/changesets", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// listWikiVerifications reads one page of the ops the calling session proposed that wait for their
+// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`).
+func (t *Transport) listWikiVerifications(sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	values := url.Values{}
+	values.Set("limit", strconv.Itoa(limit))
+	if after != "" {
+		values.Set("after", after)
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications?" + values.Encode()
+	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// reportWikiVerifications reports verdicts for ops the calling session proposed. A report none of
+// whose verdicts was recorded comes back as a 4xx carrying every outcome, as a refused proposal does.
+func (t *Transport) reportWikiVerifications(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications"
+	err := t.doHeaders(nil, http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 

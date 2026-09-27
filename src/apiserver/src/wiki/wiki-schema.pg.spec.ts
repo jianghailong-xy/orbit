@@ -324,9 +324,32 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
         write: (decision) => insert(client, 'wiki_changeset_op', opRow({
           id: PROBE,
           decision,
-          decided_at: decision === 'pending' ? null : new Date(),
+          // 0312: an op waiting for its verdict is undecided, like a pending one.
+          decided_at: decision === 'pending' || decision === 'verifying' ? null : new Date(),
           decision_reason: decision === 'rejected' ? 'duplicate' : null,
         })),
+      },
+      {
+        // 0312: the verdict an Automatic space's verification gave, with the rest of its trail.
+        table: 'wiki_changeset_op', column: 'verification_verdict', constraint: 'wiki_changeset_op_verification_verdict_chk',
+        values: Object.keys(CONTRACT.reviewModes.verification.verdicts),
+        write: (verdict) => insert(client, 'wiki_changeset_op', opRow({
+          id: PROBE,
+          decision: 'auto_applied',
+          decided_at: new Date(),
+          verification_verdict: verdict,
+          verification_reason: 'What the sources say, in one sentence.',
+          verification_model: 'qwen3.8-27b-fp8',
+          verified_at: new Date(),
+          verification_duplicate_of: verdict === 'duplicate' ? ENTRY : null,
+        })),
+      },
+      {
+        // 0311: the review mode that applied an op at once. Manual applies nothing the policy held back,
+        // so it is the one mode the column never names.
+        table: 'wiki_changeset_op', column: 'applied_by_mode', constraint: 'wiki_changeset_op_applied_by_mode_chk',
+        values: CONTRACT.reviewModes.values.filter((mode: string) => mode !== 'manual'),
+        write: (mode) => insert(client, 'wiki_changeset_op', opRow({ id: PROBE, applied_by_mode: mode })),
       },
       {
         table: 'wiki_changeset_op', column: 'decision_reason', constraint: 'wiki_changeset_op_decision_reason_chk',
@@ -514,6 +537,52 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
     await refuses(op({ seq: -1 }), 'wiki_changeset_op_seq_chk', 'ops are numbered from 0');
     await refuses(op({ payload: JSON.stringify(['add']) }), 'wiki_changeset_op_payload_chk', 'a payload is an object');
     await refuses(op({ similar: JSON.stringify({}) }), 'wiki_changeset_op_similar_chk', 'similar is a list');
+    // 0311: only an add or an amend is ever applied by a review mode, and only such an op is a spot check.
+    await refuses(op({ op: 'retire', entry_id: ENTRY, base_revision: 1, applied_by_mode: 'automatic' }),
+      'wiki_changeset_op_applied_by_mode_op_chk', 'a review mode applied an op that ends a lineage');
+    await refuses(op({ op: 'supersede', entry_id: ENTRY, base_revision: 1, applied_by_mode: 'tiered' }),
+      'wiki_changeset_op_applied_by_mode_op_chk', 'a review mode applied an op that ends a lineage');
+    await refuses(op({ spot_check: true }), 'wiki_changeset_op_spot_check_chk',
+      'a spot check of an op no review mode applied');
+    await admits(client, () => op({ op: 'amend', entry_id: ENTRY, base_revision: 1, applied_by_mode: 'tiered', spot_check: true })());
+    // 0312: an op waiting for its verdict is undecided and carries none; a verdict is a whole trail;
+    // a duplicate names what it duplicates and nothing else names anything; only an add or an amend
+    // ever waits for a verdict or carries one.
+    const trail = {
+      verification_verdict: 'supported',
+      verification_reason: 'Every claim is in the cited tool output.',
+      verification_model: 'qwen3.8-27b-fp8',
+      verified_at: new Date(),
+    };
+    await admits(client, () => op({ decision: 'verifying' })());
+    await admits(client, () => op({ op: 'amend', entry_id: ENTRY, base_revision: 1, decision: 'verifying' })());
+    await admits(client, () => op({ decision: 'auto_applied', decided_at: new Date(), applied_by_mode: 'automatic', ...trail })());
+    await admits(client, () => op({
+      decision: 'rejected', decided_at: new Date(), decision_reason: 'duplicate',
+      ...trail, verification_verdict: 'duplicate', verification_duplicate_of: ENTRY,
+    })());
+    await refuses(op({ decision: 'verifying', decided_at: new Date() }), 'wiki_changeset_op_decided_chk',
+      'an op waiting for its verdict already decided');
+    await refuses(op({ decision: 'verifying', ...trail }), 'wiki_changeset_op_verifying_chk',
+      'an op waiting for its verdict already carries one');
+    await refuses(op({ op: 'retire', entry_id: ENTRY, base_revision: 1, decision: 'verifying' }),
+      'wiki_changeset_op_verification_op_chk', 'an op that ends a lineage waits for no verdict');
+    await refuses(op({ op: 'challenge', entry_id: ENTRY, decision: 'accepted', decided_at: new Date(), ...trail }),
+      'wiki_changeset_op_verification_op_chk', 'a verdict on an op no verification decides');
+    await refuses(op({ decision: 'auto_applied', decided_at: new Date(), ...trail, verification_model: null }),
+      'wiki_changeset_op_verification_trail_chk', 'a verdict that names no model');
+    await refuses(op({ decision: 'auto_applied', decided_at: new Date(), ...trail, verified_at: null }),
+      'wiki_changeset_op_verification_trail_chk', 'a verdict recorded at no particular time');
+    await refuses(op({ decision: 'auto_applied', decided_at: new Date(), ...trail, verification_reason: 'x'.repeat(501) }),
+      'wiki_changeset_op_verification_trail_chk', 'a reason past its limit');
+    await refuses(op({ decision: 'auto_applied', decided_at: new Date(), ...trail, verification_reason: '   ' }),
+      'wiki_changeset_op_verification_trail_chk', 'a blank reason');
+    await refuses(op({ decision: 'rejected', decided_at: new Date(), decision_reason: 'duplicate', ...trail, verification_verdict: 'duplicate' }),
+      'wiki_changeset_op_verification_duplicate_chk', 'a duplicate of nothing');
+    await refuses(op({ decision: 'auto_applied', decided_at: new Date(), ...trail, verification_duplicate_of: ENTRY }),
+      'wiki_changeset_op_verification_duplicate_chk', 'a supported op naming a duplicate');
+    await refuses(op({ verification_duplicate_of: ENTRY }),
+      'wiki_changeset_op_verification_duplicate_chk', 'a duplicate named with no verdict at all');
     await insert(client, 'wiki_changeset_op', opRow());
     await refuses(op({}), 'wiki_changeset_op_changeset_seq_key', 'two ops at one place in one changeset');
   });

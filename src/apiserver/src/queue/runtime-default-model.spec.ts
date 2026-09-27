@@ -57,7 +57,6 @@ function harness(
       workDir: null,
       autoInitGit: false,
       defaultMergeTarget: null,
-      enableOrchestration: false,
       appendSystemPrompt: null,
       systemPrompt: null,
       allowedTools: [],

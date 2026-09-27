@@ -54,12 +54,11 @@ public enum DeepLink {
 /// A transcript link naming an Orbit object: `[title](orbit-task:<id>)`, and likewise
 /// `orbit-session:`, `orbit-project:` and `orbit-list:`. The composer's `#`-references send them and
 /// agents are told to write them instead of a bare id, so the reader sees a title. Mirrors web's
-/// `referenceRoute` (Transcript.tsx), with one difference: a project has no page in this app, so its
-/// reference goes to the conversation that coordinates it — a destination only a read can name, which
-/// is why `route` answers nil for it and the app's own link door (`AppModel.openOrbitLink`) answers.
+/// `referenceRoute` (Transcript.tsx), with one difference: a project's page is not a `Route`, so
+/// `route` answers nil for it and the app's own link door (`AppModel.openOrbitLink`) opens it.
 public enum ReferenceLink {
-    /// Where tapping the link goes, or nil for a reference whose destination the app has to look up
-    /// first: a project leads to the conversation that coordinates it, which only a read can name.
+    /// Where tapping the link goes, or nil for a reference the app's own link door opens instead: a
+    /// project, whose page is not a `Route`.
     public static func route(_ url: URL) -> Route? {
         guard let ref = parse(url), PublicID.toUUID(ref.id) != nil else { return nil }
         switch ref.kind {
@@ -76,9 +75,8 @@ public enum ReferenceLink {
     /// prose rather than as a link whose tap could only do nothing.
     ///
     /// A project or a task list is NOT inert: both have a destination now — a list switches the Tasks
-    /// page to its scope, and a project opens the conversation that coordinates it — reached through
-    /// the app's own link door (`AppModel.openOrbitLink`), which is where the read a project needs
-    /// happens. Only an id that doesn't parse has nowhere to go.
+    /// page to its scope, and a project opens its own page — reached through the app's own link door
+    /// (`AppModel.openOrbitLink`). Only an id that doesn't parse has nowhere to go.
     public static func isInert(_ url: URL) -> Bool {
         guard let ref = parse(url) else { return false }
         return PublicID.toUUID(ref.id) == nil

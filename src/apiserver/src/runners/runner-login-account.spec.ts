@@ -3,7 +3,11 @@ import { test } from 'node:test';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { RunnerStatus, type LoginCommand, type RunnerLoginState } from '@orbit/shared';
 import type { AuthUser } from '../common/current-user.decorator';
-import { CODEX_ACCOUNT_LOGIN_V1, RunnerApiController } from '../runner-api/runner-api.controller';
+import {
+  CLAUDE_ACCOUNT_LOGIN_V1,
+  CODEX_ACCOUNT_LOGIN_V1,
+  RunnerApiController,
+} from '../runner-api/runner-api.controller';
 import { StartLoginDto } from './dto';
 import { RunnersController } from './runners.controller';
 import { RunnersService } from './runners.service';
@@ -25,6 +29,7 @@ const SLOT = '1a2b3c4d';
 const ADDED_SLOT = '5e6f7a8b';
 const USER = { userId: OWNER } as AuthUser;
 const ACCOUNT_CAPABLE = `session-worktree-ops-v1,${CODEX_ACCOUNT_LOGIN_V1}`;
+const CLAUDE_ACCOUNT_CAPABLE = `session-worktree-ops-v1,${CLAUDE_ACCOUNT_LOGIN_V1}`;
 
 type Row = Record<string, unknown>;
 
@@ -85,6 +90,8 @@ function harness() {
     },
     state: () => runners.loginState(USER, RUNNER_ID),
     cancel: () => runners.cancelLogin(USER, RUNNER_ID),
+    /** POST /runners/:id/login/code: the authorization code the user pasted back. */
+    code: (code: string) => runners.submitLoginCode(USER, RUNNER_ID, { code }),
     /** What the runner is told to do: the `loginRequest` of its next heartbeat. `null` is a
      *  runner that sends no capability header at all. */
     async beat(capabilities: string | null = ACCOUNT_CAPABLE): Promise<LoginCommand | undefined> {
@@ -197,11 +204,39 @@ test('a body that cannot name an account is refused, never read as the runner’
   await refused({ engine: 'codex', accountName: '   ' }, /needs a name/, 'a blank name');
   await refused({ engine: 'codex', accountName: 'x'.repeat(61) }, /accountName/, 'an overlong name');
   await refused({ engine: 'codex', account: SLOT, accountName: 'Work' }, /not both/, 'both at once');
-  for (const engine of [undefined, 'claude', 'kimi']) {
-    await refused({ engine, account: SLOT }, /Only Codex/, `an account for ${engine ?? 'the default engine'}`);
-  }
+  // The engines that keep one login for the whole machine cannot sign in a slot; the ones that
+  // keep one per directory can, and do (the test below).
+  await refused({ engine: 'kimi', account: SLOT }, /keeps a login per directory/, 'an account for kimi');
   assert.deepEqual(h.writes, [], 'a refused body starts nothing');
   assert.equal(await h.beat(), undefined);
+});
+
+test('a Claude account is signed in by name, on a runner that declares that', async () => {
+  const h = harness();
+  await h.post({ engine: 'claude', account: SLOT });
+  assert.deepEqual(await h.beat(CLAUDE_ACCOUNT_CAPABLE), {
+    action: 'start',
+    engine: 'claude',
+    attempt: attemptOf(h.row),
+    account: SLOT,
+  });
+
+  // And the code the user pastes comes back naming the account it belongs to: with more than one
+  // Claude account, a sign-in can be waiting in any of them, and the runner routes the paste by
+  // this pair (loginAccountKey).
+  await h.report({ status: 'awaiting_code', url: 'https://claude.com/oauth', attempt: attemptOf(h.row) });
+  await h.code('the-code');
+  assert.deepEqual(await h.beat(CLAUDE_ACCOUNT_CAPABLE), {
+    action: 'code',
+    engine: 'claude',
+    account: SLOT,
+    code: 'the-code',
+  });
+  // A runner that has only ever signed in Codex accounts is not handed this one: it would take the
+  // named account for a plain sign-in and put the machine's own login on the line.
+  await h.post({ engine: 'claude', account: SLOT });
+  assert.equal(await h.beat(ACCOUNT_CAPABLE), undefined);
+  assert.match((await h.state()).message ?? '', /too old to sign in another Claude account/);
 });
 
 test('a runner that does not declare account sign-in is never handed a start naming another account', async () => {

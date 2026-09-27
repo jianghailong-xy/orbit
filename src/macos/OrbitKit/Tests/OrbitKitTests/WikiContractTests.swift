@@ -125,11 +125,39 @@ final class WikiContractTests: XCTestCase {
         }
     }
 
-    /// Only these are handed to agents, which is what a retired or rejected entry's card says it is not.
+    /// Only these are handed to agents, which is what a retired or rejected entry's card says it is not:
+    /// what a review mode applied is handed on as `auto`, and never as `unreviewed`.
     func testThePushableTrustIsTheContracts() throws {
         let trust = try object(contract()["trust"], "trust")
         XCTAssertEqual(try strings(trust["pushable"], "trust.pushable"),
-                       [WikiTrust.owner.rawValue, WikiTrust.confirmed.rawValue])
+                       [WikiTrust.owner.rawValue, WikiTrust.confirmed.rawValue, WikiTrust.auto.rawValue])
+    }
+
+    /// The review modes' two trusts are words of their own, never the forward-compat floor, and their
+    /// labels are the ones the web shows (`WikiCopyParityTests` holds the two to each other).
+    func testTheReviewModesTrustsDecodeAndSayAutoAndUnreviewed() throws {
+        let decoded = try JSONDecoder().decode([WikiTrust].self, from: Data(#"["auto","unreviewed"]"#.utf8))
+        XCTAssertEqual(decoded, [.auto, .unreviewed])
+        XCTAssertEqual(WikiCopy.trustLabel(.auto), "Auto")
+        XCTAssertEqual(WikiCopy.trustLabel(.unreviewed), "Unreviewed")
+        let modes = try object(contract()["reviewModes"], "reviewModes")
+        XCTAssertEqual(try strings(modes["values"], "reviewModes.values"), ["manual", "tiered", "automatic"])
+    }
+
+    /// Automatic's verification (revision 3): the op that waits for its verdict is a decision of its own,
+    /// never the forward-compat floor, and a trail's verdict is one of the contract's four.
+    func testTheVerificationDecisionAndVerdictsAreTheContracts() throws {
+        let modes = try object(contract()["reviewModes"], "reviewModes")
+        let verification = try object(modes["verification"], "reviewModes.verification")
+        XCTAssertEqual(Array(try object(verification["verdicts"], "reviewModes.verification.verdicts").keys).sorted(),
+                       known(WikiVerificationVerdict.self).sorted())
+        let waiting = #"{"id":"op","decision":"verifying","verification":null}"#
+        XCTAssertEqual(try JSONDecoder().decode(WikiChangesetOp.self, from: Data(waiting.utf8)).decision, .verifying)
+        let verified = #"{"id":"op","decision":"rejected","decisionReason":"duplicate","verification":{"verdict":"duplicate","reason":"The space already says this.","model":"qwen3.8-27b-fp8","at":"2026-09-27T04:00:00.000Z","duplicateOf":"34VrJeVspTnzi2Ye6i8bz"}}"#
+        let op = try JSONDecoder().decode(WikiChangesetOp.self, from: Data(verified.utf8))
+        XCTAssertEqual(op.verification?.verdict, .duplicate)
+        XCTAssertEqual(op.verification?.model, "qwen3.8-27b-fp8")
+        XCTAssertEqual(op.verification?.duplicateOf, "34VrJeVspTnzi2Ye6i8bz")
     }
 
     /// What an anchor is written with is exactly what the contract's anchor types name, and `type`.

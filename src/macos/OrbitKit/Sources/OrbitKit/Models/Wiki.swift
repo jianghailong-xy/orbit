@@ -36,7 +36,9 @@ public enum WikiEntryStatus: String, Codable, Sendable, CaseIterable {
 
 /// Who stands behind an entry (contract `trust`). Only `owner` and `confirmed` are handed to agents.
 public enum WikiTrust: String, Codable, Sendable, CaseIterable {
-    case owner, confirmed, proposed, external
+    /// `auto` and `unreviewed` are what a space's review mode leaves an entry it applied at once:
+    /// `auto` is pushed, `unreviewed` is shown and never pushed (contract `reviewModes`).
+    case owner, confirmed, auto, unreviewed, proposed, external
     case unknown
 
     public init(from decoder: Decoder) throws {
@@ -110,11 +112,13 @@ public enum WikiOpKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// What became of one op (contract `states.op`). `pending` is the one Review answers.
+/// What became of one op (contract `states.op`). `pending` is the one Review answers; `verifying` is
+/// an Automatic space's op waiting for its verdict, which is nobody's card.
 public enum WikiOpDecision: String, Codable, Sendable, CaseIterable {
     case pending, accepted, edited, rejected
     case autoApplied = "auto_applied"
     case conflict, expired, withdrawn
+    case verifying
     case unknown
 
     public init(from decoder: Decoder) throws {
@@ -457,6 +461,29 @@ public struct WikiSimilar: Codable, Equatable, Sendable, Identifiable {
     public let trust: WikiTrust?
     public let score: Double?
     public let rejectedReason: String?
+    /// A verification rejected it: the verifier's own reason, beside the closed-set one.
+    public let rejectedBecause: String?
+}
+
+/// What an Automatic space's verification said of an op (contract `reviewModes.verification.verdicts`).
+public enum WikiVerificationVerdict: String, Codable, Sendable, CaseIterable {
+    case supported, partial, unsupported, duplicate
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiVerificationVerdict(rawValue: raw) ?? .unknown
+    }
+}
+
+/// An op's verification trail: the verdict, the verifier's reason, the model that gave it and when,
+/// and the entry a duplicate named (contract `reviewModes.verification.trail`).
+public struct WikiOpVerification: Codable, Equatable, Sendable {
+    public let verdict: WikiVerificationVerdict?
+    public let reason: String?
+    public let model: String?
+    public let at: String?
+    public let duplicateOf: String?
 }
 
 /// One op of a changeset. `payload` is the op as it was submitted (redacted), which is where a
@@ -481,12 +508,16 @@ public struct WikiChangesetOp: Codable, Equatable, Sendable, Identifiable {
     public let resultEntryId: String?
     public let resultRevision: Int?
     public let decidedAt: String?
+    /// The verdict an Automatic space's verification gave it; nil until one arrives, and for every op
+    /// no verification decides.
+    public let verification: WikiOpVerification?
 
     public init(id: String, changesetId: String? = nil, seq: Int? = nil, op: WikiOpKind? = nil,
                 entryId: String? = nil, baseRevision: Int? = nil, payload: JSONValue? = nil,
                 similar: [WikiSimilar]? = nil, tainted: Bool? = nil, decision: WikiOpDecision? = nil,
                 decisionReason: String? = nil, decisionNote: String? = nil,
-                resultEntryId: String? = nil, resultRevision: Int? = nil, decidedAt: String? = nil) {
+                resultEntryId: String? = nil, resultRevision: Int? = nil, decidedAt: String? = nil,
+                verification: WikiOpVerification? = nil) {
         self.id = id
         self.changesetId = changesetId
         self.seq = seq
@@ -502,6 +533,7 @@ public struct WikiChangesetOp: Codable, Equatable, Sendable, Identifiable {
         self.resultEntryId = resultEntryId
         self.resultRevision = resultRevision
         self.decidedAt = decidedAt
+        self.verification = verification
     }
 }
 

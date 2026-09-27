@@ -1,0 +1,22 @@
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+-- `workspace.claude_account`: which Claude account a workspace's Claude sessions run on.
+--
+-- The sibling of `workspace.codex_account` (0297), and the same shape for the same reason: a runner
+-- can hold more than one Claude Code account, one CLAUDE_CONFIG_DIR each — Default is the directory
+-- its own environment selects (~/.claude), and every other account is a slot it added under
+-- $ORBIT_HOME/claude-accounts (src/runner-go/account_slot.go), reported per heartbeat in
+-- `runner.engines`. This column is the workspace's choice among them, stored as the slot's id and
+-- never as a path: dispatch resolves the id against the accounts the assigned runner reports and
+-- injects that slot's CLAUDE_CONFIG_DIR into the session's environment. An id the runner does not
+-- report — the workspace moved to another machine, or the slot is gone — runs on Default instead of
+-- failing.
+--
+--   claude_account   the slot id (8 lowercase hex). NULL is Default.
+--
+-- NULLABLE, and NULL is the old behaviour rather than a gap: every workspace written before this
+-- migration ran its Claude sessions on the runner's own login, which is Default.
+--
+-- ADD COLUMN only: no default, no NOT NULL, so the ALTER is catalog-only and no stored row is
+-- rewritten.
+
+ALTER TABLE "workspace" ADD COLUMN "claude_account" TEXT;

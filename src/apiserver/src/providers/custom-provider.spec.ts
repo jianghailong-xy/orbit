@@ -501,6 +501,22 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.CLAUDE_CODE_EFFORT_LEVEL, undefined);
   });
 
+  // `orbit wiki verify` calls the session's own model through a clean Claude Code of its own, and
+  // reads which model that is from the environment the provider injected (wiki contract
+  // `agentSurface.verify.model`): the model resolved for the session, beside its endpoint.
+  await t.test('a self-hosted provider names the session model beside the endpoint that serves it', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'local-vllm',
+      customRow: selfHosted(),
+      sessionModel: 'qwen3.8-27b-fp8',
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.model, 'qwen3.8-27b-fp8');
+    assert.equal(exec.env?.ANTHROPIC_MODEL, exec.model);
+    assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'http://127.0.0.1:8000');
+  });
+
   await t.test('the levels a model declares travel with the exec for dispatch to map onto', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'local-vllm',

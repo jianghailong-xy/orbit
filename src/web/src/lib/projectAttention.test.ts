@@ -9,9 +9,13 @@ import {
   integrationChipOf,
   orderWithinSection,
   projectAttentionSections,
+  projectIsWorking,
+  projectNeedsYouCount,
+  sidebarProjects,
   type AttentionProject,
   type AttentionSectionKey,
   type ProjectAttentionSummary,
+  type SidebarProject,
 } from './projectAttention';
 
 const NOW = Date.parse('2026-08-23T18:55:05.000Z');
@@ -674,5 +678,109 @@ describe('integrationChipOf', () => {
   it('draws no line for a project that has not decided one, or a server that sends none', () => {
     expect(integrationChipOf(project())).toBeNull();
     expect(integrationChipOf(project({ integration: null }))).toBeNull();
+  });
+});
+
+// The iPhone drawer's rows, spelled for the web sidebar: the same cases OrbitKit's
+// ProjectAttentionTests holds `drawerProjects` / `drawerMark` to, so the two rails agree.
+describe('the sidebar’s Projects group', () => {
+  const DAY = 24 * HOUR;
+  let n = 0;
+  const row = (over: Partial<SidebarProject> = {}): SidebarProject => {
+    n += 1;
+    return {
+      id: `0195c0de-0000-7000-8000-${String(n).padStart(12, '0')}`,
+      title: `Project ${n}`,
+      status: 'OPEN',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastActivityAt: at(HOUR),
+      buckets: { running: 0 },
+      attention: { ownerItems: [] },
+      ...over,
+    };
+  };
+
+  it('lists open projects waiting on you first, longest wait first, then by activity', () => {
+    const question = row({
+      title: 'Question',
+      lastActivityAt: at(9 * DAY),
+      attention: { ownerItems: [ownerItem('COORDINATOR_QUESTION', 1, HOUR)] },
+    });
+    const merge = row({ title: 'Merge', attention: { ownerItems: [ownerItem('PROMOTION_APPROVAL', 1, 3 * HOUR)] } });
+    const recent = row({ title: 'Recent', buckets: { running: 1 }, lastActivityAt: at(MINUTE) });
+    const stale = row({ title: 'Stale', lastActivityAt: at(5 * DAY) });
+    const closed = row({ title: 'Closed', status: 'DONE', lastActivityAt: at(MINUTE) });
+
+    expect(sidebarProjects([stale, closed, recent, question, merge]).map((p) => p.title)).toEqual([
+      'Merge',
+      'Question',
+      'Recent',
+      'Stale',
+    ]);
+    expect(projectNeedsYouCount(merge)).toBe(1);
+    expect(projectIsWorking(recent)).toBe(true);
+    expect(projectIsWorking(stale)).toBe(false);
+  });
+
+  it('counts the items waiting on you across kinds, not the kinds', () => {
+    const busy = row({
+      buckets: { running: 2 },
+      attention: {
+        ownerItems: [
+          ownerItem('PROMOTION_APPROVAL', 1, HOUR),
+          ownerItem('COORDINATOR_QUESTION', 2, MINUTE),
+          // A kind a newer server names and this build cannot draw.
+          ownerItem('SOMETHING_NEW' as OwnerItemKind, 4, HOUR),
+        ],
+      },
+    });
+    expect(projectNeedsYouCount(busy)).toBe(3);
+    // The two marks answer different questions, so a project can carry both.
+    expect(projectIsWorking(busy)).toBe(true);
+  });
+
+  it('counts nothing for a project that merely went quiet, or one that is closed', () => {
+    expect(projectNeedsYouCount(row({ lastActivityAt: at(5 * DAY) }))).toBe(0);
+    expect(
+      projectNeedsYouCount(
+        row({ status: 'DONE', attention: { ownerItems: [ownerItem('ESCALATED', 1, HOUR)] } }),
+      ),
+    ).toBe(0);
+    expect(projectNeedsYouCount(row({ attention: null }))).toBe(0);
+  });
+
+  it('marks a project whose coordinator is working, and sorts it by the coordinator’s turn', () => {
+    const busyTasks = row({ title: 'FineWeb', buckets: { running: 2 }, lastActivityAt: at(20 * MINUTE) });
+    const coordinated = row({
+      title: 'Claude 账号池',
+      lastActivityAt: at(10 * DAY),
+      coordinatorActivity: { working: true, lastTurnAt: at(MINUTE) },
+    });
+    const quiet = row({
+      title: 'Quiet',
+      lastActivityAt: at(HOUR),
+      coordinatorActivity: { working: false, lastTurnAt: at(30 * DAY) },
+    });
+
+    expect(sidebarProjects([busyTasks, coordinated, quiet]).map((p) => p.title)).toEqual([
+      'Claude 账号池',
+      'FineWeb',
+      'Quiet',
+    ]);
+    expect(projectIsWorking(coordinated)).toBe(true);
+    // A coordinator waiting for a reply is not working.
+    expect(projectIsWorking(quiet)).toBe(false);
+
+    // A server that predates the field: task activity alone, as before.
+    const older = [busyTasks, coordinated, quiet].map(({ coordinatorActivity: _, ...rest }) => rest);
+    expect(sidebarProjects(older).map((p) => p.title)).toEqual(['FineWeb', 'Quiet', 'Claude 账号池']);
+    expect(projectIsWorking(older[1])).toBe(false);
+  });
+
+  it('settles equal activity by the newer project, then by id, so the order never flickers', () => {
+    const older = row({ title: 'Older', createdAt: '2026-01-01T00:00:00.000Z' });
+    const newer = row({ title: 'Newer', createdAt: '2026-02-01T00:00:00.000Z' });
+    expect(sidebarProjects([older, newer]).map((p) => p.title)).toEqual(['Newer', 'Older']);
+    expect(sidebarProjects([newer, older]).map((p) => p.title)).toEqual(['Newer', 'Older']);
   });
 });

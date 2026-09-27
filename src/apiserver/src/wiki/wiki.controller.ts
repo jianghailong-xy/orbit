@@ -7,6 +7,7 @@ import {
   CreateWikiSpaceDto,
   UpdateWikiSpaceDto,
   WikiDecideDto,
+  WikiEntryRejectDto,
   WikiProposeDto,
 } from './dto';
 import { flagParam, listParam, WikiRetrieval } from './wiki-retrieval';
@@ -111,10 +112,19 @@ export class WikiController {
     });
   }
 
-  /** What the space does on its own: whether it pushes, and whether a reinforce applies at once. */
+  /**
+   * What the space does on its own: whether it pushes, whether a reinforce applies at once, and its
+   * review mode — the last the owner channel's alone, refused WIKI_OWNER_CHANNEL_ONLY to a request
+   * that carries a session header, as a decide is.
+   */
   @Patch('spaces/:id')
-  updateSpace(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateWikiSpaceDto) {
-    return this.wiki.updateSpace(user.userId, id, dto);
+  updateSpace(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: UpdateWikiSpaceDto,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.updateSpace(user.userId, id, dto, actingSession(request.headers));
   }
 
   /** Bind a workspace this space's sessions read and propose through (§2.1's manual binding). */
@@ -173,6 +183,21 @@ export class WikiController {
     });
   }
 
+  /**
+   * The owner's Reject of an entry a review mode applied and nobody has confirmed (contract
+   * `reviewModes.entryReject`). The owner channel's alone, like a decide.
+   */
+  @Post('entries/:id/reject')
+  @HttpCode(HttpStatus.OK)
+  rejectEntry(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: WikiEntryRejectDto,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.rejectEntry(user.userId, user.userId, id, dto, actingSession(request.headers));
+  }
+
   /** What waits for the owner, newest first, across every space or one of them. */
   @Get('review')
   review(@CurrentUser() user: AuthUser, @Query('space', PublicIdPipe) space?: string) {
@@ -212,6 +237,20 @@ export class WikiController {
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
     return this.wiki.decide(user.userId, user.userId, id, dto.decisions, actingSession(request.headers));
+  }
+
+  /**
+   * Take back a run: every op of the changeset its space's review mode applied at once and the owner
+   * has not answered (contract `reviewModes.revert`). The owner channel's alone, like a decide.
+   */
+  @Post('changesets/:id/revert')
+  @HttpCode(HttpStatus.OK)
+  revert(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.revertChangeset(user.userId, user.userId, id, actingSession(request.headers));
   }
 }
 

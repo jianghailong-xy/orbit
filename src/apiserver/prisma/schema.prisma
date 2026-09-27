@@ -518,6 +518,9 @@ model Runner {
   //   NULL       — nothing in flight
   //   pending    — user asked; the next heartbeat tells the runner to remove it
   //   done | failed — terminal, codexAccountRemoveMessage explains a failure
+  // Which engine's account store the removal below is about. NULL is Codex: the meaning every row
+  // written before accounts-per-engine had, and what the codex-named columns still carry alone.
+  accountRemoveEngine       String?   @map("account_remove_engine")
   codexAccountRemoveAccount String?   @map("codex_account_remove_account")
   codexAccountRemoveStatus  String?   @map("codex_account_remove_status")
   codexAccountRemoveMessage String?   @map("codex_account_remove_message")
@@ -715,6 +718,10 @@ model Workspace {
   // CODEX_HOME from the accounts the assigned runner reports (providers/codex-account.ts); an id
   // that runner does not report runs on Default rather than failing.
   codexAccount        String?   @map("codex_account")
+  // Which Claude account this workspace's Claude sessions run on: the id of a slot the runner added
+  // (8 lowercase hex), never a path. NULL is Default, the CLAUDE_CONFIG_DIR the runner's own
+  // environment selects (providers/account.ts). Same rules as codexAccount above.
+  claudeAccount       String?   @map("claude_account")
   agentKey            String?   @map("agent_key")
   enabled             Boolean   @default(true)
   // When workDir is NOT a git repo, the runner auto-`git init`s it (default .gitignore +
@@ -727,10 +734,6 @@ model Workspace {
   // worktree (the workspace's concurrent sessions then share one working tree); the
   // merge/commit/diff machinery is skipped since there's no isolated branch.
   enableWorktree      Boolean   @default(false) @map("enable_worktree")
-  // Opt-in per workspace (default off): may this workspace's in-session coding agent spawn and
-  // manage OTHER sessions via the `orbit mcp` session_* tools (L3 orchestration)? Off → those
-  // tools aren't exposed and the runner-token spawn endpoint refuses.
-  enableOrchestration Boolean   @default(false) @map("enable_orchestration")
   // The branch this workspace's sessions merge into by default, remembered from the last time the
   // user switched targets in the status bar's merge dropdown. Null → the runner's auto-detect
   // (main, else master). Workspace-scoped so a chosen target sticks across all its sessions.
@@ -2634,10 +2637,11 @@ model ProjectAcceptanceCriterionDefinition {
 /// again on 2026-09-08 with 0229's own sentence quoted back to them and answered that the
 /// projection should be built.
 ///
-/// Append-only by construction rather than by trigger: the one writer inserts, no code path
-/// updates or deletes, and re-confirming after an edit is a SECOND row rather than a rewrite of
-/// the first. What is current is decided by comparing the newest row's digest with the criteria as
-/// they stand now, so history costs the reader nothing.
+/// Append-only by construction rather than by trigger: both writers insert — the owner's
+/// confirmation door, and the criteria decision door carrying a confirmation over an edit the
+/// owner approved — no code path updates or deletes, and re-confirming after an edit is a SECOND
+/// row rather than a rewrite of the first. What is current is decided by comparing the newest
+/// row's digest with the criteria as they stand now, so history costs the reader nothing.
 model ProjectStandardSetConfirmation {
   /// uuid(7) rather than a random one: it is monotonic, so ordering by (confirmedAt, id) has a
   /// total order even for two confirmations that land inside the same stored millisecond.
@@ -5423,8 +5427,9 @@ model WikiSpace {
   /// The repository's first root commit, once a runner reports it: two repositories behind one URL
   /// are told apart by it.
   rootCommitSha String? @map("root_commit_sha") @db.Char(40)
-  /// `{ push, autoAcceptReinforce }` (contract `space.settings`). An absent key reads as its default:
-  /// both are on.
+  /// `{ push, autoAcceptReinforce, reviewMode }` (contract `space.settings`). An absent key reads as
+  /// its default — both switches on — except `reviewMode`, which a space made before review modes
+  /// lacks and reads as `manual`; a space made since is written `tiered`.
   settings      Json    @default("{}")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -5494,8 +5499,9 @@ model WikiEntry {
   /// `proposed` | `active` | `superseded` | `retired` | `rejected`; the last three are terminal. A
   /// rejected entry stays, as the counter-example the next proposal's `similar` shows.
   status          String
-  /// `owner` | `confirmed` | `proposed` | `external`. `proposed` exactly while the status is
-  /// `proposed` or `rejected`; only `owner` and `confirmed` are pushed.
+  /// `owner` | `confirmed` | `auto` | `unreviewed` | `proposed` | `external`. `proposed` exactly
+  /// while the status is `proposed` or `rejected`; only `owner`, `confirmed` and `auto` are pushed.
+  /// `auto` and `unreviewed` are what a space's review mode leaves an entry it applied at once (0311).
   trust           String
   currentRevision Int    @map("current_revision")
   /// At most 120 characters.
@@ -5669,7 +5675,8 @@ model WikiChangesetOp {
   tainted      Boolean    @default(false)
 
   /// `pending` | `accepted` | `edited` | `rejected` | `auto_applied` | `conflict` | `expired` |
-  /// `withdrawn`. Only `pending` is not final.
+  /// `withdrawn` | `verifying`. Only `pending` and `verifying` — an Automatic space's op waiting for
+  /// its verdict (0312) — are not final.
   decision       String  @default("pending")
   /// `not_true` | `not_useful` | `duplicate` | `too_specific`: set exactly when rejected.
   decisionReason String? @map("decision_reason")
@@ -5677,8 +5684,22 @@ model WikiChangesetOp {
   resultEntryId  String?    @map("result_entry_id") @db.Uuid
   resultEntry    WikiEntry? @relation("WikiChangesetOpResultEntry", fields: [resultEntryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_changeset_op_result_entry_fkey")
   resultRevision Int?       @map("result_revision")
-  /// Set exactly when the decision is not `pending`.
+  /// Set exactly when the decision is neither `pending` nor `verifying`.
   decidedAt      DateTime?  @map("decided_at") @db.Timestamptz(3)
+  /// `tiered` | `automatic`: the space's review mode applied this op (only an add or an amend) — at
+  /// once in Tiered, by its verdict in Automatic. NULL when the effect policy decided it (0311).
+  appliedByMode  String?    @map("applied_by_mode")
+  /// An op a review mode applied that was drawn into Review for the owner to check after the fact.
+  spotCheck      Boolean    @default(false) @map("spot_check")
+  /// The verdict an Automatic space's verification gave the op (0312): `supported` | `partial` |
+  /// `unsupported` | `duplicate`, with the verifier's reason, its model and when the server recorded
+  /// it — the four set together or not at all — and, for a duplicate, the entry it named. That last
+  /// one carries no foreign key on purpose: the trail outlives the entry it names.
+  verificationVerdict     String?   @map("verification_verdict")
+  verificationReason      String?   @map("verification_reason")
+  verificationModel       String?   @map("verification_model")
+  verifiedAt              DateTime? @map("verified_at") @db.Timestamptz(3)
+  verificationDuplicateOf String?   @map("verification_duplicate_of") @db.Uuid
 
   @@unique([changesetId, seq], map: "wiki_changeset_op_changeset_seq_key")
   @@map("wiki_changeset_op")

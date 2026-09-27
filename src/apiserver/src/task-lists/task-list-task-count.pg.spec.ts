@@ -360,17 +360,22 @@ test('the index answers _count.tasks from the column, and stops aggregating the 
     const aggregates = sql.filter((q) => q.includes('_aggr_count_tasks') || q.includes('$4=$5'));
     assert.deepEqual(aggregates, []);
 
-    // Exactly one statement still reads `task`: the grouped one that produces `runningTasks`,
-    // scoped to this owner's list ids. The second one — `status = 'DONE'` grouped by `list_id`,
-    // which 0287 removed — brings this count to 2, which is the assertion that holds that removal
-    // in place rather than leaving it to the comment above.
+    // Exactly two statements still read `task`, both scoped to this owner's list ids: the grouped
+    // one that produces `runningTasks`, and the one that counts each list's tasks filed under no
+    // project (`tasksOutsideProjects`), which reads only the project_id index's NULL entries — the
+    // few hundred standalone tasks, never a project's hundred thousand. The DONE group-by that
+    // 0287 removed (`"task"."status"` grouped by `list_id`) would bring this to 3; the count and
+    // the shapes below are what hold that removal in place rather than leaving it to the comment
+    // above.
     const taskReads = sql.filter((s) => s.includes('"public"."task"'));
     assert.deepEqual(
       taskReads.length,
-      1,
-      `expected exactly one read of task, got ${taskReads.length}:\n${taskReads.join('\n')}`,
+      2,
+      `expected exactly two reads of task, got ${taskReads.length}:\n${taskReads.join('\n')}`,
     );
-    assert.match(taskReads[0], /"list_id" IN \(/);
+    for (const read of taskReads) assert.match(read, /"list_id" IN \(/);
+    assert.equal(taskReads.filter((s) => s.includes('"project_id" IS NULL')).length, 1);
+    assert.equal(taskReads.filter((s) => s.includes('"public"."task"."status"')).length, 0);
   } finally {
     await db.$disconnect();
   }

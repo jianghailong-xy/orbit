@@ -660,6 +660,8 @@ interface HeldEdit {
  *  only there so the readings below are about a criterion and not about the whole project. */
 const MARKED = 'the work whose own session moved the ruler it is measured by';
 const CONTROL = 'the work whose ruler nobody who ran it touched';
+/** MARKED as the session running its work rewrites it in (6). */
+const REWORDED = `${MARKED}, as its own session would have it`;
 
 /**
  * The FIFTH clause, which the timeline above cannot reach.
@@ -670,8 +672,8 @@ const CONTROL = 'the work whose ruler nobody who ran it touched';
  * an accident of how it was written — it is what makes those ten readings statements about
  * satisfaction, landing and the confirmation and about nothing else. To pose §6's question a
  * criterion has to be REWORDED by one of the very sessions running its work, and a rewording is
- * not something a timeline can step back out of: it advances a revision, strands the confirmation,
- * and leaves an authorship row that every later reading would then be carrying. So this is its own
+ * not something a timeline can step back out of: it advances a revision and leaves an authorship
+ * row that every later reading would then be carrying. So this is its own
  * project, whose criteria are stated, met, landed and confirmed exactly as the first one's are,
  * and which is then walked into the one state the first cannot enter.
  *
@@ -684,9 +686,11 @@ const CONTROL = 'the work whose ruler nobody who ran it touched';
  * `withheld` is an ordered array a reader is shown in the order it arrives. So the two cases below
  * are about POSITION, not about independence:
  *
- *   (6) the clause appears in the middle of the two the same edit raises
- *   (7) the landing clause joins them, making four — and then all four are walked back to green
- *       one at a time, until this one is the whole of what withholds DONE
+ *   (6) the clause appears after the work-side one the same edit raises — the owner approved that
+ *       edit to a set they had confirmed, so the confirmation moved with it and is not raised
+ *   (7) the landing clause joins them, and the owner's does through a tightening nobody asked
+ *       them about, making four — and then all four are walked back to green one at a time, until
+ *       this one is the whole of what withholds DONE
  *
  * Four is the most that can ever hold together, and the fifth of the five is the reason: a project
  * that states no criteria has none to be unsatisfied, none to be unlanded and none for anybody to
@@ -906,7 +910,7 @@ test('the clause for a criterion its own evidence wrote takes its place in order
 
   // ═══ (6) the clause appears in the middle of the two the same edit raises ═════════════════════
 
-  await t.test('(6) the clause arrives in the middle of the ones the same edit raises', async () => {
+  await t.test('(6) the clause arrives after the work-side one the same edit raises', async () => {
     // The positive control, over the same rows: without it, every OPEN below would be equally true
     // of a column that already said OPEN and of an implementation that projects nothing at all.
     assert.equal(await storedStatus(), ProjectStatus.DONE,
@@ -918,7 +922,7 @@ test('the clause for a criterion its own evidence wrote takes its place in order
     // The abuse §6 is about, through the ordinary door with the ordinary origin: the session that
     // ran `markedWork` rewrites the criterion `markedWork` is measured by.
     await state([
-      { id: marked.definitionId, text: `${MARKED}, as its own session would have it` },
+      { id: marked.definitionId, text: REWORDED },
       { id: control.definitionId, text: CONTROL },
     ], authorAndRunner);
 
@@ -928,22 +932,41 @@ test('the clause for a criterion its own evidence wrote takes its place in order
     assert.deepEqual(await withheld(), [
       'CRITERION_UNSATISFIED',
       'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE',
-      'STANDARD_SET_UNCONFIRMED',
-    ], 'three clauses on the one edit, and the new one is in the MIDDLE of them: the rewrite '
-      + 'advanced the revision, so the declaration filed against the older wording is stale and '
-      + 'the confirmation on record names a version that no longer stands — while the clause this '
-      + 'case is about sits where the derivation pushes it, after the two work-side clauses and '
-      + 'before the owner’s');
+    ], 'two clauses on the one edit, and the new one AFTER the work-side one: the rewrite '
+      + 'advanced the revision, so the declaration filed against the older wording is stale — '
+      + 'while the owner’s own clause is not raised at all, because the owner approved this edit '
+      + 'to the set they had confirmed and the confirmation moved with it');
   });
 
   // ═══ (7) the landing clause joins them, and then all four walk back to green ══════════════════
 
   await t.test('(7) it follows CRITERION_UNLANDED, and is the last clause left standing', async () => {
-    // The one clause (6) is missing, and the last one that can join it: a new piece of work under
-    // the OTHER criterion, settled by nobody and landed nowhere. `NO_CRITERIA_STATED` cannot make
-    // a fifth — a project that states no criteria has none to be unsatisfied, none to be unlanded
-    // and none for anybody to have authored — so four is the whole of what this array can hold at
-    // once, and this reading is the widest one there is.
+    // The two clauses (6) is missing, and the last ones that can join it. The owner's first: the
+    // approval in (6) carried the confirmation, so what strands it here is an edit the owner was
+    // never asked about — the sibling criterion one step up the ladder, a tightening that lands
+    // where it is made. Asserted to be one rather than described as one, for the first timeline's
+    // reason: held instead, it would move nothing and the owner's clause would never arrive.
+    const tightening = [
+      { id: marked.definitionId, text: REWORDED, verificationMethod: METHOD },
+      { id: control.definitionId, text: CONTROL, verificationMethod: STRICTER },
+    ];
+    assert.equal(
+      classifyCriteriaEdit(
+        [
+          { id: marked.definitionId, text: REWORDED, verificationMethod: METHOD },
+          { id: control.definitionId, text: CONTROL, verificationMethod: METHOD },
+        ],
+        tightening,
+      ),
+      'ADDITIVE',
+    );
+    await projects.update(ownerId, projectId, { acceptanceCriteriaItems: tightening } as never);
+
+    // Then the landing clause: a new piece of work under the OTHER criterion, settled by nobody
+    // and landed nowhere. `NO_CRITERIA_STATED` cannot make a fifth — a project that states no
+    // criteria has none to be unsatisfied, none to be unlanded and none for anybody to have
+    // authored — so four is the whole of what this array can hold at once, and this reading is
+    // the widest one there is.
     const late = await tasks.create(ownerId, {
       title: 'the work that arrives after the criteria were confirmed',
       projectId, criterionKey: control.key, ...DECLARATION,
@@ -971,12 +994,13 @@ test('the clause for a criterion its own evidence wrote takes its place in order
       'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE',
       'STANDARD_SET_UNCONFIRMED',
     ], 'the late work settled and landed together, so the landing clause goes while the '
-      + 'satisfaction clause stays: the declaration the rewrite stranded is a different fact');
+      + 'satisfaction clause stays: the declarations the two edits stranded are a different fact');
 
-    // The ordinary repair for a declaration a rewrite left behind — re-sending the same key is how
+    // The ordinary repair for a declaration an edit left behind — re-sending the same key is how
     // a task's revision is brought up to date — so staleness is not what the readings below are
-    // measuring.
+    // measuring. Both of them: the rewrite stranded one, and the tightening the other.
     await tasks.update(ownerId, markedWork.id, { criterionKey: marked.key } as never);
+    await tasks.update(ownerId, controlWork.id, { criterionKey: control.key } as never);
     assert.deepEqual(await withheld(), [
       'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE',
       'STANDARD_SET_UNCONFIRMED',

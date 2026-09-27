@@ -21,10 +21,11 @@ import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer
 // The exact create contract shared by the runner HTTP route, MCP agent_create and
 // `orbit agent create`. Keep this as one literal: runner-go's parity test reads it and compares all
 // three surfaces, so adding a field to only one door fails the suite instead of silently shipping.
-// Deliberately EXCLUDES enableOrchestration (and enabled): the orchestration permission is
-// human-granted in the web UI only — a workspace must never be able to grant it to itself or
-// another workspace (privilege escalation). `sanitize` iterates this list, so it is also the HTTP
-// route's actual whitelist rather than documentation beside a different implementation.
+// Deliberately EXCLUDES enabled, and every other field a workspace must not control about itself
+// or another workspace. (Orchestration is no workspace field at all: it is the account's own
+// switch, written only through the owner's preferences — a user route no runner token reaches.)
+// `sanitize` iterates this list, so it is also the HTTP route's actual whitelist rather than
+// documentation beside a different implementation.
 export const ORCHESTRATOR_WORKSPACE_CREATE_FIELDS = [
   'name',
   'description',
@@ -67,8 +68,9 @@ type OrchestratorWorkspaceRecord = Pick<
 /**
  * Workspace management for in-session orchestrators, reached by the `orbit mcp` server with the
  * machine's runner token. Tenant scope is the runner's owner. Gated on the CALLING session
- * (X-Orbit-Session-Id) having an orchestration-enabled workspace — the same guard as session_create —
- * so a non-orchestrator workspace, or a direct token call without an orchestrating session, is refused.
+ * (X-Orbit-Session-Id) being allowed to orchestrate — the same guard as session_create — so an
+ * account with Session orchestration off, or a direct token call without an orchestrating session,
+ * is refused.
  */
 @UseGuards(RunnerAuthGuard)
 @Controller('runner')
@@ -104,13 +106,7 @@ export class RunnerAgentsController {
     const sanitized = this.sanitize(body, runner.id);
     if (!sanitized.name) throw new BadRequestException('name is required');
     // Bind to the calling runner by default so the new workspace can actually run sessions.
-    // enableOrchestration is pinned off rather than left absent: absent means "seed from the
-    // account default", which would let an orchestrator mint itself a second orchestrator — the
-    // very escalation `sanitize` drops the field to prevent. The grant stays a human act.
-    const workspace = await this.workspaces.create(runner.ownerId, {
-      ...sanitized,
-      enableOrchestration: false,
-    } as CreateWorkspaceDto);
+    const workspace = await this.workspaces.create(runner.ownerId, sanitized as CreateWorkspaceDto);
     // Push it to the owner's control-plane stream so their workspace list shows it live instead of
     // only after a manual reload — the workspace-side mirror of TasksService's publishTaskChanged.
     // Scoped via the calling session, which assertOrchestrator returned as this owner's.
@@ -161,8 +157,8 @@ export class RunnerAgentsController {
     };
   }
 
-  /** Whitelist the caller's fields (drops enableOrchestration/enabled etc. a workspace must not
-   *  control). On create, default runnerId to the calling runner so the workspace can run.
+  /** Whitelist the caller's fields (drops `enabled` etc. a workspace must not control). On
+   *  create, default runnerId to the calling runner so the workspace can run.
    *  This body is a plain type, not a DTO class, so the global ValidationPipe has no metatype
    *  to check — the free-form fields are validated here instead.
    *

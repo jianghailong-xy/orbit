@@ -124,7 +124,7 @@ function makeController(orchestrationEnabled: boolean) {
       if (!sessionId) throw new BadRequestException('missing session context');
       if (!credential) throw new ForbiddenException('missing orchestration credential');
       if (!orchestrationEnabled) {
-        throw new ForbiddenException('orchestration is not enabled for this workspace');
+        throw new ForbiddenException('orchestration is not enabled for this session');
       }
     },
   };
@@ -173,14 +173,14 @@ test('all session orchestration routes reject a missing credential before doing 
   }
 });
 
-test('all session orchestration routes reject a calling session whose workspace is not enabled', async () => {
+test('all session orchestration routes reject a calling session whose owner turned orchestration off', async () => {
   for (const route of ROUTES) {
     const { controller, serviceCalls, authorizationCalls } = makeController(false);
     await assert.rejects(
       () => route.invoke(controller, CALLER_SESSION_ID, ORCHESTRATION_TOKEN),
       (error: unknown) =>
         error instanceof ForbiddenException &&
-        error.message === 'orchestration is not enabled for this workspace',
+        error.message === 'orchestration is not enabled for this session',
       route.name,
     );
     assert.deepEqual(

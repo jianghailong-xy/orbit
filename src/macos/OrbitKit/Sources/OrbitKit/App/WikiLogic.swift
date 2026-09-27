@@ -165,11 +165,13 @@ public enum WikiCopy {
     /// A trust's word (`WIKI_TRUST_LABELS`).
     public static func trustLabel(_ trust: WikiTrust) -> String {
         switch trust {
-        case .owner:     return "Owner"
-        case .confirmed: return "Confirmed"
-        case .proposed:  return "Proposed"
-        case .external:  return "Web-derived"
-        case .unknown:   return ""
+        case .owner:      return "Owner"
+        case .confirmed:  return "Confirmed"
+        case .auto:       return "Auto"
+        case .unreviewed: return "Unreviewed"
+        case .proposed:   return "Proposed"
+        case .external:   return "Web-derived"
+        case .unknown:    return ""
         }
     }
 
@@ -377,11 +379,13 @@ public enum WikiLogic {
     /// A trust's tone (`WIKI_TRUST_TONE`).
     public static func trustTone(_ trust: WikiTrust) -> WikiTone {
         switch trust {
-        case .owner:     return .owner
-        case .confirmed: return .blue
-        case .proposed:  return .muted
-        case .external:  return .amber
-        case .unknown:   return .muted
+        case .owner:      return .owner
+        case .confirmed:  return .blue
+        case .auto:       return .green
+        case .unreviewed: return .muted
+        case .proposed:   return .muted
+        case .external:   return .amber
+        case .unknown:    return .muted
         }
     }
 

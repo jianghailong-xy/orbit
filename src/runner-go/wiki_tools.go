@@ -43,6 +43,11 @@ var wikiOpNames = []string{"add", "reinforce", "amend", "supersede", "retire", "
 // wikiSearchMatches is contracts/wiki.contract.json searchMatches: the legs that can find an entry.
 var wikiSearchMatches = []string{"keyword", "semantic", "path"}
 
+// wikiTrustLevels is contracts/wiki.contract.json trust.values, in its order: what a hit's trust can
+// say. `auto` and `unreviewed` are what a space's review mode leaves an entry it applied at once, and
+// an output schema that did not name them would call a correct answer malformed.
+var wikiTrustLevels = []string{"owner", "confirmed", "auto", "unreviewed", "proposed", "external"}
+
 // wikiIncludes is what wiki_get's include names, besides `none`.
 var wikiIncludes = []string{"sources", "anchors", "history"}
 
@@ -131,7 +136,7 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 						"kind":        map[string]interface{}{"type": "string", "enum": wikiEntryKinds},
 						"title":       str,
 						"summary":     map[string]interface{}{"type": "string", "description": "One sentence: the whole of what a card shows."},
-						"trust":       map[string]interface{}{"type": "string", "enum": []string{"owner", "confirmed", "proposed", "external"}},
+						"trust":       map[string]interface{}{"type": "string", "enum": wikiTrustLevels},
 						"anchorState": map[string]interface{}{"type": "string", "enum": []string{"unchecked", "verified", "changed", "missing"}},
 						"match": map[string]interface{}{
 							"type":        "array",
@@ -641,6 +646,12 @@ func describeWikiPropose(answer wikiProposeAnswer, names []string, dryRun bool) 
 		fmt.Fprintf(&out, "This request was already recorded under this idempotencyKey, and this is that answer; nothing was proposed twice. Changeset %s.\n", answer.ChangesetID)
 	case answer.ChangesetID == "":
 		out.WriteString("Nothing was recorded: every op was refused. The reasons below are the whole answer.\n")
+	case wikiOpsWaitForVerification(answer.Ops):
+		// An automatic space: what it took waits for a verdict, not for the owner (contract
+		// `reviewModes.verification`), and the command that asks for one is this session's to run.
+		fmt.Fprintf(&out, "Recorded: changeset %s. It is not saved: in this automatic space what waits for its "+
+			"verification goes live only when `orbit wiki verify` reports a verdict for it, and anything else waits "+
+			"for the owner in Review; until then no other session reads it and nothing here is knowledge.\n", answer.ChangesetID)
 	default:
 		fmt.Fprintf(&out, "Recorded as a proposal for the owner's review: changeset %s. It is not saved: the owner "+
 			"decides in Review, and until they do, no other session reads it and nothing here is knowledge.\n", answer.ChangesetID)
@@ -672,7 +683,11 @@ func describeWikiOp(op map[string]interface{}, names []string) string {
 	line := label + ": "
 	switch status {
 	case "pending":
-		line += "pending — waiting for the owner's review"
+		if waits, _ := op["waitsFor"].(string); waits == "verification" {
+			line += "pending — waiting for its verification (orbit wiki verify), not live yet"
+		} else {
+			line += "pending — waiting for the owner's review"
+		}
 	case "applied":
 		line += "applied"
 		if revision, ok := op["revision"].(float64); ok {
@@ -706,6 +721,17 @@ func describeWikiOp(op map[string]interface{}, names []string) string {
 		line += "; similar: " + strings.Join(parts, " | ")
 	}
 	return line
+}
+
+// wikiOpsWaitForVerification reports whether any op of an answer waits for its verification rather
+// than for the owner: what an automatic space takes in (contract `reviewModes.verification.waits`).
+func wikiOpsWaitForVerification(ops []map[string]interface{}) bool {
+	for _, op := range ops {
+		if waits, _ := op["waitsFor"].(string); waits == "verification" {
+			return true
+		}
+	}
+	return false
 }
 
 func wikiMapSlice(raw interface{}) []map[string]interface{} {

@@ -6,7 +6,8 @@ import {
   providerPreset,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
-import { codexAccountOnRunner } from './codex-account';
+import { accountDir } from '@orbit/shared';
+import { accountEnvVar, accountOnRunner } from './account';
 import { catalogModels } from './model-catalog';
 import { decryptSecret } from './provider-crypto';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
@@ -178,6 +179,11 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
   const claudeEnv: Record<string, string> = {
     ANTHROPIC_BASE_URL: row.baseUrl,
     ANTHROPIC_AUTH_TOKEN: apiKey,
+    // The model the session runs, beside the endpoint that serves it. The engine itself is told by
+    // --model, which outranks this; what reads it is a command the session runs that must call the
+    // same model through a clean Claude Code of its own — `orbit wiki verify` (wiki contract
+    // `agentSurface.verify.model`) — and has no --model of the session's to read.
+    ANTHROPIC_MODEL: model,
     // Claude Code disables claude.ai connectors on its own once an auth token is set — the
     // token above — and then warns on stderr, every start, that unsetting it would bring them
     // back. Unsetting it is exactly what must not happen here (it IS the provider's key), so
@@ -253,9 +259,12 @@ export function resolveProviderExec(args: {
   workspaceEnv?: Record<string, string> | null;
   /** The Codex account slot this session runs on (Workspace.codexAccount today). Only a built-in
    *  Codex session reads it: it is resolved against `runnerEngines` into the CODEX_HOME injected
-   *  below, and a slot that runner does not report runs on Default (codexAccountOnRunner). */
+   *  below, and a slot that runner does not report runs on Default (accountOnRunner). */
   codexAccount?: string | null;
-  /** Runner.engines of the assigned runner: where each Codex account's CODEX_HOME is reported. */
+  /** The Claude account slot this session runs on (Workspace.claudeAccount today), the sibling of
+   *  codexAccount and read the same way: resolved into the CLAUDE_CONFIG_DIR injected below. */
+  claudeAccount?: string | null;
+  /** Runner.engines of the assigned runner: where each account's directory is reported. */
   runnerEngines?: unknown;
 }): {
   provider: AgentProvider;
@@ -299,16 +308,18 @@ export function resolveProviderExec(args: {
   // each runner carries its own `claude auth login`, and a session that finds it missing surfaces
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
-  // A Codex session on an account other than Default runs in that account's CODEX_HOME. Built-in
-  // only: a configured provider brings its own key, so no sign-in on the machine is spent. The
-  // chosen account replaces any CODEX_HOME typed into the workspace's env.
-  const account =
-    provider === AgentProvider.CODEX
-      ? codexAccountOnRunner(args.codexAccount, args.runnerEngines)
-      : null;
-  const env = account
-    ? { ...(workspaceEnv ?? {}), CODEX_HOME: account.codexHome }
-    : (workspaceEnv ?? undefined);
+  // A session on an account other than Default runs in that account's own directory — a Codex
+  // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR. Built-in only: a configured provider brings its
+  // own key, so no sign-in on the machine is spent. The chosen account replaces any such variable
+  // typed into the workspace's env.
+  const accountId =
+    provider === AgentProvider.CLAUDE ? args.claudeAccount : args.codexAccount;
+  const account = accountOnRunner(provider, accountId, args.runnerEngines);
+  const dirVar = accountEnvVar(provider);
+  const env =
+    account && dirVar
+      ? { ...(workspaceEnv ?? {}), [dirVar]: accountDir(account) }
+      : (workspaceEnv ?? undefined);
   const pin = firstNonBlank(sessionModel);
   const retired = retiredPin(null, provider, args, pin);
   const explicitSessionModel = retired ? undefined : pin;

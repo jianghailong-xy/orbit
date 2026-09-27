@@ -44,9 +44,9 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertNotEqual(ReferenceLink.route(URL(string: "orbit-list:\(listUUID)")!), .list(listUUID))
     }
 
-    /// A project is not inert either — it goes to the conversation that coordinates it, which the
-    /// app looks up on a read. So `route` has nothing to return for it, but a view must still draw
-    /// its title as a link (`isInert` false), because a tap does lead somewhere.
+    /// A project is not inert either — it opens its own page, which is not a `Route`, through the
+    /// app's own link door. So `route` has nothing to return for it, but a view must still draw its
+    /// title as a link (`isInert` false), because a tap does lead somewhere.
     func testAProjectHasADestinationWithoutARoute() {
         let project = URL(string: "orbit-project:34MUgGQQWqTXPwyihadZ7")!
         XCTAssertNil(ReferenceLink.route(project))

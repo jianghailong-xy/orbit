@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   handleProjectsShortcut,
   handleNavActivation,
-  isProjectOnlyList,
+  ProjectRow,
   projectsShortcutLabel,
   WorkspaceRow,
   WorkspaceStateMark,
@@ -27,6 +27,14 @@ describe('TasksSidePanel nav', () => {
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     expect(topBlock).toMatch(
       /\{\s*key:\s*'projects',\s*icon:\s*<ProjectOutlined\s*\/>,\s*label:\s*'Projects',\s*shortcut:\s*projectsShortcutLabel\(\)\s*,?\s*\}/,
+    );
+  });
+
+  it('adds Tasks (icon and label, no shortcut) under Projects, as the iPhone drawer orders them', () => {
+    const topBlock =
+      source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
+    expect(topBlock).toMatch(
+      /\{\s*key:\s*'tasks',\s*icon:\s*<CheckSquareOutlined\s*\/>,\s*label:\s*'Tasks'\s*,?\s*\}/,
     );
   });
 
@@ -88,7 +96,9 @@ describe('TasksSidePanel nav', () => {
     // watches page, docs/watch-contract.md) stood after Projects until it left the sidebar: its
     // watches are agents' waits, reached from the session that keeps them. Wiki went in under
     // Projects (design §12.1): a codebase has two faces, the work in it and what the work learned.
-    expect(keys).toEqual(['projects', 'wiki', 'runners', 'providers']);
+    // Tasks went in between when the rail's foot became the open projects: the task lists that
+    // stood there are picked from the Tasks page's title, and this is the way to it.
+    expect(keys).toEqual(['projects', 'tasks', 'wiki', 'runners', 'providers']);
     expect(source).not.toContain('tp-workspaces-head');
     expect(source).not.toContain('<span className="tp-group-name">Workspaces</span>');
   });
@@ -139,11 +149,12 @@ describe('TasksSidePanel nav', () => {
     );
   });
 
-  it('keeps Projects selected on a project detail URL', () => {
+  it('maps a project detail URL to its row in the Projects group, or back to Projects', () => {
     // /projects/<id> would otherwise reach the slice(1) fallback above and produce
-    // sel === 'projects/<id>', which matches no TOP key — the entry would go dark on the very
-    // page you navigated to from it. This branch has to map the whole subtree back to 'projects'.
-    expect(source).toMatch(/startsWith\('\/projects\/'\)\s*\n?\s*\?\s*'projects'/);
+    // sel === 'projects/<id>', which matches nothing — the rail would go dark on the very page you
+    // navigated to from it. The row lights when the group lists the project, and the entry when it
+    // does not (TasksSidePanel.projects.test.tsx drives both).
+    expect(source).toMatch(/startsWith\('\/projects\/'\)\s*\n?\s*\?\s*\(projectRowKey \?\? 'projects'\)/);
     // The runner branch is checked first and its /runner prefix must not swallow it.
     expect(source).not.toMatch(/startsWith\('\/project'\)/);
   });
@@ -176,9 +187,7 @@ describe('TasksSidePanel workspace navigation', () => {
   });
 
   it('does not add a second divider when there are no Workspace rows', () => {
-    expect(source).toMatch(
-      /orderedWorkspaces\.length > 0 &&\s*\(unlistedCount > 0 \|\| activeLists\.length > 0/,
-    );
+    expect(source).toMatch(/orderedWorkspaces\.length > 0 && openProjects\.length > 0 && <div className="tp-divider" \/>/);
   });
 
   it('labels exactly the first nine Workspace shortcuts for each desktop platform', () => {
@@ -533,24 +542,64 @@ describe('TasksSidePanel workspace rows', () => {
   });
 });
 
-// The Tasks page lists the tasks outside projects, so the sidebar's lists do too: a list whose
-// every task is some project's is reached from that project's page.
-describe('TasksSidePanel lists outside projects', () => {
-  it('leaves out a list whose every task is filed under a project', () => {
-    expect(isProjectOnlyList({ _count: { tasks: 27_468 }, tasksOutsideProjects: 0 })).toBe(true);
-    expect(isProjectOnlyList({ _count: { tasks: 32 }, tasksOutsideProjects: 32 })).toBe(false);
-    expect(isProjectOnlyList({ _count: { tasks: 3 }, tasksOutsideProjects: 1 })).toBe(false);
+describe('TasksSidePanel project rows', () => {
+  const row = (over: Partial<Parameters<typeof ProjectRow>[0]['project']> = {}, active = false) =>
+    renderToStaticMarkup(
+      <ProjectRow
+        project={{
+          id: '0196a000-0000-7000-8000-000000000001',
+          title: 'Wikids AI 游戏模块：狼人杀 MVP',
+          status: 'OPEN',
+          createdAt: '2026-08-01T00:00:00.000Z',
+          lastActivityAt: '2026-09-26T12:00:00.000Z',
+          buckets: { running: 0 },
+          attention: { ownerItems: [] },
+          ...over,
+        }}
+        active={active}
+        onOpen={() => {}}
+      />,
+    );
+
+  it('is a row with a quiet dot in the icon column, the title, and nothing at the far end', () => {
+    const html = row();
+    expect(html).toContain('class="tp-item tp-project "');
+    // The dot takes the icon column the Workspace folders stand in, so the title lines up with the
+    // Workspace names above it instead of indenting past them.
+    expect(html).toContain('<span class="tp-ico tp-project-mark"><span class="tp-list-dot "></span></span>');
+    expect(html).toContain('<span class="tp-label">Wikids AI 游戏模块：狼人杀 MVP</span>');
+    expect(html).not.toContain('tp-count');
   });
 
-  // An empty list is somebody's plan for work, not a project's; and a server that does not report
-  // the split lists everything, as it always did.
-  it('keeps an empty list, and every list when the server does not say', () => {
-    expect(isProjectOnlyList({ _count: { tasks: 0 }, tasksOutsideProjects: 0 })).toBe(false);
-    expect(isProjectOnlyList({ _count: { tasks: 27_468 } })).toBe(false);
+  it('breathes the dot for a running task or a working coordinator alike', () => {
+    expect(row({ buckets: { running: 1 } })).toContain('class="tp-list-dot running" title="Running"');
+    expect(row({ coordinatorActivity: { working: true, lastTurnAt: null } })).toContain(
+      'class="tp-list-dot running"',
+    );
+    expect(row({ coordinatorActivity: { working: false, lastTurnAt: null } })).not.toContain('running');
   });
 
-  it('skips project-only lists before grouping, and counts No list over the same scope', () => {
-    expect(source).toMatch(/for \(const l of taskLists\.data \?\? \[\]\) \{\s*if \(isProjectOnlyList\(l\)\) continue;/);
-    expect(source).toContain("taskPagePath({ limit: 1, listId: 'none', projectId: 'none' })");
+  it('counts what waits on you in the workspace rows’ amber pill, beside the dot', () => {
+    const html = row({
+      buckets: { running: 1 },
+      attention: {
+        ownerItems: [
+          { kind: 'PROMOTION_APPROVAL', count: 1, oldestWaitingSince: '2026-09-26T12:00:00.000Z' },
+          { kind: 'COORDINATOR_QUESTION', count: 2, oldestWaitingSince: '2026-09-26T12:24:00.000Z' },
+        ],
+      },
+    });
+    expect(html).toContain('class="tp-count needs-you" title="3 waiting on you" aria-label="3 waiting on you">3</span>');
+    expect(html).toContain('tp-list-dot running');
+  });
+
+  it('lights as the open one', () => {
+    expect(row({}, true)).toContain('class="tp-item tp-project active"');
+  });
+
+  it('keeps the dot to the icon column’s own width, with no inset pushing the title right', () => {
+    expect(styles).toMatch(/\.tp-project-mark \{[^}]*width: 16px;[^}]*justify-content: center;/);
+    expect(styles).toMatch(/\.tp-project-mark \.tp-list-dot \{\s*margin-right: 0;/);
+    expect(styles).not.toMatch(/\.tp-item\.inset \{/);
   });
 });

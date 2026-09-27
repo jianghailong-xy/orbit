@@ -13,7 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import { CODEX_ACCOUNT_PATTERN } from '../runners/dto';
+import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 
 export class ProviderFallbackDto {
   @IsString() @MinLength(1) provider!: string;
@@ -58,12 +58,12 @@ export class CreateWorkspaceDto {
   // The Codex account this workspace's Codex sessions run on: the id of a slot its runner reports,
   // or `default`. A path is never accepted — dispatch resolves the id on the runner that runs the
   // session. null or `default` is Default, stored as NULL.
-  @IsOptional() @IsString() @Matches(CODEX_ACCOUNT_PATTERN) codexAccount?: string | null;
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) codexAccount?: string | null;
+  /** The Claude account this workspace's Claude sessions run on. Same rules as codexAccount. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) claudeAccount?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
-  // Opt-in: may this workspace's sessions orchestrate other sessions via orbit mcp (default off).
-  @IsOptional() @IsBoolean() enableOrchestration?: boolean;
   // Branch this workspace's sessions merge into by default (null = the runner auto-detects
   // main, else master). Also written implicitly when a session merges to an explicit target.
   @IsOptional() @IsString() defaultMergeTarget?: string;
@@ -94,22 +94,16 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsString() repoUrl?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   /** See CreateWorkspaceDto.codexAccount. Absent leaves the choice alone; null clears it. */
-  @IsOptional() @IsString() @Matches(CODEX_ACCOUNT_PATTERN) codexAccount?: string | null;
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) codexAccount?: string | null;
+  /** See CreateWorkspaceDto.claudeAccount. Absent leaves the choice alone; null clears it. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) claudeAccount?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
-  @IsOptional() @IsBoolean() enableOrchestration?: boolean;
   @IsOptional() @IsString() defaultMergeTarget?: string;
 }
 
 // The full workspace list in the desired sidebar order; each id's index becomes its position.
 export class ReorderWorkspacesDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
-}
-
-// Grant (or revoke) session orchestration on every workspace this account owns at once. Still a
-// per-workspace grant — this writes each row, so a workspace can be flipped back on its own
-// afterwards — it just spares the user one visit per workspace.
-export class SetOrchestrationDto {
-  @IsBoolean() enabled!: boolean;
 }

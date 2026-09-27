@@ -26,7 +26,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
-import { runCodexAccount } from '../providers/plan-usage-accounts';
+import { runAccount } from '../providers/plan-usage-accounts';
 import {
   classifyTransactionError,
   loggedRetry,
@@ -397,10 +397,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               session.assignedRunner?.planUsage as PlanUsage | null,
               session.provider,
               now,
-              runCodexAccount(
+              runAccount(
                 session.provider,
                 session.workspace?.env,
-                session.workspace?.codexAccount,
+                session.workspace,
                 session.assignedRunner?.engines,
               ),
             );

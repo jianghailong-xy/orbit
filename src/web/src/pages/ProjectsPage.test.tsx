@@ -326,12 +326,15 @@ describe('ProjectsPage', () => {
     expect(source).not.toMatch(/routeId\(params\.id\)\s*\?\?/);
     expect(source).toContain('enabled: Boolean(id)');
     // The workspace and runner reads behind the list's New project destination are shared query
-    // factories, not re-spelled here.
+    // factories, not re-spelled here. So are the list read's path and key: the sidebar's Projects
+    // group reads the same Open entry, and one spelling of `?status=` serves them both.
     expect(source).toContain(
       [
         'import {',
         '  projectCoordinatorStatusQuery,',
         '  projectIntegrationQuery,',
+        '  projectsPath,',
+        '  projectsQueryKey,',
         '  runnersQuery,',
         '  workspacesQuery,',
         "} from '../lib/queries';",

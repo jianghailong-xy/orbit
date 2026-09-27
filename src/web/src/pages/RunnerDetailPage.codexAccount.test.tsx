@@ -24,10 +24,11 @@ const apiMock = vi.mocked(api);
 const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
 const WORKSPACE_ID = '33zx0JhRhJo8rd25d3qAN';
 
-const DEFAULT: RunnerEngineAccount = { id: 'default', codexHome: '/root/.codex', auth: 'yes' };
+const DEFAULT: RunnerEngineAccount = { id: 'default', home: '/root/.codex', codexHome: '/root/.codex', auth: 'yes' };
 const WORK: RunnerEngineAccount = {
   id: '3fa91c2e',
   name: 'Work',
+  home: '/root/.orbit/codex-accounts/3fa91c2e',
   codexHome: '/root/.orbit/codex-accounts/3fa91c2e',
   auth: 'yes',
 };

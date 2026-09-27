@@ -1249,7 +1249,54 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and no `task`, `session`, `project` or `project_acceptance_*` object is named at all: the
       // wiki's history ids (session, tool call, author, source ref) are deliberately not foreign
       // keys. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
-      '0307_wiki'],
+      '0307_wiki',
+      // `workspace.enable_orchestration` dropped: session orchestration is one switch per account
+      // now, kept in `user.preferences`, so the per-workspace grant has no reader left. Read
+      // against every claim above: one `ALTER TABLE "workspace" DROP COLUMN` and nothing else — no
+      // function, trigger, type, index or constraint is created, replaced or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects; `workspace`
+      // is not a preserved relation, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach. No INSERT, UPDATE or DELETE: the dropped column held
+      // nothing any preserved row refers to.
+      '0308_orchestration_account_switch',
+      //   0309 landed the Claude account a workspace's sessions run on: one
+      //        `ALTER TABLE "workspace" ADD COLUMN` and nothing else. It names no preserved object,
+      //        creates no function or trigger, and holds DML of no kind.
+      //   0310 tagged the account removal a runner is handed with the engine whose store it is in:
+      //        one `ALTER TABLE "runner" ADD COLUMN` and nothing else, on the same terms.
+      '0309_workspace_claude_account',
+      '0310_runner_account_remove_engine',
+      // Orbit Wiki review modes: `wiki_entry_trust_chk` dropped and re-added with two more values
+      // (`auto`, `unreviewed`), and two columns on `wiki_changeset_op` (`applied_by_mode`, a nullable
+      // TEXT, and `spot_check`, a BOOLEAN NOT NULL DEFAULT false — constant defaults, so catalog-only)
+      // with three CHECKs over them. Read against every claim above: only the two wiki tables are
+      // named, and neither is a preserved relation; no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach. No function, trigger, type or index is created, replaced or dropped
+      // — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: every stored entry and op
+      // already satisfies the widened and the new CHECKs, so none is read or rewritten.
+      '0311_wiki_review_modes',
+      // Orbit Wiki verification (Automatic verifies before it applies): `wiki_changeset_op`'s decision
+      // and decided CHECKs dropped and re-added, each widened by the one value `verifying`; five
+      // nullable columns with no default (the verdict's trail — catalog-only) and four new CHECKs over
+      // them; one partial index over the ops that wait for a verdict. Read against every claim above:
+      // only `wiki_changeset_op` is named, which is not a preserved relation, and no `task`,
+      // `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and every
+      // stored task and criterion row are out of its reach. No function, trigger or type is created,
+      // replaced or dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects. No INSERT, UPDATE or DELETE: no stored op is
+      // verifying or carries a verdict, so every row satisfies every new CHECK as it stands.
+      '0312_wiki_verification',
+      // The wiki's search text priced for the planner: one `ALTER FUNCTION "wiki_entry_search_text"
+      // ... COST 10000` and nothing else. Read against every claim above: the function is the wiki's
+      // own (0307 created it) and its body, arguments and volatility are left as they are — there is
+      // no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none
+      // of the six preserved objects. No table, column, constraint, index, trigger or type is created,
+      // altered or dropped, and no `task`, `session`, `project` or `project_acceptance_*` object is
+      // named. No INSERT, UPDATE or DELETE: no row is read, locked or rewritten.
+      '0313_wiki_search_text_cost'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

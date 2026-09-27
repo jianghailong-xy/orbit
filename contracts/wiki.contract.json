@@ -10,6 +10,8 @@
 
   "storage": {
     "migration": "src/apiserver/prisma/migrations/0307_wiki/migration.sql",
+    "reviewModeMigration": "src/apiserver/prisma/migrations/0311_wiki_review_modes/migration.sql",
+    "verificationMigration": "src/apiserver/prisma/migrations/0312_wiki_verification/migration.sql",
     "tables": [
       "wiki_space",
       "wiki_space_workspace",
@@ -28,6 +30,7 @@
     "locks": "Lock an entry with FOR NO KEY UPDATE (a plain UPDATE does), never FOR UPDATE: an op's and an exposure's foreign keys take KEY SHARE on the entry, which FOR UPDATE would block.",
     "entryLinks": "supersedes_id and superseded_by_id point at wiki_entry(id, owner_id) with NO ACTION; both ends live in one space, so a space's cascade deletes them in one statement. wiki_changeset_op.entry_id and result_entry_id point at wiki_entry(id, owner_id) with ON DELETE CASCADE, because an op is reached from its space through its changeset and through its entries, and a NO ACTION check could run before the other cascade arrives.",
     "historyRefs": "An id that points at Orbit's own history carries no foreign key: session, task, tool_call, conversation turn, run event, the user who authored a revision, the op a revision came from (wiki_entry_revision.changeset_op_id), and every wiki_source.ref. A deleted record leaves the id behind as a tombstone, and a wiki write takes no lock on those tables (the precedent is 0238's deciding_session_id; docs/postgres-lock-order.md I2).",
+    "verificationTrail": "wiki_changeset_op.verification_duplicate_of names the entry a duplicate verdict pointed at, and is the one in-wiki pointer with no foreign key: it is part of the verdict's trail (reviewModes.verification.trail), which outlives the entry it named the way a history reference outlives its record. A cascade from that entry would delete the op, and with it the trail; a SET NULL would rewrite what the verifier said.",
     "singleWriter": "wiki_entry.status, trust, challenged and unsupported are written only by WikiService.applyOp and WikiService.recomputeFlags, and db-write-inventory registers those two writers and no other.",
     "appendOnly": "wiki_entry_revision is only ever inserted. A revision is never updated; a change is a new revision.",
     "search": {
@@ -75,6 +78,29 @@
         "type": "boolean",
         "default": true,
         "means": "A non-owner reinforce applies at once. Off: it waits for review (effectPolicy)."
+      },
+      "reviewMode": {
+        "type": "one of reviewModes.values",
+        "default": "tiered",
+        "unset": "manual",
+        "means": "Which of what the effect policy holds back the space applies at once (reviewModes). A space is created with the default; a stored space whose settings name no mode was made before review modes existed and reads as unset, so none of them changes behaviour until the owner can see the setting in Wiki settings and chooses another.",
+        "channel": "Written only by PATCH /api/wiki/spaces/:id on the user door, with no session header (WIKI_OWNER_CHANNEL_ONLY otherwise), by the spot checks sending the space back to manual, and by the verification sending an automatic space back to tiered."
+      },
+      "automaticSpotChecks": {
+        "type": "boolean",
+        "default": false,
+        "means": "Whether an automatic space draws spot checks at all (reviewModes.spotChecks.automatic): off, the owner is sent no spot-check card for what its verification applies; on, one in every rules.automaticSpotCheckEvery. Tiered draws its spot checks whatever this says.",
+        "channel": "The owner's alone, like reviewMode: PATCH /api/wiki/spaces/:id on the user door with no session header, and WIKI_OWNER_CHANNEL_ONLY otherwise."
+      },
+      "reviewModeChangedAt": {
+        "type": "ISO 8601 date-time",
+        "serverWritten": true,
+        "means": "When the review mode last changed. Absent until it first does. The spot checks' window and the verification's window count only what was answered since."
+      },
+      "reviewModeChangedBy": {
+        "type": "owner | spot_checks | verification",
+        "serverWritten": true,
+        "means": "Who changed it last: the owner, the spot checks sending the space back to manual, or the verification sending an automatic space back to tiered."
       },
       "reservedForPhase2": ["maintenance", "embedding"]
     }
@@ -320,15 +346,16 @@
       "values": ["proposed", "active", "superseded", "retired", "rejected"],
       "initial": ["proposed", "active"],
       "born": {
-        "proposed": "an add or supersede that waits for review",
-        "active": "an add or supersede that applied at once: the owner's own"
+        "proposed": "an add or supersede that waits for review, or an add that waits for its verification (reviewModes.verification)",
+        "active": "an add or supersede that applied at once: the owner's own, or an add the space's review mode applied (trust auto or unreviewed)"
       },
       "terminal": ["superseded", "retired", "rejected"],
       "transitions": [
-        { "from": "proposed", "to": "active", "trigger": "the owner accepted the op that proposed it, as written or edited" },
-        { "from": "proposed", "to": "rejected", "trigger": "the owner rejected that op, or it expired or was withdrawn. The row stays, as a counter-example the next similar[] shows with its reason" },
+        { "from": "proposed", "to": "active", "trigger": "the owner accepted the op that proposed it, as written or edited; or its verification found it supported (trust auto) or partly supported (trust unreviewed)" },
+        { "from": "proposed", "to": "rejected", "trigger": "the owner rejected that op, or it expired or was withdrawn; or its verification found it unsupported or a duplicate. The row stays, as a counter-example the next similar[] shows with its reason" },
         { "from": "active", "to": "superseded", "trigger": "a supersede naming it applied; superseded_by_id names the successor, whose supersedes_id names it" },
-        { "from": "active", "to": "retired", "trigger": "a retire naming it applied" }
+        { "from": "active", "to": "retired", "trigger": "a retire naming it applied" },
+        { "from": "active", "to": "rejected", "trigger": "the owner rejected an entry the review mode applied at once and nobody has confirmed (trust auto or unreviewed): on its spot check, or from the entry itself. It stays as a counter-example, like a rejected proposal" }
       ],
       "invariants": [
         "superseded exactly when superseded_by_id is set",
@@ -337,20 +364,27 @@
       ]
     },
     "op": {
-      "values": ["pending", "accepted", "edited", "rejected", "auto_applied", "conflict", "expired", "withdrawn"],
-      "initial": ["pending", "auto_applied"],
-      "terminal": ["accepted", "edited", "rejected", "auto_applied", "conflict", "expired", "withdrawn"],
+      "values": ["pending", "accepted", "edited", "rejected", "auto_applied", "conflict", "expired", "withdrawn", "verifying"],
+      "initial": ["pending", "auto_applied", "verifying"],
+      "terminal": ["accepted", "edited", "rejected", "conflict", "expired", "withdrawn"],
       "transitions": [
-        { "from": "pending", "to": "accepted", "trigger": "the owner accepted it and it applied" },
+        { "from": "verifying", "to": "auto_applied", "trigger": "its verification found it supported or partly supported, and the verdict applied it (reviewModes.verification.verdicts)" },
+        { "from": "verifying", "to": "pending", "trigger": "the verdict applied it and the draw made it a spot check (reviewModes.spotChecks.automatic): its effect stands, and the owner is asked to check it" },
+        { "from": "verifying", "to": "rejected", "trigger": "its verification found it unsupported (not_true) or a duplicate of an entry the space holds (duplicate)" },
+        { "from": "verifying", "to": "conflict", "trigger": "an amend whose entry moved, or passed into the owner's hands, before its verdict arrived: nothing applied" },
+        { "from": "verifying", "to": "withdrawn", "trigger": "the owner reverted the run it belongs to, or an amend's entry left active, before its verdict arrived" },
+        { "from": "pending", "to": "accepted", "trigger": "the owner accepted it and it applied; on a spot check, the owner confirmed what the review mode applied" },
         { "from": "pending", "to": "edited", "trigger": "the owner edited it, accepted the edit, and the edit applied" },
-        { "from": "pending", "to": "rejected", "trigger": "the owner rejected it, naming one of rejectReasons" },
-        { "from": "pending", "to": "conflict", "trigger": "the owner accepted it, but its baseRevision was no longer the entry's current revision, so nothing applied" },
+        { "from": "pending", "to": "rejected", "trigger": "the owner rejected it, naming one of rejectReasons; on a spot check, what the review mode applied is undone" },
+        { "from": "pending", "to": "conflict", "trigger": "the owner accepted it, but its baseRevision was no longer the entry's current revision, so nothing applied; on a spot check, the entry had changed since the op applied" },
         { "from": "pending", "to": "expired", "trigger": "it waited limits.pendingExpiryDays days" },
-        { "from": "pending", "to": "withdrawn", "trigger": "its entry left active before the owner decided it (another op superseded or retired it), so it can no longer apply" }
+        { "from": "pending", "to": "withdrawn", "trigger": "its entry left active before the owner decided it (another op superseded or retired it, or a revert undid it), so it can no longer apply" },
+        { "from": "auto_applied", "to": "rejected", "trigger": "the owner rejected, from the entry itself, the add the review mode applied at once (reviewModes.entryReject). Every other auto_applied op stays as it is" }
       ],
       "invariants": [
-        "decided_at is set exactly when the decision is not pending",
-        "decision_reason is set exactly when the decision is rejected, and is one of rejectReasons"
+        "decided_at is set exactly when the decision is neither pending nor verifying",
+        "decision_reason is set exactly when the decision is rejected, and is one of rejectReasons",
+        "an op waiting for its verification carries no verdict, and only an add or an amend ever waits for one or carries one"
       ]
     },
     "changeset": {
@@ -358,28 +392,33 @@
       "initial": ["pending", "settled"],
       "terminal": ["settled"],
       "transitions": [
-        { "from": "pending", "to": "settled", "trigger": "the last of its pending ops was decided, expired or withdrawn" }
+        { "from": "pending", "to": "settled", "trigger": "the last of its pending or verifying ops was decided, verified, expired or withdrawn" }
       ],
       "invariants": [
         "decided_at is set exactly when the changeset is settled",
         "a pending changeset has an expires_at"
       ],
-      "note": "A changeset every op of which applied at once is settled when it is recorded. A request none of whose ops passed records no changeset at all."
+      "note": "A changeset is pending while any of its ops waits — for the owner, or for its verification — and settled once none does. One every op of which applied at once is settled when it is recorded. A request none of whose ops passed records no changeset at all. Review lists a pending changeset only while one of its ops waits for the owner: one that waits for its verification alone is not in it."
     }
   },
 
   "trust": {
-    "values": ["owner", "confirmed", "proposed", "external"],
+    "values": ["owner", "confirmed", "auto", "unreviewed", "proposed", "external"],
     "meaning": {
       "owner": "the owner wrote it: an owner's own add or supersede",
-      "confirmed": "an agent, a maintenance run, an import or a watch proposed it and the owner accepted it, as written or edited",
+      "confirmed": "an agent, a maintenance run, an import or a watch proposed it and the owner accepted it, as written or edited — or accepted its spot check",
+      "auto": "the space's review mode applied it and no person has looked: Tiered for the owner's own words or a machine-verified entry, Automatic for what its verification found supported by the sources. Pushed; labelled Auto",
+      "unreviewed": "Tiered applied it at once without the owner's words or a machine verification behind it; Automatic's verification found its sources support it only in part; or a revert or a rejected spot check restored it. Shown, labelled Unreviewed, and never pushed",
       "proposed": "not accepted: every proposed entry and every rejected one",
       "external": "it rests on web-derived sources (a phase-3 assumption citing a url). Never pushed"
     },
-    "pushable": ["owner", "confirmed"],
+    "pushable": ["owner", "confirmed", "auto"],
     "onApply": {
       "ownerAddOrSupersede": "owner",
       "acceptedAddSupersedeOrAmend": "confirmed",
+      "reviewModeAddOrAmend": "auto or unreviewed (reviewModes.effect); in Automatic, what the verdict says (reviewModes.verification.verdicts): supported auto, partial unreviewed",
+      "spotCheckAccepted": "confirmed",
+      "undoneByRevertOrSpotCheck": "unreviewed",
       "everyOtherAppliedOp": "unchanged"
     },
     "edited": "An owner who edits a proposal before accepting it is recorded as the author of the revision that results, and the entry's trust is still confirmed."
@@ -424,7 +463,7 @@
   },
 
   "effectPolicy": {
-    "why": "Design section 4.2: only the owner's own writes and the two safe ops take effect at once; everything else waits for the owner in Review.",
+    "why": "Design section 4.2: only the owner's own writes and the two safe ops take effect at once; everything else waits for the owner in Review — unless the space's review mode applies it (reviewModes), which reads this policy first and changes nothing it applies.",
     "effects": {
       "applied": "takes effect in the submitting transaction; the op is recorded auto_applied",
       "pending": "recorded pending, and shown in Review until the owner decides it or it expires",
@@ -446,6 +485,111 @@
       "reject": "names one of rejectReasons, and may add a note",
       "edit": "carries the owner's version, shaped as an amend's changes over the proposal",
       "channel": "the user door only (agentSurface.decide)"
+    }
+  },
+
+  "reviewModes": {
+    "why": "Owner, 2026-09-26: not every entry needs a person, and a space can run as Wikova's does, in an Automatic mode. What the effect policy holds back, a space's review mode may apply; everything it applies is written through submitChangeset and applyOp like any other write, keeps its revision history, and can be rejected one entry at a time or undone a run at a time. Owner, 2026-09-27 (criterion 7, revision 3): Automatic verifies before it applies — the local model, called through a clean Claude Code apart from the call that proposed the op, checks each op against its own sources, and nothing an Automatic space takes in is live until a verdict says so (verification).",
+    "values": ["manual", "tiered", "automatic"],
+    "meaning": {
+      "manual": "The effect policy and nothing else: an agent's, a maintenance run's and an import's add, amend, supersede and retire wait for the owner, as in phase 1.",
+      "tiered": "An add or an amend applies at once. It is auto, and pushed, when it is the owner's own words or machine-verified (tiered); anything else it applies is unreviewed: shown, never pushed, and the owner may Reject it later.",
+      "automatic": "An add or an amend that passed every check waits for its verification, and its verdict decides it (verification.verdicts): supported applies as auto and is pushed, partial applies as unreviewed, unsupported is rejected with its reason, and a duplicate becomes a reinforce of the entry it duplicates. Without a verdict nothing applies, and nothing of it waits in Review."
+    },
+    "setting": "space.settings.reviewMode",
+    "effect": {
+      "rule": "The effect policy decides first. What it applies (the owner's own write, a reinforce, a challenge) is untouched by the mode; what it holds back, a mode other than manual takes when the op is an add, or an amend of an entry whose trust is auto or unreviewed — and the floors let it. Tiered applies what it takes at once; automatic sends it to its verification. A supersede and a retire end a lineage, which no revert or Reject could bring back, so they wait for the owner in every mode, and so does a reinforce the space's autoAcceptReinforce holds back.",
+      "recorded": "An op tiered applied is recorded auto_applied with applied_by_mode naming the mode, and its entry's trust is the one the mode gives it (trust.onApply.reviewModeAddOrAmend). An op automatic takes is recorded verifying, with applied_by_mode NULL until a verdict applies it: an add's lineage is born proposed meanwhile, and an amend changes nothing yet.",
+      "function": "wikiReviewEffect in src/shared/src/wiki.ts"
+    },
+    "tiered": {
+      "auto": {
+        "ownerWords": "A decision or a convention one of whose sources is the owner's own words, with its quote verified against the record: a conversation turn the owner sent (a message or a steer the user door filed with an explicit routing intent, under a client turn id that is a UUID — the runner door files neither, and a server-made turn carries a namespaced id), or an AskUserQuestion the owner answered (an approval allowed by a person, with answers).",
+        "machineVerified": {
+          "recipe": "Its verify command re-ran green in a maintenance run. Nothing reports such a run yet, so no recipe qualifies until one does: the classifier takes the result as an input and is handed false.",
+          "pitfall": "Its anchors re-verified (anchor_state verified) and its sources span at least rules.pitfallMinSessions independent sessions. A new entry's anchors are unchecked, so an add qualifies only once the anchor re-verification has run; an amend that leaves the anchors as they are keeps its entry's state."
+        }
+      },
+      "otherwise": "unreviewed",
+      "function": "wikiTieredBasis in src/shared/src/wiki.ts"
+    },
+    "floors": {
+      "why": "None of these is loosened by any mode.",
+      "principleOwnerOnly": "A principle is the owner's to write: an add, amend or supersede of one from anyone else is refused WIKI_KIND_OWNER_ONLY.",
+      "taintedWaits": "A tainted op waits for the owner (effectPolicy.tainted).",
+      "ownerVouchedWaits": "An amend, supersede or retire of an entry the owner wrote or confirmed — trust owner or confirmed, or any revision of it the owner authored — waits for the owner.",
+      "circuitBreaker": "A changeset may change, through ops the review mode applies, at most rules.breakerMaxChangedPercent percent of the entries the space held active when it began; the op that would pass that is refused WIKI_QUOTA and applies nothing. A space holding fewer than rules.breakerMinActiveEntries active entries has no breaker, so an empty space can take its first batch. What is counted is the distinct entries such ops add or amend.",
+      "opsPerChangeset": "No request holds more than limits.opsPerChangeset ops: the one past it is refused WIKI_QUOTA."
+    },
+    "verification": {
+      "why": "Owner, 2026-09-27: what a model proposed is checked by a second, separate call against the records it cites, and only what that check bears out goes live. Wikova's lesson rides with it: a verdict that cannot be read is no verdict, and lets nothing through.",
+      "waits": "An op automatic takes (an add, or an amend of an entry whose trust is auto or unreviewed, past every floor) is recorded verifying. It is not applied and not pushed; it is not a Review card, and it counts toward neither pendingOpsPerSpace nor opsPerTurn and opsPerSession; the circuit breaker and opsPerChangeset count it as they count any op a mode takes. Its proposer's answer calls it pending, with waitsFor verification.",
+      "noClock": "Nothing but a fact moves an op out of verifying: no clock expires, withdraws or applies it, and limits.pendingExpiryDays does not reach it, so it waits for its verdict however long that takes. What else ends the wait is itself a fact: the owner reverting its run (withdrawn), and for an amend its entry leaving active (withdrawn) or, by the time its verdict arrives, having moved or passed into the owner's hands (conflict).",
+      "notAutomatic": "A verdict is recorded only while the space is automatic. Once the owner, or the verification itself (fallback), has moved the space to another mode, a verdict is refused 409 and its op keeps waiting, untouched, until the space is automatic again or its run is reverted: a verdict computed under a mode the space has since left does not overrule the mode it is in.",
+      "verdicts": {
+        "supported": "The sources bear the whole of it out: the op applies — an add's lineage becomes active, an amend's revision is written — with trust auto, and it is pushed.",
+        "partial": "The sources bear out only part of it: the op applies with trust unreviewed — shown, labelled Unreviewed, never pushed, and the owner may Reject it.",
+        "unsupported": "The sources do not bear it out: the op is rejected with decision_reason not_true, and the verifier's reason is in its trail. An add's lineage becomes rejected and stays as a counter-example: the next similar[] that finds it says rejectedReason not_true and, as rejectedBecause, the verifier's reason.",
+        "duplicate": "It says what an entry the space already holds says. duplicateOf names that entry — one of the op's own similar[], or an amend's own entry — and it must be active. The op is rejected with decision_reason duplicate (an add's lineage with it), and its sources are added to the named entry as a reinforce adds them, content, status and trust untouched — unless the space's autoAcceptReinforce is off, in which case nothing is added: a reinforce the owner reviews is one a session proposes."
+      },
+      "applies": "A verdict applies through applyOp and recomputeFlags like every other write (storage.singleWriter): a promote for an add, an amend for an amend, a reject, a reinforce. An op a verdict applied is recorded auto_applied with applied_by_mode automatic, so revert, entryReject and the spot checks treat it as one the mode applied.",
+      "trail": {
+        "columns": ["verification_verdict", "verification_reason", "verification_model", "verified_at", "verification_duplicate_of"],
+        "rule": "Every verdict leaves its trail on its op, the four together or none of them: which of verdicts, the verifier's reason in one sentence (redacted as every stored text is, at most rules.verificationReasonMaxChars), the model that gave it (at most rules.verificationModelMaxChars), and when the server recorded it; verification_duplicate_of exactly when the verdict is duplicate. An op reads it back as verification: {verdict, reason, model, at, duplicateOf}, null until a verdict arrives."
+      },
+      "who": {
+        "runner": "Only the session that proposed the ops. The runner door requires X-Orbit-Session-Id (a headless call is refused) and lists and accepts verdicts for that session's own ops alone: another session's op, and anything of another owner's, is the same 404 as one that does not exist.",
+        "import": "The one-off import the API server's container runs as {origin: import, authorKind: system} calls WikiService.listVerifications and WikiService.recordVerifications directly, and reaches the ops of import changesets that name no session. Its verdicts leave the same trail and apply the same way."
+      },
+      "routes": {
+        "list": "GET /api/runner/wiki/spaces/:id/verifications",
+        "report": "POST /api/runner/wiki/spaces/:id/verifications"
+      },
+      "list": "The calling session's ops that wait for their verification in the space, oldest first, after the op ?after= names and at most ?limit= of them (rules.verificationListMax): each with its op, its kind, the entry as it would read once applied (an add's draft, an amend's changes laid over its entry), its sources each with the text of its record read now and redacted (at most rules.verificationSourceMaxChars of it, marked when cut), and its similar[] as recorded, each neighbour's title, status and trust read now. The answer names the space's mode, so a verifier can stop before it asks a model anything.",
+      "report": "verdicts[], at most limits.opsPerChangeset of them, each {opId, verdict, reason, model} and duplicateOf for a duplicate. Each is judged on its own and in a transaction of its own; its outcome is applied, rejected, reinforced, conflict or refused, and a request none of whose verdicts was recorded answers with the status of its first refusal. A verdict for an op already verified the same way answers with what was recorded, replayed, and writes nothing.",
+      "fallback": "Facts, never a clock: when a verdict recorded in an automatic space is unsupported, the unsupported ones among the rules.verificationWindow latest verdicts recorded in the space since settings.reviewModeChangedAt are counted, and more than rules.verificationMaxUnsupportedPercent percent of rules.verificationWindow sends the space back to tiered in the same transaction (reviewModeChangedBy verification). The owner is sent one notification after it commits. The switch is a compare-and-set on the mode, so a space already out of automatic trips no second time, whatever is verified after.",
+      "cli": "orbit wiki verify (agentSurface.verify) is the runner's verifier: it reads the list, asks a clean Claude Code for one verdict per op, and reports each verdict as soon as it has it."
+    },
+    "spotChecks": {
+      "trigger": "Facts, never a clock: tiered draws one of every rules.spotCheckEvery ops it applies at once into Review; automatic draws none unless settings.automaticSpotChecks is on (automatic). Which one is read off a hash of the space and the block's number, so a replay draws the same one and nothing decides it by the time of day.",
+      "automatic": "Off by default, so the owner is sent no spot-check card for what an automatic space's verification applies. Turned on by the owner, one in every rules.automaticSpotCheckEvery ops a verdict applies is drawn, the same way, as the verdict applies it.",
+      "card": "The op is recorded pending with spot_check set: its effect already stands, and its changeset stays pending until the owner answers it. It is a card in Review, and it does NOT count toward pendingOpsPerSpace — that cap is kept for what waits on the owner's decision — so a full queue neither refuses an op a mode applied nor skips the draw.",
+      "answers": {
+        "accept": "Confirms what the mode applied: the entry's trust becomes confirmed.",
+        "edit": "The owner's changes laid over the op's, written as a revision the owner authored, and the entry confirmed.",
+        "reject": "Undoes it: an add's entry becomes rejected (a counter-example, with the reason); an amend's entry is restored to the revision the amend replaced and becomes unreviewed. Counted as a rejection.",
+        "conflict": "An entry that changed after the op applied is not answered for it: the card is recorded conflict and nothing is applied."
+      },
+      "window": "The reject rate is the rejected spot checks among the rules.spotCheckWindow latest ones the owner answered (accepted, edited or rejected), counting only those recorded since settings.reviewModeChangedAt, over rules.spotCheckWindow.",
+      "trip": "When a spot check the owner rejects takes that rate over rules.spotCheckMaxRejectPercent percent while the space is not manual, the same transaction sets the space to manual (reviewModeChangedBy spot_checks), and the owner is sent one notification after it commits. The switch is a compare-and-set on the mode, so a space already manual trips no second time, whatever is rejected after."
+    },
+    "revert": {
+      "route": "POST /api/wiki/changesets/:id/revert",
+      "door": "user, with no session header (WIKI_OWNER_CHANNEL_ONLY)",
+      "does": "Undoes every op of one changeset the review mode applied that the owner has not answered: an add's entry is retired, an entry an amend changed is restored to the revision before the changeset's first amend of it and becomes unreviewed, and the changeset's open spot checks are withdrawn. Its ops still waiting for their verification are withdrawn too, an add's proposed lineage rejected with its op, so no verdict can apply them later. Every entry it touched leaves the push at once.",
+      "how": "As the owner's own changeset through submitChangeset and applyOp, so every step is a revision and an op like any other: a retire per add, an amend per changed entry. It is recorded under the idempotency key revert:<changeset id>, so a second revert answers with the first.",
+      "skipped": "An entry that left active, or changed after the changeset changed it, is not touched and is named in the answer."
+    },
+    "entryReject": {
+      "route": "POST /api/wiki/entries/:id/reject",
+      "door": "user, with no session header (WIKI_OWNER_CHANNEL_ONLY)",
+      "does": "The owner's Reject of an active entry whose trust is auto or unreviewed: the entry becomes rejected, and the add the review mode applied to create it records the rejection and its reason (rejectReasons), exactly as a rejected proposal does. Any other entry answers 409: a proposal is rejected in Review, and what the owner wrote or confirmed is retired."
+    },
+    "import": "An import, a maintenance run, an agent and a watch are treated alike: an origin-import changeset submitted in an automatic space waits for its verification like any other, and the import's own verdicts reach it through verification.who.import. A source may be a bare record id with no quote. The idempotency key is what keeps a replayed batch from writing twice.",
+    "rules": {
+      "pitfallMinSessions": 2,
+      "spotCheckEvery": 10,
+      "spotCheckWindow": 10,
+      "spotCheckMaxRejectPercent": 30,
+      "breakerMaxChangedPercent": 10,
+      "breakerMinActiveEntries": 100,
+      "automaticSpotCheckEvery": 200,
+      "verificationWindow": 50,
+      "verificationMaxUnsupportedPercent": 30,
+      "verificationReasonMaxChars": 500,
+      "verificationModelMaxChars": 200,
+      "verificationListMax": 50,
+      "verificationSourceMaxChars": 8000
     }
   },
 
@@ -500,16 +644,17 @@
     "listMaxItems": 20,
     "opsPerTurn": 5,
     "opsPerSession": 15,
+    "opsPerChangeset": 30,
     "pendingOpsPerSpace": 30,
     "pendingExpiryDays": 14,
     "searchLimitMax": 10,
     "getIdsMax": 10
   },
   "limitNotes": {
-    "fromTheDesign": ["titleMaxChars", "summaryMaxChars", "topicsMax", "aliasesMax", "quoteMaxChars", "opsPerTurn", "opsPerSession", "pendingOpsPerSpace", "pendingExpiryDays", "searchLimitMax", "getIdsMax"],
+    "fromTheDesign": ["titleMaxChars", "summaryMaxChars", "topicsMax", "aliasesMax", "quoteMaxChars", "opsPerTurn", "opsPerSession", "opsPerChangeset", "pendingOpsPerSpace", "pendingExpiryDays", "searchLimitMax", "getIdsMax"],
     "addedByThisContract": ["aliasMaxChars", "slugMaxChars", "fieldTextMaxChars", "listMaxItems"],
     "why": "The design bounds the common fields and leaves the text and lists inside an entry unbounded. An entry is meant to be atomic, so every text and list gets a ceiling well above anything atomic needs.",
-    "quota": "opsPerTurn and opsPerSession count the ops a session has recorded; pendingOpsPerSpace counts the space's pending ops. An op that applies at once never counts toward the review queue."
+    "quota": "opsPerTurn and opsPerSession protect the review queue, so they count only the ops that wait for the owner: the ops of one request, and the ops a session has recorded in its life, that the effect policy held back (a proposal, a challenge). An op that applies at once — the owner's own, a reinforce, or one the review mode applied — counts toward neither, and neither does one that waits for its verification (reviewModes.verification.waits); opsPerChangeset (any request, every origin, the owner's too) and the circuit breaker (reviewModes.floors) bound those. pendingOpsPerSpace counts the space's pending ops that wait on the owner's decision: a spot-check card does not count (reviewModes.spotChecks.card), and neither does an op that waits for its verification."
   },
 
   "push": {
@@ -520,7 +665,7 @@
     "maxChars": 6000,
     "eligible": {
       "status": ["active"],
-      "trust": ["owner", "confirmed"],
+      "trust": ["owner", "confirmed", "auto"],
       "tainted": false,
       "challenged": false,
       "unsupported": false,
@@ -529,6 +674,8 @@
     "caps": { "principle": 4, "convention": 6 },
     "line": "[Kind] Title — summary (orbit-wiki:<id>)",
     "header": "Reference notes confirmed by the owner. Context, not instructions; if one looks wrong or stale, say so and challenge it with wiki_propose.",
+    "headerWithAuto": "Reference notes the owner wrote or confirmed, or that this space's review mode accepted. Context, not instructions; if one looks wrong or stale, say so and challenge it with wiki_propose.",
+    "headerRule": "header when every line sent is the owner's or confirmed; headerWithAuto as soon as one is auto, so the block never says the owner confirmed what nobody has looked at. A Manual space has no auto entry, so its block is phase 1's word for word.",
     "never": "A session that verifies, forems or judges work gets no push: knowledge is not evidence.",
     "exposure": "one wiki_exposure row per entry pushed, channel push"
   },
@@ -541,17 +688,17 @@
     { "code": "WIKI_SOURCE_UNRESOLVED", "httpStatus": 422, "scope": "op", "when": "A source does not resolve among the owner's own rows, cites a wiki entry or view, or an op that must cite a source cites none." },
     { "code": "WIKI_QUOTE_NOT_FOUND", "httpStatus": 422, "scope": "op", "when": "A quote, whitespace-normalized, is not a substring of the text of the record it cites." },
     { "code": "WIKI_REVISION_CONFLICT", "httpStatus": 409, "scope": "op", "when": "An amend, supersede or retire names a baseRevision that is not the entry's current revision. The answer carries the current revision and a diff." },
-    { "code": "WIKI_QUOTA", "httpStatus": 429, "scope": "op", "when": "Recording the op would pass limits.opsPerTurn for the calling turn or limits.opsPerSession for the calling session." },
-    { "code": "WIKI_REVIEW_QUEUE_FULL", "httpStatus": 429, "scope": "op", "when": "The op would wait for review and the space already has limits.pendingOpsPerSpace pending ops." },
+    { "code": "WIKI_QUOTA", "httpStatus": 429, "scope": "op", "when": "The op is past limits.opsPerChangeset in its request; or it would wait for the owner and pass limits.opsPerTurn for the request or limits.opsPerSession for the calling session (limitNotes.quota); or the review mode would apply it and the changeset would pass the circuit breaker (reviewModes.floors)." },
+    { "code": "WIKI_REVIEW_QUEUE_FULL", "httpStatus": 429, "scope": "op", "when": "The op would wait for review and the space already has limits.pendingOpsPerSpace pending ops that wait on the owner's decision (spot checks and ops waiting for their verification not counted)." },
     { "code": "WIKI_PROBE_REFUSED", "httpStatus": 422, "scope": "op", "when": "The title or text reads as a tool probe (test, probe, TEST_WRITE_CHECK). The message says the tool works and not to retry." },
-    { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide arrived with a session header, whatever the session's role: deciding is the owner's, on the user door, with no acting session." },
+    { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide, a revert, an entry's Reject, a change of the review mode or of automaticSpotChecks arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session." },
     { "code": "WIKI_NOT_MAINTENANCE_SESSION", "httpStatus": 403, "scope": "request", "phase": 2, "when": "A maintenance-only route was called by a session that is not a maintenance run of that space." },
     { "code": "WIKI_SESSION_EXCLUDED", "httpStatus": 403, "scope": "request", "addedByThisContract": true, "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes." },
     { "code": "WIKI_IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer." }
   ],
   "refusalRules": {
-    "order": ["schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "quota", "similar", "taint", "effect"],
-    "orderNote": "The order each op is checked in (design section 4.1); redaction, similar and taint refuse nothing, they mark the op.",
+    "order": ["changesetSize", "schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "taint", "effect", "quota", "similar"],
+    "orderNote": "The order each op is checked in (design section 4.1); redaction, taint, effect and similar refuse nothing, they mark the op. changesetSize is limits.opsPerChangeset, read off the op's position alone. quota comes after the effect because what it counts depends on it: the review queue, the ops that wait (limitNotes.quota), and the circuit breaker, which counts what the review mode applies.",
     "perOp": "Each op is judged on its own. The ops that pass are recorded in one transaction; a refused op writes nothing.",
     "status": "A request none of whose ops was recorded answers with the HTTP status of its first refusal and every op's outcome in the body. A request that recorded something answers 200.",
     "dryRun": "Checks every op and answers as the request would, recording nothing and publishing nothing.",
@@ -578,7 +725,7 @@
         "readOnly": false,
         "destructive": false,
         "params": { "ops": "required: ops", "rationale": "required", "idempotencyKey": "required", "dryRun": "optional" },
-        "returns": "per op: pending, applied, conflict (current revision and diff) or refused (reasons); similar[] beside an add or supersede"
+        "returns": "per op: pending (with waitsFor verification when an automatic space's verification, not the owner, decides it), applied, conflict (current revision and diff) or refused (reasons); similar[] beside an add or supersede"
       }
     },
     "cli": {
@@ -605,9 +752,11 @@
           "GET /api/wiki/entries/:id",
           "POST /api/wiki/entries/:id/pin",
           "POST /api/wiki/entries/:id/unpin",
+          "POST /api/wiki/entries/:id/reject",
           "GET /api/wiki/search",
           "GET /api/wiki/review",
-          "POST /api/wiki/changesets/:id/decide"
+          "POST /api/wiki/changesets/:id/decide",
+          "POST /api/wiki/changesets/:id/revert"
         ]
       },
       "runner": {
@@ -625,8 +774,23 @@
           "POST /api/runner/wiki/anchor-checks",
           "POST /api/runner/wiki/spaces/:id/cursor"
         ],
-        "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION"
+        "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION",
+        "verificationRoutes": [
+          "GET /api/runner/wiki/spaces/:id/verifications",
+          "POST /api/runner/wiki/spaces/:id/verifications"
+        ],
+        "verificationNote": "The session that proposed the ops, and no other (reviewModes.verification.who.runner): X-Orbit-Session-Id is required, and another session's op or another owner's anything is a 404."
       }
+    },
+    "verify": {
+      "cli": "orbit wiki verify",
+      "tool": "none: a CLI verb with no MCP tool beside it. It runs a model, which is a runner's work rather than a tool call's, and it reports only what that model said.",
+      "precondition": "Verify only the ops this session proposed into an automatic space, and never write a verdict yourself: each verdict is the local model's, read from a separate clean call against the op's own sources, and a verdict that cannot be read is reported as nothing.",
+      "does": "Reads reviewModes.verification.list for --space, asks a clean Claude Code for one verdict per op, and reports each (reviewModes.verification.report) as soon as it has it, so what one run verified survives a run that stops half way. It stops at once on a 401 from the model's endpoint, and on a space that is no longer automatic.",
+      "cleanClaudeCode": "claude -p --bare --tools \"\" --strict-mcp-config --mcp-config '{\"mcpServers\":{}}' --no-session-persistence --output-format json --model <model> --system-prompt <the verifier's own, short> --settings <file naming an apiKeyHelper>, run with an empty HOME and CLAUDE_CONFIG_DIR and an environment built from an allowlist: none of the session's ORBIT_* variables, none of its own Claude Code's (of CLAUDE_CODE_* only the provider's CLAUDE_CODE_MAX_CONTEXT_TOKENS and CLAUDE_CODE_EFFORT_LEVEL pass), and no ANTHROPIC_API_KEY.",
+      "model": "The model and the endpoint are the ones the session's provider injected: ANTHROPIC_MODEL and ANTHROPIC_BASE_URL (--model names another model). The token is ANTHROPIC_AUTH_TOKEN, read by the apiKeyHelper, because a bare run sends ANTHROPIC_API_KEY as x-api-key, which the local vLLM refuses 401, and ignores ANTHROPIC_AUTH_TOKEN.",
+      "prompt": "Hand-written, one op at a time: the entry's kind, title, summary and fields, the text of each source, and the neighbours a duplicate may name. The answer is one JSON object: {\"verdict\": one of reviewModes.verification.verdicts, \"reason\": one sentence, \"duplicateOf\": the id of the neighbour it duplicates, for a duplicate}.",
+      "unreadable": "An answer that is not that object — no JSON, another verdict, no reason, a duplicate naming no listed neighbour — is not a verdict: nothing is reported for its op, which keeps waiting, and it counts as a failure. The command exits non-zero when any op failed."
     },
     "decide": {
       "route": "POST /api/wiki/changesets/:id/decide",
@@ -657,6 +821,8 @@
       "a changeset recorded something, after its transaction commits",
       "the owner decided ops, after the transaction commits",
       "a space was created, its settings changed, or a workspace was bound",
+      "the owner reverted a changeset or rejected an entry, after the transaction commits",
+      "a verdict was recorded, after its transaction commits",
       "pending ops expired or were withdrawn"
     ],
     "notPublishedWhen": ["an idempotent replay", "a dryRun", "a request that recorded nothing"],
