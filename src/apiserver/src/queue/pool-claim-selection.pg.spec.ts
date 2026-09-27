@@ -243,7 +243,7 @@ suite('an account pool at claim time, on real PostgreSQL', async (t) => {
   });
 
   await t.test('(5) the switch leaves its line in the transcript, on the first engine start after it', async () => {
-    const line = "Switched to Work — Personal's 5-hour window is spent";
+    const line = 'Switched to Work — the 5-hour window on Personal is spent';
     assert.equal((await recorded(sessionId)).poolSwitchNotice, line);
     // The claim wrote nothing into the event stream itself: the runner numbers it.
     assert.equal(await db.runEvent.count({ where: { sessionId } }), 0);

@@ -188,7 +188,12 @@ test('the switch line says why the session left its member', () => {
   const from = { label: 'Personal', enabled: true, refused: false };
   assert.equal(
     poolSwitchNotice(to, { ...from, usage: fiveHour(100) }, NOW),
-    "Switched to Work — Personal's 5-hour window is spent",
+    'Switched to Work — the 5-hour window on Personal is spent',
+  );
+  // Why no possessive: on a label that names its plan it would land on the plan ("Zhang Min · Plus's").
+  assert.equal(
+    poolSwitchNotice({ label: 'Wikova · Pro' }, { ...from, label: 'Zhang Min · Plus', usage: fiveHour(100) }, NOW),
+    'Switched to Wikova · Pro — the 5-hour window on Zhang Min · Plus is spent',
   );
   const weekSpent = reported({
     five_hour: { utilization: 20, resets_at: IN_TWO_HOURS },
@@ -196,12 +201,12 @@ test('the switch line says why the session left its member', () => {
   });
   assert.equal(
     poolSwitchNotice(to, { ...from, usage: weekSpent }, NOW),
-    "Switched to Work — Personal's weekly window is spent",
+    'Switched to Work — the weekly window on Personal is spent',
   );
   // A refused key keeps its last snapshot, which can read as barely used: the refusal is the reason.
   assert.equal(
     poolSwitchNotice(to, { ...from, usage: fiveHour(3), refused: true }, NOW),
-    "Switched to Work — Personal's key was refused",
+    'Switched to Work — the key for Personal was refused',
   );
   assert.equal(poolSwitchNotice(to, { ...from, usage: null, enabled: false }, NOW), 'Switched to Work — Personal is disabled');
   assert.equal(poolSwitchNotice(to, null, NOW), 'Switched to Work — the previous account is no longer in this pool');
