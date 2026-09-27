@@ -1,0 +1,1045 @@
+diff --git a/src/web/src/components/AccountPools.tsx b/src/web/src/components/AccountPools.tsx
+index ad1580e..6c56625 100644
+--- a/src/web/src/components/AccountPools.tsx
++++ b/src/web/src/components/AccountPools.tsx
+@@ -13,9 +13,11 @@ import {
+   memberStatus,
+   poolHeadline,
+   type PoolMember,
++  type PoolOwner,
+   type PoolRefusals,
+   type ProviderPool,
+ } from '../lib/providerPools';
++import './pool-mock.css';
+ import type { ProviderRow } from '../lib/providerAdmin';
+ import { useIsMobile } from '../lib/useMediaQuery';
+ import { useToast } from '../lib/toast';
+@@ -37,6 +39,37 @@ function readFold(): Record<string, boolean> {
+ 
+ const accounts = (n: number) => `${n} account${n === 1 ? '' : 's'}`;
+ 
++/** MOCK: a person is a circle with their initial — the Team mock's mark for people. */
++export function OwnerAvatar({ owner, size = 28 }: { owner: PoolOwner; size?: number }) {
++  return (
++    <span
++      className="pool-av"
++      style={{ background: owner.color, width: size, height: size, fontSize: Math.round(size * 0.42) }}
++      aria-hidden="true"
++    >
++      {owner.name[0]}
++    </span>
++  );
++}
++
++/** MOCK: the pool's people, overlapping, for a card head. */
++function PeopleStack({ pool }: { pool: ProviderPool }) {
++  const people = pool.people ?? [];
++  return (
++    <span className="pool-people pool-wide" title={people.map((p) => p.name).join(', ')} data-mk="people-stack">
++      {people.map((p) => (
++        <OwnerAvatar key={p.name} owner={p} size={20} />
++      ))}
++    </span>
++  );
++}
++
++/** MOCK: the engine a pool runs on, as the picker draws it. */
++export function PoolEngineMark({ pool, size = 18 }: { pool: ProviderPool; size?: number }) {
++  const codex = pool.engine === 'codex';
++  return <ProviderTile slug={codex ? 'openai' : 'anthropic'} label={codex ? 'Codex' : 'Claude'} size={size} />;
++}
++
+ /** "2 of 3 accounts available": the members a session could start on right now. */
+ export const availabilityOf = (pool: ProviderPool, refusals: PoolRefusals): string =>
+   `${availableCount(pool, refusals)} of ${accounts(pool.members.length)} available`;
+@@ -99,21 +132,33 @@ function MemberRow({
+   member,
+   refusal,
+   onRemove,
++  pool,
+ }: {
+   member: PoolMember;
+   refusal: string | null;
+   onRemove?: () => void;
++  pool?: ProviderPool;
+ }) {
++  // MOCK: in a shared pool an account is someone's — only they can sign it back in, and only they or
++  // an admin can take it out.
++  const owner = member.owner;
++  const mine = !!owner?.you;
++  const canRemove = !owner || mine || pool?.viewerRole === 'Admin';
+   const navigate = useNavigate();
+   const status = memberStatus(member, undefined, refusal);
+   const quota = memberQuota(member);
+   return (
+-    <div className="re-row pool-row" data-member={member.id}>
++    <div className="re-row pool-row" data-member={member.id} data-mk={`acct-${member.slug}`}>
+       <div className="re-id">
+-        <ProviderTile slug={member.presetSlug ?? member.slug} label={member.label} size={28} />
++        {owner ? (
++          <OwnerAvatar owner={owner} />
++        ) : (
++          <ProviderTile slug={member.presetSlug ?? member.slug} label={member.label} size={28} />
++        )}
+         <div style={{ minWidth: 0 }}>
+           <div className="re-name" title={member.label}>
+             <span className="pool-member-label">{member.label}</span>
++            {mine && <span className="pool-you">you</span>}
+             {member.next && <span className="re-chip">NEXT</span>}
+           </div>
+         </div>
+@@ -146,9 +191,14 @@ function MemberRow({
+             Re-add key
+           </Button>
+         )}
++        {member.state === 'SIGNED_OUT' && mine && (
++          <Button size="small" type="primary" data-mk="row-signin">
++            Sign in
++          </Button>
++        )}
+         {/* A mark rather than a word: beside Re-add key the pair would outgrow the column, and
+             taking an account out is undone by adding it back. */}
+-        {onRemove && (
++        {onRemove && canRemove && (
+           <Tooltip title="Remove from this pool">
+             <Button
+               size="small"
+@@ -162,6 +212,13 @@ function MemberRow({
+         )}
+       </div>
+       {refusal && <div className="pool-why">{refusal}</div>}
++      {member.state === 'SIGNED_OUT' && (
++        <div className="pool-why" data-mk="row-signedout">
++          {mine
++            ? 'Signed out on the Orbit server — sign in again to put it back in the pool.'
++            : `Signed out — only ${owner?.name ?? 'its owner'} can sign it in again.`}
++        </div>
++      )}
+     </div>
+   );
+ }
+@@ -186,7 +243,7 @@ export function PoolMembers({
+       )}
+       {/* Not of one the pool no longer admits: on its own that account still runs, and in the pool
+           it can't. */}
+-      {pool.members.length === 1 && !memberRefusal(only, refusals) && (
++      {pool.members.length === 1 && !pool.shared && !memberRefusal(only, refusals) && (
+         <div className="pool-note">
+           With one account this pool is the same as using <b>{only.label}</b> on its own. Add another
+           so a session can move when this one runs out.
+@@ -198,6 +255,7 @@ export function PoolMembers({
+           member={member}
+           refusal={memberRefusal(member, refusals)}
+           onRemove={onRemove && (() => onRemove(member))}
++          pool={pool}
+         />
+       ))}
+     </>
+@@ -216,16 +274,23 @@ function PoolCard({
+   onToggle: () => void;
+ }) {
+   return (
+-    <div className={`re-card pool-card${collapsed ? ' collapsed' : ''}`} data-pool={pool.id}>
+-      <div className="re-head">
++    <div className={`re-card pool-card${collapsed ? ' collapsed' : ''}`} data-pool={pool.id} data-mk={pool.shared ? 'team-card' : 'claude-card'}>
++      <div className="re-head" data-mk={pool.shared ? 'team-head' : 'claude-head'}>
+         <button className="re-toggle" type="button" aria-expanded={!collapsed} onClick={onToggle}>
+           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
+             ▸
+           </span>
++          <PoolEngineMark pool={pool} />
+           <span className="re-runner">{pool.label}</span>
++          {pool.shared && (
++            <span className="re-chip pool-shared-chip" data-mk="shared-chip">
++              SHARED
++            </span>
++          )}
+           <Availability pool={pool} refusals={refusals} />
+         </button>
+         <span className="re-head-sp" />
++        {pool.shared && <PeopleStack pool={pool} />}
+         <PoolGauge pool={pool} />
+         <Link className="re-manage" to={`/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
+           <span className="pool-wide">Manage </span>→
+@@ -258,12 +323,16 @@ export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refus
+ 
+   return (
+     <div className="re-sec pool-sec">
+-      <div className="re-sec-head">
++      <div className="re-sec-head pool-sec-head">
+         <h3>Account pools</h3>
+-        <span className="re-sec-sub">
+-          Several Claude subscriptions under one name — each session starts on the account with the
+-          most room in its 5-hour window.
++        <span className="re-sec-sub" data-mk="pools-sub">
++          Several subscriptions under one name — each session starts on the account with the most
++          room in its 5-hour window.
+         </span>
++        {/* MOCK: a way to make a second pool once there is one — until now only the keys list offered it. */}
++        <Button size="small" className="pool-new" data-mk="new-pool">
++          New pool
++        </Button>
+       </div>
+       {pools.map((pool) => {
+         const open = fold[pool.id] ?? !isMobile;
+diff --git a/src/web/src/lib/providerPools.ts b/src/web/src/lib/providerPools.ts
+index dc6701f..1c100e1 100644
+--- a/src/web/src/lib/providerPools.ts
++++ b/src/web/src/lib/providerPools.ts
+@@ -15,7 +15,21 @@ import type { ConfiguredProvider } from './workspaceDefaults';
+  */
+ 
+ /** Where one member stands, in the order the claim reads a member. */
+-export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA';
++export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA' | 'SIGNED_OUT';
++
++// MOCK (scratch tree only): what a shared pool adds — whose account each member is, and the people in it.
++export interface PoolOwner {
++  name: string;
++  color: string;
++  you?: boolean;
++}
++export interface PoolPerson extends PoolOwner {
++  role: 'Admin' | 'Member';
++  accounts: number;
++  /** Share of this week's use of the pool, 0..100. */
++  share: number;
++  sessions: number;
++}
+ 
+ export interface PoolMember {
+   id: string;
+@@ -31,6 +45,9 @@ export interface PoolMember {
+   resetsAt: string | null;
+   /** The member a session starting now would run on. */
+   next: boolean;
++  /** MOCK: a shared pool's member is someone's account. */
++  owner?: PoolOwner;
++  plan?: string;
+ }
+ 
+ export interface ProviderPool {
+@@ -45,6 +62,13 @@ export interface ProviderPool {
+    *  The server refuses to start or switch a session onto such a pool, or to pin a task to it. */
+   unavailable?: string | null;
+   members: PoolMember[];
++  /** MOCK: shared-pool fields. */
++  engine?: 'claude' | 'codex';
++  shared?: boolean;
++  viewerRole?: 'Admin' | 'Member';
++  ownFirst?: boolean;
++  membersCanAdd?: boolean;
++  people?: PoolPerson[];
+ }
+ 
+ /** Under ['providers'], so every provider change — a key, a pool, a quota the server re-read —
+@@ -103,10 +127,10 @@ export const poolsAsProviders = (pools: readonly ProviderPool[]): ConfiguredProv
+   pools.map((pool) => ({
+     slug: pool.slug,
+     label: pool.label,
+-    runtime: AgentProvider.CLAUDE,
++    runtime: pool.engine === 'codex' ? AgentProvider.CODEX : AgentProvider.CLAUDE,
+     models: [],
+     defaultModel: null,
+-    presetSlug: 'anthropic',
++    presetSlug: pool.engine === 'codex' ? 'openai' : 'anthropic',
+     modelsFromRuntime: true,
+     planUsage: null,
+   }));
+@@ -172,6 +196,8 @@ export function memberStatus(
+       };
+     case 'REFUSED':
+       return { label: 'Unavailable · key refused', color: 'red' };
++    case 'SIGNED_OUT':
++      return { label: 'Unavailable · signed out', color: 'red' };
+     case 'DISABLED':
+       return { label: 'Disabled', color: 'default' };
+     default:
+diff --git a/src/web/src/lib/sessionProviderChoices.ts b/src/web/src/lib/sessionProviderChoices.ts
+index 6a132e7..f165e61 100644
+--- a/src/web/src/lib/sessionProviderChoices.ts
++++ b/src/web/src/lib/sessionProviderChoices.ts
+@@ -192,7 +192,8 @@ export function providerChoices(
+     slug: pool.slug,
+     label: pool.label,
+     kind: 'pool' as const,
+-    ...brandForProvider(pool.slug, pool.label, 'anthropic'),
++    // MOCK: a Codex pool wears the Codex mark.
++    ...brandForProvider(pool.slug, pool.label, (pool as { engine?: string }).engine === 'codex' ? 'openai' : 'anthropic'),
+     modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
+     poolSize: pool.members.length,
+     ...(claudeBlocker
+diff --git a/src/web/src/pages/ProviderPoolPage.tsx b/src/web/src/pages/ProviderPoolPage.tsx
+index acf1cd0..6711664 100644
+--- a/src/web/src/pages/ProviderPoolPage.tsx
++++ b/src/web/src/pages/ProviderPoolPage.tsx
+@@ -3,7 +3,23 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
+ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+ import { Button, Popconfirm, Spin } from 'antd';
+ import { api } from '../api';
+-import { availabilityOf, PoolAccountsModal, PoolGauge, PoolMembers } from '../components/AccountPools';
++import { availabilityOf, PoolAccountsModal, PoolEngineMark, PoolGauge, PoolMembers } from '../components/AccountPools';
++import { AddAccountModal, PoolPeopleCard, PoolRulesCard, type AddStep } from '../components/SharedPool';
++import type { ProviderPool } from '../lib/providerPools';
++
++// MOCK: ?as=<first name> shows the page as that member sees it; ?add=<step> opens "Add my account".
++const mq = new URLSearchParams(location.search);
++function asViewer(pool: ProviderPool, first: string | null): ProviderPool {
++  if (!first || !pool.shared) return pool;
++  const is = (name: string) => name.split(' ')[0].toLowerCase() === first;
++  const people = (pool.people ?? []).map((p) => ({ ...p, you: is(p.name) }));
++  return {
++    ...pool,
++    people,
++    viewerRole: people.find((p) => p.you)?.role ?? 'Member',
++    members: pool.members.map((m) => (m.owner ? { ...m, owner: { ...m.owner, you: is(m.owner.name) } } : m)),
++  };
++}
+ import { encodeId, routeId } from '../lib/idCodec';
+ import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
+ import { poolRefusals, providerPoolsQuery, type PoolMember } from '../lib/providerPools';
+@@ -50,7 +66,8 @@ export function ProviderPoolPage() {
+       </div>
+     );
+   }
+-  const pool = pools.data?.find((row) => routeId(row.id) === poolId);
++  const found = pools.data?.find((row) => routeId(row.id) === poolId);
++  const pool = found && asViewer(found, mq.get('as'));
+   const refusals = poolRefusals(keys.data ?? []);
+   if (!pool) {
+     return (
+@@ -63,6 +80,8 @@ export function ProviderPoolPage() {
+     );
+   }
+ 
++  if (pool.shared) return <SharedPoolPage pool={pool} refusals={refusals} />;
++
+   return (
+     <div style={{ maxWidth: 900, margin: '0 auto' }}>
+       <Link className="provider-back" to="/providers">
+@@ -108,3 +127,63 @@ export function ProviderPoolPage() {
+     </div>
+   );
+ }
++
++/** MOCK: a shared pool's page — the same accounts card, then its people and its rules. */
++function SharedPoolPage({ pool, refusals }: { pool: ProviderPool; refusals: ReturnType<typeof poolRefusals> }) {
++  const admin = pool.viewerRole === 'Admin';
++  const me = pool.people?.find((p) => p.you);
++  const step = mq.get('add') as AddStep | null;
++  return (
++    <div style={{ maxWidth: 900, margin: '0 auto' }}>
++      <Link className="provider-back" to="/providers">
++        ‹ All providers
++      </Link>
++      <div className="pool-page-head">
++        <div style={{ minWidth: 0 }}>
++          <div className="pool-page-title">
++            <PoolEngineMark pool={pool} size={26} />
++            <h1 className="page-title">{pool.label}</h1>
++            <span className="re-chip pool-shared-chip">SHARED</span>
++          </div>
++          <div style={{ color: 'var(--text-3)', fontSize: 12 }} data-mk="page-sub">
++            Shared Codex pool · {pool.people?.length ?? 0} members · {availabilityOf(pool, refusals)} ·
++            each session starts on the account with the most room in its 5-hour window, and stays on it
++            until that one runs out.
++          </div>
++        </div>
++        {(admin || pool.membersCanAdd) && (
++          <Button type="primary" data-mk="add-mine">
++            Add my account
++          </Button>
++        )}
++      </div>
++
++      <div className="re-card pool-card pool-detail" data-pool={pool.id} data-mk="accounts-card">
++        <div className="re-head">
++          <span className="re-runner">Accounts</span>
++          <span className="re-head-sp" />
++          <PoolGauge pool={pool} />
++        </div>
++        <PoolMembers pool={pool} refusals={refusals} onRemove={() => {}} />
++      </div>
++
++      <PoolPeopleCard pool={pool} />
++      <PoolRulesCard pool={pool} />
++
++      <div className="pool-danger pool-danger-row" data-mk="danger">
++        {admin ? (
++          <>
++            <Button danger>Delete pool</Button>
++            <span className="pool-danger-note">Every account in it is signed out of the Orbit server.</span>
++          </>
++        ) : (
++          <>
++            <Button danger>Leave pool</Button>
++            <span className="pool-danger-note">Your accounts leave with you.</span>
++          </>
++        )}
++      </div>
++      {step && me && <AddAccountModal pool={pool} step={step} me={me} />}
++    </div>
++  );
++}
+diff --git a/src/web/src/pages/ProvidersPage.tsx b/src/web/src/pages/ProvidersPage.tsx
+index 25ed26f..083b59c 100644
+--- a/src/web/src/pages/ProvidersPage.tsx
++++ b/src/web/src/pages/ProvidersPage.tsx
+@@ -7,6 +7,7 @@ import { providersQuery } from '../lib/queries';
+ import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
+ import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
+ import { AccountPools, PoolHint } from '../components/AccountPools';
++import { NewPoolModal } from '../components/SharedPool';
+ import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+ import { RunnerEngines } from '../components/RunnerEngines';
+ import { useIsMobile } from '../lib/useMediaQuery';
+@@ -157,6 +158,8 @@ export function ProvidersPage() {
+       {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
+           leave sessions dispatching to something the page no longer lets you see or delete. */}
+       {poolList.length > 0 && <AccountPools pools={poolList} refusals={refusals} />}
++      {/* MOCK: ?create=1 opens the new-pool dialog. */}
++      {new URLSearchParams(location.search).get('create') && <NewPoolModal />}
+ 
+       <div className="re-sec-head" style={{ marginTop: 28 }}>
+         <h3>Your API keys</h3>
+diff --git a/src/web/src/components/SharedPool.tsx b/src/web/src/components/SharedPool.tsx
+new file mode 100644
+index 0000000..187553f
+--- /dev/null
++++ b/src/web/src/components/SharedPool.tsx
+@@ -0,0 +1,283 @@
++// MOCK (scratch tree only): the parts a shared account pool adds to the pool page — its people, its
++// rules, the way an account joins it, and the dialog that makes one.
++import { Button, Checkbox, Input, Modal, Radio, Segmented, Select, Switch } from 'antd';
++import {
++  CheckCircleFilled,
++  EllipsisOutlined,
++  ExclamationCircleFilled,
++  ExportOutlined,
++  LoadingOutlined,
++  UserAddOutlined,
++  WarningFilled,
++} from '@ant-design/icons';
++import type { PoolPerson, ProviderPool } from '../lib/providerPools';
++import { OwnerAvatar } from './AccountPools';
++import { ProviderTile } from './ProviderGallery';
++import './pool-mock.css';
++
++const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
++
++/** Who is in the pool: what each has put in, and how much of this week's use was theirs. */
++export function PoolPeopleCard({ pool }: { pool: ProviderPool }) {
++  const people = pool.people ?? [];
++  const admin = pool.viewerRole === 'Admin';
++  return (
++    <div className="re-card pool-card pool-sub-sec" data-mk="people-card">
++      <div className="re-head">
++        <span className="re-runner">
++          Members<span className="pool-head-count">{people.length}</span>
++        </span>
++        <span className="re-head-sp" />
++        <span className="pool-head-note">Share of this week’s use</span>
++        {admin && (
++          <Button size="small" icon={<UserAddOutlined />} data-mk="add-members">
++            Add members
++          </Button>
++        )}
++      </div>
++      {people.map((p) => (
++        <PersonRow key={p.name} person={p} canManage={admin && !p.you} />
++      ))}
++    </div>
++  );
++}
++
++function PersonRow({ person, canManage }: { person: PoolPerson; canManage: boolean }) {
++  return (
++    <div className="pool-person" data-mk={`person-${person.name.split(' ')[0].toLowerCase()}`}>
++      <div className="pool-person-id">
++        <OwnerAvatar owner={person} />
++        <div style={{ minWidth: 0 }}>
++          <div className="pool-person-name">
++            <span>{person.name}</span>
++            {person.you && <span className="pool-you">you</span>}
++            {person.role === 'Admin' && <span className="re-chip">ADMIN</span>}
++          </div>
++          <div className={`pool-person-meta${person.accounts ? '' : ' none'}`}>
++            {person.accounts ? plural(person.accounts, 'account') : 'No account'} ·{' '}
++            {plural(person.sessions, 'session')}
++          </div>
++        </div>
++      </div>
++      <div className="pool-share">
++        <span className="runner-util">
++          <span className="runner-util-fill" style={{ width: `${person.share}%` }} />
++        </span>
++        <span className="pool-share-pct">{person.share}%</span>
++      </div>
++      <div className="pool-person-more">{canManage && <EllipsisOutlined aria-label={`Manage ${person.name}`} />}</div>
++    </div>
++  );
++}
++
++/** The two rules an admin sets. Everyone else reads them. */
++export function PoolRulesCard({ pool }: { pool: ProviderPool }) {
++  const admin = pool.viewerRole === 'Admin';
++  return (
++    <div className="re-card pool-card pool-sub-sec" data-mk="rules-card">
++      <div className="re-head">
++        <span className="re-runner">Rules</span>
++        <span className="re-head-sp" />
++        {!admin && <span className="pool-head-note">Set by the pool’s admins</span>}
++      </div>
++      <div className="pool-rule">
++        <div>
++          <div className="pool-rule-t">Members can add accounts</div>
++          <div className="pool-rule-h">
++            Anyone in {pool.label} can put their own Codex account in. Off: only admins can.
++          </div>
++        </div>
++        <Switch checked={!!pool.membersCanAdd} disabled={!admin} />
++      </div>
++      <div className="pool-rule" data-mk="rule-own">
++        <div>
++          <div className="pool-rule-t">Own account first</div>
++          <div className="pool-rule-h">
++            A member’s sessions start on their own account while it has room, then move on to the
++            others’.
++          </div>
++        </div>
++        <Switch checked={!!pool.ownFirst} disabled={!admin} />
++      </div>
++    </div>
++  );
++}
++
++export type AddStep = 'consent' | 'code' | 'done' | 'dup';
++
++/** Putting one's own ChatGPT account in: what that means, the device sign-in, and how it ended. */
++export function AddAccountModal({ pool, step, me }: { pool: ProviderPool; step: AddStep; me: PoolPerson }) {
++  const people = pool.people?.length ?? 0;
++  const footer =
++    step === 'consent' ? (
++      <>
++        <Button>Cancel</Button>
++        <Button type="primary" data-mk="consent-go">
++          Sign in with ChatGPT
++        </Button>
++      </>
++    ) : step === 'code' ? (
++      <Button>Cancel</Button>
++    ) : step === 'dup' ? (
++      <>
++        <Button>Close</Button>
++        <Button type="primary">Use another account</Button>
++      </>
++    ) : (
++      <Button type="primary">Done</Button>
++    );
++  return (
++    <Modal open width={500} title={`Add your Codex account to ${pool.label}`} footer={footer} onCancel={() => {}}>
++      {step === 'consent' && (
++        <div data-mk="add-consent">
++          <div className="pa-lead">Sign in with the ChatGPT account you want to put in this pool.</div>
++          <ul className="pa-facts">
++            <li>
++              <b>Everyone in {pool.label} can run sessions on it</b> — {people} people. Their sessions
++              spend this account’s Codex usage.
++            </li>
++            <li>
++              <b>The sign-in stays on the Orbit server.</b> It never goes to a runner, and nobody in the
++              pool sees it or the account’s email.
++            </li>
++            <li>
++              <b>Take it out, or sign it in again, any time.</b> Its usage shows on this page for
++              everyone in the pool.
++            </li>
++          </ul>
++          <div className="pa-risk" data-mk="add-risk">
++            <WarningFilled />
++            <span>OpenAI’s terms don’t allow an account to be shared. An account used this way can be suspended.</span>
++          </div>
++        </div>
++      )}
++      {step === 'code' && (
++        <div className="rsi" style={{ marginTop: 0 }} data-mk="add-code">
++          <a className="rsi-open" href="#">
++            <ExportOutlined /> Open the sign-in page
++          </a>
++          <div className="rsi-hint">
++            Sign in <b>with the account you’re adding</b>, then enter this one-time code:
++          </div>
++          <div className="rsi-usercode">QX7M-4TZPK</div>
++          <div className="rsi-row">
++            <LoadingOutlined /> Waiting for you to approve it…
++          </div>
++          <div className="rsi-hint">The code works for 15 minutes. You can close this — the sign-in finishes on its own.</div>
++        </div>
++      )}
++      {step === 'done' && (
++        <div data-mk="add-done">
++          <div className="pa-done">
++            <CheckCircleFilled />
++            <div>
++              <div className="pa-done-t">{me.name} · Plus is in {pool.label}</div>
++              <div className="pa-done-s">It’s ready for the next session. Only you can take it out or sign it in again.</div>
++            </div>
++          </div>
++          <div className="pa-acct">
++            <OwnerAvatar owner={me} />
++            <div>
++              <div className="pa-acct-t">{me.name} · Plus</div>
++              <div className="pa-acct-s">lin.wei@wikova.test · ChatGPT Plus · only you see the email</div>
++            </div>
++          </div>
++        </div>
++      )}
++      {step === 'dup' && (
++        <div className="pa-done pa-dup" data-mk="add-dup">
++          <ExclamationCircleFilled />
++          <div>
++            <div className="pa-done-t">This ChatGPT account is already in {pool.label}</div>
++            <div className="pa-done-s">
++              Zhang Min put it in. Signing in twice doesn’t add usage — sign in with a different
++              account.
++            </div>
++          </div>
++        </div>
++      )}
++    </Modal>
++  );
++}
++
++/** Making a pool: which engine, what it's called, who else is in it. */
++export function NewPoolModal() {
++  const person = (name: string, color: string) => ({
++    value: name,
++    label: (
++      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
++        <OwnerAvatar owner={{ name, color }} size={16} />
++        {name}
++      </span>
++    ),
++  });
++  const people = [person('Zhang Min', '#16a34a'), person('Chen Yu', '#db2777'), person('Lin Wei', '#ea580c')];
++  return (
++    <Modal
++      open
++      width={520}
++      title="New account pool"
++      onCancel={() => {}}
++      footer={
++        <>
++          <Button>Cancel</Button>
++          <Button type="primary">Create pool</Button>
++        </>
++      }
++    >
++      <div className="np-field" data-mk="new-engine">
++        <span className="np-field-l">Engine</span>
++        <Segmented
++          className="np-engine"
++          value="codex"
++          options={[
++            {
++              value: 'claude',
++              label: (
++                <>
++                  <ProviderTile slug="anthropic" label="Claude" size={16} /> Claude
++                </>
++              ),
++            },
++            {
++              value: 'codex',
++              label: (
++                <>
++                  <ProviderTile slug="openai" label="Codex" size={16} /> Codex
++                </>
++              ),
++            },
++          ]}
++        />
++        <div className="np-field-h">
++          A Codex pool holds ChatGPT sign-ins, kept by the Orbit server — each person signs theirs in
++          once the pool exists. A Claude pool is made of your Claude API keys.
++        </div>
++      </div>
++      <label className="np-field">
++        <span className="np-field-l">Name</span>
++        <Input value="Team Codex" />
++      </label>
++      <div className="np-field" data-mk="new-who">
++        <span className="np-field-l">Who can use it</span>
++        <Radio.Group value="shared">
++          <Radio value="me">Just me</Radio>
++          <Radio value="shared">Me and people I add</Radio>
++        </Radio.Group>
++        <Select
++          mode="multiple"
++          style={{ width: '100%', marginTop: 10 }}
++          value={['Zhang Min', 'Chen Yu', 'Lin Wei']}
++          options={people}
++          optionLabelProp="label"
++        />
++        <div className="np-field-h">
++          They see it on their Providers page and in the session picker, and can start sessions on it.
++        </div>
++        <Checkbox checked style={{ marginTop: 8 }}>
++          They can add their own accounts
++        </Checkbox>
++      </div>
++    </Modal>
++  );
++}
+diff --git a/src/web/src/components/pool-mock.css b/src/web/src/components/pool-mock.css
+new file mode 100644
+index 0000000..7e2dc55
+--- /dev/null
++++ b/src/web/src/components/pool-mock.css
+@@ -0,0 +1,346 @@
++/* MOCK (scratch tree only): what a shared account pool adds. Tokens come from index.css. */
++
++/* People are circles with an initial — the Team mock's mark. */
++.pool-av {
++  display: inline-flex;
++  flex: none;
++  align-items: center;
++  justify-content: center;
++  border-radius: 50%;
++  color: #fff;
++  font-weight: 600;
++  line-height: 1;
++}
++.pool-you {
++  flex: none;
++  margin-left: 6px;
++  font-size: 12px;
++  font-weight: 400;
++  color: var(--text-3);
++}
++
++/* The head: the engine's mark before the name, SHARED after it, the people at the right. */
++.pool-card .re-toggle .provider-tile {
++  flex: none;
++  margin-right: 2px;
++}
++.re-chip.pool-shared-chip {
++  margin-left: 0;
++  background: var(--brand-tint);
++  color: var(--brand);
++}
++.pool-people {
++  display: inline-flex;
++  align-items: center;
++  flex: none;
++  margin-right: 6px;
++}
++.pool-people .pool-av {
++  box-shadow: 0 0 0 2px var(--bg-raised, #fff);
++}
++.pool-people .pool-av + .pool-av {
++  margin-left: -5px;
++}
++
++/* ── the pool page: its people and its rules ─────────────────────────────────────────────── */
++.pool-page-title {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++}
++.pool-page-title .page-title {
++  margin-bottom: 0;
++}
++.pool-sub-sec {
++  margin-top: 16px;
++}
++.pool-card .re-head .pool-head-count {
++  font-size: 12px;
++  font-weight: 400;
++  color: var(--text-3);
++  margin-left: 6px;
++}
++.pool-head-note {
++  font-size: 11.5px;
++  color: var(--text-3);
++  white-space: nowrap;
++}
++.pool-person {
++  display: grid;
++  grid-template-columns: minmax(0, 1fr) minmax(160px, 240px) 28px;
++  align-items: center;
++  gap: 14px;
++  padding: 10px 14px;
++}
++.pool-person + .pool-person {
++  border-top: 1px solid var(--border-subtle);
++}
++.pool-person-id {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  min-width: 0;
++}
++.pool-person-name {
++  display: flex;
++  align-items: center;
++  min-width: 0;
++  font-size: 13.5px;
++  font-weight: 500;
++  color: var(--text-1);
++}
++.pool-person-name > span:first-child {
++  min-width: 0;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++.pool-person-meta {
++  font-size: 12px;
++  color: var(--text-3);
++}
++.pool-person-accts {
++  font-size: 12.5px;
++  color: var(--text-2);
++}
++.pool-person-accts.none {
++  color: var(--text-3);
++}
++.pool-share {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  font-size: 12px;
++  color: var(--text-2);
++  font-variant-numeric: tabular-nums;
++}
++.pool-share .runner-util {
++  flex: 1;
++  margin-top: 0;
++}
++.pool-share-pct {
++  width: 32px;
++  text-align: right;
++}
++.pool-person-more {
++  color: var(--text-3);
++  text-align: center;
++}
++.pool-rule {
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  gap: 24px;
++  padding: 12px 14px;
++}
++.pool-rule + .pool-rule {
++  border-top: 1px solid var(--border-subtle);
++}
++.pool-rule-t {
++  font-size: 13.5px;
++  color: var(--text-1);
++}
++.pool-rule-h {
++  font-size: 12px;
++  line-height: 1.55;
++  color: var(--text-3);
++}
++.pool-danger-row {
++  display: flex;
++  gap: 8px;
++  align-items: center;
++}
++.pool-danger-note {
++  font-size: 12px;
++  color: var(--text-3);
++}
++
++/* ── "Add my account" ────────────────────────────────────────────────────────────────────── */
++.pa-lead {
++  font-size: 13px;
++  color: var(--text-2);
++  line-height: 1.6;
++  margin: 2px 0 12px;
++}
++.pa-facts {
++  margin: 0 0 14px;
++  padding: 10px 12px 10px 30px;
++  border-radius: 8px;
++  background: var(--bg-sunken);
++  font-size: 12.5px;
++  line-height: 1.65;
++  color: var(--text-2);
++}
++.pa-facts li + li {
++  margin-top: 4px;
++}
++.pa-facts b {
++  color: var(--text-1);
++  font-weight: 600;
++}
++.pa-risk {
++  display: flex;
++  gap: 8px;
++  align-items: flex-start;
++  margin: 0 0 4px;
++  padding: 8px 10px;
++  border: 1px solid var(--warning-border, #f5d6a3);
++  border-radius: 8px;
++  background: var(--warning-tint, #fff8ec);
++  font-size: 12.5px;
++  line-height: 1.55;
++  color: var(--text-2);
++}
++.pa-risk .anticon {
++  margin-top: 3px;
++  color: var(--warning);
++}
++.pa-step {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  margin: 0 0 12px;
++  font-size: 12px;
++  color: var(--text-3);
++}
++.pa-step b {
++  color: var(--text-2);
++  font-weight: 600;
++}
++.pa-done {
++  display: flex;
++  gap: 12px;
++  align-items: flex-start;
++  padding: 4px 0 8px;
++}
++.pa-done-t {
++  font-size: 14px;
++  font-weight: 600;
++  color: var(--text-1);
++}
++.pa-done-s {
++  font-size: 12.5px;
++  color: var(--text-3);
++  line-height: 1.6;
++}
++.pa-done .anticon {
++  font-size: 22px;
++  color: var(--success, #16a34a);
++  margin-top: 2px;
++}
++.pa-dup .anticon {
++  color: var(--warning);
++}
++.pa-acct {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  margin: 10px 0 2px;
++  padding: 10px 12px;
++  border: 1px solid var(--border);
++  border-radius: 8px;
++}
++.pa-acct-t {
++  font-size: 13px;
++  font-weight: 500;
++  color: var(--text-1);
++}
++.pa-acct-s {
++  font-size: 12px;
++  color: var(--text-3);
++}
++
++/* ── New pool ────────────────────────────────────────────────────────────────────────────── */
++.np-field {
++  display: block;
++  margin: 0 0 14px;
++}
++.np-field-l {
++  display: block;
++  margin: 0 0 6px;
++  font-size: 13px;
++  color: var(--text-2);
++}
++.np-field-h {
++  margin-top: 6px;
++  font-size: 12px;
++  line-height: 1.55;
++  color: var(--text-3);
++}
++.np-engine .ant-segmented-item-label {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++}
++
++@media (max-width: 700px) {
++  .pool-person {
++    grid-template-columns: minmax(0, 1fr) 28px;
++    row-gap: 6px;
++  }
++  .pool-person > :nth-child(2) {
++    grid-column: 1;
++    grid-row: 2;
++    padding-left: 38px;
++  }
++  .pool-person > :nth-child(3) {
++    grid-column: 2;
++    grid-row: 1;
++  }
++  .pool-head-note {
++    display: none;
++  }
++  .pool-rule {
++    gap: 14px;
++  }
++}
++
++/* The section head carries a way to make another pool. */
++.pool-sec-head {
++  display: flex;
++  align-items: baseline;
++  gap: 10px;
++}
++.pool-sec-head .pool-new {
++  margin-left: auto;
++  align-self: center;
++  flex: none;
++}
++.pool-sec-head h3 {
++  white-space: nowrap;
++}
++.ant-modal-close {
++  outline: none !important;
++  box-shadow: none !important;
++}
++
++/* Phone: the people stack is desktop-only (.pool-wide), the head's name must survive; a row's
++   actions sit at the right edge of their own line; the members' head note drops under the title. */
++@media (max-width: 700px) {
++  .pool-people {
++    display: none;
++  }
++  .pool-row .re-act,
++  .pool-detail .pool-row .re-act {
++    grid-column: 1 / -1;
++    margin-top: -4px;
++  }
++  .pool-sub-sec .re-head {
++    flex-wrap: wrap;
++    row-gap: 2px;
++  }
++  .pool-sub-sec .pool-head-note {
++    display: block;
++    order: 5;
++    width: 100%;
++  }
++  .re-chip.pool-shared-chip {
++    flex: none;
++  }
++}
++@media (max-width: 700px) {
++  /* The pool's name outranks the chip on a phone head; the pool's own page carries SHARED. */
++  .pool-card .re-toggle .pool-shared-chip {
++    display: none;
++  }
++}
