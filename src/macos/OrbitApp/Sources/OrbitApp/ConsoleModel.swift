@@ -880,7 +880,7 @@ final class ConsoleModel {
         case .assistant(let b): return b.isFinalized
         case .thinking(let b):  return b.isFinalized
         case .toolCall(let c):  return c.status != .running
-        case .user, .interrupt, .error, .authError, .autoRetry: return true   // the agent still owes a reply
+        case .user, .interrupt, .error, .authError, .autoRetry, .notice: return true   // the agent still owes a reply
         }
     }
 
