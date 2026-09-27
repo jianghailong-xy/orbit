@@ -859,9 +859,10 @@ body {
 .tp-item.active .tp-count.needs-you {
   color: var(--warning);
 }
-/* Task-list status dot. Grey + static by default; turns blue and breathes while
-   the list has a task executing right now (runningTasks > 0); turns green and
-   static once the whole list is finished (every task DONE). */
+/* Status dot for a task list (the Tasks page's scope menu) and an open project (the rail's
+   Projects group). Grey + static by default; turns blue and breathes while work is executing right
+   now (a list's runningTasks > 0; a project's running task or working coordinator); turns green and
+   static once a list is finished (every task DONE). */
 .tp-list-dot {
   width: 7px;
   height: 7px;
@@ -876,14 +877,6 @@ body {
 }
 .tp-list-dot.done {
   background: var(--success-solid);
-}
-/* A finished list reads as checked-off: its title is muted (kept clickable, no
-   strikethrough). The active highlight still wins when such a list is selected. */
-.tp-label.done {
-  color: var(--text-3);
-}
-.tp-item.active .tp-label.done {
-  color: var(--brand);
 }
 @keyframes tp-list-dot-pulse {
   0%,
@@ -1259,6 +1252,54 @@ body {
   font-weight: 600;
   margin: 0;
   color: var(--text-1);
+}
+/* The Tasks page's title is also its scope picker: every task, the tasks in no list, or one list.
+   A button in the heading's own type, so it reads as the title and presses as the menu. */
+.tasks-scope-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: -6px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.tasks-scope-trigger:hover {
+  background: var(--bg-hover);
+}
+.tasks-scope-caret {
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* Qualified by antd's own class: its injected menu styles outrank a single-class rule. */
+.ant-dropdown-menu.tasks-scope-menu {
+  min-width: 260px;
+  max-width: min(460px, calc(100vw - 24px));
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.tasks-scope-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.tasks-scope-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tasks-scope-count {
+  flex: none;
+  margin-left: 16px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .tasks-toolbar {
   display: flex;
