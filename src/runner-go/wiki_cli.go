@@ -169,6 +169,15 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 			"--json",
 		},
 		Description: wikiVerifyDescription,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"space": map[string]interface{}{"type": "string", "description": "The automatic space this session proposed into."},
+				"model": map[string]interface{}{"type": "string", "description": "The model to verify with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
+				"max":   map[string]interface{}{"type": "integer", "minimum": 1, "description": "Verify at most this many ops in this run; the rest keep waiting."},
+			},
+			"required": []string{"space"},
+		},
 		Mutates:     true,
 		SessionOnly: true,
 	},

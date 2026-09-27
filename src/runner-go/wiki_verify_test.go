@@ -822,6 +822,19 @@ func TestWikiVerifyDescriptionIsAPrecondition(t *testing.T) {
 	if !strings.HasPrefix(spec.Description, wikiVerifyPrecondition) {
 		t.Errorf("the capability's description does not lead with the precondition: %q", spec.Description)
 	}
+	// No tool stands beside it, so its schema is its own: exactly the flags its parser takes.
+	properties, _ := spec.InputSchema["properties"].(map[string]interface{})
+	names := []string{}
+	for name := range properties {
+		names = append(names, name)
+		if !writtenFlagIsParsed("verify", name) {
+			t.Errorf("the schema names --%s, which `orbit wiki verify` does not take", name)
+		}
+	}
+	sort.Strings(names)
+	if !reflect.DeepEqual(names, []string{"max", "model", "space"}) || !reflect.DeepEqual(spec.InputSchema["required"], []string{"space"}) {
+		t.Errorf("the schema = %#v", spec.InputSchema)
+	}
 	help := wikiActionHelp["verify"]
 	for _, sentence := range strings.Split(wikiVerifyPrecondition, ": ") {
 		if !strings.Contains(spec.Description, sentence) || !strings.Contains(help, sentence) {
