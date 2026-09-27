@@ -469,6 +469,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'toolCallId',
   'authorUserId',
   'authorToolCallId',
+  // The entry a duplicate verdict named (migration 0312): the column, and the op's `verification`
+  // read's `duplicateOf`, which is how a verifier names it back. An address like `resultEntryId`,
+  // with no foreign key on purpose (the trail outlives the entry), so it may 404 — never a fence.
+  'verificationDuplicateOf',
+  'duplicateOf',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

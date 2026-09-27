@@ -628,6 +628,21 @@ export interface ProjectListIntegration {
 }
 
 /**
+ * What a project's coordinator conversation is doing, as one list row states it.
+ *
+ * The task rollup cannot say this: a coordinator reading, planning or answering writes no task, so
+ * a project whose only motion is its coordinator reads as idle and sorts by a task write from days
+ * ago. The iPhone drawer lays the live session list over its rows for this; a client holding no
+ * such list reads it here. Null on a project with no coordinator bound.
+ */
+export interface ProjectListCoordinatorActivity<Instant = string> {
+  /** The conversation is working right now — exactly when the session list draws its spinner. */
+  working: boolean;
+  /** Its newest turn, or null before its first one. */
+  lastTurnAt: Instant | null;
+}
+
+/**
  * What `GET /projects` says about who must act on a project, and how long they have had to — the
  * blockers the list has always aggregated plus the items behind them (§7.1 V1).
  *

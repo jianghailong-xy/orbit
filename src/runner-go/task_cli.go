@@ -2713,6 +2713,11 @@ type cliCapabilitySpec struct {
 	// that grant exists, so the two doors appear together — a capability the engine has no tool for
 	// would be one no reader could act on, and the descriptor set is what gives it its schema.
 	RequiresOrchestration bool
+	// The input schema of a command no MCP tool stands beside (`orbit wiki verify` runs a model,
+	// which is a runner's work rather than a tool call's): its own flags, in the JSON-schema form a
+	// descriptor would give them, so the document describes every command it advertises the same
+	// way. A command that has a tool takes the tool's schema, never this.
+	InputSchema map[string]interface{}
 }
 
 var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
@@ -2901,6 +2906,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 			description = spec.Description
 		}
 		schema, _ := d["inputSchema"].(map[string]interface{})
+		if schema == nil && d == nil {
+			schema = spec.InputSchema
+		}
 		argv := append([]string{}, spec.Argv...)
 		argv[0] = executable
 		commands = append(commands, cliCapability{
