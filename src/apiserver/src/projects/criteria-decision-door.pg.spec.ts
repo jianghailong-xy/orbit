@@ -33,6 +33,14 @@
  * Both are the same refusal, because approving a proposal composed against an older set would
  * take back whatever was stated in between — which is the walk this whole arrangement forbids.
  *
+ * WHY THE CONFIRMATION MOVES ON ONE APPROVAL AND NOT ON ANOTHER
+ * -------------------------------------------------------------
+ * An APPROVE of an edit to the version the owner confirmed carries that confirmation to the
+ * version it produces (E): every word of the result has now been in front of the owner, at one of
+ * the two doors. (F) is the pair of negatives that makes that a rule rather than a side effect: an
+ * approval of a set an unheld edit had already moved past the confirmation, and one on a project
+ * nobody has confirmed, move no confirmation at all.
+ *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/criteria-decision-door.pg.spec.ts
  */
 import assert from 'node:assert/strict';
@@ -61,6 +69,7 @@ const FIRST = 'the decision door refuses four ways, and writes no effective row 
 const SECOND = 'an APPROVE applies the edit, advances the seal and records the approval together';
 const THIRD = 'the criterion this fixture drops, so that dropping it is a loosening';
 const FOURTH = 'a fourth criterion, added by a tightening edit that moves the ruler under a proposal';
+const FIFTH = 'a fifth criterion, added after the confirmation by an edit nobody asked about';
 
 /** One criterion as a held proposal's `action.request` states it. */
 interface ProposedCriterion {
@@ -416,8 +425,8 @@ test('the criteria decision door: two keys, one transaction, four refusals', {
     assert.deepEqual(held.criteria, before.criteria, 'filing it applied nothing');
 
     // The owner confirms the set that stands, so that the SECOND consequence of an APPROVE — the
-    // confirmation going stale under it — is a state change this file can watch rather than a
-    // property of a project nobody had confirmed.
+    // confirmation moving to the version it produces — is a state change this file can watch
+    // rather than a property of a project nobody had confirmed.
     const confirmed = await acceptance.confirmStandardSet(
       ownerId, projectId, { criteriaDigest: held.seal },
     );
@@ -483,12 +492,15 @@ test('the criteria decision door: two keys, one transaction, four refusals', {
     // (ii) THE SEAL ADVANCED — read back off the rows, not recomputed by the caller.
     assert.equal(after.seal, approved.resultingSeal,
       'the seal the response reports is the seal a reader of the rows computes');
-    assert.equal(approved.confirmation.state, 'STALE',
-      'so the confirmation given against the older set no longer counts');
-    assert.equal(approved.confirmation.confirmed, false);
+    assert.equal(approved.confirmation.state, 'CONFIRMED',
+      'the owner had confirmed the set this approval started from, so the confirmation moved with '
+        + 'the edit they approved instead of asking them for it a second time');
+    assert.equal(approved.confirmation.confirmed, true);
     assert.equal(approved.confirmation.currentVersion.digest, after.seal);
-    assert.equal(approved.confirmation.confirmation?.criteriaDigest, held.seal,
-      'and the response still says WHICH version the owner had confirmed');
+    assert.equal(approved.confirmation.confirmation?.criteriaDigest, after.seal,
+      'and it names the version the approval produced, not the one it started from');
+    assert.equal(approved.confirmation.confirmation?.confirmedById, ownerId,
+      'recorded against the owner who answered');
 
     // (iii) THE APPROVAL WAS RECORDED, on both tables it belongs on.
     assert.deepEqual(after.decisions, [
@@ -517,4 +529,89 @@ test('the criteria decision door: two keys, one transaction, four refusals', {
     assert.equal(spent.body.settledAs, 'APPROVE');
     assert.deepEqual(await census(), after, 'and the refusal wrote nothing');
   });
+
+  // ═══ (F) the confirmation moves only from a version the owner confirmed ══════════════════════
+
+  await t.test('(F) an APPROVE moves no confirmation the owner had not given on its starting set',
+    async () => {
+      /** Every confirmation on record for one project, oldest first. */
+      const confirmations = async (id: string): Promise<string[]> => (await sql.query<{
+        criteria_digest: string;
+      }>(
+        `SELECT "criteria_digest" FROM "project_standard_set_confirmation"
+          WHERE "project_id" = $1::uuid ORDER BY "confirmed_at", "id"`, [id],
+      )).rows.map((row) => row.criteria_digest);
+
+      // ── (1) a set an unheld edit had already moved past the confirmation ──────────────────────
+      // (E) left the confirmation on the version that stands. A tightening lands where it is made
+      // and asks nobody, so the owner has never been shown FIFTH — and the standing says so.
+      const confirmedSet = await census();
+      assert.equal((await acceptance.standardSetConfirmation(ownerId, projectId)).state,
+        'CONFIRMED', 'the starting point is a confirmed set, or the STALE below proves nothing');
+      await state([
+        ...confirmedSet.criteria.map((criterion) => ({ id: criterion.id, text: criterion.text })),
+        { text: FIFTH },
+      ]);
+      const tightened = await census();
+      assert.notEqual(tightened.seal, confirmedSet.seal, 'the tightening landed');
+      const recorded = await confirmations(projectId);
+      assert.equal(recorded.at(-1), confirmedSet.seal, 'and it wrote no confirmation of its own');
+
+      // A loosening of the set that stands, answered by the owner with both keys.
+      await state(tightened.criteria
+        .filter((criterion) => criterion.text !== THIRD)
+        .map((criterion) => ({ id: criterion.id, text: criterion.text })));
+      const proposal = await newestProposal();
+      assert.equal(proposal.baselineSeal, tightened.seal);
+      const approved = await decide(proposal.id, {
+        commitToken: proposal.commitToken, decision: 'APPROVE', baseSeal: tightened.seal,
+      });
+      assert.equal(approved.applied, true, 'the edit is in force');
+      assert.notEqual(approved.resultingSeal, tightened.seal);
+
+      assert.equal(approved.confirmation.state, 'STALE',
+        'the set this approval started from was never confirmed — FIFTH arrived after the '
+          + 'confirmation, unasked — so approving one change to it confirms none of the rest');
+      assert.equal(approved.confirmation.confirmation?.criteriaDigest, confirmedSet.seal,
+        'the newest confirmation still names the version the owner actually confirmed');
+      assert.deepEqual(await confirmations(projectId), recorded,
+        'and no confirmation row was written');
+
+      // ── (2) a project nobody has confirmed ────────────────────────────────────────────────────
+      // Confirming is also what STARTS a project, so a confirmation carried onto one that never
+      // had any would be the project started behind its owner's back.
+      const unconfirmed = randomUUID();
+      await prisma.project.create({
+        data: { id: unconfirmed, ownerId, title: 'A project nobody has said what done means for' },
+      });
+      await projects.update(ownerId, unconfirmed, {
+        acceptanceCriteriaItems: [FIRST, SECOND].map((text) => ({
+          text, verificationMethod: METHOD,
+        })),
+      } as never);
+      const { rows: [kept] } = await sql.query<{ id: string }>(
+        `SELECT "id" FROM "project_acceptance_criterion_definition"
+          WHERE "project_id" = $1::uuid ORDER BY "ordinal" LIMIT 1`, [unconfirmed],
+      );
+      const loosened = await projects.update(ownerId, unconfirmed, {
+        acceptanceCriteriaItems: [{ id: kept!.id, text: FIRST, verificationMethod: METHOD }],
+      } as never) as { acceptanceCriteriaHold?: { intentId: string; baselineSeal: string } };
+      const hold = loosened.acceptanceCriteriaHold;
+      assert.ok(hold, 'dropping a criterion is held for the owner');
+      const { rows: [key] } = await sql.query<{ commit_token: string }>(
+        `SELECT "commit_token" FROM "project_ratified_action_intent" WHERE "id" = $1::uuid`,
+        [hold.intentId],
+      );
+      const answered = await projects.decideCriteriaChange(ownerId, unconfirmed, hold.intentId, {
+        commitToken: key!.commit_token, decision: 'APPROVE', baseSeal: hold.baselineSeal,
+      } as never);
+      assert.equal(answered.applied, true);
+      assert.equal(answered.confirmation.state, 'UNCONFIRMED',
+        'nobody had confirmed anything, so there was nothing to move');
+      assert.deepEqual(await confirmations(unconfirmed), []);
+      const { rows: [started] } = await sql.query<{ coordinator_enabled: boolean }>(
+        `SELECT "coordinator_enabled" FROM "project" WHERE "id" = $1::uuid`, [unconfirmed],
+      );
+      assert.equal(started!.coordinator_enabled, false, 'and the approval did not start it');
+    });
 });

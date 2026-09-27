@@ -4,6 +4,7 @@ import {
   type OwnerItemKind,
   type OwnerItemPushKind,
   type ProjectListAttention,
+  type ProjectListCoordinatorActivity,
   type ProjectListIntegration,
 } from '@orbit/shared';
 import type { ProjectSection, SectionProject } from '../components/ProjectSections';
@@ -541,4 +542,83 @@ export function integrationChipOf(project: AttentionProject): IntegrationChip | 
   const integration = project.integration;
   if (!integration) return null;
   return { text: integration.ref, branch: integration.line === 'PROJECT_BRANCH' };
+}
+
+// ── The sidebar's Projects group ─────────────────────────────────────────────────────────────
+
+/**
+ * A project as the sidebar's Projects group reads it off `GET /projects?status=OPEN`: which ones it
+ * lists, in what order, and with which marks — the iPhone drawer's rows (OrbitKit
+ * `ProjectAttention.drawerProjects` / `drawerMark`), so the two rails agree about one project.
+ */
+export interface SidebarProject {
+  id: string;
+  title: string;
+  status: 'OPEN' | 'DONE' | 'CANCELLED';
+  createdAt: string;
+  lastActivityAt: string | null;
+  buckets: Pick<ProjectPanoramaBuckets, 'running'>;
+  attention?: Pick<ProjectAttentionSummary, 'ownerItems'> | null;
+  /** Absent from a server that predates it; null on a project with no coordinator bound. */
+  coordinatorActivity?: ProjectListCoordinatorActivity | null;
+}
+
+/** The four owner items this project is waiting on the reader for, of the kinds this build names. */
+function waitingOwnerItems(project: SidebarProject) {
+  if (project.status !== 'OPEN') return [];
+  return (project.attention?.ownerItems ?? []).filter(
+    (item) => OWNER_ITEM_KINDS.includes(item.kind) && item.count > 0,
+  );
+}
+
+/**
+ * How many items wait on the reader in this project — a merge to approve, a question, an
+ * escalation, a pause — the four kinds together: the row's amber count. A project that merely went
+ * quiet counts nothing; that is not something the reader was asked for.
+ */
+export function projectNeedsYouCount(project: SidebarProject): number {
+  return waitingOwnerItems(project).reduce((sum, item) => sum + item.count, 0);
+}
+
+/** Work in flight: a task running, or the project's coordinator working. */
+export function projectIsWorking(project: SidebarProject): boolean {
+  return project.buckets.running > 0 || project.coordinatorActivity?.working === true;
+}
+
+/** The project's newest activity: its latest task write, or its coordinator's latest turn. */
+function latestActivity(project: SidebarProject): string | null {
+  const turn = project.coordinatorActivity?.lastTurnAt ?? null;
+  return instantRank(turn) > instantRank(project.lastActivityAt) ? turn : project.lastActivityAt;
+}
+
+/** When the reader was first asked — the oldest of the items waiting on them. */
+function oldestWait(project: SidebarProject): string | null {
+  let oldest: string | null = null;
+  for (const item of waitingOwnerItems(project)) {
+    if (oldest === null || byInstantAsc(item.oldestWaitingSince, oldest) < 0) oldest = item.oldestWaitingSince;
+  }
+  return oldest;
+}
+
+/**
+ * The group's rows: open projects only; the ones waiting on the reader first, longest wait first;
+ * then by the newest activity; then the newest project. Returns a new array.
+ */
+export function sidebarProjects<T extends SidebarProject>(all: readonly T[]): T[] {
+  return all
+    .filter((project) => project.status === 'OPEN')
+    .sort((a, b) => {
+      const aNeeds = projectNeedsYouCount(a) > 0;
+      const bNeeds = projectNeedsYouCount(b) > 0;
+      if (aNeeds !== bNeeds) return aNeeds ? -1 : 1;
+      if (aNeeds) {
+        const byWait = byInstantAsc(oldestWait(a), oldestWait(b));
+        if (byWait !== 0) return byWait;
+      }
+      const byActivity = byInstantDesc(latestActivity(a), latestActivity(b));
+      if (byActivity !== 0) return byActivity;
+      const byCreated = byInstantDesc(a.createdAt, b.createdAt);
+      if (byCreated !== 0) return byCreated;
+      return a.id.localeCompare(b.id);
+    });
 }

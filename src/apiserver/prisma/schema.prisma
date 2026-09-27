@@ -2637,10 +2637,11 @@ model ProjectAcceptanceCriterionDefinition {
 /// again on 2026-09-08 with 0229's own sentence quoted back to them and answered that the
 /// projection should be built.
 ///
-/// Append-only by construction rather than by trigger: the one writer inserts, no code path
-/// updates or deletes, and re-confirming after an edit is a SECOND row rather than a rewrite of
-/// the first. What is current is decided by comparing the newest row's digest with the criteria as
-/// they stand now, so history costs the reader nothing.
+/// Append-only by construction rather than by trigger: both writers insert — the owner's
+/// confirmation door, and the criteria decision door carrying a confirmation over an edit the
+/// owner approved — no code path updates or deletes, and re-confirming after an edit is a SECOND
+/// row rather than a rewrite of the first. What is current is decided by comparing the newest
+/// row's digest with the criteria as they stand now, so history costs the reader nothing.
 model ProjectStandardSetConfirmation {
   /// uuid(7) rather than a random one: it is monotonic, so ordering by (confirmedAt, id) has a
   /// total order even for two confirmations that land inside the same stored millisecond.
