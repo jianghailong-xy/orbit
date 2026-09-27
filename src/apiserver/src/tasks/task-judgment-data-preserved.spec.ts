@@ -1277,7 +1277,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names
       // none of the six preserved objects. No INSERT, UPDATE or DELETE: every stored entry and op
       // already satisfies the widened and the new CHECKs, so none is read or rewritten.
-      '0311_wiki_review_modes'],
+      '0311_wiki_review_modes',
+      // The wiki's search text priced for the planner: one `ALTER FUNCTION "wiki_entry_search_text"
+      // ... COST 10000` and nothing else. Read against every claim above: the function is the wiki's
+      // own (0307 created it) and its body, arguments and volatility are left as they are — there is
+      // no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none
+      // of the six preserved objects. No table, column, constraint, index, trigger or type is created,
+      // altered or dropped, and no `task`, `session`, `project` or `project_acceptance_*` object is
+      // named. No INSERT, UPDATE or DELETE: no row is read, locked or rewritten.
+      '0313_wiki_search_text_cost'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
