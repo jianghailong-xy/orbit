@@ -2028,6 +2028,35 @@ func (t *Transport) proposeWikiChangeset(sessionID string, body interface{}) (js
 	return out, err
 }
 
+// listWikiVerifications reads one page of the ops the calling session proposed that wait for their
+// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`).
+func (t *Transport) listWikiVerifications(sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	values := url.Values{}
+	values.Set("limit", strconv.Itoa(limit))
+	if after != "" {
+		values.Set("after", after)
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications?" + values.Encode()
+	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// reportWikiVerifications reports verdicts for ops the calling session proposed. A report none of
+// whose verdicts was recorded comes back as a 4xx carrying every outcome, as a refused proposal does.
+func (t *Transport) reportWikiVerifications(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications"
+	err := t.doHeaders(nil, http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // ── Service tokens for headless processes (`orbit token`) ──────────────────
 // Runner-token authenticated on purpose: a service token can never mint another, so a leaked
 // bridge credential cannot renew itself or widen its own scope.

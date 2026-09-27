@@ -5675,7 +5675,8 @@ model WikiChangesetOp {
   tainted      Boolean    @default(false)
 
   /// `pending` | `accepted` | `edited` | `rejected` | `auto_applied` | `conflict` | `expired` |
-  /// `withdrawn`. Only `pending` is not final.
+  /// `withdrawn` | `verifying`. Only `pending` and `verifying` — an Automatic space's op waiting for
+  /// its verdict (0312) — are not final.
   decision       String  @default("pending")
   /// `not_true` | `not_useful` | `duplicate` | `too_specific`: set exactly when rejected.
   decisionReason String? @map("decision_reason")
@@ -5683,13 +5684,22 @@ model WikiChangesetOp {
   resultEntryId  String?    @map("result_entry_id") @db.Uuid
   resultEntry    WikiEntry? @relation("WikiChangesetOpResultEntry", fields: [resultEntryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_changeset_op_result_entry_fkey")
   resultRevision Int?       @map("result_revision")
-  /// Set exactly when the decision is not `pending`.
+  /// Set exactly when the decision is neither `pending` nor `verifying`.
   decidedAt      DateTime?  @map("decided_at") @db.Timestamptz(3)
-  /// `tiered` | `automatic`: the space's review mode applied this op at once (only an add or an
-  /// amend). NULL when the effect policy decided it (0311).
+  /// `tiered` | `automatic`: the space's review mode applied this op (only an add or an amend) — at
+  /// once in Tiered, by its verdict in Automatic. NULL when the effect policy decided it (0311).
   appliedByMode  String?    @map("applied_by_mode")
   /// An op a review mode applied that was drawn into Review for the owner to check after the fact.
   spotCheck      Boolean    @default(false) @map("spot_check")
+  /// The verdict an Automatic space's verification gave the op (0312): `supported` | `partial` |
+  /// `unsupported` | `duplicate`, with the verifier's reason, its model and when the server recorded
+  /// it — the four set together or not at all — and, for a duplicate, the entry it named. That last
+  /// one carries no foreign key on purpose: the trail outlives the entry it names.
+  verificationVerdict     String?   @map("verification_verdict")
+  verificationReason      String?   @map("verification_reason")
+  verificationModel       String?   @map("verification_model")
+  verifiedAt              DateTime? @map("verified_at") @db.Timestamptz(3)
+  verificationDuplicateOf String?   @map("verification_duplicate_of") @db.Uuid
 
   @@unique([changesetId, seq], map: "wiki_changeset_op_changeset_seq_key")
   @@map("wiki_changeset_op")
