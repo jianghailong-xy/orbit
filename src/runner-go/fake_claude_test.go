@@ -47,6 +47,10 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeCodexResetProviderEnv); dir != "" {
 		os.Exit(runFakeCodexResetProvider(dir))
 	}
+	// The one-shot `claude -p` that `orbit wiki verify` runs (wiki_verify_test.go).
+	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {
+		os.Exit(runFakeVerifyClaude(dir))
+	}
 	os.Exit(m.Run())
 }
 

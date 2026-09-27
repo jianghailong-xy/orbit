@@ -813,7 +813,7 @@ func TestWikiCommandsNeedASessionAndTheSwitch(t *testing.T) {
 	}
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	t.Setenv(envWiki, "off")
-	for _, command := range [][]string{{"search", "anything"}, {"get", "e1"}, {"propose", "--ops", "[]"}} {
+	for _, command := range [][]string{{"search", "anything"}, {"get", "e1"}, {"propose", "--ops", "[]"}, {"verify", "--space", "s1"}} {
 		err := cmdWikiCLI(command, strings.NewReader(""), &out)
 		if err == nil || !strings.Contains(err.Error(), "ORBIT_WIKI=off") {
 			t.Errorf("orbit wiki %s with the wiki off = %v, want the refusal that names ORBIT_WIKI=off", command[0], err)
@@ -827,7 +827,7 @@ func TestWikiCommandsNeedASessionAndTheSwitch(t *testing.T) {
 	if _, ok := cmdHelp["wiki"]; !ok || !strings.Contains(usage, "orbit wiki") {
 		t.Error("`orbit` and `orbit help` do not list the wiki family")
 	}
-	for _, action := range []string{"search", "get", "propose"} {
+	for _, action := range []string{"search", "get", "propose", "verify"} {
 		var text strings.Builder
 		if err := cmdWikiCLI([]string{action, "--help"}, strings.NewReader(""), &text); err != nil {
 			t.Fatalf("orbit wiki %s --help: %v", action, err)
@@ -1033,7 +1033,8 @@ func TestWikiCLIFlagsBecomeTheToolArguments(t *testing.T) {
 // nobody wrote.
 func TestWikiCapabilitiesDescribeTheFlagsTheParserTakes(t *testing.T) {
 	for _, spec := range wikiCLICapabilities {
-		if !wikiToolNames[spec.Tool] {
+		// `orbit wiki verify` is the one verb with no tool beside it (contract `agentSurface.verify`).
+		if !wikiToolNames[spec.Tool] && spec.Tool != "wiki_verify" {
 			t.Errorf("capability %s is advertised and is not a wiki tool", spec.Tool)
 		}
 		if spec.Argv[0] != "orbit" || spec.Argv[1] != "wiki" {
@@ -1080,6 +1081,10 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("rationale-file", "", "")
 		fs.String("idempotency-key", "", "")
 		fs.Bool("dry-run", false, "")
+	case "verify":
+		fs.String("space", "", "")
+		fs.String("model", "", "")
+		fs.Int("max", 0, "")
 	default:
 		return false
 	}
@@ -1105,7 +1110,7 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 		t.Errorf("the citation is not the link shape the clients draw: %q", instructions)
 	}
 	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
-	for _, action := range []string{"search", "get", "propose"} {
+	for _, action := range []string{"search", "get", "propose", "verify"} {
 		if !strings.Contains(rules, "Bash("+exe+" wiki "+action+" *)") {
 			t.Errorf("orbit wiki %s is advertised and pre-approved for nobody: %q", action, rules)
 		}

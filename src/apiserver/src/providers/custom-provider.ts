@@ -179,6 +179,11 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
   const claudeEnv: Record<string, string> = {
     ANTHROPIC_BASE_URL: row.baseUrl,
     ANTHROPIC_AUTH_TOKEN: apiKey,
+    // The model the session runs, beside the endpoint that serves it. The engine itself is told by
+    // --model, which outranks this; what reads it is a command the session runs that must call the
+    // same model through a clean Claude Code of its own — `orbit wiki verify` (wiki contract
+    // `agentSurface.verify.model`) — and has no --model of the session's to read.
+    ANTHROPIC_MODEL: model,
     // Claude Code disables claude.ai connectors on its own once an auth token is set — the
     // token above — and then warns on stderr, every start, that unsetting it would bring them
     // back. Unsetting it is exactly what must not happen here (it IS the provider's key), so

@@ -541,6 +541,47 @@ export class PushService {
     }
   }
 
+  /**
+   * Tell the owner an Automatic wiki space's verification sent it back to Tiered (wiki contract
+   * `reviewModes.verification.fallback`): too many of the latest proposals its verifier checked had
+   * no support in their own sources.
+   *
+   * Once per trip on the same terms as the spot checks' notice above: the switch is a compare-and-set
+   * on the space, and only the transaction that won it calls here, after it commits. No badge, and
+   * best-effort — the space is Tiered whether or not the phone rang.
+   */
+  async notifyWikiVerificationTripped(input: {
+    ownerId: string;
+    spaceId: string;
+    title: string;
+    unsupported: number;
+    window: number;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      if (tokens.length === 0) return;
+      const auth = this.authToken();
+      if (!auth) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: 'Wiki switched to Tiered',
+            body: `${input.title}: ${input.unsupported} of the last ${input.window} verified proposals had no support in `
+              + 'their sources, so the space went back to Tiered until you switch it to Automatic again.',
+          },
+          sound: 'default',
+          'thread-id': `wiki-${input.spaceId}`,
+        },
+        wikiSpaceID: input.spaceId,
+        kind: 'wiki-review-mode-tiered',
+      });
+      await this.deliver(tokens, body, 'alert', '10', auth);
+    } catch (err) {
+      this.log.warn(`wiki verification notify failed: ${(err as Error).message}`);
+    }
+  }
+
   /** Session IDs that currently "need your reply" for this owner — the badge is this set's size.
    *  Mirrors the client's SessionGrouping.needsYou: an Open, non-ending RUNNING session with at
    *  least one PENDING approval, plus the coordinator conversations carrying one of the four owner
