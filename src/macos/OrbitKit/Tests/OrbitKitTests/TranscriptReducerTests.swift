@@ -1737,6 +1737,32 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(message, "2026-08-12T17:24:09.394Z custom tool call output is missing ×3")
     }
 
+    /// A move between account-pool members is said on the engine start that follows it: the control
+    /// plane puts the sentence on that `system` event as `notice`. It was read by nothing here — the
+    /// branch looked for stderr only — so a phone never showed a switch, a fallback to the runner's
+    /// own login, or edits left in the shared checkout. It is a note, not an error.
+    func testSystemNoticeBecomesANoticeRow() {
+        var r = TranscriptReducer()
+        let notice = "Switched to Wikova · Pro — the 5-hour window on Zhang Min · Plus is spent"
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "subtype": .string("init"), "sessionId": .string("s1"),
+            "notice": .string(notice), "noticeKind": .string("pool-member-switched")])))
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items.first?.asNotice, notice)
+    }
+
+    /// Web draws one row per notice event and folds only stderr, so a repeat — a second image codex
+    /// failed to generate — is a row of its own here too.
+    func testRepeatedNoticeIsNotFolded() {
+        var r = TranscriptReducer()
+        let notice = "Codex could not generate the image."
+        for seq in 1...2 {
+            r.apply(RunEvent(seq: seq, type: .system, payload: .object([
+                "notice": .string(notice), "noticeKind": .string("codex-image-generation-failed")])))
+        }
+        XCTAssertEqual(r.state.items.map(\.asNotice), [notice, notice])
+    }
+
     /// An API error arrives as an ordinary assistant reply with a `success` result, so a transcript
     /// that trusts the event type renders the agent apparently answering "API Error: 400". One we
     /// cannot place stays a plain error line — a re-send would reproduce it.
@@ -2093,4 +2119,5 @@ extension TranscriptItem {
     var asAssistant: AssistantBubble? { if case .assistant(let b) = self { return b }; return nil }
     var asTool: ToolCard? { if case .toolCall(let c) = self { return c }; return nil }
     var asError: String? { if case .error(_, let m) = self { return m }; return nil }
+    var asNotice: String? { if case .notice(_, let m) = self { return m }; return nil }
 }

@@ -199,7 +199,7 @@ public extension TranscriptItem {
         case .assistant(let bubble): return bubble.ts
         case .thinking(let block):   return block.finishedTs ?? block.startedTs
         case .toolCall(let card):    return card.ts
-        case .interrupt, .error, .authError, .autoRetry: return nil
+        case .interrupt, .error, .authError, .autoRetry, .notice: return nil
         }
     }
 }
