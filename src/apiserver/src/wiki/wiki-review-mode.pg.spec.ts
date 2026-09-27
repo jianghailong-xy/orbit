@@ -789,6 +789,20 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
     assert.equal(refusal.code, 'WIKI_QUOTA');
     assert.match(refusal.message, /circuit breaker/u);
 
+    // What is counted is DISTINCT entries: one entry amended twice in a run, both amends waiting for
+    // their verdicts, is one entry — nine adds and it make ten of a hundred.
+    const standing = await h.prisma.wikiEntry.findFirstOrThrow({ where: { spaceId: full, status: 'active' } });
+    const amendOnce = {
+      op: 'amend', entryId: standing.id, baseRevision: 1, changes: { summary: 'Amended once in this run.' }, sources: [{ kind: 'tool_call', ref: cited }],
+    };
+    const distinct = await h.service.submitChangeset(importer(importOwner.id), full, {
+      rationale: 'nine adds, and one entry amended twice',
+      ops: [...importOps(9, cited, 'distinct'), amendOnce, { ...amendOnce, changes: { summary: 'Amended twice in this run.' } }],
+      idempotencyKey: `distinct-${randomUUID()}`,
+    });
+    assert.deepEqual((distinct.ops as Outcome[]).map((op) => op.waitsFor ?? op.status), Array(11).fill('verification'),
+      'ten distinct entries of a hundred, not eleven');
+
     const young = await modeSpace(h, importOwner, 'automatic');
     await activeEntries(h, importOwner.id, young, WIKI_REVIEW_RULES.breakerMinActiveEntries - 1);
     const filled = await h.service.submitChangeset(importer(importOwner.id), young, {

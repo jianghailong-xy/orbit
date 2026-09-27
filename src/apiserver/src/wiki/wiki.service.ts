@@ -1174,7 +1174,12 @@ export class WikiService {
         // The quotas count what the POLICY held back; a spot check is the server's own draw.
         if (prepared.waitsForOwner) budget.waitingInRequest += 1;
         if (prepared.byMode) {
-          budget.changedByMode.add(outcome.status === 'applied' && outcome.entryId ? outcome.entryId : `seq:${seq}`);
+          // The distinct entries the mode changes: an amend's own entry — whether it applied now or
+          // waits for its verdict — and an add's new lineage.
+          const changed = prepared.op === 'amend'
+            ? prepared.entryId
+            : outcome.status === 'applied' || outcome.status === 'pending' ? outcome.entryId : null;
+          budget.changedByMode.add(changed ?? `seq:${seq}`);
         }
         if (outcome.status !== 'refused') recorded += 1;
       } catch (error) {
