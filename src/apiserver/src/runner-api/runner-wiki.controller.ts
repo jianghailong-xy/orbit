@@ -4,10 +4,10 @@ import { JUDGMENT_DISPATCH_ORIGIN } from '../projects/coordinator-authority';
 import { toUuid } from '@orbit/shared';
 import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
-import { WikiProposeDto } from '../wiki/dto';
+import { WikiProposeDto, WikiVerificationReportDto } from '../wiki/dto';
 import { flagParam, listParam, WikiRetrieval } from '../wiki/wiki-retrieval';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
-import { answerFor, WikiService, WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
+import { answerFor, answerForVerifications, WikiService, WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 
@@ -21,7 +21,10 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  * workspace decides which space it is filed in, and it can never be decided from here.
  *
  * THERE IS NO DECIDE ON THIS DOOR, deliberately and not by omission: `decide` exists on the user door
- * only, and a session that could reach it would be a session deciding what the owner keeps.
+ * only, and a session that could reach it would be a session deciding what the owner keeps. What it
+ * does have is the verification's two routes, and they are no decide: they carry a model's verdict on
+ * the calling session's OWN proposals in an Automatic space, the one mode the owner set up to let a
+ * verifier decide (contract `reviewModes.verification`), and nothing of anybody else's.
  *
  * A HEADLESS CALL — no session header — is an agent with no session: it may still PROPOSE (contract
  * `changesetOrigins.agent`), and it must name the space, because it has no workspace for one to be
@@ -116,6 +119,48 @@ export class RunnerWikiController {
     return answerFor(await this.wiki.submitChangeset(principal, spaceId, dto));
   }
 
+  /**
+   * The ops this session proposed that wait for their verification in the space (contract
+   * `reviewModes.verification.list`): what `orbit wiki verify` hands its verifier, one page at a time.
+   *
+   * THE PROPOSER'S OWN, AND ONLY WITH A SESSION. A verdict is reported by the session that proposed
+   * the op and by no other, so a headless call — no session to be the proposer — is refused, and a
+   * session sees its own ops alone: another session's, and another owner's space, are not there.
+   */
+  @Get('spaces/:id/verifications')
+  async verifications(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    /** The last opId of the page before, to read the next one. */
+    @Query('after') after?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const principal = await this.proposer(runner, callingSessionId);
+    return this.wiki.listVerifications(principal, id, {
+      after: after?.trim() || null,
+      limit: limit === undefined ? undefined : Number(limit),
+    });
+  }
+
+  /**
+   * Report verdicts for ops this session proposed (contract `reviewModes.verification.report`): each
+   * is recorded with its trail and applied as it says, on its own, and the answer carries every
+   * verdict's outcome. A request none of whose verdicts was recorded answers with the status of its
+   * first refusal — 404 for an op that is not this session's to report.
+   */
+  @Post('spaces/:id/verifications')
+  @HttpCode(HttpStatus.OK)
+  async verify(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: WikiVerificationReportDto,
+  ) {
+    const principal = await this.proposer(runner, callingSessionId);
+    return answerForVerifications(await this.wiki.recordVerifications(principal, id, dto.verdicts));
+  }
+
   /** One entry, as the calling session's space shares it. */
   @Get('entries/:id')
   async getEntry(
@@ -164,6 +209,21 @@ export class RunnerWikiController {
     });
     if (!session) throw new ForbiddenException('X-Orbit-Session-Id names no session this runner hosts');
     return session.id;
+  }
+
+  /**
+   * The caller of a verification route: the session this runner hosts that proposed the ops, which
+   * the header must name (contract `agentSurface.doors.runner.verificationNote`).
+   */
+  private async proposer(runner: Pick<Runner, 'id' | 'ownerId'>, header: string | undefined): Promise<WikiPrincipal> {
+    const sessionId = await this.callingSession(runner, header);
+    if (!sessionId) {
+      throw new BadRequestException(
+        'missing session context: a verdict is reported by the session that proposed the op, so this door needs X-Orbit-Session-Id',
+      );
+    }
+    await this.assertNotExcluded(sessionId);
+    return { origin: 'agent', ownerId: runner.ownerId, userId: null, sessionId, toolCallId: null };
   }
 
   /**

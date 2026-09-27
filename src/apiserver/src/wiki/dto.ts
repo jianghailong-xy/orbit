@@ -67,6 +67,11 @@ export class UpdateWikiSpaceDto {
   @IsIn(WIKI_REVIEW_MODES)
   reviewMode?: WikiReviewMode;
 
+  /** Whether an Automatic space sends its owner spot checks at all. The owner channel's alone, like the mode. */
+  @IsOptional()
+  @IsBoolean()
+  automaticSpotChecks?: boolean;
+
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -147,6 +152,17 @@ export class WikiEntryRejectDto {
   @IsString()
   @MaxLength(2_000)
   note?: string;
+}
+
+/**
+ * POST /api/runner/wiki/spaces/:id/verifications — verdicts on the calling session's own ops
+ * (contract `reviewModes.verification.report`). `@Allow()`d and left to WikiService like `ops`: each
+ * verdict is judged on its own, a malformed one is refused WIKI_SCHEMA naming its field while the
+ * others are still recorded, and the one-off import calls the same service method with no DTO at all.
+ */
+export class WikiVerificationReportDto {
+  @Allow()
+  verdicts?: unknown;
 }
 
 /** The owner's answer to one pending op, or to several of one changeset in one call. */

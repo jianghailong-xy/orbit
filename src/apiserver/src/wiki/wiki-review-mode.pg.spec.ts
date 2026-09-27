@@ -7,10 +7,12 @@
  *
  *   1. three modes × six kinds × three kinds of source (the owner's own words, a machine
  *      verification, an agent's say-so alone), cell by cell: what took effect, with which trust, and
- *      whether the next session is pushed it;
+ *      whether the next session is pushed it — in Automatic, nothing before its verdict, and what a
+ *      supported verdict applies after it (revision 3; `wiki-verify.pg.spec.ts` takes the verdicts
+ *      one by one);
  *   2. each of the five floors, in Automatic, with a counter-example that is not let through;
- *   3. spot checks drawn by fact, a reject rate over the line sending the space back to Manual, and
- *      the owner told once — not again on the next rejection;
+ *   3. Tiered's spot checks drawn by fact, a reject rate over the line sending the space back to
+ *      Manual, and the owner told once — not again on the next rejection;
  *   4. a whole run reverted, and every entry it touched out of the push.
  *
  * Around them, what those four rest on: who may switch a mode (the owner's JWT, never a session), a
@@ -170,6 +172,7 @@ interface Outcome {
   status: 'pending' | 'applied' | 'conflict' | 'refused';
   opId?: string | null;
   entryId?: string | null;
+  waitsFor?: string;
   reasons?: Array<{ code: string; message: string }>;
   similar?: Array<{ id: string; rejectedReason?: string }>;
 }
@@ -370,6 +373,26 @@ async function entryRow(h: Harness, id: string) {
   return h.prisma.wikiEntry.findFirstOrThrow({ where: { id: toUuid(id) } });
 }
 
+/** An agent's session as the runner door's report of its verdicts names it. */
+function agent(ownerId: string, sessionId: string): WikiPrincipal {
+  return { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null };
+}
+
+/**
+ * Every op among `outcomes` that waits for its verification, found supported by its proposer — the
+ * verdict that applies an Automatic space's op as Auto (contract `reviewModes.verification`).
+ */
+async function verifyAll(h: Harness, proposer: WikiPrincipal, spaceId: string, outcomes: readonly Outcome[]): Promise<void> {
+  const waiting = outcomes.filter((outcome) => outcome.status === 'pending' && outcome.waitsFor === 'verification');
+  for (let at = 0; at < waiting.length; at += WIKI_LIMITS.opsPerChangeset) {
+    const verdicts = waiting.slice(at, at + WIKI_LIMITS.opsPerChangeset).map((outcome) => ({
+      opId: outcome.opId!, verdict: 'supported', reason: 'The cited record says so.', model: 'qwen3.8-27b-fp8',
+    }));
+    const done = await h.service.recordVerifications(proposer, spaceId, verdicts);
+    for (const outcome of done.outcomes) assert.equal(outcome.status, 'applied', JSON.stringify(outcome));
+  }
+}
+
 /** The entries the next session in this workspace is handed, by id. */
 async function pushed(h: Harness, ownerId: string, workspaceId: string, sessionId: string): Promise<Set<string>> {
   const content = await appendWikiContext(h.prisma as unknown as Prisma.TransactionClient, {
@@ -469,7 +492,9 @@ test('review modes · who switches a mode, and what a space starts in', { skip, 
  * - An agent's say-so alone: an add citing the agent's own tool output.
  *
  * Each cell says what took effect (`pending`, applied `auto`, applied `unreviewed`, or the refusal
- * code), and whether a session starting next in the space's workspace is pushed it.
+ * code), and whether a session starting next in the space's workspace is pushed it. An Automatic cell
+ * takes effect only through its verdict (revision 3): before one, it waits and nothing of it is
+ * pushed; a supported verdict applies it as `auto`, which is the cell's effect.
  */
 type Source = 'owner_words' | 'machine_verified' | 'agent_alone';
 type Cell = { effect: 'pending' } | { effect: 'applied'; trust: 'auto' | 'unreviewed' } | { effect: 'refused'; code: string };
@@ -480,6 +505,7 @@ function expected(mode: Mode, kind: WikiKind, source: Source): Cell {
   // The machine-verified op is an amend, and a decision is only ever superseded.
   if (source === 'machine_verified' && !KIND_SPECS[kind].amendable) return { effect: 'refused', code: 'WIKI_SCHEMA' };
   if (mode === 'manual') return { effect: 'pending' };
+  // Once its verdict says supported: before it, the op waits for its verification (asserted apart).
   if (mode === 'automatic') return { effect: 'applied', trust: 'auto' };
   const auto =
     (source === 'owner_words' && (kind === 'decision' || kind === 'convention'))
@@ -505,7 +531,7 @@ test('review modes · three modes × six kinds × three sources, cell by cell', 
     const firstCall = await toolCall(h, first, 'Bash', 'node --test build/wiki/x.pg.spec.js exited 0 with every case skipped');
     const secondCall = await toolCall(h, second, 'Bash', 'the same spec skipped every case again in a second session');
 
-    const cells: Array<{ kind: WikiKind; source: Source; outcome: Outcome; entryId: string | null }> = [];
+    const cells: Array<{ kind: WikiKind; source: Source; outcome: Outcome; entryId: string | null; proposer: string }> = [];
     for (const kind of WIKI_KINDS) {
       for (const source of ['owner_words', 'machine_verified', 'agent_alone'] as const) {
         // One session per cell: in Manual every op here waits, and a session's quota counts those.
@@ -537,7 +563,26 @@ test('review modes · three modes × six kinds × three sources, cell by cell', 
         const outcome = answer.body.ops?.[0] as Outcome;
         assert.ok(outcome, `${mode}/${kind}/${source}: no outcome in ${JSON.stringify(answer.body)}`);
         const entryId = outcome.entryId ? toUuid(outcome.entryId) : (op.entryId as string | undefined) ?? null;
-        cells.push({ kind, source, outcome, entryId });
+        cells.push({ kind, source, outcome, entryId, proposer });
+      }
+    }
+
+    if (mode === 'automatic') {
+      // Before any verdict: every cell the mode took waits for its verification, nothing of it is
+      // live, and nothing of it is pushed. Then each proposer reports its op supported.
+      const before = await pushed(h, owner.id, ws, await session(h, owner.id, ws, machine));
+      for (const { kind, source, outcome, entryId, proposer } of cells) {
+        if (expected(mode, kind, source).effect === 'refused') continue;
+        const label: string = `automatic × ${kind} × ${source}, before its verdict`;
+        assert.equal(outcome.status, 'pending', `${label}: ${JSON.stringify(outcome)}`);
+        assert.equal(outcome.waitsFor, 'verification', label);
+        const op = await h.prisma.wikiChangesetOp.findFirstOrThrow({ where: { id: toUuid(outcome.opId!) } });
+        assert.equal(op.decision, 'verifying', label);
+        const entry = await entryRow(h, entryId!);
+        if (source === 'machine_verified') assert.equal(entry.currentRevision, 1, `${label}: an amend wrote a revision`);
+        else assert.equal(entry.status, 'proposed', label);
+        assert.equal(before.has(entryId!), false, `${label}: pushed`);
+        await verifyAll(h, agent(owner.id, proposer), space, [outcome]);
       }
     }
 
@@ -551,7 +596,8 @@ test('review modes · three modes × six kinds × three sources, cell by cell', 
         table.push(`${where}: refused ${want.code}`);
         continue;
       }
-      assert.equal(outcome.status, want.effect, `${where}: ${JSON.stringify(outcome)}`);
+      // An Automatic cell answered pending when it was proposed, and its verdict applied it since.
+      assert.equal(outcome.status, mode === 'automatic' ? 'pending' : want.effect, `${where}: ${JSON.stringify(outcome)}`);
       const entry = await entryRow(h, entryId!);
       const op = await h.prisma.wikiChangesetOp.findFirstOrThrow({ where: { id: toUuid(outcome.opId!) } });
       if (want.effect === 'pending') {
@@ -659,10 +705,14 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
       ops,
     });
 
-  await t.test('the control: an agent\'s add in Automatic applies at once, as auto', async () => {
-    const answer = await propose([{ op: 'add', entry: draft('pitfall', 'A floor control pitfall'), sources: cite }]);
+  await t.test('the control: an agent\'s add in Automatic waits for its verification, and a supported verdict applies it as auto', async () => {
+    const proposer = await session(h, owner.id, ws, machine);
+    const answer = await propose([{ op: 'add', entry: draft('pitfall', 'A floor control pitfall'), sources: cite }], proposer);
     expectStatus(answer, 200, 'the control');
-    assert.equal(answer.body.ops[0].status, 'applied');
+    assert.equal(answer.body.ops[0].status, 'pending');
+    assert.equal(answer.body.ops[0].waitsFor, 'verification');
+    assert.equal((await entryRow(h, answer.body.ops[0].entryId)).status, 'proposed');
+    await verifyAll(h, agent(owner.id, proposer), space, answer.body.ops);
     assert.equal((await entryRow(h, answer.body.ops[0].entryId)).trust, 'auto');
   });
 
@@ -679,6 +729,7 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
     const answer = await propose([{ op: 'add', entry: draft('pitfall', 'A pitfall read off the web'), sources: cite }], reader);
     expectStatus(answer, 200, 'a tainted add');
     assert.equal(answer.body.ops[0].status, 'pending', 'held back, not applied');
+    assert.equal(answer.body.ops[0].waitsFor, undefined, 'for the owner: no verdict can apply what the floor holds');
     const entry = await entryRow(h, answer.body.ops[0].entryId);
     assert.equal(entry.status, 'proposed');
     assert.equal(entry.tainted, true);
@@ -700,7 +751,9 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
     assert.equal((await entryRow(h, ownerEntry)).currentRevision, 1, 'the owner\'s entry is as they wrote it');
 
     // An entry the mode applied, then the owner edited: an owner revision is the owner's hand on it.
-    const applied = await propose([{ op: 'add', entry: draft('pitfall', 'A pitfall the owner then edited'), sources: cite }]);
+    const verifier = await session(h, owner.id, ws, machine);
+    const applied = await propose([{ op: 'add', entry: draft('pitfall', 'A pitfall the owner then edited'), sources: cite }], verifier);
+    await verifyAll(h, agent(owner.id, verifier), space, applied.body.ops);
     const touched = applied.body.ops[0].entryId as string;
     const edited = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${space}/changesets`, {
       rationale: 'the owner sharpens it',
@@ -730,11 +783,25 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
       ops: importOps(12, cited, 'breaker'),
       idempotencyKey: `breaker-${randomUUID()}`,
     });
-    const statuses = (tripped.ops as Outcome[]).map((op) => op.status);
-    assert.deepEqual(statuses, [...Array(10).fill('applied'), 'refused', 'refused'], 'ten of a hundred, and not one more');
+    const statuses = (tripped.ops as Outcome[]).map((op) => op.waitsFor ?? op.status);
+    assert.deepEqual(statuses, [...Array(10).fill('verification'), 'refused', 'refused'], 'ten of a hundred, and not one more');
     const refusal = (tripped.ops as Outcome[])[10].reasons![0];
     assert.equal(refusal.code, 'WIKI_QUOTA');
     assert.match(refusal.message, /circuit breaker/u);
+
+    // What is counted is DISTINCT entries: one entry amended twice in a run, both amends waiting for
+    // their verdicts, is one entry — nine adds and it make ten of a hundred.
+    const standing = await h.prisma.wikiEntry.findFirstOrThrow({ where: { spaceId: full, status: 'active' } });
+    const amendOnce = {
+      op: 'amend', entryId: standing.id, baseRevision: 1, changes: { summary: 'Amended once in this run.' }, sources: [{ kind: 'tool_call', ref: cited }],
+    };
+    const distinct = await h.service.submitChangeset(importer(importOwner.id), full, {
+      rationale: 'nine adds, and one entry amended twice',
+      ops: [...importOps(9, cited, 'distinct'), amendOnce, { ...amendOnce, changes: { summary: 'Amended twice in this run.' } }],
+      idempotencyKey: `distinct-${randomUUID()}`,
+    });
+    assert.deepEqual((distinct.ops as Outcome[]).map((op) => op.waitsFor ?? op.status), Array(11).fill('verification'),
+      'ten distinct entries of a hundred, not eleven');
 
     const young = await modeSpace(h, importOwner, 'automatic');
     await activeEntries(h, importOwner.id, young, WIKI_REVIEW_RULES.breakerMinActiveEntries - 1);
@@ -743,7 +810,7 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
       ops: importOps(12, cited, 'young'),
       idempotencyKey: `young-${randomUUID()}`,
     });
-    assert.deepEqual((filled.ops as Outcome[]).map((op) => op.status), Array(12).fill('applied'), 'below a hundred there is no breaker');
+    assert.deepEqual((filled.ops as Outcome[]).map((op) => op.waitsFor), Array(12).fill('verification'), 'below a hundred there is no breaker');
   });
 
   await t.test('5 · thirty ops a changeset, and the thirty-first refused — whoever sends it', async () => {
@@ -757,13 +824,13 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
       idempotencyKey: `thirty-${randomUUID()}`,
     });
     const outcomes = answer.ops as Outcome[];
-    assert.equal(outcomes.filter((op) => op.status === 'applied').length, WIKI_LIMITS.opsPerChangeset);
+    assert.equal(outcomes.filter((op) => op.waitsFor === 'verification').length, WIKI_LIMITS.opsPerChangeset);
     assert.equal(outcomes[WIKI_LIMITS.opsPerChangeset].status, 'refused');
     assert.equal(outcomes[WIKI_LIMITS.opsPerChangeset].reasons![0].code, 'WIKI_QUOTA');
     assert.equal(await h.prisma.wikiEntry.count({ where: { spaceId: target } }), WIKI_LIMITS.opsPerChangeset);
   });
 
-  await t.test('and what applies at once is not held to the review queue\'s quotas: a session\'s six adds all apply', async () => {
+  await t.test('and what the mode takes is not held to the review queue\'s quotas: a session\'s six adds all go to their verification', async () => {
     const proposer = await session(h, owner.id, ws, machine);
     const ops = Array.from({ length: WIKI_LIMITS.opsPerTurn + 1 }, (_unused, n) => ({
       op: 'add',
@@ -772,18 +839,20 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
     }));
     const answer = await propose(ops, proposer);
     expectStatus(answer, 200, 'six adds in one turn');
-    assert.deepEqual((answer.body.ops as Outcome[]).map((op) => op.status), Array(6).fill('applied'));
+    assert.deepEqual((answer.body.ops as Outcome[]).map((op) => [op.status, op.waitsFor]), Array(6).fill(['pending', 'verification']));
   });
 });
 
 // ── 3. spot checks ──────────────────────────────────────────────────────────────────────────────
 
-test('review modes · spot checks by fact, and a reject rate over the line sends the space back once', { skip, concurrency: 1, timeout: 600_000 }, async (t) => {
+test('review modes · Tiered\'s spot checks by fact, and a reject rate over the line sends the space back once', { skip, concurrency: 1, timeout: 600_000 }, async (t) => {
   const h = await boot();
   const owner = await account(h, 'spot checks');
   const recordsOf = await session(h, owner.id, null, null);
   const cited = await toolCall(h, recordsOf, 'Bash', 'compiled from the dossier');
-  const space = await modeSpace(h, owner, 'automatic');
+  // Tiered: it applies an import's adds at once, and draws one in ten as it does. (Automatic draws
+  // none unless its owner asks — `wiki-verify.pg.spec.ts`.)
+  const space = await modeSpace(h, owner, 'tiered');
   const load = async (count: number, prefix: string) => h.service.submitChangeset(importer(owner.id), space, {
     rationale: `a batch of ${count}`,
     ops: importOps(count, cited, prefix),
@@ -817,7 +886,7 @@ test('review modes · spot checks by fact, and a reject rate over the line sends
     }
     for (const check of drawn) {
       assert.equal(check.decision, 'pending', 'a spot check waits for the owner');
-      assert.equal(check.appliedByMode, 'automatic');
+      assert.equal(check.appliedByMode, 'tiered');
       assert.equal((await entryRow(h, check.resultEntryId!)).status, 'active', 'and its effect already stands');
     }
     const review = await call(h, { bearer: owner.bearer }, 'GET', `/wiki/review?space=${space}`);
@@ -851,7 +920,7 @@ test('review modes · spot checks by fact, and a reject rate over the line sends
     }
     // Three of ten is 30%, which is not over the line.
     let settings = (await h.prisma.wikiSpace.findFirstOrThrow({ where: { id: space } })).settings as Record<string, unknown>;
-    assert.equal(settings.reviewMode, 'automatic', 'three rejections out of ten are not over 30%');
+    assert.equal(settings.reviewMode, 'tiered', 'three rejections out of ten are not over 30%');
     assert.equal(h.notified.length, 0);
 
     // The fourth, answered from the entry itself rather than the card, is the same fact.
@@ -912,9 +981,10 @@ test('review modes · a whole run reverted, and every entry it touched out of th
     ],
     idempotencyKey: `earlier-${randomUUID()}`,
   });
+  await verifyAll(h, importer(owner.id), space, earlier.ops as Outcome[]);
   const [kept, amended] = (earlier.ops as Outcome[]).map((op) => op.entryId!);
 
-  // The run: two adds and an amend, all applied at once.
+  // The run: two adds and an amend, each applied by its supported verdict.
   const proposer = await session(h, owner.id, ws, machine);
   const run = await call(h, { runner: machine, headers: { 'x-orbit-session-id': proposer } }, 'POST', '/runner/wiki/changesets', {
     rationale: 'a maintenance run that went wrong',
@@ -925,7 +995,8 @@ test('review modes · a whole run reverted, and every entry it touched out of th
     ],
   });
   expectStatus(run, 200, 'the run');
-  assert.deepEqual((run.body.ops as Outcome[]).map((op) => op.status), ['applied', 'applied', 'applied']);
+  assert.deepEqual((run.body.ops as Outcome[]).map((op) => op.waitsFor), ['verification', 'verification', 'verification']);
+  await verifyAll(h, agent(owner.id, proposer), space, run.body.ops as Outcome[]);
   const [madeUp, madeUpPitfall] = (run.body.ops as Outcome[]).map((op) => toUuid(op.entryId!));
   const before = await pushed(h, owner.id, ws, await session(h, owner.id, ws, machine));
   for (const id of [kept, amended, madeUp, madeUpPitfall]) assert.ok(before.has(id), `${id} is pushed before the revert`);
@@ -987,13 +1058,15 @@ test('review modes · the owner rejects one entry, and a bulk import applies onc
   const preview = await modeSpace(h, owner, 'automatic');
   const batch = importOps(WIKI_LIMITS.opsPerChangeset, cited, 'preview');
 
-  await t.test('origin import, authored by the system, bare record ids, applied at once', async () => {
+  await t.test('origin import, authored by the system, bare record ids, applied by its verdicts', async () => {
     const answer = await h.service.submitChangeset(importer(owner.id), preview, {
       rationale: 'the demo\'s compiled entries, batch one',
       ops: batch,
       idempotencyKey: 'preview-load:batch-0001',
     });
-    assert.deepEqual((answer.ops as Outcome[]).map((op) => op.status), Array(WIKI_LIMITS.opsPerChangeset).fill('applied'));
+    assert.deepEqual((answer.ops as Outcome[]).map((op) => op.waitsFor), Array(WIKI_LIMITS.opsPerChangeset).fill('verification'));
+    assert.equal(await h.prisma.wikiEntry.count({ where: { spaceId: preview, status: 'active' } }), 0, 'nothing is live before its verdict');
+    await verifyAll(h, importer(owner.id), preview, answer.ops as Outcome[]);
     const changeset = await h.prisma.wikiChangeset.findFirstOrThrow({ where: { id: String(answer.changesetId) } });
     assert.equal(changeset.origin, 'import');
     assert.equal(changeset.sessionId, null);
@@ -1013,7 +1086,7 @@ test('review modes · the owner rejects one entry, and a bulk import applies onc
       idempotencyKey: 'preview-load:batch-0001',
     });
     assert.equal(replay.replayed, true);
-    assert.ok((replay.ops as Outcome[]).every((op) => op.status === 'applied'), 'the recorded answer, as it was');
+    assert.ok((replay.ops as Outcome[]).every((op) => op.status === 'pending' && op.waitsFor === 'verification'), 'the recorded answer, as it was');
     assert.equal(await h.prisma.wikiEntry.count({ where: { spaceId: preview } }), WIKI_LIMITS.opsPerChangeset);
     await assert.rejects(
       h.service.submitChangeset(importer(owner.id), preview, {
@@ -1054,6 +1127,8 @@ test('review modes · the owner rejects one entry, and a bulk import applies onc
     });
     const similar = (neighbour.ops as Outcome[])[0].similar ?? [];
     assert.equal(similar.find((near) => near.id === entry.id)?.rejectedReason, 'not_true', 'a rejected neighbour says why');
+    // The owner rejected it, not its verifier, which had found it supported: no verifier's words ride along.
+    assert.equal((similar.find((near) => near.id === entry.id) as { rejectedBecause?: string } | undefined)?.rejectedBecause, undefined);
   });
 
   await t.test('what the owner wrote is retired, never rejected', async () => {

@@ -318,6 +318,12 @@ message, and two specs (`coordinator-authority.spec.ts:62,100`,
 > finding of 2026-09-08, not as a description of the server. The `SETTLE_PROJECT_DONE` sentence
 > beside it is NOT covered by this note and still holds: that column is projected, and no principal
 > writes it.
+>
+> **2026-09-27:** the table has a second writer. `ProjectsService.decideCriteriaChange` — the
+> owner's criteria decision door, under the same no-acting-session rule — appends a confirmation of
+> the resulting version when the owner approves a held edit to the version they had confirmed, in
+> the same transaction as the edit. It never writes one for a set nobody confirmed, and never
+> starts a project.
 
 ### Decision: (B). The card prompts; the confirmation is written through an owner-authenticated door.
 
