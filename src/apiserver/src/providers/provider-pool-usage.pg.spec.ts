@@ -38,6 +38,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { OAUTH_USAGE_URL } from './plan-usage';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersController } from './providers.controller';
+import { CodexLoginService } from './codex-login.service';
 import { ProvidersService } from './providers.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -97,6 +98,9 @@ async function openDoor(providers: ProvidersService, prisma: PrismaService) {
     controllers: [ProvidersController],
     providers: [
       { provide: ProvidersService, useValue: providers },
+    // The ChatGPT sign-in's own controller dependency (migration 0323): no route this spec reads
+    // reaches it, and a module that omitted it would fail to build the controller.
+      { provide: CodexLoginService, useValue: {} },
       JwtAuthGuard,
       Reflector,
       { provide: JwtService, useValue: { verifyAsync: async (token: string) => ({ sub: token }) } },

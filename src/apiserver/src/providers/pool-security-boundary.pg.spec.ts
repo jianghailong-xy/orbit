@@ -67,6 +67,7 @@ import { OAUTH_USAGE_URL } from './plan-usage';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { encryptSecret } from './provider-crypto';
 import { ProvidersController } from './providers.controller';
+import { CodexLoginService } from './codex-login.service';
 import { ProvidersService } from './providers.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -289,6 +290,9 @@ const doorsOver: { providers: ProvidersService | null; prisma: unknown } = { pro
   controllers: [ProvidersController, AdminProvidersController, RunnerProvidersController],
   providers: [
     { provide: ProvidersService, useFactory: () => doorsOver.providers },
+    // The ChatGPT sign-in's own controller dependency (migration 0323): no route this spec reads
+    // reaches it, and a module that omitted it would fail to build the controller.
+    { provide: CodexLoginService, useValue: {} },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
     JwtAuthGuard,
     AdminRoleGuard,
