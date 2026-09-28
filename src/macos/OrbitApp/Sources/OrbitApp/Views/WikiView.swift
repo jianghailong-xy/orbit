@@ -22,6 +22,10 @@ struct WikiHomeActions {
     var openReview: () -> Void = {}
     var pickSpace: (String) -> Void = { _ in }
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
+    /// The space's Wiki settings, from the gear in the bar (mock 12 ①).
+    var openSettings: () -> Void = {}
+    /// One run's page, from its row in Recently changed (mock 12 ②).
+    var openRun: (String) -> Void = { _ in }
 }
 
 /// One space's home: the large title with the space beside it, the search under the title, the
@@ -61,6 +65,15 @@ struct WikiHomePage: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            // The bar's actions, in the web head's order — Settings here; the gear is its icon.
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: actions.openSettings) {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel(WikiModeCopy.settings)
+            }
+        }
         .task(id: query) {
             let text = query
             guard !text.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -177,7 +190,13 @@ struct WikiHomePage: View {
                 if content.recentlyChanged.isEmpty {
                     empty(WikiCopy.noChanges)
                 } else {
-                    ForEach(content.recentlyChanged) { item in changeRow(item) }
+                    // One run is one row, wherever Review ties its ops to it (`wikiRecentRows`).
+                    ForEach(content.recentRows) { row in
+                        switch row {
+                        case .op(let item):                   changeRow(item)
+                        case .run(let changeset, let at, _):  runRow(changeset, at: at)
+                        }
+                    }
                 }
             }
         case .agentsUsed:
@@ -310,19 +329,37 @@ struct WikiHomePage: View {
         .buttonStyle(.plain)
     }
 
-    /// One change: the entry, when, and what happened to it — the same verbs as an entry's History.
+    /// One change: the entry, when, and what happened to it — the same verbs as an entry's History —
+    /// with the mark a review mode applied it with.
     private func changeRow(_ item: WikiTimelineItem) -> some View {
         let ended = item.status == .retired || item.status == .superseded || item.status == .rejected
         let kind = item.kind.map(WikiCopy.kindLabel) ?? ""
         let line = [WikiLogic.changeVerb(item), kind].filter { !$0.isEmpty }.joined(separator: " · ")
+        let marked = item.appliedByMode != nil && !ended && (item.trust == .auto || item.trust == .unreviewed)
         return Button {
             if let id = item.entryId { actions.openEntry(id) }
         } label: {
             WikiRowLabel(title: item.title ?? "—", time: item.at.flatMap { RelativeTime.format($0, now: now) },
-                         detail: line, note: WikiLogic.changeNote(item), struck: ended)
+                         detail: line, note: WikiLogic.changeNote(item), struck: ended,
+                         mark: marked ? item.trust : nil)
         }
         .buttonStyle(.plain)
         .disabled(item.entryId == nil)
+    }
+
+    /// One run: who it was and when, then what it applied and with which marks (mock 12 ②). The row
+    /// is the way in; Revert run… is on the run's own page.
+    private func runRow(_ changeset: WikiChangeset, at: String?) -> some View {
+        let summary = WikiModeLogic.runSummary(changeset, entries: content.entries)
+        let line = ([WikiModeCopy.appliedChanges(summary.applied)] + WikiModeLogic.runCounts(summary))
+            .joined(separator: " · ")
+        return Button {
+            actions.openRun(changeset.id)
+        } label: {
+            WikiRowLabel(title: WikiModeCopy.originWord(changeset.origin),
+                         time: at.flatMap { RelativeTime.format($0, now: now) }, detail: line)
+        }
+        .buttonStyle(.plain)
     }
 
     /// The week's use: how many sessions were handed the wiki and how many searches it answered,
@@ -390,6 +427,8 @@ private struct WikiRowLabel: View {
     var detail: String? = nil
     var note: String? = nil
     var struck = false
+    /// The mark a review mode applied it with: Auto or Unreviewed, in the lists' own badge.
+    var mark: WikiTrust? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -401,6 +440,9 @@ private struct WikiRowLabel: View {
                     .lineLimit(1)
                 if let count {
                     Text("\(count)").font(.orbitLabel).foregroundStyle(Color.secondary)
+                }
+                if let mark {
+                    WikiBadge(text: WikiCopy.trustLabel(mark), tone: WikiLogic.trustTone(mark))
                 }
                 Spacer(minLength: 8)
                 if let time {
@@ -436,6 +478,9 @@ struct WikiEntryActions {
     var copyLink: () -> Void = {}
     var openSession: (String) -> Void = { _ in }
     var openTask: (String) -> Void = { _ in }
+    /// The owner's answers to what a review mode applied: Confirm, and Reject with its reason.
+    var confirm: () -> Void = {}
+    var reject: (WikiRejectReason) -> Void = { _ in }
 }
 
 /// One entry, as an inset-grouped page: the head (kind and topics, title, trust, anchor, pinned),
@@ -444,6 +489,8 @@ struct WikiEntryActions {
 struct WikiEntryPage: View {
     let detail: WikiEntryDetail
     var now: Date = Date()
+    /// The verdict behind what a review mode applied, when the page has the op that carries it.
+    var verification: WikiOpVerification? = nil
     /// A session's title, when this client holds one; the row falls back to the id.
     var sessionTitle: (String) -> String? = { _ in nil }
     /// The title of the task or session a source cites, once its card has been read — the web draws
@@ -501,6 +548,15 @@ struct WikiEntryPage: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             chips
+            // What a review mode applied: the owner's two answers under the head, then what its mark
+            // means for agents (mock 18 ①③) — Edit and ⋯ stay in the bar.
+            if WikiModeLogic.answerable(status: entry.status, trust: entry.trust) {
+                answers
+                    .padding(.top, 4)
+            }
+            if let banner = WikiModeLogic.banner(status: entry.status, trust: entry.trust, tainted: entry.tainted == true) {
+                markBar(banner)
+            }
         }
         .padding(.vertical, 4)
         .listRowBackground(Color.clear)
@@ -535,6 +591,75 @@ struct WikiEntryPage: View {
             }
             if entry.pinned == true { WikiBadge(text: WikiCopy.pinned, tone: .muted) }
             if entry.tainted == true { WikiBadge(text: WikiCopy.webDerived, tone: .amber) }
+        }
+    }
+
+    /// Confirm (for what agents are not sent yet) and Reject ▾, two large buttons side by side.
+    private var answers: some View {
+        HStack(spacing: 10) {
+            if WikiModeLogic.canConfirm(status: entry.status, trust: entry.trust) {
+                Button(action: actions.confirm) {
+                    Label(WikiModeCopy.confirm, systemImage: "checkmark")
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            Menu {
+                // The four reasons, headed by where the reason goes (mock 18 ②).
+                Section(WikiModeCopy.rejectOnRecord) {
+                    ForEach(WikiRejectReason.allCases, id: \.self) { reason in
+                        Button(WikiCopy.rejectReasonLabel(reason)) { actions.reject(reason) }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(WikiCopy.reject)
+                    Image(systemName: "chevron.down").font(.orbitMeta.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity, minHeight: 32)
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+        }
+        .disabled(busy)
+    }
+
+    /// The bar under the head: the mark's word and what it means, then who checked it and who applied it.
+    private func markBar(_ banner: WikiModeLogic.Banner) -> some View {
+        let current = detail.history.max { ($0.revision ?? 0) < ($1.revision ?? 0) }
+        let line = WikiModeLogic.checkedLine(verdict: verification?.verdict, model: verification?.model,
+                                             tainted: entry.tainted == true,
+                                             who: current.map { Self.historyWord($0.authorKind) },
+                                             when: current?.createdAt.flatMap { RelativeTime.format($0, now: now) })
+        return HStack(alignment: .top, spacing: 8) {
+            Image(systemName: banner.tone == .amber ? "globe" : banner.tone == .green ? "checkmark.circle" : "info.circle")
+                .foregroundStyle(WikiPalette.color(banner.tone))
+            VStack(alignment: .leading, spacing: 3) {
+                (Text(banner.lead).bold().foregroundColor(WikiPalette.color(banner.tone)) + Text(" · " + banner.text))
+                    .font(.orbitLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !line.isEmpty {
+                    Text(line)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(banner.tone == .amber ? AnyShapeStyle(wikiAmberWash)
+                        : AnyShapeStyle(WikiPalette.color(banner.tone).opacity(banner.tone == .muted ? 0.08 : 0.12)),
+                    in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Who wrote a revision, in the History section's own words.
+    private static func historyWord(_ kind: WikiAuthorKind?) -> String {
+        switch kind {
+        case .owner?:       return WikiCopy.historyConfirmedBy
+        case .maintenance?: return WikiCopy.historyMaintenance
+        case .system?:      return WikiCopy.historySystem
+        default:            return WikiCopy.historyProposedBy
         }
     }
 
@@ -689,8 +814,14 @@ struct WikiEntryPage: View {
     /// Where it's used: how many sessions this week were handed it and how often it was fetched, then
     /// the sessions themselves.
     @ViewBuilder private var whereUsed: some View {
+        // The push leaves an Unreviewed entry out, so the section says so first (mock 18 ①).
+        if let note = WikiModeLogic.whereUsedNote(status: entry.status, trust: entry.trust) {
+            Text(note).font(.orbitLabel).foregroundStyle(.secondary)
+        }
         if detail.exposure.isEmpty {
-            Text(WikiCopy.noUseYet).font(.orbitLabel).foregroundStyle(.secondary)
+            if WikiModeLogic.whereUsedNote(status: entry.status, trust: entry.trust) == nil {
+                Text(WikiCopy.noUseYet).font(.orbitLabel).foregroundStyle(.secondary)
+            }
         } else {
             let pushed = Set(detail.exposure.filter { $0.channel == .push }.compactMap(\.sessionId)).count
             let fetched = detail.exposure.filter { $0.channel == .get }.count
@@ -764,6 +895,8 @@ struct WikiReviewActions {
     var decide: (WikiLogic.ReviewCard, WikiDecideAction, WikiRejectReason?) -> Void = { _, _, _ in }
     var edit: (WikiLogic.ReviewCard) -> Void = { _ in }
     var openSession: (String) -> Void = { _ in }
+    /// A challenge's Amend: the owner's version of the entry it names.
+    var amend: (WikiLogic.ReviewCard) -> Void = { _ in }
 }
 
 /// Review: the proposals waiting for the owner, one card at a time with its position ("1 of 3"),
@@ -910,11 +1043,14 @@ struct WikiReviewCard: View {
 
     private var op: WikiChangesetOp { card.op }
     private var isRetire: Bool { op.op == .retire }
+    /// A challenge is answered about the entry it names: Re-confirm, Amend or Retire.
+    private var isChallenge: Bool { op.op == .challenge }
     private var tainted: Bool { op.tainted == true }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             head
+            if isChallenge { challengeLine }
             if tainted { webDerivedWarning }
             Text(isRetire ? "Retire “\(WikiLogic.cardTitle(card, entry: entry))”"
                           : WikiLogic.cardTitle(card, entry: entry))
@@ -929,6 +1065,20 @@ struct WikiReviewCard: View {
                     .buttonStyle(.borderedProminent)
                     Button { actions.decide(card, .reject, .notTrue) } label: {
                         Text(WikiCopy.keep).approvalActionLabel()
+                    }
+                    .buttonStyle(.bordered)
+                } else if isChallenge {
+                    Button { actions.decide(card, .reconfirm, nil) } label: {
+                        Text(WikiModeCopy.reconfirm).approvalActionLabel()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button { actions.amend(card) } label: {
+                        Text(WikiModeCopy.amend).approvalActionLabel()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(entry == nil)
+                    Button { actions.decide(card, .retire, nil) } label: {
+                        Text(WikiModeCopy.retire).approvalActionLabel()
                     }
                     .buttonStyle(.bordered)
                 } else {
@@ -958,7 +1108,11 @@ struct WikiReviewCard: View {
                 }
             }
             .disabled(busy)
-            if !isRetire {
+            if isChallenge {
+                Text(WikiModeCopy.challengeWaits)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            } else if !isRetire {
                 Text(tainted ? WikiCopy.webDerivedNote : WikiCopy.acceptNote)
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
@@ -996,6 +1150,34 @@ struct WikiReviewCard: View {
             }
             .font(.orbitLabel)
         }
+    }
+
+    /// What a challenge is about, in the amber a Web-derived card wears: each anchor that broke — path,
+    /// symbol or commit, changed or missing — and the commit of main it was checked on; a challenge
+    /// about something else says its own reason.
+    private var challengeLine: some View {
+        let broken = WikiModeLogic.brokenAnchors(entry?.anchors)
+        let ref = WikiModeLogic.challengeRef(entry?.anchors)
+        var text = Text("")
+        if broken.isEmpty {
+            text = Text(WikiModeCopy.challenged).bold()
+                + Text(" · " + (op.payload?["reason"]?.stringValue ?? WikiModeCopy.challengeWaits))
+        } else {
+            for (index, anchor) in broken.enumerated() {
+                if index > 0 { text = text + Text("; ") }
+                text = text + Text(anchor.state == .changed ? "Changed" : "Missing").bold() + Text(" · " + anchor.label)
+            }
+            if let ref { text = text + Text(" · " + WikiModeCopy.checkedOnMain(ref)).foregroundColor(.secondary) }
+        }
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "scope").foregroundStyle(.orange)
+            text
+                .font(.orbitLabel)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(wikiAmberWash, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var webDerivedWarning: some View {

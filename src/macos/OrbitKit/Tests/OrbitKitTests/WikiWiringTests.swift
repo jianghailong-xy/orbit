@@ -196,13 +196,21 @@ final class WikiWiringTests: XCTestCase {
         let card = code(try slice(try source("Views/WikiView.swift"),
                                   from: "struct WikiReviewCard: View {", to: "/// The op's chip and the kind"))
         let answers = try slice(card, from: "ApprovalActions {", to: ".disabled(busy)")
-        assertOrder(answers, ["Text(WikiCopy.reviewRetire)", "Text(WikiCopy.keep)", "Text(WikiCopy.accept)",
-                              "Text(WikiCopy.reviewEdit)", "Text(WikiCopy.reject)"], "a card's answers")
+        assertOrder(answers, ["Text(WikiCopy.reviewRetire)", "Text(WikiCopy.keep)",
+                              "Text(WikiModeCopy.reconfirm)", "Text(WikiModeCopy.amend)", "Text(WikiModeCopy.retire)",
+                              "Text(WikiCopy.accept)", "Text(WikiCopy.reviewEdit)", "Text(WikiCopy.reject)"],
+                    "a card's answers — a challenge's between a retirement's and the rest")
         XCTAssertTrue(answers.contains("actions.decide(card, .reject, .notTrue)"), "Keep is a rejection as Not true")
         XCTAssertTrue(answers.contains("Section(WikiCopy.rejectReasonFoot)"))
         XCTAssertTrue(answers.contains("ForEach(WikiRejectReason.allCases, id: \\.self)"))
-        XCTAssertEqual(answers.components(separatedBy: ".approvalActionLabel()").count - 1, 5,
+        XCTAssertEqual(answers.components(separatedBy: ".approvalActionLabel()").count - 1, 8,
                        "every answer spans the card, as the approval cards' do")
+        let challenge = try slice(answers, from: "} else if isChallenge {", to: "} else {")
+        XCTAssertTrue(challenge.contains("actions.decide(card, .reconfirm, nil)"))
+        XCTAssertTrue(challenge.contains("actions.amend(card)"))
+        XCTAssertTrue(challenge.contains("actions.decide(card, .retire, nil)"))
+        let reconfirm = try slice(challenge, from: "Text(WikiModeCopy.reconfirm)", to: "Text(WikiModeCopy.amend)")
+        XCTAssertTrue(reconfirm.contains(".buttonStyle(.borderedProminent)"), "Re-confirm is the one filled answer")
         let accept = try slice(answers, from: "Text(WikiCopy.accept)", to: "Text(WikiCopy.reviewEdit)")
         XCTAssertTrue(accept.contains(".buttonStyle(.borderedProminent)"), "Accept is the one filled answer")
         let page = try slice(view, from: "struct WikiReviewPage: View {", to: "struct WikiReviewCard: View {")

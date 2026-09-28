@@ -1,0 +1,1061 @@
+{
+  "about": [
+    "Wiki review modes on the two clients (criterion 8, mocks 17–20): the settings page's words and order,",
+    "the marks an entry wears and the owner's answers to it, one run counted, the Revert dialog, Recently",
+    "changed folding a run into one row, and what a challenge card says about the anchors that broke.",
+    "The web reads this file in `lib/wikiReviewMode.test.ts`; OrbitKit in `WikiReviewModeCopyParityTests`",
+    "(`WikiModeCopy`, `WikiModeLogic`), so the two ends cannot drift into two sentences or two counts.",
+    "",
+    "`settings`: the page's sections top to bottom, the three modes in the order both list them (the",
+    "default one tagged), the Automatic spot check, the floors, and maintenance off / its Set up form /",
+    "on. `fallbacks`: a space's settings → the sentence the page leads Review mode with, or null.",
+    "`marks`: one entry → the answers it offers, the bar under its head, and the line Where it's used",
+    "adds. `checkedLines`: the bar's second line. `runs`: one changeset, with the entries the page",
+    "holds → what its page and its Recently changed row count and say. `recent`: the feed's op ids",
+    "with the runs Review holds → the rows. `challenges`: an entry's anchors → the ones a challenge is",
+    "about, in the server's own words, and the commit they were checked on."
+  ],
+  "settings": {
+    "title": "Wiki settings",
+    "crumb": "Settings",
+    "sections": [
+      "Review mode",
+      "Maintenance"
+    ],
+    "reviewModeHint": "Only you can switch it",
+    "lead": "Who has to look at a change before agents get it.",
+    "defaultTag": "default",
+    "modes": [
+      {
+        "mode": "manual",
+        "label": "Manual",
+        "note": "Every change from sessions, maintenance and imports waits for you in Review.",
+        "default": false
+      },
+      {
+        "mode": "tiered",
+        "label": "Tiered",
+        "note": "Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents.",
+        "default": true
+      },
+      {
+        "mode": "automatic",
+        "label": "Automatic",
+        "note": "local-vllm checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.",
+        "default": false
+      }
+    ],
+    "spotCheck": {
+      "title": "Spot-check Automatic",
+      "note": "Send 1 in 200 of the changes it applies to Review, to see what it lets through. Off by default; spot checks do not count toward the 30 waiting in Review."
+    },
+    "floors": {
+      "lead": "Always asks you, in any mode:",
+      "note": "principles, anything a session proposed after reading the web, and changes to entries you wrote or confirmed. A run that would change more than 10% of the wiki stops."
+    },
+    "maintenance": {
+      "name": "Wiki maintenance",
+      "note": "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the workspace you pick, with the provider pinned.",
+      "off": "Off",
+      "on": "On",
+      "setUp": "Set up…",
+      "form": {
+        "title": "Set up maintenance",
+        "fields": [
+          {
+            "label": "Workspace",
+            "note": "The runner that checks out this codebase; maintenance runs there."
+          },
+          {
+            "label": "Provider",
+            "note": "Pinned: a run never falls back to another provider."
+          },
+          {
+            "label": "Daily limit",
+            "note": "A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes."
+          }
+        ],
+        "unit": "runs a day",
+        "cancel": "Cancel",
+        "turnOn": "Turn on",
+        "save": "Save",
+        "defaults": {
+          "provider": "local-vllm",
+          "dailyRunLimit": 8,
+          "min": 1,
+          "max": 48
+        }
+      },
+      "rows": [
+        "Status",
+        "Workspace",
+        "Provider",
+        "Daily limit"
+      ],
+      "edit": "Edit",
+      "turnOff": "Turn off",
+      "runsADay": [
+        {
+          "runs": 8,
+          "says": "8 runs a day"
+        },
+        {
+          "runs": 1,
+          "says": "1 run a day"
+        }
+      ],
+      "workspaceLabels": [
+        {
+          "workspace": {
+            "name": "orbit",
+            "runner": {
+              "name": "wikova",
+              "displayName": null
+            }
+          },
+          "says": "orbit · wikova"
+        },
+        {
+          "workspace": {
+            "name": "orbit",
+            "runner": {
+              "name": "host-1",
+              "displayName": "Mac mini"
+            }
+          },
+          "says": "orbit · Mac mini"
+        },
+        {
+          "workspace": {
+            "name": "orbit",
+            "runner": null
+          },
+          "says": "orbit"
+        }
+      ],
+      "providerLabels": [
+        {
+          "provider": "local-vllm",
+          "model": "qwen3.8-27b-fp8",
+          "says": "local-vllm · qwen3.8-27b-fp8"
+        },
+        {
+          "provider": "local-vllm",
+          "model": null,
+          "says": "local-vllm"
+        }
+      ]
+    },
+    "fallbacks": [
+      {
+        "settings": {
+          "reviewMode": "tiered",
+          "reviewModeChangedBy": "verification",
+          "reviewModeChangedAt": "2026-09-27T12:00:00.000Z"
+        },
+        "says": "Automatic switched itself back to Tiered on Sep 27: the check rejected more than 30% of the last 50 changes. Choose Automatic again when you want it back."
+      },
+      {
+        "settings": {
+          "reviewMode": "manual",
+          "reviewModeChangedBy": "spot_checks",
+          "reviewModeChangedAt": "2026-09-26T12:00:00.000Z"
+        },
+        "says": "The spot checks switched this space back to Manual on Sep 26: you rejected more than 30% of the last 10. Choose another mode when you want it back."
+      },
+      {
+        "settings": {
+          "reviewMode": "automatic",
+          "reviewModeChangedBy": "owner",
+          "reviewModeChangedAt": "2026-09-28T12:00:00.000Z"
+        },
+        "says": null
+      },
+      {
+        "settings": {
+          "reviewMode": "tiered",
+          "reviewModeChangedBy": "owner",
+          "reviewModeChangedAt": "2026-09-28T12:00:00.000Z"
+        },
+        "says": null
+      },
+      {
+        "settings": {
+          "reviewMode": "manual"
+        },
+        "says": null
+      }
+    ]
+  },
+  "answers": {
+    "confirm": "Confirm",
+    "reject": "Reject",
+    "confirmed": "Confirmed",
+    "rejected": "Rejected",
+    "reasons": [
+      "Not true",
+      "Not useful",
+      "Duplicate",
+      "Too specific"
+    ],
+    "foot": "The reason goes on the record."
+  },
+  "marks": [
+    {
+      "name": "unreviewed",
+      "entry": {
+        "status": "active",
+        "trust": "unreviewed",
+        "tainted": false
+      },
+      "confirm": true,
+      "reject": true,
+      "banner": {
+        "tone": "muted",
+        "lead": "Unreviewed",
+        "text": "applied without review, and not sent to agents until you confirm it."
+      },
+      "whereUsed": "Not sent to agents while it is Unreviewed."
+    },
+    {
+      "name": "auto",
+      "entry": {
+        "status": "active",
+        "trust": "auto",
+        "tainted": false
+      },
+      "confirm": false,
+      "reject": true,
+      "banner": {
+        "tone": "green",
+        "lead": "Auto",
+        "text": "applied without asking you, and sent to agents. Reject takes it back."
+      },
+      "whereUsed": null
+    },
+    {
+      "name": "web-derived",
+      "entry": {
+        "status": "active",
+        "trust": "unreviewed",
+        "tainted": true
+      },
+      "confirm": true,
+      "reject": true,
+      "banner": {
+        "tone": "amber",
+        "lead": "Web-derived",
+        "text": "this session read web pages before proposing. Confirming shows it to agents."
+      },
+      "whereUsed": "Not sent to agents while it is Unreviewed."
+    },
+    {
+      "name": "confirmed",
+      "entry": {
+        "status": "active",
+        "trust": "confirmed",
+        "tainted": false
+      },
+      "confirm": false,
+      "reject": false,
+      "banner": null,
+      "whereUsed": null
+    },
+    {
+      "name": "owner",
+      "entry": {
+        "status": "active",
+        "trust": "owner",
+        "tainted": false
+      },
+      "confirm": false,
+      "reject": false,
+      "banner": null,
+      "whereUsed": null
+    },
+    {
+      "name": "rejected",
+      "entry": {
+        "status": "rejected",
+        "trust": "proposed",
+        "tainted": false
+      },
+      "confirm": false,
+      "reject": false,
+      "banner": null,
+      "whereUsed": null
+    },
+    {
+      "name": "retired after Auto",
+      "entry": {
+        "status": "retired",
+        "trust": "auto",
+        "tainted": false
+      },
+      "confirm": false,
+      "reject": false,
+      "banner": null,
+      "whereUsed": null
+    }
+  ],
+  "checkedLines": [
+    {
+      "verification": {
+        "verdict": "partial",
+        "model": "local-vllm"
+      },
+      "tainted": false,
+      "who": "Wiki maintenance",
+      "when": "2h ago",
+      "says": "Checked by local-vllm: partly supported · Wiki maintenance, 2h ago"
+    },
+    {
+      "verification": {
+        "verdict": "supported",
+        "model": "local-vllm"
+      },
+      "tainted": true,
+      "who": "Wiki maintenance",
+      "when": "2h ago",
+      "says": "Checked by local-vllm: supported · capped at Unreviewed · Wiki maintenance, 2h ago"
+    },
+    {
+      "verification": null,
+      "tainted": false,
+      "who": "Proposed by a session",
+      "when": "3h ago",
+      "says": "Proposed by a session, 3h ago"
+    },
+    {
+      "verification": null,
+      "tainted": false,
+      "who": null,
+      "when": null,
+      "says": ""
+    }
+  ],
+  "runs": [
+    {
+      "name": "a maintenance run in an Automatic space",
+      "changeset": {
+        "id": "0196b500-0000-7000-8000-000000000001",
+        "spaceId": "space-1",
+        "origin": "maintenance",
+        "sessionId": "session-1",
+        "toolCallId": null,
+        "rationale": "Wiki maintenance",
+        "status": "pending",
+        "createdAt": "2026-09-28T07:41:00.000Z",
+        "decidedAt": null,
+        "expiresAt": "2026-10-12T07:41:00.000Z",
+        "ops": [
+          {
+            "id": "run1-op1",
+            "changesetId": "0196b500-0000-7000-8000-000000000001",
+            "seq": 0,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "Chromium renders the mock HTML to PNG",
+                "summary": "Headless chromium with a fixed window size."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "e1",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "supported",
+              "reason": "the sources say so",
+              "model": "local-vllm",
+              "at": "2026-09-28T07:42:00.000Z",
+              "duplicateOf": null,
+              "evidence": "readable"
+            }
+          },
+          {
+            "id": "run1-op2",
+            "changesetId": "0196b500-0000-7000-8000-000000000001",
+            "seq": 1,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "captureBeyondViewport shifts the screenshot",
+                "summary": "Set it false and clip by the element's rect."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "e2",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "partial",
+              "reason": "the sources say so",
+              "model": "local-vllm",
+              "at": "2026-09-28T07:42:00.000Z",
+              "duplicateOf": null,
+              "evidence": "readable"
+            }
+          },
+          {
+            "id": "run1-op3",
+            "changesetId": "0196b500-0000-7000-8000-000000000001",
+            "seq": 2,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "Mocks live in docs/mocks",
+                "summary": "Approved mocks go in docs/mocks/."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "pending",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "e3",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": true,
+            "verification": {
+              "verdict": "supported",
+              "reason": "the sources say so",
+              "model": "local-vllm",
+              "at": "2026-09-28T07:42:00.000Z",
+              "duplicateOf": null,
+              "evidence": "readable"
+            }
+          },
+          {
+            "id": "run1-op4",
+            "changesetId": "0196b500-0000-7000-8000-000000000001",
+            "seq": 3,
+            "op": "amend",
+            "entryId": "e4",
+            "baseRevision": 1,
+            "payload": {
+              "changes": {
+                "summary": "Hover changes visibility, never layout."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": null,
+            "resultRevision": null,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "supported",
+              "reason": "the sources say so",
+              "model": "local-vllm",
+              "at": "2026-09-28T07:42:00.000Z",
+              "duplicateOf": null,
+              "evidence": "readable"
+            }
+          },
+          {
+            "id": "run1-op5",
+            "changesetId": "0196b500-0000-7000-8000-000000000001",
+            "seq": 4,
+            "op": "reinforce",
+            "entryId": "e5",
+            "baseRevision": 1,
+            "payload": {},
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": null,
+            "resultRevision": null,
+            "decidedAt": null,
+            "appliedByMode": null,
+            "spotCheck": false,
+            "verification": null
+          },
+          {
+            "id": "run1-op6",
+            "changesetId": "0196b500-0000-7000-8000-000000000001",
+            "seq": 5,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "A claim no source backs",
+                "summary": "Rejected by the check."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "rejected",
+            "decisionReason": "not_true",
+            "decisionNote": null,
+            "resultEntryId": "e6",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": null,
+            "spotCheck": false,
+            "verification": {
+              "verdict": "unsupported",
+              "reason": "the sources say so",
+              "model": "local-vllm",
+              "at": "2026-09-28T07:42:00.000Z",
+              "duplicateOf": null,
+              "evidence": "readable"
+            }
+          },
+          {
+            "id": "run1-op7",
+            "changesetId": "0196b500-0000-7000-8000-000000000001",
+            "seq": 6,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "A principle only the owner writes",
+                "summary": "Waits for the owner."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "pending",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "e7",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": null,
+            "spotCheck": false,
+            "verification": null
+          }
+        ]
+      },
+      "entries": [
+        {
+          "id": "e1",
+          "spaceId": "space-1",
+          "kind": "pitfall",
+          "status": "active",
+          "trust": "auto",
+          "currentRevision": 1,
+          "title": "Chromium renders the mock HTML to PNG",
+          "summary": "Headless chromium with a fixed window size.",
+          "fields": {},
+          "topics": [],
+          "aliases": [],
+          "anchors": [],
+          "anchorState": "unchecked",
+          "anchorCheckedRef": null,
+          "anchorCheckedAt": null,
+          "tainted": false,
+          "challenged": false,
+          "unsupported": false,
+          "pinned": false,
+          "supersedesId": null,
+          "supersededById": null,
+          "validFrom": "2026-09-28T07:41:00.000Z",
+          "validTo": null,
+          "recordedAt": "2026-09-28T07:41:00.000Z",
+          "retiredAt": null
+        },
+        {
+          "id": "e2",
+          "spaceId": "space-1",
+          "kind": "pitfall",
+          "status": "active",
+          "trust": "unreviewed",
+          "currentRevision": 1,
+          "title": "captureBeyondViewport shifts the screenshot",
+          "summary": "Set it false and clip by the element's rect.",
+          "fields": {},
+          "topics": [],
+          "aliases": [],
+          "anchors": [],
+          "anchorState": "unchecked",
+          "anchorCheckedRef": null,
+          "anchorCheckedAt": null,
+          "tainted": false,
+          "challenged": false,
+          "unsupported": false,
+          "pinned": false,
+          "supersedesId": null,
+          "supersededById": null,
+          "validFrom": "2026-09-28T07:41:00.000Z",
+          "validTo": null,
+          "recordedAt": "2026-09-28T07:41:00.000Z",
+          "retiredAt": null
+        },
+        {
+          "id": "e3",
+          "spaceId": "space-1",
+          "kind": "pitfall",
+          "status": "active",
+          "trust": "auto",
+          "currentRevision": 1,
+          "title": "Mocks live in docs/mocks",
+          "summary": "Approved mocks go in docs/mocks/.",
+          "fields": {},
+          "topics": [],
+          "aliases": [],
+          "anchors": [],
+          "anchorState": "unchecked",
+          "anchorCheckedRef": null,
+          "anchorCheckedAt": null,
+          "tainted": false,
+          "challenged": false,
+          "unsupported": false,
+          "pinned": false,
+          "supersedesId": null,
+          "supersededById": null,
+          "validFrom": "2026-09-28T07:41:00.000Z",
+          "validTo": null,
+          "recordedAt": "2026-09-28T07:41:00.000Z",
+          "retiredAt": null
+        },
+        {
+          "id": "e4",
+          "spaceId": "space-1",
+          "kind": "pitfall",
+          "status": "active",
+          "trust": "auto",
+          "currentRevision": 1,
+          "title": "Hover never moves the layout",
+          "summary": "Hover changes visibility, never layout.",
+          "fields": {},
+          "topics": [],
+          "aliases": [],
+          "anchors": [],
+          "anchorState": "unchecked",
+          "anchorCheckedRef": null,
+          "anchorCheckedAt": null,
+          "tainted": false,
+          "challenged": false,
+          "unsupported": false,
+          "pinned": false,
+          "supersedesId": null,
+          "supersededById": null,
+          "validFrom": "2026-09-28T07:41:00.000Z",
+          "validTo": null,
+          "recordedAt": "2026-09-28T07:41:00.000Z",
+          "retiredAt": null
+        },
+        {
+          "id": "e5",
+          "spaceId": "space-1",
+          "kind": "pitfall",
+          "status": "active",
+          "trust": "confirmed",
+          "currentRevision": 1,
+          "title": "Worktree index.lock breaks git add",
+          "summary": "Remove the stale lock first.",
+          "fields": {},
+          "topics": [],
+          "aliases": [],
+          "anchors": [],
+          "anchorState": "unchecked",
+          "anchorCheckedRef": null,
+          "anchorCheckedAt": null,
+          "tainted": false,
+          "challenged": false,
+          "unsupported": false,
+          "pinned": false,
+          "supersedesId": null,
+          "supersededById": null,
+          "validFrom": "2026-09-28T07:41:00.000Z",
+          "validTo": null,
+          "recordedAt": "2026-09-28T07:41:00.000Z",
+          "retiredAt": null
+        }
+      ],
+      "isRun": true,
+      "kicker": "Wiki maintenance · run",
+      "title": "Applied 5 changes",
+      "when": "Sep 28, 07:41",
+      "counts": [
+        "3 Auto",
+        "1 Unreviewed",
+        "1 rejected by the check",
+        "2 to review"
+      ],
+      "added": [
+        "Chromium renders the mock HTML to PNG",
+        "captureBeyondViewport shifts the screenshot",
+        "Mocks live in docs/mocks"
+      ],
+      "amended": [
+        "Hover never moves the layout"
+      ],
+      "reinforced": [
+        "Worktree index.lock breaks git add"
+      ],
+      "marks": {
+        "Chromium renders the mock HTML to PNG": "auto",
+        "captureBeyondViewport shifts the screenshot": "unreviewed",
+        "Mocks live in docs/mocks": "auto",
+        "Hover never moves the layout": "auto",
+        "Worktree index.lock breaks git add": "confirmed"
+      },
+      "revert": "The 4 changes it applied are undone: 3 added entries are withdrawn and 1 amended one goes back to its previous revision. Agents stop getting them."
+    },
+    {
+      "name": "a Tiered import, one of whose entries the page does not hold",
+      "changeset": {
+        "id": "0196b500-0000-7000-8000-000000000002",
+        "spaceId": "space-1",
+        "origin": "import",
+        "sessionId": null,
+        "toolCallId": null,
+        "rationale": "import",
+        "status": "pending",
+        "createdAt": "2026-09-27T09:05:00.000Z",
+        "decidedAt": null,
+        "expiresAt": null,
+        "ops": [
+          {
+            "id": "run2-op1",
+            "changesetId": "0196b500-0000-7000-8000-000000000002",
+            "seq": 0,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "Import one",
+                "summary": "From CLAUDE.md."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "f1",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "tiered",
+            "spotCheck": false,
+            "verification": null
+          },
+          {
+            "id": "run2-op2",
+            "changesetId": "0196b500-0000-7000-8000-000000000002",
+            "seq": 1,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "Import two",
+                "summary": "From memory."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "accepted",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "f2",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "tiered",
+            "spotCheck": false,
+            "verification": null
+          }
+        ]
+      },
+      "entries": [
+        {
+          "id": "f2",
+          "spaceId": "space-1",
+          "kind": "pitfall",
+          "status": "active",
+          "trust": "confirmed",
+          "currentRevision": 1,
+          "title": "Import two",
+          "summary": "From memory.",
+          "fields": {},
+          "topics": [],
+          "aliases": [],
+          "anchors": [],
+          "anchorState": "unchecked",
+          "anchorCheckedRef": null,
+          "anchorCheckedAt": null,
+          "tainted": false,
+          "challenged": false,
+          "unsupported": false,
+          "pinned": false,
+          "supersedesId": null,
+          "supersededById": null,
+          "validFrom": "2026-09-28T07:41:00.000Z",
+          "validTo": null,
+          "recordedAt": "2026-09-28T07:41:00.000Z",
+          "retiredAt": null
+        }
+      ],
+      "isRun": true,
+      "kicker": "Import · run",
+      "title": "Applied 2 changes",
+      "when": "Sep 27, 09:05",
+      "counts": [],
+      "added": [
+        "Import one",
+        "Import two"
+      ],
+      "amended": [],
+      "reinforced": [],
+      "marks": {
+        "Import one": null,
+        "Import two": "confirmed"
+      },
+      "revert": "The 1 change it applied is undone: 1 added entry is withdrawn. Agents stop getting it."
+    },
+    {
+      "name": "a session's proposal nothing applied",
+      "changeset": {
+        "id": "0196b500-0000-7000-8000-000000000003",
+        "spaceId": "space-1",
+        "origin": "agent",
+        "sessionId": "session-2",
+        "toolCallId": null,
+        "rationale": "a session proposes",
+        "status": "pending",
+        "createdAt": "2026-09-28T06:00:00.000Z",
+        "decidedAt": null,
+        "expiresAt": "2026-10-12T06:00:00.000Z",
+        "ops": [
+          {
+            "id": "prop-op1",
+            "changesetId": "0196b500-0000-7000-8000-000000000003",
+            "seq": 0,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "A proposal",
+                "summary": "Waits in Review."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "pending",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "g1",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": null,
+            "spotCheck": false,
+            "verification": null
+          }
+        ]
+      },
+      "entries": [],
+      "isRun": false,
+      "kicker": "A session · run",
+      "title": "Applied 0 changes",
+      "when": "Sep 28, 06:00",
+      "counts": [
+        "1 to review"
+      ],
+      "added": [],
+      "amended": [],
+      "reinforced": [],
+      "marks": {},
+      "revert": "The 0 changes it applied are undone. Agents stop getting them."
+    }
+  ],
+  "revertDialog": {
+    "title": "Revert this run?",
+    "keeps": "Changes you have confirmed, edited or rejected since are left as they are.",
+    "confirm": "Revert run",
+    "cancel": "Cancel",
+    "action": "Revert run…",
+    "view": "View run",
+    "openSession": "Open session",
+    "reverted": "Reverted",
+    "groups": [
+      "Added",
+      "Amended",
+      "Reinforced"
+    ]
+  },
+  "recent": [
+    {
+      "name": "a run folds into one row at its newest change; an op of no run stays its own row",
+      "items": [
+        {
+          "opId": "run1-op1",
+          "at": "2026-09-28T07:41:00.000Z"
+        },
+        {
+          "opId": "prop-op1",
+          "at": "2026-09-28T07:00:00.000Z"
+        },
+        {
+          "opId": "run1-op2",
+          "at": "2026-09-28T06:59:00.000Z"
+        },
+        {
+          "opId": "lone-op",
+          "at": "2026-09-28T06:00:00.000Z"
+        },
+        {
+          "opId": "run2-op1",
+          "at": "2026-09-27T09:05:00.000Z"
+        }
+      ],
+      "runs": [
+        "0196b500-0000-7000-8000-000000000001",
+        "0196b500-0000-7000-8000-000000000003",
+        "0196b500-0000-7000-8000-000000000002"
+      ],
+      "rows": [
+        {
+          "run": "0196b500-0000-7000-8000-000000000001",
+          "at": "2026-09-28T07:41:00.000Z",
+          "items": [
+            "run1-op1",
+            "run1-op2"
+          ]
+        },
+        {
+          "op": "prop-op1"
+        },
+        {
+          "op": "lone-op"
+        },
+        {
+          "run": "0196b500-0000-7000-8000-000000000002",
+          "at": "2026-09-27T09:05:00.000Z",
+          "items": [
+            "run2-op1"
+          ]
+        }
+      ]
+    }
+  ],
+  "challenge": {
+    "answers": [
+      "Re-confirm",
+      "Amend",
+      "Retire"
+    ],
+    "waits": "Agents stop getting this entry until you answer.",
+    "challenged": "Challenged",
+    "amendNote": "Your version replaces the entry, and its anchors are checked again."
+  },
+  "challenges": [
+    {
+      "name": "a symbol that changed and a commit that went missing",
+      "anchors": [
+        {
+          "type": "path",
+          "path": "src/web/src/lib/wiki.ts",
+          "check": {
+            "state": "verified",
+            "ref": "1588c3b000000000000000000000000000000000",
+            "at": "2026-09-28T01:00:00.000Z"
+          }
+        },
+        {
+          "type": "symbol",
+          "path": "src/web/src/lib/wiki.ts",
+          "symbol": "wikiAnchorMark",
+          "check": {
+            "state": "changed",
+            "ref": "1588c3b000000000000000000000000000000000",
+            "at": "2026-09-28T01:00:00.000Z"
+          }
+        },
+        {
+          "type": "commit",
+          "sha": "abcdef0222222222222222222222222222222222",
+          "check": {
+            "state": "missing",
+            "ref": "9f2e4d1111111111111111111111111111111111",
+            "at": "2026-09-27T01:00:00.000Z"
+          }
+        },
+        {
+          "type": "path",
+          "path": "src/web/src/pages/WikiPage.tsx"
+        }
+      ],
+      "broken": [
+        {
+          "state": "changed",
+          "label": "symbol wikiAnchorMark in src/web/src/lib/wiki.ts"
+        },
+        {
+          "state": "missing",
+          "label": "commit abcdef0"
+        }
+      ],
+      "ref": "1588c3b000000000000000000000000000000000",
+      "checkedOn": "checked on main at 1588c3b"
+    },
+    {
+      "name": "a path that went missing",
+      "anchors": [
+        {
+          "type": "path",
+          "path": "docs/old.md",
+          "check": {
+            "state": "missing",
+            "ref": "9f2e4d1111111111111111111111111111111111",
+            "at": "2026-09-27T01:00:00.000Z"
+          }
+        }
+      ],
+      "broken": [
+        {
+          "state": "missing",
+          "label": "path docs/old.md"
+        }
+      ],
+      "ref": "9f2e4d1111111111111111111111111111111111",
+      "checkedOn": "checked on main at 9f2e4d1"
+    },
+    {
+      "name": "a challenge about something other than an anchor",
+      "anchors": [],
+      "broken": [],
+      "ref": null,
+      "checkedOn": null
+    }
+  ]
+}

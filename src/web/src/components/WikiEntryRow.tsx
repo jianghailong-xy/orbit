@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import {
   WIKI_NO_LONGER_PUSHED,
   WIKI_STATUS_LABELS,
+  WIKI_REVIEW_REJECT,
   WIKI_SUPERSEDED_BY,
+  WIKI_WEB_DERIVED,
   wikiAnchorMark,
   wikiEntryPath,
   wikiRowSummary,
@@ -11,6 +13,8 @@ import {
   type WikiEntry,
 } from '../lib/wiki';
 import { WikiAnchorMark, WikiKindMark, WikiStatusBadge, WikiTrustBadge } from './WikiMarks';
+import { WikiRejectMenu, useRejectEntry } from './WikiRunPage';
+import { wikiEntryAnswerable } from '../lib/wikiReviewMode';
 
 /**
  * One entry, in the two shapes the Wiki draws a row in.
@@ -62,6 +66,7 @@ export function WikiEntryRow({
           <span className="tt">
             <Link to={wikiEntryPath(spaceSlug, entry.id)}>{entry.title}</Link>
           </span>
+          {!superseded && entry.tainted && <span className="tdp-badge tone-amber">{WIKI_WEB_DERIVED}</span>}
         </div>
         {superseded ? (
           <div className="supby">
@@ -89,8 +94,23 @@ export function WikiEntryRow({
         {superseded ? <WikiStatusBadge status={entry.status} /> : <WikiTrustBadge trust={entry.trust} />}
       </span>
       <span>{superseded ? null : <WikiAnchorMark mark={mark} />}</span>
-      <span className="used">{superseded || used <= 0 ? null : wikiUsedThisWeek(used)}</span>
+      <span className="used">
+        {superseded || used <= 0 ? null : <span className="n">{wikiUsedThisWeek(used)}</span>}
+        {/* What a review mode applied can be taken back from the row itself, on a pointer (mock 17 ⑧). */}
+        {wikiEntryAnswerable(entry) && <RowReject entryId={entry.id} />}
+      </span>
     </div>
+  );
+}
+
+function RowReject({ entryId }: { entryId: string }) {
+  const reject = useRejectEntry();
+  return (
+    <WikiRejectMenu onReject={(reason) => void reject(entryId, reason)}>
+      <button type="button" className="wk-row-reject">
+        {WIKI_REVIEW_REJECT}
+      </button>
+    </WikiRejectMenu>
   );
 }
 
