@@ -173,9 +173,12 @@ public enum WikiExposureChannel: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// What the owner does with one pending op in Review (contract `effectPolicy.decide.actions`).
+/// What the owner does with one pending op in Review (contract `effectPolicy.decide.actions`). The last
+/// three answer a challenge and nothing else (`anchorRules.verify.answers`): Re-confirm the entry as it
+/// stands (a moved anchor's new baseline), Amend it with `edited`, or Retire it.
 public enum WikiDecideAction: String, Codable, Sendable, CaseIterable {
     case accept, edit, reject
+    case reconfirm, amend, retire
 }
 
 /// Why a proposal was rejected, in the order Review's menu lists them (contract `rejectReasons`).
@@ -719,6 +722,7 @@ public struct WikiDecision: Encodable, Equatable, Sendable {
     public let edited: WikiEntryChanges?
     /// Required with `reject`.
     public let reason: WikiRejectReason?
+    /// With `retire`, the reason the entry goes; with any other, the owner's note on the op.
     public let note: String?
 
     public init(opId: String, action: WikiDecideAction, edited: WikiEntryChanges? = nil,

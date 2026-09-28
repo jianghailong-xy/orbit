@@ -722,3 +722,70 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 - CLI：`orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]`、
   `orbit wiki cursor advance --space <id> --to <token> [--outcome …] [--error TEXT] [--json]`，只有 CLI、没有 MCP 工具，三张 family 表都登记。
 
+
+## 17. 锚点复验（判据 4）
+
+JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchors.ts`（列表、合并检查结果、重置基线）、
+`wiki.service.ts` 的 `recordAnchorChecks` / `answerChallenge`（写入只经 `applyOp` 与 `recordChangeset`），runner 门在
+`runner-api/runner-wiki-anchors.controller.ts`，runner 一侧是 `src/runner-go/wiki_anchors.go` 的 `orbit wiki anchors verify`。
+
+### 17.1 谁能复验、复验什么
+
+- 只对该 space 的维护会话开放（`isWikiMaintenanceSession`，与案卷、游标同一个判定）：headless 回 400，别的会话
+  `WIKI_NOT_MAINTENANCE_SESSION`，别的 owner 的 space 是普通 404。复验的结果会让条目退出推送、往 owner 的 Review 里放 challenge，
+  所以别的会话不能回报。
+- 只复验 git 能验的三种锚点：`path`、`symbol`、`commit`。其余四种（criterion / merge_evidence / command / record）归服务端或配方重跑，
+  还没有人写它们的检查结果，所以带这类锚点的条目在它们被检查之前一直是 `unchecked`。
+- 列表 `GET /api/runner/wiki/spaces/:id/anchors?after=&limit=`：该 space 里 **active** 且带 git 锚点的条目，按 id 排序，每条带当前
+  revision 和它的 git 锚点（带在 `anchors` 里的下标；symbol 另带它要对上的哈希，第一次检查前为 null）；默认每页 50、最多 200。
+  待审的提议不列，生效后再验。`repo` 是默认 checkout：绑定到 space 的 workspace 的工作目录——调用会话自己的 workspace 优先，
+  其次是 space 的维护 workspace，再次是住在这台 runner 上的第一个绑定 workspace——**原样返回**，`~/orbit` 这样的写法由 runner 按自己的
+  家目录展开（apiserver 不知道 runner 的家目录）。
+
+### 17.2 runner 怎么验
+
+- 先 `git fetch origin +refs/heads/main:refs/remotes/origin/main`，再对 `refs/remotes/origin/main` 此刻指向的提交逐个检查；fetch 失败就什么都不验、
+  什么都不报。报告里带这个 40 位 sha（`ref`）。
+- path：`git cat-file -e <ref>:<path>`（去掉开头的 `./`、`/` 和结尾的 `/`），在就是 verified，不在就是 missing。
+- symbol：`git grep -n -w -F -I` 在该文件（路径是目录时取路径序的第一个文件）里找符号作为整词出现的第一行；从这一行起共 20 行
+  （到文件尾为止）为区域，每行以换行结尾，取 sha256（小写十六进制）为 `regionSha256`。找不到就是 missing。
+- commit：`git merge-base --is-ancestor <sha> <ref>`，是祖先才 verified；不是祖先、或仓库里根本没有这个 sha，一律 missing——非祖先的 sha
+  会毒化依赖它的下游。
+- git 验不了的锚点（git 本身报错）什么都不报，命令以非 0 退出；stale 不算失败。
+
+### 17.3 服务端怎么记
+
+- 每个条目一个事务（同核实结论）。条目已不 active、已不是报告里的 revision、或某个下标上已不是报告的那种锚点，就回 `stale`，
+  什么都不写，下次运行重读。畸形的条目 `WIKI_SCHEMA` 并指出字段；别的 space 的条目 404。全部被拒才按第一个拒绝的状态码回。
+- **基线**：symbol 锚点对自己的 `regionSha256`；没写的，对第一次检查找到的区域（存为检查里的 `baselineSha256`）。找到的 symbol 由服务端
+  对基线判 verified / changed，runner 的判断不作数；changed / missing 的检查不会移动基线，只有 owner 的 Re-confirm 会。
+- 每个锚点最近一次检查存在 `wiki_entry.anchors[i].check`：`{ state, ref, at }`，找到的 symbol 另有 `regionSha256`（这次找到的）和
+  `baselineSha256`（检查采纳的基线）。**修订里存的是写下时的锚点，不带检查**；amend 冲突回答里给的当前锚点也不带。
+- `anchor_state` 由各锚点的最近检查汇总：有 missing 就是 missing，否则有 changed 就是 changed，否则有未检查的（或根本没有锚点）就是
+  unchecked，否则 verified；`anchor_checked_ref` / `anchor_checked_at` 是最近一次检查的 ref 和时间。只由 `applyOp` 写：一次检查，
+  以及重新给出锚点的 amend（新锚点是 unchecked，Re-confirm 带着保留的检查除外）。
+
+### 17.4 失效：退出推送与系统 challenge
+
+- 检查让 active 条目成为 changed 或 missing，它当场退出推送（`push.eligible.anchorStateNot`）；若没有未决的 challenge，同一事务里经唯一写入口
+  记一条**系统 challenge**：origin 为 maintenance、不挂会话（不占任何会话的配额），challenge 的 reason 写明哪些锚点不再成立、在哪个 ref 上验的。
+  条目有任何未决 challenge 时不再重复记。
+- owner 在 Review 里经 JWT 门的 decide 回答（带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`），三个新动作只用于 challenge op，用在别的 op 上 `WIKI_SCHEMA`：
+  - `reconfirm`：条目按最近一次检查时的 ref 保持原样——区域变了的 symbol 以检查找到的区域为新基线（写进锚点自己的 `regionSha256`），
+    检查为 missing 的锚点删掉；有改动就作为 owner 的新修订写入（沿用条目当前修订的出处）。只动锚点，所以不许改写的 decision 也照此
+    Re-confirm。trust 为 auto / unreviewed 的变 confirmed。
+    challenge 记为 accepted。
+  - `amend`：`edited` 形如 amend 的 changes（至少一个键），作为 owner 的修订叠在条目上，出处沿用、trust 同上；changes 没给的锚点照 Re-confirm
+    重置基线，给了的锚点是新的、未检查。decision 这种只能取代、不能改写的 kind 回 `WIKI_SCHEMA`。challenge 记为 edited。
+  - `retire`：owner 自己的 retire（当前修订为 baseRevision），经唯一写入口记录，reason 取 owner 的附言，没有就取 challenge 的 reason；
+    challenge 随条目离开 active 被 withdrawn。
+  - challenge 指向的条目已不 active 时记 conflict、什么都不做。`accept` / `edit` / `reject` 对 challenge 保持原意。
+- **Tiered 读得到复验结果**：Tiered 的 pitfall 条件读 `anchor_state`；检查让一条 Tiered 以 unreviewed 生效的 pitfall（active、未污染、当前修订就是那次
+  tiered op 写的）变成 verified，且 space 仍是 Tiered、那次 op 自己的出处跨 2 个以上独立会话时，同一事务里升为 auto 并开始推送。
+
+### 17.5 CLI
+
+- `orbit wiki anchors verify --space <id> [--repo <path>] [--json]`，只有 CLI、没有 MCP 工具，三张 family 表都登记。
+- 前置条件（逐词测试）：「Re-verify anchors only as a Wiki maintenance run of the space, in a checkout of its repository, and report only what git
+  said: every state is read from origin/main just after a fetch, and an anchor git could not check is reported as nothing.」
+- 分页读列表、每批最多 50 个条目回报；fetch 失败、git 验不了某个锚点、或服务端拒了某个条目时以非 0 退出。
