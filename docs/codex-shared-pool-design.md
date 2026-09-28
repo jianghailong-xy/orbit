@@ -206,9 +206,12 @@ claim（P1 已落地，`QueueService.resolveSharedPool`）：
 |---|---|
 | 01 | Providers 页共享池卡片与「New pool」 |
 | 02 | 池页（管理员 / 成员视角）：Keys、Members、Rules、删除/离开 |
-| 03 | 建池 → 加 key 说明（带风险提示）→ 填 key（名字、key、上限）→ 完成 → 重复 key 被拒 |
+| 03 | 建池（Codex · Just me）→「Sign in with ChatGPT」：说明（只本人可用、登录只在服务器、不得共享）→ 设备码（打开登录页、输入一次性码、等待确认）→ 完成（邮箱与 `…AB12`）→ 码过期 / 同一账号再登 / 被登出后用原账号重登（P3-c，2026-09-28 按本人账号方向改写） |
 | 04 | 会话里：选择器、输入框配额条、换 key 提示（新文案） |
-| 05 | web 443px 与 iOS 一一对应；iOS 池页可操作，删除 key 用左滑 |
+| 05 | web 443px 与 iOS 一一对应：本人账号池的池页与登录弹层；iOS 池页可操作，登出用左滑（iOS 效果图源文件是 `ios.html`；P3-c 改写） |
+| 06 | 本人账号池的池页：代管账号的邮箱、套餐、状态、各额度窗口与恢复时间；被 OpenAI 登出后「Sign in again」（只给本人）；还没有账号时「Sign in with ChatGPT」（P3-c 新增） |
+
+- 01、02、04 与 `web-mock.patch` 画的是共享 API key 池（另一条凭据形态，仍然有效）；本人账号的登录型池以 03、05、06 为准。
 
 - 每把 key 一行，显示：**贡献者 / 名字 / 打码指纹 / 本窗口用量 / 上限 / 状态**
   （状态词：`Available`、`Running now`、`Out of budget · resets …`、`Invalid · rejected by OpenAI`、`Disabled`）。
