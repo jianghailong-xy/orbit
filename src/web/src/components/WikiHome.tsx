@@ -5,7 +5,8 @@ import { Button } from 'antd';
 import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty, WikiPin } from './WikiCards';
 import { WikiEntryLine } from './WikiEntryRow';
-import { WikiDot, WikiOpChip } from './WikiMarks';
+import { WikiDot, WikiOpChip, WikiTrustBadge } from './WikiMarks';
+import { WikiRunTimelineRow } from './WikiRunPage';
 import { wikiEntriesQuery, wikiReviewQuery, wikiSpaceQuery, wikiSpacesQuery, wikiTimelineQuery } from '../lib/queries';
 import type { WikiChangeset, WikiChangesetOp, WikiEntry, WikiSpaceWithUsage, WikiTimelineItem } from '../lib/wiki';
 import {
@@ -43,6 +44,7 @@ import {
   writeWikiSeen,
   type WikiTrust,
 } from '../lib/wiki';
+import { wikiRecentRows } from '../lib/wikiReviewMode';
 
 /**
  * The Wiki home: what the space holds, and what wants the owner's attention.
@@ -170,9 +172,20 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
             <WikiEmpty>{WIKI_NO_CHANGES}</WikiEmpty>
           ) : (
             <ol className="wk-tl">
-              {(timeline.data?.items ?? []).slice(0, 5).map((item) => (
-                <TimelineRow key={item.opId} item={item} spaceSlug={space.slug} />
-              ))}
+              {/* One run is one row (mock 11 ⑦), wherever the page can tell which run an op came in. */}
+              {wikiRecentRows(timeline.data?.items ?? [], review.data ?? []).slice(0, 5).map((row) =>
+                row.kind === 'run' ? (
+                  <WikiRunTimelineRow
+                    key={row.changeset.id}
+                    changeset={row.changeset}
+                    at={row.at}
+                    spaceSlug={space.slug}
+                    entries={entryById}
+                  />
+                ) : (
+                  <TimelineRow key={row.item.opId} item={row.item} spaceSlug={space.slug} />
+                ),
+              )}
             </ol>
           )}
         </WikiCard>
@@ -245,6 +258,7 @@ function TimelineRow({ item, spaceSlug }: { item: WikiTimelineItem; spaceSlug: s
       <div>
         <div className="wk-tl-h">
           <b>{wikiChangeVerb(item)}</b>
+          {item.appliedByMode && !retired && (trust === 'auto' || trust === 'unreviewed') && <WikiTrustBadge trust={trust} />}
           <span className="when">{relTime(item.at)}</span>
         </div>
         <div className="wk-tl-t">
