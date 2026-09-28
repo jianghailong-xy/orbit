@@ -104,7 +104,10 @@ final class SharedPoolCopyParityTests: XCTestCase {
         // "No keys yet — …", in the web's one sentence for both kinds of pool.
         assertSays(row, "No {shared ? 'keys' : 'accounts'}\(SharedPoolPage.noKeys.dropFirst("No keys".count))",
                    in: Self.accountPools)
-        assertSays(row, "pool.shared ? 'All at cap' : 'All spent'", in: Self.accountPools)
+        // The first run of a stopped shared pool's head: "All at cap", or "All out of budget" when that
+        // is what stopped them (`SharedPoolPage.keysHeadline` says the same over the keys).
+        assertSays(row, "!pool.shared ? 'All spent' : allOutOfBudget(pool.shared) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)'",
+                   in: Self.accountPools)
     }
 
     /// Each key's status tag, and what the Keys header says when no key is next.
@@ -124,6 +127,19 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(tags, "label: '\(status(off))', color: 'default'", in: Self.providerPools)
         assertSays(tags, "`At cap · resets ${formatCapReset(member.resetsAt)}` : 'At cap'", in: Self.providerPools)
         assertSays(tags, "pool.shared ? 'No key can run' : 'No account can run'", in: Self.providerPools)
+
+        // A key OpenAI put out of budget (P2's `spentUntil`) says so, with the date its mark runs to, in
+        // the web's own sentence and colour — and out of budget outranks the cap.
+        let outOfBudget = SharedPoolKey(id: "k", label: "k", fingerprint: "f",
+                                        spentUntil: "2026-09-30T06:00:00.000Z", contributor: who)
+        XCTAssertEqual(status(outOfBudget), "Out of budget · resets Sep 30")
+        assertSays(tags, "label: `Out of budget · resets ${formatCapReset(member.key.spentUntil)}`, color: 'orange'",
+                   in: Self.providerPools)
+        // ...and the Keys header, when none of them can run, says which of the two stopped them, in the
+        // two words the web's pool head chooses between.
+        let gauge = try web(Self.accountPools)
+        assertSays(gauge, "allOutOfBudget(pool.shared) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)'",
+                   in: Self.accountPools)
 
         let lib = try web(Self.sharedPools)
         assertSays(lib, "pool.keys.length === 0 ? 'No keys' : 'No key can run'", in: Self.sharedPools)

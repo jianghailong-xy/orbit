@@ -94,6 +94,10 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
     public let enabled: Bool
     /// Whole dollars a calendar month (UTC) everyone but its contributor may spend on it. Nil: no cap.
     public let shareCap: Int?
+    /// Out of budget until then — OpenAI answered `insufficient_quota` for it, and the page says
+    /// `Out of budget · resets …` (`pool-key-select.ts` spent). Nil when it is not, which is what the
+    /// server sends once the mark is behind us too.
+    public let spentUntil: String?
     public let contributor: PoolKeyContributor
     /// This month's use of it; `othersCostUsd` is what its cap counts.
     public let usage: PoolSpend
@@ -104,7 +108,8 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
     public let next: Bool
 
     public init(id: String, label: String, fingerprint: String, state: PoolKeyState = .active,
-                enabled: Bool = true, shareCap: Int? = nil, contributor: PoolKeyContributor,
+                enabled: Bool = true, shareCap: Int? = nil, spentUntil: String? = nil,
+                contributor: PoolKeyContributor,
                 usage: PoolSpend = PoolSpend(), running: Bool = false, next: Bool = false) {
         self.id = id
         self.label = label
@@ -112,6 +117,7 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
         self.state = state
         self.enabled = enabled
         self.shareCap = shareCap
+        self.spentUntil = spentUntil
         self.contributor = contributor
         self.usage = usage
         self.running = running
@@ -126,6 +132,7 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
         state = try c.decodeIfPresent(PoolKeyState.self, forKey: .state) ?? .unknown
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         shareCap = (try? c.decodeIfPresent(Int.self, forKey: .shareCap)) ?? nil
+        spentUntil = (try? c.decodeIfPresent(String.self, forKey: .spentUntil)) ?? nil
         contributor = try c.decode(PoolKeyContributor.self, forKey: .contributor)
         usage = (try? c.decodeIfPresent(PoolSpend.self, forKey: .usage)) ?? PoolSpend()
         running = (try? c.decodeIfPresent(Bool.self, forKey: .running)) ?? false

@@ -199,10 +199,11 @@ final class ProviderPoolsParityTests: XCTestCase {
                                  members: [PoolMember(id: "m", slug: "k", label: "K", state: .spent)])
         let withReset = try XCTUnwrap(ProviderPools.spentNote(spent, now: now))
         let head = try XCTUnwrap(withReset.components(separatedBy: " · resets ").first)
-        // The head's first run is chosen by the pool's kind — a shared pool's keys are capped, not spent —
-        // and an account pool's reset is `formatResetTime`, the same clock this client reads.
+        // The head's first run is chosen by the pool's kind — a shared pool's keys are capped, not spent,
+        // unless what stopped them is OpenAI's own out-of-budget mark (`allOutOfBudget`) — and an account
+        // pool's reset is `formatResetTime`, the same clock this client reads.
         let prose = web.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        XCTAssertTrue(prose.contains("const spent = pool.shared ? 'All at cap' : '\(head)';"),
+        XCTAssertTrue(prose.contains("const spent = !pool.shared ? '\(head)' : allOutOfBudget(pool.shared) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)';"),
                       "AccountPools.tsx no longer heads a spent account pool with `\(head)`")
         XCTAssertTrue(prose.contains("{spent} · </span>resets{' '} {pool.shared ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}"),
                       "AccountPools.tsx no longer says `\(head) · resets <time>`")
