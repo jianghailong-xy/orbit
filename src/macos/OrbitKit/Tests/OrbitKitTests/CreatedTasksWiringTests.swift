@@ -159,7 +159,7 @@ final class CreatedTasksWiringTests: XCTestCase {
         XCTAssertTrue(agents.contains(".environment(\\.opensPagesOverConsole, true)"),
                       "the phone's stack is the one place that tells its console to push")
         XCTAssertTrue(agents.contains("case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)"))
-        XCTAssertTrue(agents.contains("case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)"))
+        XCTAssertTrue(agents.contains("case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)"))
         XCTAssertTrue(agents.contains("case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)"))
         XCTAssertTrue(agents.contains("case .watches:                      FollowingListView(rowNavigation: .push)"))
         XCTAssertTrue(agents.contains("case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)"))

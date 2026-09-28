@@ -1400,6 +1400,11 @@ final class AppModel {
     /// returns you there — while the nav-bar back button still pops to the agent's session list.
     var consoleFromRecents: Bool { nav.consoleFromRecents }
 
+    /// iOS compact: the same for the project page on top of the Projects stack, when one of the
+    /// drawer's project rows opened it — the edge returns you to the drawer, the back button to the
+    /// Projects list.
+    var projectFromDrawer: Bool { nav.projectFromDrawer }
+
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
     /// no pushed page needs the edge for the system back-swipe. Every section that pushes reads its
@@ -1786,10 +1791,12 @@ final class AppModel {
     }
 
     /// Open one project's page from outside the Projects list — the drawer's project rows: the
-    /// section's list at the root and the project on top, whatever was showing there before.
-    func openProject(_ id: String) {
+    /// section's list at the root and the project on top, whatever was showing there before. The
+    /// drawer's rows pass `.drawer`, so the compact shell frees the left edge for the drawer-open
+    /// swipe on that page (see `NavState.projectFromDrawer`).
+    func openProject(_ id: String, origin: NavOrigin = .list) {
         selectedSection = .projects
-        nav.path = [.projectDetail(projectID: id)]
+        nav.path = [.projectDetail(projectID: id, origin: origin)]
     }
 
     /// A project's page opened from inside a conversation — a coordinator conversation's title, a

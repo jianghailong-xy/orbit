@@ -148,11 +148,11 @@ struct CompactShell: View {
                     }
                     .offset(x: x)
 
-                // Left-edge open strip — present at a section's root, and on a console opened from
-                // Recents (which turns off the system back-swipe below, freeing this edge), so the
-                // drawer-open swipe is available there. A normal pushed page keeps the edge for the
-                // system back-swipe.
-                if !drawerOpen && (isAtRoot || model.consoleFromRecents) {
+                // Left-edge open strip — present at a section's root, and on a page opened from the
+                // drawer — a console from Recents, a project from its row — which turns off the
+                // system back-swipe below, freeing this edge, so the drawer-open swipe is available
+                // there. A normal pushed page keeps the edge for the system back-swipe.
+                if !drawerOpen && (isAtRoot || model.consoleFromRecents || model.projectFromDrawer) {
                     Color.clear
                         .frame(width: 18)
                         .frame(maxHeight: .infinity)
@@ -296,7 +296,7 @@ private struct CompactSections: View {
                                 .environment(\.opensPagesOverConsole, true)
                         // What a console opens over itself.
                         case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
-                        case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)
+                        case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
                         case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
                         case .watches:                      FollowingListView(rowNavigation: .push)
                         case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
@@ -309,7 +309,9 @@ private struct CompactSections: View {
 
         // PROJECTS — the index → one project's page. The path IS the section's stack, like every
         // section here. A task a project's rows open is opened where tasks live (`route(to: .task)`),
-        // so the Tasks stack stays the one page its detail store follows.
+        // so the Tasks stack stays the one page its detail store follows. A page one of the drawer's
+        // project rows opened hands the left edge to the drawer-open swipe, as a Recents console
+        // does: the system back-swipe is off there, and the back button still returns to the list.
         case .projects:
             NavigationStack(path: $model.nav.path) {
                 ProjectsListView(rowNavigation: .push)
@@ -317,7 +319,9 @@ private struct CompactSections: View {
                     .refreshable { await model.projects?.load() }
                     .navigationDestination(for: NavNode.self) { node in
                         switch node {
-                        case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)
+                        case .projectDetail(let projectID, _):
+                            ProjectDetailView(projectID: projectID)
+                                .background { SwipeBackGestureToggle(enabled: !model.projectFromDrawer) }
                         default:                            EmptyView()
                         }
                     }
@@ -931,7 +935,7 @@ private struct NavigationDrawer: View {
         let selected = model.selectedSection == .projects
             && model.selectedProjectID.map(PublicID.storageKey) == PublicID.storageKey(project.id)
         return Button {
-            model.openProject(project.id)
+            model.openProject(project.id, origin: .drawer)
             close()
         } label: {
             pill(selected: selected) {
@@ -1139,11 +1143,12 @@ private struct AgentConsolePage: View {
     }
 }
 
-/// Toggles the enclosing `UINavigationController`'s interactive pop (edge swipe-back) gesture while
-/// leaving the tappable back button intact — there's no SwiftUI API to disable only the swipe. Used on
-/// a Recents-opened console so the left screen edge drives `CompactShell`'s drawer-open swipe instead of
-/// the system back-swipe: backing out with the edge returns you to the drawer you came from, while the
-/// `‹` button still pops to the session list. A passive, non-interactive probe that reaches the nav
+/// Toggles the enclosing `UINavigationController`'s interactive pop gestures (the edge swipe-back, and
+/// on iOS 26 the swipe-back from anywhere in the content) while leaving the tappable back button
+/// intact — there's no SwiftUI API to disable only the swipe. Used on a page opened from the drawer (a
+/// Recents console, a project's page) so the left screen edge drives `CompactShell`'s drawer-open swipe
+/// instead of the system back-swipe: backing out with the edge returns you to the drawer you came from,
+/// while the `‹` button still pops to the list. A passive, non-interactive probe that reaches the nav
 /// controller through its own responder chain; it caches that controller so the gesture is restored even
 /// if the view is torn down while disabled.
 private struct SwipeBackGestureToggle: UIViewRepresentable {
@@ -1173,14 +1178,22 @@ private struct SwipeBackGestureToggle: UIViewRepresentable {
             super.didMoveToWindow()
             apply()
         }
-        func restore() { nav?.interactivePopGestureRecognizer?.isEnabled = true }
+        func restore() { setSwipeBacks(enabled: true) }
 
         private func apply() {
             // Only drive the gesture while attached; a detached probe leaves restoration to
             // `restore()` (dismantle) or the next `updateUIView`, never writing a stale nav controller.
             guard window != nil else { return }
             if let found = nearestNav() { nav = found }
-            nav?.interactivePopGestureRecognizer?.isEnabled = desiredEnabled
+            setSwipeBacks(enabled: desiredEnabled)
+        }
+        /// Both of them: left on, iOS 26's content swipe-back still pops the page from a swipe that
+        /// starts just past the drawer's edge strip.
+        private func setSwipeBacks(enabled: Bool) {
+            nav?.interactivePopGestureRecognizer?.isEnabled = enabled
+            if #available(iOS 26.0, *) {
+                nav?.interactiveContentPopGestureRecognizer?.isEnabled = enabled
+            }
         }
         private func nearestNav() -> UINavigationController? {
             var responder: UIResponder? = next
