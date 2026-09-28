@@ -16451,6 +16451,94 @@ button.chat-jump-start:hover {
 .aa-ask { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--fill-inset); font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
 .aa-ask b { color: var(--text-1); font-weight: 600; }
 
+/* ── review modes (criterion 8, mocks 17–20): Wiki settings, the marks' bar, one run, a challenge ──
+   The settings page is the app's Settings page for one space — one centred column of cards, a sentence
+   on the left and its control on the right. The marks' bar and a run's drawer are the entry drawer's
+   own frame; a challenge card is a Review card with its answers swapped. */
+.wk-settings { max-width: 600px; margin: 0 auto; }
+.wk-settings .page-title { margin-top: 8px; }
+.wk-settings-sub { margin: -4px 0 16px; font-size: 13px; color: var(--text-3); overflow-wrap: anywhere; }
+.wk-settings-card { margin-bottom: 16px; }
+.wk-settings-hint { font-size: 12.5px; font-weight: 400; color: var(--text-3); }
+.wk-settings-lead { margin-bottom: 8px; font-size: 13px; color: var(--text-2); }
+.wk-modes.ant-radio-group { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.wk-mode { padding: 9px 12px 10px; border-radius: 8px; }
+.wk-mode.on { background: var(--brand-tint); }
+.wk-mode-t { font-weight: 600; color: var(--text-1); }
+.wk-mode-tag { margin-left: 6px; font-size: 11.5px; color: var(--text-3); }
+.wk-mode-d { margin: 2px 0 0 24px; font-size: 12.5px; line-height: 1.5; color: var(--text-3); }
+.wk-spot { display: flex; align-items: center; gap: 16px; margin: 10px 0 0 24px; padding: 9px 12px; border-radius: 8px;
+           border: 1px solid var(--border-subtle); background: var(--bg-raised); }
+.wk-spot > div { flex: 1; min-width: 0; }
+.wk-spot.off { opacity: .55; }
+.wk-spot-t { font-size: 13.5px; color: var(--text-1); }
+.wk-spot-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.wk-floors { margin-top: 12px; }
+.wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
+.wk-maint-t { font-size: 14px; color: var(--text-1); }
+.wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.wk-maint-state { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-3); white-space: nowrap; }
+.wk-dot.on { background: var(--success-solid); }
+.wk-maint-rows { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 7px 12px; font-size: 13.5px; line-height: 1.5; }
+.wk-maint-rows > .k { color: var(--text-3); font-size: 12.5px; padding-top: 1px; }
+.wk-maint-rows > .v { color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
+.wk-maint-rows .dim { color: var(--text-3); }
+.wk-maint-rows .wk-dot { margin-right: 2px; }
+.wk-maint-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.wk-setup { display: flex; flex-direction: column; }
+.wk-setup-k { margin: 12px 0 6px; font-size: 13px; font-weight: 500; color: var(--text-1); }
+.wk-setup-d { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.wk-setup-limit { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+.wk-setup-limit .ant-input-number { width: 72px; }
+.wk-setup-refusal { margin: 14px 0 0; }
+@media (max-width: 600px) {
+  .wk-maint-off { grid-template-columns: minmax(0, 1fr) auto; }
+  .wk-maint-off > .ant-btn { grid-column: 1 / -1; justify-self: start; }
+}
+
+.wk-markbar { display: flex; gap: 8px; align-items: flex-start; margin: 0 20px 6px; padding: 9px 12px; border-radius: 8px;
+              border: 1px solid var(--border-subtle); background: var(--fill-inset); font-size: 13px; line-height: 1.5; color: var(--text-1); }
+.wk-markbar > .ic { margin-top: 3px; font-size: 14px; color: var(--text-3); }
+.wk-markbar b { font-weight: 600; }
+.wk-markbar.tone-green { background: var(--success-bg); border-color: var(--success-border); }
+.wk-markbar.tone-green > .ic, .wk-markbar.tone-green b { color: var(--success); }
+.wk-markbar.tone-amber { background: var(--warning-bg); border-color: var(--warning-border); }
+.wk-markbar.tone-amber > .ic, .wk-markbar.tone-amber b { color: var(--warning); }
+.wk-markbar-line { margin-top: 2px; font-size: 12px; color: var(--text-3); }
+
+.wk-run-meta { margin-top: 6px; font-size: 12.5px; color: var(--text-3); }
+.wk-run-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 12px; }
+.wk-run-counts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 20px; padding: 9px 12px; border-radius: 8px;
+                 background: var(--fill-inset); font-size: 12.5px; color: var(--text-2); }
+.wk-run-rows { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.wk-run-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 10px; }
+.wk-run-row + .wk-run-row { border-top: 1px solid var(--border-subtle); }
+.wk-run-row .main { min-width: 0; }
+.wk-run-row .t { font-size: 13.5px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-run-row .t a { color: inherit; text-decoration: none; }
+.wk-run-row .t a:hover { text-decoration: underline; }
+.wk-run-row .d { margin-top: 1px; font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-run-reject, .wk-row-reject { display: none; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12.5px;
+                                 color: var(--error); cursor: pointer; white-space: nowrap; }
+.wk-run-row:hover .wk-run-reject, .wk-run-row:focus-within .wk-run-reject { display: inline; }
+.wk-erow:hover .wk-row-reject, .wk-erow:focus-within .wk-row-reject { display: inline; }
+.wk-erow:hover .used .n, .wk-erow:focus-within .used .n { display: none; }
+.wk-menu-foot { font-size: 12px; color: var(--text-3); }
+.wk-revert-body p { margin: 0 0 8px; }
+.wk-revert-body p:last-child { margin-bottom: 0; color: var(--text-3); }
+.wk-tl-acts { display: flex; gap: 12px; margin-top: 2px; font-size: 12px; }
+.wk-tl-acts a { color: var(--brand); text-decoration: none; }
+.wk-tl-acts button { padding: 0; border: 0; background: transparent; font: inherit; color: var(--brand); cursor: pointer; }
+.wk-tl-acts button.danger { color: var(--error); }
+.wk-challenge-line .dim { color: var(--text-3); }
+/* A phone has no pointer to hover with: a run's row is the way in, and Reject is on the entry. */
+@media (max-width: 600px) {
+  .wk-tl-acts { display: none; }
+  .wk-run-row:hover .wk-run-reject { display: none; }
+  .wk-erow:hover .wk-row-reject { display: none; }
+  .wk-erow:hover .used .n { display: inline; }
+}
+
 /* ── phone: one column, in the order the phone mocks draw (07–09) ──────────────────────────────
    The right rail does not sit BESIDE the main column at this width — it moves into it, and its
    blocks are ordered by what the reader has to do: Review first (it is the only block that asks for
