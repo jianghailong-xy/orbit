@@ -73,6 +73,8 @@ export function WikiArticleRoute({
   if (article.data === null) {
     return <WikiTopicPage spaceId={spaceId} spaceSlug={spaceSlug} topicSlug={topicSlug} note={WIKI_NO_ARTICLE_YET} />;
   }
+  // A read that failed for another reason still leaves the topic's entries to read.
+  if (article.isError) return <WikiTopicPage spaceId={spaceId} spaceSlug={spaceSlug} topicSlug={topicSlug} />;
   if (!article.data) return <div className="wk-art-page" aria-busy={article.isPending} />;
   return <WikiArticlePage article={article.data} spaceId={spaceId} spaceSlug={spaceSlug} />;
 }
