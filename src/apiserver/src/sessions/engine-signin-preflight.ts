@@ -116,8 +116,9 @@ function sessionAccountLogin(
  *
  * Everything ambiguous stays a `null` — a session that fails at spawn with an actionable message
  * is a far better outcome than one refused for a state we misread:
- *   - the session brings its own credential (a configured provider's API key, or one set on the
- *     workspace's environment) → the CLI's local login is not what will run it;
+ *   - the session brings its own credential (a configured provider's API key, an account pool member's,
+ *     a shared pool's gateway session token, or one set on the workspace's environment) → the CLI's
+ *     local login is not what will run it;
  *   - the runtime has no local sign-in at all (OpenCode resolves credentials itself);
  *   - the runner has never reported this engine, or reports `unknown` (its probe couldn't answer —
  *     which is deliberately NOT a claim of a sign-out), or reports it as not installed (the runner
@@ -153,7 +154,9 @@ export function isEngineSignedOut(error: unknown): error is EngineSignedOutConfl
 export function signedOutEngineRefusal(args: {
   /** The built-in runtime that will actually execute this session (not the provider identity). */
   runtime: string;
-  /** True when a configured ModelProvider will inject its key at dispatch (custom-provider.ts). */
+  /** True when dispatch injects a credential of the session's own (custom-provider.ts): a configured
+   *  ModelProvider's key, an account pool member's, or — for a shared pool — OPENAI_BASE_URL at the pool
+   *  gateway with a session token as OPENAI_API_KEY (QueueService.resolveSharedPool). */
   bringsOwnCredentials: boolean;
   /** The workspace's custom environment, which the runner layers onto the engine process. */
   workspaceEnv?: unknown;

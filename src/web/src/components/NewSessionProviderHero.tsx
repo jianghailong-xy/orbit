@@ -7,7 +7,8 @@ import type { ProviderChoice } from '../lib/sessionProviderChoices';
 
 /** The brand mark. Same construction as the /providers tile (gradient + white glyph), sized up:
  *  at hero size it carries a soft shadow in its own brand colour, which a 24px chip can't. An
- *  account pool wears its vendor's mark with the number of accounts in its corner. */
+ *  account pool wears its vendor's mark with the number of accounts (a shared pool's: keys) in its
+ *  corner. */
 function ProviderMark({ choice, size }: { choice: ProviderChoice; size: number }) {
   if (choice.poolSize === undefined) return <BrandMark choice={choice} size={size} />;
   return (
@@ -16,7 +17,7 @@ function ProviderMark({ choice, size }: { choice: ProviderChoice; size: number }
       <span
         className="np-pool-badge"
         style={{ fontSize: Math.max(9, Math.round(size * 0.2)) }}
-        aria-label={`${choice.poolSize} account${choice.poolSize === 1 ? '' : 's'}`}
+        aria-label={`${choice.poolSize} ${choice.poolUnit ?? 'account'}${choice.poolSize === 1 ? '' : 's'}`}
       >
         {choice.poolSize}
       </span>

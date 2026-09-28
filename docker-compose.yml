@@ -153,6 +153,9 @@ services:
       ORBIT_WIKI_CANARY_OWNERS: "${ORBIT_WIKI_CANARY_OWNERS:-}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
+      # Where runners reach this deployment — the origin the web image bakes in below. A session on a
+      # shared Codex pool is handed <origin>/api/gw/codex as its OpenAI endpoint (providers/shared-pool.ts).
+      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
       # Optional: DeepSeek (OpenAI-compatible) for asynchronously improving prompt-derived
       # session titles and filing the session under a few semantic tags. Session creation and
       # worktree branch generation never wait on it.

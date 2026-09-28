@@ -4,6 +4,7 @@ import { api } from '../api';
 import { routeId } from './idCodec';
 import { planUsageRows, type PlanUsageDisplayRow } from './planUsage';
 import type { ProviderRow } from './providerAdmin';
+import { formatCapReset, type SharedPool, type SharedPoolKey } from './sharedPools';
 import type { ConfiguredProvider } from './workspaceDefaults';
 
 /**
@@ -14,8 +15,9 @@ import type { ConfiguredProvider } from './workspaceDefaults';
  * it — so nothing here re-derives them.
  */
 
-/** Where one member stands, in the order the claim reads a member. */
-export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA';
+/** Where one member stands, in the order the claim reads a member. INVALID is a shared pool's key that
+ *  OpenAI refused (a 401): its contributor or an admin replaces it. */
+export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'INVALID' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA';
 
 export interface PoolMember {
   id: string;
@@ -31,6 +33,8 @@ export interface PoolMember {
   resetsAt: string | null;
   /** The member a session starting now would run on. */
   next: boolean;
+  /** In a shared pool a member is one of its keys: the key as the server reads it (sharedPools.ts). */
+  key?: SharedPoolKey;
 }
 
 export interface ProviderPool {
@@ -45,6 +49,9 @@ export interface ProviderPool {
    *  The server refuses to start or switch a session onto such a pool, or to pin a task to it. */
   unavailable?: string | null;
   members: PoolMember[];
+  /** A shared pool (sharedPoolAsProviderPool): the whole of it as its page reads it — its people, its
+   *  rules and the viewer's place in it. Absent on an account pool of the user's own. */
+  shared?: SharedPool;
 }
 
 /** Under ['providers'], so every provider change — a key, a pool, a quota the server re-read —
@@ -97,16 +104,17 @@ export const poolEligibleCount = (rows: readonly ProviderRow[]): number =>
 /**
  * The pools as providers a session picker can offer and a composer can run: a pool runs on its
  * members' Claude subscriptions, whose models are the Claude CLI's own — the same model space an
- * Anthropic key has — and it carries no quota of its own (each member has one).
+ * Anthropic key has — and it carries no quota of its own (each member has one). A shared pool runs
+ * Codex on OpenAI's own endpoint, so its models are the Codex CLI's.
  */
 export const poolsAsProviders = (pools: readonly ProviderPool[]): ConfiguredProvider[] =>
   pools.map((pool) => ({
     slug: pool.slug,
     label: pool.label,
-    runtime: AgentProvider.CLAUDE,
+    runtime: pool.shared ? AgentProvider.CODEX : AgentProvider.CLAUDE,
     models: [],
     defaultModel: null,
-    presetSlug: 'anthropic',
+    presetSlug: pool.shared ? 'openai' : 'anthropic',
     modelsFromRuntime: true,
     planUsage: null,
   }));
@@ -166,10 +174,21 @@ export function memberStatus(
     case 'AVAILABLE':
       return { label: 'Available', color: 'green' };
     case 'SPENT':
+      // A key is not spent but capped: what ran out is what its contributor lets the others spend on
+      // it this month, and that comes back on the first of the next one.
+      if (member.key) {
+        return {
+          label: member.resetsAt ? `At cap · resets ${formatCapReset(member.resetsAt)}` : 'At cap',
+          color: 'orange',
+        };
+      }
       return {
         label: member.resetsAt ? `Spent · resets ${formatResetTime(member.resetsAt, now)}` : 'Spent',
         color: 'orange',
       };
+    case 'INVALID':
+      // Why is a line of the row's own: "Rejected by OpenAI — …" runs past the status column.
+      return { label: 'Invalid', color: 'red' };
     case 'REFUSED':
       return { label: 'Unavailable · key refused', color: 'red' };
     case 'DISABLED':
@@ -198,5 +217,5 @@ export function poolHeadline(pool: ProviderPool): PoolHeadline {
   // member it no longer admits still reports a spent window for.
   if (pool.unavailable) return { kind: 'none', reason: pool.unavailable };
   if (pool.members.some((m) => m.state === 'SPENT')) return { kind: 'spent', resetsAt: pool.resetsAt };
-  return { kind: 'none', reason: 'No account can run' };
+  return { kind: 'none', reason: pool.shared ? 'No key can run' : 'No account can run' };
 }

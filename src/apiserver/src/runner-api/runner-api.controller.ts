@@ -238,7 +238,7 @@ import {
   withTaskStart,
 } from './control-plane-note';
 import { readTaskStartCard } from '../tasks/task-start-card';
-import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
@@ -2097,8 +2097,9 @@ export class RunnerApiController {
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
       // scope mirrors the claim path: a personal provider resolves only for its owner's sessions,
-      // and an account pool is rebuilt on the member the claim would choose, not the runner's login.
-      // A maintenance run, as on the claim, never through a pool.
+      // and an account pool is rebuilt on the member the claim would choose, not the runner's login — a
+      // shared pool on the gateway, with a token of its own, as the claim builds it. A maintenance run, as
+      // on the claim, never through a pool.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
       const customRow = declaredIsBuiltin
         ? null
@@ -2107,7 +2108,11 @@ export class RunnerApiController {
               slug: declared!,
               OR: [{ ownerId: null }, { ownerId: s.ownerId }],
             },
-          })) ?? (maintenance ? null : await this.queue.resolvePoolMember(this.prisma, s, declared!)));
+          })) ??
+          (maintenance
+            ? null
+            : ((await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
+              (await this.queue.resolveSharedPool(this.prisma, s, declared!)))));
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
           declaredProvider: declared,
@@ -3270,7 +3275,9 @@ export class RunnerApiController {
    *
    * A switch onto one of the owner's account pools re-spawns on the member the claim would choose,
    * recorded as the claim records it (QueueService.resolvePoolMember) — through `tx`, which holds this
-   * session's row. Resolved as a plain slug, it would come up on the runner's own login.
+   * session's row. Resolved as a plain slug, it would come up on the runner's own login. A switch onto a
+   * shared pool re-spawns on its gateway with a token minted for the new process
+   * (QueueService.resolveSharedPool).
    */
   private async reloadProviderEnv(
     tx: Prisma.TransactionClient,
@@ -3293,6 +3300,7 @@ export class RunnerApiController {
         provider: true,
         providerBuiltin: true,
         poolMemberProviderId: true,
+        poolKeyId: true,
         usesRuntimeDefaultModel: true,
         workspace: { select: { model: true, env: true, codexAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
@@ -3306,7 +3314,9 @@ export class RunnerApiController {
             slug: session.provider!,
             OR: [{ ownerId: null }, { ownerId: session.ownerId }],
           },
-        })) ?? (await this.queue.resolvePoolMember(tx, session, session.provider!)));
+        })) ??
+        (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
+        (await this.queue.resolveSharedPool(tx, session, session.provider!)));
     const exec = resolveProviderExec({
       declaredProvider: session.provider,
       declaredProviderBuiltin: session.providerBuiltin,
@@ -3479,7 +3489,11 @@ export class RunnerApiController {
         where: { slug: session.provider!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
         select: { runtime: true },
       });
-      runtime = normalizeRuntimeProvider(customRow?.runtime, true);
+      // A pool has no row of its own: a shared pool runs Codex.
+      runtime = normalizeRuntimeProvider(
+        customRow?.runtime ?? (await accountPoolRuntime(this.prisma, session.ownerId, session.provider!)),
+        true,
+      );
     }
     if (!serverMatchedRuntime(runtime)) return false;
     const rules = await this.prisma.workspacePermissionRule.findMany({
@@ -3666,6 +3680,9 @@ export class RunnerApiController {
           // How much of that budget is spent, for the one failure class whose wait is decided
           // here rather than by a reply's text — see `retryArmAt` below.
           retryAttempts: true,
+          // Which shared pool's key a failed turn may have ended on — see `keyRetryAt` below.
+          provider: true,
+          poolKeyId: true,
           // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
           // work that will report back and wake this session again, which is what makes a turn the
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
@@ -3972,8 +3989,24 @@ export class RunnerApiController {
       // Never over an arm already standing: one is set by the failure this turn is repeating, it
       // is closer to firing than anything computed now, and re-deciding it here would restart the
       // countdown on every attempt — the one shape that makes a bounded ladder unbounded.
-      const retryArmAt =
-        unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
+      //
+      // A model turn a shared pool's key ended is armed ahead of that ladder: the gateway refused the key,
+      // or OpenAI said it is out of budget or refused it, and the next claim moves the session to another
+      // key. That is re-sent the moment another key can take it, or at the first reset when none can
+      // (QueueService.sharedPoolKeyRetryAt) — the account pool's "room on another member re-sends now",
+      // for keys. Decided from the keys, not from the engine's words, and never for a turn whose key can
+      // still run: that failure was not the key's.
+      const keyRetryAt =
+        dto.status === RunStatus.FAILED
+        && completedTurn?.kind === 'message'
+        && current.retryAt == null
+        // Only a configured provider's slug can name a pool, as in quotaRetryAt.
+        && !isBuiltinProvider(current.provider)
+          ? await this.queue.sharedPoolKeyRetryAt(tx, current, new Date())
+          : null;
+      const retryArmAt = keyRetryAt
+        ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
+        : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
           ? nextAutoRetryAt(current.retryAttempts, new Date())
           : null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
@@ -5323,9 +5356,20 @@ export class RunnerApiController {
               select: { env: true, codexAccount: true },
             })
           : null;
+      // A shared pool's key that ended the run is waited out the same way, from the keys rather than the
+      // words (QueueService.sharedPoolKeyRetryAt): now while another key can take the work.
+      const keyRetryAt =
+        effectiveStatus === RunStatus.FAILED
+        && current.retryAt == null
+        && !quotaSpent
+        && !isBuiltinProvider(current.provider)
+          ? await this.queue.sharedPoolKeyRetryAt(tx, current, new Date())
+          : null;
       const quotaRetryAt = quotaSpent
         ? await this.quotaRetryAt(tx, runner.id, current, dto.error!, workspace)
-        : null;
+        : keyRetryAt
+          ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
+          : null;
 
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
