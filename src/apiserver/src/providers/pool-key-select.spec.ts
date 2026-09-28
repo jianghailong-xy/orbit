@@ -10,7 +10,7 @@ import {
 } from './pool-key-select';
 
 /**
- * Which key of a shared pool a claim puts a session on (migrations 0320, 0322): the rules pool-select.ts
+ * Which key of a shared pool a claim puts a session on (migrations 0321, 0322): the rules pool-select.ts
  * chooses an account pool's member by, for keys — stay on the key the session has while it can run, the
  * requester's own first when the pool says so, then the most room left under the share caps, and none
  * OpenAI said is out of budget until its reset. Also when a pool whose keys cannot run comes back, and the

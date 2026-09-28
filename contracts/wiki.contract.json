@@ -850,6 +850,7 @@
       "route": "GET /api/runner/wiki/spaces/:id/dossiers",
       "query": {
         "after": "optional: a cursor token; the page starts after the later of it and the watermark",
+        "until": "optional: a cursor token the page does not go past — the position a maintenance task expects its run to reach (maintenance.job.task.expect)",
         "limit": "optional: sessions a page carries, 1 to rules.pageSessionsMax, default rules.pageSessionsDefault"
       },
       "who": "Maintenance sessions of the space, and no other: a headless call is refused 400, any other session of the owner WIKI_NOT_MAINTENANCE_SESSION, another owner's space a plain 404.",
@@ -875,7 +876,7 @@
     },
     "cursor": {
       "table": "wiki_cursor",
-      "row": "One per space (source 'facts'): the watermark, the furthest position a page handed out, the backlog as last counted with its oldest fact and the lag, and the health — last_ok_at, last_run_at, last_outcome, consecutive_failures, last_error.",
+      "row": "One per space (source 'facts'): the watermark, the furthest position a page handed out, the backlog as last counted with its oldest fact and the lag, and the health — last_ok_at, last_run_at, last_outcome, consecutive_failures, last_error — and, since 0320, held_reason and held_at: why the last fact that found the space due made no task (maintenance.job.held).",
       "factKinds": {
         "session_settled": "A session of the space (maintenance.cursor.scope) at rest (awaiting input, succeeded, failed, cancelled or interrupted), at its last_turn_at: once per session, and again each time it comes to rest later.",
         "task_terminal": "A task of the space (assigned to one of its workspaces, or with a session in one) that is DONE, CANCELLED or FAILED, at its updated_at.",
@@ -900,7 +901,7 @@
           "A move is one compare-and-set on the watermark, so of two runs the later position wins and the earlier is refused behind."
         ]
       },
-      "due": "A maintenance task is due when the backlog reaches rules.backlogThreshold, or when a new fact arrives while the oldest fact after the watermark is older than rules.maxPendingAgeHours (criterion 3). No clock starts one."
+      "due": "A maintenance task is due when rules.backlogThreshold sessions have a fact after the watermark (design section 8.2: twenty sessions, not twenty facts), or when a new fact arrives while the oldest fact after the watermark is older than rules.maxPendingAgeHours (criterion 3, maintenance.job.trigger). No clock starts one."
     },
     "run": {
       "doc": "docs/wiki-contract.md section 16.5; design section 8.2 cost guardrails",
@@ -931,7 +932,213 @@
       "tool": "none: maintenance verbs are CLI only, for a maintenance session, and have no MCP tool beside them.",
       "dossierPrecondition": "Read dossiers only as a Wiki maintenance run of the space, and cite the records their lines name, never the dossier itself: a dossier is sessions compressed, redacted and cut to a budget, not a record.",
       "cursorPrecondition": "Advance the cursor only when the run succeeded and every dossier up to the token was processed: a run that failed or was cut short reports that outcome instead, and moves nothing."
+    },
+    "job": {
+      "phase": 2,
+      "doc": "docs/wiki-contract.md section 19; design section 8.2",
+      "migration": "src/apiserver/prisma/migrations/0320_wiki_maintenance_run/migration.sql",
+      "tables": [
+        "wiki_maintenance_run"
+      ],
+      "rules": {
+        "runSessionsMax": 20,
+        "entriesPerSessionMax": 6,
+        "extractConcurrency": 4,
+        "checkTimeoutSeconds": 300
+      },
+      "trigger": {
+        "who": "The server (WikiMaintenanceTrigger), for every space of the owner whose maintenance is on, when an event this replica published names a committed fact of the space that is still after the cursor: a session of the space at rest, an approval it answered, a merge receipt of it (all through the session's own events), or a settled task of the space (task.changed). A merge receipt or a criterion revision that publishes nothing of its own is counted in the backlog and taken in with the next fact that arrives.",
+        "due": [
+          "backlog",
+          "age"
+        ],
+        "conditions": "Due when rules.backlogThreshold sessions have a fact after the cursor, or when the oldest fact after it is older than rules.maxPendingAgeHours as the new fact arrives. No clock starts a task: a space that turns due in silence makes its task with its next fact.",
+        "notMade": [
+          "maintenance is off, or names no workspace or list",
+          "a task of the maintenance list has not ended (OPEN or IN_PROGRESS)",
+          "the event names no fact of the space after the cursor: a rename, the maintenance run's own events, another space's work",
+          "the space is not due",
+          "no fact past the settle grace is left to cover",
+          "held: the day's runs are used up, or a Manual space's review queue has no room"
+        ],
+        "lock": "The task is made under a lock on the maintenance list's row, after the list's unended tasks and the day's count are read again under it, so two facts arriving together make one task."
+      },
+      "held": {
+        "reasons": [
+          "daily_limit_reached",
+          "review_queue_full"
+        ],
+        "where": "wiki_cursor.held_reason and held_at, served as the cursor state's held: {reason, at}, or null. Written when a due space makes no task for one of the reasons, keeping the time the reason first held; cleared when a task is made.",
+        "daily_limit_reached": "The space has made settings.maintenance.dailyRunLimit maintenance tasks since midnight UTC (wikiMaintenanceRunsToday), however they ended.",
+        "review_queue_full": "A Manual space, where every proposal waits for the owner, whose review queue has no room for one session's proposals."
+      },
+      "runSize": "How many sessions a run covers (wikiMaintenanceRunSessions), so that what it can propose fits its guardrails at rules.entriesPerSessionMax entries a session: in Manual, what one session may leave waiting (limits.opsPerSession) and what the review queue has room for; in Tiered and Automatic, reviewModes.rules.breakerMaxChangedPercent of the active entries when the space holds reviewModes.rules.breakerMinActiveEntries or more, and rules.runSessionsMax otherwise. Never more than rules.runSessionsMax.",
+      "task": {
+        "list": "the space's hidden Wiki maintenance list (maintenance.list)",
+        "title": "Wiki maintenance: <space title>",
+        "assignee": "settings.maintenance.workspaceId",
+        "provider": "settings.maintenance.provider, pinned: the session is claimed as maintenance.run says",
+        "runAt": "the moment it is made: the dispatcher's next scan starts it",
+        "creator": "USER, the space's owner",
+        "description": "the run's instructions: run `orbit wiki maintain --space <id>` once, and report what it printed",
+        "completionCriterion": "EXECUTABLE",
+        "acceptanceCommand": "orbit wiki check --space <id> --expect-cursor <token>",
+        "acceptanceExpectedExitCode": 0,
+        "acceptanceTimeoutSeconds": "rules.checkTimeoutSeconds",
+        "expect": "The position a dossier page from the cursor would end at after the next runSize sessions, over the facts past the settle grace: the run pages from the same cursor up to it (the dossier route's until) and so reaches exactly it."
+      },
+      "run": {
+        "steps": [
+          "context: GET …/maintenance/run — the space and its repository, the maintenance workspace's work directory, the topics, the guardrails' numbers and the position the task expects",
+          "checkout: the maintenance workspace's work directory, ~ expanded to the runner account's home, fetched; a checkout that is not the space's repository (its origin URL, its root commit) fails the run",
+          "dossiers: pages from the cursor up to the expected position (until); a dossier unchanged since it was processed is skipped",
+          "extract: one clean Claude Code call to the local model per dossier (the demo's A2+6: an 8k dossier, no thinking, at most rules.entriesPerSessionMax entries), told the space's repository and to answer {\"offTopic\": true} for a session about something else; each entry checked as the demo's extract.py checked it — kind, fields, each source a line of the dossier with its quote copied from that line, anchors that exist on origin/main — and the rejected ones asked for once more",
+          "self-check: the entries as adds, grouped by topic into batches of at most limits.opsPerChangeset ops (limits.opsPerTurn in Manual), each proposed with dryRun; a quote the server does not find is dropped from its source and the op checked again, an op still refused is dropped, and one the review queue holds back is not proposed",
+          "breaker: when the space holds breakerMinActiveEntries active entries or more, the ops the mode would apply across every batch may change at most breakerMaxChangedPercent of them; more trips the breaker before anything is recorded",
+          "propose: each batch through POST …/maintenance/changesets, origin maintenance; an op the server refuses now fails the run",
+          "verify: in an Automatic space, orbit wiki verify's verification of the run's own ops, and one more pass for those left without a verdict",
+          "anchors: orbit wiki anchors verify with --repo the checkout",
+          "articles: orbit wiki articles, which rewrites only the topics whose entry set changed",
+          "finish: POST …/maintenance/finish with the last page's token, outcome succeeded and the report"
+        ],
+        "failure": "A step that fails, a run cut short, or a breaker that trips ends the run with outcome failed through the same finish route (truncated, through the cursor route, when the turn limit cut it): the cursor does not move, the space's consecutive failures go up by one, and the report says where it stopped.",
+        "tokens": "The report's tokens are every model call the run made — extraction, verification and articles — as Claude Code reported them."
+      },
+      "offTopic": "A session in the space's workspaces that is not about the space's repository yields no entry: the extraction prompt names the repository and what it is, and asks for {\"offTopic\": true} for such a session; and an entry whose code anchors none exist in the repository is dropped. Both are counted in the report (offTopic, entries.foreign).",
+      "breaker": "The circuit breaker over a run (wiki-maintenance-breaker.ts): a maintenance run's changeset counts reviewModes.floors.circuitBreaker over the whole run — every entry its earlier changesets changed through the mode is spent, and the active entries are counted as they stood when the run began — and its refusal says the run stops and moves no cursor.",
+      "report": "What a run reports when it ends (WikiMaintenanceReport): sessions, dossiers, unchanged, offTopic, entries {extracted, kept, dropped, foreign, principles}, ops {proposed, recorded, refused, selfCheckDropped, heldBack, applied, waiting}, verification, anchors, articles, tokens {input, output, calls}, seconds, and stoppedAt when it did not succeed. At most 16,000 bytes of JSON, kept on the run's row with ops.refused as a column of its own.",
+      "check": {
+        "route": "GET /api/runner/wiki/spaces/:id/maintenance/check",
+        "who": "The space's owner's runner with no session — a task's acceptance command runs with none — or a maintenance run of the space; any other session WIKI_NOT_MAINTENANCE_SESSION, another owner's space a 404. It reads and writes nothing.",
+        "passes": "The cursor at or past the expected position, and the latest run whose task expects that position ended succeeded with ops.refused 0.",
+        "exit": "0 when it passes; 1 otherwise, with each reason a sentence: the cursor before the position, no run expecting it, a run that did not say how it ended or did not succeed, a run that said nothing of its ops, or ops the server refused."
+      },
+      "routes": {
+        "context": "GET /api/runner/wiki/spaces/:id/maintenance/run",
+        "propose": "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
+        "finish": "POST /api/runner/wiki/spaces/:id/maintenance/finish",
+        "check": "GET /api/runner/wiki/spaces/:id/maintenance/check"
+      },
+      "cli": {
+        "maintain": "orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]",
+        "check": "orbit wiki check --space <id> --expect-cursor <token> [--json]",
+        "tool": "none: both are CLI only. maintain is a maintenance run's alone, and check is its task's acceptance command, which runs where there is no session.",
+        "maintainPrecondition": "Run this only as a Wiki maintenance run of the space, once, and let it finish: it proposes as the space's maintenance run, and it moves the cursor only when every step succeeded — a run that failed, was cut short or tripped the breaker moves nothing.",
+        "checkPrecondition": "Judge a maintenance run only by what this reads: it passes when the space's cursor reached the position the task expects and the server refused none of the run's ops, and a run cannot pass it by saying it finished."
+      }
     }
+  },
+
+  "articles": {
+    "phase": 2,
+    "doc": "docs/wiki-contract.md section 18; design section 3 wiki_topic_summary and section 12.1",
+    "migration": "src/apiserver/prisma/migrations/0317_wiki_topic_articles/migration.sql",
+    "tables": ["wiki_topic_summary"],
+    "means": "Each topic of a space has an article the local model wrote from the topic's active entries, every sentence footnoted to one of them; a topic with more entries than rules.splitAbove has an overview and subtopic articles instead. Articles are a view of the entries and a disposable cache (wiki_topic_summary): rewritten only when the topic's entry set changed, never pushed, never a source, and never returned by wiki_search or wiki_get.",
+    "categories": [
+      { "key": "platform", "title": "Platform core" },
+      { "key": "runner", "title": "Runner & engines" },
+      { "key": "clients", "title": "Clients & UI" },
+      { "key": "data", "title": "Data & backend" },
+      { "key": "engineering", "title": "Engineering workflow" },
+      { "key": "collaboration", "title": "Collaboration" }
+    ],
+    "categoriesNote": "The demo's six categories in the demo's order (平台核心, Runner 与引擎, 客户端与界面, 数据与后端, 工程流程, 协作), named in English as all UI copy is. wiki_topic.category is one of the keys, CHECKed; the directory lists the categories in this order.",
+    "kinds": {
+      "article": "part 0 of a topic that was not split: the topic's one article",
+      "overview": "part 0 of a topic that was split: what the topic covers, pointing at its subtopic articles",
+      "subtopic": "part 1 or later of a split topic: one group of its entries, hanging on the overview (parent_id)"
+    },
+    "rules": {
+      "minChars": 400,
+      "maxChars": 900,
+      "splitAbove": 45,
+      "groupTarget": 40,
+      "groupsMax": 40,
+      "groupMin": 8,
+      "entriesPerArticle": 30,
+      "titleMaxChars": 120,
+      "markdownMaxChars": 20000
+    },
+    "rulesNote": "An article's length is counted in characters (Unicode code points) of its kept sentences, footnote markers and headings left out: the demo's measure, whose articles averaged 1,052 against a 400-900 target. The writer aims inside the range and asks again once when a draft falls short of minChars; the server cuts what passes maxChars (validation.cap). splitAbove, groupTarget, groupsMax and groupMin are the writer's grouping (the demo's), entriesPerArticle the most entries one article is written from.",
+    "membership": {
+      "entries": "A topic's entries are the space's active entries that no web-derived source tainted, each in exactly one topic.",
+      "order": [
+        "paths: every repo-relative path the entry names (its path and symbol anchors, a pitfall's trigger.paths, a convention's scope up to its first wildcard) votes for the topic whose pattern claims the most of it (membership.patterns); the topic with the most votes wins, then the longer claim, then the earlier topic",
+        "declared: failing that, the first of the entry's own topics that is a topic of the space",
+        "text: failing that, the topic whose words its title, summary and aliases are closest to (tf-idf cosine over words and CJK bigrams against each topic's title, description and the entries the first two steps gave it); an entry close to none is in no topic"
+      ],
+      "why": "The demo filed articles by the words alone, and a topic collected entries about something else (the sessions topic held articles on database writes and on running Nest). Where an entry is anchored in the code is the better witness, so it decides first.",
+      "paths": "A path is taken relative to the repository: a leading ./ and a checkout's absolute prefix (/root/orbit/, or a worktree's /.orbit/worktrees/<id>/) are dropped first.",
+      "patterns": "wiki_topic.path_prefixes holds prefixes and suffixes. A prefix claims a path that starts with it, as many characters as it has; one that ends in / claims the directory itself too (src/web claims what src/web/ does). A pattern that starts with * is a suffix: it claims a path that ends with the rest (*.swift claims a bare ConsoleModel.swift), as many characters as the rest has. So a directory's prefix outranks a suffix, and a suffix names what a bare file name is about when nothing longer does."
+    },
+    "fingerprint": "sha256 of the lines <entry id>:<current revision> of the topic's entries, sorted by id and joined by a newline: the same entries at the same revisions give the same fingerprint, and an entry that joins, leaves or is amended changes it.",
+    "regeneration": "A topic's articles are rewritten only when its fingerprint differs from the one its part 0 was generated from, and only by a maintenance run after its entries changed (criterion 3): no clock starts one. A write that names the stored fingerprint rewrites nothing (unchanged), and one that names a fingerprint other than the topic's current one is refused WIKI_ARTICLE_STALE.",
+    "validation": {
+      "input": "Each part is Markdown with footnote markers [n], and notes: the entry each n names, notes[n-1]. A subtopic part names the entries of its group too.",
+      "sentences": "The body is cut into sentences at 。！？, and at a full stop or an ASCII ? or ! followed by a space or the end of the line — not at an ASCII ? or ! after a space or another ? or !, which is code left outside backticks (a ?? b, a != b), and not inside a code span; a heading line starts a block, and a first-level heading is not part of the body.",
+      "markers": "A marker survives only when n is 1 to the number of notes and notes[n-1] is an entry of the topic (a subtopic may cite any entry of its topic). A marker out of range, naming another topic's entry or naming no entry of the space is stripped.",
+      "sentencesWithoutNotes": "A sentence left with no marker is deleted.",
+      "cap": "When the kept sentences pass rules.maxChars, the last sentence of the longest block with more than one is dropped, again and again, until they do not.",
+      "numbering": "Footnotes are renumbered 1, 2, … in the order they first appear, and citations records the entry and its revision behind each number.",
+      "empty": "A subtopic part with no sentence left is dropped; a part 0 with none is not written at all, and the topic stays as it was."
+    },
+    "view": {
+      "push": "Never in <orbit_wiki_context>: the push reads wiki_entry and nothing else.",
+      "source": "Never a source: no source kind names an article (sourceRules.firstHand), so citing one is WIKI_SOURCE_UNRESOLVED.",
+      "agents": "Never returned by wiki_search or wiki_get: both read entries alone, and an article's id is no entry's.",
+      "readers": "The owner, on the user door. Another owner's space, topic or article is a plain 404."
+    },
+    "who": {
+      "write": "A maintenance run of the space (isWikiMaintenanceSession, contract maintenance.session) through the runner door, and an import the API server's container runs itself (origin import, no session and no user) for a preview space. Every other caller is refused WIKI_NOT_MAINTENANCE_SESSION; the user door has no write route.",
+      "read": "The owner, on the user door."
+    },
+    "seeding": "A space with no topic yet is given articles.defaultTopics the first time a writer asks for its plan: their slugs, display names, categories, descriptions and path prefixes, in this order. A space that has topics keeps them.",
+    "routes": {
+      "directory": "GET /api/wiki/spaces/:id/articles",
+      "article": "GET /api/wiki/spaces/:id/articles/:slug",
+      "part": "GET /api/wiki/spaces/:id/articles/:slug/:part",
+      "index": "GET /api/wiki/spaces/:id/article-index",
+      "plan": "POST /api/runner/wiki/spaces/:id/article-plan",
+      "input": "GET /api/runner/wiki/spaces/:id/articles/:slug/input",
+      "write": "POST /api/runner/wiki/spaces/:id/articles/:slug"
+    },
+    "reads": {
+      "directory": "The six categories in order, each with its topics (display name, description, the article's part 0 if there is one, and the subtopic parts under it), and the topics nothing has filed under a category.",
+      "article": "One part: its title, kind, blocks of sentences with their footnote numbers, and footnotes resolved to the entries they name (title, summary, kind, status, trust), with the topic, its category, the parts beside it, when and at which ref it was generated.",
+      "index": "Every article of the space, A to Z by title: its topic, its part and the entries it was written from."
+    },
+    "cleanClaudeCode": "The verifier's clean launch (agentSurface.verify.cleanClaudeCode) with the writer's own system prompt, and thinking off: CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0. The model reads entries only, never session text.",
+    "cli": {
+      "articles": "orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]",
+      "tool": "none: a maintenance run's verb, CLI only, with no MCP tool beside it.",
+      "precondition": "Write articles only as a Wiki maintenance run of the space, and only from what the model wrote: every sentence keeps a footnote to one of the topic's entries or is deleted, and a topic whose entries did not change is left as it is.",
+      "does": "Asks the plan for the topics whose entry set changed (--topic, one of them), reads each one's entries, groups a topic of more than rules.splitAbove entries into subtopics by their anchor paths and words, has the model name each group and write each article, and writes the topic's articles. It stops at the first 401 from the model's endpoint, and exits non-zero when any topic it took up was left unwritten."
+    },
+    "defaultTopics": [
+      { "slug": "sessions", "title": "会话", "category": "platform", "description": "Sessions: lifecycle, messages, turns, steer and interrupt, delivery, attachments, session merge and commit.", "pathPrefixes": ["src/apiserver/src/sessions/", "src/apiserver/src/attachments/", "src/apiserver/src/link-previews/", "src/apiserver/src/session-tags/", "docs/session-"] },
+      { "slug": "tasks", "title": "任务与派发", "category": "platform", "description": "Tasks and task lists: completion criteria, acceptance, dependencies, dispatch, retries, evidence.", "pathPrefixes": ["src/apiserver/src/tasks/", "src/apiserver/src/task-lists/", "docs/task-"] },
+      { "slug": "projects", "title": "项目与落地", "category": "platform", "description": "Projects and coordinators: the integration line, landing and promotion to main, blockers, open items, the outcome reconciler.", "pathPrefixes": ["src/apiserver/src/projects/", "src/apiserver/src/outcome-reconciler/", "src/apiserver/src/deadlock/", "scripts/outcome-reconciler", "scripts/project-", "docs/project-"] },
+      { "slug": "watches-wakeups", "title": "Watch 与唤醒", "category": "platform", "description": "Watches, scheduled wakeups, awaits and the notifications they send to sessions.", "pathPrefixes": ["src/apiserver/src/watches/", "contracts/watch", "docs/watch-"] },
+      { "slug": "wiki", "title": "Wiki", "category": "platform", "description": "The Orbit wiki itself: its contract, entries, review, maintenance and articles.", "pathPrefixes": ["src/apiserver/src/wiki/", "src/apiserver/src/runner-api/runner-wiki", "src/runner-go/wiki", "src/web/src/pages/Wiki", "src/web/src/components/Wiki", "src/web/src/lib/wiki", "src/macos/OrbitKit/Sources/OrbitKit/Models/Wiki", "src/macos/OrbitKit/Sources/OrbitKit/App/Wiki", "src/macos/OrbitKit/Tests/OrbitKitTests/Wiki", "src/macos/OrbitApp/Sources/OrbitApp/Wiki", "src/macos/OrbitApp/Sources/OrbitApp/Views/Wiki", "contracts/wiki", "docs/wiki", "docs/mocks/wiki", "scripts/wiki-"] },
+      { "slug": "runner", "title": "Runner", "category": "runner", "description": "The Go runner daemon: claim and lease, background jobs, self-update, process management, and the runner door.", "pathPrefixes": ["src/runner-go/", "src/apiserver/src/runner-api/", "src/apiserver/src/runners/"] },
+      { "slug": "engines-providers", "title": "引擎与模型提供方", "category": "runner", "description": "Coding engines and model providers: Claude Code, Codex, Kimi, OpenCode, vLLM, models, effort, quotas and rate limits.", "pathPrefixes": ["src/apiserver/src/providers/", "src/apiserver/src/agents/", "src/runner-go/claude", "src/runner-go/codex", "src/runner-go/kimi", "src/runner-go/opencode", "src/runner-go/provider", "src/runner-go/model", "src/runner-go/effort", "src/runner-go/deepseek", "src/runner-go/engine", "src/runner-go/planusage"] },
+      { "slug": "agent-tooling", "title": "Agent 工具与环境", "category": "runner", "description": "How agents work here: Bash tool quirks, MCP tools and the orbit CLI, subagents, context and the agents' memory.", "pathPrefixes": ["src/runner-go/mcp", "src/runner-go/agent_instructions", "src/runner-go/cli_", "src/runner-go/agent_cli", "src/runner-go/notify_cli", "src/runner-go/project_cli", "src/runner-go/session_cli", "src/runner-go/task_cli", "src/runner-go/token_cli", "src/runner-go/watch_cli"] },
+      { "slug": "web-client", "title": "Web 客户端", "category": "clients", "description": "The web client: React, antd, vitest, layout.", "pathPrefixes": ["src/web/"] },
+      { "slug": "apple-clients", "title": "iOS 与 macOS 客户端", "category": "clients", "description": "The iOS and macOS clients and OrbitKit: SwiftUI, Xcode, TestFlight builds.", "pathPrefixes": ["src/macos/", "src/ios/", "OrbitKit/", "OrbitApp/", "*.swift"] },
+      { "slug": "realtime-push", "title": "实时流与推送", "category": "clients", "description": "Realtime streams, server-sent events and push notifications.", "pathPrefixes": ["src/apiserver/src/realtime/", "src/apiserver/src/push/", "src/apiserver/src/events/", "docs/realtime-"] },
+      { "slug": "ui-design", "title": "UI 设计", "category": "clients", "description": "UI and UX design: mockups, screenshots, layout rules, the copy in the UI.", "pathPrefixes": ["docs/mocks/", "docs/ux/"] },
+      { "slug": "database", "title": "数据库与 Prisma", "category": "data", "description": "PostgreSQL and Prisma: schema, migrations, queries, performance, locks, backups, the write inventory.", "pathPrefixes": ["src/apiserver/prisma/", "prisma/", "src/apiserver/src/prisma/", "src/apiserver/src/common/db-write-inventory", "src/apiserver/src/common/transaction-retry", "src/apiserver/src/common/lock-order", "docs/postgres-", "docs/db-write-audit", "scripts/pg-", "scripts/sync-db-trigger-inventory", "*.sql", "*.prisma"] },
+      { "slug": "auth-workspaces", "title": "账号与工作区", "category": "data", "description": "Auth, users, accounts, workspaces, share links and permissions.", "pathPrefixes": ["src/apiserver/src/auth/", "src/apiserver/src/users/", "src/apiserver/src/share-links/", "src/apiserver/src/workspaces/", "docs/share-links-"] },
+      { "slug": "shared-contracts", "title": "共享包与契约", "category": "data", "description": "The shared package and the contracts: codecs, ids, protocol definitions.", "pathPrefixes": ["src/shared/", "contracts/", "src/apiserver/src/common/public-id"] },
+      { "slug": "security", "title": "安全与密钥", "category": "data", "description": "Secrets, keys, redaction and the handling of credentials.", "pathPrefixes": ["src/apiserver/src/common/secret", "docs/dependency-security"] },
+      { "slug": "git-worktrees", "title": "Git 与 worktree", "category": "engineering", "description": "Git and worktrees: branches, merges, rebases, cherry-picks, stash, worktree overlays and node_modules.", "pathPrefixes": ["src/runner-go/worktree", "src/runner-go/git", "src/runner-go/merge", "src/runner-go/integrate", "src/runner-go/repohealth", "scripts/worktree-overlay"] },
+      { "slug": "testing", "title": "测试", "category": "engineering", "description": "Tests: pg specs, node:test, vitest, go test, fixtures, flakes and acceptance scripts.", "pathPrefixes": ["scripts/run-pg-spec", "scripts/acceptance/", "scripts/pg-matrix-", "scripts/executable-acceptance-", "src/apiserver/src/test-support/", "test/", "*_test.go", "*.spec.ts", "*.test.ts", "*.test.tsx"] },
+      { "slug": "ci-release", "title": "CI 与发版", "category": "engineering", "description": "CI and releases: GitHub Actions, tags, versions, signing, notarization, TestFlight.", "pathPrefixes": [".github/", "scripts/ci/", "scripts/build-binaries", "scripts/runner-release", ".claude/skills/release/", "src/runner-go/selfupdate", "package.json", "package-lock.json"] },
+      { "slug": "deploy-ops", "title": "部署与运维", "category": "engineering", "description": "Deployment and the host: docker compose, upgrade, gateway, disk, memory, systemd, logs.", "pathPrefixes": ["docker-compose", "gateway/", ".claude/skills/upgrade/", "scripts/image-boot", "docs/self-hosting", "src/runner-go/hostd", "*Dockerfile"] },
+      { "slug": "observability", "title": "可观测性", "category": "engineering", "description": "Metrics, logs, dashboards and diagnosing production incidents.", "pathPrefixes": ["src/apiserver/src/metrics/", "src/apiserver/src/health/"] },
+      { "slug": "workflow-owner", "title": "与 owner 协作", "category": "collaboration", "description": "How the owner wants work done: communication, language, confirmations, scope, reporting.", "pathPrefixes": ["docs/human-only-authority", "CLAUDE.md", "AGENTS.md"] }
+    ]
   },
 
   "refusals": [
@@ -950,7 +1157,8 @@
     { "code": "WIKI_SESSION_EXCLUDED", "httpStatus": 403, "scope": "request", "addedByThisContract": true, "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes." },
     { "code": "WIKI_IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer." },
     { "code": "WIKI_CURSOR_BEHIND", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A succeeded run asked to advance the cursor to a token behind the space's watermark: another run already went further, and the cursor only moves forward (maintenance.cursor.advance). The answer carries the cursor as it stands." },
-    { "code": "WIKI_CURSOR_INVALID", "httpStatus": 400, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A cursor token that no dossier page of this space handed out: one that does not decode, one of another space, or a position past the furthest page the space's dossier route has issued." }
+    { "code": "WIKI_CURSOR_INVALID", "httpStatus": 400, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A cursor token that no dossier page of this space handed out: one that does not decode, one of another space, or a position past the furthest page the space's dossier route has issued." },
+    { "code": "WIKI_ARTICLE_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "An article write named an entry-set fingerprint that is not its topic's current one: the topic's entries changed while the articles were being written (articles.regeneration). Nothing is written; the next run writes them from the entries as they stand." }
   ],
   "refusalRules": {
     "order": ["changesetSize", "schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "taint", "effect", "quota", "similar"],
@@ -1014,7 +1222,11 @@
           "GET /api/wiki/search",
           "GET /api/wiki/review",
           "POST /api/wiki/changesets/:id/decide",
-          "POST /api/wiki/changesets/:id/revert"
+          "POST /api/wiki/changesets/:id/revert",
+          "GET /api/wiki/spaces/:id/articles",
+          "GET /api/wiki/spaces/:id/articles/:slug",
+          "GET /api/wiki/spaces/:id/articles/:slug/:part",
+          "GET /api/wiki/spaces/:id/article-index"
         ]
       },
       "runner": {
@@ -1030,9 +1242,16 @@
           "GET /api/runner/wiki/spaces/:id/dossiers",
           "GET /api/runner/wiki/spaces/:id/anchors",
           "POST /api/runner/wiki/spaces/:id/anchor-checks",
-          "POST /api/runner/wiki/spaces/:id/cursor"
+          "POST /api/runner/wiki/spaces/:id/cursor",
+          "POST /api/runner/wiki/spaces/:id/article-plan",
+          "GET /api/runner/wiki/spaces/:id/articles/:slug/input",
+          "POST /api/runner/wiki/spaces/:id/articles/:slug",
+          "GET /api/runner/wiki/spaces/:id/maintenance/run",
+          "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
+          "POST /api/runner/wiki/spaces/:id/maintenance/finish",
+          "GET /api/runner/wiki/spaces/:id/maintenance/check"
         ],
-        "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION",
+        "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION. The maintenance job's check (maintenance.job.check) also answers the space's owner's runner with no session, since a task's acceptance command runs with none.",
         "verificationRoutes": [
           "GET /api/runner/wiki/spaces/:id/verifications",
           "POST /api/runner/wiki/spaces/:id/verifications"
@@ -1079,7 +1298,7 @@
     "event": "wiki.changed",
     "scope": "the space's owner, on the user-scoped control-plane stream (GET /api/events). The envelope names no session.",
     "payload": ["id"],
-    "id": "the space whose entries, review queue, bindings or settings changed",
+    "id": "the space whose entries, review queue, bindings, settings or articles changed",
     "redaction": "The space's id and nothing else: no entry, title, status, op or count. A client re-reads what it shows, and that read decides what it may see.",
     "publishedWhen": [
       "a changeset recorded something, after its transaction commits",
@@ -1087,7 +1306,8 @@
       "a space was created, its settings changed, or a workspace was bound",
       "the owner reverted a changeset or rejected an entry, after the transaction commits",
       "a verdict was recorded, after its transaction commits",
-      "pending ops expired or were withdrawn"
+      "pending ops expired or were withdrawn",
+      "a topic's articles were written, or a space's topics seeded, after the transaction commits"
     ],
     "notPublishedWhen": ["an idempotent replay", "a dryRun", "a request that recorded nothing"],
     "correctness": "Nothing depends on it. Dropping every announcement changes only how long a client waits: clients re-read on focus and on reconnect.",

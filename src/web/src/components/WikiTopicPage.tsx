@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { RightOutlined } from '@ant-design/icons';
 import { WikiEmpty } from './WikiCards';
+import { WikiContentsButton } from './WikiDirectory';
 import { WikiEntryRow } from './WikiEntryRow';
 import { wikiTopicQuery } from '../lib/queries';
 import type { WikiEntry } from '../lib/wiki';
@@ -29,13 +30,12 @@ import {
 } from '../lib/wiki';
 
 /**
- * A topic's page: its entries, grouped the way the design groups them.
+ * A topic's page before it has an article: its entries, grouped the way the design groups them.
  *
- * NO GENERATED SUMMARY, deliberately and for now. Design §12.1 puts one at the top of this page and
- * it belongs to phase 2 (`wiki_topic_summary`, written by the maintenance run, every sentence
- * footnoted back to an entry). Phase 1 has nothing to generate it with, and a heading over an empty
- * box reads as a page that failed to load — so the section is absent until there is something to put
- * in it, which is what this task's own instructions ask for.
+ * The generated text design §12.1 puts at the top of a topic's page is the topic's article
+ * (`WikiArticlePage`, criterion 10), and a topic's route draws that whenever the article read has one.
+ * This is what the route draws until then — a heading over an empty box would read as a page that
+ * failed to load.
  *
  * THE GROUPS COME FROM THE SHARED REGISTRY: `WIKI_TOPIC_GROUPS` names the kinds each one holds, so a
  * group appears exactly when the topic has entries of those kinds and disappears when it does not —
@@ -45,12 +45,15 @@ export function WikiTopicPage({
   spaceId,
   spaceSlug,
   topicSlug,
+  note,
 }: {
   spaceId: string;
   spaceSlug: string;
   /** The topic to draw, when the caller knows it and the route does not name it — the entry drawer
    *  draws the page its entry belongs to behind itself, and that page is not at a topic URL. */
   topicSlug?: string;
+  /** A line under the head saying why there is no text over the entries. */
+  note?: string;
 }) {
   const params = useParams();
   const topic = topicSlug ?? params.topic ?? '';
@@ -80,10 +83,13 @@ export function WikiTopicPage({
 
   return (
     <div className="wk-topic-page">
-      <div className="wk-crumb">
-        <Link to={wikiSpacePath(spaceSlug)}>{WIKI_TITLE}</Link>
-        <RightOutlined className="ic" />
-        <span>{topicView.data?.title ?? WIKI_TOPIC_TITLE_FALLBACK}</span>
+      <div className="wk-art-crumbrow">
+        <div className="wk-crumb">
+          <Link to={wikiSpacePath(spaceSlug)}>{WIKI_TITLE}</Link>
+          <RightOutlined className="ic" />
+          <span>{topicView.data?.title ?? WIKI_TOPIC_TITLE_FALLBACK}</span>
+        </div>
+        <WikiContentsButton />
       </div>
       <h1 className="t-title">{topicView.data?.title ?? topic}</h1>
       <div className="t-meta">
@@ -100,6 +106,7 @@ export function WikiTopicPage({
           </>
         )}
       </div>
+      {note && <div className="wk-note-dim wk-topic-note">{note}</div>}
 
       {topicView.isError ? (
         <WikiEmpty>{WIKI_TOPIC_MISSING}</WikiEmpty>
@@ -107,7 +114,7 @@ export function WikiTopicPage({
         <WikiEmpty>{WIKI_NO_ENTRIES}</WikiEmpty>
       ) : (
         groups.map((group) => (
-          <TopicGroup
+          <WikiTopicGroup
             key={group.title}
             title={group.title}
             note={group.note}
@@ -122,8 +129,9 @@ export function WikiTopicPage({
   );
 }
 
-/** One kind-group: the head's three columns, then the rows measured against them. */
-function TopicGroup({
+/** One kind-group: the head's three columns, then the rows measured against them. An article's
+ *  entries are drawn in the same groups (`WikiArticlePage`). */
+export function WikiTopicGroup({
   title,
   note,
   spaceSlug,

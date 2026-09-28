@@ -14,10 +14,13 @@ import { LINK_PREVIEW_MAX_REFS, type LinkPreviewRef } from '@orbit/shared';
 import { useNavigate } from 'react-router-dom';
 import { relTime } from './Transcript';
 import { WikiEmpty } from './WikiCards';
+import { WikiEntryAnswers, WikiMarkBar } from './WikiEntryMarks';
 import { WikiAim, WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
 import { WikiSourceList } from './WikiSources';
 import { linkPreviewsQuery, wikiEntryQuery } from '../lib/queries';
 import { decodeId } from '../lib/idCodec';
+import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
+import { WIKI_NOT_SENT_UNREVIEWED, wikiEntryAnswerable } from '../lib/wikiReviewMode';
 import {
   WIKI_ACTION_COPY_LINK,
   WIKI_ACTION_EDIT,
@@ -86,6 +89,7 @@ export function WikiEntryDrawer({
 }) {
   const entry = useQuery(wikiEntryQuery(entryId));
   const { message } = App.useApp();
+  const phone = useMediaQuery(PHONE_QUERY);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editor, setEditor] = useState<'edit' | 'supersede' | 'retire' | null>(null);
   const [copied, setCopied] = useState(false);
@@ -137,8 +141,15 @@ export function WikiEntryDrawer({
           )}
         </div>
         <div className="tdp-head-actions">
-          <Button icon={<EditOutlined />} onClick={() => setEditor('edit')} disabled={!data}>
-            {WIKI_ACTION_EDIT}
+          {data && <WikiEntryAnswers entry={data} />}
+          {/* Beside Confirm and Reject a phone keeps Edit to its icon (mock 18 ①). */}
+          <Button
+            icon={<EditOutlined />}
+            onClick={() => setEditor('edit')}
+            disabled={!data}
+            aria-label={WIKI_ACTION_EDIT}
+          >
+            {!(phone && data && wikiEntryAnswerable(data)) && <>{WIKI_ACTION_EDIT}</>}
           </Button>
           <Dropdown
             open={menuOpen}
@@ -167,6 +178,7 @@ export function WikiEntryDrawer({
         </div>
         <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
       </div>
+      {data && <WikiMarkBar entry={data} />}
 
       {data && (
         <>
@@ -209,7 +221,9 @@ export function WikiEntryDrawer({
           </Section>
 
           <Section title={WIKI_SECTION_USED}>
-            <UsedSection exposure={data.exposure ?? []} />
+            {/* The push leaves an Unreviewed entry out, so the section says so first (mock 17 ④). */}
+            {data.status === 'active' && data.trust === 'unreviewed' && <WikiEmpty>{WIKI_NOT_SENT_UNREVIEWED}</WikiEmpty>}
+            <UsedSection exposure={data.exposure ?? []} quiet={data.status === 'active' && data.trust === 'unreviewed'} />
           </Section>
 
           <Section title={WIKI_SECTION_HISTORY}>
@@ -292,7 +306,7 @@ function DetailRow({ label, value }: { label: string; value: string | string[] }
  * is described there. Rows the answer does not cover keep the short id they came with: an exposure
  * row is a fact this page already has, and a title is a nicety it may not get.
  */
-function UsedSection({ exposure }: { exposure: WikiEntryDetail['exposure'] }) {
+function UsedSection({ exposure, quiet = false }: { exposure: WikiEntryDetail['exposure']; quiet?: boolean }) {
   const rows = exposure ?? [];
   const pushed = rows.filter((row) => row.channel === 'push');
   const sessions = new Set(pushed.map((row) => row.sessionId).filter((id): id is string => !!id));
@@ -324,7 +338,7 @@ function UsedSection({ exposure }: { exposure: WikiEntryDetail['exposure'] }) {
     return map;
   }, [answers]);
 
-  if (rows.length === 0) return <WikiEmpty>{WIKI_NO_USE_YET}</WikiEmpty>;
+  if (rows.length === 0) return quiet ? null : <WikiEmpty>{WIKI_NO_USE_YET}</WikiEmpty>;
   return (
     <>
       <div className="wk-used-h">{wikiPushedTo(sessions.size, fetched)}</div>

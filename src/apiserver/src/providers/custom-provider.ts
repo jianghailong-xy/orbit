@@ -151,7 +151,7 @@ export async function sessionExecRuntime(
  * The runtime `slug` borrows when it names a pool `ownerId` may dispatch with, else null: one of their own
  * account pools, which runs on Claude — a pool runs on whichever member the claim picks
  * (QueueService.resolvePoolMember), and only a Claude subscription is admitted as one
- * (ProvidersService.assertPoolMembers) — or a shared pool they are a person of (migration 0320), which runs
+ * (ProvidersService.assertPoolMembers) — or a shared pool they are a person of (migration 0321), which runs
  * on Codex through the pool gateway (QueueService.resolveSharedPool).
  *
  * Asked by the doors that accept a provider slug once no provider holds it. Somebody else's account pool,

@@ -187,6 +187,8 @@ type wikiVerifySummary struct {
 	Failed      int                 `json:"failed"`
 	Failures    []wikiVerifyFailure `json:"failures"`
 	Stopped     string              `json:"stopped,omitempty"`
+	// What the verdicts cost, as Claude Code reported it: a maintenance run adds it to its own spend.
+	Usage wikiModelUsage `json:"usage"`
 }
 
 type wikiVerifyFailure struct {
@@ -263,8 +265,10 @@ func verifyOneWikiOp(t *Transport, sessionID, spaceID string, cfg wikiVerifyConf
 	}
 	candidates := wikiVerifyCandidates(item)
 	ctx, cancel := context.WithTimeout(context.Background(), wikiVerifyCallTimeout)
-	answer, err := askWikiVerifier(ctx, claude, cfg, wikiVerifyPrompt(item, candidates))
+	answer, usage, err := askWikiVerifier(ctx, claude, cfg, wikiVerifyPrompt(item, candidates))
 	cancel()
+	summary.Usage.InputTokens += usage.InputTokens
+	summary.Usage.OutputTokens += usage.OutputTokens
 	var auth *wikiVerifyAuthError
 	if errors.As(err, &auth) {
 		fail("the model endpoint answered 401")
@@ -399,28 +403,30 @@ func wikiVerifyEndpointUp(baseURL string) error {
 	return nil
 }
 
-// askWikiVerifier runs one clean Claude Code over prompt and returns the model's answer text.
-func askWikiVerifier(ctx context.Context, claude string, cfg wikiVerifyConfig, prompt string) (string, error) {
+// askWikiVerifier runs one clean Claude Code over prompt and returns the model's answer text, and what
+// the call cost.
+func askWikiVerifier(ctx context.Context, claude string, cfg wikiVerifyConfig, prompt string) (string, wikiModelUsage, error) {
+	var usage wikiModelUsage
 	scratch, err := os.MkdirTemp("", "orbit-wiki-verify-")
 	if err != nil {
-		return "", err
+		return "", usage, err
 	}
 	defer os.RemoveAll(scratch)
 	home := filepath.Join(scratch, "home")
 	config := filepath.Join(scratch, "config")
 	for _, dir := range []string{home, config} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return "", err
+			return "", usage, err
 		}
 		// Onboarding done, and nothing else: the dirs are empty so no login, memory or setting of this
 		// machine's reaches the call.
 		if err := os.WriteFile(filepath.Join(dir, ".claude.json"), []byte(`{"hasCompletedOnboarding":true}`), 0o600); err != nil {
-			return "", err
+			return "", usage, err
 		}
 	}
 	settings := filepath.Join(scratch, "settings.json")
 	if err := os.WriteFile(settings, []byte(`{"apiKeyHelper":"printenv ANTHROPIC_AUTH_TOKEN"}`), 0o600); err != nil {
-		return "", err
+		return "", usage, err
 	}
 	cmd := exec.CommandContext(ctx, claude, wikiVerifyClaudeArgs(cfg.model, settings)...)
 	cmd.Dir = scratch
@@ -434,20 +440,28 @@ func askWikiVerifier(ctx context.Context, claude string, cfg wikiVerifyConfig, p
 		IsError        bool   `json:"is_error"`
 		Result         string `json:"result"`
 		APIErrorStatus *int   `json:"api_error_status"`
+		Usage          struct {
+			InputTokens              int `json:"input_tokens"`
+			OutputTokens             int `json:"output_tokens"`
+			CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+			CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(lastJSONLine(stdout.Bytes()), &result); err != nil {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("Claude Code gave no answer within %s", wikiVerifyCallTimeout)
+			return "", usage, fmt.Errorf("Claude Code gave no answer within %s", wikiVerifyCallTimeout)
 		}
-		return "", fmt.Errorf("Claude Code gave no result (%v): %s", runErr, lastLines(stderr.String(), 3))
+		return "", usage, fmt.Errorf("Claude Code gave no result (%v): %s", runErr, lastLines(stderr.String(), 3))
 	}
+	usage.InputTokens = result.Usage.InputTokens + result.Usage.CacheReadInputTokens + result.Usage.CacheCreationInputTokens
+	usage.OutputTokens = result.Usage.OutputTokens
 	if (result.APIErrorStatus != nil && *result.APIErrorStatus == http.StatusUnauthorized) || (result.IsError && wikiVerify401.MatchString(result.Result)) {
-		return "", &wikiVerifyAuthError{detail: result.Result}
+		return "", usage, &wikiVerifyAuthError{detail: result.Result}
 	}
 	if result.IsError {
-		return "", fmt.Errorf("Claude Code reported an error: %s", result.Result)
+		return "", usage, fmt.Errorf("Claude Code reported an error: %s", result.Result)
 	}
-	return result.Result, nil
+	return result.Result, usage, nil
 }
 
 var wikiVerify401 = regexp.MustCompile(`(?i)\b401\b|authentication_error|invalid api key`)

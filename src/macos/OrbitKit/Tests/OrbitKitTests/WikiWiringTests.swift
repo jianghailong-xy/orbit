@@ -124,16 +124,17 @@ final class WikiWiringTests: XCTestCase {
     // MARK: the home page
 
     /// The home page draws `WikiLogic.HomeBand` in its own order — the search under the title, the
-    /// banner, then the five bands — and the header carries the large title with the space beside it.
+    /// banner, then the four bands — and the header carries the large title with the space beside it.
     func testTheHomePageDrawsTheBandsInOrder() throws {
         let page = code(try slice(try source("Views/WikiView.swift"),
                                   from: "struct WikiHomePage: View {", to: "private struct WikiRowLabel: View {"))
         XCTAssertTrue(page.contains("ForEach(WikiLogic.HomeBand.allCases, id: \\.self) { band in"))
         let bands = try slice(page, from: "private func band(_ band: WikiLogic.HomeBand) -> some View {",
                               to: "private var searchField: some View {")
-        assertOrder(bands, ["case .search:", "case .reviewBanner:", "case .principles:", "case .topics:",
+        assertOrder(bands, ["case .search:", "case .reviewBanner:", "case .principles:",
                             "case .recentDecisions:", "case .recentlyChanged:", "case .agentsUsed:"],
                     "the bands' arms")
+        XCTAssertFalse(bands.contains("case .topics:"), "the topics are the Contents sheet, not a band")
         XCTAssertTrue(bands.contains("if content.proposals > 0 {\n                reviewBanner"),
                       "the banner shows only while something is waiting")
         let header = try slice(page, from: "private var header: some View {", to: "private var spacePicker: some View {")
@@ -196,13 +197,21 @@ final class WikiWiringTests: XCTestCase {
         let card = code(try slice(try source("Views/WikiView.swift"),
                                   from: "struct WikiReviewCard: View {", to: "/// The op's chip and the kind"))
         let answers = try slice(card, from: "ApprovalActions {", to: ".disabled(busy)")
-        assertOrder(answers, ["Text(WikiCopy.reviewRetire)", "Text(WikiCopy.keep)", "Text(WikiCopy.accept)",
-                              "Text(WikiCopy.reviewEdit)", "Text(WikiCopy.reject)"], "a card's answers")
+        assertOrder(answers, ["Text(WikiCopy.reviewRetire)", "Text(WikiCopy.keep)",
+                              "Text(WikiModeCopy.reconfirm)", "Text(WikiModeCopy.amend)", "Text(WikiModeCopy.retire)",
+                              "Text(WikiCopy.accept)", "Text(WikiCopy.reviewEdit)", "Text(WikiCopy.reject)"],
+                    "a card's answers — a challenge's between a retirement's and the rest")
         XCTAssertTrue(answers.contains("actions.decide(card, .reject, .notTrue)"), "Keep is a rejection as Not true")
         XCTAssertTrue(answers.contains("Section(WikiCopy.rejectReasonFoot)"))
         XCTAssertTrue(answers.contains("ForEach(WikiRejectReason.allCases, id: \\.self)"))
-        XCTAssertEqual(answers.components(separatedBy: ".approvalActionLabel()").count - 1, 5,
+        XCTAssertEqual(answers.components(separatedBy: ".approvalActionLabel()").count - 1, 8,
                        "every answer spans the card, as the approval cards' do")
+        let challenge = try slice(answers, from: "} else if isChallenge {", to: "} else {")
+        XCTAssertTrue(challenge.contains("actions.decide(card, .reconfirm, nil)"))
+        XCTAssertTrue(challenge.contains("actions.amend(card)"))
+        XCTAssertTrue(challenge.contains("actions.decide(card, .retire, nil)"))
+        let reconfirm = try slice(challenge, from: "Text(WikiModeCopy.reconfirm)", to: "Text(WikiModeCopy.amend)")
+        XCTAssertTrue(reconfirm.contains(".buttonStyle(.borderedProminent)"), "Re-confirm is the one filled answer")
         let accept = try slice(answers, from: "Text(WikiCopy.accept)", to: "Text(WikiCopy.reviewEdit)")
         XCTAssertTrue(accept.contains(".buttonStyle(.borderedProminent)"), "Accept is the one filled answer")
         let page = try slice(view, from: "struct WikiReviewPage: View {", to: "struct WikiReviewCard: View {")

@@ -822,6 +822,24 @@ public final class APIClient: @unchecked Sendable {
     public func wikiTimeline(spaceID: String) async throws -> WikiTimeline {
         try await get("wiki/spaces/\(spaceID)/timeline")
     }
+    /// `GET /wiki/spaces/:id/articles`: the category directory — categories → topics → each topic's
+    /// article and its subtopic parts (contract `articles.reads.directory`).
+    public func wikiArticleDirectory(spaceID: String) async throws -> WikiArticleDirectory {
+        try await get("wiki/spaces/\(spaceID)/articles")
+    }
+    /// `GET /wiki/spaces/:id/articles/:slug[/:part]`: one of a topic's articles, its footnotes resolved
+    /// to the entries they name. A 404 is a topic with no such article yet.
+    public func wikiArticle(spaceID: String, slug: String, part: Int) async throws -> WikiArticle {
+        try await get(part > 0 ? "wiki/spaces/\(spaceID)/articles/\(slug)/\(part)" : "wiki/spaces/\(spaceID)/articles/\(slug)")
+    }
+    /// `GET /wiki/spaces/:id/article-index`: every article of the space, A to Z.
+    public func wikiArticleIndex(spaceID: String) async throws -> WikiArticleIndex {
+        try await get("wiki/spaces/\(spaceID)/article-index")
+    }
+    /// `GET /wiki/spaces/:id/topics/:slug`: the entries that file themselves under a topic.
+    public func wikiTopic(spaceID: String, slug: String) async throws -> WikiTopicView {
+        try await get("wiki/spaces/\(spaceID)/topics/\(slug)")
+    }
     /// `GET /wiki/review`: the changesets with an op still waiting for the owner, across every space,
     /// or one space's when `spaceID` is given. Their decided ops ride along; Review keeps the pending.
     public func wikiReview(spaceID: String? = nil) async throws -> [WikiChangeset] {
@@ -845,6 +863,25 @@ public final class APIClient: @unchecked Sendable {
     /// `POST /wiki/spaces/:id/changesets`: the owner's own write, which applies at once.
     public func submitWikiChangeset(spaceID: String, _ req: WikiChangesetRequest) async throws -> WikiChangeResult {
         try await post("wiki/spaces/\(spaceID)/changesets", body: req)
+    }
+    /// `PATCH /wiki/spaces/:id`: the owner's settings — the review mode, Automatic's spot checks and
+    /// maintenance; answers with the space as the server kept it. Refused to every session.
+    public func updateWikiSpace(_ id: String, _ req: WikiSpaceUpdate) async throws -> WikiSpace {
+        try await patch("wiki/spaces/\(id)", body: req)
+    }
+    /// `POST /wiki/entries/:id/confirm`: the owner vouching for what a review mode applied — the entry
+    /// becomes Confirmed and is pushed from then on.
+    public func confirmWikiEntry(_ id: String) async throws {
+        try await postRaw("wiki/entries/\(id)/confirm", body: Optional<Empty>.none)
+    }
+    /// `POST /wiki/entries/:id/reject`: the owner taking back what a review mode applied, with a reason.
+    public func rejectWikiEntry(_ id: String, reason: WikiRejectReason) async throws {
+        try await postRaw("wiki/entries/\(id)/reject", body: WikiEntryRejectRequest(reason: reason))
+    }
+    /// `POST /wiki/changesets/:id/revert`: every op of one run its review mode applied that nobody has
+    /// answered, taken back at once. Keyed by the run, so a second press answers with the first.
+    public func revertWikiChangeset(_ id: String) async throws -> WikiRevertResult {
+        try await postEmpty("wiki/changesets/\(id)/revert")
     }
 
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized

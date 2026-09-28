@@ -135,7 +135,7 @@ function duplicateKey(label: string, contributor: string) {
 }
 
 /**
- * Shared Codex pools (migration 0320, docs/codex-shared-pool-design.md §2.5, "account" read as "key"):
+ * Shared Codex pools (migration 0321, docs/codex-shared-pool-design.md §2.5, "account" read as "key"):
  * the doors of the pool page. Every one of them first finds the caller among the pool's people, and a
  * pool they are not in is not found — the answer is the same whether it exists or not.
  *

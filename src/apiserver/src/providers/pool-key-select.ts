@@ -3,7 +3,7 @@ import { nextUsageWindowStart } from './shared-pool';
 /** A share cap is whole US dollars; the ledger counts millionths of one. */
 const MICROS_PER_DOLLAR = 1_000_000;
 
-/** What choosing reads of one key of a shared pool (migrations 0320, 0322). */
+/** What choosing reads of one key of a shared pool (migrations 0321, 0322). */
 export interface PoolKeyCandidate {
   id: string;
   contributorId: string;

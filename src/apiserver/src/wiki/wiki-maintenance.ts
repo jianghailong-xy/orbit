@@ -52,7 +52,7 @@ export interface FactPosition {
   ref: string;
 }
 
-interface Fact extends FactPosition {
+export interface Fact extends FactPosition {
   /** The session whose dossier the fact is about, when there is one. */
   sessionId: string | null;
 }
@@ -104,7 +104,7 @@ function refuse(code: WikiRefusalCode, message: string): never {
 }
 
 /** Where a space's facts come from: its workspaces, its projects, and the list its own runs are in. */
-interface SpaceScope {
+export interface SpaceScope {
   ownerId: string;
   spaceId: string;
   workspaceIds: string[];
@@ -137,7 +137,7 @@ interface SpaceScope {
  * The case the rule is for — a project whose tasks are assigned to, and ran in, another workspace — is
  * left out all the same.
  */
-async function spaceScope(prisma: PrismaService, ownerId: string, spaceId: string): Promise<SpaceScope> {
+export async function spaceScope(prisma: PrismaService, ownerId: string, spaceId: string): Promise<SpaceScope> {
   const space = await prisma.wikiSpace.findFirst({
     where: { id: spaceId, ownerId },
     select: { id: true, repoUrlNorm: true, settings: true },
@@ -228,7 +228,7 @@ async function spaceScope(prisma: PrismaService, ownerId: string, spaceId: strin
  * sources. Nothing of a maintenance run is among them: its sessions, its tasks, its approvals and its
  * receipts are the run's own work, and counting them would have a run feed its own backlog.
  */
-function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.Sql {
+export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.Sql {
   const owner = scope.ownerId;
   const list = scope.maintenanceListId;
   const since = from ? from.at.toISOString() : null;
@@ -295,7 +295,7 @@ function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.Sql {
 }
 
 /** `(at, kind, ref) > from`, or true from the beginning. */
-function afterSql(from: FactPosition | null): Prisma.Sql {
+export function afterSql(from: FactPosition | null): Prisma.Sql {
   if (!from) return Prisma.sql`true`;
   return Prisma.sql`(f."at", f."kind", f."ref") > (${from.at.toISOString()}::timestamp, ${from.kind}::text, ${from.ref}::text)`;
 }
@@ -308,7 +308,7 @@ interface FactRow {
 }
 
 /** The facts after `from`, up to `until`, oldest first, at most `limit` of them. */
-async function factsAfter(
+export async function factsAfter(
   reader: DossierReader,
   scope: SpaceScope,
   from: FactPosition | null,
@@ -333,7 +333,7 @@ export interface Backlog {
 }
 
 /** How many facts there are after the watermark — every one of them, however recent. */
-async function countBacklog(reader: DossierReader, scope: SpaceScope, from: FactPosition | null): Promise<Backlog> {
+export async function countBacklog(reader: DossierReader, scope: SpaceScope, from: FactPosition | null): Promise<Backlog> {
   const byKind = Object.fromEntries(WIKI_CURSOR_FACT_KINDS.map((kind) => [kind, 0])) as Record<WikiCursorFactKind, number>;
   if (scope.workspaceIds.length === 0 && scope.projectIds.length === 0) {
     return { backlog: 0, byKind, pendingSessions: 0, oldestPendingAt: null };
@@ -384,6 +384,8 @@ interface CursorRow {
   lastOutcome: string | null;
   consecutiveFailures: number;
   lastError: string | null;
+  heldReason: string | null;
+  heldAt: Date | null;
 }
 
 const CURSOR_SELECT = {
@@ -399,17 +401,24 @@ const CURSOR_SELECT = {
   lastOutcome: true,
   consecutiveFailures: true,
   lastError: true,
+  heldReason: true,
+  heldAt: true,
 } satisfies Prisma.WikiCursorSelect;
 
 function positionOf(at: Date | null, kind: string | null, ref: string | null): FactPosition | null {
   return at && kind && ref ? { at, kind: kind as WikiCursorFactKind, ref } : null;
 }
 
-/** Which two conditions make a maintenance task due (criterion 3 reads these; nothing here starts one). */
-export function maintenanceDue(state: { backlog: number; oldestPendingAt: Date | null }, now: Date): { backlog: boolean; age: boolean } {
+/**
+ * Which two conditions make a maintenance task due (criterion 3 reads these; nothing here starts one):
+ * `rules.backlogThreshold` SESSIONS with a fact after the watermark — design §8.2's «20 个会话», so a
+ * session that came to rest with its task settled and its branch merged is one, not three — or the
+ * oldest fact after it older than `rules.maxPendingAgeHours`.
+ */
+export function maintenanceDue(state: { pendingSessions: number; oldestPendingAt: Date | null }, now: Date): { backlog: boolean; age: boolean } {
   const ageMs = WIKI_MAINTENANCE_RULES.maxPendingAgeHours * 3_600_000;
   return {
-    backlog: state.backlog >= WIKI_MAINTENANCE_RULES.backlogThreshold,
+    backlog: state.pendingSessions >= WIKI_MAINTENANCE_RULES.backlogThreshold,
     age: state.oldestPendingAt !== null && now.getTime() - state.oldestPendingAt.getTime() > ageMs,
   };
 }
@@ -417,7 +426,7 @@ export function maintenanceDue(state: { backlog: number; oldestPendingAt: Date |
 // ── Pages of dossiers ───────────────────────────────────────────────────────────────────────────
 
 /** The most facts one page reads past its start before it stops and says there is more. */
-const PAGE_FACT_SCAN = 5_000;
+export const PAGE_FACT_SCAN = 5_000;
 
 /** A task title's template: its digits read as `#` (contract `maintenance.dossier.batchProjects`). */
 export function titleTemplate(title: string): string {
@@ -443,12 +452,47 @@ export function errorSignature(output: string): string {
 
 export interface DossierPageOptions {
   after?: string | null;
+  /** A cursor token the page does not go past: the position a run's task expects it to reach. */
+  until?: string | null;
   limit?: number;
   /** Now, for a spec to hold still; the grace a fact is given to commit is counted back from it. */
   now?: Date;
   graceSeconds?: number;
   /** A budget smaller than the contract's, for a spec. */
   maxTokens?: number;
+}
+
+/**
+ * One page over facts read oldest first: the facts it covers until it holds `limit` sessions, the
+ * sessions they name, and the position of the last one — the page's token. The same walk makes a
+ * maintenance task's expected position (wiki-maintenance-run.ts), so a run that pages from the same
+ * watermark reaches exactly what its task expects.
+ */
+export function pageOf(
+  facts: readonly Fact[],
+  start: FactPosition | null,
+  limit: number,
+  scanFull: boolean,
+): { end: FactPosition | null; sessionIds: string[]; covered: number; more: boolean } {
+  const sessionIds: string[] = [];
+  const seen = new Set<string>();
+  let end: FactPosition | null = start;
+  let covered = 0;
+  let more = scanFull;
+  for (const fact of facts) {
+    if (fact.sessionId && !seen.has(fact.sessionId)) {
+      if (seen.size >= limit) {
+        more = true;
+        break;
+      }
+      seen.add(fact.sessionId);
+      sessionIds.push(fact.sessionId);
+    }
+    end = { at: fact.at, kind: fact.kind, ref: fact.ref };
+    covered += 1;
+  }
+  if (covered < facts.length) more = true;
+  return { end, sessionIds, covered, more };
 }
 
 export interface CursorAdvanceInput {
@@ -512,6 +556,9 @@ export class WikiMaintenance {
       consecutiveFailures: row.consecutiveFailures,
       lastError: row.lastError,
       due: maintenanceDue(counted, now),
+      held: row.heldReason && row.heldAt
+        ? { reason: row.heldReason as 'daily_limit_reached' | 'review_queue_full', at: row.heldAt.toISOString() }
+        : null,
     };
   }
 
@@ -537,27 +584,14 @@ export class WikiMaintenance {
       if (comparePositions(asked, start) > 0) start = asked;
     }
     const grace = options.graceSeconds ?? WIKI_MAINTENANCE_RULES.settleGraceSeconds;
-    const until = new Date(now.getTime() - grace * 1000);
-    const facts = await factsAfter(this.prisma, scope, start, until, PAGE_FACT_SCAN);
-
-    const sessionIds: string[] = [];
-    const seen = new Set<string>();
-    let end: FactPosition | null = start;
-    let covered = 0;
-    let more = facts.length === PAGE_FACT_SCAN;
-    for (const fact of facts) {
-      if (fact.sessionId && !seen.has(fact.sessionId)) {
-        if (seen.size >= limit) {
-          more = true;
-          break;
-        }
-        seen.add(fact.sessionId);
-        sessionIds.push(fact.sessionId);
-      }
-      end = { at: fact.at, kind: fact.kind, ref: fact.ref };
-      covered += 1;
-    }
-    if (covered < facts.length) more = true;
+    const settled = new Date(now.getTime() - grace * 1000);
+    // A page never passes the position its run's task expects (`until`): what is after it is the next
+    // run's. The facts before it are read to the grace like any others.
+    const stop = options.until ? decodeCursorToken(options.until, spaceId) : null;
+    const until = stop && stop.at < settled ? stop.at : settled;
+    const scanned = await factsAfter(this.prisma, scope, start, until, PAGE_FACT_SCAN);
+    const facts = stop ? scanned.filter((fact) => comparePositions(fact, stop) <= 0) : scanned;
+    const { end, sessionIds, covered, more } = pageOf(facts, start, limit, scanned.length === PAGE_FACT_SCAN);
 
     const literals = await ownerEnvLiterals(this.prisma, ownerId);
     const { batchOf, batches } = await this.batches(ownerId, sessionIds);

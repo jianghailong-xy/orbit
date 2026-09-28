@@ -333,6 +333,12 @@ private struct CompactSections: View {
                         switch node {
                         case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)
                         case .wikiReview:             WikiReviewView()
+                        case .wikiSettings:           WikiSettingsView()
+                        case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)
+                        case .wikiArticle(let topic, let part):
+                            WikiArticleScreen(address: WikiArticleAddress(topic: topic, part: part))
+                        case .wikiBrowse:             WikiBrowseScreen()
+                        case .wikiIndex:              WikiIndexScreen()
                         default:                      EmptyView()
                         }
                     }

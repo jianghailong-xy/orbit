@@ -30,7 +30,7 @@ export const POOL_USAGE_FLUSH_MS = 2_000;
 
 /**
  * The shared pools' ledger as the pool gateway writes it (`pool_usage`: per key, per person, per calendar
- * month — migration 0320). An answer's use is added here, in memory, the moment its stream ends, and
+ * month — migration 0321). An answer's use is added here, in memory, the moment its stream ends, and
  * written with everybody else's every POOL_USAGE_FLUSH_MS as ONE statement: the gateway holds no
  * database connection while a response streams, and a busy pool costs one write every two seconds rather
  * than one per answer (the connection-pool contention the design warns about).

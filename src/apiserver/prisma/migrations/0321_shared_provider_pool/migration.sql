@@ -1,4 +1,4 @@
--- 0320 — shared Codex pools: several Orbit users run Codex sessions on organization/project OpenAI API
+-- 0321 — shared Codex pools: several Orbit users run Codex sessions on organization/project OpenAI API
 -- keys that live only on this server (docs/codex-shared-pool-design.md §2.2–§2.5, "account" read as
 -- "key" throughout).
 --

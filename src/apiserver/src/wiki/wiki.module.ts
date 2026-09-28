@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { PushModule } from '../push/push.module';
 import { WikiController } from './wiki.controller';
+import { WikiArticles } from './wiki-articles';
+import { WikiArticlesController } from './wiki-articles.controller';
 import { WikiMaintenance } from './wiki-maintenance';
+import { WikiMaintenanceTrigger } from './wiki-maintenance-run';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
@@ -19,11 +22,17 @@ import { WikiService } from './wiki.service';
   // For the one notification the review modes send (a space the spot checks sent back to Manual):
   // PushService is a sender with no feature state, not a Sessions or Projects service.
   imports: [PushModule],
-  controllers: [WikiController],
+  // The articles' reads (contract `articles`) are a controller of their own, so WikiController's
+  // hand-built specs construct it as before.
+  controllers: [WikiController, WikiArticlesController],
   // WikiMaintenance serves the maintenance run's dossiers and cursor (contract `maintenance`) to
   // `RunnerWikiMaintenanceController`, and reads the Sessions' and Projects' rows the way the other two
-  // do: through Prisma, with no service of theirs.
-  providers: [WikiService, WikiRetrieval, WikiMaintenance],
-  exports: [WikiService, WikiRetrieval, WikiMaintenance],
+  // do: through Prisma, with no service of theirs. WikiArticles serves the articles to both doors the
+  // same way (contract `articles`).
+  // WikiMaintenanceTrigger makes a space's maintenance task when a committed fact finds it due (contract
+  // `maintenance.job.trigger`): it takes the events this replica publishes as hints, through the global
+  // RealtimeService, and reads and writes rows through Prisma alone.
+  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger],
+  exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles],
 })
 export class WikiModule {}

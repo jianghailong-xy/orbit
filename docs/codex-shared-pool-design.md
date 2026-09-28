@@ -1,7 +1,7 @@
 # Codex 共享池（共享组织/项目 API key + 网关）设计
 
 **状态**：方向由账号所有者于 2026-09-27 定为「共享组织/项目 API key + 网关」，取代原「服务器保管成员个人
-ChatGPT 登录」；本文档、效果图与 4 项产品决策已按新方向改写（2026-09-28）。P1（数据与权限，迁移 0320）与 P2（网关，迁移 0322）已实现，界面还没开始。
+ChatGPT 登录」；本文档、效果图与 4 项产品决策已按新方向改写（2026-09-28）。P1（数据与权限，迁移 0321）与 P2（网关，迁移 0322）已实现，界面还没开始。
 效果图、iOS 复刻和 web 界面 mock 补丁都在 [`docs/mocks/codex-shared-pool/`](./mocks/codex-shared-pool/)。
 
 **改动日期与原因**：2026-09-27，账号所有者把项目方向定为「共享组织/项目 API key + 网关」。
@@ -138,7 +138,7 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
 - P0 要验证：同一个 codex 线程换 key 后还能否继续（加密 reasoning、prompt cache）。
   不能的话，换 key 时丢弃加密 reasoning，或者新开线程接续。
 
-### 2.4 数据模型（P1 定稿，迁移 0320；池里放组织/项目 API key）
+### 2.4 数据模型（P1 定稿，迁移 0321；池里放组织/项目 API key）
 
 - `provider_pool` 加列：`engine`（`claude` | `codex`）、`shared`、`members_can_add`、`own_key_first`（两条规则默认都开）。
   个人池是 `claude` 且不共享（0265 建的都是），共享池是 `codex` 且共享，`provider_pool_engine_check` 把两者绑死。

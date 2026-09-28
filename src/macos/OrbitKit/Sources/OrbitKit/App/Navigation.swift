@@ -66,6 +66,18 @@ public enum NavNode: Hashable, Sendable {
     /// Review: the proposals waiting for the owner, one card at a time. Pushed from the Wiki home's
     /// amber banner.
     case wikiReview
+    /// The space's Wiki settings — its review mode and maintenance — pushed from the home's gear.
+    case wikiSettings
+    /// One run: what a maintenance run, an import or a session's proposal applied at once, pushed
+    /// from its row in Recently changed.
+    case wikiRun(changesetID: String)
+    /// One of a topic's articles — its own (part 0) or a subtopic article — pushed from the Contents
+    /// sheet, Browse by category or the A–Z index.
+    case wikiArticle(topic: String, part: Int)
+    /// Every category's topics and their articles, pushed from the Contents sheet.
+    case wikiBrowse
+    /// Every article A to Z, pushed from the Contents sheet.
+    case wikiIndex
 }
 
 /// Which section is showing, and every section's stack.
@@ -179,6 +191,36 @@ public struct NavState: Equatable, Sendable {
         return false
     }
 
+    /// Whether the Wiki settings are the page on top of the Wiki section's stack.
+    public var wikiSettingsOnTop: Bool {
+        if case .wikiSettings = path.last { return true }
+        return false
+    }
+
+    /// The run the Wiki pane shows, when a run's page is on top.
+    public var selectedWikiRunID: String? {
+        guard case .wikiRun(let id) = path.last else { return nil }
+        return id
+    }
+
+    /// The article the Wiki pane shows, when an article is on top: its topic and part.
+    public var selectedWikiArticle: WikiArticleAddress? {
+        guard case .wikiArticle(let topic, let part) = path.last else { return nil }
+        return WikiArticleAddress(topic: topic, part: part)
+    }
+
+    /// Whether Browse by category is the page on top of the Wiki section's stack.
+    public var wikiBrowseOnTop: Bool {
+        if case .wikiBrowse = path.last { return true }
+        return false
+    }
+
+    /// Whether the A–Z index is the page on top of the Wiki section's stack.
+    public var wikiIndexOnTop: Bool {
+        if case .wikiIndex = path.last { return true }
+        return false
+    }
+
     /// `AppModel.selectedUserID` — the account the Admin pane shows.
     public var selectedUserID: String? {
         guard case .userDetail(let id) = path.last else { return nil }
@@ -275,5 +317,16 @@ public struct NavState: Equatable, Sendable {
         var p = path
         change(&p)
         stacks[section] = p.isEmpty ? nil : p
+    }
+}
+
+/// Where one article lives: its topic's slug, and its part — 0 for the topic's own article.
+public struct WikiArticleAddress: Hashable, Sendable {
+    public let topic: String
+    public let part: Int
+
+    public init(topic: String, part: Int) {
+        self.topic = topic
+        self.part = part
     }
 }

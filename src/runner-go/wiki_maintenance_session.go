@@ -230,6 +230,7 @@ func wikiMaintenanceEnv(job *ClaimedSession) []string {
 		"DISABLE_AUTOUPDATER=1",
 		"ORBIT_HOME=" + machineHome(),
 	}
+	env = append(env, wikiMaintainBashEnv()...)
 	for _, key := range wikiMaintenanceEnvPass {
 		if value, ok := os.LookupEnv(key); ok {
 			env = append(env, key+"="+value)

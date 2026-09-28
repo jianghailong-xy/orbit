@@ -619,7 +619,7 @@ export class QueueService {
    * Read from the members and the quota cache the claim below picks from, so a brake does not release
    * work the claim would then send to an account known to be spent.
    *
-   * A shared pool `ownerId` is in (migration 0320) answers from its keys the same way
+   * A shared pool `ownerId` is in (migration 0321) answers from its keys the same way
    * (pool-key-select.ts poolKeysResumeAt): `now` while one can run for them, the first reset while all
    * are out of budget or spent to their caps, and null when none will come back by waiting.
    */
@@ -677,7 +677,7 @@ export class QueueService {
    * A pool whose members are all spent is not refused. It waits for the first of them to reset, as
    * the claim and the brakes above already make it.
    *
-   * A shared pool `ownerId` is in (migration 0320) is refused the same way when none of its keys can run
+   * A shared pool `ownerId` is in (migration 0321) is refused the same way when none of its keys can run
    * — it has none, or each is switched off or refused by OpenAI — and not when its keys are only spent to
    * their share caps, which come back on the first of the month (sharedPoolUnavailableReason).
    */
@@ -707,7 +707,7 @@ export class QueueService {
   /**
    * `ownerId`'s account pool on `slug`: its name, its member rows, and the ones a claim may choose from
    * (isPoolCandidate) as candidates with their quota as the cache has it. Null when `slug` names no pool
-   * of theirs — and when it names a shared pool (migration 0320), whose keys are no members of this kind.
+   * of theirs — and when it names a shared pool (migration 0321), whose keys are no members of this kind.
    */
   private async accountPool(ownerId: string, slug: string, db: Prisma.TransactionClient = this.prisma) {
     const pool = await db.providerPool.findFirst({
@@ -800,7 +800,7 @@ export class QueueService {
   }
 
   /**
-   * What a session on a shared pool (migration 0320) dispatches as, or null when `slug` names no shared
+   * What a session on a shared pool (migration 0321) dispatches as, or null when `slug` names no shared
    * pool this session's owner is in — which then dispatches as a deleted provider does, exactly as a slug
    * nothing holds. A shared pool is reached by its people only: nobody else's session is handed its
    * gateway, a token or anything about its keys.

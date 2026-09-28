@@ -90,7 +90,6 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_SEARCH_PLACEHOLDER", WikiCopy.searchPlaceholder),
             ("WIKI_REVIEW_TITLE", WikiCopy.reviewTitle),
             ("WIKI_PRINCIPLES", WikiCopy.principles),
-            ("WIKI_TOPICS", WikiCopy.topics),
             ("WIKI_RECENT_DECISIONS", WikiCopy.recentDecisions),
             ("WIKI_RECENTLY_CHANGED", WikiCopy.recentlyChanged),
             ("WIKI_AGENTS_USED", WikiCopy.agentsUsed),
@@ -149,7 +148,6 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_NO_REVIEW", WikiCopy.noReview),
             ("WIKI_NO_CHANGES", WikiCopy.noChanges),
             ("WIKI_NO_DECISIONS", WikiCopy.noDecisions),
-            ("WIKI_NO_TOPICS", WikiCopy.noTopics),
             ("WIKI_NO_AGENTS_YET", WikiCopy.noAgentsYet),
             ("WIKI_NO_ENTRY_SELECTED", WikiCopy.noEntrySelected),
         ]
@@ -258,33 +256,37 @@ final class WikiCopyParityTests: XCTestCase {
 
     // MARK: the home page
 
-    /// The web phone draws one column: the Review card first (the one block that asks for anything),
-    /// then the main column — Principles, Topics, Recent decisions — then Recently changed and Agents
-    /// used the wiki. iOS draws the same blocks in the same order, the banner standing where the web's
-    /// Review card stands, with the search under the title as on the web phone.
+    /// The web phone draws one column (mock 12): the Review bar first (the one block that asks for
+    /// anything), then the main column — Principles, Recent decisions — then the rest of the right
+    /// column, Recently changed and Agents used the wiki; the right column's Review card is the bar.
+    /// iOS draws the same blocks in the same order, its banner where the web phone's bar is. The
+    /// topics are no band at either end: they are the directory (the web's column and drawer, the
+    /// native Contents sheet).
     func testTheHomeBandsAreTheWebPhonesInItsOrder() throws {
         let home = try source(Self.home)
         let columns = try slice(home, from: "<div className=\"wk-cols\">", to: "<UsageCard space={space} />")
         let main = try slice(columns, from: "<div className=\"wk-col\">", to: "</div> <div className=\"wk-col\">")
-        assertOrder(main, ["title={WIKI_PRINCIPLES}", "title={WIKI_TOPICS}", "title={WIKI_RECENT_DECISIONS}"],
-                    "the main column")
+        assertOrder(main, ["title={WIKI_PRINCIPLES}", "title={WIKI_RECENT_DECISIONS}"], "the main column")
+        XCTAssertFalse(home.contains("title={WIKI_TOPICS}"), "the Topics grid is the directory now")
         let side = try slice(columns, from: "</div> <div className=\"wk-col\">", to: "<UsageCard space={space} />")
         assertOrder(side, ["<ReviewCard", "title={WIKI_RECENTLY_CHANGED}", "<UsageCard"], "the right column")
         assertSays(home, "title={WIKI_REVIEW_TITLE}", in: Self.home)
+        assertSays(home, "className=\"wk-review-card\"", in: Self.home)
         assertSays(home, "<WikiCard title={WIKI_AGENTS_USED} hint={WIKI_AGENTS_USED_HINT}>", in: Self.home)
+        // The bar leads the page, ahead of the columns, and says what the native banner says.
+        assertOrder(home, ["<Link className=\"wk-banner\" to={WIKI_REVIEW_PATH}>",
+                           "{wikiProposalsToReview(pending.length)}", "<div className=\"wk-cols\">"], "the phone's bar")
 
-        // The phone rule that makes that one column: the right column's first card leads, then the
-        // main column, then the rest of the right column.
+        // The phone rule that makes that one column: the bar shown, the card hidden, the two columns
+        // stacked in their own order.
         let css = try source(Self.css)
-        let phone = try slice(css, from: "@media (max-width: 900px) { .wk-cols, .rv-cols", to: ".wk-topics {")
-        for rule in [".wk-cols { display: flex; flex-direction: column; }",
-                     ".wk-cols > .wk-col:last-child { display: contents; }",
-                     ".wk-cols > .wk-col:last-child > .wk-card:first-child { order: -1; }",
-                     ".wk-cols > .wk-col:first-child { order: 1;",
-                     ".wk-cols > .wk-col:last-child > .wk-card { order: 2; }"] {
+        let phone = try slice(css, from: "@media (max-width: 960px) { .wk-page { display: flex; flex-direction: column; }",
+                              to: ".wk-art-page .t-title, .wk-browse-page .t-title")
+        for rule in [".wk-banner { display: flex; }", ".wk-review-card { display: none; }",
+                     ".wk-cols { display: flex; flex-direction: column; gap: 16px; }"] {
             assertSays(phone, rule, in: Self.css)
         }
-        let webPhone = [WikiCopy.reviewTitle, WikiCopy.principles, WikiCopy.topics, WikiCopy.recentDecisions,
+        let webPhone = [WikiCopy.reviewTitle, WikiCopy.principles, WikiCopy.recentDecisions,
                         WikiCopy.recentlyChanged, WikiCopy.agentsUsed]
         let native = WikiLogic.HomeBand.allCases.filter { $0 != .search }
             .map { $0 == .reviewBanner ? WikiCopy.reviewTitle : ($0.title ?? "") }
@@ -292,31 +294,30 @@ final class WikiCopyParityTests: XCTestCase {
 
         // The Review card counts the space on screen; the sidebar's row counts every space.
         assertSays(home, "wikiReviewQuery(space.id)", in: Self.home)
-        // The search is under the title on the web phone, and first on the native page.
+        // The head: the title, the search and the status row, which a phone draws status line first —
+        // the native header's title and status line, then the search band.
         let page = try source(Self.page)
-        assertOrder(page, ["<h1 className=\"page-title\">{WIKI_TITLE}</h1>", "<div className=\"wk-search\" role=\"search\">"],
-                    "the web phone's head")
+        assertOrder(page, ["<h1 className=\"page-title\">{WIKI_TITLE}</h1>", "<div className=\"wk-search\" role=\"search\">",
+                           "<div className=\"project-integration wk-status-row\">"], "the web's head")
+        for rule in [".wk-page > .wk-status-row { order: 1;", ".wk-page > .wk-search { order: 2;",
+                     ".wk-status-review { display: none; }"] {
+            assertSays(phone, rule, in: Self.css)
+        }
         XCTAssertEqual(WikiLogic.HomeBand.allCases.first, .search)
     }
 
     /// The home page's rows are the web's: principles oldest recorded first, the four newest
-    /// decisions, the five newest changes, the three most used, topics by count — and the verbs.
+    /// decisions, the five newest changes, the three most used — and the verbs.
     func testTheHomeRowsAreTheWebsRows() throws {
         let home = try source(Self.home)
-        assertSays(home, ".slice(0, 5).map((item) => (", in: Self.home)
-        assertSays(home, "return [words[0].charAt(0).toUpperCase() + words[0].slice(1), ...words.slice(1)].join(' ');",
+        // One run is one row: the five newest rows once Review's runs are folded in (`wikiRecentRows`).
+        assertSays(home, "wikiRecentRows(timeline.data?.items ?? [], review.data ?? []).slice(0, 5).map((row) =>",
                    in: Self.home)
-        for verb in ["if (entry.status === 'superseded') return 'Superseded';",
-                     "if (entry.status === 'retired') return 'Retired';",
-                     "if (entry.trust === 'owner') return 'Added by you';",
-                     "return 'Confirmed';"] {
-            assertSays(home, verb, in: Self.home)
-        }
         let lib = try source(Self.lib)
         for verb in ["if (item.decision === 'accepted') return WIKI_HISTORY_CONFIRMED_BY;",
                      "if (item.decision === 'edited') return 'Edited by you';",
                      "return 'Retired';", "return 'Superseded';", "return 'Reinforced';", "return 'Challenged';",
-                     "return item.origin === 'owner' ? 'Added by you' : 'Proposed';",
+                     "return item.origin === 'owner' ? 'Added by you' : item.appliedByMode ? 'Added' : 'Proposed';",
                      "return item.origin === 'owner' ? 'Amended by you' : 'Amended';",
                      "`replaced by “${item.supersededByTitle}”`", "`replaces “${item.supersededByTitle}”`"] {
             assertSays(lib, verb, in: Self.lib)

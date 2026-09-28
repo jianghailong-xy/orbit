@@ -11,6 +11,8 @@ struct WikiHomeView: View {
     /// How rows navigate: the three-column shells select, the compact stack pushes.
     var rowNavigation: SessionRowNavigation = .selection
 
+    @State private var contentsShown = false
+
     var body: some View {
         if let wiki = model.wiki {
             TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -22,8 +24,21 @@ struct WikiHomeView: View {
             }
             .task { await wiki.loadHome() }
             .refreshable { await wiki.loadHome() }
+            .sheet(isPresented: $contentsShown) {
+                WikiContentsScreen(at: .home) { pick in go(pick) }
+            }
         } else {
             ProgressView()
+        }
+    }
+
+    /// Where a Contents row goes: the home is where the reader already is; the rest open as pages.
+    private func go(_ pick: WikiContentsPick) {
+        switch pick {
+        case .home:                         break
+        case .browse:                       open(.wikiBrowse)
+        case .index:                        open(.wikiIndex)
+        case .article(let topic, let part): open(.wikiArticle(topic: topic, part: part))
         }
     }
 
@@ -35,7 +50,10 @@ struct WikiHomeView: View {
                 wiki.selectedSlug = slug
                 Task { await wiki.loadHome() }
             },
-            search: { query in await wiki.search(query) })
+            search: { query in await wiki.search(query) },
+            openSettings: { open(.wikiSettings) },
+            openRun: { id in open(.wikiRun(changesetID: id)) },
+            openContents: { contentsShown = true })
     }
 
     /// A phone pushes the page; the three-column shells put it in the detail pane beside the list.
@@ -79,9 +97,200 @@ struct WikiDetailPane: View {
             WikiEntryView(entryID: id).id(id)
         } else if model.nav.wikiReviewOnTop {
             WikiReviewView()
+        } else if model.nav.wikiSettingsOnTop {
+            WikiSettingsView()
+        } else if let run = model.nav.selectedWikiRunID {
+            WikiRunView(changesetID: run).id(run)
+        } else if let article = model.nav.selectedWikiArticle {
+            WikiArticleScreen(address: article).id(article)
+        } else if model.nav.wikiBrowseOnTop {
+            WikiBrowseScreen()
+        } else if model.nav.wikiIndexOnTop {
+            WikiIndexScreen()
         } else {
             ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
                                    description: Text("Pick an entry, or open Review."))
+        }
+    }
+}
+
+// MARK: - the articles
+
+/// The Contents sheet over the model's directory, read when it opens.
+struct WikiContentsScreen: View {
+    @Environment(AppModel.self) private var model
+    let at: WikiContentsAt
+    let pick: (WikiContentsPick) -> Void
+
+    var body: some View {
+        if let wiki = model.wiki {
+            WikiContentsSheet(groups: wiki.directory.map(WikiArticleLogic.directoryGroups) ?? [], at: at, pick: pick)
+                .task { await wiki.loadDirectory() }
+        } else {
+            ProgressView()
+        }
+    }
+}
+
+/// The article pages push what they open onto the section's stack; Contents' Home goes back to the root.
+@MainActor private func wikiGo(_ model: AppModel, _ pick: WikiContentsPick) {
+    switch pick {
+    case .home:                         model.nav.popToRoot()
+    case .browse:                       model.push(.wikiBrowse)
+    case .index:                        model.push(.wikiIndex)
+    case .article(let topic, let part): model.push(.wikiArticle(topic: topic, part: part))
+    }
+}
+
+/// One of a topic's articles, or — while the topic has none — its entries alone.
+struct WikiArticleScreen: View {
+    @Environment(AppModel.self) private var model
+    let address: WikiArticleAddress
+
+    @State private var contentsShown = false
+
+    var body: some View {
+        if let wiki = model.wiki {
+            Group {
+                if let article = wiki.articles[address] {
+                    WikiArticlePage(article: article, entries: wiki.topicEntries[address.topic],
+                                    detail: { id in wiki.detail(id) }, actions: actions(wiki))
+                } else if wiki.missingArticles.contains(address) {
+                    WikiTopicEntriesPage(title: topicTitle(wiki), entries: wiki.topicEntries[address.topic] ?? [],
+                                         actions: actions(wiki))
+                } else if wiki.failedArticles.contains(address) {
+                    ContentUnavailableView {
+                        Label("The article couldn't be loaded", systemImage: AppSection.wiki.systemImage)
+                    } description: {
+                        Text("Check the connection, then try again.")
+                    } actions: {
+                        Button("Retry") { Task { await wiki.loadArticle(address) } }
+                    }
+                } else {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .task {
+                await wiki.loadArticle(address)
+                if wiki.missingArticles.contains(address) && wiki.directory == nil { await wiki.loadDirectory() }
+            }
+            .refreshable { await wiki.loadArticle(address) }
+            .sheet(isPresented: $contentsShown) {
+                WikiContentsScreen(at: .article(topic: address.topic, part: address.part)) { pick in wikiGo(model, pick) }
+            }
+        } else {
+            ProgressView()
+        }
+    }
+
+    /// The topic's name, as the directory has it; its slug before the directory is read.
+    private func topicTitle(_ wiki: WikiModel) -> String {
+        let groups = wiki.directory.map(WikiArticleLogic.directoryGroups) ?? []
+        for group in groups {
+            if let topic = group.topics.first(where: { $0.slug == address.topic }) { return topic.title }
+        }
+        return address.topic
+    }
+
+    private func actions(_ wiki: WikiModel) -> WikiArticleActions {
+        WikiArticleActions(
+            openEntry: { id in model.push(.wikiEntry(entryID: id)) },
+            openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
+            openBrowse: { model.push(.wikiBrowse) },
+            openContents: { contentsShown = true },
+            readEntry: { id in Task { await wiki.loadEntry(id) } })
+    }
+}
+
+/// A topic with no article yet: its entries by kind, and why there is no text over them.
+struct WikiTopicEntriesPage: View {
+    let title: String
+    let entries: [WikiEntry]
+    var actions = WikiArticleActions()
+
+    var body: some View {
+        List {
+            Section {
+                Text(title)
+                    .font(.title.bold())
+                    .listRowSeparator(.hidden)
+                Text(WikiArticleCopy.noArticleYet)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .listRowSeparator(.hidden)
+            }
+            ForEach(WikiArticleLogic.entryGroups(entries, cited: [])) { group in
+                Section(group.title) {
+                    ForEach(group.entries) { entry in
+                        Button { actions.openEntry(entry.id) } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(entry.displayTitle)
+                                    .font(.orbitProse)
+                                    .foregroundStyle(Color.primary)
+                                    .lineLimit(1)
+                                Spacer(minLength: 8)
+                                if let trust = entry.trust, trust != .unknown {
+                                    WikiBadge(text: WikiCopy.trustLabel(trust), tone: WikiLogic.trustTone(trust))
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: actions.openContents) { Image(systemName: "list.bullet") }
+                    .accessibilityLabel(WikiArticleCopy.contents)
+            }
+        }
+    }
+}
+
+/// Browse by category over the model's directory.
+struct WikiBrowseScreen: View {
+    @Environment(AppModel.self) private var model
+    @State private var contentsShown = false
+
+    var body: some View {
+        if let wiki = model.wiki {
+            WikiBrowsePage(categories: wiki.directory.map(WikiArticleLogic.browseCategories) ?? [],
+                           actions: WikiArticleActions(
+                               openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
+                               openContents: { contentsShown = true }))
+                .task { await wiki.loadDirectory() }
+                .refreshable { await wiki.loadDirectory() }
+                .sheet(isPresented: $contentsShown) {
+                    WikiContentsScreen(at: .browse) { pick in wikiGo(model, pick) }
+                }
+        } else {
+            ProgressView()
+        }
+    }
+}
+
+/// The A–Z index over the model's index read.
+struct WikiIndexScreen: View {
+    @Environment(AppModel.self) private var model
+    @State private var contentsShown = false
+
+    var body: some View {
+        if let wiki = model.wiki {
+            let items = wiki.articleIndex?.items ?? []
+            WikiIndexPage(groups: WikiArticleLogic.indexGroups(items), count: items.count,
+                          actions: WikiArticleActions(
+                              openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
+                              openContents: { contentsShown = true }))
+                .task { await wiki.loadArticleIndex() }
+                .refreshable { await wiki.loadArticleIndex() }
+                .sheet(isPresented: $contentsShown) {
+                    WikiContentsScreen(at: .index) { pick in wikiGo(model, pick) }
+                }
+        } else {
+            ProgressView()
         }
     }
 }
@@ -108,6 +317,7 @@ struct WikiEntryView: View {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 if let detail = wiki.detail(entryID) {
                     WikiEntryPage(detail: detail, now: context.date,
+                                  verification: Self.verification(of: detail.entry, in: wiki),
                                   sessionTitle: { id in
                                       Self.card(.session, id).flatMap(title(of:))
                                           ?? model.session(id: PublicID.toPublic(id))?.title
@@ -178,7 +388,24 @@ struct WikiEntryView: View {
             retire: { retiring = true },
             copyLink: { copyLink(wiki, detail.entry) },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            openTask: { id in model.route(to: .task(PublicID.toPublic(id))) })
+            openTask: { id in model.route(to: .task(PublicID.toPublic(id))) },
+            confirm: {
+                Task { finish(await wiki.confirm(detail.entry), done: WikiModeCopy.confirmed) }
+            },
+            reject: { reason in
+                Task { finish(await wiki.reject(detail.entry.id, reason: reason), done: WikiModeCopy.rejected) }
+            })
+    }
+
+    /// The verdict behind what a review mode applied, read where it is kept — on the op — from the
+    /// one read that carries ops: the space's queue, which holds it while it waits as a spot check.
+    @MainActor private static func verification(of entry: WikiEntry, in wiki: WikiModel) -> WikiOpVerification? {
+        let key = PublicID.storageKey(entry.id)
+        let ops = ((wiki.home?.runs ?? []) + wiki.review).flatMap { $0.ops ?? [] }
+        return ops.first { op in
+            op.verification != nil
+                && [op.resultEntryId, op.entryId].compactMap { $0 }.contains { PublicID.storageKey($0) == key }
+        }?.verification
     }
 
     // MARK: the titles a card read gives
@@ -306,6 +533,8 @@ struct WikiReviewView: View {
     @Environment(AppModel.self) private var model
 
     @State private var editing: WikiLogic.ReviewCard?
+    /// A challenge whose Amend form is open.
+    @State private var amending: WikiLogic.ReviewCard?
     @State private var notice: String?
 
     var body: some View {
@@ -337,6 +566,15 @@ struct WikiReviewView: View {
                     return answer == nil
                 }
             }
+            .sheet(item: $amending) { card in
+                if let entry = card.op.entryId.flatMap({ wiki.detail($0)?.entry }) {
+                    WikiChallengeAmendForm(entry: entry) { edited in
+                        let answer = await wiki.decide(card, .amend, edited: edited)
+                        finish(answer, done: WikiCopy.decided)
+                        return answer == nil
+                    }
+                }
+            }
             .alert(WikiCopy.refused, isPresented: Binding(get: { notice != nil },
                                                           set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
@@ -357,7 +595,8 @@ struct WikiReviewView: View {
                 }
             },
             edit: { card in editing = card },
-            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) })
+            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
+            amend: { card in amending = card })
     }
 
     private func finish(_ answer: String?, done: String) {
@@ -365,6 +604,71 @@ struct WikiReviewView: View {
             notice = answer
         } else {
             model.showToast(done)
+        }
+    }
+}
+
+/// A challenge's Amend: the owner's version of the entry it names — its title and one line — written
+/// as the owner's revision; the anchors are checked again (contract `anchorRules.verify.answers.amend`).
+/// Only what changed is sent, and with nothing changed the answer waits: an Amend that changes nothing
+/// is a Re-confirm.
+private struct WikiChallengeAmendForm: View {
+    let entry: WikiEntry
+    let submit: (WikiEntryChanges) async -> Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+    @State private var summary: String
+    @State private var saving = false
+
+    init(entry: WikiEntry, submit: @escaping (WikiEntryChanges) async -> Bool) {
+        self.entry = entry
+        self.submit = submit
+        _title = State(initialValue: entry.title ?? "")
+        _summary = State(initialValue: entry.summary ?? "")
+    }
+
+    private var changes: WikiEntryChanges {
+        let newTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return WikiEntryChanges(
+            title: newTitle != (entry.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines) ? newTitle : nil,
+            summary: newSummary != (entry.summary ?? "").trimmingCharacters(in: .whitespacesAndNewlines) ? newSummary : nil)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(WikiCopy.titlePlaceholder, text: $title)
+                    TextField(WikiCopy.summaryPlaceholder, text: $summary, axis: .vertical)
+                        .lineLimit(2...5)
+                } footer: {
+                    Text(WikiModeCopy.amendNote)
+                }
+            }
+            .navigationTitle(WikiModeCopy.amend)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(WikiModeCopy.cancel) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(WikiModeCopy.amend) {
+                        saving = true
+                        let edited = changes
+                        Task {
+                            let landed = await submit(edited)
+                            saving = false
+                            if landed { dismiss() }
+                        }
+                    }
+                    .disabled(saving || (changes.title == nil && changes.summary == nil)
+                              || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
         }
     }
 }

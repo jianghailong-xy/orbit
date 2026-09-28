@@ -28,7 +28,6 @@ public enum WikiCopy {
 
     // The bands of the home page, in the order both clients draw them.
     public static let principles = "Principles"                         // WIKI_PRINCIPLES
-    public static let topics = "Topics"                                 // WIKI_TOPICS
     public static let recentDecisions = "Recent decisions"              // WIKI_RECENT_DECISIONS
     public static let recentlyChanged = "Recently changed"              // WIKI_RECENTLY_CHANGED
     public static let agentsUsed = "Agents used the wiki"               // WIKI_AGENTS_USED
@@ -158,7 +157,6 @@ public enum WikiCopy {
     public static let noReview = "Nothing is waiting for you."                     // WIKI_NO_REVIEW
     public static let noChanges = "Nothing has changed yet."                       // WIKI_NO_CHANGES
     public static let noDecisions = "No decision has been recorded yet."           // WIKI_NO_DECISIONS
-    public static let noTopics = "No entry has been filed under a topic yet."      // WIKI_NO_TOPICS
     public static let noAgentsYet = "No session has used this wiki yet."           // WIKI_NO_AGENTS_YET
     public static let noEntrySelected = "That entry is no longer in this space."   // WIKI_NO_ENTRY_SELECTED
 
@@ -283,18 +281,17 @@ public struct WikiDiffHunk: Equatable, Sendable {
 public enum WikiLogic {
     // MARK: the home page's bands
 
-    /// The home page's bands, top to bottom — the order the web's phone page draws them in (mock 07,
+    /// The home page's bands, top to bottom — the order the web's phone page draws them in (mock 12,
     /// `WikiHome.tsx`), and the order `WikiView` lays its sections out in. `WikiCopyParityTests` holds
-    /// both to it.
+    /// both to it. The topics are not a band: they are the Contents sheet (mock 12 ③).
     public enum HomeBand: String, CaseIterable, Sendable {
-        case search, reviewBanner, principles, topics, recentDecisions, recentlyChanged, agentsUsed
+        case search, reviewBanner, principles, recentDecisions, recentlyChanged, agentsUsed
 
-        /// The band's heading, for the five that have one.
+        /// The band's heading, for the four that have one.
         public var title: String? {
             switch self {
             case .search, .reviewBanner: return nil
             case .principles:      return WikiCopy.principles
-            case .topics:          return WikiCopy.topics
             case .recentDecisions: return WikiCopy.recentDecisions
             case .recentlyChanged: return WikiCopy.recentlyChanged
             case .agentsUsed:      return WikiCopy.agentsUsed
@@ -527,34 +524,6 @@ public enum WikiLogic {
 
     // MARK: the home page's reads
 
-    /// An entry's topic slugs, deduplicated and in the order it lists them.
-    public static func topics(of entry: WikiEntry) -> [String] {
-        var seen = Set<String>()
-        return (entry.topics ?? []).filter { seen.insert($0).inserted }
-    }
-
-    /// One topic the space's entries use: how many carry it, and the most recently changed of them.
-    public struct TopicSummary: Equatable, Sendable, Identifiable {
-        public let slug: String
-        public let count: Int
-        public let latest: WikiEntry?
-        public var id: String { slug }
-    }
-
-    /// The topics a space's entries actually use (`wikiTopicSummaries`): derived from the entries,
-    /// because phase 1 writes no topic row — an entry names its topics by slug, so the slugs in use
-    /// ARE the topics. Most entries first, then by slug, so two runs over one list agree.
-    public static func topicSummaries(_ entries: [WikiEntry]) -> [TopicSummary] {
-        var bySlug: [String: [WikiEntry]] = [:]
-        for entry in entries {
-            for slug in topics(of: entry) { bySlug[slug, default: []].append(entry) }
-        }
-        return bySlug.map { slug, held in
-            TopicSummary(slug: slug, count: held.count, latest: held.sorted(by: changedFirst).first)
-        }
-        .sorted { $0.count != $1.count ? $0.count > $1.count : $0.slug < $1.slug }
-    }
-
     /// The entries of one kind, newest change first (`wikiEntriesOfKind`).
     public static func entries(_ entries: [WikiEntry], ofKind kind: WikiEntryKind) -> [WikiEntry] {
         entries.filter { $0.kind == kind }.sorted(by: changedFirst)
@@ -567,24 +536,6 @@ public enum WikiLogic {
         return at != bt ? at > bt : a.id > b.id
     }
 
-    /// A topic's name, read out of its slug the way the server reads it (`topicTitle`):
-    /// `tasks-dispatch` → `Tasks dispatch`.
-    public static func topicTitle(_ slug: String) -> String {
-        let words = slug.split(separator: "-").map(String.init)
-        guard let first = words.first else { return slug }
-        return ([first.prefix(1).uppercased() + first.dropFirst()] + words.dropFirst()).joined(separator: " ")
-    }
-
-    /// The verb a topic row leads with: what its newest entry is, and who made it so
-    /// (`wikiChangeVerbOfEntry`).
-    public static func entryVerb(_ entry: WikiEntry, loaded: Set<String>) -> String {
-        if entry.status == .superseded { return "Superseded" }
-        if entry.status == .retired { return "Retired" }
-        if entry.trust == .owner { return "Added by you" }
-        if let successor = entry.supersededById, loaded.contains(successor) { return "Superseded" }
-        return "Confirmed"
-    }
-
     /// The word a timeline row leads with, from what happened to the op (`wikiChangeVerb`).
     public static func changeVerb(_ item: WikiTimelineItem) -> String {
         if item.decision == .accepted { return WikiCopy.historyConfirmedBy }
@@ -594,7 +545,8 @@ public enum WikiLogic {
         case .supersede?: return "Superseded"
         case .reinforce?: return "Reinforced"
         case .challenge?: return "Challenged"
-        case .add?:       return item.origin == .owner ? "Added by you" : "Proposed"
+        // What a review mode applied is in the wiki already — `Added`, and its mark says by whom.
+        case .add?:       return item.origin == .owner ? "Added by you" : (item.appliedByMode != nil ? "Added" : "Proposed")
         default:          return item.origin == .owner ? "Amended by you" : "Amended"
         }
     }
@@ -795,14 +747,18 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// Proposals waiting in this space — the banner's number, as the web home's Review card counts it
     /// (the drawer's row sums every space's).
     public let proposals: Int
+    /// This space's changesets that still have something waiting in Review — the one read that ties
+    /// an op of the timeline to the run it came in, so Recently changed can fold a run into a row.
+    public let runs: [WikiChangeset]
 
     public init(space: WikiSpace, spaces: [WikiSpace], entries: [WikiEntry],
-                timeline: [WikiTimelineItem], proposals: Int) {
+                timeline: [WikiTimelineItem], proposals: Int, runs: [WikiChangeset] = []) {
         self.space = space
         self.spaces = spaces
         self.entries = entries
         self.timeline = timeline
         self.proposals = proposals
+        self.runs = runs
     }
 
     /// Every principle, of any status, oldest recorded first — the web's order for the owner's own
@@ -821,13 +777,17 @@ public struct WikiHomeContent: Equatable, Sendable {
         return !rows.isEmpty && rows.allSatisfy { $0.trust == .owner }
     }
 
-    public var topics: [WikiLogic.TopicSummary] { WikiLogic.topicSummaries(entries) }
-
     /// The four newest decisions, of any status.
     public var recentDecisions: [WikiEntry] { Array(WikiLogic.entries(entries, ofKind: .decision).prefix(4)) }
 
     /// The five newest changes.
     public var recentlyChanged: [WikiTimelineItem] { Array(timeline.prefix(5)) }
+
+    /// The five newest rows of Recently changed, a run folded into one row wherever Review ties its
+    /// ops to it (`wikiRecentRows(...).slice(0, 5)` on the web).
+    public var recentRows: [WikiModeLogic.RecentRow] {
+        Array(WikiModeLogic.recentRows(timeline, runs: runs).prefix(5))
+    }
 
     /// The three most used entries this week.
     public var mostUsed: [WikiUsageEntry] {
@@ -837,16 +797,16 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// Whether any session used the wiki in the window — the band says so rather than drawing zeros.
     public var usedThisWeek: Bool { (space.usage?.entries ?? []).contains { ($0.total ?? 0) > 0 } }
 
-    /// The ids in hand, for the verbs that ask whether an entry's successor is one of them.
-    public var loadedIDs: Set<String> { Set(entries.map(\.id)) }
-
     /// The line under the title: how many entries, and the commit the anchors were last verified at.
-    /// The count waiting for review is left out — the banner right below says it (mock 07 ①).
+    /// The count waiting for review is left out — the banner right below says it (mock 12 ①).
     public var statusLine: String {
         var parts = ["\(entries.count) \(WikiCopy.entryNoun(entries.count))"]
         if let sha = space.rootCommitSha, !sha.isEmpty {
             parts.append(WikiCopy.anchorsVerified(ref: String(sha.prefix(7)), ago: ""))
         }
+        // Criterion 5's place: the maintenance run's part of this line — `Maintained 2h ago ✓ · 6 to
+        // catch up` and its three other looks (mock 12 ④) — is appended here, after the anchors, as
+        // the web's status row carries it.
         return parts.joined(separator: " · ")
     }
 }

@@ -70,7 +70,7 @@ export class AddProviderPoolMemberDto {
   @IsPublicId() providerId!: string;
 }
 
-// A shared pool (migration 0320): organization/project OpenAI keys several people run Codex on, through
+// A shared pool (migration 0321): organization/project OpenAI keys several people run Codex on, through
 // the pool gateway. Its slug is derived from the label the way an account pool's is.
 export class CreateSharedPoolDto {
   @IsString() @MinLength(1) label!: string;

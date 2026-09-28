@@ -1,5 +1,5 @@
 /**
- * What a runner is handed for a session on a shared Codex pool (migration 0320), on real PostgreSQL:
+ * What a runner is handed for a session on a shared Codex pool (migration 0321), on real PostgreSQL:
  *
  *  (1) The claim hands the runner the pool gateway as OPENAI_BASE_URL and a session token as
  *      OPENAI_API_KEY, on the codex runtime — and nothing of any key: the token equals no key of the pool

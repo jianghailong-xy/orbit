@@ -14,7 +14,7 @@ import {
 import { SharedPoolsService } from './shared-pools.service';
 
 /**
- * Shared Codex pools (migration 0320): the pool page's doors. Scoped by who is IN a pool rather than by
+ * Shared Codex pools (migration 0321): the pool page's doors. Scoped by who is IN a pool rather than by
  * who owns it — a pool the caller is not in answers 404 from every route here, the same as one that does
  * not exist — and what each person may do there is SharedPoolsService's table. No body any route here
  * answers with carries a key: a key goes in through POST keys and PUT keys/:keyId/secret and never comes

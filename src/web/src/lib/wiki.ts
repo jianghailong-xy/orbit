@@ -76,6 +76,10 @@ export interface WikiTimelineItem {
   supersededById: string | null;
   supersededByTitle: string | null;
   reason: string | null;
+  /** The review mode that applied the op at once, or null when the owner or the effect policy did. */
+  appliedByMode?: 'tiered' | 'automatic' | null;
+  /** An op the mode applied that is also waiting in Review as a spot check. */
+  spotCheck?: boolean;
 }
 
 export interface WikiTimeline {
@@ -205,7 +209,6 @@ export const WIKI_PENDING_EXPIRES = (when: string): string => `expires ${when}`;
 
 // The bands of the home page, in the order both clients draw them.
 export const WIKI_PRINCIPLES = 'Principles';
-export const WIKI_TOPICS = 'Topics';
 export const WIKI_RECENT_DECISIONS = 'Recent decisions';
 export const WIKI_RECENTLY_CHANGED = 'Recently changed';
 export const WIKI_AGENTS_USED = 'Agents used the wiki';
@@ -358,7 +361,6 @@ export const WIKI_NO_ENTRIES = 'Nothing has been recorded in this space yet.';
 export const WIKI_NO_REVIEW = 'Nothing is waiting for you.';
 export const WIKI_NO_CHANGES = 'Nothing has changed yet.';
 export const WIKI_NO_DECISIONS = 'No decision has been recorded yet.';
-export const WIKI_NO_TOPICS = 'No entry has been filed under a topic yet.';
 export const WIKI_NO_AGENTS_YET = 'No session has used this wiki yet.';
 export const WIKI_NO_ENTRY_SELECTED = 'That entry is no longer in this space.';
 /** §12.1's generated Summary is phase 2: the page says so rather than drawing an empty box. */
@@ -443,43 +445,6 @@ export function wikiUsageOf(stats: unknown): number {
   return count('searchHits') + count('gets');
 }
 
-/** An entry's topic slugs, deduplicated and in the order it lists them. */
-export function wikiTopicsOf(entry: Pick<WikiEntry, 'topics'>): string[] {
-  return [...new Set(entry.topics ?? [])];
-}
-
-export interface WikiTopicSummary {
-  slug: string;
-  count: number;
-  /** The most recently changed entry carrying the topic, which is the line the grid shows. */
-  latest: WikiEntry | null;
-}
-
-/**
- * The topics a space's entries actually use, and how many entries each holds.
- *
- * Derived from the entries, because phase 1 writes no `wiki_topic` row: an entry names its topics by
- * slug, so the slugs in use ARE the topics. Sorted by count and then by slug, so two runs over the
- * same entries answer in the same order.
- */
-export function wikiTopicSummaries(entries: readonly WikiEntry[]): WikiTopicSummary[] {
-  const bySlug = new Map<string, WikiEntry[]>();
-  for (const entry of entries) {
-    for (const slug of wikiTopicsOf(entry)) {
-      const held = bySlug.get(slug) ?? [];
-      held.push(entry);
-      bySlug.set(slug, held);
-    }
-  }
-  return [...bySlug]
-    .map(([slug, held]) => ({
-      slug,
-      count: held.length,
-      latest: [...held].sort(byChangedAtDesc)[0] ?? null,
-    }))
-    .sort((a, b) => b.count - a.count || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
-}
-
 /** The entries of one kind, newest change first. */
 export function wikiEntriesOfKind(entries: readonly WikiEntry[], kind: WikiEntryKind): WikiEntry[] {
   return entries.filter((entry) => entry.kind === kind).sort(byChangedAtDesc);
@@ -523,7 +488,7 @@ export function wikiDecisionWord(entry: WikiEntry): string {
  * `Added` / `Confirmed` / `Amended` / `Retired` as one vocabulary across the timeline, the topic
  * grid and the Review cards, and `Change` stays the anchor's word alone.
  */
-export function wikiChangeVerb(item: Pick<WikiTimelineItem, 'op' | 'decision' | 'origin'>): string {
+export function wikiChangeVerb(item: Pick<WikiTimelineItem, 'op' | 'decision' | 'origin' | 'appliedByMode'>): string {
   if (item.decision === 'accepted') return WIKI_HISTORY_CONFIRMED_BY;
   if (item.decision === 'edited') return 'Edited by you';
   switch (item.op) {
@@ -536,7 +501,8 @@ export function wikiChangeVerb(item: Pick<WikiTimelineItem, 'op' | 'decision' | 
     case 'challenge':
       return 'Challenged';
     case 'add':
-      return item.origin === 'owner' ? 'Added by you' : 'Proposed';
+      // What a review mode applied is in the wiki already — `Added`, and its mark says by whom.
+      return item.origin === 'owner' ? 'Added by you' : item.appliedByMode ? 'Added' : 'Proposed';
     default:
       return item.origin === 'owner' ? 'Amended by you' : 'Amended';
   }

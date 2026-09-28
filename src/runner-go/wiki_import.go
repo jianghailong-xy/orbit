@@ -1802,7 +1802,13 @@ type wikiImportRepo struct {
 var wikiImportRepoDir = ""
 
 func openWikiImportRepo() *wikiImportRepo {
-	root, err := wikiImportGit(wikiImportRepoDir, "rev-parse", "--show-toplevel")
+	return openWikiImportRepoAt(wikiImportRepoDir)
+}
+
+// openWikiImportRepoAt is the repository dir is in ("" for the current directory): what a Wiki maintenance
+// run holds the model's anchors to in the maintenance workspace's checkout (wiki_maintain.go).
+func openWikiImportRepoAt(dir string) *wikiImportRepo {
+	root, err := wikiImportGit(dir, "rev-parse", "--show-toplevel")
 	if err != nil || root == "" {
 		return nil
 	}
