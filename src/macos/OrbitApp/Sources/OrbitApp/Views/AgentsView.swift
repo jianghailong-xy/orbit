@@ -835,6 +835,7 @@ struct AgentConsoleDetail: View {
                            configuredProviders: agents.configuredProviders,
                            configuredProvidersLoaded: agents.configuredProvidersLoaded,
                            providerPools: agents.providerPools,
+                           sharedPools: agents.sharedPools,
                            modelCatalog: agents.modelCatalog(for: agent.runnerId),
                            defaultEffort: app.user?.preferences?.defaultEffort) { session in
                 app.openCreatedAgentSession(session)
@@ -894,6 +895,8 @@ struct NewSessionView: View {
     let configuredProvidersLoaded: Bool
     /// The account pools the parent has loaded, so a workspace that runs on one opens on its tile.
     let providerPools: [ProviderPool]
+    /// The shared pools this account is in, which the draft offers beside its own (`draft.allPools`).
+    let sharedPools: [SharedPool]
     /// The owning runner's cached model catalogue — what `defaultModel` was resolved from, and what
     /// NAMES it. Passed in so the first frame reads the same label the picker will settle on.
     let modelCatalog: RunnerModelCatalog?
@@ -910,6 +913,7 @@ struct NewSessionView: View {
          configuredProviders: [ConfiguredProvider] = [],
          configuredProvidersLoaded: Bool = false,
          providerPools: [ProviderPool] = [],
+         sharedPools: [SharedPool] = [],
          modelCatalog: RunnerModelCatalog? = nil,
          defaultEffort: String? = nil,
          onCreated: @escaping (Session) -> Void) {
@@ -918,6 +922,7 @@ struct NewSessionView: View {
         self.configuredProviders = configuredProviders
         self.configuredProvidersLoaded = configuredProvidersLoaded
         self.providerPools = providerPools
+        self.sharedPools = sharedPools
         self.modelCatalog = modelCatalog
         self.defaultEffort = defaultEffort
         _draft = State(initialValue: registry.draftModel(
@@ -925,6 +930,7 @@ struct NewSessionView: View {
             configuredProviders: configuredProviders,
             configuredProvidersLoaded: configuredProvidersLoaded,
             providerPools: providerPools,
+            sharedPools: sharedPools,
             modelCatalog: modelCatalog, accountDefaultEffort: defaultEffort,
             onCreated: onCreated))
     }
@@ -942,7 +948,8 @@ struct NewSessionView: View {
                         ProviderMark(provider: draft.provider, size: 68,
                                      brandKey: currentProviderChoice.brandKey,
                                      label: currentProviderChoice.label,
-                                     poolSize: currentProviderChoice.poolSize)
+                                     poolSize: currentProviderChoice.poolSize,
+                                     poolUnit: currentProviderChoice.poolUnit)
                         Button { showProviderPicker = true } label: {
                             HStack(spacing: 7) {
                                 Text(currentProviderChoice.label)
@@ -1085,14 +1092,14 @@ struct NewSessionView: View {
         WorkspaceTitleSwitcher(name: agent.name) { showSwitcher = true }
     }
 
-    /// Engines first, then this account's pools, then its configured providers. Built from the
-    /// draft's own snapshot so the list matches the model space the pills are already resolving
-    /// against.
+    /// Engines first, then this account's pools — its own and the shared ones it is in — then its
+    /// configured providers. Built from the draft's own snapshot so the list matches the model space
+    /// the pills are already resolving against.
     private var providerChoices: [ProviderChoice] {
         SessionProviderChoices.choices(configured: draft.configuredProviders,
                                        catalog: draft.modelCatalog,
                                        engines: draft.runnerEngines,
-                                       pools: draft.providerPools)
+                                       pools: draft.allPools)
     }
 
     private var currentProviderChoice: ProviderChoice {

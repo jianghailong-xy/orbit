@@ -22,6 +22,8 @@ final class SharedPoolCopyParityTests: XCTestCase {
     private static let poolPage = "src/web/src/pages/ProviderPoolPage.tsx"
     private static let sharedPools = "src/web/src/lib/sharedPools.ts"
     private static let providerPools = "src/web/src/lib/providerPools.ts"
+    private static let sessionProviderChoices = "src/web/src/lib/sessionProviderChoices.ts"
+    private static let hero = "src/web/src/components/NewSessionProviderHero.tsx"
 
     private enum ParityError: Error, CustomStringConvertible {
         case missing(String)
@@ -227,6 +229,82 @@ final class SharedPoolCopyParityTests: XCTestCase {
                    in: Self.sharedPool)
         XCTAssertEqual(AddPoolKey.replaceDuplicate(AddPoolKey.AddedBy(name: "Chen Yu"), pool: pool("Team Codex")),
                        "This key is already in Team Codex — Chen Yu added it.")
+    }
+
+    /// The new-session picker and the composer take a shared pool as web takes it: drawn as an account
+    /// pool whose members are its keys (`sharedPoolAsProviderPool`), running Codex rather than Claude,
+    /// wearing its keys' count and the key's own words. Each line below is the web's own expression for
+    /// it, so a field or a sentence that moved at one end only fails here.
+    func testThePickerAndTheComposerDrawASharedPoolAsTheWebDoes() throws {
+        let lib = try web(Self.sharedPools)
+        let window = SharedPoolWindow(start: "2026-09-01T00:00:00.000Z",
+                                      end: "2026-10-01T00:00:00.000Z")
+        let capped = SharedPoolKey(id: "k", label: "orbit-org-1", fingerprint: "sk-…0000", shareCap: 50,
+                                   contributor: PoolKeyContributor(userId: "u", name: "Wikova"),
+                                   usage: PoolSpend(costUsd: 50, othersCostUsd: 50))
+        let mine = SharedPoolKey(id: "k2", label: "ios-build", fingerprint: "sk-…0000",
+                                 contributor: PoolKeyContributor(userId: "me", name: "Me", you: true))
+        func pool(_ keys: [SharedPoolKey]) -> SharedPool {
+            SharedPool(id: "p", slug: "team-codex", label: "Team Codex", window: window, keys: keys)
+        }
+        let drawn = SharedPools.asProviderPool(pool([capped]))
+
+        // The adapter, line for line: a key is the member, its state keyState's, its cap's gauge.
+        assertSays(lib, "presetSlug: 'openai',", in: Self.sharedPools)
+        assertSays(lib, "planUsage: keyWindow(key, pool),", in: Self.sharedPools)
+        assertSays(lib, "resetsAt: state === 'SPENT' ? pool.window.end : null,", in: Self.sharedPools)
+        assertSays(lib, "next: key.next,", in: Self.sharedPools)
+        assertSays(lib, "resetsAt: !free && members.some((member) => member.state === 'SPENT') ? pool.window.end : null,",
+                   in: Self.sharedPools)
+        assertSays(lib, "unavailable: runnable ? null : pool.keys.length === 0 ? 'No keys' : 'No key can run',",
+                   in: Self.sharedPools)
+        assertSays(lib, "shared: pool,", in: Self.sharedPools)
+        XCTAssertEqual(drawn.members[0].presetSlug, "openai")
+        XCTAssertEqual(drawn.members[0].state, .spent)
+        XCTAssertEqual(drawn.members[0].resetsAt, window.end)
+        XCTAssertEqual(drawn.resetsAt, window.end)
+        XCTAssertEqual(SharedPools.asProviderPool(pool([])).unavailable, "No keys")
+        let refused = SharedPoolKey(id: "k3", label: "orbit-org-3", fingerprint: "sk-…0000", state: .invalid,
+                                    contributor: PoolKeyContributor(userId: "u", name: "Wikova"))
+        XCTAssertEqual(SharedPools.asProviderPool(pool([refused])).unavailable, "No key can run")
+        // A key the others have capped is not a pool that cannot run: the month brings it back, so
+        // the pool takes a session and waits (`spentNote`), exactly as web's `runnable` reads it.
+        XCTAssertNil(drawn.unavailable)
+        XCTAssertEqual(drawn.shared?.slug, "team-codex", "the whole view rides along, as web's `shared`")
+
+        // This pool's CLI is Codex, with Codex's own models and mark — the account pool's is Claude.
+        let providers = ProviderPools.asProviders([drawn])
+        assertSays(try web(Self.providerPools), "runtime: pool.shared ? AgentProvider.CODEX : AgentProvider.CLAUDE,",
+                   in: Self.providerPools)
+        XCTAssertEqual(AgentDefaults.runtime(for: "team-codex", configured: providers), "codex")
+        XCTAssertEqual(providers.first?.presetSlug, "openai")
+        XCTAssertEqual(ProviderPools.asProviders([drawn]).first?.runtime, "codex")
+
+        // The picker's row: a choice on that CLI, wearing how many keys it holds.
+        let choices = SessionProviderChoices.choices(configured: providers, pools: [drawn])
+        let tile = try XCTUnwrap(choices.first { $0.slug == "team-codex" })
+        let choicesSource = try web(Self.sessionProviderChoices)
+        assertSays(choicesSource, "const runtime = pool.shared ? AgentProvider.CODEX : AgentProvider.CLAUDE;",
+                   in: Self.sessionProviderChoices)
+        assertSays(choicesSource, "poolUnit: 'key' as const", in: Self.sessionProviderChoices)
+        assertSays(choicesSource, "poolUnit?: 'key';", in: Self.sessionProviderChoices)
+        assertSays(try web(Self.hero),
+                   "aria-label={`${choice.poolSize} ${choice.poolUnit ?? 'account'}${choice.poolSize === 1 ? '' : 's'}`}",
+                   in: Self.hero)
+        XCTAssertEqual(tile.brandKey, "openai")
+        XCTAssertEqual(tile.poolUnit, "key")
+        XCTAssertEqual(tile.poolSize, 1)
+        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: tile.poolSize ?? 0, unit: tile.poolUnit), "1 key")
+        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: 2, unit: nil), "2 accounts")
+
+        // The composer: the key beside the quota is the one the pool picks for the viewer.
+        let account = PoolAccount(member: drawn.members[0], current: false)
+        XCTAssertEqual(ProviderPools.accountHelp(pool: drawn, account: account),
+                       "A session on Team Codex starts on orbit-org-1 — the key it picks for you right now")
+        // A key with no cap has no gauge, and the others' cap is a month, not a window.
+        let uncapped = SharedPools.asProviderPool(pool([mine]))
+        XCTAssertNil(uncapped.members[0].planUsage)
+        XCTAssertEqual(drawn.members[0].planUsage?.rows.first?.window.windowDurationMins, 30 * 24 * 60)
     }
 
     /// An account pool's page, read-only on a phone: its head, its accounts and their status tags.

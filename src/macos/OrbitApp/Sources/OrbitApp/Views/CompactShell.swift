@@ -1103,6 +1103,7 @@ private struct AgentComposePage: View {
                            configuredProviders: agents.configuredProviders,
                            configuredProvidersLoaded: agents.configuredProvidersLoaded,
                            providerPools: agents.providerPools,
+                           sharedPools: agents.sharedPools,
                            modelCatalog: agents.modelCatalog(for: agent.runnerId),
                            defaultEffort: model.user?.preferences?.defaultEffort) { session in
                 model.openCreatedAgentSession(session)

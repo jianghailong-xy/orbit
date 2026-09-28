@@ -27,13 +27,18 @@ public enum ProviderPools {
     public static let sectionTitle = "Account pools"
     public static let sectionFooter = ProvidersOverview.accountPoolsDetail
 
-    /// The pools as providers the pickers and the composer resolve like any configured one: a pool
-    /// runs on its members' Claude subscriptions, whose models are the Claude CLI's own — the model
-    /// space an Anthropic key has — and it carries no quota of its own (each member has one).
+    /// The pools as providers the pickers and the composer resolve like any configured one: an
+    /// account pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own
+    /// — the model space an Anthropic key has — and it carries no quota of its own (each member has
+    /// one). A shared pool runs Codex on OpenAI's own endpoint through the pool gateway, so its
+    /// models are the Codex CLI's and its mark OpenAI's.
     public static func asProviders(_ pools: [ProviderPool]) -> [ConfiguredProvider] {
         pools.map { pool in
-            ConfiguredProvider(slug: pool.slug, label: pool.label, runtime: "claude",
-                               presetSlug: "anthropic", modelsFromRuntime: true)
+            let shared = pool.shared != nil
+            return ConfiguredProvider(slug: pool.slug, label: pool.label,
+                                      runtime: shared ? "codex" : "claude",
+                                      presetSlug: shared ? SharedPools.keyPresetSlug : "anthropic",
+                                      modelsFromRuntime: true)
         }
     }
 
@@ -50,11 +55,14 @@ public enum ProviderPools {
         return pool.members.first(where: \.next).map { PoolAccount(member: $0, current: false) }
     }
 
-    /// What the account beside the quota says about itself when asked (a tooltip on web).
+    /// What the account beside the quota says about itself when asked (a tooltip on web). A shared
+    /// pool's member is one of its keys, which is what the second sentence ends by saying.
     public static func accountHelp(pool: ProviderPool, account: PoolAccount) -> String {
         account.current
             ? "\(pool.label) is running this session on \(account.member.label)"
-            : "A session on \(pool.label) starts on \(account.member.label) — the account with the most room right now"
+            : "A session on \(pool.label) starts on \(account.member.label) — "
+                + (pool.shared != nil ? "the key it picks for you" : "the account with the most room")
+                + " right now"
     }
 
     /// Why the new-session picker greys `pool` out, or nil while it can run: the server's own answer
@@ -75,9 +83,23 @@ public enum ProviderPools {
                                  timeZone: TimeZone = .current) -> String? {
         guard !pool.members.contains(where: \.next), unavailableReason(pool) == nil,
               pool.members.contains(where: { $0.state == .spent }) else { return nil }
-        guard let resetsAt = pool.resetsAt,
-              let time = formatResetTime(resetsAt, now: now, timeZone: timeZone) else { return "All spent" }
-        return "All spent · resets \(time)"
+        guard let resetsAt = pool.resetsAt else { return spentHead(pool) }
+        // A shared pool's keys are capped rather than spent: the month turning is what frees them,
+        // and a date says that where a clock would not (web's `PoolGauge`).
+        if pool.shared != nil {
+            guard let date = SharedPoolPage.capReset(resetsAt) else { return spentHead(pool) }
+            return "\(spentHead(pool)) · resets \(date)"
+        }
+        guard let time = formatResetTime(resetsAt, now: now, timeZone: timeZone) else {
+            return spentHead(pool)
+        }
+        return "\(spentHead(pool)) · resets \(time)"
+    }
+
+    /// What a pool with nothing left to run on is headed with (web's `PoolGauge`): a shared pool's
+    /// keys ran out of what their contributors let the others spend this month, which is a cap.
+    static func spentHead(_ pool: ProviderPool) -> String {
+        pool.shared != nil ? "All at cap" : "All spent"
     }
 
     // MARK: the pool's page (Settings → Providers → an account pool)
