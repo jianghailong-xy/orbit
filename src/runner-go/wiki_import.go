@@ -1333,12 +1333,24 @@ func wikiImportHasHan(text string) bool {
 	return false
 }
 
-// wikiImportNoteGives is whether the note gives the command as it is written: a recipe's verify
-// command is run as it stands, and a description of a check («full-api on main») is not one.
+// wikiImportNoteGives is whether the note gives the command as it is written, in its code — a code
+// block or a `span`: a recipe's verify command is run as it stands, and neither a description of a
+// check («full-api on main») nor a link to another note («见 [[full-api-red-on-main]]») is one, though
+// the note's prose holds both.
 func wikiImportNoteGives(note, command string) bool {
 	collapse := func(text string) string { return strings.Join(strings.Fields(text), " ") }
-	command = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(command), "$ "))
-	return command != "" && strings.Contains(collapse(note), collapse(command))
+	command = collapse(strings.TrimPrefix(strings.TrimSpace(command), "$ "))
+	if command == "" {
+		return false
+	}
+	code := wikiImportCodeBlock.FindAllString(note, -1)
+	code = append(code, wikiImportCodeSpan.FindAllString(wikiImportCodeBlock.ReplaceAllString(note, " "), -1)...)
+	for _, piece := range code {
+		if strings.Contains(collapse(strings.Trim(piece, "`")), command) {
+			return true
+		}
+	}
+	return false
 }
 
 // wikiImportPrompt is the demo's extraction prompt (prompts.py) for one note instead of a case file:
@@ -1371,7 +1383,7 @@ The kind's own fields (all required; be terse: each text field one short sentenc
 RULES:
 - quote: copied exactly from the note, backticks and punctuation included — no "…", no paraphrase, no translation. Prefer a span without double quotes; if one is unavoidable, escape it as \".
 - Write titles and text fields in the language the note is written in; keep code, paths and commands verbatim.
-- verify.command is a shell command copied exactly as the note writes it, one that shows the procedure worked — never a description of a check. A procedure the note gives no such command for is not a recipe: write it as a convention, or leave it out.
+- verify.command is a command copied exactly from the note's code (a code block or a span in backticks), one that shows the procedure worked — never a description of a check or a link to another note. A procedure the note gives no such command for is not a recipe: write it as a convention, or leave it out.
 - Only put a path or a sha in anchors if it appears in the note; never invent one. decidedAt is the date the note gives the decision, or else the note's date.
 
 EXAMPLE (a fictional repository, for format only):
@@ -1716,8 +1728,9 @@ func wikiImportField(name string, value interface{}, note wikiImportNote) (inter
 			return nil, "verify needs a command"
 		}
 		if !wikiImportNoteGives(note.text, command) {
-			return nil, fmt.Sprintf("verify.command %q is not a command the note gives: copy one exactly as the note "+
-				"writes it, or, when the note gives none, write the procedure as a convention or leave it out", cutRunes(command, 80))
+			return nil, fmt.Sprintf("verify.command %q is not a command the note gives: copy one exactly from the note's "+
+				"code (a code block or a span in backticks), or, when the note gives none, write the procedure as a convention "+
+				"or leave it out", cutRunes(command, 80))
 		}
 		exit := 0
 		switch code := verify["expectedExit"].(type) {

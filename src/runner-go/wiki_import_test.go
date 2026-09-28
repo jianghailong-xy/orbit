@@ -993,17 +993,19 @@ func TestWikiImportReadsANotesLanguageFromItsProse(t *testing.T) {
 }
 
 func TestWikiImportTakesAVerifyCommandOnlyAsTheNoteWritesIt(t *testing.T) {
-	note := wikiImportNote{id: "note-7", path: "memory/x.md", date: "2026-09-20", text: "取基线：\n```\n$ npm run test:full-api   -- --main\n```\n"}
+	note := wikiImportNote{id: "note-7", path: "memory/x.md", date: "2026-09-20",
+		text: "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n"}
 	recipe := func(command string) map[string]interface{} {
 		return map[string]interface{}{"kind": "recipe", "title": "取基线", "summary": "s", "steps": []interface{}{"a"},
 			"verify": map[string]interface{}{"command": command, "expectedExit": 0}}
 	}
-	for _, command := range []string{"npm run test:full-api -- --main", "$ npm run test:full-api -- --main"} {
+	for _, command := range []string{"npm run test:full-api -- --main", "$ npm run test:full-api -- --main", "git status --short"} {
 		if _, problems := wikiImportOpFrom(recipe(command), "recipe", note, nil); len(problems) > 0 {
 			t.Errorf("the note's own command %q was refused: %v", command, problems)
 		}
 	}
-	for _, command := range []string{"full-api on main", "npm run test:full-api -- --branch"} {
+	// A description, a command the note never writes, and two spans of its prose that are no command.
+	for _, command := range []string{"full-api on main", "npm run test:full-api -- --branch", "见 [[full-api-red-on-main]]", "full-api-red-on-main"} {
 		_, problems := wikiImportOpFrom(recipe(command), "recipe", note, nil)
 		if len(problems) != 1 || !strings.Contains(problems[0], "is not a command the note gives") {
 			t.Errorf("verify.command %q was let through (%v): only a command the note writes is one", command, problems)
