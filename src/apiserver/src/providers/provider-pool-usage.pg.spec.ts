@@ -49,12 +49,16 @@ const HOUR = 60 * 60 * 1000;
 /** Every Anthropic credential, subscription or metered, starts with this. */
 const KEY_PREFIX = 'sk-ant';
 
-/** What the usage endpoint answers for each key: a body, or a status it refuses with. */
+/** What the usage endpoint answers for each key: a body, a status it refuses with, or both. */
 const usageAnswers = new Map<string, unknown>();
 const usageEndpoint = (async (input: unknown, init?: { headers?: Record<string, string> }) => {
   const key = String(init?.headers?.authorization ?? '').replace(/^Bearer /, '');
   const answer = String(input) === OAUTH_USAGE_URL ? usageAnswers.get(key) : undefined;
   if (typeof answer === 'number') return new Response('{"error":{"message":"refused"}}', { status: answer });
+  if (answer && typeof answer === 'object' && 'status' in answer) {
+    const refusal = answer as { status: number; body: unknown };
+    return new Response(JSON.stringify(refusal.body), { status: refusal.status });
+  }
   return answer === undefined
     ? new Response('unavailable', { status: 500 })
     : new Response(JSON.stringify(answer), { status: 200 });
@@ -85,6 +89,7 @@ interface Pool {
   slug: string;
   label: string;
   resetsAt: string | null;
+  unavailable?: string | null;
   members: Member[];
 }
 interface MineRow {
@@ -196,16 +201,23 @@ suite('what the providers page reads about account pools, over HTTP on real Post
   const spent = await connect(alice.id, 'Spent', subscription());
   const silent = await connect(alice.id, 'Silent', subscription());
   const refused = await connect(alice.id, 'Refused', subscription());
+  const setup = await connect(alice.id, 'Setup token', subscription());
   usageAnswers.set(work.key, fiveHour(70, new Date(now + 2 * HOUR)));
   usageAnswers.set(home.key, fiveHour(20, new Date(now + 3 * HOUR)));
   usageAnswers.set(spent.key, fiveHour(100, new Date(now + HOUR)));
   // `silent` gets no answer: an endpoint that has nothing to say about it, so nothing is reported.
   usageAnswers.set(refused.key, 401);
+  // `setup` holds a Claude Code setup token: the endpoint refuses the READ (no `user:profile` scope)
+  // while sessions run on the very same token. That is the live case, and not a refused key.
+  usageAnswers.set(setup.key, {
+    status: 403,
+    body: { error: { message: 'OAuth token does not meet scope requirement user:profile' } },
+  });
   const pool = await providers.createPool(alice.id, {
     label: 'Claude accounts',
-    providerIds: [work.id, home.id, spent.id, silent.id, refused.id],
+    providerIds: [work.id, home.id, spent.id, silent.id, refused.id, setup.id],
   });
-  for (const member of [work, home, spent, silent, refused]) await warm(member.id);
+  for (const member of [work, home, spent, silent, refused, setup]) await warm(member.id);
   // A session generating on Work right now, through the pool.
   await db.session.create({
     data: {
@@ -229,10 +241,10 @@ suite('what the providers page reads about account pools, over HTTP on real Post
     const [served] = json;
     assert.equal(served.id, pub(pool.id), 'the pool is addressed by its public id');
     const byLabel = new Map(served.members.map((member) => [member.label, member]));
-    assert.deepEqual([...byLabel.keys()].sort(), ['Home', 'Refused', 'Silent', 'Spent', 'Work']);
+    assert.deepEqual([...byLabel.keys()].sort(), ['Home', 'Refused', 'Setup token', 'Silent', 'Spent', 'Work']);
     assert.equal(byLabel.get('Work')!.id, pub(work.id));
 
-    // Each member's own PlanUsageSnapshot, read with its own credential — four accounts, four answers.
+    // Each member's own PlanUsageSnapshot, read with its own credential — one answer per account.
     assert.equal(byLabel.get('Work')!.planUsage?.fiveHour?.utilization, 70);
     assert.equal(byLabel.get('Home')!.planUsage?.fiveHour?.utilization, 20);
     assert.equal(byLabel.get('Spent')!.planUsage?.fiveHour?.utilization, 100);
@@ -247,7 +259,11 @@ suite('what the providers page reads about account pools, over HTTP on real Post
       Silent: 'NO_QUOTA',
       // Refused once is refused for good: not available, whatever it last said.
       Refused: 'REFUSED',
+      // A quota the endpoint will not report is a state of its own: the credential runs sessions, so the
+      // member is a candidate, ranked behind every member whose quota could be read.
+      'Setup token': 'USAGE_UNKNOWN',
     });
+    assert.equal(byLabel.get('Setup token')!.planUsage, null, 'a read the endpoint refused reports nothing');
     assert.equal(byLabel.get('Spent')!.resetsAt, new Date(now + HOUR).toISOString());
     assert.equal(byLabel.get('Home')!.resetsAt, null);
     assert.equal(served.resetsAt, null, 'a pool with room is not waiting on any reset');
@@ -313,4 +329,44 @@ suite('what the providers page reads about account pools, over HTTP on real Post
     const mine = await door.get<MineRow[]>(bob.id, '/api/providers/mine');
     assert.deepEqual(mine.json, []);
   });
+
+  await t.test('(5) a pool whose accounts are all setup tokens still runs on one of them', async () => {
+    const one = await connect(alice.id, 'Setup one', subscription());
+    const two = await connect(alice.id, 'Setup two', subscription());
+    for (const member of [one, two]) {
+      usageAnswers.set(member.key, {
+        status: 403,
+        body: { error: { message: 'OAuth token does not meet scope requirement user:profile' } },
+      });
+      await warm(member.id);
+    }
+    const setupPool = await providers.createPool(alice.id, {
+      label: 'Setup tokens',
+      providerIds: [one.id, two.id],
+    });
+    const { text, json } = await door.get<Pool[]>(alice.id, '/api/providers/pools');
+    const served = json.find((row) => row.id === pub(setupPool.id))!;
+    // The live regression: this pool used to say "No account can run" and be refused by every door.
+    assert.equal(served.unavailable, null, 'a pool of setup tokens is not one that cannot run');
+    assert.deepEqual(
+      Object.fromEntries(served.members.map((member) => [member.label, member.state])),
+      { 'Setup one': 'USAGE_UNKNOWN', 'Setup two': 'USAGE_UNKNOWN' },
+    );
+    // And it has a member for the next session to start on — the claim's own answer, so the picker does
+    // not grey the pool out either.
+    assert.deepEqual(served.members.filter((member) => member.next).map((member) => member.label), ['Setup one']);
+    assertKeyless(text, 'GET /providers/pools (setup tokens)');
+
+    // A member whose quota CAN be read outranks them wherever it sits among the rows: an account with
+    // known room is taken ahead of one whose room is a guess.
+    const known = await connect(alice.id, 'Known', subscription());
+    usageAnswers.set(known.key, fiveHour(90, new Date(now + HOUR)));
+    await warm(known.id);
+    await providers.addPoolMember(alice.id, setupPool.id, known.id);
+    const after = (await door.get<Pool[]>(alice.id, '/api/providers/pools')).json.find(
+      (row) => row.id === pub(setupPool.id),
+    )!;
+    assert.deepEqual(after.members.filter((member) => member.next).map((member) => member.label), ['Known']);
+  });
+
 });

@@ -268,6 +268,10 @@ final class ProviderPoolsTests: XCTestCase {
                        PoolStatus(label: "Spent · resets 10:30", tone: .warning))
         XCTAssertEqual(status(member(4, .spent)), PoolStatus(label: "Spent", tone: .warning))
         XCTAssertEqual(status(member(5, .refused)), PoolStatus(label: "Unavailable · key refused", tone: .danger))
+        // A quota the endpoint would not report is not a refused key — other words, other colour — and
+        // the account still runs, which is why it is not the danger tone.
+        XCTAssertEqual(status(member(9, .usageUnknown)),
+                       PoolStatus(label: "Unavailable · usage unreadable", tone: .neutral))
         XCTAssertEqual(status(member(6, .disabled)), PoolStatus(label: "Disabled", tone: .neutral))
         XCTAssertEqual(status(member(7, .noQuota)), PoolStatus(label: "No quota reported", tone: .neutral))
         XCTAssertEqual(status(member(8, .unknown)), PoolStatus(label: "No quota reported", tone: .neutral))
@@ -296,6 +300,13 @@ final class ProviderPoolsTests: XCTestCase {
         XCTAssertEqual(ProviderPools.headline(pool([member(1, .refused)], unavailable: "No account can run"), now: now),
                        "No account can run")
         XCTAssertEqual(ProviderPools.headline(pool([]), now: now), "No account can run")
+
+        // The live regression: a pool of nothing but setup tokens runs on one of them — it is not headed
+        // with "No account can run", and the account counts towards the ones a session could start on.
+        let setup = pool([member(1, .usageUnknown), member(2, .usageUnknown, next: true, label: "Laptop")])
+        XCTAssertEqual(ProviderPools.pageSubtitle(setup), "2 of 2 accounts available")
+        XCTAssertEqual(ProviderPools.headline(setup, now: now, timeZone: utc), "Next: Laptop")
+        XCTAssertNil(ProviderPools.unavailableReason(setup))
     }
 
     // MARK: - a pool as a provider the composer can run

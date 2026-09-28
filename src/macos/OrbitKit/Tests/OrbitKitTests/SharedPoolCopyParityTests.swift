@@ -321,6 +321,10 @@ final class SharedPoolCopyParityTests: XCTestCase {
         func member(_ state: PoolMemberState) -> PoolMember { PoolMember(id: "m", slug: "m", label: "M", state: state) }
         assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.running)).label)', color: 'processing'", in: Self.providerPools)
         assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.refused)).label)', color: 'red'", in: Self.providerPools)
+        // The two ways the endpoint turns a credential away are two labels, word for word with the web's.
+        assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.usageUnknown)).label)', color: 'default'",
+                   in: Self.providerPools)
+        XCTAssertEqual(ProviderPools.memberStatus(member(.usageUnknown)).label, "Unavailable · usage unreadable")
         assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.noQuota)).label)', color: 'default'", in: Self.providerPools)
         assertSays(tags, "`Spent · resets ${formatResetTime(member.resetsAt, now)}` : 'Spent'", in: Self.providerPools)
 

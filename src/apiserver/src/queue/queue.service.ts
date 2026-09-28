@@ -736,11 +736,15 @@ export class QueueService {
     // A member no claim may choose is no candidate, and nobody asks after its quota.
     const candidates = rows
       .filter(isPoolCandidate)
-      .map((row) => ({
-        row,
-        usage: this.planUsage?.snapshot(row) ?? null,
-        refused: this.planUsage?.refused(row) ?? false,
-      }));
+      .map((row) => {
+        const standing = this.planUsage?.usageStanding(row) ?? null;
+        return {
+          row,
+          usage: this.planUsage?.snapshot(row) ?? null,
+          refused: standing === 'KEY_REFUSED',
+          usageUnreadable: standing === 'USAGE_UNKNOWN',
+        };
+      });
     return { label: pool.label, engine: pool.engine, login: pool.logins[0] ?? null, rows, candidates };
   }
 

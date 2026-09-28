@@ -274,6 +274,7 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     keys = [WORK, HOME, SPARE, METERED];
     const refused = key(6, 'Old laptop');
     const silent = key(7, 'Silent');
+    const setup = key(8, 'Setup token');
     pools = [
       pool([
         member(WORK, { state: 'RUNNING', planUsage: fiveHour(80) }),
@@ -281,6 +282,7 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
         member(SPARE, { state: 'SPENT', planUsage: fiveHour(100, resets), resetsAt: resets }),
         member(refused, { state: 'REFUSED' }),
         member(silent, { state: 'NO_QUOTA' }),
+        member(setup, { state: 'USAGE_UNKNOWN' }),
       ]),
     ];
     await mount('/providers');
@@ -290,6 +292,11 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     expect(tag('Spare')).toBe(`Spent · resets ${formatResetTime(resets)}`);
     expect(tag('Old laptop')).toBe('Unavailable · key refused');
     expect(tag('Silent')).toBe('No quota reported');
+    // A quota the endpoint would not report says so in its own words — never "key refused" — and the
+    // row offers no Re-add key: the key is not what is wrong.
+    expect(tag('Setup token')).toBe('Unavailable · usage unreadable');
+    expect(rowOf('Setup token')?.textContent).not.toContain('Re-add key');
+    expect(rowOf('Old laptop')?.textContent).toContain('Re-add key');
     // Its own gauge, not the pool's: Work is at 80 while the pool's head shows Home's 20.
     expect(rowOf('Work')?.querySelector<HTMLElement>('.runner-util-fill')?.style.width).toBe('80%');
     expect(rowOf('Work')?.querySelector('.runner-util')?.classList.contains('full')).toBe(false);
@@ -362,6 +369,25 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     await mount('/providers');
     expect(section()?.textContent).toContain('0 of 1 account available');
     expect(section()?.textContent).not.toContain('the same as using');
+  });
+
+  it('offers a pool whose accounts are all setup tokens: a last choice, not none at all', async () => {
+    // The live regression: both accounts' quotas are unreadable (a setup token carries no profile
+    // scope), and the pool used to head with "No account can run" and be refused by every door.
+    const setup = key(8, 'Setup token');
+    const laptop = key(9, 'Laptop');
+    keys = [setup, laptop];
+    pools = [
+      pool([
+        member(setup, { state: 'USAGE_UNKNOWN', next: true }),
+        member(laptop, { state: 'USAGE_UNKNOWN' }),
+      ]),
+    ];
+    await mount('/providers');
+    expect(section()!.querySelector('.re-head')?.textContent).toContain('2 of 2 accounts available');
+    expect(section()!.querySelector('.pool-gauge')?.textContent).toContain('Next: Setup token');
+    expect(section()!.textContent).not.toContain('No account can run');
+    expect(rowOf('Setup token')?.textContent).toContain('NEXT');
   });
 
   it('says so when a fully spent pool frees up — at the earliest reset, not the latest', async () => {

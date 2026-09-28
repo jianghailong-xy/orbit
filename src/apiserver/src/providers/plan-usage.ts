@@ -68,6 +68,27 @@ export function subscriptionUsageRefusal(row: UsageProbeRow, apiKey: string): Su
   return 'NOT_ANTHROPIC_ENDPOINT';
 }
 
+/** What the usage endpoint's refusal of a read says about the credential it was asked with. */
+export type UsageFailureKind = 'KEY_REFUSED' | 'USAGE_UNKNOWN';
+
+/**
+ * Why a reading failed, as far as the credential is concerned, or null when the failure was outside it
+ * (the endpoint unreachable, or answering for its own reasons) and the read is worth retrying.
+ *
+ * - `KEY_REFUSED` — 401: the token was not authenticated at all, which is the verdict a session's own
+ *   request to the same endpoint would meet. Final for the key: a new one is the way back.
+ * - `USAGE_UNKNOWN` — 403, and the 401 that names a scope requirement: the token is a credential this
+ *   endpoint will not *report on*, while everything else about it is fine. A Claude Code setup token
+ *   carries no `user:profile` scope, so the usage read is refused while sessions run on the very same
+ *   token — which is no reason to call the key refused, and a reason to keep the member runnable with
+ *   its quota unknown. Final for the read too: the same token would get the same answer.
+ */
+export function usageFailureKind(status: number, message: string): UsageFailureKind | null {
+  if (status === 403) return 'USAGE_UNKNOWN';
+  if (status !== 401) return null;
+  return /\bscope\b/i.test(message) ? 'USAGE_UNKNOWN' : 'KEY_REFUSED';
+}
+
 /**
  * The message the endpoint sent with a refusal, for the log line that reports it.
  *
