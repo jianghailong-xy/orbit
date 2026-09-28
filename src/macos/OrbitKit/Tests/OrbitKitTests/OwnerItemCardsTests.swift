@@ -80,6 +80,9 @@ final class OwnerItemCardsTests: XCTestCase {
             ("ANSWERED_HEADING", CoordinatorQuestions.answeredHeading),
             ("WAITING_FOR_COORDINATOR", CoordinatorQuestions.waitingForCoordinator),
             ("DELIVERED_TO_COORDINATOR", CoordinatorQuestions.deliveredToCoordinator),
+            ("NOTE_PROMPT", CoordinatorQuestions.notePrompt),
+            ("OWN_ANSWER_PROMPT", CoordinatorQuestions.ownAnswerPrompt),
+            ("OTHER_OPTION", CoordinatorQuestions.otherOption),
         ]
         for (name, mine) in pairs {
             XCTAssertEqual(mine, try declaration(web, name),
@@ -153,14 +156,18 @@ final class OwnerItemCardsTests: XCTestCase {
         XCTAssertFalse(CoordinatorQuestions.isOpen(.gone))
     }
 
-    /// The button is live exactly when the door would take the press: a choice where one is on
-    /// offer, any non-empty text where it is not.
+    /// The button is live exactly when the door would take the press: an option chosen, or any
+    /// non-empty text. Text beside a chosen option is a note on it; text with no option chosen is
+    /// the answer itself, which is what the Other row is for.
     func testTheAnswerIsOnlySendableWhenTheDoorWouldTakeIt() {
         let choice = question(options: [.init(label: "t4 first"), .init(label: "both")], recommended: 1)
         XCTAssertFalse(CoordinatorQuestions.sendable(question: choice, chosen: nil, text: ""))
-        XCTAssertFalse(CoordinatorQuestions.sendable(question: choice, chosen: nil, text: "whatever"),
-                       "a question with options is answered by choosing one")
-        XCTAssertTrue(CoordinatorQuestions.sendable(question: choice, chosen: 0, text: ""))
+        XCTAssertTrue(CoordinatorQuestions.sendable(question: choice, chosen: nil, text: "neither"),
+                      "words alone are an answer — that is what the Other row is on the card for")
+        XCTAssertTrue(CoordinatorQuestions.sendable(question: choice, chosen: .option(0), text: ""))
+        XCTAssertTrue(CoordinatorQuestions.sendable(question: choice, chosen: .other, text: "neither"))
+        XCTAssertFalse(CoordinatorQuestions.sendable(question: choice, chosen: .other, text: "  \n "),
+                       "the Other row with an empty box is not an answer the door would take")
 
         let free = question()
         XCTAssertFalse(CoordinatorQuestions.sendable(question: free, chosen: nil, text: "   \n "),
@@ -168,12 +175,43 @@ final class OwnerItemCardsTests: XCTestCase {
         XCTAssertTrue(CoordinatorQuestions.sendable(question: free, chosen: nil, text: "t4 first"))
 
         XCTAssertNil(CoordinatorQuestions.request(question: choice, chosen: nil, text: ""))
-        let both = CoordinatorQuestions.request(question: choice, chosen: 1, text: " they can share a runner ")
+        XCTAssertNil(CoordinatorQuestions.request(question: choice, chosen: .other, text: " \n "),
+                     "a row that was picked with nothing written under it is not a press the door takes")
+
+        let both = CoordinatorQuestions.request(question: choice, chosen: .option(1),
+                                                text: " they can share a runner ")
         XCTAssertEqual(both?.option, 1)
         XCTAssertEqual(both?.text, "they can share a runner", "sent trimmed, as the browser sends it")
+
+        let mine = CoordinatorQuestions.request(question: choice, chosen: .other, text: " neither ")
+        XCTAssertNil(mine?.option, "the Other row sends the words with no option in front of them")
+        XCTAssertEqual(mine?.text, "neither")
+
         let prose = CoordinatorQuestions.request(question: free, chosen: nil, text: "t4 first")
         XCTAssertNil(prose?.option)
         XCTAssertEqual(prose?.text, "t4 first")
+    }
+
+    /// Which row is picked, and what the box under them says its text will be — the browser's own
+    /// three states: an option (a note on it), the Other row or nothing yet (the answer), and a
+    /// question asked without options, where the box is the whole of it.
+    func testTheBoxSaysWhatItsTextWillBe() {
+        let choice = question(options: [.init(label: "t4 first")], recommended: 0)
+        XCTAssertEqual(CoordinatorQuestions.answerPrompt(question: choice, chosen: .option(0)),
+                       CoordinatorQuestions.notePrompt)
+        XCTAssertEqual(CoordinatorQuestions.answerPrompt(question: choice, chosen: .other),
+                       CoordinatorQuestions.ownAnswerPrompt)
+        XCTAssertEqual(CoordinatorQuestions.answerPrompt(question: choice, chosen: nil),
+                       CoordinatorQuestions.ownAnswerPrompt)
+        XCTAssertEqual(CoordinatorQuestions.answerPrompt(question: question(), chosen: nil),
+                       CoordinatorQuestions.freeAnswerPrompt)
+
+        XCTAssertTrue(CoordinatorQuestions.isOther(.other))
+        XCTAssertFalse(CoordinatorQuestions.isOther(.option(0)))
+        XCTAssertFalse(CoordinatorQuestions.isOther(nil))
+        XCTAssertEqual(CoordinatorQuestions.optionIndex(.option(2)), 2)
+        XCTAssertNil(CoordinatorQuestions.optionIndex(.other))
+        XCTAssertNil(CoordinatorQuestions.optionIndex(nil))
     }
 
     /// The receipt says what was answered in the words the card showed, and whether anybody has
