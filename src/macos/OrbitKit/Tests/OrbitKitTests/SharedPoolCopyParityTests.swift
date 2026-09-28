@@ -275,10 +275,13 @@ final class SharedPoolCopyParityTests: XCTestCase {
         XCTAssertNil(drawn.unavailable)
         XCTAssertEqual(drawn.shared?.slug, "team-codex", "the whole view rides along, as web's `shared`")
 
-        // This pool's CLI is Codex, with Codex's own models and mark — the account pool's is Claude.
+        // This pool's CLI is Codex, with Codex's own models and mark — the account pool's is Claude (and
+        // a pool of one's own ChatGPT account's is Codex too: CodexSignInCopyParityTests).
         let providers = ProviderPools.asProviders([drawn])
-        assertSays(try web(Self.providerPools), "runtime: pool.shared ? AgentProvider.CODEX : AgentProvider.CLAUDE,",
+        let poolsLib = try web(Self.providerPools)
+        assertSays(poolsLib, "runtime: poolRunsCodex(pool) ? AgentProvider.CODEX : AgentProvider.CLAUDE,",
                    in: Self.providerPools)
+        assertSays(poolsLib, "!!pool.shared || pool.engine === AgentProvider.CODEX;", in: Self.providerPools)
         XCTAssertEqual(AgentDefaults.runtime(for: "team-codex", configured: providers), "codex")
         XCTAssertEqual(providers.first?.presetSlug, "openai")
         XCTAssertEqual(ProviderPools.asProviders([drawn]).first?.runtime, "codex")
@@ -287,7 +290,8 @@ final class SharedPoolCopyParityTests: XCTestCase {
         let choices = SessionProviderChoices.choices(configured: providers, pools: [drawn])
         let tile = try XCTUnwrap(choices.first { $0.slug == "team-codex" })
         let choicesSource = try web(Self.sessionProviderChoices)
-        assertSays(choicesSource, "const runtime = pool.shared ? AgentProvider.CODEX : AgentProvider.CLAUDE;",
+        assertSays(choicesSource,
+                   "const runtime = pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;",
                    in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit: 'key' as const", in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit?: 'key';", in: Self.sessionProviderChoices)
@@ -321,11 +325,16 @@ final class SharedPoolCopyParityTests: XCTestCase {
         func member(_ state: PoolMemberState) -> PoolMember { PoolMember(id: "m", slug: "m", label: "M", state: state) }
         assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.running)).label)', color: 'processing'", in: Self.providerPools)
         assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.refused)).label)', color: 'red'", in: Self.providerPools)
+        // The two ways the endpoint turns a credential away are two labels, word for word with the web's.
+        assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.usageUnknown)).label)', color: 'default'",
+                   in: Self.providerPools)
+        XCTAssertEqual(ProviderPools.memberStatus(member(.usageUnknown)).label, "Unavailable · usage unreadable")
         assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.noQuota)).label)', color: 'default'", in: Self.providerPools)
         assertSays(tags, "`Spent · resets ${formatResetTime(member.resetsAt, now)}` : 'Spent'", in: Self.providerPools)
 
         let card = try web(Self.accountPools)
-        assertSays(card, "Next: {member.label}", in: Self.accountPools)
+        // "Next: …" — but a pool of one's own ChatGPT account names its one account instead.
+        assertSays(card, "`Next: ${member.label}`", in: Self.accountPools)
         let three = ProviderPool(id: "p", slug: "p", label: "P",
                                  members: [member(.available), member(.spent), member(.disabled)])
         XCTAssertEqual(ProviderPools.pageSubtitle(three), "1 of 3 accounts available")

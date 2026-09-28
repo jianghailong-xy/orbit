@@ -138,7 +138,14 @@ test('shared pools (migration 0321) against PostgreSQL', { skip, concurrency: 1,
       { engine: personal.engine, shared: personal.shared, membersCanAdd: personal.membersCanAdd, ownKeyFirst: personal.ownKeyFirst },
       { engine: 'claude', shared: false, membersCanAdd: true, ownKeyFirst: true },
     );
-    for (const [engine, shared] of [['codex', false], ['claude', true], ['kimi', true]] as const) {
+    // A personal pool may also be `codex` (migration 0323): the pool one's own ChatGPT login runs on. What
+    // the check still holds together is that a SHARED pool is Codex and nothing else — the one credential
+    // several people may share is an organization/project key, never anybody's login.
+    const ownLogin = await prisma.providerPool.create({
+      data: { slug: `shared-schema-${randomUUID()}`, label: 'My ChatGPT', ownerId: ann, engine: 'codex' },
+    });
+    assert.deepEqual({ engine: ownLogin.engine, shared: ownLogin.shared }, { engine: 'codex', shared: false });
+    for (const [engine, shared] of [['claude', true], ['kimi', true], ['kimi', false]] as const) {
       await assert.rejects(
         sql.query(
           `INSERT INTO provider_pool (id, slug, label, owner_id, engine, shared, updated_at)

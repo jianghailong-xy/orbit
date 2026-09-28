@@ -30,16 +30,22 @@ public enum ProviderPools {
     /// The pools as providers the pickers and the composer resolve like any configured one: an
     /// account pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own
     /// — the model space an Anthropic key has — and it carries no quota of its own (each member has
-    /// one). A shared pool runs Codex on OpenAI's own endpoint through the pool gateway, so its
-    /// models are the Codex CLI's and its mark OpenAI's.
+    /// one). A shared pool runs Codex on OpenAI's own endpoint through the pool gateway, and so does a
+    /// pool of one's own ChatGPT account: their models are the Codex CLI's and their mark OpenAI's.
     public static func asProviders(_ pools: [ProviderPool]) -> [ConfiguredProvider] {
         pools.map { pool in
-            let shared = pool.shared != nil
+            let codex = runsCodex(pool)
             return ConfiguredProvider(slug: pool.slug, label: pool.label,
-                                      runtime: shared ? "codex" : "claude",
-                                      presetSlug: shared ? SharedPools.keyPresetSlug : "anthropic",
+                                      runtime: codex ? "codex" : "claude",
+                                      presetSlug: codex ? SharedPools.keyPresetSlug : "anthropic",
                                       modelsFromRuntime: true)
         }
+    }
+
+    /// Whether a pool runs Codex — a shared pool of OpenAI keys, or a pool of one's own ChatGPT account
+    /// (web's `poolRunsCodex`) — rather than its members' Claude subscriptions.
+    public static func runsCodex(_ pool: ProviderPool) -> Bool {
+        pool.shared != nil || pool.engine == "codex"
     }
 
     /// The account a session on `pool` is on: the member its last claim recorded (`memberID`), or —
@@ -120,9 +126,10 @@ public enum ProviderPools {
     }
 
     /// The "2" of "2 of 3 accounts available": the members a session could start on now (web's
-    /// `canTakeWork`). One that reports no quota counts — the claim still picks it, just last.
+    /// `canTakeWork`). One that reports no quota counts — the claim still picks it, just last — and so
+    /// does one whose quota the endpoint would not report: the key is not refused.
     public static func readyCount(_ pool: ProviderPool) -> Int {
-        pool.members.filter { [.available, .running, .noQuota].contains($0.state) }.count
+        pool.members.filter { [.available, .running, .noQuota, .usageUnknown].contains($0.state) }.count
     }
 
     /// The Accounts header's trailing words (web's `PoolGauge`): the account the next session starts
@@ -149,6 +156,9 @@ public enum ProviderPools {
             }
             return PoolStatus(label: "Spent · resets \(time)", tone: .warning)
         case .refused: return PoolStatus(label: "Unavailable · key refused", tone: .danger)
+        // Its line says what brings it back: its owner's sign-in again.
+        case .signedOut: return PoolStatus(label: "Signed out", tone: .danger)
+        case .usageUnknown: return PoolStatus(label: "Unavailable · usage unreadable", tone: .neutral)
         case .disabled: return PoolStatus(label: "Disabled", tone: .neutral)
         case .noQuota, .unknown: return PoolStatus(label: "No quota reported", tone: .neutral)
         }

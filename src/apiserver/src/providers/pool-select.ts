@@ -13,9 +13,12 @@ export interface PoolCandidate<Row extends PoolMemberRow> {
   row: Row;
   /** The member's quota as ProviderPlanUsageService reads it; null when it has none to report. */
   usage: PlanUsageSnapshot | null;
-  /** The usage endpoint refused this credential (401/403), which ProviderPlanUsageService takes as
-   *  final and never asks about again. */
+  /** The endpoint refused this credential itself (401): no run can go to it, whatever it last said. */
   refused: boolean;
+  /** The endpoint would not report this credential's quota (403 — a setup token without the profile
+   *  scope), while the credential itself is fine. The member runs; its quota is unknown, so it is
+   *  ranked after every member whose quota could be read. */
+  usageUnreadable: boolean;
 }
 
 /** A member no run can go to right now. */
@@ -49,7 +52,10 @@ export type PoolSelection<Row extends PoolMemberRow> =
  *   when another has more room: moving accounts over a few percent gains nothing.
  * - A member with no 5-hour reading ranks after every member that has one. Not reported is not the
  *   same as not used, so it is never taken for 0%.
- * - A refused credential is no candidate at all, whatever its last snapshot said.
+ * - A refused credential is no candidate at all, whatever its last snapshot said. One whose quota
+ *   could not be READ is a candidate, and ranks behind every member whose quota was: nothing says how
+ *   much of it is left, so it takes the run only when no reading beats it — and a pool of nothing but
+ *   those still runs on one, rather than hold every session for a number that never comes.
  * - Equal utilization goes to the lower slug, so the answer never depends on the order of the rows.
  *
  * Only the 5-hour window ranks, but any spent window rules a member out: a weekly limit stops an
@@ -64,7 +70,7 @@ export function selectPoolMember<Row extends PoolMemberRow>(
   now: Date,
 ): PoolSelection<Row> {
   const usable = candidates.filter((c) => !c.refused && spentResets(c.usage, now).length === 0);
-  const chosen = usable.find((c) => c.row.id === stickyId) ?? usable.sort(byRoom)[0];
+  const chosen = usable.find((c) => c.row.id === stickyId) ?? usable.sort(byChoice)[0];
   if (chosen) return { kind: 'SELECTED', row: chosen.row };
 
   const members = candidates.map((c) => ({
@@ -197,6 +203,14 @@ function spentWindow(usage: PlanUsageSnapshot | null, now: Date): string | null 
 /** Every one of them has to pass, so the latest — unknown if any one is. */
 function latestReset(resets: number[]): Date | null {
   return resets.some(Number.isNaN) ? null : new Date(Math.max(...resets));
+}
+
+/**
+ * The members whose quota could be read first, then the ones whose quota the endpoint would not
+ * report — and within each of the two, least 5-hour utilization first, no reading last, then by slug.
+ */
+function byChoice<Row extends PoolMemberRow>(a: PoolCandidate<Row>, b: PoolCandidate<Row>): number {
+  return Number(a.usageUnreadable) - Number(b.usageUnreadable) || byRoom(a, b);
 }
 
 /** Least 5-hour utilization first, no reading last, then by slug. */

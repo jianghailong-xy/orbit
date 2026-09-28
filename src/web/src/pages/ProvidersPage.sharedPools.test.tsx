@@ -377,6 +377,9 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     const modal = dialog()!;
     expect(modal.querySelector('.ant-modal-title')?.textContent).toBe('New account pool');
     expect(modal.querySelector('.ant-segmented-item-selected')?.textContent?.trim()).toBe('Codex');
+    // "Just me" is a pool of one's own ChatGPT account (ProvidersPage.codexLogin.test.tsx); shared, a
+    // Codex pool holds the people's OpenAI API keys.
+    await click(modal.querySelector('input[type="radio"][value="people"]'));
     await type(fieldInput('Name', modal), 'Team Codex');
     // An address typed and not yet a tag still counts.
     await type(modal.querySelector<HTMLInputElement>('.np-people input'), 'zhang@example.com');

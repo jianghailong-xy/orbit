@@ -31,6 +31,8 @@ public enum ProvidersOverview {
     /// a session could start on now, in the words a phone gives the web card's head ("2 of 3
     /// available" — the web drops "accounts" at that width to keep the pool's name).
     public static func poolSummary(_ pool: ProviderPool) -> String {
+        // One account is no count: a pool of one's own ChatGPT account says where that account stands.
+        if CodexLoginPool.isLoginPool(pool) { return CodexLoginPool.overviewValue(pool) }
         if let unavailable = pool.unavailable { return unavailable }
         return "\(ProviderPools.readyCount(pool)) of \(pool.members.count) available"
     }
