@@ -1786,8 +1786,11 @@ func wikiImportPlain(text string) (string, []int) {
 // exists on its main line, a commit that is an ancestor of it. Outside a repository there are no
 // anchors at all rather than unchecked ones — a sha that is not an ancestor poisons whatever trusts it.
 type wikiImportRepo struct {
-	root  string
-	ref   string
+	root string
+	ref  string
+	// The repository's name, read off its origin (…/orbit.git reads orbit) or its directory: a note
+	// that names a file by an absolute path names it inside some checkout called that.
+	name  string
 	files map[string]bool
 	dirs  map[string]bool
 	mu    sync.Mutex
@@ -1811,7 +1814,11 @@ func openWikiImportRepo() *wikiImportRepo {
 	if err != nil {
 		return nil
 	}
-	repo := &wikiImportRepo{root: root, ref: ref, files: map[string]bool{}, dirs: map[string]bool{}, shas: map[string]string{}}
+	name := filepath.Base(root)
+	if origin, err := wikiImportGit(root, "remote", "get-url", "origin"); err == nil && origin != "" {
+		name = strings.TrimSuffix(filepath.Base(strings.TrimRight(origin, "/")), ".git")
+	}
+	repo := &wikiImportRepo{root: root, ref: ref, name: name, files: map[string]bool{}, dirs: map[string]bool{}, shas: map[string]string{}}
 	for _, file := range strings.Split(listing, "\n") {
 		if file == "" {
 			continue
@@ -1864,18 +1871,23 @@ func (r *wikiImportRepo) anchors(raw interface{}) []interface{} {
 	return wikiImportCap(out)
 }
 
-// path is a path the model named, relative to the repository, when its main line has it.
+// path is a path the model named, relative to the repository, when its main line has it. An
+// absolute one is read inside this checkout, an Orbit worktree, or any directory named for the
+// repository: /root/orbit/src/x reads src/x.
 func (r *wikiImportRepo) path(raw string) (string, bool) {
 	path := strings.Trim(strings.TrimSpace(raw), "`\"'")
 	path = wikiImportLineSuffix.ReplaceAllString(path, "")
-	if strings.HasPrefix(path, r.root+"/") {
+	switch {
+	case strings.HasPrefix(path, r.root+"/"):
 		path = strings.TrimPrefix(path, r.root+"/")
+	case wikiImportWorktreePrefix.MatchString(path):
+		path = wikiImportWorktreePrefix.ReplaceAllString(path, "")
+	case strings.HasPrefix(path, "/") || strings.HasPrefix(path, "~/"):
+		if at := strings.Index(path, "/"+r.name+"/"); r.name != "" && at >= 0 {
+			path = path[at+len(r.name)+2:]
+		}
 	}
-	path = wikiImportWorktreePrefix.ReplaceAllString(path, "")
-	for _, prefix := range []string{"~/orbit/", "/root/orbit/", "./"} {
-		path = strings.TrimPrefix(path, prefix)
-	}
-	path = strings.TrimSuffix(path, "/")
+	path = strings.TrimSuffix(strings.TrimPrefix(path, "./"), "/")
 	if path == "" || strings.HasPrefix(path, "/") {
 		return "", false
 	}

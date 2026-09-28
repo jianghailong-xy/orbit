@@ -262,6 +262,8 @@ func wikiImportTestRepo(t *testing.T) string {
 	}
 	for _, args := range [][]string{
 		{"init", "-q"},
+		// Named as the repository a note's absolute paths name it: /root/orbit/docs/guide.md.
+		{"remote", "add", "origin", "https://github.com/wikova/orbit.git"},
 		{"add", "."},
 		{"-c", "user.email=spec@orbit.invalid", "-c", "user.name=spec", "commit", "-q", "-m", "the repository"},
 	} {

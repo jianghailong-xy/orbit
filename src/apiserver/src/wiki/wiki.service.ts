@@ -3248,9 +3248,9 @@ export class WikiService {
    * session's own, or one named by id), a run event, a tool call, a task, a task comment, an approval,
    * and a commit resolved through the merge receipt that named it — and the two a maintenance run's
    * dossier cites besides (contract `maintenance.dossier.sources`): a merge receipt itself, and an
-   * owner decision, a blocker the owner resolved with a note. Everything else the contract lists
-   * belongs to a phase that does not write yet — a `note` has no row, and a `url` is an assumption's,
-   * which phase 1 refuses.
+   * owner decision, a blocker the owner resolved with a note — and a `note`, a file `orbit wiki import`
+   * registered (contract `import.source`). Everything else the contract lists belongs to a phase that
+   * does not write yet: a `url` is an assumption's, which phase 1 refuses.
    */
   private async sourceText(
     tx: Tx,

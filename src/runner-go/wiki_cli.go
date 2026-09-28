@@ -13,9 +13,10 @@ import (
 // composition inside a session. Like the MCP tools they act for the session they run in — what a
 // session may read is what its bound workspace shares, and a proposal is recorded against it — so
 // there is no headless form: at a terminal outside a session there is nowhere to read from and
-// nobody to propose as. Three verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go)
-// runs a model, which is a runner's work rather than a tool call's, and `orbit wiki dossier` and
-// `orbit wiki cursor advance` (wiki_dossier.go) are a Wiki maintenance run's, and no other session's.
+// nobody to propose as. Four verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go) and
+// `orbit wiki import` (wiki_import.go) run a model, which is a runner's work rather than a tool call's,
+// and `orbit wiki dossier` and `orbit wiki cursor advance` (wiki_dossier.go) are a Wiki maintenance
+// run's, and no other session's.
 
 const wikiHelp = `orbit wiki — read the Orbit wiki and propose to it
 
