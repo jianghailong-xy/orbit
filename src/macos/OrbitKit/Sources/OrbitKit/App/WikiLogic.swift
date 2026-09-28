@@ -747,18 +747,23 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// Proposals waiting in this space — the banner's number, as the web home's Review card counts it
     /// (the drawer's row sums every space's).
     public let proposals: Int
-    /// This space's changesets that still have something waiting in Review — the one read that ties
-    /// an op of the timeline to the run it came in, so Recently changed can fold a run into a row.
-    public let runs: [WikiChangeset]
+    /// The runs Recently changed folds, each as its own read answers it (`GET /wiki/changesets/:id`):
+    /// what their rows count and whether they offer Revert run….
+    public let runs: [WikiChangesetView]
+    /// The space's health (`GET /wiki/spaces/:id/health`, criterion 5): every active entry it holds, and
+    /// where its maintenance run stands — what the status line says. Nil when that read failed.
+    public let health: WikiSpaceHealth?
 
     public init(space: WikiSpace, spaces: [WikiSpace], entries: [WikiEntry],
-                timeline: [WikiTimelineItem], proposals: Int, runs: [WikiChangeset] = []) {
+                timeline: [WikiTimelineItem], proposals: Int, runs: [WikiChangesetView] = [],
+                health: WikiSpaceHealth? = nil) {
         self.space = space
         self.spaces = spaces
         self.entries = entries
         self.timeline = timeline
         self.proposals = proposals
         self.runs = runs
+        self.health = health
     }
 
     /// Every principle, of any status, oldest recorded first — the web's order for the owner's own
@@ -783,10 +788,24 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// The five newest changes.
     public var recentlyChanged: [WikiTimelineItem] { Array(timeline.prefix(5)) }
 
-    /// The five newest rows of Recently changed, a run folded into one row wherever Review ties its
-    /// ops to it (`wikiRecentRows(...).slice(0, 5)` on the web).
+    /// The five newest rows of Recently changed, every run folded into one row by the changeset its
+    /// items name (`wikiRecentRows(...).slice(0, 5)` on the web).
     public var recentRows: [WikiModeLogic.RecentRow] {
-        Array(WikiModeLogic.recentRows(timeline, runs: runs).prefix(5))
+        Array(WikiModeLogic.recentRows(timeline).prefix(5))
+    }
+
+    /// The runs those rows fold, by their changesets' ids — what the home reads for each one.
+    public var recentRunIDs: [String] {
+        recentRows.compactMap { row in
+            if case .run(let changesetId, _, _, _) = row { return changesetId }
+            return nil
+        }
+    }
+
+    /// One run the home read, by either spelling of its id.
+    public func run(_ id: String) -> WikiChangesetView? {
+        let key = PublicID.storageKey(id)
+        return runs.first { PublicID.storageKey($0.id) == key }
     }
 
     /// The three most used entries this week.
@@ -797,16 +816,22 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// Whether any session used the wiki in the window — the band says so rather than drawing zeros.
     public var usedThisWeek: Bool { (space.usage?.entries ?? []).contains { ($0.total ?? 0) > 0 } }
 
-    /// The line under the title: how many entries, and the commit the anchors were last verified at.
-    /// The count waiting for review is left out — the banner right below says it (mock 12 ①).
-    public var statusLine: String {
-        var parts = ["\(entries.count) \(WikiCopy.entryNoun(entries.count))"]
+    /// The line under the title, part by part: how many entries — every active one the health read
+    /// counts, else the entries read here — the commit the anchors were last verified at, and where the
+    /// maintenance run stands (mock 12 ④), as the web's status row carries them. The count waiting for
+    /// review is left out — the banner right below says it (mock 12 ①).
+    public func statusParts(now: Date) -> [WikiStatusPart] {
+        let count = health?.entries ?? entries.count
+        var parts = [WikiStatusPart("\(WikiArticleCopy.count(count)) \(WikiCopy.entryNoun(count))")]
         if let sha = space.rootCommitSha, !sha.isEmpty {
-            parts.append(WikiCopy.anchorsVerified(ref: String(sha.prefix(7)), ago: ""))
+            parts.append(WikiStatusPart(WikiCopy.anchorsVerified(ref: String(sha.prefix(7)), ago: "")))
         }
-        // Criterion 5's place: the maintenance run's part of this line — `Maintained 2h ago ✓ · 6 to
-        // catch up` and its three other looks (mock 12 ④) — is appended here, after the anchors, as
-        // the web's status row carries it.
-        return parts.joined(separator: " · ")
+        if let health { parts += WikiHealthLogic.parts(health.maintenance, now: now) }
+        return parts
     }
+
+    /// The same line as one text (`WikiHealthLogic.text`): what VoiceOver reads.
+    public func statusLine(now: Date) -> String { WikiHealthLogic.text(statusParts(now: now)) }
+
+    public var statusLine: String { statusLine(now: Date()) }
 }

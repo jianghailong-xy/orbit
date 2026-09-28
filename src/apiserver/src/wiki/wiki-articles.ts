@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import {
   toUuid,
   WIKI_ARTICLE_CATEGORIES,
+  WIKI_ARTICLE_ENTRIES_LISTED,
   WIKI_ARTICLE_KINDS,
   WIKI_ARTICLE_RULES,
   WIKI_DEFAULT_TOPICS,
@@ -22,6 +23,7 @@ import {
   type WikiArticleStats,
   type WikiArticleView,
   type WikiArticleWriteResult,
+  type WikiEntry,
   type WikiEntryKind,
   type WikiEntryStatus,
   type WikiTrust,
@@ -30,7 +32,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
-import { WikiRefusalError, type WikiPrincipal } from './wiki.service';
+import { ENTRY_SELECT, entryView, WikiRefusalError, type WikiPrincipal } from './wiki.service';
 
 /**
  * The articles (criterion 9; contracts/wiki.contract.json `articles`, migration 0317): each topic's
@@ -1225,6 +1227,17 @@ export class WikiArticles {
           : null,
       };
     });
+    // What the list under the article is (`articles.reads.article`): every entry it was written from by
+    // id, and the first WIKI_ARTICLE_ENTRIES_LISTED of them as they stand now — the cited ones first, so
+    // a cap never drops an entry a footnote names — for the page to list by kind.
+    const pool = new Set(row.entryIds);
+    const cited = [...new Set(citations.map((citation) => citation.entryId))].filter((id) => pool.has(id));
+    const listed = [...cited, ...row.entryIds.filter((id) => !cited.includes(id))].slice(0, WIKI_ARTICLE_ENTRIES_LISTED);
+    const rank = new Map(listed.map((id, i) => [id, i]));
+    const pooled = listed.length === 0
+      ? []
+      : await this.prisma.wikiEntry.findMany({ where: { ownerId, id: { in: listed } }, select: ENTRY_SELECT });
+    pooled.sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
     const lead = rows.find((candidate) => candidate.part === 0);
     const category = asCategory(topic.category);
     return {
@@ -1236,6 +1249,8 @@ export class WikiArticles {
       blocks: row.body as unknown as WikiArticleBlock[],
       footnotes,
       entryCount: row.entryIds.length,
+      entryIds: row.entryIds,
+      entries: pooled.map(entryView) as unknown as WikiEntry[],
       chars: (row.stats as unknown as WikiArticleStats).chars ?? 0,
       generatedAt: row.generatedAt.toISOString(),
       ref: row.ref,

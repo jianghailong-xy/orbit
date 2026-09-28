@@ -116,7 +116,6 @@ public enum WikiModeCopy {
     public static let runAdded = "Added"                                          // WIKI_RUN_ADDED
     public static let runAmended = "Amended"                                      // WIKI_RUN_AMENDED
     public static let runReinforced = "Reinforced"                                // WIKI_RUN_REINFORCED
-    public static let noSuchRun = "This run is not waiting in Review any more, so it cannot be opened here."
     /// A group's rows past the first few (`wikiShowMore`, `WIKI_SHOW_LESS`).
     public static func showMore(_ count: Int) -> String { "Show \(count) more" }
     public static let showLess = "Show less"
@@ -289,16 +288,12 @@ public enum WikiModeLogic {
         return (op.decision == .pending && op.spotCheck == true) || op.decision == .accepted || op.decision == .edited
     }
 
-    /// Whether Revert takes an op back: applied by the mode, an add or an amend, unanswered (`wikiOpRevertible`).
-    public static func opRevertible(_ op: WikiChangesetOp) -> Bool {
-        guard op.appliedByMode != nil, op.op == .add || op.op == .amend else { return false }
-        return op.decision == .autoApplied || (op.decision == .pending && op.spotCheck == true)
-    }
+    /// Whether a changeset is a run a person can take back: some op of it was applied by its review mode,
+    /// which its read says as `appliedByMode` and the timeline as each item's `changesetAppliedByMode`
+    /// (`wikiIsRun`).
+    public static func isRun(appliedByMode: WikiReviewMode?) -> Bool { appliedByMode != nil }
 
-    /// Whether a changeset is a run a person can take back: something in it was applied by its mode.
-    public static func isRun(_ changeset: WikiChangeset) -> Bool {
-        (changeset.ops ?? []).contains { $0.appliedByMode != nil }
-    }
+    public static func isRun(_ run: WikiChangesetView) -> Bool { isRun(appliedByMode: run.appliedByMode) }
 
     /// One entry a run changed, as its page lists it.
     public struct RunRow: Equatable, Sendable, Identifiable {
@@ -306,12 +301,14 @@ public enum WikiModeLogic {
         public let entryId: String?
         public let title: String
         public let summary: String
-        /// The entry's trust as it stands now, else what the op's verdict applied it with.
+        /// The entry's trust as it stands now — none once it has ended — else what the op's verdict
+        /// applied it with.
         public let trust: WikiTrust?
         public var id: String { op.id }
     }
 
-    /// What one run did (`WikiRunSummary`).
+    /// What one run did (`WikiRunSummary`): the server's counts, its entries grouped, and what Revert
+    /// run… would undo.
     public struct RunSummary: Equatable, Sendable {
         public var applied = 0
         public var auto = 0
@@ -321,32 +318,32 @@ public enum WikiModeLogic {
         public var added: [RunRow] = []
         public var amended: [RunRow] = []
         public var reinforced: [RunRow] = []
+        /// Whether the server says Revert run… would take anything back now.
+        public var revertible = false
         public var revertAdds = 0
         public var revertAmends = 0
 
-        public var revertible: Int { revertAdds + revertAmends }
+        /// How many changes the revert undoes, as its dialog says.
+        public var revertTotal: Int { revertAdds + revertAmends }
     }
 
-    /// One run, counted, and its entries grouped Added / Amended / Reinforced (`wikiRunSummary`).
-    /// `entries` are the ones the page holds, keyed by any spelling of their id.
-    public static func runSummary(_ changeset: WikiChangeset, entries: [WikiEntry]) -> RunSummary {
+    /// One run as its read answers it: the server's counts and what Revert would undo, and its entries
+    /// grouped Added / Amended / Reinforced (`wikiRunSummary`).
+    public static func runSummary(_ run: WikiChangesetView) -> RunSummary {
         var byID: [String: WikiEntry] = [:]
-        for entry in entries { byID[PublicID.storageKey(entry.id)] = entry }
+        for entry in run.entries { byID[PublicID.storageKey(entry.id)] = entry }
         var summary = RunSummary()
-        for op in (changeset.ops ?? []).sorted(by: { ($0.seq ?? 0) < ($1.seq ?? 0) }) {
-            if op.decision == .pending { summary.toReview += 1 }
-            let verdict = op.verification?.verdict
-            if op.decision == .rejected && (verdict == .unsupported || verdict == .duplicate) { summary.rejectedByCheck += 1 }
-            if opRevertible(op) {
-                if op.op == .add { summary.revertAdds += 1 } else { summary.revertAmends += 1 }
-            }
+        summary.applied = run.counts.applied
+        summary.auto = run.counts.auto
+        summary.unreviewed = run.counts.unreviewed
+        summary.rejectedByCheck = run.counts.rejectedByCheck
+        summary.toReview = run.counts.toReview
+        summary.revertible = run.revertible
+        summary.revertAdds = run.revert?.adds ?? 0
+        summary.revertAmends = run.revert?.amends ?? 0
+        for op in (run.changeset.ops ?? []).sorted(by: { ($0.seq ?? 0) < ($1.seq ?? 0) }) {
             guard opApplied(op) else { continue }
-            summary.applied += 1
             let row = runRow(op, byID)
-            if op.op == .add || op.op == .amend {
-                if row.trust == .auto { summary.auto += 1 }
-                if row.trust == .unreviewed { summary.unreviewed += 1 }
-            }
             switch op.op {
             case .add?:       summary.added.append(row)
             case .amend?:     summary.amended.append(row)
@@ -367,10 +364,15 @@ public enum WikiModeLogic {
         case .partial?:   verdictTrust = .unreviewed
         default:          verdictTrust = nil
         }
+        // An entry that has ended since (retired with its run, rejected) wears no mark.
+        let trust: WikiTrust?
+        if let entry { trust = entry.status == .active ? entry.trust : nil } else {
+            trust = op.tainted == true && verdictTrust != nil ? .unreviewed : verdictTrust
+        }
         return RunRow(op: op, entryId: entryId,
                       title: entry?.title ?? draft?["title"]?.stringValue ?? "—",
                       summary: entry?.summary ?? draft?["summary"]?.stringValue ?? "",
-                      trust: entry?.trust ?? (op.tainted == true && verdictTrust != nil ? .unreviewed : verdictTrust))
+                      trust: trust)
     }
 
     /// The run's counts in a line (`wikiRunCounts`).
@@ -385,7 +387,7 @@ public enum WikiModeLogic {
 
     /// What the Revert dialog says it will do (`wikiRevertBody`).
     public static func revertBody(_ summary: RunSummary) -> String {
-        let total = summary.revertible
+        let total = summary.revertTotal
         var clauses: [String] = []
         if summary.revertAdds > 0 {
             clauses.append("\(summary.revertAdds) added \(summary.revertAdds == 1 ? "entry is" : "entries are") withdrawn")
@@ -400,39 +402,37 @@ public enum WikiModeLogic {
 
     // MARK: Recently changed
 
-    /// A row of Recently changed: one op, or every op of a run the page can open (`WikiRecentRow`).
+    /// A row of Recently changed: one op, or every op of a run, which opens by its changeset's id
+    /// (`WikiRecentRow`).
     public enum RecentRow: Equatable, Sendable, Identifiable {
         case op(WikiTimelineItem)
-        case run(changeset: WikiChangeset, at: String?, items: [WikiTimelineItem])
+        case run(changesetId: String, origin: WikiChangesetOrigin?, at: String?, items: [WikiTimelineItem])
 
         public var id: String {
             switch self {
-            case .op(let item):               return "op:\(item.opId)"
-            case .run(let changeset, _, _):   return "run:\(changeset.id)"
+            case .op(let item):                       return "op:\(item.opId)"
+            case .run(let changesetId, _, _, _):      return "run:\(PublicID.storageKey(changesetId))"
             }
         }
     }
 
-    /// The feed with each run folded into one row at the place of its newest change, for the runs
-    /// Review ties to their ops (`wikiRecentRows`).
-    public static func recentRows(_ items: [WikiTimelineItem], runs: [WikiChangeset]) -> [RecentRow] {
-        var runOf: [String: WikiChangeset] = [:]
-        for changeset in runs where isRun(changeset) {
-            for op in changeset.ops ?? [] { runOf[op.id] = changeset }
-        }
+    /// The feed with every run folded into one row at the place of its newest change, by the changeset
+    /// each item names; an op of no run stays a row of its own (`wikiRecentRows`).
+    public static func recentRows(_ items: [WikiTimelineItem]) -> [RecentRow] {
         var rows: [RecentRow] = []
         var at: [String: Int] = [:]
         for item in items {
-            guard let changeset = runOf[item.opId] else {
+            guard let changesetId = item.changesetId, isRun(appliedByMode: item.changesetAppliedByMode) else {
                 rows.append(.op(item))
                 continue
             }
-            if let index = at[changeset.id], case .run(let run, let when, let held) = rows[index] {
-                rows[index] = .run(changeset: run, at: when, items: held + [item])
+            let key = PublicID.storageKey(changesetId)
+            if let index = at[key], case .run(let id, let origin, let when, let held) = rows[index] {
+                rows[index] = .run(changesetId: id, origin: origin, at: when, items: held + [item])
                 continue
             }
-            at[changeset.id] = rows.count
-            rows.append(.run(changeset: changeset, at: item.at, items: [item]))
+            at[key] = rows.count
+            rows.append(.run(changesetId: changesetId, origin: item.origin, at: item.at, items: [item]))
         }
         return rows
     }

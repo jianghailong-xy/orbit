@@ -86,8 +86,13 @@ const MOCKUPS = entry({ kind: 'convention', title: '改 UI 先给效果图、分
 const CHROMIUM = entry({ kind: 'recipe', title: '用 chromium headless 渲染 mock HTML 生成 PNG 效果图', summary: '在 Linux 环境下写成 HTML 文件，再截图。' });
 const EXTRACT = entry({ kind: 'pitfall', title: 'extractStyle 输出再包一层 <style> 会吃掉首条规则', trust: 'unreviewed' });
 const DOCS = entry({ kind: 'convention', title: 'UI 效果图按仓库惯例放进 docs/mocks/', validFrom: '2026-09-26T00:00:00.000Z' });
+/** Written from, though it names another topic: the article's pool is its own, not the topic read's. */
+const ELSEWHERE = entry({ kind: 'pitfall', title: 'Popover 的箭头要 pointAtCenter', topics: ['web-client'], validFrom: '2026-09-22T00:00:00.000Z' });
+/** Filed under the topic, but not what this article was written from. */
+const TOPIC_ONLY = entry({ kind: 'recipe', title: '只在主题读里的条目' });
 const GONE_ID = uuid();
 const TOPIC_ENTRIES = [MOCKUPS, CHROMIUM, EXTRACT, DOCS];
+const POOL = [MOCKUPS, CHROMIUM, EXTRACT, DOCS, ELSEWHERE];
 
 const ARTICLE: WikiArticleView = {
   spaceId: SPACE_ID,
@@ -111,7 +116,9 @@ const ARTICLE: WikiArticleView = {
     { n: 3, entryId: EXTRACT.id, revision: 1, entry: { id: EXTRACT.id, kind: 'pitfall', title: EXTRACT.title, summary: EXTRACT.summary, status: 'active', trust: 'unreviewed', currentRevision: 1 } },
     { n: 4, entryId: GONE_ID, revision: 2, entry: null },
   ],
-  entryCount: 59,
+  entryCount: POOL.length,
+  entryIds: POOL.map((row) => row.id),
+  entries: POOL,
   chars: 612,
   generatedAt: '2026-09-27T03:10:00.000Z',
   ref: '1588c3bd26383b0b56244e975f8403b15b88a42d',
@@ -147,7 +154,7 @@ async function serve(url: string): Promise<Response> {
   if (path === `${space}/articles/ui-design/1`) return reply(200, ARTICLE);
   if (path.startsWith(`${space}/articles/`)) return reply(404, { message: 'this topic has no article yet' });
   if (path === `${space}/topics/ui-design`) {
-    return reply(200, { slug: 'ui-design', title: 'UI 设计', description: null, declared: true, entryCount: 4, entries: TOPIC_ENTRIES });
+    return reply(200, { slug: 'ui-design', title: 'UI 设计', description: null, declared: true, entryCount: 5, entries: [...TOPIC_ENTRIES, TOPIC_ONLY] });
   }
   if (path === `${space}/topics/tasks`) {
     return reply(200, { slug: 'tasks', title: '任务与派发', description: null, declared: true, entryCount: 1, entries: [entry({ title: 'Tasks start from a fact', topics: ['tasks'] })] });
@@ -272,8 +279,8 @@ describe("a topic's article", () => {
 
     expect(text('.wk-crumb a', art)).toEqual(['Wiki', 'Clients & UI', 'UI 设计']);
     expect(text('.wk-art-title', art)).toEqual(['Orbit 仓库 UI 效果图生成与验收规范']);
-    expect(text('.wk-tag', art)).toEqual(['Clients & UI', 'UI 设计', '2 conventions', '1 pitfall', '1 recipe']);
-    expect(text('.wk-art-updated', art)[0]).toMatch(/^Updated Sep 2[78] at 1588c3b · written by Wiki maintenance from 59 entries$/);
+    expect(text('.wk-tag', art)).toEqual(['Clients & UI', 'UI 设计', '2 conventions', '2 pitfalls', '1 recipe']);
+    expect(text('.wk-art-updated', art)[0]).toMatch(/^Updated Sep 2[78] at 1588c3b · written by Wiki maintenance from 5 entries$/);
     // A heading over every block but the lead; a footnote run after every sentence.
     expect(text('.wk-art h2', art)).toEqual(['常见陷阱']);
     expect(text('.wk-art .wk-fn', art)).toEqual(['[1]', '[2][3]', '[3][4]']);
@@ -295,14 +302,18 @@ describe("a topic's article", () => {
     expect(list.querySelector('a')?.getAttribute('href')).toBe(`/wiki/orbit/e/${encodeId(MOCKUPS.id)}`);
   });
 
-  it("puts the topic's entries under it by kind, what the article cites leading each group", async () => {
+  it('puts the entries it was written from under it by kind, what the article cites leading each group', async () => {
     await open('/wiki/orbit/t/ui-design/1');
     await vi.waitFor(() => expect(page()?.querySelector('.wk-art-entries .wk-sec')).toBeTruthy());
     const entries = page().querySelector('.wk-art-entries')!;
-    expect(text('.wk-art-entries-h', entries)).toEqual(['Entries 4 filed under this topic, by kind']);
+    expect(text('.wk-art-entries-h', entries)).toEqual(['Entries the 5 this article is written from, by kind']);
     expect(text('.wk-sec-h h3', entries)).toEqual(['Principles & conventions', 'Pitfalls', 'Recipes']);
     // The convention the article cites leads its group, ahead of the newer one it does not.
     expect(text('.wk-sec:first-of-type .wk-row-t .tt', entries)).toEqual([MOCKUPS.title, DOCS.title]);
+    // The pool is the article's: an entry of another topic it was written from is listed, one the topic
+    // read holds that it was not written from is not.
+    expect(text('.wk-sec:nth-of-type(2) .wk-row-t .tt', entries)).toEqual([EXTRACT.title, ELSEWHERE.title]);
+    expect(entries.textContent).not.toContain(TOPIC_ONLY.title);
     expect(text('.tdp-badge', entries)).toContain('Unreviewed');
     expect(text('.tdp-badge', entries)).toContain('Auto');
   });

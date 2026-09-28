@@ -142,6 +142,9 @@ suite("a shared pool page's next key, running keys and session counts — on rea
   async function next(who: Person): Promise<string[]> {
     const marked = (await view(who)).keys.filter((key) => key.next).map((key) => key.label);
     const { ownKeyFirst } = await db.providerPool.findUniqueOrThrow({ where: { id: poolId } });
+    // One clock for both sides of the comparison: the candidates are filtered by it and the claim
+    // is asked with it, so a key crossing its budget window between two `new Date()`s cannot make
+    // the fixture's two answers disagree for a reason that is not the product's.
     const now = new Date();
     const candidates = await sharedPoolKeyCandidates(db, poolId, now);
     const chosen = choosePoolKey(candidates, who.id, ownKeyFirst, null, now);

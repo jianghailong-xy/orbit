@@ -39,6 +39,10 @@ final class WikiModel {
     private(set) var missingArticles: Set<WikiArticleAddress> = []
     private(set) var failedArticles: Set<WikiArticleAddress> = []
     private(set) var topicEntries: [String: [WikiEntry]] = [:]
+    /// The run pages read so far, each by its own read (`GET /wiki/changesets/:id`), and the ones the
+    /// server does not know — by storage key.
+    private(set) var runs: [String: WikiChangesetView] = [:]
+    private(set) var missingRuns: Set<String> = []
 
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
@@ -103,7 +107,8 @@ final class WikiModel {
         }
     }
 
-    /// The spaces, then the four reads the home page is drawn from, side by side.
+    /// The spaces, then the four reads the home page is drawn from, side by side — and then each run
+    /// Recently changed folds, by its own read.
     func loadHome() async {
         homeState.begin()
         await loadSpaces()
@@ -115,20 +120,25 @@ final class WikiModel {
         async let documentRead = api.wikiSpace(space.id)
         async let entriesRead = api.wikiEntries(spaceID: space.id)
         async let timelineRead = api.wikiTimeline(spaceID: space.id)
-        // This space's queue: the one read that ties a timeline op to the run it came in, so Recently
-        // changed can fold a run into one row and open its page.
-        async let runsRead = api.wikiReview(spaceID: space.id)
+        async let healthRead = api.wikiHealth(spaceID: space.id)
         do {
             let document = try await documentRead
             let entries = try await entriesRead
             // The timeline is one band of six; the page still draws without it.
             let timeline = try? await timelineRead
-            let runs = (try? await runsRead) ?? []
+            // The status line's count and maintenance part (criterion 5); without it the line says what
+            // the entries read here count, and nothing of maintenance.
+            let health = try? await healthRead
+            // Every item names its changeset: the runs among the rows are read by their ids, whether or
+            // not anything of them still waits in Review. A run whose read failed keeps its row.
+            let base = WikiHomeContent(space: document, spaces: spaces, entries: entries,
+                                       timeline: timeline?.items ?? [], proposals: space.pendingOps ?? 0)
+            let runs = await readRuns(base.recentRunIDs)
             // Another space was picked while this one was reading: its own read owns the page.
             guard currentSpace?.id == space.id else { return }
-            let content = WikiHomeContent(space: document, spaces: spaces, entries: entries,
-                                          timeline: timeline?.items ?? [], proposals: space.pendingOps ?? 0,
-                                          runs: runs)
+            let content = WikiHomeContent(space: base.space, spaces: base.spaces, entries: base.entries,
+                                          timeline: base.timeline, proposals: base.proposals, runs: runs,
+                                          health: health)
             if content != home { home = content }
             homeState.succeed()
         } catch {
@@ -268,6 +278,7 @@ final class WikiModel {
         if directory != nil { await loadDirectory() }
         if articleIndex != nil { await loadArticleIndex() }
         for address in Array(articles.keys) { await loadArticle(address) }
+        for key in Array(runs.keys) { await loadRun(key) }
         if reviewState.hasLoaded { await loadReview() }
         for key in Array(onScreen.keys) { await loadEntry(key) }
     }
@@ -345,20 +356,49 @@ final class WikiModel {
 
     // MARK: one run
 
-    /// A run by either spelling of its id: this space's, read with the home, else any space's queue.
-    func run(_ id: String) -> WikiChangeset? {
+    /// Runs by their own reads, side by side; one whose read fails is left out.
+    private func readRuns(_ ids: [String]) async -> [WikiChangesetView] {
+        let api = self.api
+        return await withTaskGroup(of: (Int, WikiChangesetView?).self) { group in
+            for (index, id) in ids.enumerated() {
+                group.addTask { (index, try? await api.wikiChangeset(id)) }
+            }
+            var read: [(Int, WikiChangesetView)] = []
+            for await (index, view) in group { if let view { read.append((index, view)) } }
+            return read.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+    }
+
+    /// A run by either spelling of its id: its page's own read, else the one the home read.
+    func run(_ id: String) -> WikiChangesetView? {
+        runs[PublicID.storageKey(id)] ?? home?.run(id)
+    }
+
+    /// Whether the server does not know the run: another account's, or none at all.
+    func isMissingRun(_ id: String) -> Bool { missingRuns.contains(PublicID.storageKey(id)) }
+
+    /// One run's page, read by its id (`GET /wiki/changesets/:id`), whatever of it waits in Review.
+    func loadRun(_ id: String) async {
         let key = PublicID.storageKey(id)
-        return (home?.runs ?? []).first { PublicID.storageKey($0.id) == key }
-            ?? review.first { PublicID.storageKey($0.id) == key }
+        do {
+            let read = try await api.wikiChangeset(id)
+            missingRuns.remove(key)
+            if runs[key] != read { runs[key] = read }
+        } catch APIError.http(let status, _) where status == 404 {
+            missingRuns.insert(key)
+        } catch {
+            // Keep what is on screen; the next nudge reads it again.
+        }
     }
 
     /// Revert run: every op its review mode applied that nobody has answered, taken back at once.
-    func revert(_ changeset: WikiChangeset) async -> String? {
+    func revert(_ run: WikiChangesetView) async -> String? {
         busy = true
         defer { busy = false }
         do {
-            _ = try await api.revertWikiChangeset(changeset.id)
+            _ = try await api.revertWikiChangeset(run.id)
             await reloadAfterWrite()
+            await loadRun(run.id)
             return nil
         } catch {
             return Self.refusal(error)

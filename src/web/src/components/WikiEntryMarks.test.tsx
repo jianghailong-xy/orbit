@@ -15,7 +15,9 @@ import { WikiEntryDrawer } from './WikiEntryDrawer';
  * it's used says an Unreviewed entry is not sent.
  *
  * The two answers are read off the wire: `POST /api/wiki/entries/:id/confirm` and
- * `POST /api/wiki/entries/:id/reject` with the reason picked from the menu.
+ * `POST /api/wiki/entries/:id/reject` with the reason picked from the menu. The bar's second line is the
+ * entry read's own `verification` — the verdict its current revision was applied on — and Review, which
+ * answers empty here, is not where it comes from.
  */
 
 const ENTRY_ID = '0196b400-0000-7000-8000-000000000001';
@@ -203,6 +205,34 @@ describe('an entry a review mode applied', () => {
     const bar = container.querySelector('.wk-markbar')!;
     expect(bar.className).toContain('tone-amber');
     expect(bar.textContent).toContain('Web-derived · this session read web pages before proposing. Confirming shows it to agents.');
+  });
+
+  const VERDICT = {
+    verdict: 'partial' as const,
+    reason: 'The cited record says part of it.',
+    model: 'qwen3.8-27b-fp8',
+    at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+    duplicateOf: null,
+    evidence: 'readable' as const,
+  };
+
+  it('says who checked it and what they said, from the entry read, with nothing of it waiting in Review', async () => {
+    await mount({ changesetId: 'run-1', appliedByMode: 'automatic', verification: VERDICT });
+    expect(container.querySelector('.wk-markbar .wk-markbar-line')?.textContent).toBe(
+      'Checked by qwen3.8-27b-fp8: partly supported · Wiki maintenance, 2h ago',
+    );
+  });
+
+  it('Web-derived: says the verdict, and that it went no further than Unreviewed', async () => {
+    await mount({ tainted: true, changesetId: 'run-1', appliedByMode: 'automatic', verification: { ...VERDICT, verdict: 'supported' } });
+    expect(container.querySelector('.wk-markbar .wk-markbar-line')?.textContent).toBe(
+      'Checked by qwen3.8-27b-fp8: supported · capped at Unreviewed · Wiki maintenance, 2h ago',
+    );
+  });
+
+  it('no verdict — a Tiered entry — and the line says who applied it and when, and nothing more', async () => {
+    await mount({ changesetId: 'run-2', appliedByMode: 'tiered', verification: null });
+    expect(container.querySelector('.wk-markbar .wk-markbar-line')?.textContent).toBe('Wiki maintenance, 2h ago');
   });
 
   it('what the owner wrote or confirmed offers neither answer and no bar', async () => {

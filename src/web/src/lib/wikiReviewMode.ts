@@ -9,16 +9,18 @@
  * which both clients are proved against. The words are the mocks' (docs/mocks/wiki 17–20), as the
  * owner confirmed them on 2026-09-28.
  *
- * WHAT THE SERVER DOES NOT SAY YET, these readings leave out rather than invent: how many sessions a
- * run read and on which provider, whether a run was reverted, and the verdict behind an entry nobody
- * put in Review. The page draws the fact when it has it and nothing in its place when it does not.
+ * A RUN IS READ BY ITS OWN ID (`GET /api/wiki/changesets/:id`, contract `reviewModes.run`), whatever of
+ * it still waits in Review: the server counts what it did and says whether Revert run… would take
+ * anything back, so every run — an Automatic one nothing of which waits anywhere included — folds into
+ * one row, opens and reverts. What the server does not say yet, these readings leave out rather than
+ * invent: how many sessions a run read and on which provider.
  */
 import {
   WIKI_LIMITS,
   WIKI_REVIEW_RULES,
   type WikiAnchor,
-  type WikiChangeset,
   type WikiChangesetOp,
+  type WikiChangesetView,
   type WikiEntry,
   type WikiReviewMode,
   type WikiSpaceSettings,
@@ -231,8 +233,6 @@ export const WIKI_OPEN_SESSION = 'Open session';
 export const WIKI_RUN_ADDED = 'Added';
 export const WIKI_RUN_AMENDED = 'Amended';
 export const WIKI_RUN_REINFORCED = 'Reinforced';
-/** A run nobody can open here any more: it settled, or it was never this space's. */
-export const WIKI_NO_SUCH_RUN = 'This run is not waiting in Review any more, so it cannot be opened here.';
 
 /** Who a run was, as its page's kicker and its Recently changed row name it. */
 export const WIKI_ORIGIN_WORDS: Record<string, string> = {
@@ -262,11 +262,14 @@ export interface WikiRunRow {
   entryId: string | null;
   title: string;
   summary: string;
-  /** The entry's trust as it stands now, else what the op's verdict applied it with. */
+  /** The entry's trust as it stands now — none once it has ended — else what the op's verdict applied it with. */
   trust: WikiTrust | null;
 }
 
-/** What one run did, as its page and its Recently changed row count it. */
+/**
+ * What one run did, as its page and its Recently changed row say it: the server's counts, its entries
+ * grouped Added / Amended / Reinforced, and what Revert run… would undo.
+ */
 export interface WikiRunSummary {
   /** Every op whose effect the run left standing: what the mode applied, and what applied by itself. */
   applied: number;
@@ -277,7 +280,9 @@ export interface WikiRunSummary {
   added: WikiRunRow[];
   amended: WikiRunRow[];
   reinforced: WikiRunRow[];
-  /** What Revert would undo: the adds and amends the mode applied that nobody has answered. */
+  /** Whether the server says Revert run… would take anything back now. */
+  revertible: boolean;
+  /** What it would undo, as the server counts it by the revert's own rules. */
   revertAdds: number;
   revertAmends: number;
 }
@@ -289,51 +294,33 @@ export function wikiOpApplied(op: Pick<WikiChangesetOp, 'decision' | 'spotCheck'
   return (op.decision === 'pending' && op.spotCheck) || op.decision === 'accepted' || op.decision === 'edited';
 }
 
-/** Whether Revert takes an op back (contract `reviewModes.revert`): applied by the mode, unanswered. */
-export function wikiOpRevertible(op: Pick<WikiChangesetOp, 'op' | 'decision' | 'spotCheck' | 'appliedByMode'>): boolean {
-  if (op.appliedByMode === null || op.appliedByMode === undefined) return false;
-  if (op.op !== 'add' && op.op !== 'amend') return false;
-  return op.decision === 'auto_applied' || (op.decision === 'pending' && op.spotCheck);
-}
-
-/** Whether a changeset is a run a person can take back: something in it was applied by its mode. */
-export function wikiIsRun(changeset: Pick<WikiChangeset, 'ops'>): boolean {
-  return changeset.ops.some((op) => op.appliedByMode !== null && op.appliedByMode !== undefined);
+/**
+ * Whether a changeset is a run a person can take back: some op of it was applied by its review mode —
+ * which the server says as the changeset's `appliedByMode`, and the timeline as each item's
+ * `changesetAppliedByMode`.
+ */
+export function wikiIsRun(changeset: { appliedByMode?: string | null }): boolean {
+  return changeset.appliedByMode !== null && changeset.appliedByMode !== undefined;
 }
 
 /**
- * One run, counted: what it applied and with which mark, what the check turned away, and what waits
- * in Review — and its entries grouped Added / Amended / Reinforced, as its page lists them.
+ * One run as its read answers it: the server's counts and what Revert would undo, and its entries
+ * grouped Added / Amended / Reinforced, as its page lists them.
  */
-export function wikiRunSummary(changeset: WikiChangeset, entries: ReadonlyMap<string, WikiEntry>): WikiRunSummary {
-  const ops = [...changeset.ops].sort((a, b) => a.seq - b.seq);
+export function wikiRunSummary(changeset: WikiChangesetView): WikiRunSummary {
+  const entries = new Map(changeset.entries.map((entry) => [entry.id, entry]));
   const summary: WikiRunSummary = {
-    applied: 0,
-    auto: 0,
-    unreviewed: 0,
-    rejectedByCheck: 0,
-    toReview: 0,
+    ...changeset.counts,
     added: [],
     amended: [],
     reinforced: [],
-    revertAdds: 0,
-    revertAmends: 0,
+    revertible: changeset.revertible,
+    revertAdds: changeset.revert?.adds ?? 0,
+    revertAmends: changeset.revert?.amends ?? 0,
   };
-  for (const op of ops) {
-    if (op.decision === 'pending') summary.toReview += 1;
-    const verdict = op.verification?.verdict;
-    if (op.decision === 'rejected' && (verdict === 'unsupported' || verdict === 'duplicate')) summary.rejectedByCheck += 1;
-    if (wikiOpRevertible(op)) {
-      if (op.op === 'add') summary.revertAdds += 1;
-      else summary.revertAmends += 1;
-    }
+  for (const op of [...changeset.ops].sort((a, b) => a.seq - b.seq)) {
     if (!wikiOpApplied(op)) continue;
-    summary.applied += 1;
     const row = runRow(op, entries);
-    if (op.op === 'add' || op.op === 'amend') {
-      if (row.trust === 'auto') summary.auto += 1;
-      if (row.trust === 'unreviewed') summary.unreviewed += 1;
-    }
     if (op.op === 'add') summary.added.push(row);
     else if (op.op === 'amend') summary.amended.push(row);
     else if (op.op === 'reinforce') summary.reinforced.push(row);
@@ -353,7 +340,8 @@ function runRow(op: WikiChangesetOp, entries: ReadonlyMap<string, WikiEntry>): W
     entryId: entryId ?? null,
     title: entry?.title ?? (typeof draft.title === 'string' ? draft.title : '—'),
     summary: entry?.summary ?? (typeof draft.summary === 'string' ? draft.summary : ''),
-    trust: entry?.trust ?? (op.tainted && verdictTrust ? 'unreviewed' : verdictTrust),
+    // An entry that has ended since (retired with its run, rejected) wears no mark: nothing it was applied with stands.
+    trust: entry ? (entry.status === 'active' ? entry.trust : null) : op.tainted && verdictTrust ? 'unreviewed' : verdictTrust,
   };
 }
 
@@ -389,43 +377,44 @@ export function wikiRevertBody(summary: Pick<WikiRunSummary, 'revertAdds' | 'rev
 
 // ── Recently changed: one run is one row ────────────────────────────────────────────────────────
 
-/** A row of Recently changed: one op, or every op of a run the page can open. */
-export type WikiRecentRow<T extends { opId: string }> =
+/** What the fold reads of a timeline item: the op, when, and the changeset it came in (`WikiTimelineItem`). */
+export interface WikiRecentItem {
+  opId: string;
+  at: string;
+  origin: string;
+  changesetId?: string | null;
+  changesetAppliedByMode?: string | null;
+}
+
+/** A row of Recently changed: one op, or every op of a run, which opens by its changeset's id. */
+export type WikiRecentRow<T extends WikiRecentItem> =
   | { kind: 'op'; item: T }
-  | { kind: 'run'; changeset: WikiChangeset; at: string; items: T[] };
+  | { kind: 'run'; changesetId: string; origin: string; at: string; items: T[] };
 
 /**
  * The feed with each run folded into one row, at the place of its newest change.
  *
- * A RUN IS FOLDED ONLY WHEN THE PAGE HAS IT: the timeline names ops, not the changeset they came in,
- * so the one read that ties an op to its run is Review's — which holds the runs that still have
- * something waiting there (a spot check, or an op the floors kept for the owner). Every other op
- * stays a row of its own, as it always was.
+ * EVERY RUN FOLDS: each item names its changeset and the review mode that applied any of it (contract
+ * `reviewModes.run.timeline`), so an op some mode's run applied joins that run's row whether or not
+ * anything of the run still waits in Review. An op of no run — the owner's own write, a proposal the
+ * owner accepted, a revert — stays a row of its own.
  */
-export function wikiRecentRows<T extends { opId: string; at: string }>(
-  items: readonly T[],
-  runs: readonly WikiChangeset[],
-): Array<WikiRecentRow<T>> {
-  const runOf = new Map<string, WikiChangeset>();
-  for (const changeset of runs) {
-    if (!wikiIsRun(changeset)) continue;
-    for (const op of changeset.ops) runOf.set(op.id, changeset);
-  }
+export function wikiRecentRows<T extends WikiRecentItem>(items: readonly T[]): Array<WikiRecentRow<T>> {
   const rows: Array<WikiRecentRow<T>> = [];
-  const folded = new Map<string, { kind: 'run'; changeset: WikiChangeset; at: string; items: T[] }>();
+  const folded = new Map<string, { kind: 'run'; changesetId: string; origin: string; at: string; items: T[] }>();
   for (const item of items) {
-    const changeset = runOf.get(item.opId);
-    if (!changeset) {
+    const changesetId = item.changesetId ?? null;
+    if (!changesetId || !wikiIsRun({ appliedByMode: item.changesetAppliedByMode })) {
       rows.push({ kind: 'op', item });
       continue;
     }
-    const row = folded.get(changeset.id);
+    const row = folded.get(changesetId);
     if (row) {
       row.items.push(item);
       continue;
     }
-    const created = { kind: 'run' as const, changeset, at: item.at, items: [item] };
-    folded.set(changeset.id, created);
+    const created = { kind: 'run' as const, changesetId, origin: item.origin, at: item.at, items: [item] };
+    folded.set(changesetId, created);
     rows.push(created);
   }
   return rows;

@@ -11,6 +11,7 @@ import { WikiContentsButton, WikiContentsProvider, WikiDirectory, type WikiDirec
 import { WikiEntryDrawer } from '../components/WikiEntryDrawer';
 import { WikiHome } from '../components/WikiHome';
 import { WikiIndexPage } from '../components/WikiIndexPage';
+import { WikiMaintenanceStatus } from '../components/WikiMaintenanceStatus';
 import { WikiNewEntryButton } from '../components/WikiNewEntry';
 import { WikiReviewPage } from '../components/WikiReviewPage';
 import { WikiRunDrawer } from '../components/WikiRunPage';
@@ -18,7 +19,7 @@ import { WikiSettingsButton } from '../components/WikiSettingsButton';
 import { WikiSettingsPage } from '../components/WikiSettingsPage';
 import { openSessionSearch } from '../components/SessionSearch';
 import { wikiLinkHost } from '../components/WikiSources';
-import { wikiEntriesQuery, wikiEntryQuery, wikiSpaceQuery, wikiSpacesQuery } from '../lib/queries';
+import { wikiEntriesQuery, wikiEntryQuery, wikiHealthQuery, wikiSpaceQuery, wikiSpacesQuery } from '../lib/queries';
 import { routeId } from '../lib/idCodec';
 import {
   WIKI_DISABLED_NOTE,
@@ -33,7 +34,7 @@ import {
   wikiAnchorsVerified,
   wikiSpacePath,
 } from '../lib/wiki';
-import { wikiArticlePath } from '../lib/wikiArticles';
+import { wikiArticlePath, wikiCount } from '../lib/wikiArticles';
 
 /**
  * The Wiki's routes, and the chrome they share.
@@ -223,7 +224,7 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
         </WikiFrame>
       </div>
       <button type="button" className="wk-scrim" aria-label="Close" onClick={() => navigate(back)} />
-      <WikiRunDrawer spaceId={space.id} spaceSlug={space.slug} changesetId={changesetId} onClose={() => navigate(back)} />
+      <WikiRunDrawer spaceSlug={space.slug} changesetId={changesetId} onClose={() => navigate(back)} />
     </div>
   );
 }
@@ -251,7 +252,10 @@ function WikiFrame({
   const navigate = useNavigate();
   const spaces = useQuery(wikiSpacesQuery());
   const entries = useQuery(wikiEntriesQuery(space?.id ?? null));
-  const count = entries.data?.length ?? 0;
+  // The status line's health (criterion 5): every active entry of the space — the entry list stops at
+  // 200, so its length is the count only until the health read is in — and where maintenance stands.
+  const health = useQuery(wikiHealthQuery(space?.id ?? null));
+  const count = health.data?.entries ?? entries.data?.length ?? 0;
 
   const page = (
     <div className={`wk-page${at && at.view !== 'home' ? ' wk-page--reading' : ''}`}>
@@ -296,7 +300,7 @@ function WikiFrame({
           <div className="project-integration-row">
             <span className="project-integration-facts">
               <span>
-                <b>{count}</b> {WIKI_ENTRY_NOUN(count)}
+                <b>{wikiCount(count)}</b> {WIKI_ENTRY_NOUN(count)}
               </span>
               {/* The phone's amber banner says this one (mock 12 ①), so its status line leaves it out. */}
               <span className="wk-status-review">
@@ -311,9 +315,9 @@ function WikiFrame({
                   <span>{wikiAnchorsVerified(space.rootCommitSha.slice(0, 7), '')}</span>
                 </>
               )}
-              {/* Criterion 5's place: the maintenance run's part of this line — `Maintained 2h ago ✓ ·
-                  6 to catch up` and its three other looks (mocks 11 ②, 12 ④) — goes here, after the
-                  anchors, on every width. */}
+              {/* The maintenance run's part of this line, after the anchors, on every width (mocks 11 ②,
+                  12 ④): `Maintained 2h ago ✓ · 6 to catch up` and its other looks. */}
+              {health.data && <WikiMaintenanceStatus health={health.data.maintenance} spaceSlug={space.slug} />}
             </span>
           </div>
         </div>

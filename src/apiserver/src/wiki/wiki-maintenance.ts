@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import {
   WIKI_CURSOR_FACT_KINDS,
   WIKI_CURSOR_OUTCOMES,
+  WIKI_MAINTENANCE_HEALTH,
   WIKI_MAINTENANCE_RULES,
   wikiMaintenanceSettings,
   type WikiCursorFactKind,
@@ -17,6 +18,7 @@ import {
 import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 import { buildDossier, loadDossierRecords, ownerEnvLiterals, type DossierReader } from './wiki-dossier';
 import { normalizeRepoUrl, WikiRefusalError } from './wiki.service';
 
@@ -505,7 +507,13 @@ export interface CursorAdvanceInput {
 export class WikiMaintenance {
   private readonly logger = new Logger(WikiMaintenance.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // The one notification a failing run sends (contract `maintenance.health.notify`). Best-effort and
+    // after the statement, like WikiService's, and defaulted for the same reason: the specs that
+    // construct this service by hand do not each have to stub a sender they never read.
+    private readonly push: PushService = undefined as unknown as PushService,
+  ) {}
 
   /** The space's cursor row, made the first time anything reads it. */
   private async cursorRow(ownerId: string, spaceId: string): Promise<CursorRow> {
@@ -814,15 +822,19 @@ export class WikiMaintenance {
       // it names one, is still checked as this space's, and moves nothing either way.
       if (input.to) decodeCursorToken(input.to, spaceId);
       const said = redactSecrets((input.error ?? '').trim()).text.slice(0, 2000).trim();
-      await this.prisma.wikiCursor.updateMany({
-        where: { id: row.id },
-        data: {
-          consecutiveFailures: { increment: 1 },
-          lastError: said || `the run ended ${outcome}`,
-          lastRunAt: now,
-          lastOutcome: outcome,
-        },
-      });
+      const lastError = said || `the run ended ${outcome}`;
+      // One statement that counts the failure and reads the count back: of reports racing on the row,
+      // each reads a number of its own, so exactly one reads the threshold (contract
+      // `maintenance.health.notify`).
+      const [counted] = await this.prisma.$queryRaw<Array<{ failures: number }>>`
+        UPDATE "wiki_cursor"
+           SET "consecutive_failures" = "consecutive_failures" + 1, "last_error" = ${lastError},
+               "last_run_at" = ${now.toISOString()}::timestamptz, "last_outcome" = ${outcome}, "updated_at" = now()
+         WHERE "id" = ${row.id}::uuid
+        RETURNING "consecutive_failures" AS "failures"`;
+      if (counted?.failures === WIKI_MAINTENANCE_HEALTH.notifyAfterFailures) {
+        await this.announceFailing(ownerId, spaceId, counted.failures, lastError);
+      }
       return { advanced: false, outcome, state: await this.stateOf(scope, await this.cursorRow(ownerId, spaceId), now) };
     }
 
@@ -864,6 +876,20 @@ export class WikiMaintenance {
       return { advanced: false, outcome, state: await this.stateOf(scope, await this.cursorRow(ownerId, spaceId), now) };
     }
     return { advanced: true, outcome, state: await this.stateOf(scope, after, now) };
+  }
+
+  /**
+   * The owner's one notification for a streak of failed runs, from the report that made it the
+   * threshold. After the statement and best-effort: a title that cannot be read, or a phone that does
+   * not ring, leaves the failure recorded all the same.
+   */
+  private async announceFailing(ownerId: string, spaceId: string, failures: number, lastError: string): Promise<void> {
+    try {
+      const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { title: true } });
+      void this.push?.notifyWikiMaintenanceFailing({ ownerId, spaceId, title: space?.title ?? '', failures, lastError });
+    } catch (error) {
+      this.logger.warn(`the owner was not told of a failing maintenance run: ${(error as Error).message}`);
+    }
   }
 
   private async behind(scope: SpaceScope, row: CursorRow, now: Date): Promise<never> {

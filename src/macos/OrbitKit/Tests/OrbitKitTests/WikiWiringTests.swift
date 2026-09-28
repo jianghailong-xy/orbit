@@ -139,7 +139,7 @@ final class WikiWiringTests: XCTestCase {
                       "the banner shows only while something is waiting")
         let header = try slice(page, from: "private var header: some View {", to: "private var spacePicker: some View {")
         assertOrder(header, ["Text(WikiCopy.title)", ".font(.largeTitle.bold())", "spacePicker",
-                             "Text(content.statusLine)"], "the header")
+                             "Text(wikiStatusText(content.statusParts(now: now)))"], "the header")
         let picker = try slice(page, from: "private var spacePicker: some View {",
                                to: "private func band(_ band: WikiLogic.HomeBand) -> some View {")
         XCTAssertTrue(picker.contains("Image(systemName: \"chevron.up.chevron.down\")"))

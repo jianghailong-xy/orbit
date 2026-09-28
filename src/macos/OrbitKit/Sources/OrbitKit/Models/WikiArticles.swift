@@ -132,6 +132,10 @@ public struct WikiArticle: Codable, Equatable, Sendable {
     public let blocks: [WikiArticleBlock]
     public let footnotes: [WikiArticleFootnote]
     public let entryCount: Int?
+    /// Every entry it was written from: the pool its generation stored (contract `articles.reads.article`).
+    public let entryIds: [String]?
+    /// Those entries as they stand now, the cited ones first — what the list under the article is drawn from.
+    public let entries: [WikiEntry]?
     public let chars: Int?
     public let generatedAt: String?
     /// The git ref it was generated at, when the run knew one.

@@ -7,7 +7,7 @@ import { WikiEmpty } from './WikiCards';
 import { WikiContentsButton } from './WikiDirectory';
 import { WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
 import { WikiTopicGroup, WikiTopicPage } from './WikiTopicPage';
-import { wikiArticleQuery, wikiEntryQuery, wikiTopicQuery } from '../lib/queries';
+import { wikiArticleQuery, wikiEntryQuery } from '../lib/queries';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import {
   WIKI_ACTION_OPEN,
@@ -26,16 +26,15 @@ import {
 } from '../lib/wiki';
 import {
   WIKI_ARTICLE_ENTRIES,
-  WIKI_ARTICLE_ENTRIES_HINT,
   WIKI_FOOTNOTES,
   WIKI_FOOTNOTE_GONE,
   WIKI_NO_ARTICLE_YET,
+  wikiArticleEntriesHint,
   wikiArticleGroups,
   wikiArticleKindTags,
   wikiArticlePath,
   wikiArticleUpdated,
   wikiBrowsePath,
-  wikiCount,
   wikiEntriesCited,
   wikiNoteLabel,
   wikiSentenceSegments,
@@ -48,7 +47,7 @@ import {
 /**
  * A topic's page, article first (criterion 10, mocks 13–14): the crumb, the title, the tags, when and
  * from what it was written, the text with a superscript footnote after every sentence, the footnotes,
- * then the topic's entries by kind. The order is the web phone's and iOS's alike
+ * then the entries it was written from, by kind. The order is the web phone's and iOS's alike
  * (`WIKI_ARTICLE_SECTIONS`, held by `WikiArticlesCopyParityTests`).
  *
  * A TOPIC WITH NO ARTICLE is still a page: the article read answers 404 until a maintenance run has
@@ -76,25 +75,23 @@ export function WikiArticleRoute({
   // A read that failed for another reason still leaves the topic's entries to read.
   if (article.isError) return <WikiTopicPage spaceId={spaceId} spaceSlug={spaceSlug} topicSlug={topicSlug} />;
   if (!article.data) return <div className="wk-art-page" aria-busy={article.isPending} />;
-  return <WikiArticlePage article={article.data} spaceId={spaceId} spaceSlug={spaceSlug} />;
+  return <WikiArticlePage article={article.data} spaceSlug={spaceSlug} />;
 }
 
 export function WikiArticlePage({
   article,
-  spaceId,
   spaceSlug,
 }: {
   article: WikiArticleView;
-  spaceId: string;
   spaceSlug: string;
 }) {
   const topicSlug = article.topic.slug;
-  const topic = useQuery(wikiTopicQuery(spaceId, topicSlug));
-  const entries = useMemo(() => topic.data?.entries ?? [], [topic.data]);
+  // The entries it was written from, as its read carries them (contract `articles.reads.article`).
+  const entries = article.entries;
   const [seen] = useState(() => readWikiSeen(wikiSeenKey(spaceSlug, topicSlug)));
   useEffect(() => {
-    if (topic.isSuccess) writeWikiSeen(wikiSeenKey(spaceSlug, topicSlug));
-  }, [spaceSlug, topicSlug, topic.isSuccess]);
+    writeWikiSeen(wikiSeenKey(spaceSlug, topicSlug));
+  }, [spaceSlug, topicSlug]);
 
   const cited = useMemo(() => article.footnotes.map((note) => note.entryId), [article.footnotes]);
   const groups = useMemo(() => wikiArticleGroups(entries, cited), [entries, cited]);
@@ -165,11 +162,9 @@ export function WikiArticlePage({
       <section className="wk-art-entries">
         <h3 className="wk-art-entries-h">
           {WIKI_ARTICLE_ENTRIES}{' '}
-          <small>
-            {wikiCount(entries.length)} {WIKI_ARTICLE_ENTRIES_HINT}
-          </small>
+          <small>{wikiArticleEntriesHint(article.entryIds.length)}</small>
         </h3>
-        {topic.isSuccess && entries.length === 0 ? (
+        {entries.length === 0 ? (
           <WikiEmpty>{WIKI_TOPIC_MISSING}</WikiEmpty>
         ) : (
           groups.map((group) => (

@@ -71,6 +71,8 @@ final class WikiAPIClientTests: XCTestCase {
             case "/api/wiki/entries/E1": return (200, WikiFixtures.entryDetail)
             case "/api/wiki/search": return (200, #"{"q":"redaction","semantic":false,"hits":[]}"#)
             case "/api/wiki/changesets/C1/decide": return (200, #"{"id":"C1","status":"settled","ops":[]}"#)
+            case "/api/wiki/changesets/C1":
+                return (200, #"{"id":"C1","status":"settled","ops":[],"appliedByMode":"automatic","entries":[],"counts":{"applied":0,"auto":0,"unreviewed":0,"rejectedByCheck":0,"toReview":0},"revertible":false,"revert":null}"#)
             case "/api/wiki/spaces/S1/changesets": return (200, #"{"changesetId":"C2","replayed":false,"ops":[]}"#)
             default: return (404, "")
             }
@@ -83,6 +85,7 @@ final class WikiAPIClientTests: XCTestCase {
         _ = try await api.wikiReview()
         _ = try await api.wikiReview(spaceID: "S1")
         let detail = try await api.wikiEntry("E1")
+        let run = try await api.wikiChangeset("C1")
         _ = try await api.wikiSearch("redaction", spaceID: "S1")
         let decided = try await api.decideWikiChangeset(
             "C1", WikiDecideRequest(decisions: [WikiDecision(opId: "O1", action: .accept)]))
@@ -93,6 +96,8 @@ final class WikiAPIClientTests: XCTestCase {
         XCTAssertEqual(spaces.count, 2)
         XCTAssertEqual(detail.entry.id, WikiFixtures.pitfallID)
         XCTAssertEqual(decided.status, .settled)
+        XCTAssertEqual(run.appliedByMode, .automatic)
+        XCTAssertFalse(run.revertible)
         XCTAssertEqual(log.all, [
             "GET /api/wiki/spaces",
             "GET /api/wiki/spaces/S1?include=usage",
@@ -101,6 +106,7 @@ final class WikiAPIClientTests: XCTestCase {
             "GET /api/wiki/review",
             "GET /api/wiki/review?space=S1",
             "GET /api/wiki/entries/E1?include=sources,history,exposure",
+            "GET /api/wiki/changesets/C1",
             "GET /api/wiki/search?q=redaction&include=topics&space=S1",
             "POST /api/wiki/changesets/C1/decide",
             "POST /api/wiki/spaces/S1/changesets",

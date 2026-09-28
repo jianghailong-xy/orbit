@@ -822,6 +822,11 @@ public final class APIClient: @unchecked Sendable {
     public func wikiTimeline(spaceID: String) async throws -> WikiTimeline {
         try await get("wiki/spaces/\(spaceID)/timeline")
     }
+    /// `GET /wiki/spaces/:id/health`: every active entry of the space, and where its maintenance run
+    /// stands — what the home's status line says (contract `maintenance.health`).
+    public func wikiHealth(spaceID: String) async throws -> WikiSpaceHealth {
+        try await get("wiki/spaces/\(spaceID)/health")
+    }
     /// `GET /wiki/spaces/:id/articles`: the category directory — categories → topics → each topic's
     /// article and its subtopic parts (contract `articles.reads.directory`).
     public func wikiArticleDirectory(spaceID: String) async throws -> WikiArticleDirectory {
@@ -844,6 +849,11 @@ public final class APIClient: @unchecked Sendable {
     /// or one space's when `spaceID` is given. Their decided ops ride along; Review keeps the pending.
     public func wikiReview(spaceID: String? = nil) async throws -> [WikiChangeset] {
         try await get("wiki/review", query: spaceID.map { [URLQueryItem(name: "space", value: $0)] } ?? [])
+    }
+    /// `GET /wiki/changesets/:id`: one run as its page reads it — its ops, the entries they name, what it
+    /// did counted, and whether Revert run… would take anything back — whatever of it waits in Review.
+    public func wikiChangeset(_ id: String) async throws -> WikiChangesetView {
+        try await get("wiki/changesets/\(id)")
     }
     /// `GET /wiki/entries/:id?include=sources,history,exposure`: one entry and what its page draws.
     public func wikiEntry(_ id: String) async throws -> WikiEntryDetail {

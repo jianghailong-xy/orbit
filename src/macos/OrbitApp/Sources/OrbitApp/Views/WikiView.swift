@@ -28,6 +28,8 @@ struct WikiHomeActions {
     var openRun: (String) -> Void = { _ in }
     /// The Contents sheet — the category directory — from the list button in the bar (mock 12 ③).
     var openContents: () -> Void = {}
+    /// A session, by id: the status line's View run opens the run that failed (mock 12 ④).
+    var openSession: (String) -> Void = { _ in }
 }
 
 /// One space's home: the large title with the space beside it, the status line, the search under
@@ -108,10 +110,21 @@ struct WikiHomePage: View {
                 Spacer(minLength: 8)
                 spacePicker
             }
-            Text(content.statusLine)
+            Text(wikiStatusText(content.statusParts(now: now)))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .environment(\.openURL, OpenURLAction { url in
+                    switch url {
+                    case wikiStatusSettingsURL:
+                        actions.openSettings()
+                    case wikiStatusRunURL:
+                        if let session = content.health?.maintenance.lastRun?.sessionId { actions.openSession(session) }
+                    default:
+                        return .systemAction
+                    }
+                    return .handled
+                })
         }
         .padding(.top, 4)
     }
@@ -187,11 +200,13 @@ struct WikiHomePage: View {
                 if content.recentlyChanged.isEmpty {
                     empty(WikiCopy.noChanges)
                 } else {
-                    // One run is one row, wherever Review ties its ops to it (`wikiRecentRows`).
+                    // One run is one row: every item names the changeset it came in (`wikiRecentRows`).
                     ForEach(content.recentRows) { row in
                         switch row {
-                        case .op(let item):                   changeRow(item)
-                        case .run(let changeset, let at, _):  runRow(changeset, at: at)
+                        case .op(let item):
+                            changeRow(item)
+                        case .run(let changesetId, let origin, let at, let items):
+                            runRow(changesetId, origin: origin, at: at, changes: items.count)
                         }
                     }
                 }
@@ -330,15 +345,16 @@ struct WikiHomePage: View {
     }
 
     /// One run: who it was and when, then what it applied and with which marks (mock 12 ②). The row
-    /// is the way in; Revert run… is on the run's own page.
-    private func runRow(_ changeset: WikiChangeset, at: String?) -> some View {
-        let summary = WikiModeLogic.runSummary(changeset, entries: content.entries)
-        let line = ([WikiModeCopy.appliedChanges(summary.applied)] + WikiModeLogic.runCounts(summary))
+    /// is the way in; Revert run… is on the run's own page. What it counts is the run's own read, which
+    /// the home reads for every run it folds; until that answers, the changes the feed holds of it.
+    private func runRow(_ changesetId: String, origin: WikiChangesetOrigin?, at: String?, changes: Int) -> some View {
+        let summary = content.run(changesetId).map(WikiModeLogic.runSummary)
+        let line = ([WikiModeCopy.appliedChanges(summary?.applied ?? changes)] + (summary.map(WikiModeLogic.runCounts) ?? []))
             .joined(separator: " · ")
         return Button {
-            actions.openRun(changeset.id)
+            actions.openRun(changesetId)
         } label: {
-            WikiRowLabel(title: WikiModeCopy.originWord(changeset.origin),
+            WikiRowLabel(title: WikiModeCopy.originWord(origin),
                          time: at.flatMap { RelativeTime.format($0, now: now) }, detail: line)
         }
         .buttonStyle(.plain)
@@ -467,8 +483,6 @@ struct WikiEntryActions {
 struct WikiEntryPage: View {
     let detail: WikiEntryDetail
     var now: Date = Date()
-    /// The verdict behind what a review mode applied, when the page has the op that carries it.
-    var verification: WikiOpVerification? = nil
     /// A session's title, when this client holds one; the row falls back to the id.
     var sessionTitle: (String) -> String? = { _ in nil }
     /// The title of the task or session a source cites, once its card has been read — the web draws
@@ -602,9 +616,11 @@ struct WikiEntryPage: View {
         .disabled(busy)
     }
 
-    /// The bar under the head: the mark's word and what it means, then who checked it and who applied it.
+    /// The bar under the head: the mark's word and what it means, then who checked it — the verdict the
+    /// current revision was applied on, which the entry's read carries — and who applied it.
     private func markBar(_ banner: WikiModeLogic.Banner) -> some View {
         let current = detail.history.max { ($0.revision ?? 0) < ($1.revision ?? 0) }
+        let verification = detail.verification
         let line = WikiModeLogic.checkedLine(verdict: verification?.verdict, model: verification?.model,
                                              tainted: entry.tainted == true,
                                              who: current.map { Self.historyWord($0.authorKind) },
@@ -1371,6 +1387,55 @@ private struct WikiTrailingIconLabelStyle: LabelStyle {
             configuration.title
             configuration.icon
         }
+    }
+}
+
+/// Where the status line's two links lead: the line opens them itself (`openURL` on the header).
+let wikiStatusSettingsURL = URL(string: "orbit-wiki-status://settings")!
+let wikiStatusRunURL = URL(string: "orbit-wiki-status://run")!
+
+/// The status line under the title (mocks 12 ①, ④), one wrapping text: each part behind its `·`, amber
+/// while a maintenance run waits and red when it broke — the dot before the words, as the session list's
+/// status dots are — a green ✓ after a run that succeeded, and Set up and View run as links in the tint.
+/// The parts are `WikiHealthLogic`'s, which the web's status row draws too; a phone has no spinner, as
+/// mock 12 has none.
+func wikiStatusText(_ parts: [WikiStatusPart]) -> AttributedString {
+    typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
+    var line = AttributedString()
+    for (index, part) in parts.enumerated() {
+        if index > 0 { line += AttributedString(" · ") }
+        let colour = wikiStatusColour(part.tone)
+        // No-break spaces keep the dot on the line of the words it colours, and the ✓ on the line of the
+        // success it marks: a wrapped line never ends on a lone dot or starts with a lone check.
+        if part.mark == .dot {
+            var dot = AttributedString("●\u{00A0}")
+            if let colour { dot[Colour.self] = colour }
+            line += dot
+        }
+        var words = AttributedString(part.text)
+        if let colour { words[Colour.self] = colour }
+        if part.strong { words[AttributeScopes.SwiftUIAttributes.FontAttribute.self] = Font.orbitLabel.weight(.semibold) }
+        switch part.link {
+        case .settings: words.link = wikiStatusSettingsURL
+        case .run: words.link = wikiStatusRunURL
+        case .none: break
+        }
+        line += words
+        if part.mark == .check {
+            var check = AttributedString("\u{00A0}✓")
+            check[Colour.self] = Color.green
+            line += check
+        }
+    }
+    return line
+}
+
+/// A part's colour: amber while a run waits, red when it broke; the line's own grey otherwise.
+private func wikiStatusColour(_ tone: WikiStatusPart.Tone) -> Color? {
+    switch tone {
+    case .warn: return Color.orange
+    case .error: return Color.red
+    case .muted, .plain: return nil
     }
 }
 

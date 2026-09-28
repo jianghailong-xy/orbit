@@ -707,6 +707,25 @@
       "how": "As the owner's own changeset through submitChangeset and applyOp, so every step is a revision and an op like any other: a retire per add, an amend per changed entry. It is recorded under the idempotency key revert:<changeset id>, so a second revert answers with the first.",
       "skipped": "An entry that left active, or changed after the changeset changed it, is not touched and is named in the answer."
     },
+    "run": {
+      "why": "Review lists a changeset only while an op of it waits for the owner, and the timeline lists ops, not the changesets they came in. So a client could tie an op to its run, fold the run into one row, open it and revert it only while the run still had a card in Review, and an automatic run draws no spot check by default: once its verdicts applied it, nothing was left to take it back from (criterion 8). These three reads name every run.",
+      "read": {
+        "route": "GET /api/wiki/changesets/:id",
+        "door": "user, with no session header (WIKI_OWNER_CHANNEL_ONLY). Another owner's changeset is a plain 404.",
+        "answers": "changesetView, whatever of the changeset still waits: its fields and ops as Review shows them (decision, result, verification trail), appliedByMode, entries (every entry its ops name, as it stands now), counts, revertible and revert.",
+        "appliedByMode": "automatic when a verdict applied any of its ops, else tiered when the tiered rules did, else null: a changeset no review mode applied anything of, which is no run."
+      },
+      "counts": {
+        "applied": "Ops whose effect stands from the changeset itself: auto_applied, or applied by its mode and waiting as a spot check, accepted or edited since.",
+        "auto": "Of the applied adds and amends, those whose entry is active, still at the revision the op wrote, with trust auto.",
+        "unreviewed": "The same, with trust unreviewed.",
+        "rejectedByCheck": "Ops an unsupported or duplicate verdict rejected.",
+        "toReview": "Ops waiting for the owner in Review (decision pending): its spot checks, and what the floors kept."
+      },
+      "revertible": "What revert.route would undo if it were called now, by its own rules (revert.does, revert.skipped): revert.adds counts the adds whose entry is still active, revert.amends the entries an amend changed that nobody has changed since. revertible is true when either is above 0, and false once the changeset was reverted (the idempotency key revert:<changeset id>); revert is null whenever revertible is false. A client offers Revert run… exactly when revertible is true, and its dialog says those two numbers.",
+      "timeline": "Each item of GET /api/wiki/spaces/:id/timeline carries changesetId, the changeset its op came in, and changesetAppliedByMode, that changeset's appliedByMode. A client folds the items of a changeset whose changesetAppliedByMode is not null into one row and opens it through read.route; every other item stays a row of its own. origin is the changeset's, and appliedByMode stays the op's own.",
+      "entry": "GET /api/wiki/entries/:id on the user door adds where the entry's current revision came from: changesetId (the changeset whose op wrote it), appliedByMode (that op's) and verification (that op's verdict, verification.trail), each null when there is none. The runner door's read adds none of them: an agent is handed the entry, not how it was decided."
+    },
     "entryReject": {
       "route": "POST /api/wiki/entries/:id/reject",
       "door": "user, with no session header (WIKI_OWNER_CHANNEL_ONLY)",
@@ -1026,6 +1045,37 @@
         "maintainPrecondition": "Run this only as a Wiki maintenance run of the space, once, and let it finish: it proposes as the space's maintenance run, and it moves the cursor only when every step succeeded — a run that failed, was cut short or tripped the breaker moves nothing.",
         "checkPrecondition": "Judge a maintenance run only by what this reads: it passes when the space's cursor reached the position the task expects and the server refused none of the run's ops, and a run cannot pass it by saying it finished."
       }
+    },
+    "health": {
+      "phase": 2,
+      "doc": "docs/wiki-contract.md section 20; design section 8.2 (health)",
+      "criterion": 5,
+      "route": "GET /api/wiki/spaces/:id/health",
+      "who": "The space's owner on the user door, as every read of the space: another account's space is the plain 404, and an account the wiki is not on for is answered WIKI_DISABLED. It writes nothing — not even the cursor row, which a space that never ran has none of yet.",
+      "entries": "The space's active entries, every one of them: the status line's N entries. The entry list stops at limits of its own and is not a count.",
+      "maintenance": {
+        "enabled": "settings.maintenance.enabled.",
+        "look": "One of looks: what the status line draws.",
+        "lastOkAt": "When a run last succeeded (the cursor row's last_ok_at), or null.",
+        "lastRunAt": "When a run last reported how it ended, however it ended, or null.",
+        "consecutiveFailures": "Runs reported in a row that did not succeed; a succeeded run sets it back to 0 (maintenance.cursor.advance).",
+        "backlog": "The facts after the cursor (maintenance.cursor.backlog), counted from the facts as the read is made — the status line's N to catch up. Counted only while maintenance is on: a space that is off reads 0.",
+        "oldestPendingAt": "The oldest of those facts, or null; null too while maintenance is off.",
+        "lagSeconds": "How long ago that fact was, in whole seconds; 0 when there is none.",
+        "dailyLimitReached": "The space has made settings.maintenance.dailyRunLimit maintenance tasks since midnight UTC (wikiMaintenanceRunsToday), however they ended: no fact makes another today.",
+        "held": "maintenance.job.held as the cursor row keeps it: {reason, at}, or null.",
+        "running": "The run under way — its row has started and not ended, and its task is OPEN or IN_PROGRESS — as {sessionId, startedAt}, or null.",
+        "lastRun": "The run that ended last, as {sessionId, outcome, endedAt}, or null: what View run opens."
+      },
+      "looks": ["off", "failing", "running", "behind", "ok"],
+      "look": "The first that holds, in the order of looks: off — maintenance is off; failing — consecutiveFailures is more than 0; running — running is not null; behind — the oldest fact after the cursor is older than maintenance.rules.maxPendingAgeHours; ok — none of those (wikiMaintenanceLook).",
+      "notify": {
+        "afterFailures": 3,
+        "push": "PushService.notifyWikiMaintenanceFailing: one alert to the owner's devices, kind wiki-maintenance-failing, thread wiki-<space>, no badge — nothing is waiting for a reply.",
+        "once": "Sent by the one failure report whose increment made consecutive_failures exactly afterFailures. The increment is one UPDATE … RETURNING on the cursor row, so of reports racing only one reads that number back, and the streak's later failures read more. After the statement, outside any transaction, best-effort: the failure is recorded whether or not the phone rang.",
+        "reset": "A succeeded run sets consecutive_failures back to 0, so the next streak is told once more, at its own third failure."
+      },
+      "client": "The Wiki home's status line, on the web at every width and on iOS: after the entries, the review count (desktop only) and the anchors, the maintenance part in the space's look — the same words and the same parts on both, locked by src/shared/src/wiki-health.fixture.json."
     }
   },
 
@@ -1105,7 +1155,8 @@
     },
     "reads": {
       "directory": "The six categories in order, each with its topics (display name, description, the article's part 0 if there is one, and the subtopic parts under it), and the topics nothing has filed under a category.",
-      "article": "One part: its title, kind, blocks of sentences with their footnote numbers, and footnotes resolved to the entries they name (title, summary, kind, status, trust), with the topic, its category, the parts beside it, when and at which ref it was generated.",
+      "article": "One part: its title, kind, blocks of sentences with their footnote numbers, and footnotes resolved to the entries they name (title, summary, kind, status, trust), with the topic, its category, the parts beside it, when and at which ref it was generated. It names every entry it was written from (entryIds, the pool its generation stored in wiki_topic_summary.entry_ids) and carries the first entriesListed of them as they stand now, the cited ones first (entries): what the list under the article is drawn from.",
+      "entriesListed": 200,
       "index": "Every article of the space, A to Z by title: its topic, its part and the entries it was written from."
     },
     "cleanClaudeCode": "The verifier's clean launch (agentSurface.verify.cleanClaudeCode) with the writer's own system prompt, and thinking off: CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0. The model reads entries only, never session text.",
@@ -1221,12 +1272,14 @@
           "POST /api/wiki/entries/:id/confirm",
           "GET /api/wiki/search",
           "GET /api/wiki/review",
+          "GET /api/wiki/changesets/:id",
           "POST /api/wiki/changesets/:id/decide",
           "POST /api/wiki/changesets/:id/revert",
           "GET /api/wiki/spaces/:id/articles",
           "GET /api/wiki/spaces/:id/articles/:slug",
           "GET /api/wiki/spaces/:id/articles/:slug/:part",
-          "GET /api/wiki/spaces/:id/article-index"
+          "GET /api/wiki/spaces/:id/article-index",
+          "GET /api/wiki/spaces/:id/health"
         ]
       },
       "runner": {

@@ -6,7 +6,9 @@ import OrbitKit
 // its entries grouped Added / Amended / Reinforced — pushed from its row in Recently changed.
 //
 // The web's run drawer, block for block and in its order (`WikiRunPage.tsx`); every count and word is
-// `WikiModeLogic` / `WikiModeCopy`, held to the web's by `WikiReviewModeCopyParityTests`.
+// `WikiModeLogic` / `WikiModeCopy`, held to the web's by `WikiReviewModeCopyParityTests`. The run is
+// read by its own id (`GET /wiki/changesets/:id`), whatever of it still waits in Review: the server
+// counts it and says whether Revert run… would take anything back.
 
 /// Where a press on a run's page goes.
 struct WikiRunActions {
@@ -16,12 +18,14 @@ struct WikiRunActions {
     var reject: (String, WikiRejectReason) -> Void = { _, _ in }
 }
 
-/// One run's page, drawn from its changeset and the entries the page holds.
+/// One run's page, drawn from its own read: the changeset, the entries its ops name, and the server's counts.
 struct WikiRunPage: View {
-    let changeset: WikiChangeset
-    let entries: [WikiEntry]
+    let run: WikiChangesetView
     var busy = false
     var actions = WikiRunActions()
+
+    private var changeset: WikiChangeset { run.changeset }
+    private var entries: [WikiEntry] { run.entries }
 
     /// How many rows a group shows before `Show N more` — the web drawer's number.
     private static let shownPerGroup = 4
@@ -30,7 +34,7 @@ struct WikiRunPage: View {
     /// The row whose Reject is asking for its reason.
     @State private var rejecting: WikiModeLogic.RunRow?
 
-    private var summary: WikiModeLogic.RunSummary { WikiModeLogic.runSummary(changeset, entries: entries) }
+    private var summary: WikiModeLogic.RunSummary { WikiModeLogic.runSummary(run) }
 
     var body: some View {
         let counted = summary
@@ -80,7 +84,7 @@ struct WikiRunPage: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.red)
-                .disabled(busy || summary.revertible == 0)
+                .disabled(busy || !summary.revertible)
                 if let session = changeset.sessionId {
                     Button { actions.openSession(session) } label: {
                         Text(WikiModeCopy.openSession).frame(maxWidth: .infinity, minHeight: 32)
@@ -159,7 +163,7 @@ struct WikiRunPage: View {
     }
 }
 
-/// The screen: the run as the model holds it, the Revert confirm, and where a press goes.
+/// The screen: the run as its own read answers it, the Revert confirm, and where a press goes.
 struct WikiRunView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -172,8 +176,7 @@ struct WikiRunView: View {
         if let wiki = model.wiki {
             Group {
                 if let changeset = wiki.run(changesetID) {
-                    WikiRunPage(changeset: changeset, entries: wiki.home?.entries ?? [], busy: wiki.busy,
-                                actions: actions(wiki))
+                    WikiRunPage(run: changeset, busy: wiki.busy, actions: actions(wiki))
                         .alert(WikiModeCopy.revertTitle, isPresented: $reverting) {
                             Button(WikiModeCopy.cancel, role: .cancel) {}
                             Button(WikiModeCopy.revertRunConfirm, role: .destructive) {
@@ -187,13 +190,17 @@ struct WikiRunView: View {
                                 }
                             }
                         } message: {
-                            let summary = WikiModeLogic.runSummary(changeset, entries: wiki.home?.entries ?? [])
+                            let summary = WikiModeLogic.runSummary(changeset)
                             Text(WikiModeLogic.revertBody(summary) + "\n" + WikiModeCopy.revertKeeps)
                         }
+                } else if wiki.isMissingRun(changesetID) {
+                    // A run the server does not know: nothing to draw, and nothing said it cannot back.
+                    Color.clear
                 } else {
-                    ContentUnavailableView(WikiModeCopy.noSuchRun, systemImage: AppSection.wiki.systemImage)
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .task(id: changesetID) { await wiki.loadRun(changesetID) }
             .alert(WikiCopy.refused, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
             } message: {

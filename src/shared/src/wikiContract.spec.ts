@@ -50,6 +50,10 @@ import {
   WIKI_VOUCHED_TRUST,
   validateWikiEntryDraft,
   validateWikiSources,
+  type WikiChangeset,
+  type WikiChangesetCounts,
+  type WikiChangesetView,
+  type WikiEntryAppliedBy,
   wikiEstimateTokens,
   wikiMaintenanceSettings,
   wikiOpEffect,
@@ -62,10 +66,12 @@ import {
 import {
   WIKI_ARTICLE_CATEGORIES,
   WIKI_ARTICLE_CATEGORY_KEYS,
+  WIKI_ARTICLE_ENTRIES_LISTED,
   WIKI_ARTICLE_KINDS,
   WIKI_ARTICLE_RULES,
   WIKI_DEFAULT_TOPICS,
   wikiArticleChars,
+  type WikiArticleView,
 } from './wikiArticles';
 import {
   WIKI_MAINTENANCE_DUE,
@@ -74,6 +80,7 @@ import {
   wikiMaintenanceCheckCommand,
   wikiMaintenanceRunSessions,
 } from './wikiMaintain';
+import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 
 /**
  * Holds `src/shared/src/wiki.ts` to `contracts/wiki.contract.json`, the hand-written authority
@@ -356,6 +363,45 @@ describe('wiki contract', () => {
     expect(CONTRACT.trust.onApply.entryConfirmed).toBe('confirmed');
   });
 
+  it('names every run: the changeset on the timeline, one run\'s read, and where an entry\'s revision came from (criterion 8)', () => {
+    const run = CONTRACT.reviewModes.run;
+    const user: string[] = CONTRACT.agentSurface.doors.user.routes;
+    const runner: string[] = [
+      ...CONTRACT.agentSurface.doors.runner.routes,
+      ...CONTRACT.agentSurface.doors.runner.maintenanceRoutes,
+      ...CONTRACT.agentSurface.doors.runner.verificationRoutes,
+    ];
+    // The run's read is the owner's, on the owner's door, and nowhere an agent can reach.
+    expect(run.read.route).toBe('GET /api/wiki/changesets/:id');
+    expect(user).toContain(run.read.route);
+    expect(runner.some((route) => /\/changesets\/:id$/u.test(route))).toBe(false);
+    expect(run.read.door).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
+    expect(run.read.door).toMatch(/plain 404/u);
+    // What it answers: a changeset, with what it did counted in the words the clients say it.
+    const counts: WikiChangesetCounts = { applied: 0, auto: 0, unreviewed: 0, rejectedByCheck: 0, toReview: 0 };
+    expect(keysOf(run.counts)).toEqual(Object.keys(counts));
+    const view: Omit<WikiChangesetView, keyof WikiChangeset> = {
+      appliedByMode: null, entries: [], counts, revertible: false, revert: null,
+    };
+    for (const key of keysOf(view)) expect(run.read.answers, `answers names ${key}`).toMatch(new RegExp(`\\b${key}\\b`, 'u'));
+    // Revert run… is offered exactly when the revert would do something, by the revert's own rules.
+    expect(run.revertible).toMatch(/revert\.does, revert\.skipped/u);
+    expect(run.revertible).toMatch(/revert:<changeset id>/u);
+    expect(run.revertible).toMatch(/exactly when revertible is true/u);
+    expect(CONTRACT.reviewModes.revert.how).toMatch(/revert:<changeset id>/u);
+    // The timeline names each op's changeset; an entry's read says where its current revision came from.
+    expect(run.timeline).toMatch(/changesetId/u);
+    expect(run.timeline).toMatch(/changesetAppliedByMode/u);
+    expect(user).toContain('GET /api/wiki/spaces/:id/timeline');
+    const appliedBy: WikiEntryAppliedBy = { changesetId: null, appliedByMode: null, verification: null };
+    for (const key of Object.keys(appliedBy)) expect(run.entry).toMatch(new RegExp(`\\b${key}\\b`, 'u'));
+    expect(run.entry).toMatch(/runner door's read adds none of them/u);
+    // An article's read names the entries it was written from, and lists the first entriesListed of them.
+    expect(CONTRACT.articles.reads.entriesListed).toBe(WIKI_ARTICLE_ENTRIES_LISTED);
+    const pool: Pick<WikiArticleView, 'entryIds' | 'entries'> = { entryIds: [], entries: [] };
+    for (const key of keysOf(pool)) expect(CONTRACT.articles.reads.article).toMatch(new RegExp(`\\(${key}\\b`, 'u'));
+  });
+
   it('holds a verdict to what its verifier could read, and a tainted op to unreviewed (revision 4)', () => {
     const evidence = CONTRACT.reviewModes.verification.evidence;
     expect(evidence.values).toEqual([...WIKI_VERIFICATION_EVIDENCE]);
@@ -570,6 +616,36 @@ describe('wiki contract', () => {
     expect(size('tiered', 100_000)).toBe(WIKI_MAINTENANCE_JOB.runSessionsMax);
     expect(size('manual', 0)).toBe(Math.floor(WIKI_LIMITS.opsPerSession / 6));
     expect(size('manual', 0, WIKI_LIMITS.pendingOpsPerSpace - 5)).toBe(0);
+  });
+
+  it('reads a space\'s health the way the contract states it, and tells the owner once a streak', () => {
+    // Criterion 5: the Wiki home's status line reads the space's entries and its maintenance run's health.
+    const health = CONTRACT.maintenance.health;
+    expect(health.criterion).toBe(5);
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(health.route);
+    expect(health.route).toBe('GET /api/wiki/spaces/:id/health');
+    expect(health.looks).toEqual([...WIKI_MAINTENANCE_LOOKS]);
+    expect(keysOf(health.maintenance)).toEqual([
+      'enabled', 'look', 'lastOkAt', 'lastRunAt', 'consecutiveFailures', 'backlog', 'oldestPendingAt', 'lagSeconds',
+      'dailyLimitReached', 'held', 'running', 'lastRun',
+    ]);
+    expect(health.notify.afterFailures).toBe(WIKI_MAINTENANCE_HEALTH.notifyAfterFailures);
+    expect(health.notify.once).toMatch(/exactly afterFailures/u);
+    expect(health.notify.reset).toMatch(/back to 0/u);
+    // The looks win in the order the contract lists them.
+    const now = new Date('2026-09-28T12:00:00.000Z');
+    const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
+    const base = { enabled: true, consecutiveFailures: 0, running: null, oldestPendingAt: null };
+    const running = { sessionId: 's', startedAt: hoursAgo(0.1) };
+    const late = hoursAgo(WIKI_MAINTENANCE_RULES.maxPendingAgeHours + 2);
+    expect(wikiMaintenanceLook({ ...base, enabled: false, consecutiveFailures: 3, running, oldestPendingAt: late }, now)).toBe('off');
+    expect(wikiMaintenanceLook({ ...base, consecutiveFailures: 1, running, oldestPendingAt: late }, now)).toBe('failing');
+    expect(wikiMaintenanceLook({ ...base, running, oldestPendingAt: late }, now)).toBe('running');
+    expect(wikiMaintenanceLook({ ...base, oldestPendingAt: late }, now)).toBe('behind');
+    expect(wikiMaintenanceLook({ ...base, oldestPendingAt: hoursAgo(WIKI_MAINTENANCE_RULES.maxPendingAgeHours - 1) }, now)).toBe('ok');
+    expect(wikiMaintenanceLook(base, now)).toBe('ok');
+    expect(health.look).toMatch(/maintenance\.rules\.maxPendingAgeHours/u);
+    expect(health.client).toMatch(/wiki-health\.fixture\.json/u);
   });
 
   it('ships the run a maintenance session is claimed with, as the contract states it', () => {

@@ -1167,3 +1167,43 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 		}
 	}
 }
+
+// TestWikiRunReadIsTheOwnersAlone holds this side to the contract's one run read (criterion 8,
+// `reviewModes.run`): it is a route of the owner's door, no runner door serves anything like it, and
+// no tool this binary offers reads or takes back a run — an agent is handed entries, never how a
+// review mode decided them.
+func TestWikiRunReadIsTheOwnersAlone(t *testing.T) {
+	contract := wikiContract(t)
+	run := contract["reviewModes"].(map[string]interface{})["run"].(map[string]interface{})
+	route := run["read"].(map[string]interface{})["route"].(string)
+	if route != "GET /api/wiki/changesets/:id" {
+		t.Fatalf("the contract's run read is %q", route)
+	}
+	doors := wikiSurface(t)["doors"].(map[string]interface{})
+	onUserDoor := false
+	for _, raw := range doors["user"].(map[string]interface{})["routes"].([]interface{}) {
+		if raw.(string) == route {
+			onUserDoor = true
+		}
+	}
+	if !onUserDoor {
+		t.Errorf("%s is not a route of the owner's door", route)
+	}
+	runner := doors["runner"].(map[string]interface{})
+	for _, list := range []string{"routes", "maintenanceRoutes", "verificationRoutes", "importRoutes"} {
+		routes, _ := runner[list].([]interface{})
+		for _, raw := range routes {
+			if strings.Contains(raw.(string), "/changesets/") {
+				t.Errorf("the runner door's %s serve %s, a changeset by its id", list, raw)
+			}
+		}
+	}
+	if entry, _ := run["entry"].(string); !strings.Contains(entry, "runner door's read adds none of them") {
+		t.Errorf("the contract no longer keeps how an entry was decided off the runner door: %q", entry)
+	}
+	for name := range wikiToolNames {
+		if strings.Contains(name, "run") || strings.Contains(name, "revert") || strings.Contains(name, "changeset") {
+			t.Errorf("this binary offers %s, a tool about runs", name)
+		}
+	}
+}

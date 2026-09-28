@@ -9,10 +9,10 @@
  * `src/shared/src/wiki-articles.fixture.json`.
  *
  * WHAT IS READ, NOT INVENTED. The directory, an article and the index are the server's three article
- * reads (contract `articles.reads`); the entries under an article are the topic read's, which is the
- * one read that answers a topic's entries (see `WIKI_ARTICLE_ENTRIES_HINT`). A count the reads do not
- * carry — how many sessions a footnote's entry came from, say — is read from the entry when its card
- * opens, or not drawn.
+ * reads (contract `articles.reads`); the entries under an article are the ones its read says it was
+ * written from (`entryIds`, and `entries` as they stand now — see `wikiArticleEntriesHint`). A count
+ * the reads do not carry — how many sessions a footnote's entry came from, say — is read from the
+ * entry when its card opens, or not drawn.
  */
 import {
   type WikiArticleDirectory,
@@ -71,12 +71,10 @@ export const WIKI_FOOTNOTES = 'Footnotes';
 export const wikiEntriesCited = (count: number): string => `${count} ${count === 1 ? 'entry' : 'entries'} cited`;
 export const WIKI_ARTICLE_ENTRIES = 'Entries';
 /**
- * What the list under an article is. NOT "the entries this article is written from" (mock 13's
- * words): the article read names the entries it cites, not the ones it was written from, so the list
- * is the topic read's — the entries that file themselves under this topic. The two sets meet at the
- * cited ones, which lead their groups.
+ * What the list under an article is, in mock 13's words: the entries the article is written from —
+ * every one its read names (`entryIds`), the cited ones leading their groups.
  */
-export const WIKI_ARTICLE_ENTRIES_HINT = 'filed under this topic, by kind';
+export const wikiArticleEntriesHint = (count: number): string => `the ${wikiCount(count)} this article is written from, by kind`;
 /** A footnote whose entry the wiki no longer has: the number stays, the card says so. */
 export const WIKI_FOOTNOTE_GONE = 'This entry is no longer in the wiki.';
 /** The entry card's last line: what backs it, and the ref its anchor was checked at. */
