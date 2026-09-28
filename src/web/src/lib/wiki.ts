@@ -24,6 +24,7 @@ import {
   type WikiChangeset,
   type WikiChangesetOp,
   type WikiEntry,
+  type WikiEntryAppliedBy,
   type WikiEntryKind,
   type WikiEntryRevision,
   type WikiKind,
@@ -80,6 +81,10 @@ export interface WikiTimelineItem {
   appliedByMode?: 'tiered' | 'automatic' | null;
   /** An op the mode applied that is also waiting in Review as a spot check. */
   spotCheck?: boolean;
+  /** The changeset the op came in (contract `reviewModes.run.timeline`)… */
+  changesetId?: string | null;
+  /** …and the review mode that applied any op of it: not null makes it a run, one row of Recently changed. */
+  changesetAppliedByMode?: 'tiered' | 'automatic' | null;
 }
 
 export interface WikiTimeline {
@@ -125,8 +130,11 @@ export interface WikiExposureRow {
   at: string;
 }
 
-/** One entry with everything the drawer draws, as `?include=sources,history,exposure` answers it. */
-export interface WikiEntryDetail extends WikiEntry {
+/**
+ * One entry with everything the drawer draws, as `?include=sources,history,exposure` answers it — and
+ * where its current revision came from (`WikiEntryAppliedBy`), which the user door always adds.
+ */
+export interface WikiEntryDetail extends WikiEntry, Partial<WikiEntryAppliedBy> {
   sources?: WikiSource[];
   history?: Array<
     Pick<
