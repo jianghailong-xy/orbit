@@ -39,6 +39,7 @@ import { WikiModule } from '../wiki/wiki.module';
 import { RunnerWikiController } from './runner-wiki.controller';
 import { RunnerWikiMaintenanceController } from './runner-wiki-maintenance.controller';
 import { RunnerWikiAnchorsController } from './runner-wiki-anchors.controller';
+import { RunnerWikiArticlesController } from './runner-wiki-articles.controller';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -87,6 +88,8 @@ import { RunnerWikiAnchorsController } from './runner-wiki-anchors.controller';
     RunnerWikiMaintenanceController,
     // The anchor re-verification's two routes (contract `anchorRules.verify`), for the same reason.
     RunnerWikiAnchorsController,
+    // A maintenance run's articles (contract `articles`): the plan, a topic's entries, the write.
+    RunnerWikiArticlesController,
   ],
   providers: [
     RunnerAuthGuard,

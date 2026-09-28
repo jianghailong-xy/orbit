@@ -1325,7 +1325,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row are out of its reach. No function, trigger or type is created, replaced or dropped — no
       // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of
       // the six preserved objects. No INSERT, UPDATE or DELETE: the table starts empty.
-      '0316_wiki_note'],
+      '0316_wiki_note',
+      // The wiki's articles: `wiki_topic` gains one nullable TEXT column, `category`, with its CHECK
+      // (catalog-only, and every existing row satisfies it), and a unique index over (id, owner_id)
+      // that its primary key already makes unique; and one new table, `wiki_topic_summary`, reaching
+      // `wiki_topic` through (topic_id, owner_id) and itself through (parent_id, owner_id), with its
+      // own CHECKs and two indexes. Read against every claim above: no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion row
+      // are out of its reach. No function, trigger or type is created, replaced or dropped — no
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
+      // six preserved objects. No INSERT, UPDATE or DELETE: nothing is read, locked or backfilled.
+      '0317_wiki_topic_articles'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
