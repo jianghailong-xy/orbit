@@ -244,8 +244,14 @@ struct SettingsHomeView: View {
 
     private var signOutSection: some View {
         Section {
+            // The glyph in the word's red, as ChatGPT's Log out: the role colours only the word, and a
+            // form row's icon would otherwise take the accent.
             Button(role: .destructive) { confirmingSignOut = true } label: {
-                Label(SettingsCopy.signOut, systemImage: "rectangle.portrait.and.arrow.right")
+                Label {
+                    Text(SettingsCopy.signOut)
+                } icon: {
+                    Image(systemName: "rectangle.portrait.and.arrow.right").foregroundStyle(Color.red)
+                }
             }
         } footer: {
             if let line = SettingsHome.versionLine(
