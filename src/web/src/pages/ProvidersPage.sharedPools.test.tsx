@@ -323,6 +323,25 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(container.querySelector('.pool-sec .pool-card .pool-gauge-name')?.textContent).toBe('Next: orbit-org-1');
   });
 
+  it('heads a pool no key can run on with the mark that stopped them, and the first of them back', async () => {
+    const board = team(WIKOVA);
+    const spent = {
+      ...board.keys[0],
+      id: id(17),
+      label: 'chen-org-2',
+      spentUntil: '2026-09-30T06:00:00.000Z',
+      next: false,
+      running: false,
+      contributor: { userId: CHEN, name: NAMES[CHEN], you: false },
+    };
+    shared = [{ ...board, keys: [spent] }];
+    await mount('/providers');
+    expect(container.querySelector('.pool-sec .pool-card .pool-gauge')?.textContent).toBe(
+      'All out of budget · resets Sep 30',
+    );
+    expect(container.querySelector('.pool-sec .pool-card .re-summary')?.textContent).toBe('0 of 1 key available');
+  });
+
   it('says the same of that key on the pool page, where the whole pool reads as its own head', async () => {
     shared = [teamWithOutOfBudget()];
     await mount(`/providers/pools/${POOL_ID}`);
