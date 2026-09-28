@@ -96,10 +96,13 @@ public enum ProviderPools {
         return "\(spentHead(pool)) · resets \(time)"
     }
 
-    /// What a pool with nothing left to run on is headed with (web's `PoolGauge`): a shared pool's
-    /// keys ran out of what their contributors let the others spend this month, which is a cap.
+    /// What a pool with nothing left to run on is headed with (web's `PoolGauge`): a shared pool's keys
+    /// ran out of what their contributors let the others spend this month, which is a cap — or OpenAI
+    /// itself put them out of budget, when that is the only reason, which is the two words the pool's
+    /// own page heads its keys with (`SharedPoolPage.keysHeadline`).
     static func spentHead(_ pool: ProviderPool) -> String {
-        pool.shared != nil ? "All at cap" : "All spent"
+        guard let shared = pool.shared else { return "All spent" }
+        return SharedPoolPage.allOutOfBudget(shared) ? SharedPoolPage.allOutOfBudgetWords : SharedPoolPage.allAtCapWords
     }
 
     // MARK: the pool's page (Settings → Providers → an account pool)

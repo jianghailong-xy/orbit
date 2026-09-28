@@ -17,9 +17,11 @@ final class SharedPoolAdapterTests: XCTestCase {
 
     private func key(_ label: String, state: PoolKeyState = .active, enabled: Bool = true,
                      cap: Int? = nil, contributor: PoolKeyContributor? = nil, others: Double = 0,
-                     running: Bool = false, next: Bool = false) -> SharedPoolKey {
+                     running: Bool = false, next: Bool = false,
+                     spentUntil: String? = nil) -> SharedPoolKey {
         SharedPoolKey(id: "k-\(label)", label: label, fingerprint: "sk-…0000", state: state,
-                      enabled: enabled, shareCap: cap, contributor: contributor ?? wikova,
+                      enabled: enabled, shareCap: cap, spentUntil: spentUntil,
+                      contributor: contributor ?? wikova,
                       usage: PoolSpend(costUsd: others, othersCostUsd: others),
                       running: running, next: next)
     }
@@ -159,6 +161,22 @@ final class SharedPoolAdapterTests: XCTestCase {
                                                          key("mine", cap: 5, contributor: me,
                                                              others: 99, next: true)]))
         XCTAssertNil(ProviderPools.spentNote(mine))
+    }
+
+    /// A key OpenAI itself put out of budget comes back at its own mark rather than the month's end, and
+    /// a pool left with nothing but such keys says that instead — the words the pool's own page heads
+    /// its keys with (`SharedPoolPage.keysHeadline`), at the earliest key back.
+    func testAKeyOpenAIPutOutOfBudgetComesBackAtItsMark() {
+        let spent = SharedPools.asProviderPool(self.pool([key("a", spentUntil: "2026-09-30T06:00:00.000Z")]))
+        XCTAssertEqual(spent.members[0].state, .spent)
+        XCTAssertEqual(spent.members[0].resetsAt, "2026-09-30T06:00:00.000Z")
+        XCTAssertEqual(spent.resetsAt, "2026-09-30T06:00:00.000Z")
+        XCTAssertEqual(ProviderPools.spentNote(spent), "All out of budget · resets Sep 30")
+        // A cap among the stops keeps the cap's words, at the soonest of the two.
+        let mixed = SharedPools.asProviderPool(self.pool([key("a", cap: 5, others: 5),
+                                                         key("b", spentUntil: "2026-09-30T06:00:00.000Z")]))
+        XCTAssertEqual(mixed.resetsAt, "2026-09-30T06:00:00.000Z")
+        XCTAssertEqual(ProviderPools.spentNote(mixed), "All at cap · resets Sep 30")
     }
 
     /// What the composer says the key beside the gauge is: the one a session started now runs on,

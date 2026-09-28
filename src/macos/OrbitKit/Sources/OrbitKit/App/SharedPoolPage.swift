@@ -126,6 +126,19 @@ public enum SharedPoolPage {
         key.spentUntil ?? pool.window?.end
     }
 
+    /// The EARLIEST of some reset instants — one key free of its reason is enough for work to continue —
+    /// parsed rather than compared as text, so the answer does not ride on how the server spells a time.
+    static func earliest(_ resets: [String]) -> String? {
+        resets.min { (RelativeTime.parse($0) ?? .distantFuture) < (RelativeTime.parse($1) ?? .distantFuture) }
+    }
+
+    /// When the first key of a pool that cannot run comes back: the earliest of the stops' own resets,
+    /// which is what a pool's head names. Nil while one of its keys can run, or with none stopped.
+    static func firstReset(_ pool: SharedPool) -> String? {
+        let stopped = pool.keys.filter { keyState($0) == .spent }.compactMap { reset($0, in: pool) }
+        return stopped.isEmpty ? nil : earliest(stopped)
+    }
+
     /// The "2" of "2 of 5 keys available": the keys a session of the caller's could start on now.
     public static func availableCount(_ pool: SharedPool) -> Int {
         pool.keys.filter { [.available, .running].contains(keyState($0)) }.count
@@ -162,13 +175,7 @@ public enum SharedPoolPage {
         let stopped = pool.keys.filter { keyState($0) == .spent }
         if !stopped.isEmpty {
             let words = allOutOfBudget(pool) ? allOutOfBudgetWords : allAtCapWords
-            // The EARLIEST of the stops, as an account pool's reset is: one key free of its reason is
-            // enough for work to continue, whether that is the month turning or OpenAI's mark running out.
-            let resets = stopped.compactMap { reset($0, in: pool) }
-            let earliest = resets.min {
-                (RelativeTime.parse($0) ?? .distantFuture) < (RelativeTime.parse($1) ?? .distantFuture)
-            }
-            guard let at = earliest, let date = capReset(at) else { return words }
+            guard let at = firstReset(pool), let date = capReset(at) else { return words }
             return "\(words) · resets \(date)"
         }
         return "No key can run"

@@ -26,8 +26,10 @@ public enum SharedPools {
                 enabled: key.enabled,
                 planUsage: keyWindow(key, in: pool),
                 state: memberState(state),
-                // Only a cap has a reset, and it is the month's own end rather than a window's.
-                resetsAt: state == .atCap ? pool.window?.end : nil,
+                // A stopped key has a reset, and it is a date rather than a window's clock: OpenAI's
+                // own mark when the gateway set one (`spentUntil`), else the month's end — the same
+                // choice web's `sharedPoolAsProviderPool` makes for the same key.
+                resetsAt: state == .spent ? (key.spentUntil ?? pool.window?.end) : nil,
                 next: key.next,
                 key: key)
         }
@@ -37,8 +39,10 @@ public enum SharedPools {
             id: pool.id,
             slug: pool.slug,
             label: pool.label,
-            // A pool nobody can start on until the month turns: the keys' own caps end together.
-            resetsAt: !free && members.contains { $0.state == .spent } ? pool.window?.end : nil,
+            // A pool nobody can start on until its first stop lets go — the earliest of them, an account
+            // pool's own rule, which is the month turning for a cap and OpenAI's own mark for a key it
+            // took out of budget. Web's `sharedPoolAsProviderPool` reads the same members the same way.
+            resetsAt: free ? nil : SharedPoolPage.firstReset(pool),
             unavailable: runnable ? nil : pool.keys.isEmpty ? "No keys" : "No key can run",
             members: members,
             shared: pool)
@@ -50,12 +54,13 @@ public enum SharedPools {
 
     /// A key's state in this client's member vocabulary. The pool's own states are the keys'
     /// (`PoolKeyState`), so a key OpenAI refused is a member whose key was refused (`refused`) and a
-    /// cap the others used up is `spent` — the words for each are the pool's to say.
+    /// key that cannot run now — the others' cap used up, or OpenAI's own mark on it — is `spent`;
+    /// the words for each are the pool's to say.
     static func memberState(_ state: SharedPoolPage.KeyState) -> PoolMemberState {
         switch state {
         case .invalid: return .refused
         case .disabled: return .disabled
-        case .atCap: return .spent
+        case .spent: return .spent
         case .running: return .running
         case .available: return .available
         }
