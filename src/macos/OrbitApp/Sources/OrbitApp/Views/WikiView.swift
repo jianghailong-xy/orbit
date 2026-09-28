@@ -28,6 +28,8 @@ struct WikiHomeActions {
     var openRun: (String) -> Void = { _ in }
     /// The Contents sheet — the category directory — from the list button in the bar (mock 12 ③).
     var openContents: () -> Void = {}
+    /// A session, by id: the status line's View run opens the run that failed (mock 12 ④).
+    var openSession: (String) -> Void = { _ in }
 }
 
 /// One space's home: the large title with the space beside it, the status line, the search under
@@ -108,10 +110,21 @@ struct WikiHomePage: View {
                 Spacer(minLength: 8)
                 spacePicker
             }
-            Text(content.statusLine)
+            Text(wikiStatusText(content.statusParts(now: now)))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .environment(\.openURL, OpenURLAction { url in
+                    switch url {
+                    case wikiStatusSettingsURL:
+                        actions.openSettings()
+                    case wikiStatusRunURL:
+                        if let session = content.health?.maintenance.lastRun?.sessionId { actions.openSession(session) }
+                    default:
+                        return .systemAction
+                    }
+                    return .handled
+                })
         }
         .padding(.top, 4)
     }
@@ -1374,6 +1387,55 @@ private struct WikiTrailingIconLabelStyle: LabelStyle {
             configuration.title
             configuration.icon
         }
+    }
+}
+
+/// Where the status line's two links lead: the line opens them itself (`openURL` on the header).
+let wikiStatusSettingsURL = URL(string: "orbit-wiki-status://settings")!
+let wikiStatusRunURL = URL(string: "orbit-wiki-status://run")!
+
+/// The status line under the title (mocks 12 ①, ④), one wrapping text: each part behind its `·`, amber
+/// while a maintenance run waits and red when it broke — the dot before the words, as the session list's
+/// status dots are — a green ✓ after a run that succeeded, and Set up and View run as links in the tint.
+/// The parts are `WikiHealthLogic`'s, which the web's status row draws too; a phone has no spinner, as
+/// mock 12 has none.
+func wikiStatusText(_ parts: [WikiStatusPart]) -> AttributedString {
+    typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
+    var line = AttributedString()
+    for (index, part) in parts.enumerated() {
+        if index > 0 { line += AttributedString(" · ") }
+        let colour = wikiStatusColour(part.tone)
+        // No-break spaces keep the dot on the line of the words it colours, and the ✓ on the line of the
+        // success it marks: a wrapped line never ends on a lone dot or starts with a lone check.
+        if part.mark == .dot {
+            var dot = AttributedString("●\u{00A0}")
+            if let colour { dot[Colour.self] = colour }
+            line += dot
+        }
+        var words = AttributedString(part.text)
+        if let colour { words[Colour.self] = colour }
+        if part.strong { words[AttributeScopes.SwiftUIAttributes.FontAttribute.self] = Font.orbitLabel.weight(.semibold) }
+        switch part.link {
+        case .settings: words.link = wikiStatusSettingsURL
+        case .run: words.link = wikiStatusRunURL
+        case .none: break
+        }
+        line += words
+        if part.mark == .check {
+            var check = AttributedString("\u{00A0}✓")
+            check[Colour.self] = Color.green
+            line += check
+        }
+    }
+    return line
+}
+
+/// A part's colour: amber while a run waits, red when it broke; the line's own grey otherwise.
+private func wikiStatusColour(_ tone: WikiStatusPart.Tone) -> Color? {
+    switch tone {
+    case .warn: return Color.orange
+    case .error: return Color.red
+    case .muted, .plain: return nil
     }
 }
 

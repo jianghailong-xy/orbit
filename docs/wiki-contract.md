@@ -1014,3 +1014,51 @@ op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 直接生效 / 
   里跑，所以它接受 owner 的 runner 不带会话的调用；带了会话头的，须是该 space 的维护会话。
 - 通过的条件：游标已在期望位置或之后，**并且**期望这个位置的最新一次运行以 succeeded 收尾、`ops.refused` 为 0。
 - 否则退出码 1，每条原因一句：游标没到；没有任务期望这个位置；运行没说怎么结束的或没成功；运行没报它的 op；服务端拒了 op。
+
+## 20. 健康可见：Wiki 首页的状态行与连续失败的通知（判据 5）
+
+JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-health.ts`（读）与 `wiki-maintenance.ts` 的
+`advanceCursor`（通知），用户门在 `wiki/wiki-health.controller.ts`；共享类型与 look 的判定在 `src/shared/src/wikiHealth.ts`；
+两端的文案在 web `lib/wikiHealth.ts` 与 OrbitKit `WikiHealthLogic.swift`，由 `src/shared/src/wiki-health.fixture.json` 锁住。
+没有新迁移：读的是 0315 的 `wiki_cursor` 与 0320 的 `wiki_maintenance_run`。
+
+### 20.1 读：`GET /api/wiki/spaces/:id/health`
+
+- 只给 space 的 owner（JWT 门）；别的账号的 space 是普通的 404，wiki 没对该账号开放时是 `WIKI_DISABLED`。**只读**：连游标行也不建——
+  从没跑过的 space 没有游标行，读作游标在最开头。
+- `entries`：space 的 **全部** active 条目数，即状态行的「N entries」。条目列表有自己的上限（200），它的长度不是计数。
+- `maintenance`：
+  - `enabled`；`lastOkAt`（上次成功）、`lastRunAt`（上次有运行报告，不论结局）；`consecutiveFailures`（连续失败次数，成功即清零）；
+  - `backlog`、`oldestPendingAt`、`lagSeconds`：游标之后的事实数（§16.2 的 backlog）、其中最老的一条及其年龄，**读时现算**——
+    游标行上存的那份只是上一次运行写下的。只在维护开着时算：关着的 space 读作 0 / null / 0；
+  - `dailyLimitReached`：今天（UTC）建出的维护任务已达 `dailyRunLimit`；`held`：§19.2 的 `{reason, at}` 或 null；
+  - `running`：已开始、未结束、且它的任务仍是 OPEN / IN_PROGRESS 的那次运行 `{sessionId, startedAt}`，或 null；
+  - `lastRun`：最后结束的那次运行 `{sessionId, outcome, endedAt}`，或 null——状态行的 View run 打开它的会话；
+  - `look`：状态行画哪一种（20.2）。
+
+### 20.2 四种样子（另加「正在跑」）
+
+按 `looks` 的顺序，第一个成立的就是（`wikiMaintenanceLook`）：
+
+| look | 条件 | 状态行（效果图 11 ②、12 ④） |
+|---|---|---|
+| `off` | 维护关着 | `Maintenance off · Set up`（Set up 进 Wiki 设置） |
+| `failing`（红） | `consecutiveFailures > 0` | `● Maintenance failed 3 times · last success 2d ago · 57 to catch up · View run` |
+| `running` | `running` 不为空 | `Maintaining now · started 4m ago · 24 to catch up` |
+| `behind`（琥珀） | 最老的事实超过 `maintenance.rules.maxPendingAgeHours`（24） | `● Maintenance behind · 43 to catch up, oldest 26h · last run 1d ago · daily limit reached` |
+| `ok` | 以上都不成立 | `Maintained 2h ago ✓ · 6 to catch up` |
+
+- 效果图没画、这次补的写法：失败 1 次写 `Maintenance failed`（2 次起写 `… N times`）；从没成功过就不写 `last success`；运行没报出会话
+  就不给 View run；开着但还没成功过一次写 `Maintenance on · N to catch up`；滞后原因除了 `daily limit reached`，Manual 下审阅队列满时写
+  `review queue full`。
+- 时间：`just now` / `4m ago` / `2h ago` / `1d ago` / `3w ago`；滞后量三天以内按小时（`26h`，对着 24 小时的线读），之后按天（`14d`）。
+- web 各宽度与 iOS 同一句话：entries（全量、千分位）· 锚点 · 维护部分；web 桌面在 entries 后多一个审阅数（手机由琥珀横幅说）。
+
+### 20.3 连续失败 3 次通知 owner 一次
+
+- 运行报告失败（游标路由的 failed / truncated，或 finish 路由的 failed）时，计数是游标行上的**一条** `UPDATE … RETURNING`：
+  加一并读回新值。并发上报时每个报告读回各自的数，只有读回恰好 `notify.afterFailures`（3）的那一次推送——同一轮第 4、5 次不再推。
+- 推送走 `PushService.notifyWikiMaintenanceFailing`：标题 `Wiki maintenance failed 3 times`，正文是 space 标题、「成功之前 wiki 收不到新
+  东西」和最后一次错误的第一行；kind `wiki-maintenance-failing`，thread `wiki-<space>`，不改角标。在语句之后、任何事务之外发，尽力而为：
+  手机没响，失败照样记下。
+- 成功的运行把计数清零（§16.4），下一轮连续失败到它自己的第 3 次再推一次。

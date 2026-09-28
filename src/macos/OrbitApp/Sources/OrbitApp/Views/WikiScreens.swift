@@ -53,7 +53,8 @@ struct WikiHomeView: View {
             search: { query in await wiki.search(query) },
             openSettings: { open(.wikiSettings) },
             openRun: { id in open(.wikiRun(changesetID: id)) },
-            openContents: { contentsShown = true })
+            openContents: { contentsShown = true },
+            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) })
     }
 
     /// A phone pushes the page; the three-column shells put it in the detail pane beside the list.
