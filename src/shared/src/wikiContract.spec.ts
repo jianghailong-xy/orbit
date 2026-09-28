@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { WIKI_IMPORT_RULES } from './wiki';
 import {
   KIND_SPECS,
   WIKI_ANCHOR_SPECS,
@@ -626,4 +627,34 @@ describe('wiki contract', () => {
       expect(errors.map((e) => e.path).sort()).toEqual([...v.expect.errors].sort());
     },
   );
+
+  it('imports a file as a note, and proposes from it as an agent would', () => {
+    const imports = CONTRACT.import;
+    expect(imports.phase).toBe(2);
+    expect(imports.rules).toEqual({ ...WIKI_IMPORT_RULES });
+    expect(imports.tables).toEqual(['wiki_note']);
+    // The note's CHECKs are the rules' own numbers.
+    const sql = readFileSync(path.join(ROOT, imports.migration), 'utf8');
+    expect(sql).toContain(`char_length("text") <= ${WIKI_IMPORT_RULES.noteMaxChars}`);
+    expect(sql).toContain(`char_length("path") <= ${WIKI_IMPORT_RULES.notePathMaxChars}`);
+    expect(sql).toMatch(/UNIQUE INDEX IF NOT EXISTS "wiki_note_space_id_content_sha256_key"\s+ON "wiki_note" \("space_id", "content_sha256"\)/u);
+    // A note is a source kind, and an import an origin, that phase 1 already declared; what an import
+    // proposes is held to exactly what an agent's proposal is.
+    expect(WIKI_SOURCE_KINDS).toContain('note');
+    expect(WIKI_CHANGESET_ORIGINS).toContain('import');
+    expect(WIKI_EFFECT_POLICY.origins.import).toEqual(WIKI_EFFECT_POLICY.origins.agent);
+    expect(imports.source).toMatch(/never the owner's own words/u);
+    // A run is one changeset's worth.
+    expect(WIKI_IMPORT_RULES.opsPerRun).toBe(WIKI_LIMITS.opsPerChangeset);
+    // Its two routes are the runner door's, and neither decides anything.
+    const runner = CONTRACT.agentSurface.doors.runner;
+    expect(runner.importRoutes).toEqual([imports.note.route, imports.propose.route]);
+    for (const route of runner.importRoutes) expect(route).toMatch(/^POST \/api\/runner\/wiki\/spaces\/:id\/(notes|imports)$/u);
+    expect(imports.note.redaction).toMatch(/BEFORE anything is stored or hashed/u);
+    // A CLI verb with no tool beside it, whose description leads with what its reader must not do.
+    expect(imports.cli.command).toMatch(/^orbit wiki import --from <dir\|file> --space <id>/u);
+    expect(imports.cli.tool).toMatch(/^none/u);
+    expect(imports.cli.precondition).toMatch(/never write an entry yourself/u);
+    expect(CONTRACT.agentSurface.tools).not.toContain('wiki_import');
+  });
 });

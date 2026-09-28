@@ -220,6 +220,28 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
   原记录被删时同一事务里置 `deleted`，`quote` 与 `quote_sha256` 清空；只靠已删出处支撑的 confirmed 条目标 `unsupported`，
   退出推送进 Review。owner 手写的条目不受影响。
 
+### 5.1 `note` 出处与 `orbit wiki import`（判据 1，契约 `import`）
+
+- **一个文件一条 note**（迁移 0316，表 `wiki_note`）：`POST /api/runner/wiki/spaces/:id/notes` 收 `{path, text}`，
+  正文和路径先过共享脱敏器（带 owner 的 `workspace.env` 值），**只存脱敏后的正文、它的 sha256 和路径**，原文不落库。
+  `UNIQUE (space_id, content_sha256)`：同一文件重导、或同样内容换个文件名（AGENTS.md 重复 CLAUDE.md），回答已有的那条
+  （`created: false`），不产生新行。回答里的 `text` 就是存下的脱敏正文，导入端交给模型的也是它，所以模型抄的引文
+  对得上原文。正文至多 10 万字、路径至多 500 字。
+- **引用**：`{ kind: 'note', ref: <note id>, quote? }`，只在本 owner 的 note 里解析（别人的 note 是 `WIKI_SOURCE_UNRESOLVED`），
+  引文校验和 Automatic 的核实读的都是存下的脱敏正文；出处的 `locator` 是 `{ path }`，客户端显示成「Note · 路径」。
+  note 是 agent 写的二手内容，不算 owner 原话。
+- **提议**：`POST /api/runner/wiki/spaces/:id/imports`，body 同 `wiki_propose`，origin 由路由定为 `import`（不收 body 字段）。
+  生效只看 space 的审阅模式：Manual 全部待审；Tiered 直接生效为 Unreviewed（按抽检规则抽检）；Automatic 先等核实，
+  由同一会话的 `orbit wiki verify` 核实。安全底线照常：principle 拒 `WIKI_KIND_OWNER_ONLY`，tainted 待审，熔断，
+  每个变更集至多 30 个 op。两条路由都要带 `X-Orbit-Session-Id`（无会话 400），别的 owner 的 space 是 404。
+- **`orbit wiki import --from <dir|file> --space <id>`**（runner-go `wiki_import.go`）：逐文件登记 note → 用干净的
+  Claude Code 调本地模型（同 `orbit wiki verify` 的启动参数、环境白名单和 apiKeyHelper，默认不开 thinking）从脱敏正文里
+  抽至多 6 条 → 整批 dryRun 自检 → 提议。每次运行至多 30 个 op；因内容被拒的 op 丢弃并计数，从第一个因名额被拒的 op
+  （`WIKI_QUOTA`、`WIKI_REVIEW_QUEUE_FULL`）起留给下一次运行，所以要审的一批一批进 Review。principle 不提议、只计数。
+  目录按 frontmatter 的 type（feedback、user、reference、project、其余）再按文件名排序，跳过 `MEMORY.md`。
+  在本机（`$ORBIT_HOME/wiki-import` 或 `--state`）记住导到了哪：重跑从断点续，导过的文件不再送模型，内容变了的按新
+  note 导。碰到模型端点的第一个 401 就停；首次调用前先等 `/health` 回 200。
+
 ---
 
 ## 6. 状态机
