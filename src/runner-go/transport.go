@@ -2093,6 +2093,41 @@ func (t *Transport) advanceWikiCursor(sessionID, spaceID string, body interface{
 	return out, err
 }
 
+// listWikiAnchors reads one page of a space's live entries with git anchors, for the Wiki maintenance
+// run the calling session is (`orbit wiki anchors verify`, contract `anchorRules.verify.list`). after is
+// the next an earlier page gave, and a limit of 0 leaves the page's size to the server.
+func (t *Transport) listWikiAnchors(sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	values := url.Values{}
+	if after != "" {
+		values.Set("after", after)
+	}
+	if limit > 0 {
+		values.Set("limit", strconv.Itoa(limit))
+	}
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/anchors"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// reportWikiAnchorChecks reports what the calling session's maintenance run found on origin/main
+// (`orbit wiki anchors verify`, contract `anchorRules.verify.report`): each entry is recorded on its own.
+func (t *Transport) reportWikiAnchorChecks(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/anchor-checks"
+	err := t.doHeaders(nil, http.MethodPost, path, body, &out, wikiAnchorReportTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // ── Service tokens for headless processes (`orbit token`) ──────────────────
 // Runner-token authenticated on purpose: a service token can never mint another, so a leaked
 // bridge credential cannot renew itself or widen its own scope.

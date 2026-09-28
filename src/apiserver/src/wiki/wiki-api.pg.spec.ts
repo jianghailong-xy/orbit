@@ -377,7 +377,9 @@ test('the refusals, limits and effect policy this door answers with are the cont
     ].sort(),
   );
   assert.equal(status('WIKI_REVISION_CONFLICT'), 409);
-  assert.deepEqual(CONTRACT.effectPolicy.decide.actions, ['accept', 'edit', 'reject']);
+  // accept, edit and reject answer any op; reconfirm, amend and retire answer a challenge, and only a
+  // challenge (criterion 4, contract `anchorRules.verify.answers`).
+  assert.deepEqual(CONTRACT.effectPolicy.decide.actions, ['accept', 'edit', 'reject', 'reconfirm', 'amend', 'retire']);
   assert.deepEqual(Object.keys(CONTRACT.rejectReasons), ['not_true', 'not_useful', 'duplicate', 'too_specific']);
   for (const [limit, value] of Object.entries(CONTRACT.limits)) {
     assert.equal((WIKI_LIMITS as unknown as Record<string, number>)[limit], value, `limits.${limit}`);

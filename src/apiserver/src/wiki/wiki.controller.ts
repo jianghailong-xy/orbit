@@ -237,7 +237,8 @@ export class WikiController {
   }
 
   /**
-   * The owner's answer to one or more pending ops: accept, edit or reject.
+   * The owner's answer to one or more pending ops: accept, edit or reject — and, for a challenge,
+   * Re-confirm, Amend or Retire the entry it names (contract `anchorRules.verify.answers`).
    *
    * `assertOwnerChannel` runs before anything is read: a request that carries a session header is
    * refused WIKI_OWNER_CHANNEL_ONLY however it authenticated, because an agent reporting a person's
