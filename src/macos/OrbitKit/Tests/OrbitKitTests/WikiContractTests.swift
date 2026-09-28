@@ -112,6 +112,21 @@ final class WikiContractTests: XCTestCase {
                        known(WikiSourceState.self))
     }
 
+    /// An imported file is a `note` (contract `import`, criterion 1): the entries a local model read in
+    /// it cite the note, whose locator the server keeps as the file's path — and the Sources section
+    /// shows that path under the word Note, as the web does (`wikiSourceRefText`).
+    func testAnImportedNoteReadsAsTheFileItCameFrom() throws {
+        let c = try contract()
+        let imports = try object(c["import"], "import")
+        XCTAssertEqual(try strings(imports["tables"], "import.tables"), ["wiki_note"])
+        XCTAssertTrue(try XCTUnwrap(imports["source"] as? String).contains("Its locator is { path }"))
+        let json = #"{"id":"source-1","kind":"note","ref":"34WLbvrZ2SKHshXeJhZNn","locator":{"path":"memory/prefers-chinese.md"},"quote":"Reply in Chinese","quoteVerified":true,"state":"live","tainted":false}"#
+        let source = try JSONDecoder().decode(WikiSource.self, from: Data(json.utf8))
+        XCTAssertEqual(source.kind, .note)
+        XCTAssertEqual(WikiLogic.sourceWord(source.kind), "Note")
+        XCTAssertEqual(WikiLogic.sourceRef(source), "memory/prefers-chinese.md")
+    }
+
     /// What the owner decides, and the four reasons Review's menu offers — in the words it shows them.
     func testDecideActionsAndRejectReasonsMatchTheContract() throws {
         let c = try contract()
