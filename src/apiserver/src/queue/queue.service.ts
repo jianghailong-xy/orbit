@@ -10,6 +10,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { codexLoginUnavailableReason } from '../providers/codex-login';
 import { isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
@@ -700,6 +701,11 @@ export class QueueService {
       });
       return sharedPoolUnavailableReason(shared.label, keys);
     }
+    // A Codex pool of the owner's own (migration 0323) has no members to choose from: its account is the
+    // credential, and it takes a session exactly while that account is ACTIVE — signed out, or nobody
+    // signed in yet, refuses it here, where the person can act on the reason. A quota that has not been
+    // read is not that and does not appear here at all.
+    if (pool.engine === AgentProvider.CODEX) return codexLoginUnavailableReason(pool.label, pool.login);
     if (selectPoolMember(pool.candidates, null, new Date()).kind !== 'UNAVAILABLE') return null;
     return poolUnavailableReason(pool.label, pool.rows);
   }
@@ -714,6 +720,10 @@ export class QueueService {
       where: { slug, ownerId, shared: false },
       select: {
         label: true,
+        engine: true,
+        // A `codex` pool of one's own holds a ChatGPT login instead of members (migration 0323): what
+        // decides whether it can run is this row's state, never a quota reading.
+        logins: { select: { email: true, state: true } },
         members: {
           where: { ownerId },
           orderBy: { provider: { slug: 'asc' } },
@@ -731,7 +741,7 @@ export class QueueService {
         usage: this.planUsage?.snapshot(row) ?? null,
         refused: this.planUsage?.refused(row) ?? false,
       }));
-    return { label: pool.label, rows, candidates };
+    return { label: pool.label, engine: pool.engine, login: pool.logins[0] ?? null, rows, candidates };
   }
 
   /**

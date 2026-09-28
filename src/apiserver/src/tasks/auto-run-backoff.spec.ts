@@ -69,7 +69,7 @@ function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
     providerPool: {
       findFirst: async ({ where }: { where: { slug: string; ownerId: string } }) =>
         where.slug === POOL && where.ownerId === 'owner-1'
-          ? { members: rows.map((provider) => ({ provider })) }
+          ? { engine: 'claude', logins: [], members: rows.map((provider) => ({ provider })) }
           : null,
     },
   };

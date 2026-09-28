@@ -5,6 +5,7 @@ import { CLAUDE_EFFORT_ORDER } from '../common/runtime-provider';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { codexLoginUnavailableReason, codexLoginView } from './codex-login';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -78,13 +79,28 @@ function assertReasoningLevels(runtime: string, models: unknown): void {
 type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
 
 /** A pool as its owner reads it: the providers in it, keyless and endpointless, in the order the
- *  provider lists use. */
+ *  provider lists use — and, for a Codex pool of the caller's own, the ChatGPT account it runs on
+ *  (migration 0323). Only the columns `codexLoginView` reads are selected, and no token is among them:
+ *  the encrypted pair is never selected on any path that builds a response. */
 const POOL_SELECT = {
   id: true,
   slug: true,
   label: true,
   createdAt: true,
   updatedAt: true,
+  engine: true,
+  logins: {
+    orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
+    select: {
+      accountId: true,
+      email: true,
+      plan: true,
+      state: true,
+      lastError: true,
+      expiresAt: true,
+      createdAt: true,
+    },
+  },
   members: {
     orderBy: [
       { provider: { position: { sort: 'asc', nulls: 'last' } } },
@@ -95,8 +111,16 @@ const POOL_SELECT = {
   },
 } satisfies Prisma.ProviderPoolSelect;
 
-function poolView({ members, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
-  return { ...pool, members: members.map((member) => member.provider) };
+function poolView({ members, logins, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
+  return { ...pool, members: members.map((member) => member.provider), login: loginOf(logins) };
+}
+
+/** A pool's account as every read of it carries it: the email and `…AB12` of the one login it holds
+ *  (a Codex pool of its owner's own), or null — which is every Claude pool, and a Codex one nobody has
+ *  signed into yet. Built by `codexLoginView`, which cannot see a token: none is selected. */
+function loginOf(logins: { accountId: string; email: string | null; plan: string | null; state: string;
+  lastError: string | null; expiresAt: Date; createdAt: Date }[]) {
+  return codexLoginView(logins[0] ?? null);
 }
 
 /** The same pools, read with what asking each member's credential for its quota takes (poolViews). The key
@@ -217,7 +241,7 @@ export class ProvidersService {
     const pools = await this.prisma.providerPool.findMany({
       where: { OR: [{ ownerId, shared: false }, { shared: true, people: { some: { userId: ownerId } } }] },
       orderBy: { createdAt: 'asc' },
-      select: { slug: true, label: true, shared: true },
+      select: { slug: true, label: true, shared: true, engine: true },
     });
     return [
       // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
@@ -231,10 +255,12 @@ export class ProvidersService {
       }),
       // A pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own —
       // so, like a built-in engine, it names no model list of its own. A shared pool runs Codex on
-      // OpenAI's own endpoint, whose models are the Codex CLI's.
-      ...pools.map(({ shared, ...pool }) => ({
+      // OpenAI's own endpoint, whose models are the Codex CLI's; so does a pool of one's own that holds
+      // a ChatGPT login the server signed in (migration 0323) — it is Codex throughout, and its account
+      // is what a session on it spends.
+      ...pools.map(({ shared, engine, ...pool }) => ({
         ...pool,
-        runtime: shared ? AgentProvider.CODEX : AgentProvider.CLAUDE,
+        runtime: shared || engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE,
         builtin: false,
       })),
     ];
@@ -415,9 +441,21 @@ export class ProvidersService {
   }
 
   /** An account pool of the caller's own providers: one more slug to dispatch with, taken from the
-   *  namespace the providers' slugs come from. Its members keep theirs. */
+   *  namespace the providers' slugs come from. Its members keep theirs.
+   *
+   *  A pool may instead be created on Codex (migration 0323): a pool of the caller's own that holds one
+   *  ChatGPT login this server signs in and keeps, and starts with no members at all — its account is
+   *  added by the sign-in (CodexLoginService), never as a provider, so one that names providers is
+   *  refused rather than quietly emptied of them. */
   async createPool(ownerId: string, dto: CreateProviderPoolDto) {
     const providerIds = [...new Set(dto.providerIds ?? [])];
+    const engine = dto.engine ?? AgentProvider.CLAUDE;
+    if (engine === AgentProvider.CODEX && providerIds.length) {
+      throw new BadRequestException({
+        code: 'POOL_ENGINE_MEMBERS',
+        message: 'a Codex pool of your own runs on a ChatGPT login, not on providers — leave providerIds empty',
+      });
+    }
     await this.assertPoolMembers(ownerId, providerIds);
     const pool = await this.withFreeSlug(slugBase(dto.label), (slug) =>
       this.prisma.providerPool.create({
@@ -425,6 +463,7 @@ export class ProvidersService {
           slug,
           label: dto.label,
           ownerId,
+          engine,
           members: { createMany: { data: providerIds.map((providerId) => ({ providerId })) } },
         },
         select: POOL_SELECT,
@@ -432,6 +471,18 @@ export class ProvidersService {
     );
     this.publishChanged(ownerId, pool.id);
     return poolView(pool);
+  }
+
+  /** One of the caller's pools, as its page reads it — the members it holds and where each of them
+   *  stands, or the ChatGPT account a Codex pool of theirs runs on. Another owner's is not found, and
+   *  neither is a shared pool's, which is read on its own page (SharedPoolsService). */
+  async getPool(ownerId: string, id: string) {
+    const pool = await this.prisma.providerPool.findFirst({
+      where: { id, ownerId, shared: false },
+      select: POOL_QUOTA_SELECT,
+    });
+    if (!pool) throw new NotFoundException('pool not found');
+    return (await this.poolViews(ownerId, [pool]))[0];
   }
 
   /** Put one of the caller's providers into one of their pools. Adding a member again changes nothing. */
@@ -587,7 +638,20 @@ export class ProvidersService {
       ownerId,
       pools.flatMap((pool) => pool.members.map((member) => member.provider)),
     );
-    return pools.map(({ members, ...pool }) => {
+    return pools.map(({ members, logins, ...pool }) => {
+      const login = loginOf(logins);
+      // A Codex pool of the owner's own runs on its ChatGPT account, not on member providers: it holds
+      // none, and what decides whether it can take a session is the account's state alone. A quota that
+      // has not been read does not decide it — that is `login.usage` being null, and the account runs.
+      if (pool.engine === AgentProvider.CODEX) {
+        return {
+          ...pool,
+          login,
+          resetsAt: null,
+          unavailable: codexLoginUnavailableReason(pool.label, login),
+          members: [],
+        };
+      }
       const quota = members.map(({ provider: row }) => ({
         row,
         usage: this.planUsage.snapshot(row),
@@ -600,6 +664,7 @@ export class ProvidersService {
       );
       return {
         ...pool,
+        login,
         resetsAt: selection.kind === 'EXHAUSTED' ? (selection.resetsAt?.toISOString() ?? null) : null,
         unavailable:
           selection.kind !== 'UNAVAILABLE' ? null : members.length > 0 ? 'No account can run' : 'No accounts',

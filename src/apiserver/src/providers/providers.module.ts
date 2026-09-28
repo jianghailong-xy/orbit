@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { AdminProvidersController } from './admin-providers.controller';
+import { CodexLoginService } from './codex-login.service';
 import { ModelCatalogService } from './model-catalog.service';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { PoolGatewayController } from './pool-gateway.controller';
@@ -21,6 +22,10 @@ import { SharedPoolsService } from './shared-pools.service';
     ProviderPlanUsageService,
     AdminRoleGuard,
     SharedPoolsService,
+    // The ChatGPT sign-in of a personal Codex pool (migration 0323): it spawns the official codex CLI's
+    // device flow and stores what the CLI leaves, encrypted. Only its own controller uses it — the pool
+    // view reads the row straight from the table, so nothing else has to hand a token around.
+    CodexLoginService,
     PoolGatewayService,
     PoolUsageLedger,
     // The shared pools' gateway forwards to OpenAI and nowhere else (pool-gateway.service.ts).

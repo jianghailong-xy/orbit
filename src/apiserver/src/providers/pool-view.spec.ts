@@ -41,7 +41,10 @@ function listPools(
   usage: Record<string, PlanUsageSnapshot>,
   { refused = [] as string[], running = [] as { provider: string; poolMemberProviderId: string | null }[] } = {},
 ) {
-  const pools = [{ id: 'pool-1', slug: POOL, label: 'Claude accounts', createdAt: new Date(0), updatedAt: new Date(0), members }];
+  const pools = [{
+    id: 'pool-1', slug: POOL, label: 'Claude accounts', createdAt: new Date(0), updatedAt: new Date(0),
+    engine: 'claude', logins: [], members,
+  }];
   return new ProvidersService(
     {
       providerPool: { findMany: async () => pools },

@@ -1371,7 +1371,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
       // six preserved objects. No INSERT, UPDATE or DELETE: every key reads NULL, and nothing is
       // backfilled.
-      '0322_pool_key_spent_until'],
+      '0322_pool_key_spent_until',
+      // A pool of one person's own that runs on their ChatGPT login, held by this server (0323): one
+      // `DROP CONSTRAINT` and one `ADD CONSTRAINT` of `provider_pool_engine_check`, whose new form admits
+      // `codex` to a pool that is not shared — every stored pool is a 0265 personal Claude one or a 0321
+      // shared Codex one, and each still satisfies it, so no row is rewritten or refused — and one new
+      // table, `pool_codex_login`, with its primary key, its two CHECKs and its composite foreign key
+      // (pool_id, user_id) → provider_pool(id, owner_id). Read against every claim above: no `task`,
+      // `session`, `project` or `project_acceptance_*` object is named — `provider_pool` is, as the table
+      // the CHECK is replaced on and the parent the new foreign key references, and neither is a preserved
+      // relation. No function, trigger, type or enum is created, replaced or dropped — no `CREATE OR
+      // REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects — and no `ALTER TYPE` or `DROP TYPE`. No INSERT, UPDATE or DELETE: the new table
+      // starts empty and nothing is backfilled.
+      '0323_pool_codex_login'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

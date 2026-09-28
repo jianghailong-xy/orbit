@@ -1,0 +1,491 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+  type OnModuleDestroy,
+} from '@nestjs/common';
+import { RunEventType } from '@orbit/shared';
+import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
+import {
+  CodexAuthError,
+  codexDeviceChallenge,
+  codexLoginView,
+  parseCodexAuthJson,
+  type CodexLoginTokens,
+  type CodexLoginView,
+  type DeviceChallenge,
+} from './codex-login';
+import { encryptSecret } from './provider-crypto';
+
+/**
+ * The server side of "sign in with ChatGPT" for a personal codex pool (migration 0323): the owner starts
+ * a device-code login, the OFFICIAL codex CLI runs it here, the owner approves in their browser, and the
+ * credential the CLI leaves behind is encrypted into `pool_codex_login`. The pool's own doors are
+ * ProvidersService; this is the flow.
+ *
+ * THE CLI RUNS HERE, IN A THROWAWAY CODEX_HOME
+ * ============================================
+ * `codex login --device-auth` is spawned with CODEX_HOME pointing at a directory made for this one
+ * attempt, which is what makes it a NEW login: no pre-existing `auth.json` is on that path to be copied
+ * or reused, and nothing of the operator's own CODEX_HOME is read or written. The credential exists as a
+ * file only while the CLI holds it; this service reads it the moment the CLI stops, parses out the four
+ * values it needs, deletes the directory, and keeps the tokens in memory only until the next poll stores
+ * them (encrypted, provider-crypto). No refresh is ever done here — the pool gateway is the one place the
+ * pair is rotated (P3-b), which is why nothing else in this process ever writes those columns.
+ *
+ * THE STATE MACHINE
+ * =================
+ * One attempt per pool, in this process: it owns a child process, and a child process belongs to the
+ * process that spawned it, so an attempt cannot be handed to another replica — a poll that lands
+ * elsewhere sees no attempt at all (NONE) and the page starts the flow again.
+ *
+ *   (none) ──POST──▶ PENDING ──(CLI prints the page and code)──▶ PENDING (challenge readable)
+ *                       │  │
+ *                       │  ├─(DELETE)──────────────▶ CANCELLED   child killed, directory gone
+ *                       │  ├─(15 minutes pass)─────▶ EXPIRED     child killed, directory gone
+ *                       │  └─(CLI stops, no login)─▶ FAILED      with the exit code, never its output
+ *                       │
+ *                       └─(owner approves; CLI writes auth.json and stops)─▶ CONFIRMED
+ *                                                                              │
+ *                                            poll stores it encrypted ─────────┘
+ *                                                    │
+ *        ┌───────────────────────────────────────────┴────────────────────────────────┐
+ *        │  ACTIVE  ──(upstream 401 through the gateway: markSignedOut)──▶  SIGNED_OUT │
+ *        │     ▲                                                                  │    │
+ *        │     └────────── the owner signs in again (only they can) ──────────────┘    │
+ *        └──────────────────────────────────────────────────────────────────────────────┘
+ *
+ * The row's own two states are ACTIVE and SIGNED_OUT, and only the credential's fate moves them. A quota
+ * that could not be read is neither: `usage` is null on the view and the account runs on.
+ *
+ * SECURITY
+ * ========
+ *   * The tokens are written, decrypted and rotated in this one process and this one table. They are not
+ *     logged, not put in a claim payload, not returned by any route: a response carries the account's
+ *     email and `…AB12`, and a refusal carries neither the tokens nor the ciphertext.
+ *   * The CLI is spawned with a small, named environment (see loginEnv) so this server's own secrets —
+ *     PROVIDER_SECRET_KEY above all — are not inherited by it.
+ *   * A pool is its owner's alone: every method here resolves the pool by (id, ownerId, not shared) and a
+ *     pool that is not the caller's answers 404, exactly as one that does not exist. Re-login is the same
+ *     door, so nobody but the owner can sign the account in, out, or again.
+ */
+
+/** How long an attempt may live by default: the CLI's own words are "expires in 15 minutes" for the code
+ *  it prints. CODEX_LOGIN_TTL_MS overrides it, which is how a spec drives the deadline without waiting a
+ *  quarter of an hour for it. */
+export const CODEX_LOGIN_TTL_MS = 15 * 60 * 1000;
+
+const codexLoginTtlMs = () => {
+  const set = Number(process.env.CODEX_LOGIN_TTL_MS);
+  return Number.isFinite(set) && set > 0 ? set : CODEX_LOGIN_TTL_MS;
+};
+
+/**
+ * How long `start` waits for the CLI to print the page and the code before giving up on it. The CLI
+ * prints them at once — this is the whole of what the person needs to be handed back — so the wait is
+ * short on purpose: an answer with no code in it is not one the page can do anything with.
+ */
+const CHALLENGE_TIMEOUT_MS = 10_000;
+
+/** How much of the CLI's output this keeps. It is the banner and the code; nothing else is ever read. */
+const OUTPUT_CAP = 16 * 1024;
+
+/** What `start` answers with, and what a poll repeats until the login settles. */
+export interface CodexLoginAttemptView {
+  status: 'PENDING';
+  verificationUrl: string | null;
+  userCode: string | null;
+  expiresAt: string;
+}
+
+/** What a poll answers: the attempt's state, and the account the pool holds (before and after). */
+export interface CodexLoginPollView {
+  status: 'PENDING' | 'CONFIRMED' | 'EXPIRED' | 'CANCELLED' | 'FAILED' | 'NONE';
+  verificationUrl?: string | null;
+  userCode?: string | null;
+  expiresAt?: string;
+  /** The stored account, whenever the pool has one. */
+  account: CodexLoginView | null;
+  /** Why it failed, in this server's words — the CLI's own output is never repeated. */
+  error?: string;
+}
+
+interface Attempt {
+  poolId: string;
+  userId: string;
+  dir: string | null;
+  child: ChildProcess | null;
+  output: string;
+  challenge: DeviceChallenge | null;
+  status: 'PENDING' | 'CONFIRMED' | 'EXPIRED' | 'CANCELLED' | 'FAILED';
+  error: string | null;
+  /** Read off the CLI's auth.json once it stopped; held only until the poll that stores it. */
+  tokens: CodexLoginTokens | null;
+  expiresAt: number;
+  timer: NodeJS.Timeout | null;
+}
+
+/** The codex CLI this server signs in with. Named by CODEX_LOGIN_BIN so a deployment can pin a path. */
+const codexBin = () => process.env.CODEX_LOGIN_BIN?.trim() || 'codex';
+
+/**
+ * The environment the CLI is given: its own CODEX_HOME, and only what it needs to run and reach the
+ * network. Named rather than inherited wholesale, because a CLI is not a reader of this server's secrets
+ * — the master key that decrypts every pool credential is in this process's environment, and it is not
+ * going into a child's.
+ */
+function loginEnv(dir: string): NodeJS.ProcessEnv {
+  const keep = [
+    'PATH',
+    'HOME',
+    'TMPDIR',
+    'LANG',
+    'LC_ALL',
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'NO_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'no_proxy',
+    'NODE_EXTRA_CA_CERTS',
+    'SSL_CERT_FILE',
+    'SSL_CERT_DIR',
+  ];
+  const env: NodeJS.ProcessEnv = { CODEX_HOME: dir };
+  for (const key of keep) {
+    const value = process.env[key];
+    if (value) env[key] = value;
+  }
+  return env;
+}
+
+@Injectable()
+export class CodexLoginService implements OnModuleDestroy {
+  /** The attempts this process is running, by pool: one at a time, and only ever here. */
+  private readonly attempts = new Map<string, Attempt>();
+
+  constructor(
+    private readonly prisma: PrismaService,
+    // @Global RealtimeModule: the pool's account is on its owner's pool page and picker.
+    private readonly realtime: RealtimeService,
+  ) {}
+
+  /** Nothing outlives the process: a sign-in still waiting is killed and its directory removed. */
+  onModuleDestroy(): void {
+    for (const attempt of this.attempts.values()) void this.release(attempt);
+    this.attempts.clear();
+  }
+
+  /**
+   * Start a device-code login for one of the caller's own codex pools. A second start on the same pool
+   * takes the place of the first: one attempt per pool, so the child process, the directory and the code
+   * that is out there all belong to one flow.
+   */
+  async start(userId: string, poolId: string): Promise<CodexLoginAttemptView> {
+    const pool = await this.ownPool(userId, poolId);
+    const previous = this.attempts.get(pool.id);
+    if (previous) await this.release(previous);
+
+    const dir = await mkdtemp(join(tmpdir(), 'orbit-codex-login-'));
+    const attempt: Attempt = {
+      poolId: pool.id,
+      userId,
+      dir,
+      child: null,
+      output: '',
+      challenge: null,
+      status: 'PENDING',
+      error: null,
+      tokens: null,
+      expiresAt: Date.now() + codexLoginTtlMs(),
+      timer: null,
+    };
+    this.attempts.set(pool.id, attempt);
+    attempt.timer = setTimeout(() => {
+      attempt.status = 'EXPIRED';
+      void this.release(attempt);
+    }, codexLoginTtlMs());
+    // The deadline is this pool's business, not the process's: an idle server must still exit.
+    attempt.timer.unref();
+
+    const child = spawn(codexBin(), ['login', '--device-auth'], {
+      cwd: dir,
+      env: loginEnv(dir),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    attempt.child = child;
+    for (const stream of [child.stdout, child.stderr]) {
+      stream?.on('data', (chunk: Buffer) => {
+        if (attempt.output.length >= OUTPUT_CAP) return;
+        attempt.output += chunk.toString('utf8').slice(0, OUTPUT_CAP - attempt.output.length);
+        attempt.challenge = codexDeviceChallenge(attempt.output) ?? attempt.challenge;
+      });
+    }
+    child.on('error', () => {
+      attempt.error = `the codex CLI (${codexBin()}) could not be started on this server`;
+      attempt.status = 'FAILED';
+      void this.release(attempt);
+    });
+    child.on('exit', (code) => {
+      void this.settle(attempt, code);
+    });
+
+    // The code is the point of this call: wait for the CLI to print it, and give the attempt up rather
+    // than answer with half of what the page needs. A CLI that died first is answered with why.
+    const challenge = await this.awaitChallenge(attempt);
+    if (!challenge) {
+      const { error } = attempt;
+      attempt.status = 'FAILED';
+      await this.release(attempt);
+      this.attempts.delete(pool.id);
+      throw new ServiceUnavailableException({
+        code: 'CODEX_LOGIN_NO_CHALLENGE',
+        message: error ?? 'the codex CLI offered no device code',
+      });
+    }
+    return {
+      status: 'PENDING',
+      verificationUrl: challenge.verificationUrl,
+      userCode: challenge.userCode,
+      expiresAt: new Date(attempt.expiresAt).toISOString(),
+    };
+  }
+
+  /** The challenge as soon as the CLI has printed it, or null once the attempt is no longer waiting on
+   *  the person — a CLI that died, or one that printed nothing this server could read in time. */
+  private async awaitChallenge(attempt: Attempt): Promise<DeviceChallenge | null> {
+    const deadline = Date.now() + CHALLENGE_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (attempt.challenge) return attempt.challenge;
+      if (attempt.status !== 'PENDING') return null;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return attempt.challenge;
+  }
+
+  /**
+   * Where the login stands. The first poll after the owner approved is the one that stores the account —
+   * encrypted, and only then does anything of it reach the database. A second sign-in of an account the
+   * pool already runs on is refused here with the same 409 a second add of a key gets; the same account
+   * after a SIGNED_OUT is not a second one: it is the re-login, and it takes the row over.
+   */
+  async poll(userId: string, poolId: string): Promise<CodexLoginPollView> {
+    const pool = await this.ownPool(userId, poolId);
+    const attempt = this.attempts.get(pool.id);
+    if (!attempt) return { status: 'NONE', account: await this.account(pool.id) };
+
+    if (attempt.status === 'PENDING') {
+      return {
+        status: 'PENDING',
+        verificationUrl: attempt.challenge?.verificationUrl ?? null,
+        userCode: attempt.challenge?.userCode ?? null,
+        expiresAt: new Date(attempt.expiresAt).toISOString(),
+        account: await this.account(pool.id),
+      };
+    }
+    if (attempt.status === 'CONFIRMED') {
+      try {
+        const account = await this.store(pool, attempt);
+        this.attempts.delete(pool.id);
+        this.publish(poolId, userId);
+        return { status: 'CONFIRMED', account };
+      } catch (e) {
+        // A refused login is over, whichever way it was refused: the tokens it was holding go with the
+        // attempt — nothing of them is kept for a retry — and the answer is the refusal itself.
+        this.attempts.delete(pool.id);
+        await this.release(attempt);
+        attempt.tokens = null;
+        throw e;
+      }
+    }
+    const { status, error } = attempt;
+    this.attempts.delete(pool.id);
+    return { status, error: error ?? undefined, account: await this.account(pool.id) };
+  }
+
+  /**
+   * Give up on the attempt in flight: the child is killed, its directory removed, and nothing of it is
+   * stored. A pool with nothing in flight answers NONE rather than claiming to have cancelled something.
+   */
+  async cancel(userId: string, poolId: string): Promise<CodexLoginPollView> {
+    const pool = await this.ownPool(userId, poolId);
+    const attempt = this.attempts.get(pool.id);
+    if (!attempt) return { status: 'NONE', account: await this.account(pool.id) };
+    attempt.status = 'CANCELLED';
+    await this.release(attempt);
+    this.attempts.delete(pool.id);
+    return { status: 'CANCELLED', account: await this.account(pool.id) };
+  }
+
+  /**
+   * The owner takes the account out of the pool: the rows go, and with them the only copy this server
+   * holds of those tokens. What a session does next is the claim's business, as for a pool deleted under
+   * it. A pool with no account answers { removed: 0 }.
+   */
+  async signOut(userId: string, poolId: string) {
+    const pool = await this.ownPool(userId, poolId);
+    const attempt = this.attempts.get(pool.id);
+    if (attempt) {
+      attempt.status = 'CANCELLED';
+      await this.release(attempt);
+      this.attempts.delete(pool.id);
+    }
+    const { count } = await this.prisma.poolCodexLogin.deleteMany({ where: { poolId: pool.id } });
+    if (count > 0) this.publish(poolId, userId);
+    return { removed: count };
+  }
+
+  /**
+   * The upstream refused this account (a 401 through the pool gateway): it is SIGNED_OUT until its owner
+   * signs in again, and no claim may run on it. `reason` is the upstream's own words, kept so the page can
+   * say them. Only an ACTIVE account moves, so a second refusal — or one racing the owner's re-login —
+   * changes nothing; true when it moved. The pool gateway's to call (P3-b); no route reaches it.
+   */
+  async markSignedOut(poolId: string, reason: string): Promise<boolean> {
+    const { count } = await this.prisma.poolCodexLogin.updateMany({
+      where: { poolId, state: 'ACTIVE' },
+      data: { state: 'SIGNED_OUT', lastError: reason },
+    });
+    if (count > 0) {
+      const pool = await this.prisma.providerPool.findUnique({
+        where: { id: poolId },
+        select: { ownerId: true },
+      });
+      if (pool) this.publish(poolId, pool.ownerId);
+    }
+    return count > 0;
+  }
+
+  /** Each pool's account as a response reads it, by pool id — for the pools' own list (ProvidersService). */
+  async views(poolIds: string[]): Promise<Map<string, CodexLoginView | null>> {
+    const views = new Map<string, CodexLoginView | null>();
+    if (!poolIds.length) return views;
+    const rows = await this.prisma.poolCodexLogin.findMany({
+      where: { poolId: { in: poolIds } },
+      orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
+    });
+    for (const poolId of poolIds) {
+      views.set(poolId, codexLoginView(rows.find((row) => row.poolId === poolId) ?? null));
+    }
+    return views;
+  }
+
+  /** The account one pool holds, or null. */
+  private async account(poolId: string): Promise<CodexLoginView | null> {
+    return (await this.views([poolId])).get(poolId) ?? null;
+  }
+
+  /**
+   * The pool this caller may sign in on: one of their own, on Codex, not shared. Anything else is not
+   * found — another owner's pool is answered exactly as one that does not exist, and a Claude pool of
+   * their own has no ChatGPT login to hold.
+   */
+  private async ownPool(userId: string, poolId: string) {
+    const pool = await this.prisma.providerPool.findFirst({
+      where: { id: poolId, ownerId: userId, shared: false, engine: 'codex' },
+      select: { id: true, label: true },
+    });
+    if (!pool) throw new NotFoundException('pool not found');
+    return pool;
+  }
+
+  /**
+   * The CLI has stopped: read what it left, if anything. The FILE decides, not the exit code — the codex
+   * CLI's status is not a reliable word on the login, and a login that happened while the process was
+   * killed late is still a login. Its output is never read for this and never repeated anywhere.
+   */
+  private async settle(attempt: Attempt, code: number | null): Promise<void> {
+    if (attempt.status !== 'PENDING' || !attempt.dir) return;
+    if (attempt.timer) clearTimeout(attempt.timer);
+    attempt.timer = null;
+    const raw = await readFile(join(attempt.dir, 'auth.json'), 'utf8').catch(() => null);
+    if (raw !== null) {
+      try {
+        attempt.tokens = parseCodexAuthJson(raw);
+        attempt.status = 'CONFIRMED';
+      } catch (e) {
+        attempt.status = 'FAILED';
+        attempt.error = e instanceof CodexAuthError ? e.message : 'the codex CLI left a login this server cannot read';
+      }
+    } else if (code === 0) {
+      attempt.status = 'FAILED';
+      attempt.error = 'the codex CLI finished without a login';
+    } else {
+      attempt.status = 'FAILED';
+      attempt.error = `the codex CLI gave up (exit ${code ?? 'signal'})`;
+    }
+    // The credential file is gone the moment it has been read: nothing of it stays on disk.
+    await this.release(attempt);
+  }
+
+  /** Kill the child, forget the directory, drop anything read from it. Safe to call more than once. */
+  private async release(attempt: Attempt): Promise<void> {
+    if (attempt.timer) clearTimeout(attempt.timer);
+    attempt.timer = null;
+    attempt.child?.kill('SIGKILL');
+    attempt.child = null;
+    attempt.output = '';
+    attempt.challenge = null;
+    // What a finished sign-in is holding is the one thing that survives: the poll that stores it may not
+    // have come yet. Every other ending — cancelled, expired, failed, signed out, shut down — forgets it,
+    // and so does the poll that refuses it (the catch below).
+    if (attempt.status !== 'CONFIRMED') attempt.tokens = null;
+    const dir = attempt.dir;
+    attempt.dir = null;
+    if (dir) await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  /**
+   * The account the attempt signed in, encrypted into the pool — or the 409 that says the pool already
+   * runs on it (SIGNED_OUT, the owner's sign-in again: the row is taken over) or on another account (one
+   * login per pool: signing out first is what switches accounts).
+   */
+  private async store(pool: { id: string; label: string }, attempt: Attempt): Promise<CodexLoginView | null> {
+    const tokens = attempt.tokens;
+    if (!tokens) throw new Error('a confirmed attempt with no tokens');
+    const rows = await this.prisma.poolCodexLogin.findMany({
+      where: { poolId: pool.id },
+      select: { accountId: true, email: true, state: true },
+    });
+    const held = rows.find((row) => row.accountId === tokens.accountId);
+    if (held && held.state === 'ACTIVE') {
+      throw new ConflictException({
+        code: 'POOL_CODEX_ACCOUNT_DUPLICATE',
+        message: `This ChatGPT account is already in "${pool.label}"`,
+      });
+    }
+    const other = rows.find((row) => row.accountId !== tokens.accountId);
+    if (other) {
+      throw new ConflictException({
+        code: 'POOL_CODEX_ACCOUNT_TAKEN',
+        message: `"${pool.label}" already runs on ${other.email ?? 'another ChatGPT account'} — sign it out first`,
+      });
+    }
+    const data = {
+      accessTokenEnc: encryptSecret(tokens.accessToken),
+      refreshTokenEnc: encryptSecret(tokens.refreshToken),
+      email: tokens.email,
+      plan: tokens.plan,
+      expiresAt: tokens.expiresAt,
+      state: 'ACTIVE',
+      lastError: null,
+    };
+    await this.prisma.poolCodexLogin.upsert({
+      where: { poolId_accountId: { poolId: pool.id, accountId: tokens.accountId } },
+      create: { poolId: pool.id, userId: attempt.userId, accountId: tokens.accountId, ...data },
+      update: data,
+    });
+    attempt.tokens = null;
+    return this.account(pool.id);
+  }
+
+  private publish(poolId: string, ownerId: string): void {
+    this.realtime.publishForUser(ownerId, RunEventType.PROVIDER_CHANGED, poolId);
+  }
+}
