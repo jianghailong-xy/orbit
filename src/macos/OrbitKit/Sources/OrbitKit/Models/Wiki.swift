@@ -340,6 +340,25 @@ public struct WikiMaintenanceSettings: Codable, Equatable, Sendable {
     }
 }
 
+/// Why the last fact that found a space's maintenance due made no task (contract `maintenance.job.held`):
+/// the space's runs for the UTC day are used up, or — Manual — the review queue has no room. What the Wiki
+/// home page's status line says beside the lag, until a task is made.
+public enum WikiMaintenanceHeldReason: String, Codable, CaseIterable, Sendable {
+    case dailyLimitReached = "daily_limit_reached"
+    case reviewQueueFull = "review_queue_full"
+}
+
+/// `held` on a space's maintenance cursor state: why no task was made, and since when (ISO 8601).
+public struct WikiMaintenanceHeld: Codable, Equatable, Sendable {
+    public let reason: WikiMaintenanceHeldReason
+    public let at: String
+
+    public init(reason: WikiMaintenanceHeldReason, at: String) {
+        self.reason = reason
+        self.at = at
+    }
+}
+
 /// One owner's wiki for one codebase. `GET /wiki/spaces` answers these with `pendingOps` — the
 /// proposals waiting in it, which the drawer's amber number sums — and `GET /wiki/spaces/:id` with
 /// `usage` when asked for it.

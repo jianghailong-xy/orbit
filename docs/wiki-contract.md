@@ -697,7 +697,8 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
   只看第一条会漏掉任务还没跑的项目：2026-09-28 线上按字面规则会排除 orbit 自己的 15 个项目的协调会话。项目属于 space 用的也是这三条。
   维护作业自己的会话、任务、审批和回执都不算事实，免得一次运行喂大自己的 backlog。
 - 事实按（时间到毫秒, 种类, id）排成一条线；水位是线上的一个位置，存成三列而不是 jsonb，所以推进是一条 compare-and-set。
-- 到期条件留给判据 3：backlog ≥ 20，或新事实到达时最老的未处理事实已超过 24 小时（`state.due`）。时钟不启动任何工作。
+- 到期条件（判据 3，§19.1）：水位之后有事实的会话达到 20 个（设计 §8.2 说的是「20 个会话」，不是 20 条事实），或新事实到达时
+  最老的未处理事实已超过 24 小时（`state.due`）。时钟不启动任何工作。
 
 ### 16.3 案卷
 
@@ -911,3 +912,75 @@ JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（�
   提交。模型只读条目，不读会话原文；每篇最多用组里出处最多的 30 条。
 - 干净调用照抄 `orbit wiki verify` 的启动参数、环境白名单和 apiKeyHelper，只换系统提示；thinking 默认关：`CLAUDE_CODE_EFFORT_LEVEL=unset`
   且 `MAX_THINKING_TOKENS=0`（只设前者仍会发 adaptive thinking）。碰到第一个 401 就停；有主题没写成就以非 0 退出。
+
+## 19. 维护作业：由事实建任务、`orbit wiki maintain` 与 `orbit wiki check`（判据 3）
+
+JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端在 `src/apiserver/src/wiki/wiki-maintenance-run.ts`
+（触发、运行的起止与判据）、`wiki-maintenance-breaker.ts`（整次运行的熔断），runner 门在
+`runner-api/runner-wiki-maintain.controller.ts`；runner-go 在 `wiki_maintain.go`。
+
+### 19.1 触发：事实驱动，不用时钟
+
+- `WikiMaintenanceTrigger` 把本副本发布的每个事件当作提示：会话的 STATUS / SESSION_ENDED / SESSION_UPDATED / APPROVAL_RESOLVED，
+  以及 `task.changed` 点名的任务。只有提示点名的是**这个 space 的、仍在游标之后的已提交事实**（会话结算、它回答的审批、它的 merge
+  receipt、space 的任务终态），才去问这个 space 是否到期；改名、维护作业自己的事件、别的 space 的工作都不算新事实，
+  space 再到期也不建任务。merge receipt 与判据修订自己不发事件：它们照样计入 backlog，由下一个到达的事实一起带进来。
+- 到期：水位之后有事实的会话 ≥ `rules.backlogThreshold`（20），或新事实到达时最老的未处理事实已超过 `maxPendingAgeHours`（24）。
+  年龄只在事实到达时读，从不等：夜里悄悄满一天的 space，早上第一个事实到达时才建任务。
+- 不建：维护关了或缺 workspace / 清单；清单里有未结束（OPEN / IN_PROGRESS）的任务；提示不是新事实；没到期；过了 120 秒宽限的
+  事实里没有可覆盖的；被挡住（19.2）。
+- 建任务在维护清单那一行的锁下进行，锁内再读一遍未结束的任务和当天次数：两个事实同时到达只建一个。
+
+### 19.2 被挡住：健康状态里的 `held`
+
+- `daily_limit_reached`：这个 space 自 UTC 零点起建出的维护任务已达 `settings.maintenance.dailyRunLimit`（`wikiMaintenanceRunsToday`，不论结局）。
+- `review_queue_full`：Manual 模式下每条提议都等 owner，审阅队列连一个会话的提议都放不下。
+- 记在 `wiki_cursor.held_reason` / `held_at`，游标状态里是 `held: { reason, at }` 或 null；同一原因保留第一次被挡的时刻，建出任务时清空。
+
+### 19.3 任务的样子
+
+- 在 space 隐藏的「Wiki maintenance」清单里；标题 `Wiki maintenance: <space 标题>`；指派给维护设置的 workspace，provider 钉死为
+  维护设置的 provider（认领时按 §16.5 干净启动）；`runAt` 为建出的时刻；创建者为 owner（USER）。
+- 描述就是运行的指令：用 Bash 跑一次 `orbit wiki maintain --space <id>`，跑完用 task_progress_report 与一条 task_comment 汇报，
+  含 token 花费；失败时贴最后几行；不跑别的，失败最多重试一次。
+- 判据 EXECUTABLE：`orbit wiki check --space <id> --expect-cursor <token>`，期望退出码 0，时限 `rules.checkTimeoutSeconds`（300 秒）。
+- **期望位置**：从游标起、只看过了宽限的事实，按案卷页的同一走法数够 `runSize` 个会话时页会停在的位置。运行从同一游标翻页
+  （案卷路由的 `until`）正好走到这里。
+- **一次运行的大小**（`wikiMaintenanceRunSessions`），按每个会话最多 `entriesPerSessionMax`（6）条算，让它提议的东西放得进护栏：
+  Manual 下取一个会话最多留给 owner 的数（`limits.opsPerSession`）与审阅队列的空位中较小者；Tiered / Automatic 下 space 有
+  ≥100 个 active 条目时取它们的 10%（熔断线）；否则 `runSessionsMax`（20）。永不超过 20。
+
+### 19.4 `orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]`
+
+只有维护会话能跑（其余 `WIKI_NOT_MAINTENANCE_SESSION`），一次跑完以下各步，任何一步失败、被截断或熔断都不推进游标：
+
+1. **起点**：`GET …/maintenance/run` 拿 space 与仓库、维护 workspace 的工作目录、主题表、护栏数字和期望位置，同时记下运行开始、是哪个会话。
+2. **checkout**：维护 workspace 的工作目录（`~` 按 runner 账号的家目录展开——会话里 HOME 是干净目录），先 fetch；它的 origin 与 space
+   的仓库（`repo_url_norm`、有记录时的根提交）不一致就判失败并说明原因。
+3. **案卷**：从游标翻页到期望位置（`until`）；自上次处理后没变的案卷跳过。
+4. **抽取**：每个案卷一次干净的 Claude Code 调本地模型——照演示的 A2+6：8k 案卷、不开 thinking、每例最多 6 条；提示里带 space 的仓库
+   名、地址和一两句它是做什么的（取自仓库 README 的开头），要求讲的不是这个仓库的会话回答 `{"offTopic": true}`。每条照演示的
+   `extract.py` 校验：种类与字段、出处必须是案卷里的行且引文逐字出自该行、锚点必须在 origin/main 上存在；没过的整批再问一次。
+   代码锚点全都不在本仓库的条目丢弃（计 `entries.foreign`），离题的会话计 `offTopic`。principle 只有 owner 能写，抽到的丢弃并计数。
+5. **自检**：按主题分批（每批最多 `limits.opsPerChangeset` 个 op；Manual 最多 `limits.opsPerTurn`），逐批 `dryRun`：服务端找不到的
+   引文从出处上去掉再查一次，仍被拒的 op 丢掉（`selfCheckDropped`），被审阅配额挡住的不提议（`heldBack`）。
+6. **熔断**：space 有 ≥100 个 active 条目时，各批 dryRun 里会被模式直接生效或等核实的 op 合计不得超过 active 的 10%，超过就熔断，
+   一条都不写。服务端对维护运行的 changeset 也按整次运行计熔断（`wiki-maintenance-breaker.ts`）：本次运行先前各 changeset 经
+   模式改动的条目都算已用，active 数按运行开始时算（现在的 active 减去本次运行自己加出来且仍 active 的）。
+7. **提议**：`POST …/maintenance/changesets`，origin 为 `maintenance`；此时还有 op 被拒就判失败。
+8. **核实**：Automatic 下走 `orbit wiki verify` 对本次运行自己的 op 的核实，没拿到结论的再核一遍。
+9. **锚点**：`orbit wiki anchors verify`，`--repo` 取上面的 checkout。
+10. **文章**：`orbit wiki articles`，只重写条目集合变了的主题。
+11. **收尾**：`POST …/maintenance/finish`，带最后一页的 token、outcome 与运行报告；失败时 outcome 为 failed、带原因，游标不动、连续失败加一。
+    被 maxTurns 截断时由 runner 在游标路由上报 truncated（§16.5），同样记到运行上。
+
+运行报告（`WikiMaintenanceReport`）：会话、案卷、跳过、离题数，条目（抽到 / 保留 / 丢弃 / 锚点在库外 / principle），
+op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 直接生效 / 等待），核实、锚点、文章各自的结果，**token（输入、输出、调用次数，含抽取、
+核实、文章三处）**与耗时，失败时 `stoppedAt`。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独成列。
+
+### 19.5 `orbit wiki check --space <id> --expect-cursor <token> [--json]`
+
+- `GET /api/runner/wiki/spaces/:id/maintenance/check?expect=<token>`：只读。任务的验收命令在会话回合之后、在没有会话上下文的 shell
+  里跑，所以它接受 owner 的 runner 不带会话的调用；带了会话头的，须是该 space 的维护会话。
+- 通过的条件：游标已在期望位置或之后，**并且**期望这个位置的最新一次运行以 succeeded 收尾、`ops.refused` 为 0。
+- 否则退出码 1，每条原因一句：游标没到；没有任务期望这个位置；运行没说怎么结束的或没成功；运行没报它的 op；服务端拒了 op。

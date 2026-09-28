@@ -1335,7 +1335,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // are out of its reach. No function, trigger or type is created, replaced or dropped — no
       // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
       // six preserved objects. No INSERT, UPDATE or DELETE: nothing is read, locked or backfilled.
-      '0317_wiki_topic_articles'],
+      '0317_wiki_topic_articles',
+      // The wiki's maintenance job: one new table, `wiki_maintenance_run` (a maintenance task the
+      // trigger made, the cursor position its check expects, and what its run reported), reaching
+      // `wiki_space` through (space_id, owner_id) with its own CHECKs, a unique index and two plain
+      // ones; its task_id and session_id are history references with no foreign key. And
+      // `wiki_cursor` gains two nullable columns with no default (catalog-only) and one CHECK that
+      // every row satisfies as it stands. Read against every claim above: no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
+      // and criterion row are out of its reach. No function, trigger or type is created, replaced or
+      // dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and
+      // names none of the six preserved objects. No INSERT, UPDATE or DELETE: the table starts empty.
+      '0320_wiki_maintenance_run'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

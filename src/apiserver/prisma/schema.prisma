@@ -5446,6 +5446,8 @@ model WikiSpace {
   changesets WikiChangeset[]
   cursors    WikiCursor[]
   dossiers   WikiDossier[]
+  /// The maintenance runs its trigger made (0320).
+  maintenanceRuns WikiMaintenanceRun[]
 
   /// The key every child's composite foreign key names.
   @@unique([id, ownerId], map: "wiki_space_id_owner_id_key")
@@ -5840,11 +5842,51 @@ model WikiCursor {
   lastOutcome         String?   @map("last_outcome")
   consecutiveFailures Int       @default(0) @map("consecutive_failures")
   lastError           String?   @map("last_error")
+  /// Why the last fact that found a run due made no task (0320): `daily_limit_reached` or
+  /// `review_queue_full`, and when. Cleared when a task is made.
+  heldReason          String?   @map("held_reason")
+  heldAt              DateTime? @map("held_at") @db.Timestamptz(3)
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([spaceId, source], map: "wiki_cursor_space_id_source_key")
   @@map("wiki_cursor")
+}
+
+/// One Wiki maintenance run (contracts/wiki.contract.json `maintenance.job`, migration 0320): the task a
+/// fact made for the space, the position that task's check expects the cursor to reach, and how the run
+/// went as it reported it. `task_id` and `session_id` are history references with no foreign key, as
+/// `wiki_dossier.session_id` is: a row outlives a task or session deleted since, and names nothing live.
+model WikiMaintenanceRun {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  spaceId         String    @map("space_id") @db.Uuid
+  ownerId         String    @map("owner_id") @db.Uuid
+  space           WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_maintenance_run_space_fkey")
+  taskId          String    @unique(map: "wiki_maintenance_run_task_id_key") @map("task_id") @db.Uuid
+  /// `backlog` | `age` for a task the trigger made; NULL for a run of a task somebody else put in the list.
+  due             String?
+  backlog         Int       @default(0)
+  pendingSessions Int       @default(0) @map("pending_sessions")
+  oldestPendingAt DateTime? @map("oldest_pending_at") @db.Timestamptz(3)
+  /// The position the task's check expects the cursor to reach (a cursor position: set together or not at all).
+  expectAt        DateTime? @map("expect_at") @db.Timestamptz(3)
+  expectKind      String?   @map("expect_kind")
+  expectRef       String?   @map("expect_ref")
+  sessionId       String?   @map("session_id") @db.Uuid
+  startedAt       DateTime? @map("started_at") @db.Timestamptz(3)
+  endedAt         DateTime? @map("ended_at") @db.Timestamptz(3)
+  /// `succeeded` | `failed` | `truncated`, as the run reported it.
+  outcome         String?
+  /// The ops of the run the server refused: what `orbit wiki check` reads beside the cursor.
+  opsRefused      Int?      @map("ops_refused")
+  report          Json?
+  error           String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([spaceId, expectAt, expectKind, expectRef], map: "wiki_maintenance_run_expect_idx")
+  @@index([sessionId], map: "wiki_maintenance_run_session_id_idx")
+  @@map("wiki_maintenance_run")
 }
 
 /// What is kept of a dossier once it is handed out: its sources and its hash, never its text

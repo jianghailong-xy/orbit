@@ -40,6 +40,7 @@ import { RunnerWikiController } from './runner-wiki.controller';
 import { RunnerWikiMaintenanceController } from './runner-wiki-maintenance.controller';
 import { RunnerWikiAnchorsController } from './runner-wiki-anchors.controller';
 import { RunnerWikiArticlesController } from './runner-wiki-articles.controller';
+import { RunnerWikiMaintainController } from './runner-wiki-maintain.controller';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -90,6 +91,8 @@ import { RunnerWikiArticlesController } from './runner-wiki-articles.controller'
     RunnerWikiAnchorsController,
     // A maintenance run's articles (contract `articles`): the plan, a topic's entries, the write.
     RunnerWikiArticlesController,
+    // The maintenance job's routes (criterion 3): a run's start, proposals, end, and the task's check.
+    RunnerWikiMaintainController,
   ],
   providers: [
     RunnerAuthGuard,
