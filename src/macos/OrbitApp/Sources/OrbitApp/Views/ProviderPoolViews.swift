@@ -897,13 +897,18 @@ private struct AccountRow: View {
             }
             Spacer(minLength: 8)
             if let quota {
+                // The percent over the gauge, as a member's share is drawn; the window it reads under it,
+                // so a long account name keeps the row's width.
                 VStack(alignment: .trailing, spacing: 6) {
-                    Text(verbatim: "\(quota.label) \(quota.percent)%")
-                        .font(.orbitLabel)
+                    Text(verbatim: "\(quota.percent)%")
+                        .font(.orbitListSubtitle)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                     PoolGaugeBar(percent: quota.percent,
                                  tint: quota.percent >= 90 ? PoolTone.color(.warning) : Color.accentColor)
+                    Text(quota.label)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.top, 3)
             }
