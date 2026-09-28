@@ -750,15 +750,20 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// The runs Recently changed folds, each as its own read answers it (`GET /wiki/changesets/:id`):
     /// what their rows count and whether they offer Revert run….
     public let runs: [WikiChangesetView]
+    /// The space's health (`GET /wiki/spaces/:id/health`, criterion 5): every active entry it holds, and
+    /// where its maintenance run stands — what the status line says. Nil when that read failed.
+    public let health: WikiSpaceHealth?
 
     public init(space: WikiSpace, spaces: [WikiSpace], entries: [WikiEntry],
-                timeline: [WikiTimelineItem], proposals: Int, runs: [WikiChangesetView] = []) {
+                timeline: [WikiTimelineItem], proposals: Int, runs: [WikiChangesetView] = [],
+                health: WikiSpaceHealth? = nil) {
         self.space = space
         self.spaces = spaces
         self.entries = entries
         self.timeline = timeline
         self.proposals = proposals
         self.runs = runs
+        self.health = health
     }
 
     /// Every principle, of any status, oldest recorded first — the web's order for the owner's own
@@ -811,16 +816,22 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// Whether any session used the wiki in the window — the band says so rather than drawing zeros.
     public var usedThisWeek: Bool { (space.usage?.entries ?? []).contains { ($0.total ?? 0) > 0 } }
 
-    /// The line under the title: how many entries, and the commit the anchors were last verified at.
-    /// The count waiting for review is left out — the banner right below says it (mock 12 ①).
-    public var statusLine: String {
-        var parts = ["\(entries.count) \(WikiCopy.entryNoun(entries.count))"]
+    /// The line under the title, part by part: how many entries — every active one the health read
+    /// counts, else the entries read here — the commit the anchors were last verified at, and where the
+    /// maintenance run stands (mock 12 ④), as the web's status row carries them. The count waiting for
+    /// review is left out — the banner right below says it (mock 12 ①).
+    public func statusParts(now: Date) -> [WikiStatusPart] {
+        let count = health?.entries ?? entries.count
+        var parts = [WikiStatusPart("\(WikiArticleCopy.count(count)) \(WikiCopy.entryNoun(count))")]
         if let sha = space.rootCommitSha, !sha.isEmpty {
-            parts.append(WikiCopy.anchorsVerified(ref: String(sha.prefix(7)), ago: ""))
+            parts.append(WikiStatusPart(WikiCopy.anchorsVerified(ref: String(sha.prefix(7)), ago: "")))
         }
-        // Criterion 5's place: the maintenance run's part of this line — `Maintained 2h ago ✓ · 6 to
-        // catch up` and its three other looks (mock 12 ④) — is appended here, after the anchors, as
-        // the web's status row carries it.
-        return parts.joined(separator: " · ")
+        if let health { parts += WikiHealthLogic.parts(health.maintenance, now: now) }
+        return parts
     }
+
+    /// The same line as one text (`WikiHealthLogic.text`): what VoiceOver reads.
+    public func statusLine(now: Date) -> String { WikiHealthLogic.text(statusParts(now: now)) }
+
+    public var statusLine: String { statusLine(now: Date()) }
 }
