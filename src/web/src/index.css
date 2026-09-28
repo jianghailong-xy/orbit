@@ -16743,6 +16743,7 @@ button.chat-jump-start:hover {
   .wk-page > .wk-search { order: 2; margin-top: 12px; height: 40px; }
   .wk-page > .wk-layout, .wk-page > .wk-body { order: 3; }
   .wk-status-review { display: none; }
+  .wk-maint-spin { display: none; }
   .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search, .wk-page--reading > .wk-status-row { display: none; }
   .wk-layout { display: block; margin-top: 0; }
   .wk-dir-col { display: none; }
