@@ -141,6 +141,22 @@ final class WikiContractTests: XCTestCase {
         }
     }
 
+    /// A challenge is answered Re-confirm, Amend or Retire (criterion 4): the contract's three answers,
+    /// each a decide action this client sends.
+    func testTheChallengeAnswersAreTheContracts() throws {
+        let rules = try object(contract()["anchorRules"], "anchorRules")
+        let verify = try object(rules["verify"], "anchorRules.verify")
+        let answers = try object(verify["answers"], "anchorRules.verify.answers")
+        XCTAssertEqual(Set(answers.keys.filter { $0 != "only" }), ["reconfirm", "amend", "retire"])
+        for answer in answers.keys where answer != "only" {
+            XCTAssertNotNil(WikiDecideAction(rawValue: answer), "\(answer) is no decide action this client can send")
+        }
+        XCTAssertEqual(try strings(verify["types"], "anchorRules.verify.types"), ["path", "symbol", "commit"])
+        for type in try strings(verify["types"], "anchorRules.verify.types") {
+            XCTAssertNotNil(WikiAnchorType(rawValue: type), "\(type) is no anchor type this client draws")
+        }
+    }
+
     /// Only these are handed to agents, which is what a retired or rejected entry's card says it is not:
     /// what a review mode applied is handed on as `auto`, and never as `unreviewed`.
     func testThePushableTrustIsTheContracts() throws {

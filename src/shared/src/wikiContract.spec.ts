@@ -7,7 +7,9 @@ import {
   WIKI_ANCHOR_SPECS,
   WIKI_ANCHOR_STATES,
   WIKI_ANCHOR_TYPES,
+  WIKI_ANCHOR_RULES,
   WIKI_AUTHOR_KINDS,
+  WIKI_CHALLENGE_ANSWERS,
   WIKI_CHANGESET_ORIGINS,
   WIKI_CHANGESET_STATUSES,
   WIKI_CONTRACT_VERSION,
@@ -20,6 +22,7 @@ import {
   WIKI_ENTRY_KINDS,
   WIKI_ENTRY_STATUSES,
   WIKI_EXPOSURE_CHANNELS,
+  WIKI_GIT_ANCHOR_TYPES,
   WIKI_KINDS,
   WIKI_LIMITS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
@@ -534,6 +537,35 @@ describe('wiki contract', () => {
     expect(run.cleanStart.flags).toEqual(expect.arrayContaining(['--bare', '--strict-mcp-config', '--max-turns 120']));
     expect(run.cleanStart.thinking).toMatch(/CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0/u);
     expect(run.cleanStart.auth).toMatch(/apiKeyHelper/u);
+  });
+
+  it('re-verifies the anchors git can check, on the routes and by the rules the contract states', () => {
+    // Criterion 4: a maintenance run re-verifies paths, symbols and commits on origin/main.
+    const verify = CONTRACT.anchorRules.verify;
+    expect(verify.types).toEqual([...WIKI_GIT_ANCHOR_TYPES]);
+    for (const type of WIKI_GIT_ANCHOR_TYPES) expect(keysOf(CONTRACT.anchorTypes)).toContain(type);
+    expect(verify.rules).toEqual(WIKI_ANCHOR_RULES);
+    expect(WIKI_ANCHOR_RULES.symbolRegionLines).toBe(20);
+    expect(WIKI_ANCHOR_RULES.reportEntriesMax).toBeLessThanOrEqual(WIKI_ANCHOR_RULES.listEntriesMax);
+    // Both routes are the runner door's maintenance routes: no other session reaches them.
+    const routes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
+    expect(routes).toContain(verify.list.route);
+    expect(routes).toContain(verify.report.route);
+    expect(verify.who).toMatch(/WIKI_NOT_MAINTENANCE_SESSION/u);
+    // A commit that is not an ancestor of origin/main is missing, never verified.
+    expect(verify.checks.commit).toMatch(/not an ancestor/u);
+    expect(verify.checks.commit).toMatch(/missing/u);
+    // What takes an entry out of the push is what a broken anchor leaves behind.
+    expect(CONTRACT.push.eligible.anchorStateNot).toEqual(['changed', 'missing']);
+    expect(verify.challenge).toMatch(/one system challenge/u);
+    // The owner answers a challenge with the three the challenge op names, on the decide route alone.
+    expect(keysOf(verify.answers).filter((key) => key !== 'only')).toEqual([...WIKI_CHALLENGE_ANSWERS]);
+    for (const answer of WIKI_CHALLENGE_ANSWERS) expect(WIKI_DECIDE_ACTIONS).toContain(answer);
+    expect(CONTRACT.ops.challenge.does).toMatch(/Re-confirm, Amend or Retire/u);
+    expect(CONTRACT.effectPolicy.decide.challengeAnswers).toMatch(/anchorRules\.verify\.answers/u);
+    // Tiered's pitfall reads what a check writes.
+    expect(CONTRACT.reviewModes.tiered.auto.machineVerified.pitfall).toMatch(/anchor_state verified/u);
+    expect(verify.tiered).toMatch(/pitfallMinSessions/u);
   });
 
   it('declares every refusal once, with a status and a scope, and names no code it does not declare', () => {
