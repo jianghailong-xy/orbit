@@ -281,7 +281,7 @@ final class WikiHealthCopyParityTests: XCTestCase {
                     "the native line's links")
         let text = try slice(view, from: "func wikiStatusText(_ parts: [WikiStatusPart]) -> AttributedString {",
                              to: "private func wikiStatusColour(")
-        for piece in ["AttributedString(\" · \")", "AttributedString(\"● \")", "AttributedString(\" ✓\")",
+        for piece in ["AttributedString(\" · \")", "AttributedString(\"●\\u{00A0}\")", "AttributedString(\"\\u{00A0}✓\")",
                       "words.link = wikiStatusSettingsURL", "words.link = wikiStatusRunURL"] {
             XCTAssertTrue(text.contains(piece), "the native line lost \(piece)")
         }

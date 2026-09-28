@@ -1405,8 +1405,10 @@ func wikiStatusText(_ parts: [WikiStatusPart]) -> AttributedString {
     for (index, part) in parts.enumerated() {
         if index > 0 { line += AttributedString(" · ") }
         let colour = wikiStatusColour(part.tone)
+        // No-break spaces keep the dot on the line of the words it colours, and the ✓ on the line of the
+        // success it marks: a wrapped line never ends on a lone dot or starts with a lone check.
         if part.mark == .dot {
-            var dot = AttributedString("● ")
+            var dot = AttributedString("●\u{00A0}")
             if let colour { dot[Colour.self] = colour }
             line += dot
         }
@@ -1420,7 +1422,7 @@ func wikiStatusText(_ parts: [WikiStatusPart]) -> AttributedString {
         }
         line += words
         if part.mark == .check {
-            var check = AttributedString(" ✓")
+            var check = AttributedString("\u{00A0}✓")
             check[Colour.self] = Color.green
             line += check
         }
