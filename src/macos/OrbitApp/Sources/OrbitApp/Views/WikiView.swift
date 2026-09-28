@@ -26,11 +26,13 @@ struct WikiHomeActions {
     var openSettings: () -> Void = {}
     /// One run's page, from its row in Recently changed (mock 12 ②).
     var openRun: (String) -> Void = { _ in }
+    /// The Contents sheet — the category directory — from the list button in the bar (mock 12 ③).
+    var openContents: () -> Void = {}
 }
 
-/// One space's home: the large title with the space beside it, the search under the title, the
-/// status line, the amber banner that leads to Review, then Principles, Topics, Recent decisions,
-/// Recently changed and Agents used the wiki.
+/// One space's home: the large title with the space beside it, the status line, the search under
+/// them, the amber banner that leads to Review, then Principles, Recent decisions, Recently changed
+/// and Agents used the wiki. The topics are the Contents sheet the bar's list button opens.
 struct WikiHomePage: View {
     let content: WikiHomeContent
     var now: Date = Date()
@@ -66,8 +68,12 @@ struct WikiHomePage: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            // The bar's actions, in the web head's order — Settings here; the gear is its icon.
+            // The bar's actions, in the web head's order — Contents, then Settings; icons both.
             ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: actions.openContents) {
+                    Image(systemName: "list.bullet")
+                }
+                .accessibilityLabel(WikiArticleCopy.contents)
                 Button(action: actions.openSettings) {
                     Image(systemName: "gearshape")
                 }
@@ -164,15 +170,6 @@ struct WikiHomePage: View {
                     ForEach(content.principles) { entry in
                         entryRow(entry, detail: entry.summary, time: entry.validFrom)
                     }
-                }
-            }
-        case .topics:
-            Section {
-                bandHeader(WikiCopy.topics, count: content.topics.count)
-                if content.topics.isEmpty {
-                    empty(WikiCopy.noTopics)
-                } else {
-                    ForEach(content.topics) { topic in topicRow(topic) }
                 }
             }
         case .recentDecisions:
@@ -303,21 +300,6 @@ struct WikiHomePage: View {
         .buttonStyle(.plain)
     }
 
-    /// A topic: its name and how many entries carry it, then what its newest entry is and who made it
-    /// so. A topic has no page of its own here, so the row opens that newest entry.
-    private func topicRow(_ topic: WikiLogic.TopicSummary) -> some View {
-        let latest = topic.latest
-        let verb = latest.map { WikiLogic.entryVerb($0, loaded: content.loadedIDs) }
-        return Button {
-            if let latest { actions.openEntry(latest.id) }
-        } label: {
-            WikiRowLabel(title: WikiLogic.topicTitle(topic.slug), count: topic.count,
-                         time: latest?.validFrom.flatMap { RelativeTime.format($0, now: now) },
-                         detail: [verb, latest?.displayTitle].compactMap { $0 }.joined(separator: " · "))
-        }
-        .buttonStyle(.plain)
-    }
-
     /// A decision, ADR-style: its title and the day it was decided, then whether it is in force.
     private func decisionRow(_ entry: WikiEntry) -> some View {
         let status = entry.status.map(WikiCopy.statusLabel) ?? ""
@@ -418,11 +400,10 @@ struct WikiHomePage: View {
     }
 }
 
-/// A home-page row: a title (struck through once agents no longer get it) with a count and a time on
-/// its right, and a secondary line under it — the session list's compact row.
+/// A home-page row: a title (struck through once agents no longer get it) with a time on its right,
+/// and a secondary line under it — the session list's compact row.
 private struct WikiRowLabel: View {
     let title: String
-    var count: Int? = nil
     var time: String? = nil
     var detail: String? = nil
     var note: String? = nil
@@ -438,9 +419,6 @@ private struct WikiRowLabel: View {
                     .strikethrough(struck)
                     .foregroundStyle(struck ? Color.secondary : Color.primary)
                     .lineLimit(1)
-                if let count {
-                    Text("\(count)").font(.orbitLabel).foregroundStyle(Color.secondary)
-                }
                 if let mark {
                     WikiBadge(text: WikiCopy.trustLabel(mark), tone: WikiLogic.trustTone(mark))
                 }
