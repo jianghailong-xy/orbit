@@ -814,7 +814,8 @@ func TestWikiCommandsNeedASessionAndTheSwitch(t *testing.T) {
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	t.Setenv(envWiki, "off")
 	for _, command := range [][]string{{"search", "anything"}, {"get", "e1"}, {"propose", "--ops", "[]"}, {"verify", "--space", "s1"},
-		{"dossier", "--space", "s1"}, {"cursor", "advance", "--space", "s1", "--to", "wc1.x"}, {"anchors", "verify", "--space", "s1"}} {
+		{"dossier", "--space", "s1"}, {"cursor", "advance", "--space", "s1", "--to", "wc1.x"}, {"anchors", "verify", "--space", "s1"},
+		{"articles", "--space", "s1"}} {
 		err := cmdWikiCLI(command, strings.NewReader(""), &out)
 		if err == nil || !strings.Contains(err.Error(), "ORBIT_WIKI=off") {
 			t.Errorf("orbit wiki %s with the wiki off = %v, want the refusal that names ORBIT_WIKI=off", command[0], err)
@@ -828,7 +829,7 @@ func TestWikiCommandsNeedASessionAndTheSwitch(t *testing.T) {
 	if _, ok := cmdHelp["wiki"]; !ok || !strings.Contains(usage, "orbit wiki") {
 		t.Error("`orbit` and `orbit help` do not list the wiki family")
 	}
-	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor", "anchors"} {
+	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor", "anchors", "articles"} {
 		var text strings.Builder
 		if err := cmdWikiCLI([]string{action, "--help"}, strings.NewReader(""), &text); err != nil {
 			t.Fatalf("orbit wiki %s --help: %v", action, err)
@@ -1029,8 +1030,9 @@ func TestWikiCLIFlagsBecomeTheToolArguments(t *testing.T) {
 
 // wikiCLIOnlyCapabilities are the wiki verbs no MCP tool stands beside: verify runs a model (contract
 // `agentSurface.verify.tool`), and dossier, cursor advance and anchors verify are a Wiki maintenance
-// run's and no other session's (`maintenance.cli.tool`, `anchorRules.verify.tool`).
-var wikiCLIOnlyCapabilities = map[string]bool{"wiki_verify": true, "wiki_dossier": true, "wiki_cursor_advance": true, "wiki_anchors_verify": true}
+// run's and no other session's (`maintenance.cli.tool`, `anchorRules.verify.tool`), and so are the
+// articles (`articles.cli.tool`).
+var wikiCLIOnlyCapabilities = map[string]bool{"wiki_verify": true, "wiki_dossier": true, "wiki_cursor_advance": true, "wiki_anchors_verify": true, "wiki_articles": true}
 
 // The commands an agent is told about are the commands that exist, and the flags in the capability
 // document are the flags the parsers take. cli_mcp_parity_test.go and
@@ -1110,6 +1112,10 @@ func writtenFlagIsParsed(action, name string) bool {
 	case "anchors verify":
 		fs.String("space", "", "")
 		fs.String("repo", "", "")
+	case "articles":
+		fs.String("space", "", "")
+		fs.String("topic", "", "")
+		fs.String("model", "", "")
 	default:
 		return false
 	}
@@ -1135,7 +1141,7 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 		t.Errorf("the citation is not the link shape the clients draw: %q", instructions)
 	}
 	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
-	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify"} {
+	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles"} {
 		if !strings.Contains(rules, "Bash("+exe+" wiki "+action+" *)") {
 			t.Errorf("orbit wiki %s is advertised and pre-approved for nobody: %q", action, rules)
 		}

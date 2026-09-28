@@ -188,6 +188,7 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_IDEMPOTENCY_KEY_REUSED: 409,
   WIKI_CURSOR_BEHIND: 409,
   WIKI_CURSOR_INVALID: 400,
+  WIKI_ARTICLE_STALE: 409,
 };
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */

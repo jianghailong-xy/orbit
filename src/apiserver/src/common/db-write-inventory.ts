@@ -1179,6 +1179,19 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. The page is returned to the maintenance run after the commit.',
     answer: 'Typed 503 from the global boundary; the maintenance run asks for the page again, and what it is handed is recorded then.',
   },
+  // The articles (contracts/wiki.contract.json `articles`, migration 0317): one topic's articles
+  // replaced together, by a maintenance run of the space or the server's own import.
+  {
+    at: 'wiki/wiki-articles.ts#write',
+    shape: 'TX_RETRIED',
+    locks: 'The topic\'s wiki_topic row (rank 60) by SELECT … FOR NO KEY UPDATE — the one writer of a topic at a time — then its wiki_topic_summary rows (60): one DELETE of every part, then one INSERT per part, part 0 first and each subtopic part after it, whose composite foreign keys take KEY SHARE on the topic row this transaction already holds and on the part 0 row it just wrote. The entries, the topics and the stored fingerprint were read before, unlocked; the fingerprint is read again under the lock.',
+    identity: 'The topic and the fingerprint of the entries the parts were written from. Under the lock, a part 0 that already carries that fingerprint means the write happened: the closure writes nothing and the call answers unchanged.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The stored fingerprint is re-read under the topic lock inside the closure, and the parts written are computed before it from the request and the entries, so a re-run either finds its own committed write (unchanged) or replaces the same rows with the same content.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the maintenance run asks for its plan again, and a topic still changed is written then.',
+  },
 ];
 
 export interface TransactionParticipant {
@@ -1632,6 +1645,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-maintenance.ts#cursorRow', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The space\'s cursor row, made the first time anything reads it: one upsert keyed by (space_id, source), whose unique index makes it one row per space; the empty update writes nothing to a row that exists.' },
   { at: 'wiki/wiki-maintenance.ts#stateOf', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The backlog as just counted from the facts, written back onto the cursor row by id so that a reader that does not count (the Wiki home page\'s status line) reads it. A later count overwrites it; nothing decides anything from this copy.' },
   { at: 'wiki/wiki-maintenance.ts#advanceCursor', class: 'ONE_ROW_CAS', statements: 2, note: 'At most two statements on the space\'s cursor row. A run that did not succeed: one UPDATE by id that counts the failure. One that succeeded: the move itself is one UPDATE whose WHERE is the compare-and-set — the watermark still behind the token and the furthest issued position not behind it — so of two runs the later position wins; a token at the watermark, or a move another run made first, is one UPDATE by id that records the success. Refusals write nothing.' },
+  { at: 'wiki/wiki-articles.ts#plan', class: 'INSERT', statements: 1, note: 'A space with no topic is given the default ones (contracts/wiki.contract.json `articles.seeding`): one INSERT of the batch, ON CONFLICT DO NOTHING on (space_id, slug), so two first plans leave one set. Only when a count found none; a space that has topics is never written. Outside a transaction on purpose: the rows are names and path prefixes, nothing reads them as a fact about anything else, and a plan that loses the race simply reads the winner\'s.' },
 ];
 
 export interface TriggerWriteSource {
