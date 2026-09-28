@@ -35,7 +35,9 @@ struct WikiHomeView: View {
                 wiki.selectedSlug = slug
                 Task { await wiki.loadHome() }
             },
-            search: { query in await wiki.search(query) })
+            search: { query in await wiki.search(query) },
+            openSettings: { open(.wikiSettings) },
+            openRun: { id in open(.wikiRun(changesetID: id)) })
     }
 
     /// A phone pushes the page; the three-column shells put it in the detail pane beside the list.
@@ -79,6 +81,10 @@ struct WikiDetailPane: View {
             WikiEntryView(entryID: id).id(id)
         } else if model.nav.wikiReviewOnTop {
             WikiReviewView()
+        } else if model.nav.wikiSettingsOnTop {
+            WikiSettingsView()
+        } else if let run = model.nav.selectedWikiRunID {
+            WikiRunView(changesetID: run).id(run)
         } else {
             ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
                                    description: Text("Pick an entry, or open Review."))
@@ -108,6 +114,7 @@ struct WikiEntryView: View {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 if let detail = wiki.detail(entryID) {
                     WikiEntryPage(detail: detail, now: context.date,
+                                  verification: Self.verification(of: detail.entry, in: wiki),
                                   sessionTitle: { id in
                                       Self.card(.session, id).flatMap(title(of:))
                                           ?? model.session(id: PublicID.toPublic(id))?.title
@@ -178,7 +185,24 @@ struct WikiEntryView: View {
             retire: { retiring = true },
             copyLink: { copyLink(wiki, detail.entry) },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            openTask: { id in model.route(to: .task(PublicID.toPublic(id))) })
+            openTask: { id in model.route(to: .task(PublicID.toPublic(id))) },
+            confirm: {
+                Task { finish(await wiki.confirm(detail.entry), done: WikiModeCopy.confirmed) }
+            },
+            reject: { reason in
+                Task { finish(await wiki.reject(detail.entry.id, reason: reason), done: WikiModeCopy.rejected) }
+            })
+    }
+
+    /// The verdict behind what a review mode applied, read where it is kept — on the op — from the
+    /// one read that carries ops: the space's queue, which holds it while it waits as a spot check.
+    @MainActor private static func verification(of entry: WikiEntry, in wiki: WikiModel) -> WikiOpVerification? {
+        let key = PublicID.storageKey(entry.id)
+        let ops = ((wiki.home?.runs ?? []) + wiki.review).flatMap { $0.ops ?? [] }
+        return ops.first { op in
+            op.verification != nil
+                && [op.resultEntryId, op.entryId].compactMap { $0 }.contains { PublicID.storageKey($0) == key }
+        }?.verification
     }
 
     // MARK: the titles a card read gives
@@ -306,6 +330,8 @@ struct WikiReviewView: View {
     @Environment(AppModel.self) private var model
 
     @State private var editing: WikiLogic.ReviewCard?
+    /// A challenge whose Amend form is open.
+    @State private var amending: WikiLogic.ReviewCard?
     @State private var notice: String?
 
     var body: some View {
@@ -337,6 +363,15 @@ struct WikiReviewView: View {
                     return answer == nil
                 }
             }
+            .sheet(item: $amending) { card in
+                if let entry = card.op.entryId.flatMap({ wiki.detail($0)?.entry }) {
+                    WikiChallengeAmendForm(entry: entry) { edited in
+                        let answer = await wiki.decide(card, .amend, edited: edited)
+                        finish(answer, done: WikiCopy.decided)
+                        return answer == nil
+                    }
+                }
+            }
             .alert(WikiCopy.refused, isPresented: Binding(get: { notice != nil },
                                                           set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
@@ -357,7 +392,8 @@ struct WikiReviewView: View {
                 }
             },
             edit: { card in editing = card },
-            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) })
+            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
+            amend: { card in amending = card })
     }
 
     private func finish(_ answer: String?, done: String) {
@@ -365,6 +401,71 @@ struct WikiReviewView: View {
             notice = answer
         } else {
             model.showToast(done)
+        }
+    }
+}
+
+/// A challenge's Amend: the owner's version of the entry it names — its title and one line — written
+/// as the owner's revision; the anchors are checked again (contract `anchorRules.verify.answers.amend`).
+/// Only what changed is sent, and with nothing changed the answer waits: an Amend that changes nothing
+/// is a Re-confirm.
+private struct WikiChallengeAmendForm: View {
+    let entry: WikiEntry
+    let submit: (WikiEntryChanges) async -> Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+    @State private var summary: String
+    @State private var saving = false
+
+    init(entry: WikiEntry, submit: @escaping (WikiEntryChanges) async -> Bool) {
+        self.entry = entry
+        self.submit = submit
+        _title = State(initialValue: entry.title ?? "")
+        _summary = State(initialValue: entry.summary ?? "")
+    }
+
+    private var changes: WikiEntryChanges {
+        let newTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return WikiEntryChanges(
+            title: newTitle != (entry.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines) ? newTitle : nil,
+            summary: newSummary != (entry.summary ?? "").trimmingCharacters(in: .whitespacesAndNewlines) ? newSummary : nil)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(WikiCopy.titlePlaceholder, text: $title)
+                    TextField(WikiCopy.summaryPlaceholder, text: $summary, axis: .vertical)
+                        .lineLimit(2...5)
+                } footer: {
+                    Text(WikiModeCopy.amendNote)
+                }
+            }
+            .navigationTitle(WikiModeCopy.amend)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(WikiModeCopy.cancel) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(WikiModeCopy.amend) {
+                        saving = true
+                        let edited = changes
+                        Task {
+                            let landed = await submit(edited)
+                            saving = false
+                            if landed { dismiss() }
+                        }
+                    }
+                    .disabled(saving || (changes.title == nil && changes.summary == nil)
+                              || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
         }
     }
 }

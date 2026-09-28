@@ -9,6 +9,9 @@ import { WikiEntryDrawer } from '../components/WikiEntryDrawer';
 import { WikiHome } from '../components/WikiHome';
 import { WikiNewEntryButton } from '../components/WikiNewEntry';
 import { WikiReviewPage } from '../components/WikiReviewPage';
+import { WikiRunDrawer } from '../components/WikiRunPage';
+import { WikiSettingsButton } from '../components/WikiSettingsButton';
+import { WikiSettingsPage } from '../components/WikiSettingsPage';
 import { wikiLinkHost } from '../components/WikiSources';
 import { WikiTopicPage } from '../components/WikiTopicPage';
 import { wikiEntriesQuery, wikiEntryQuery, wikiSpaceQuery, wikiSpacesQuery } from '../lib/queries';
@@ -28,7 +31,7 @@ import {
 } from '../lib/wiki';
 
 /**
- * The Wiki's five routes, and the chrome they share.
+ * The Wiki's routes, and the chrome they share.
  *
  * ONE PAGE COMPONENT, because the views differ only in the body under the header: the header — the
  * space picker, the search line, the status row — belongs to the space rather than to any one view,
@@ -41,7 +44,7 @@ import {
  * the picker in the header is how they mean another one.
  */
 
-export type WikiRoute = 'home' | 'topic' | 'entry' | 'review';
+export type WikiRoute = 'home' | 'topic' | 'entry' | 'review' | 'settings' | 'run';
 
 interface SpaceRow {
   id: string;
@@ -96,6 +99,10 @@ export function WikiPage({ route }: { route: WikiRoute }) {
   }
 
   const space: SpaceRow = resolved;
+  // The space's own settings are a page of their own, the app's Settings page for one space (mock 19):
+  // no search line or status row over them.
+  if (route === 'settings') return <WikiSettingsPage space={resolved} />;
+  if (route === 'run') return <RunRoute space={space} runParam={params.run ?? ''} />;
   if (route === 'review') {
     return (
       <WikiFrame space={space}>
@@ -167,6 +174,27 @@ function EntryRoute({ space, entryParam }: { space: SpaceRow; entryParam: string
 }
 
 /**
+ * `/wiki/:space/run/:run`: one run as a drawer over the space's home, the way an entry's drawer
+ * stands over the page it was opened from (mock 17 ⑧).
+ */
+function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
+  const navigate = useNavigate();
+  const changesetId = routeId(runParam) ?? runParam;
+  const back = wikiSpacePath(space.slug);
+  return (
+    <div className="wk-with-drawer">
+      <div className="wk-drawer-bg" aria-hidden="true">
+        <WikiFrame space={space}>
+          <HomeBody spaceId={space.id} />
+        </WikiFrame>
+      </div>
+      <button type="button" className="wk-scrim" aria-label="Close" onClick={() => navigate(back)} />
+      <WikiRunDrawer spaceId={space.id} spaceSlug={space.slug} changesetId={changesetId} onClose={() => navigate(back)} />
+    </div>
+  );
+}
+
+/**
  * The chrome every Wiki view wears: the title row (space picker, New entry), the search line and the
  * status row. It is the project page's own title row and toolbar, which is what the design's mock
  * links and draws — the counts are the page's counts, not a new row of numbers.
@@ -198,7 +226,10 @@ function WikiFrame({ space, children }: { space: SpaceRow | null; children: Reac
               <DownOutlined className="ic caret" />
             </span>
           )}
-          <div className="wk-actions">{space && <WikiNewEntryButton spaceId={space.id} />}</div>
+          <div className="wk-actions">
+            {space && <WikiSettingsButton spaceSlug={space.slug} />}
+            {space && <WikiNewEntryButton spaceId={space.id} />}
+          </div>
         </div>
 
         {space && (
