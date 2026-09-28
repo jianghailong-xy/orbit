@@ -16192,6 +16192,9 @@ button.chat-jump-start:hover {
              border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); font-size: 14px; color: var(--text-4); }
 .wk-search .ic { color: var(--text-4); font-size: 14px; }
 .wk-search .grow { flex: 1; }
+/* The line is the ⌘K palette's way in: a button the width of the line, drawn as the line itself. */
+.wk-search-open { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding: 0; border: 0;
+                  background: transparent; font: inherit; color: inherit; text-align: left; cursor: text; }
 .wk-kbd { padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-subtle); color: var(--text-3);
           font: 11px/17px -apple-system, "Segoe UI", sans-serif; white-space: nowrap; }
 .wk-status-row { margin-top: 14px; }
@@ -16204,7 +16207,7 @@ button.chat-jump-start:hover {
 .wk-sep { color: var(--text-4); }
 
 /* ── the two columns, and the card ───────────────────────────────────────────────────────────── */
-.wk-cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; margin-top: 16px; }
+.wk-cols { display: grid; grid-template-columns: minmax(0, 1fr) 288px; gap: 24px; align-items: start; margin-top: 16px; }
 .wk-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .wk-card { margin: 0; }
 .wk-card .project-open-items-head { align-items: center; }
@@ -16280,18 +16283,7 @@ button.chat-jump-start:hover {
 .wk-more { display: block; width: 100%; text-align: left; padding: 8px 2px 0; border: 0; background: transparent;
            font: inherit; font-size: 12.5px; color: var(--brand); cursor: pointer; }
 
-/* ── the home page's grids: topics, the decision log, the change feed, the usage bars ─────────── */
-.wk-topics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
-.wk-topic { padding: 10px 12px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle);
-            min-width: 0; color: inherit; text-decoration: none; display: block; }
-.wk-topic:hover { border-color: var(--brand-border); }
-.wk-topic-h { display: flex; align-items: center; gap: 8px; }
-.wk-topic-n { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wk-topic-c { flex: none; font-size: 11.5px; font-weight: 600; color: var(--text-2); background: var(--fill-muted); border-radius: 999px; padding: 1px 7px; }
-.wk-topic-l { margin-top: 6px; font-size: 12px; line-height: 1.5; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2;
-              -webkit-box-orient: vertical; overflow: hidden; min-height: 36px; }
-.wk-topic-l b { font-weight: 600; color: var(--text-1); }
-.wk-topic-l .when { color: var(--text-3); }
+/* ── the home page's lists: the decision log, the change feed, the usage bars ──────────────────── */
 .wk-dec { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 2px;
           border-top: 1px solid var(--border-subtle); }
 .wk-dec:first-child { border-top: 0; }
@@ -16539,25 +16531,9 @@ button.chat-jump-start:hover {
   .wk-erow:hover .used .n { display: inline; }
 }
 
-/* ── phone: one column, in the order the phone mocks draw (07–09) ──────────────────────────────
-   The right rail does not sit BESIDE the main column at this width — it moves into it, and its
-   blocks are ordered by what the reader has to do: Review first (it is the only block that asks for
-   anything), then the main column, then what changed and what the agents used. That is the phone
-   mocks' own order, and iOS mirrors it block for block. */
+/* ── phone: one column, in the order the phone mocks draw (07–09) ────────────────────────────── */
 @media (max-width: 900px) {
-  .wk-cols, .rv-cols { grid-template-columns: minmax(0, 1fr); }
-  /* Review leads on a phone: it is the amber number's destination, and a reader who tapped the
-     sidebar's count should land on it rather than scroll past principles to find it. */
-  .wk-cols > .wk-col:last-child { order: -1; }
-  .wk-cols > .wk-col:last-child > .wk-card:not(:first-child) { order: 1; }
-  .wk-cols > .wk-col:last-child { display: contents; }
-  .wk-cols > .wk-col:first-child { order: 0; }
-  .wk-cols { display: flex; flex-direction: column; }
-  .wk-cols > .wk-col:last-child > .wk-card { order: 2; }
-  .wk-cols > .wk-col:last-child > .wk-card:first-child { order: -1; }
-  .wk-cols > .wk-col:first-child { order: 1; display: flex; flex-direction: column; gap: 16px; }
-  .wk-cols > .wk-col:last-child { order: 2; gap: 16px; }
-  .wk-topics { grid-template-columns: minmax(0, 1fr); }
+  .rv-cols { grid-template-columns: minmax(0, 1fr); }
   .wk-sec-h .cols { display: none; }
   .wk-erow { grid-template-columns: 22px minmax(0, 1fr); row-gap: 4px; }
   .wk-erow > span:nth-child(3), .wk-erow > span:nth-child(4), .wk-erow .used { grid-column: 2; text-align: left; }
@@ -16571,6 +16547,210 @@ button.chat-jump-start:hover {
   .wk-pkv > .k { padding-top: 6px; }
   .rv-head { flex-direction: column; align-items: flex-start; }
   .wk-seg { margin-left: 0; }
+}
+
+/* ── the articles (criterion 10, mocks 11–16): the directory, a topic's article, Browse, the A–Z index ──
+   Ported from the mocks' own sheet (`docs/mocks/wiki/wiki-p2.css`) the way the phase-1 block above
+   was: the directory is the app sidebar's rows one step smaller, the article's head is the topic
+   page's (`.t-title`, `.t-meta`), its entries are the topic page's groups (`.wk-sec`, `.wk-erow`) and a
+   footnote's card is antd's Popover — on a phone the Drawer from the bottom. The Contents drawer is
+   the app drawer's own shape (`.app-nav` below 960px): 320px from the left over a 40% scrim. */
+.wk-layout { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 32px; align-items: start; margin-top: 18px; }
+.wk-layout.home { gap: 24px; }
+.wk-main { min-width: 0; }
+.wk-layout .wk-cols { margin-top: 0; }
+.wk-page .wk-contents-btn { display: none; }
+
+.wk-toc { display: block; min-width: 0; margin-left: -8px; padding-top: 2px; }
+.wk-toc-item { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border-radius: 6px;
+               font-size: 13.5px; color: var(--text-1); white-space: nowrap; min-width: 0; text-decoration: none; }
+.wk-toc-item:hover { background: var(--bg-hover); color: var(--text-1); }
+.wk-toc-item .tp-ico { font-size: 15px; color: var(--text-2); display: inline-flex; }
+.wk-toc-item .lb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wk-toc-item .n { flex: none; margin-left: 6px; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.wk-toc-item .caret { flex: none; font-size: 9px; color: var(--text-4); margin-left: -3px; }
+.wk-toc-item.active, .wk-toc-item.active:hover { background: var(--brand-tint); color: var(--brand); font-weight: 600; }
+.wk-toc-item.active .tp-ico, .wk-toc-item.active .n { color: var(--brand); }
+.wk-toc-item.open { font-weight: 600; }
+.wk-toc-item.sub { height: 28px; padding-left: 26px; font-size: 12.5px; color: var(--text-2); }
+.wk-toc-item.sub.active { color: var(--brand); }
+.wk-toc-cat { margin: 14px 8px 3px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.wk-toc-sep { height: 1px; background: var(--border-subtle); margin: 8px 8px 0; }
+
+.wk-contents-backdrop { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, .4); }
+.wk-contents { position: fixed; top: 0; left: 0; bottom: 0; z-index: 60; width: min(320px, 84vw); height: var(--app-vh, 100vh);
+               display: flex; flex-direction: column; background: var(--bg-raised); box-shadow: 2px 0 16px rgba(0, 0, 0, .18); }
+.wk-contents-h { display: flex; align-items: center; gap: 8px; height: 52px; flex: none; padding: 0 8px 0 16px;
+                 border-bottom: 1px solid var(--border-subtle); }
+.wk-contents-h b { flex: 1; font-size: 16px; font-weight: 600; color: var(--text-1); }
+.wk-contents-x { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 0;
+                 border-radius: 8px; background: transparent; color: var(--text-2); font-size: 15px; cursor: pointer; }
+.wk-contents-body { flex: 1; overflow-y: auto; padding: 8px 8px 16px 16px; }
+.wk-contents .wk-toc-item { height: 38px; font-size: 14.5px; }
+.wk-contents .wk-toc-item.sub { height: 34px; font-size: 13.5px; }
+.wk-contents .wk-toc-cat { font-size: 12.5px; }
+.wk-contents .wk-toc-item .n { font-size: 12.5px; }
+
+.wk-banner { display: none; align-items: center; gap: 9px; margin-top: 16px; padding: 10px 14px; border: 1px solid var(--warning-border);
+             border-radius: 8px; background: var(--warning-bg); color: var(--text-1); font-size: 14px; text-decoration: none; }
+.wk-banner .t { flex: 1; min-width: 0; }
+.wk-banner .ic { font-size: 11px; color: var(--text-4); }
+.wk-banner:hover { color: var(--text-1); }
+
+.wk-art-page { min-width: 0; position: relative; }
+.wk-topic-note { margin-top: 10px; }
+.wk-art-crumbrow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wk-art-crumbrow .wk-crumb { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; }
+.wk-art-page .t-title { font-size: 30px; line-height: 1.28; letter-spacing: -.02em; }
+.wk-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; align-items: center; }
+.wk-tag { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px;
+          background: var(--fill-muted); color: var(--text-2); font-size: 12px; white-space: nowrap; }
+.wk-tag.cat { background: var(--brand-tint); color: var(--brand-strong); }
+.wk-art-page .t-meta { flex-wrap: wrap; gap: 6px 9px; }
+.wk-art-page .t-meta .ic { font-size: 12px; color: var(--text-3); }
+.wk-art { margin-top: 20px; font-size: 15px; line-height: 1.85; color: var(--text-1); }
+.wk-art p { margin: 0 0 12px; }
+.wk-art h2 { margin: 26px 0 10px; padding-bottom: 6px; font-size: 18px; font-weight: 650; line-height: 1.4;
+             border-bottom: 1px solid var(--border-subtle); }
+.wk-art code, .wk-fncard code, .wk-fnlist code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: .86em;
+  background: var(--fill-inset); border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
+.wk-fn { font-size: 11px; line-height: 0; vertical-align: super; margin-left: 1px; white-space: nowrap; }
+.wk-fn-n { padding: 0 1px; border: 0; border-radius: 3px; background: transparent; font: inherit; color: var(--brand); cursor: pointer; }
+.wk-fn-n:hover { text-decoration: underline; }
+.wk-fn-n.on { background: var(--brand); color: #fff; text-decoration: none; }
+.wk-art .hl { background: color-mix(in srgb, var(--brand-tint) 80%, transparent); border-radius: 3px;
+              box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-tint) 80%, transparent); }
+
+.wk-fncard { width: 380px; max-width: 100%; }
+.wk-fncard .k { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.wk-fncard .k .num { font: 600 11px/18px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--brand); }
+.wk-fncard .k .kind { display: inline-flex; color: var(--text-3); }
+.wk-fncard .k .tdp-badge { margin-left: auto; }
+.wk-fncard .t { margin-top: 7px; font-size: 14.5px; font-weight: 650; line-height: 1.45; color: var(--text-1); }
+.wk-fncard .d { margin-top: 5px; font-size: 13px; line-height: 1.6; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 3;
+                -webkit-box-orient: vertical; overflow: hidden; }
+.wk-fncard .f { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border-subtle);
+                font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.wk-fncard .f .go { margin-left: auto; padding: 0; border: 0; background: transparent; font: inherit; color: var(--brand);
+                    font-weight: 600; font-size: 12.5px; cursor: pointer; }
+.wk-fncard.sheet { width: auto; padding: 8px 16px 16px; }
+.wk-fncard.sheet .k { font-size: 12.5px; }
+.wk-fncard.sheet .t { margin-top: 8px; font-size: 16px; }
+.wk-fncard.sheet .d { margin-top: 6px; font-size: 14px; line-height: 1.65; -webkit-line-clamp: 4; }
+.wk-fncard.sheet .f { border-top: 0; padding-top: 0; font-size: 12.5px; }
+.wk-fncard-open { margin-top: 14px; }
+.wk-fnsheet .ant-drawer-content { border-radius: 12px 12px 0 0; }
+.wk-fnsheet .ant-drawer-body::before { content: ""; display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--border);
+                                       margin: 8px auto 4px; }
+
+.wk-fnlist { margin-top: 30px; }
+.wk-fnlist h3, .wk-art-entries-h { margin: 0 0 8px; font-size: 15px; font-weight: 650; color: var(--text-1); display: flex;
+                                   align-items: baseline; gap: 8px; }
+.wk-fnlist h3 small, .wk-art-entries-h small { font-size: 12.5px; font-weight: 400; color: var(--text-3); }
+.wk-fnlist ol { margin: 0; padding: 0; list-style: none; }
+.wk-fnlist li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 6px; align-items: baseline; padding: 3px 0;
+                font-size: 13px; line-height: 1.55; color: var(--text-2); }
+.wk-fnlist li .no { text-align: right; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.wk-fnlist li .tt { min-width: 0; color: var(--text-1); text-decoration: underline; text-decoration-color: var(--border);
+                    text-underline-offset: 3px; }
+.wk-fnlist li .tt.gone { color: var(--text-3); text-decoration: none; }
+.wk-fnlist li .mt { white-space: nowrap; font-size: 12px; color: var(--text-3); display: inline-flex; align-items: center; gap: 6px; }
+.wk-fnlist li .tdp-badge { font-size: 11px; line-height: 16px; padding: 0 6px; }
+.wk-art-entries { margin-top: 34px; }
+.wk-art-entries .wk-sec:first-of-type { margin-top: 10px; }
+.wk-art-entries .wk-sec-h h3 { white-space: nowrap; }
+.wk-art-entries .wk-sec-h .note { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-art-entries .wk-sec-h .cols { flex: none; }
+
+.wk-browse-cat { margin-top: 26px; }
+.wk-browse-cat > h2 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; padding-bottom: 8px;
+                      border-bottom: 1px solid var(--border-subtle); font-size: 18px; font-weight: 650; color: var(--text-1); }
+.wk-browse-cat > h2 small { font-size: 12.5px; font-weight: 400; color: var(--text-3); }
+.wk-browse-topic { padding: 12px 0 10px; border-bottom: 1px solid var(--border-subtle); }
+.wk-browse-topic .h { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.wk-browse-topic .h a, .wk-browse-topic .h b { font-size: 14.5px; font-weight: 650; color: var(--brand); text-decoration: none; }
+.wk-browse-topic .h b { color: var(--text-1); }
+.wk-browse-topic .h .n { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.wk-browse-caret { display: none; margin-left: auto; padding: 0 2px; border: 0; background: transparent; font-size: 11px;
+                   color: var(--text-4); cursor: pointer; }
+.wk-browse-topic .ov { margin-top: 2px; font-size: 12.5px; line-height: 1.6; color: var(--text-2); display: -webkit-box;
+                       -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.wk-browse-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; margin-top: 6px; }
+.wk-browse-list a { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; font-size: 13px; min-width: 0; color: var(--text-1);
+                    text-decoration: none; }
+.wk-browse-list a:hover .tt { color: var(--brand); }
+.wk-browse-list .tt { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-browse-list .n { flex: none; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.wk-browse-list .dash { flex: 1; border-bottom: 1px dotted var(--border); transform: translateY(-4px); min-width: 12px; }
+.wk-browse-topic .wk-more { padding-top: 4px; }
+
+.wk-az-bar { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 16px; }
+.wk-az-bar > * { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 26px; padding: 0 4px;
+                 border-radius: 6px; border: 1px solid var(--border-subtle); font-family: inherit; font-size: 12.5px; font-weight: 600;
+                 line-height: 1; color: var(--brand);
+                 background: var(--bg-raised); }
+.wk-az-bar button { cursor: pointer; }
+.wk-az-bar button:hover { background: var(--brand-tint); border-color: var(--brand-border); }
+.wk-az-bar .off { color: var(--text-4); background: var(--bg-subtle); }
+.wk-az-g { margin-top: 22px; scroll-margin-top: 12px; }
+.wk-az-g > h2 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; padding-bottom: 6px; border-bottom: 1px solid var(--border-subtle);
+                font-size: 18px; font-weight: 650; }
+.wk-az-g > h2 small { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.wk-az-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+.wk-az-list a { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border-subtle); min-width: 0;
+                font-size: 13.5px; color: var(--text-1); text-decoration: none; }
+.wk-az-list a:hover .t { color: var(--brand); }
+.wk-az-list .t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-az-list .t.ov { font-weight: 650; }
+.wk-az-list .m { flex: none; margin-left: auto; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+
+/* A desktop too narrow for the home's rail beside its main column and the directory: one column. */
+@media (min-width: 961px) and (max-width: 1320px) {
+  .wk-layout .wk-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── narrower than the app's desktop layout (960px, `MOBILE_QUERY`): the phone mocks 12, 14, 16 ────
+   One column in the phone's order: the head, the status line, the search, then the Review bar,
+   Principles, Recent decisions, Recently changed and Agents used the wiki — the right rail's Review
+   card is the bar above, and the rest of the rail follows the main column. The directory is the
+   Contents drawer; a reading page other than the home drops the head for its crumb row, which
+   carries the list button. iOS draws the same blocks in the same order. */
+@media (max-width: 960px) {
+  .wk-page { display: flex; flex-direction: column; }
+  .wk-page > .wk-title-row { order: 0; }
+  .wk-page > .wk-status-row { order: 1; margin-top: 8px; background: none; border: 0; border-radius: 0; }
+  .wk-page > .wk-status-row .project-integration-row { padding: 0; cursor: default; }
+  .wk-page > .wk-search { order: 2; margin-top: 12px; height: 40px; }
+  .wk-page > .wk-layout, .wk-page > .wk-body { order: 3; }
+  .wk-status-review { display: none; }
+  .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search, .wk-page--reading > .wk-status-row { display: none; }
+  .wk-layout { display: block; margin-top: 0; }
+  .wk-dir-col { display: none; }
+  .wk-page .wk-contents-btn { display: inline-flex; }
+  .wk-banner { display: flex; }
+  .wk-review-card { display: none; }
+  .wk-cols { display: flex; flex-direction: column; gap: 16px; }
+  .wk-art-page .t-title, .wk-browse-page .t-title, .wk-az-page .t-title { margin-top: 10px; font-size: 24px; line-height: 1.35; letter-spacing: -.015em; }
+  .wk-art { margin-top: 14px; font-size: 16px; line-height: 1.8; }
+  .wk-art h2 { margin: 22px 0 8px; font-size: 17px; }
+  .wk-fn { font-size: 11.5px; }
+  .wk-fnlist li { grid-template-columns: 24px minmax(0, 1fr); padding: 9px 2px 10px; border-bottom: 1px solid var(--border-subtle); }
+  .wk-fnlist li .no { text-align: left; }
+  .wk-fnlist li .tt { font-size: 14px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wk-fnlist li .mt { grid-column: 2; margin-top: 2px; font-size: 12.5px; }
+  .wk-browse-caret { display: inline-flex; }
+  .wk-browse-list { grid-template-columns: minmax(0, 1fr); margin: 6px 0 0 14px; }
+  .wk-browse-list a { padding: 9px 0; border-bottom: 1px solid var(--border-subtle); font-size: 14px; }
+  .wk-browse-list .dash { display: none; }
+  .wk-browse-list .n { margin-left: auto; }
+  .wk-az-bar > * { width: 30px; height: 30px; font-size: 13px; }
+  .wk-az-g { margin-top: 16px; }
+  .wk-az-g > h2 { padding: 4px 8px; font-size: 13px; color: var(--text-2); background: var(--bg-subtle); border-radius: 4px 4px 0 0; }
+  .wk-az-g > h2 small { display: none; }
+  .wk-az-list { grid-template-columns: minmax(0, 1fr); }
+  .wk-az-list a { flex-direction: column; align-items: stretch; gap: 1px; padding: 9px 2px; font-size: 14px; }
+  .wk-az-list .m { margin-left: 0; font-size: 12.5px; }
 }
 
 /* ── The wiki in a conversation: the context a session was handed ──────────────────────────────

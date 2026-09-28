@@ -1,19 +1,23 @@
 import { useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { DownOutlined, SearchOutlined } from '@ant-design/icons';
 import { OrbitLinkCardsProvider } from '../components/OrbitLinkCard';
 import { statusLabel } from '../components/WorkspaceView';
+import { WikiArticleRoute } from '../components/WikiArticlePage';
+import { WikiBrowsePage } from '../components/WikiBrowsePage';
 import { WikiCard, WikiEmpty } from '../components/WikiCards';
+import { WikiContentsButton, WikiContentsProvider, WikiDirectory, type WikiDirectoryAt } from '../components/WikiDirectory';
 import { WikiEntryDrawer } from '../components/WikiEntryDrawer';
 import { WikiHome } from '../components/WikiHome';
+import { WikiIndexPage } from '../components/WikiIndexPage';
 import { WikiNewEntryButton } from '../components/WikiNewEntry';
 import { WikiReviewPage } from '../components/WikiReviewPage';
 import { WikiRunDrawer } from '../components/WikiRunPage';
 import { WikiSettingsButton } from '../components/WikiSettingsButton';
 import { WikiSettingsPage } from '../components/WikiSettingsPage';
+import { openSessionSearch } from '../components/SessionSearch';
 import { wikiLinkHost } from '../components/WikiSources';
-import { WikiTopicPage } from '../components/WikiTopicPage';
 import { wikiEntriesQuery, wikiEntryQuery, wikiSpaceQuery, wikiSpacesQuery } from '../lib/queries';
 import { routeId } from '../lib/idCodec';
 import {
@@ -29,6 +33,7 @@ import {
   wikiAnchorsVerified,
   wikiSpacePath,
 } from '../lib/wiki';
+import { wikiArticlePath } from '../lib/wikiArticles';
 
 /**
  * The Wiki's routes, and the chrome they share.
@@ -44,7 +49,7 @@ import {
  * the picker in the header is how they mean another one.
  */
 
-export type WikiRoute = 'home' | 'topic' | 'entry' | 'review' | 'settings' | 'run';
+export type WikiRoute = 'home' | 'topic' | 'entry' | 'review' | 'settings' | 'run' | 'browse' | 'index';
 
 interface SpaceRow {
   id: string;
@@ -111,9 +116,25 @@ export function WikiPage({ route }: { route: WikiRoute }) {
     );
   }
   if (route === 'topic') {
+    const topic = params.topic ?? '';
+    const part = wikiPartParam(params.part);
     return (
-      <WikiFrame space={space}>
-        <WikiTopicPage spaceId={space.id} spaceSlug={space.slug} />
+      <WikiFrame space={space} at={{ view: 'topic', topic, part }}>
+        <WikiArticleRoute spaceId={space.id} spaceSlug={space.slug} topicSlug={topic} part={part} />
+      </WikiFrame>
+    );
+  }
+  if (route === 'browse') {
+    return (
+      <WikiFrame space={space} at={{ view: 'browse' }}>
+        <WikiBrowsePage spaceId={space.id} spaceSlug={space.slug} />
+      </WikiFrame>
+    );
+  }
+  if (route === 'index') {
+    return (
+      <WikiFrame space={space} at={{ view: 'index' }}>
+        <WikiIndexPage spaceId={space.id} spaceSlug={space.slug} />
       </WikiFrame>
     );
   }
@@ -121,10 +142,16 @@ export function WikiPage({ route }: { route: WikiRoute }) {
     return <EntryRoute space={space} entryParam={params.entry ?? ''} />;
   }
   return (
-    <WikiFrame space={space}>
+    <WikiFrame space={space} at={{ view: 'home' }}>
       <HomeBody spaceId={space.id} />
     </WikiFrame>
   );
+}
+
+/** A subtopic article's number from its URL segment; anything that is not one is the topic's own article. */
+function wikiPartParam(raw: string | undefined): number {
+  const part = Number(raw ?? 0);
+  return Number.isInteger(part) && part > 0 ? part : 0;
 }
 
 /** The home page's body: the space document with its usage window, and the two columns under it. */
@@ -140,13 +167,20 @@ function HomeBody({ spaceId }: { spaceId: string }) {
  * Its FIRST topic, because that is the page a reader would have come from and where its title and
  * facts were read. An entry filed under nothing has no such page, so the drawer opens over the
  * space's home instead of over a topic that does not exist.
+ *
+ * AN ENTRY OPENED FROM AN ARTICLE'S FOOTNOTE keeps that article behind it instead: the footnote says
+ * where it came from (`state.wikiBack`), and closing the drawer returns to the sentence the reader
+ * was on rather than to whichever topic the entry names first.
  */
 function EntryRoute({ space, entryParam }: { space: SpaceRow; entryParam: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const entryId = routeId(entryParam) ?? entryParam;
   const entry = useQuery(wikiEntryQuery(entryId));
-  const topic = entry.data?.topics?.[0] ?? null;
-  const back = topic ? `/wiki/${space.slug}/t/${topic}` : wikiSpacePath(space.slug);
+  const from = (location.state as { wikiBack?: { topic: string; part: number } } | null)?.wikiBack ?? null;
+  const topic = from?.topic ?? entry.data?.topics?.[0] ?? null;
+  const part = from?.part ?? 0;
+  const back = topic ? wikiArticlePath(space.slug, topic, part) : wikiSpacePath(space.slug);
 
   return (
     // The drawer draws its sources with the conversation's own link cards, and those ask a provider
@@ -157,11 +191,11 @@ function EntryRoute({ space, entryParam }: { space: SpaceRow; entryParam: string
       <div className="wk-with-drawer">
         <div className="wk-drawer-bg" aria-hidden="true">
           {topic ? (
-            <WikiFrame space={space}>
-              <WikiTopicPage spaceId={space.id} spaceSlug={space.slug} topicSlug={topic} />
+            <WikiFrame space={space} at={{ view: 'topic', topic, part }}>
+              <WikiArticleRoute spaceId={space.id} spaceSlug={space.slug} topicSlug={topic} part={part} />
             </WikiFrame>
           ) : (
-            <WikiFrame space={space}>
+            <WikiFrame space={space} at={{ view: 'home' }}>
               <HomeBody spaceId={space.id} />
             </WikiFrame>
           )}
@@ -184,7 +218,7 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
   return (
     <div className="wk-with-drawer">
       <div className="wk-drawer-bg" aria-hidden="true">
-        <WikiFrame space={space}>
+        <WikiFrame space={space} at={{ view: 'home' }}>
           <HomeBody spaceId={space.id} />
         </WikiFrame>
       </div>
@@ -198,72 +232,115 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
  * The chrome every Wiki view wears: the title row (space picker, New entry), the search line and the
  * status row. It is the project page's own title row and toolbar, which is what the design's mock
  * links and draws — the counts are the page's counts, not a new row of numbers.
+ *
+ * THE DIRECTORY STANDS BESIDE EVERY READING VIEW (`at`: the home, a topic's article, Browse, the
+ * index — mocks 11, 13, 15): a column on a desktop, and on anything narrower the Contents drawer the
+ * head's list button opens. On a phone a reading view other than the home also drops the head — its
+ * crumb row carries the list button instead (mock 14 ①) — and the home's status row comes before
+ * the search (mock 12 ①). Review and the settings are not reading views and keep the frame as it was.
  */
-function WikiFrame({ space, children }: { space: SpaceRow | null; children: React.ReactNode }) {
+function WikiFrame({
+  space,
+  at = null,
+  children,
+}: {
+  space: SpaceRow | null;
+  at?: WikiDirectoryAt | null;
+  children: React.ReactNode;
+}) {
   const navigate = useNavigate();
   const spaces = useQuery(wikiSpacesQuery());
   const entries = useQuery(wikiEntriesQuery(space?.id ?? null));
   const count = entries.data?.length ?? 0;
 
-  return (
-    <OrbitLinkCardsProvider stateWord={statusLabel} host={wikiLinkHost()}>
-      <div className="wk-page">
-        <div className="wk-title-row">
-          <h1 className="page-title">{WIKI_TITLE}</h1>
-          {space && (
-            <span className="wk-select" title={WIKI_SPACE_PICKER_HINT}>
-              <select
-                value={space.slug}
-                aria-label={WIKI_SPACE_PICKER_HINT}
-                onChange={(event) => navigate(wikiSpacePath(event.target.value))}
-              >
-                {(spaces.data ?? []).map((row) => (
-                  <option key={row.id} value={row.slug}>
-                    {row.slug}
-                  </option>
-                ))}
-              </select>
-              <DownOutlined className="ic caret" />
-            </span>
-          )}
-          <div className="wk-actions">
-            {space && <WikiSettingsButton spaceSlug={space.slug} />}
-            {space && <WikiNewEntryButton spaceId={space.id} />}
-          </div>
-        </div>
-
+  const page = (
+    <div className={`wk-page${at && at.view !== 'home' ? ' wk-page--reading' : ''}`}>
+      <div className="wk-title-row">
+        <h1 className="page-title">{WIKI_TITLE}</h1>
         {space && (
-          <div className="wk-search" role="search">
+          <span className="wk-select" title={WIKI_SPACE_PICKER_HINT}>
+            <select
+              value={space.slug}
+              aria-label={WIKI_SPACE_PICKER_HINT}
+              onChange={(event) => navigate(wikiSpacePath(event.target.value))}
+            >
+              {(spaces.data ?? []).map((row) => (
+                <option key={row.id} value={row.slug}>
+                  {row.slug}
+                </option>
+              ))}
+            </select>
+            <DownOutlined className="ic caret" />
+          </span>
+        )}
+        <div className="wk-actions">
+          {space && at && <WikiContentsButton />}
+          {space && <WikiSettingsButton spaceSlug={space.slug} />}
+          {space && <WikiNewEntryButton spaceId={space.id} />}
+        </div>
+      </div>
+
+      {space && (
+        <div className="wk-search" role="search">
+          {/* The palette's own search: ⌘K answers entries in its Wiki group, so this line opens it. */}
+          <button type="button" className="wk-search-open" onClick={openSessionSearch}>
             <SearchOutlined className="ic" />
             <span className="grow">{WIKI_SEARCH_PLACEHOLDER}</span>
             <kbd className="wk-kbd">{WIKI_SEARCH_SHORTCUT}</kbd>
-          </div>
-        )}
+          </button>
+        </div>
+      )}
 
-        {space && (
-          <div className="project-integration wk-status-row">
-            <div className="project-integration-row">
-              <span className="project-integration-facts">
-                <span>
-                  <b>{count}</b> {WIKI_ENTRY_NOUN(count)}
-                </span>
+      {space && (
+        <div className="project-integration wk-status-row">
+          <div className="project-integration-row">
+            <span className="project-integration-facts">
+              <span>
+                <b>{count}</b> {WIKI_ENTRY_NOUN(count)}
+              </span>
+              {/* The phone's amber banner says this one (mock 12 ①), so its status line leaves it out. */}
+              <span className="wk-status-review">
                 <span className="wk-sep">·</span>
                 <span className={space.pendingOps > 0 ? 'wk-warn-text' : ''}>
                   <b>{space.pendingOps}</b> {WIKI_TO_REVIEW}
                 </span>
-                {space.rootCommitSha && (
-                  <>
-                    <span className="wk-sep">·</span>
-                    <span>{wikiAnchorsVerified(space.rootCommitSha.slice(0, 7), '')}</span>
-                  </>
-                )}
               </span>
-            </div>
+              {space.rootCommitSha && (
+                <>
+                  <span className="wk-sep">·</span>
+                  <span>{wikiAnchorsVerified(space.rootCommitSha.slice(0, 7), '')}</span>
+                </>
+              )}
+              {/* Criterion 5's place: the maintenance run's part of this line — `Maintained 2h ago ✓ ·
+                  6 to catch up` and its three other looks (mocks 11 ②, 12 ④) — goes here, after the
+                  anchors, on every width. */}
+            </span>
           </div>
-        )}
+        </div>
+      )}
 
+      {space && at ? (
+        <div className={`wk-layout${at.view === 'home' ? ' home' : ''}`}>
+          <div className="wk-dir-col">
+            <WikiDirectory spaceId={space.id} spaceSlug={space.slug} at={at} />
+          </div>
+          <div className="wk-main">{children}</div>
+        </div>
+      ) : (
         <div className="wk-body">{children}</div>
-      </div>
+      )}
+    </div>
+  );
+
+  return (
+    <OrbitLinkCardsProvider stateWord={statusLabel} host={wikiLinkHost()}>
+      {space && at ? (
+        <WikiContentsProvider spaceId={space.id} spaceSlug={space.slug} at={at}>
+          {page}
+        </WikiContentsProvider>
+      ) : (
+        page
+      )}
     </OrbitLinkCardsProvider>
   );
 }

@@ -1,0 +1,1210 @@
+{
+  "about": [
+    "Wiki articles on the two clients (criterion 10, mocks 11–16): the category directory, a topic's article with",
+    "its footnotes and entries, Browse by category and the A–Z index — the words, the orders and the readings the",
+    "web phone and iOS must share. The web reads this file in `lib/wikiArticles.test.ts`; OrbitKit in",
+    "`WikiArticlesCopyParityTests` (`WikiArticleCopy`, `WikiArticleLogic`), so the two ends cannot drift.",
+    "",
+    "`orders`: the home page's bands top to bottom on a phone, an article page's sections, the directory's",
+    "first rows, Browse's and the index's sections. `directory`: the server's directory read → the groups the",
+    "directory lists (a category with no topic left out, uncategorized topics last under `Other`, a topic's",
+    "count the entries its article was written from, null before it has one). `browse`: the same read → the",
+    "lines Browse says. `index`: the index read's items → the letters and rows, Chinese titles by pinyin",
+    "(`initials` pins the characters the old boundary string got wrong: 六 is L, 入 is R). `updated`: an",
+    "article's head line, in `timeZone`. `segments`: a sentence's runs. `articleGroups`: an article's entries",
+    "by kind, the cited ones leading their group in footnote order, the rest newest first."
+  ],
+  "timeZone": "Asia/Shanghai",
+  "words": {
+    "contents": "Contents",
+    "home": "Home",
+    "browse": "Browse by category",
+    "azIndex": "A–Z index",
+    "other": "Other",
+    "footnotes": "Footnotes",
+    "entries": "Entries",
+    "entriesHint": "filed under this topic, by kind",
+    "footnoteGone": "This entry is no longer in the wiki.",
+    "openEntry": "Open entry",
+    "topicOverview": "Topic overview",
+    "noArticleYet": "No article yet. The maintenance run writes one once this topic has entries.",
+    "noArticles": "No article has been written yet. The maintenance run writes one for each topic that has entries.",
+    "moreArticles": [
+      {
+        "n": 11,
+        "says": "11 more"
+      },
+      {
+        "n": 1,
+        "says": "1 more"
+      }
+    ]
+  },
+  "orders": {
+    "homeBands": [
+      "statusLine",
+      "search",
+      "reviewBanner",
+      "principles",
+      "recentDecisions",
+      "recentlyChanged",
+      "agentsUsed"
+    ],
+    "homeBandTitles": [
+      null,
+      null,
+      null,
+      "Principles",
+      "Recent decisions",
+      "Recently changed",
+      "Agents used the wiki"
+    ],
+    "articleSections": [
+      "crumb",
+      "title",
+      "tags",
+      "updated",
+      "body",
+      "footnotes",
+      "entries"
+    ],
+    "directoryHead": [
+      "Home",
+      "Browse by category",
+      "A–Z index"
+    ],
+    "browseSections": [
+      "crumb",
+      "title",
+      "summary",
+      "categories"
+    ],
+    "indexSections": [
+      "crumb",
+      "title",
+      "summary",
+      "letters",
+      "groups"
+    ],
+    "indexLetters": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "J",
+      "K",
+      "L",
+      "M",
+      "N",
+      "O",
+      "P",
+      "Q",
+      "R",
+      "S",
+      "T",
+      "U",
+      "V",
+      "W",
+      "X",
+      "Y",
+      "Z",
+      "#"
+    ]
+  },
+  "directory": {
+    "read": {
+      "spaceId": "3fK9wq1sVb2Lm0PpQx7aZy",
+      "categories": [
+        {
+          "key": "platform",
+          "title": "Platform core",
+          "topics": [
+            {
+              "slug": "sessions",
+              "title": "会话",
+              "description": "Sessions: lifecycle, messages, turns, steer and interrupt, delivery, attachments, session merge and commit.",
+              "category": "platform",
+              "article": {
+                "part": 0,
+                "kind": "overview",
+                "title": "会话",
+                "entryCount": 725,
+                "generatedAt": "2026-09-27T10:12:00.000Z"
+              },
+              "parts": [
+                {
+                  "part": 1,
+                  "kind": "subtopic",
+                  "title": "Worktree 环境依赖与构建",
+                  "entryCount": 80
+                },
+                {
+                  "part": 2,
+                  "kind": "subtopic",
+                  "title": "会话生命周期与资源调度",
+                  "entryCount": 43
+                },
+                {
+                  "part": 3,
+                  "kind": "subtopic",
+                  "title": "Session 生命周期与运维陷阱",
+                  "entryCount": 34
+                },
+                {
+                  "part": 4,
+                  "kind": "subtopic",
+                  "title": "Turn 边界、Steer 与重试",
+                  "entryCount": 37
+                },
+                {
+                  "part": 5,
+                  "kind": "subtopic",
+                  "title": "会话状态机与生命周期",
+                  "entryCount": 15
+                },
+                {
+                  "part": 6,
+                  "kind": "subtopic",
+                  "title": "会话状态契约与字段安全",
+                  "entryCount": 16
+                },
+                {
+                  "part": 7,
+                  "kind": "subtopic",
+                  "title": "Nest 运行陷阱与联调",
+                  "entryCount": 25
+                },
+                {
+                  "part": 8,
+                  "kind": "subtopic",
+                  "title": "客户端会话状态与生命周期",
+                  "entryCount": 12
+                },
+                {
+                  "part": 9,
+                  "kind": "subtopic",
+                  "title": "会话判活权威与静默失败",
+                  "entryCount": 26
+                },
+                {
+                  "part": 10,
+                  "kind": "subtopic",
+                  "title": "会话复用键与状态派生细节",
+                  "entryCount": 34
+                }
+              ]
+            },
+            {
+              "slug": "tasks",
+              "title": "任务与派发",
+              "description": "Tasks and task lists: completion criteria, acceptance, dependencies, dispatch, retries, evidence.",
+              "category": "platform",
+              "article": {
+                "part": 0,
+                "kind": "article",
+                "title": "任务派发与验收",
+                "entryCount": 38,
+                "generatedAt": "2026-09-27T10:14:00.000Z"
+              },
+              "parts": []
+            },
+            {
+              "slug": "watches-wakeups",
+              "title": "Watch 与唤醒",
+              "description": "Watches, scheduled wakeups, awaits and the notifications they send to sessions.",
+              "category": "platform",
+              "article": null,
+              "parts": []
+            }
+          ]
+        },
+        {
+          "key": "runner",
+          "title": "Runner & engines",
+          "topics": []
+        },
+        {
+          "key": "clients",
+          "title": "Clients & UI",
+          "topics": [
+            {
+              "slug": "ui-design",
+              "title": "UI 设计",
+              "description": "UI and UX design: mockups, screenshots, layout rules, the copy in the UI.",
+              "category": "clients",
+              "article": {
+                "part": 0,
+                "kind": "overview",
+                "title": "UI 设计",
+                "entryCount": 147,
+                "generatedAt": "2026-09-27T10:20:00.000Z"
+              },
+              "parts": [
+                {
+                  "part": 1,
+                  "kind": "subtopic",
+                  "title": "Orbit 仓库 UI 效果图生成与验收规范",
+                  "entryCount": 59
+                },
+                {
+                  "part": 2,
+                  "kind": "subtopic",
+                  "title": "UI 交互细节与文案规范",
+                  "entryCount": 40
+                },
+                {
+                  "part": 3,
+                  "kind": "subtopic",
+                  "title": "UI 状态反馈与交互细节",
+                  "entryCount": 28
+                },
+                {
+                  "part": 4,
+                  "kind": "subtopic",
+                  "title": "界面状态与交互的克制定制",
+                  "entryCount": 20
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "data",
+          "title": "Data & backend",
+          "topics": []
+        },
+        {
+          "key": "engineering",
+          "title": "Engineering workflow",
+          "topics": []
+        },
+        {
+          "key": "collaboration",
+          "title": "Collaboration",
+          "topics": []
+        }
+      ],
+      "uncategorized": [
+        {
+          "slug": "misc",
+          "title": "",
+          "description": null,
+          "category": null,
+          "article": {
+            "part": 0,
+            "kind": "article",
+            "title": "零散记录",
+            "entryCount": 1,
+            "generatedAt": "2026-09-27T10:30:00.000Z"
+          },
+          "parts": []
+        }
+      ]
+    },
+    "groups": [
+      {
+        "title": "Platform core",
+        "topics": [
+          {
+            "slug": "sessions",
+            "title": "会话",
+            "count": 725,
+            "parts": [
+              "Worktree 环境依赖与构建",
+              "会话生命周期与资源调度",
+              "Session 生命周期与运维陷阱",
+              "Turn 边界、Steer 与重试",
+              "会话状态机与生命周期",
+              "会话状态契约与字段安全",
+              "Nest 运行陷阱与联调",
+              "客户端会话状态与生命周期",
+              "会话判活权威与静默失败",
+              "会话复用键与状态派生细节"
+            ]
+          },
+          {
+            "slug": "tasks",
+            "title": "任务与派发",
+            "count": 38,
+            "parts": []
+          },
+          {
+            "slug": "watches-wakeups",
+            "title": "Watch 与唤醒",
+            "count": null,
+            "parts": []
+          }
+        ]
+      },
+      {
+        "title": "Clients & UI",
+        "topics": [
+          {
+            "slug": "ui-design",
+            "title": "UI 设计",
+            "count": 147,
+            "parts": [
+              "Orbit 仓库 UI 效果图生成与验收规范",
+              "UI 交互细节与文案规范",
+              "UI 状态反馈与交互细节",
+              "界面状态与交互的克制定制"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Other",
+        "topics": [
+          {
+            "slug": "misc",
+            "title": "misc",
+            "count": 1,
+            "parts": []
+          }
+        ]
+      }
+    ]
+  },
+  "browse": {
+    "summary": "18 articles · 5 topics · 911 entries",
+    "shown": 8,
+    "shownPhone": 5,
+    "categories": [
+      {
+        "title": "Platform core",
+        "summary": "3 topics · 12 articles · 763 entries",
+        "topics": [
+          {
+            "slug": "sessions",
+            "title": "会话",
+            "line": "725 entries · 11 articles",
+            "parts": 10
+          },
+          {
+            "slug": "tasks",
+            "title": "任务与派发",
+            "line": "38 entries · 1 article",
+            "parts": 0
+          },
+          {
+            "slug": "watches-wakeups",
+            "title": "Watch 与唤醒",
+            "line": null,
+            "parts": 0
+          }
+        ]
+      },
+      {
+        "title": "Clients & UI",
+        "summary": "1 topic · 5 articles · 147 entries",
+        "topics": [
+          {
+            "slug": "ui-design",
+            "title": "UI 设计",
+            "line": "147 entries · 5 articles",
+            "parts": 4
+          }
+        ]
+      },
+      {
+        "title": "Other",
+        "summary": "1 topic · 1 article · 1 entry",
+        "topics": [
+          {
+            "slug": "misc",
+            "title": "misc",
+            "line": "1 entry · 1 article",
+            "parts": 0
+          }
+        ]
+      }
+    ]
+  },
+  "index": {
+    "items": [
+      {
+        "part": 0,
+        "kind": "overview",
+        "title": "会话",
+        "entryCount": 725,
+        "initial": "#",
+        "topic": {
+          "slug": "sessions",
+          "title": "会话"
+        }
+      },
+      {
+        "part": 2,
+        "kind": "subtopic",
+        "title": "会话生命周期与资源调度",
+        "entryCount": 43,
+        "initial": "#",
+        "topic": {
+          "slug": "sessions",
+          "title": "会话"
+        }
+      },
+      {
+        "part": 1,
+        "kind": "subtopic",
+        "title": "Worktree 环境依赖与构建",
+        "entryCount": 80,
+        "initial": "W",
+        "topic": {
+          "slug": "sessions",
+          "title": "会话"
+        }
+      },
+      {
+        "part": 0,
+        "kind": "overview",
+        "title": "安全与密钥",
+        "entryCount": 22,
+        "initial": "#",
+        "topic": {
+          "slug": "security",
+          "title": "安全与密钥"
+        }
+      },
+      {
+        "part": 3,
+        "kind": "subtopic",
+        "title": "Agent 工具边界与 CLI 行为",
+        "entryCount": 32,
+        "initial": "A",
+        "topic": {
+          "slug": "agent-tooling",
+          "title": "Agent 工具与环境"
+        }
+      },
+      {
+        "part": 0,
+        "kind": "overview",
+        "title": "Agent 工具与环境",
+        "entryCount": 507,
+        "initial": "A",
+        "topic": {
+          "slug": "agent-tooling",
+          "title": "Agent 工具与环境"
+        }
+      },
+      {
+        "part": 5,
+        "kind": "subtopic",
+        "title": "AutoRetry 与 Resume 机制",
+        "entryCount": 39,
+        "initial": "A",
+        "topic": {
+          "slug": "sessions",
+          "title": "会话"
+        }
+      },
+      {
+        "part": 4,
+        "kind": "subtopic",
+        "title": "并发升级与部署一致性",
+        "entryCount": 60,
+        "initial": "#",
+        "topic": {
+          "slug": "deploy-ops",
+          "title": "部署与运维"
+        }
+      },
+      {
+        "part": 0,
+        "kind": "overview",
+        "title": "部署与运维",
+        "entryCount": 686,
+        "initial": "#",
+        "topic": {
+          "slug": "deploy-ops",
+          "title": "部署与运维"
+        }
+      },
+      {
+        "part": 2,
+        "kind": "subtopic",
+        "title": "build 目录并发竞争与 stale 假红",
+        "entryCount": 46,
+        "initial": "B",
+        "topic": {
+          "slug": "testing",
+          "title": "测试"
+        }
+      },
+      {
+        "part": 1,
+        "kind": "subtopic",
+        "title": "Bash 后台禁用，改用 bg_run",
+        "entryCount": 47,
+        "initial": "B",
+        "topic": {
+          "slug": "agent-tooling",
+          "title": "Agent 工具与环境"
+        }
+      },
+      {
+        "part": 0,
+        "kind": "overview",
+        "title": "测试",
+        "entryCount": 873,
+        "initial": "#",
+        "topic": {
+          "slug": "testing",
+          "title": "测试"
+        }
+      },
+      {
+        "part": 6,
+        "kind": "subtopic",
+        "title": "从 main 打 beta tag",
+        "entryCount": 25,
+        "initial": "#",
+        "topic": {
+          "slug": "ci-release",
+          "title": "CI 与发版"
+        }
+      },
+      {
+        "part": 7,
+        "kind": "subtopic",
+        "title": "触发器扇出与迁移陷阱",
+        "entryCount": 45,
+        "initial": "#",
+        "topic": {
+          "slug": "database",
+          "title": "数据库与 Prisma"
+        }
+      },
+      {
+        "part": 0,
+        "kind": "overview",
+        "title": "CI 与发版",
+        "entryCount": 374,
+        "initial": "C",
+        "topic": {
+          "slug": "ci-release",
+          "title": "CI 与发版"
+        }
+      },
+      {
+        "part": 3,
+        "kind": "subtopic",
+        "title": "重试与幂等键",
+        "entryCount": 18,
+        "initial": "#",
+        "topic": {
+          "slug": "tasks",
+          "title": "任务与派发"
+        }
+      },
+      {
+        "part": 8,
+        "kind": "subtopic",
+        "title": "长会话的上下文压缩",
+        "entryCount": 12,
+        "initial": "#",
+        "topic": {
+          "slug": "sessions",
+          "title": "会话"
+        }
+      },
+      {
+        "part": 9,
+        "kind": "subtopic",
+        "title": "六个常见的迁移坑",
+        "entryCount": 6,
+        "initial": "#",
+        "topic": {
+          "slug": "database",
+          "title": "数据库与 Prisma"
+        }
+      },
+      {
+        "part": 3,
+        "kind": "subtopic",
+        "title": "入口路由与静态段",
+        "entryCount": 14,
+        "initial": "#",
+        "topic": {
+          "slug": "web-client",
+          "title": "Web 客户端"
+        }
+      },
+      {
+        "part": 0,
+        "kind": "overview",
+        "title": "与 owner 协作",
+        "entryCount": 405,
+        "initial": "#",
+        "topic": {
+          "slug": "workflow-owner",
+          "title": "与 owner 协作"
+        }
+      },
+      {
+        "part": 2,
+        "kind": "subtopic",
+        "title": "2FA 与登录回调",
+        "entryCount": 9,
+        "initial": "#",
+        "topic": {
+          "slug": "auth-workspaces",
+          "title": "账号与工作区"
+        }
+      },
+      {
+        "part": 4,
+        "kind": "subtopic",
+        "title": "「板子」默认 12 人预女猎白",
+        "entryCount": 3,
+        "initial": "#",
+        "topic": {
+          "slug": "collab",
+          "title": "协作"
+        }
+      }
+    ],
+    "summary": "22 articles by title · Chinese titles by pinyin",
+    "groups": [
+      {
+        "letter": "A",
+        "rows": [
+          {
+            "title": "安全与密钥",
+            "meta": "Topic overview"
+          },
+          {
+            "title": "Agent 工具边界与 CLI 行为",
+            "meta": "Agent 工具与环境 · 32 entries"
+          },
+          {
+            "title": "Agent 工具与环境",
+            "meta": "Topic overview"
+          },
+          {
+            "title": "AutoRetry 与 Resume 机制",
+            "meta": "会话 · 39 entries"
+          }
+        ]
+      },
+      {
+        "letter": "B",
+        "rows": [
+          {
+            "title": "并发升级与部署一致性",
+            "meta": "部署与运维 · 60 entries"
+          },
+          {
+            "title": "部署与运维",
+            "meta": "Topic overview"
+          },
+          {
+            "title": "Bash 后台禁用，改用 bg_run",
+            "meta": "Agent 工具与环境 · 47 entries"
+          },
+          {
+            "title": "build 目录并发竞争与 stale 假红",
+            "meta": "测试 · 46 entries"
+          }
+        ]
+      },
+      {
+        "letter": "C",
+        "rows": [
+          {
+            "title": "测试",
+            "meta": "Topic overview"
+          },
+          {
+            "title": "触发器扇出与迁移陷阱",
+            "meta": "数据库与 Prisma · 45 entries"
+          },
+          {
+            "title": "从 main 打 beta tag",
+            "meta": "CI 与发版 · 25 entries"
+          },
+          {
+            "title": "CI 与发版",
+            "meta": "Topic overview"
+          }
+        ]
+      },
+      {
+        "letter": "H",
+        "rows": [
+          {
+            "title": "会话",
+            "meta": "Topic overview"
+          },
+          {
+            "title": "会话生命周期与资源调度",
+            "meta": "会话 · 43 entries"
+          }
+        ]
+      },
+      {
+        "letter": "L",
+        "rows": [
+          {
+            "title": "六个常见的迁移坑",
+            "meta": "数据库与 Prisma · 6 entries"
+          }
+        ]
+      },
+      {
+        "letter": "R",
+        "rows": [
+          {
+            "title": "入口路由与静态段",
+            "meta": "Web 客户端 · 14 entries"
+          }
+        ]
+      },
+      {
+        "letter": "W",
+        "rows": [
+          {
+            "title": "Worktree 环境依赖与构建",
+            "meta": "会话 · 80 entries"
+          }
+        ]
+      },
+      {
+        "letter": "Y",
+        "rows": [
+          {
+            "title": "与 owner 协作",
+            "meta": "Topic overview"
+          }
+        ]
+      },
+      {
+        "letter": "Z",
+        "rows": [
+          {
+            "title": "长会话的上下文压缩",
+            "meta": "会话 · 12 entries"
+          },
+          {
+            "title": "重试与幂等键",
+            "meta": "任务与派发 · 18 entries"
+          }
+        ]
+      },
+      {
+        "letter": "#",
+        "rows": [
+          {
+            "title": "「板子」默认 12 人预女猎白",
+            "meta": "协作 · 3 entries"
+          },
+          {
+            "title": "2FA 与登录回调",
+            "meta": "账号与工作区 · 9 entries"
+          }
+        ]
+      }
+    ]
+  },
+  "initials": [
+    {
+      "title": "安全与密钥",
+      "says": "A"
+    },
+    {
+      "title": "并发升级",
+      "says": "B"
+    },
+    {
+      "title": "测试",
+      "says": "C"
+    },
+    {
+      "title": "从 main 打 beta tag",
+      "says": "C"
+    },
+    {
+      "title": "触发器扇出",
+      "says": "C"
+    },
+    {
+      "title": "重试与幂等键",
+      "says": "Z"
+    },
+    {
+      "title": "长会话",
+      "says": "Z"
+    },
+    {
+      "title": "会话",
+      "says": "H"
+    },
+    {
+      "title": "行为约定",
+      "says": "X"
+    },
+    {
+      "title": "六个坑",
+      "says": "L"
+    },
+    {
+      "title": "入口路由",
+      "says": "R"
+    },
+    {
+      "title": "数据库",
+      "says": "S"
+    },
+    {
+      "title": "与 owner 协作",
+      "says": "Y"
+    },
+    {
+      "title": "Agent 工具",
+      "says": "A"
+    },
+    {
+      "title": "build 目录",
+      "says": "B"
+    },
+    {
+      "title": "  worktree 依赖",
+      "says": "W"
+    },
+    {
+      "title": "2FA 与登录",
+      "says": "#"
+    },
+    {
+      "title": "「板子」",
+      "says": "#"
+    },
+    {
+      "title": "",
+      "says": "#"
+    }
+  ],
+  "counts": [
+    {
+      "n": 0,
+      "says": "0"
+    },
+    {
+      "n": 7,
+      "says": "7"
+    },
+    {
+      "n": 999,
+      "says": "999"
+    },
+    {
+      "n": 1000,
+      "says": "1,000"
+    },
+    {
+      "n": 11689,
+      "says": "11,689"
+    },
+    {
+      "n": 1234567,
+      "says": "1,234,567"
+    }
+  ],
+  "updated": [
+    {
+      "article": {
+        "generatedAt": "2026-09-27T03:10:00.000Z",
+        "ref": "1588c3bd26383b0b56244e975f8403b15b88a42d",
+        "entryCount": 59
+      },
+      "says": "Updated Sep 27 at 1588c3b · written by Wiki maintenance from 59 entries"
+    },
+    {
+      "article": {
+        "generatedAt": "2026-09-27T20:30:00.000Z",
+        "ref": null,
+        "entryCount": 1
+      },
+      "says": "Updated Sep 28 · written by Wiki maintenance from 1 entry"
+    },
+    {
+      "article": {
+        "generatedAt": "2026-09-01T00:00:00.000Z",
+        "ref": "main",
+        "entryCount": 11689
+      },
+      "says": "Updated Sep 1 at main · written by Wiki maintenance from 11,689 entries"
+    }
+  ],
+  "entriesCited": [
+    {
+      "n": 20,
+      "says": "20 entries cited"
+    },
+    {
+      "n": 1,
+      "says": "1 entry cited"
+    },
+    {
+      "n": 0,
+      "says": "0 entries cited"
+    }
+  ],
+  "sourcesLines": [
+    {
+      "sources": 8,
+      "sessions": 5,
+      "says": "8 sources · 5 sessions"
+    },
+    {
+      "sources": 1,
+      "sessions": 0,
+      "says": "1 source"
+    },
+    {
+      "sources": 3,
+      "sessions": 1,
+      "says": "3 sources · 1 session"
+    },
+    {
+      "sources": 0,
+      "sessions": 0,
+      "says": "0 sources"
+    }
+  ],
+  "segments": [
+    {
+      "text": "按 `wikiAnchorMark` 标出 **Changed** 的条目。",
+      "says": [
+        {
+          "kind": "text",
+          "text": "按 "
+        },
+        {
+          "kind": "code",
+          "text": "wikiAnchorMark"
+        },
+        {
+          "kind": "text",
+          "text": " 标出 "
+        },
+        {
+          "kind": "strong",
+          "text": "Changed"
+        },
+        {
+          "kind": "text",
+          "text": " 的条目。"
+        }
+      ]
+    },
+    {
+      "text": "单个 ` 反引号不配对",
+      "says": [
+        {
+          "kind": "text",
+          "text": "单个 ` 反引号不配对"
+        }
+      ]
+    },
+    {
+      "text": "空的 `` 不算代码",
+      "says": [
+        {
+          "kind": "text",
+          "text": "空的 `` 不算代码"
+        }
+      ]
+    },
+    {
+      "text": "**粗体**开头，`a ?? b` 结尾",
+      "says": [
+        {
+          "kind": "strong",
+          "text": "粗体"
+        },
+        {
+          "kind": "text",
+          "text": "开头，"
+        },
+        {
+          "kind": "code",
+          "text": "a ?? b"
+        },
+        {
+          "kind": "text",
+          "text": " 结尾"
+        }
+      ]
+    },
+    {
+      "text": "a ** b 不是粗体",
+      "says": [
+        {
+          "kind": "text",
+          "text": "a ** b 不是粗体"
+        }
+      ]
+    },
+    {
+      "text": "Plain sentence with nothing marked.",
+      "says": [
+        {
+          "kind": "text",
+          "text": "Plain sentence with nothing marked."
+        }
+      ]
+    }
+  ],
+  "noteLabels": [
+    {
+      "n": 1,
+      "says": "[1]"
+    },
+    {
+      "n": 7,
+      "says": "[7]"
+    },
+    {
+      "n": 20,
+      "says": "[20]"
+    }
+  ],
+  "kindTags": [
+    {
+      "kinds": [
+        "convention",
+        "convention",
+        "decision",
+        "principle",
+        "concept"
+      ],
+      "says": [
+        "1 principle",
+        "2 conventions",
+        "1 decision",
+        "1 concept"
+      ]
+    },
+    {
+      "kinds": [
+        "pitfall"
+      ],
+      "says": [
+        "1 pitfall"
+      ]
+    },
+    {
+      "kinds": [
+        "recipe",
+        "recipe",
+        "recipe",
+        "assumption"
+      ],
+      "says": [
+        "3 recipes",
+        "1 assumption"
+      ]
+    },
+    {
+      "kinds": [],
+      "says": []
+    }
+  ],
+  "articleGroups": {
+    "entries": [
+      {
+        "id": "e1",
+        "kind": "convention",
+        "validFrom": "2026-09-20T00:00:00.000Z"
+      },
+      {
+        "id": "e2",
+        "kind": "principle",
+        "validFrom": "2026-09-25T00:00:00.000Z"
+      },
+      {
+        "id": "e3",
+        "kind": "decision",
+        "validFrom": "2026-09-21T00:00:00.000Z"
+      },
+      {
+        "id": "e4",
+        "kind": "decision",
+        "validFrom": "2026-09-26T00:00:00.000Z"
+      },
+      {
+        "id": "e5",
+        "kind": "pitfall",
+        "validFrom": "2026-09-22T00:00:00.000Z"
+      },
+      {
+        "id": "e6",
+        "kind": "recipe",
+        "validFrom": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "id": "e7",
+        "kind": "recipe",
+        "validFrom": "2026-09-24T00:00:00.000Z"
+      },
+      {
+        "id": "e8",
+        "kind": "concept",
+        "validFrom": "2026-09-19T00:00:00.000Z"
+      },
+      {
+        "id": "e9",
+        "kind": "convention",
+        "validFrom": "2026-09-27T00:00:00.000Z"
+      }
+    ],
+    "cited": [
+      "e6",
+      "e1",
+      "e3"
+    ],
+    "groups": [
+      {
+        "title": "Principles & conventions",
+        "ids": [
+          "e1",
+          "e9",
+          "e2"
+        ]
+      },
+      {
+        "title": "Decisions",
+        "ids": [
+          "e3",
+          "e4"
+        ]
+      },
+      {
+        "title": "Pitfalls",
+        "ids": [
+          "e5"
+        ]
+      },
+      {
+        "title": "Recipes",
+        "ids": [
+          "e6",
+          "e7"
+        ]
+      },
+      {
+        "title": "Concepts",
+        "ids": [
+          "e8"
+        ]
+      }
+    ]
+  }
+}
