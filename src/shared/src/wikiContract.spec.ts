@@ -10,7 +10,10 @@ import {
   WIKI_CHANGESET_ORIGINS,
   WIKI_CHANGESET_STATUSES,
   WIKI_CONTRACT_VERSION,
+  WIKI_CURSOR_FACT_KINDS,
+  WIKI_CURSOR_OUTCOMES,
   WIKI_DECIDE_ACTIONS,
+  WIKI_DEFAULT_MAINTENANCE_SETTINGS,
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_EFFECT_POLICY,
   WIKI_ENTRY_KINDS,
@@ -18,6 +21,8 @@ import {
   WIKI_EXPOSURE_CHANNELS,
   WIKI_KINDS,
   WIKI_LIMITS,
+  WIKI_MAINTENANCE_LIST_TITLE,
+  WIKI_MAINTENANCE_RULES,
   WIKI_OPS,
   WIKI_OP_DECISIONS,
   WIKI_PUSHABLE_TRUST,
@@ -36,6 +41,8 @@ import {
   WIKI_VERIFICATION_VERDICTS,
   validateWikiEntryDraft,
   validateWikiSources,
+  wikiEstimateTokens,
+  wikiMaintenanceSettings,
   wikiOpEffect,
   wikiReviewEffect,
   wikiSpaceSettings,
@@ -380,6 +387,51 @@ describe('wiki contract', () => {
     // What a review mode applies is pushed as auto, and never as unreviewed.
     expect(WIKI_PUSHABLE_TRUST).toContain('auto');
     expect(WIKI_PUSHABLE_TRUST).not.toContain('unreviewed');
+  });
+
+  it('ships the maintenance run the contract states: off by default, its rules, its facts and its cursor', () => {
+    // Criterion 2 and the settings beside it: a space's maintenance is off until its owner turns it on.
+    const setting = CONTRACT.space.settings.maintenance;
+    expect(setting.default).toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
+    expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.enabled).toBe(false);
+    expect(keysOf(setting.keys)).toEqual(Object.keys(WIKI_DEFAULT_MAINTENANCE_SETTINGS));
+    expect(setting.channel).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
+    expect(WIKI_DEFAULT_SPACE_SETTINGS.maintenance).toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
+    expect(CONTRACT.space.settings.reservedForPhase2).not.toContain('maintenance');
+    expect(wikiSpaceSettings({}).maintenance).toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
+    expect(wikiSpaceSettings({ maintenance: { enabled: 'yes', dailyTokenBudget: -1, provider: '' } }).maintenance)
+      .toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
+    expect(wikiMaintenanceSettings({ enabled: true, workspaceId: 'w', listId: 'l', dailyTokenBudget: 5 }))
+      .toEqual({ enabled: true, workspaceId: 'w', provider: 'local-vllm', dailyTokenBudget: 5, listId: 'l' });
+
+    const maintenance = CONTRACT.maintenance;
+    expect(maintenance.rules).toEqual(WIKI_MAINTENANCE_RULES);
+    // The demo's numbers: 8k a session recalled more than 16k; twenty sessions or a day makes a run due.
+    expect(WIKI_MAINTENANCE_RULES.dossierMaxTokens).toBe(8_000);
+    expect(WIKI_MAINTENANCE_RULES.errorClusterMinSessions).toBe(3);
+    expect(WIKI_MAINTENANCE_RULES.backlogThreshold).toBe(20);
+    expect(WIKI_MAINTENANCE_RULES.maxPendingAgeHours).toBe(24);
+    expect(maintenance.list.title).toBe(WIKI_MAINTENANCE_LIST_TITLE);
+    expect(maintenance.list.hidden).toBe(true);
+    expect(keysOf(maintenance.cursor.factKinds)).toEqual([...WIKI_CURSOR_FACT_KINDS]);
+    expect(maintenance.cursor.advance.outcomes).toEqual([...WIKI_CURSOR_OUTCOMES]);
+    // Both maintenance routes this side serves are the runner door's maintenance routes.
+    const routes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
+    expect(routes).toContain(maintenance.dossier.route);
+    expect(routes).toContain(maintenance.cursor.advance.route);
+    // The refusals the cursor answers are declared, with their statuses.
+    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
+    expect(status('WIKI_CURSOR_BEHIND')).toBe(409);
+    expect(status('WIKI_CURSOR_INVALID')).toBe(400);
+    expect(status('WIKI_NOT_MAINTENANCE_SESSION')).toBe(403);
+    // The token estimate the budget was measured with: ASCII at 3.4 a token, the rest at 1.25, plus one.
+    expect(maintenance.dossier.budget).toMatch(/wikiEstimateTokens/u);
+    expect(wikiEstimateTokens('')).toBe(0);
+    expect(wikiEstimateTokens('abcdefghij')).toBe(Math.floor(10 / 3.4) + 1);
+    expect(wikiEstimateTokens('案卷与游标')).toBe(Math.floor(5 / 1.25) + 1);
+    // The dossier's text is never stored: the one table that keeps anything of it keeps its sources and hash.
+    expect(maintenance.tables).toEqual(['wiki_cursor', 'wiki_dossier']);
+    expect(maintenance.dossier.storage).toMatch(/text is never stored/u);
   });
 
   it('declares every refusal once, with a status and a scope, and names no code it does not declare', () => {

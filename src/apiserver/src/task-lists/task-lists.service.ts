@@ -89,7 +89,9 @@ export class TaskListsService {
 
   private async loadList(ownerId: string) {
     const lists = await this.prisma.taskList.findMany({
-      where: { ownerId },
+      // A hidden list — a wiki space's «Wiki maintenance» list (migration 0315) — is not in the index;
+      // its tasks are reachable by id, and `GET task-lists/:id` still answers for it.
+      where: { ownerId, hidden: false },
       orderBy: { createdAt: 'desc' },
       // Explicit projection, and `instructions` is deliberately not in it. A list's standing
       // instructions run to kilobytes of prose — on this deployment four lists carry 13KB of the

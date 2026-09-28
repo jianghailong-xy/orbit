@@ -37,6 +37,7 @@ import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconcile
 import { WatchesModule } from '../watches/watches.module';
 import { WikiModule } from '../wiki/wiki.module';
 import { RunnerWikiController } from './runner-wiki.controller';
+import { RunnerWikiMaintenanceController } from './runner-wiki-maintenance.controller';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -80,6 +81,9 @@ import { RunnerWikiController } from './runner-wiki.controller';
     RunnerProjectsController,
     RunnerWatchesController,
     RunnerWikiController,
+    // The maintenance run's two routes (contract `maintenance`): its own controller, so the one above
+    // injects exactly what it always did.
+    RunnerWikiMaintenanceController,
   ],
   providers: [
     RunnerAuthGuard,

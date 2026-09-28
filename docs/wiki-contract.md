@@ -16,6 +16,11 @@ T4 检索、T5 runner 工具、T6 推送、T7 实时事件、T8–T10 客户端�
 留痕在 op 上；拒绝率超阈值自动退回 Tiered；Automatic 默认不发抽检卡；抽检卡不再占 30 条待审名额。见 §7.4，迁移
 `0312_wiki_verification`，JSON 里是 `reviewModes.verification` 与 `agentSurface.verify`。
 
+**判据 2（阶段 2，2026-09-28）：案卷与游标**：space 设置 `maintenance`（默认关闭、只有 owner 能改，打开时建隐藏的
+「Wiki maintenance」清单）、维护会话的判定、服务端确定性抽取的会话案卷、`wiki_cursor` 的水位与 backlog、两个新拒绝码
+`WIKI_CURSOR_BEHIND` / `WIKI_CURSOR_INVALID`，见新增的 §16；迁移 `0315_wiki_cursor`，JSON 里是 `space.settings.maintenance` 与
+`maintenance` 一节。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -28,6 +33,7 @@ T4 检索、T5 runner 工具、T6 推送、T7 实时事件、T8–T10 客户端�
 | 库结构测试（库 ↔ JSON） | `src/apiserver/src/wiki/wiki-schema.pg.spec.ts`，经 `scripts/run-pg-spec.sh` 跑 |
 | 审阅模式的行为测试 | `src/apiserver/src/wiki/wiki-review-mode.pg.spec.ts`，经 `scripts/run-pg-spec.sh` 跑 |
 | Automatic 核实的行为测试 | `src/apiserver/src/wiki/wiki-verify.pg.spec.ts`（服务端），`src/runner-go/wiki_verify_test.go`（`orbit wiki verify`，假 vLLM 端点） |
+| 案卷与游标的行为测试 | `src/apiserver/src/wiki/wiki-dossier.pg.spec.ts`（服务端），`src/runner-go/wiki_dossier_test.go`（`orbit wiki dossier` / `orbit wiki cursor advance`） |
 
 **本任务不做**：服务、控制器、MCP 工具、推送、实时事件的实现，以及任何 UI。它们各自的任务照本契约写。
 
@@ -572,3 +578,74 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
 尚待后续任务确认的一点：没有对应 space 的 workspace 第一次使用时，是自动为它的仓库建一个 space，还是回 `WIKI_SPACE_UNBOUND`
 等 owner 手动建，设计只写了「自动绑到对应 space」。本契约只规定了绑定到已有 space 的情形，建与不建由 T3 与 owner 定。
+
+---
+
+## 16. 维护作业：案卷与游标（判据 2）
+
+JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apiserver/src/wiki/wiki-dossier.ts`（抽取）、
+`wiki-maintenance.ts`（游标、案卷页）、`wiki-maintenance-settings.ts`（设置与维护会话的判定），runner 门在
+`runner-api/runner-wiki-maintenance.controller.ts`。
+
+### 16.1 维护设置与维护会话
+
+- `settings.maintenance = { enabled, workspaceId, provider, dailyTokenBudget, listId }`，默认
+  `{ false, null, 'local-vllm', 2000000, null }`。只能经用户门 `PATCH /api/wiki/spaces/:id` 改，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
+  runner 门没有改设置的路由。只写 `maintenance` 这一个键，在 SQL 里合并，其他设置的并发写不会互相覆盖。
+- 打开维护必须给出 owner 自己的 workspace。第一次打开时建一个隐藏的任务清单（标题「Wiki maintenance」、`hidden = true`、
+  `maxConcurrent = 1`），id 写进 `listId`；关掉时清单和 `listId` 都保留。`listId` 永远不从请求里取。
+- **维护会话 = 任务在这个清单里的会话**。判定是导出函数 `isWikiMaintenanceSession` / `wikiMaintenanceSpaceOf`，
+  锚点复验、文章生成、维护作业、干净启动都用它，不各自再判断一遍。
+- `task_list.hidden` 为真的清单不进 owner 的清单索引（`GET /task-lists`），里面的任务仍可按 id 读到。
+
+### 16.2 事实、水位与 backlog
+
+- 五类已提交事实各让 backlog 加一：会话结算（会话停下来——等输入、成功、失败、取消或被打断——按 `last_turn_at`）、任务终态
+  （`updated_at`）、审批回答（AskUserQuestion 已回答、ExitPlanMode 已决定、带理由的 DENIED，按 `decided_at`）、merge receipt
+  （`created_at`）、判据修订（`updated_at`）。普通的 Bash 允许不算：它没有可学的内容。
+- **backlog 是数出来的，不是记出来的**：每次读游标都从这些行里现算水位之后的事实，所以事件丢了也不会漏事实；wiki 模块不往
+  Sessions / Projects 服务注入任何依赖。数完写回 `wiki_cursor` 的 `backlog`、`pending_sessions`、`oldest_pending_at`、`lag_seconds`，
+  给首页状态行直接读。
+- **范围**：普通会话按它所在的 workspace 归属。项目的协调会话、它的 coordinator wake 打开的判断会话「代表一个项目」，
+  只有它代表的项目在这里干活，它们才属于这个 space——协调者所在的 workspace 只说明它在哪儿开的，不说明项目在做哪个代码库。
+  「在这里干活」指三者之一：项目的任务会话在 space 绑定的 workspace 里跑过、项目的任务指派给了其中一个 workspace、项目的代码库
+  就是 space 的仓库；没有任何任务被指派或跑过、也没有代码库的项目说不出自己在哪儿干活，才按协调会话自己的 workspace 算。
+  只看第一条会漏掉任务还没跑的项目：2026-09-28 线上按字面规则会排除 orbit 自己的 15 个项目的协调会话。项目属于 space 用的也是这三条。
+  维护作业自己的会话、任务、审批和回执都不算事实，免得一次运行喂大自己的 backlog。
+- 事实按（时间到毫秒, 种类, id）排成一条线；水位是线上的一个位置，存成三列而不是 jsonb，所以推进是一条 compare-and-set。
+- 到期条件留给判据 3：backlog ≥ 20，或新事实到达时最老的未处理事实已超过 24 小时（`state.due`）。时钟不启动任何工作。
+
+### 16.3 案卷
+
+- `GET /api/runner/wiki/spaces/:id/dossiers?after=<token>&limit=N`：只对该 space 的维护会话开放；headless 回 400，别的会话
+  `WIKI_NOT_MAINTENANCE_SESSION`，别的 owner 的 space 是普通 404。页从「after 与水位中较后的那个」之后开始，只取已过 120 秒
+  宽限的事实（给事务留提交时间），按顺序取到 N 个会话为止（默认 20、最多 50）；返回的 `cursor` 是本页覆盖到的最后一个事实。
+- 内容照设计 §8.2 第 1 步，外加 agent 自己的轨迹：头部（会话、任务、验收标准、污染标记）；任务会话的开场 prompt（去掉任务模板尾巴）、
+  owner 的消息和 steer、打断；AskUserQuestion 问答、ExitPlanMode、带理由的 DENIED；agent 的回复、thinking 里命中信号的句子、
+  压缩的工具时间线（命令首行 + 结果首尾行，连续的读 / 改折成一行）；已结算任务最新 3 条 agent 评论和 owner 评论；merge receipt 的 sha；
+  owner 解决 blocker 时写的说明。读写记忆文件的工具调用连同结果剔除，指向记忆库的句子剔除。
+- 打分与装箱照演示的打包器 v2；每行以 `L12` 开头，`sources` 把每个行名对到一手记录（turn / event / tool_call / task_comment /
+  approval / merge_receipt / owner_decision），维护作业提议条目时引用这些记录，不引用案卷。服务端的出处解析因此补了
+  `merge_receipt` 与 `owner_decision`（owner 解决的 blocker；它不算 Tiered 的 owner 原话）。
+- **先脱敏再截断**：每条记录的文本先过共享脱敏器（owner 的 workspace.env 值作字面量），再裁剪、打分、装箱；最后整段再过一遍。
+  每个会话不超过 8,000 token（`wikiEstimateTokens`：ASCII ÷ 3.4 + 其他 ÷ 1.25 + 1），装不下的被截断并标 `truncated`。
+- **确定性**：同样的记录两次抽取字节一致，哈希（正文 + NUL + sources 的 JSON 的 sha256）相同；抽取不读时钟。
+- **只存 (sourceIds, hash)**：`wiki_dossier` 每个 space、每个会话一行，存 sources、hash、token 数和发放它的页的位置，没有任何列存正文。
+  同一 hash 已在游标推进过的页上发过时，`unchanged = true`，作业可以跳过。
+- **批量项目只给聚合统计**：任务标题把数字读成 `#` 之后，同一项目（没有项目时同一清单）里有 20 个以上同模板的任务，就是批量项目，
+  它的会话不出案卷，只出一条聚合：任务按状态计数、本页会话数、最常见的报错签名（FineWeb 的 11 万个任务只有 7 个模板）。
+- **报错簇**：`tool_call.is_error` 按（工具, 归一化首行——数字、hex、路径、引号内文本换成占位符）分组，统计 space 近 14 天停下来的会话，
+  3 个以上会话共有的才算簇，页上只给本页会话所在的簇。
+
+### 16.4 游标推进
+
+- `POST /api/runner/wiki/spaces/:id/cursor`，body `{ to, outcome?, error? }`，`outcome` 是 `succeeded`（默认）/ `failed` / `truncated`。
+- 只有 `succeeded` 推得动：`failed` / `truncated` 只记失败（`consecutive_failures + 1`、`last_error`（先脱敏）、`last_run_at`），
+  回 200、`advanced: false`，可以不带 token。
+- 只能前进：token 落后于水位回 `WIKI_CURSOR_BEHIND`（409，附当前游标），不改任何东西；等于水位算一次不移动的成功；
+  不是本 space 某页发出的 token（解不开、别的 space 的、超过发出过的最远位置）回 `WIKI_CURSOR_INVALID`（400）。
+- 推进本身是一条 compare-and-set（水位仍在 token 之前、发出过的最远位置不在 token 之前），两次运行里位置靠后的那次赢，
+  另一次被判 behind。
+- CLI：`orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]`、
+  `orbit wiki cursor advance --space <id> --to <token> [--outcome …] [--error TEXT] [--json]`，只有 CLI、没有 MCP 工具，三张 family 表都登记。
+

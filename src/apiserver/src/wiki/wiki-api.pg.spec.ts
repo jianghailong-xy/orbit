@@ -357,6 +357,9 @@ test('the refusals, limits and effect policy this door answers with are the cont
   assert.deepEqual(
     CONTRACT.refusals.map((refusal) => [refusal.code, refusal.httpStatus]).sort(),
     [
+      // The maintenance run's cursor (migration 0315, contract `maintenance.cursor.advance`).
+      ['WIKI_CURSOR_BEHIND', 409],
+      ['WIKI_CURSOR_INVALID', 400],
       ['WIKI_DISABLED', 404],
       ['WIKI_IDEMPOTENCY_KEY_REUSED', 409],
       ['WIKI_KIND_OWNER_ONLY', 403],

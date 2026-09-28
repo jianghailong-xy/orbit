@@ -1115,6 +1115,30 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'After the commit and outside the closure: one `wiki.changed` for the space once any verdict of the request was recorded, and — only for the verdict whose compare-and-set moved the space to Tiered — one push notification to the owner (`PushService.notifyWikiVerificationTripped`). Neither is inside a closure, so a retried attempt sends neither twice.',
     answer: 'Typed 503 from the global boundary; the verifier reports again, and a verdict already recorded answers with itself.',
   },
+  // The Wiki maintenance run (contracts/wiki.contract.json `maintenance`, migration 0315): the owner's
+  // maintenance settings with the hidden list they make, and what a dossier page records it handed out.
+  {
+    at: 'wiki/wiki-maintenance-settings.ts#setWikiMaintenance',
+    shape: 'TX_RETRIED',
+    locks: 'When maintenance is being turned on and the space has no list yet: the task_list INSERT first, whose owner foreign key takes the user row FOR KEY SHARE (rank 10) and which creates the list row (rank 20); then the wiki_space row FOR UPDATE (rank 60), read again under that lock; then, only for the loser of two first enables, the DELETE of the list it just made (the same rank-20 row, its own); then one UPDATE of that wiki_space row, merging the maintenance key alone. Ascending throughout: the list is written before the space row is locked, never after.',
+    identity: 'The space and its owner. The list is recorded in the settings only when the locked row has none, so two first enables leave one list: the second finds the first one\'s and deletes its own.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The settings are re-read under the row lock inside the closure, and the merge and the list decision are re-derived from them, so a re-run after a conflict reaches what the committed row says. A rolled-back attempt takes the list it made with it.',
+    effects: 'None inside, and none after: the list is hidden, so no list-index event is owed.',
+    answer: 'Typed 503 from the global boundary; the owner saves the setting again.',
+  },
+  {
+    at: 'wiki/wiki-maintenance.ts#recordIssue',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s wiki_cursor row (rank 60) by one conditional UPDATE, then one wiki_dossier row (rank 60) per dossier by upsert on (space_id, session_id). Both reach wiki_space through (space_id, owner_id) and take it FOR KEY SHARE, which no wiki write conflicts with; no session, task or other row is locked — they were read before, unlocked.',
+    identity: 'The page\'s end position and the space. The cursor\'s furthest issued position only moves forward — the UPDATE\'s WHERE is that compare-and-set — and each dossier row is keyed by its space and session, so a re-run writes the same rows with the same hashes.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The closure writes values computed before it and reads nothing: re-running it re-applies the same forward-only issue and the same upserts, which is the same outcome.',
+    effects: 'None inside. The page is returned to the maintenance run after the commit.',
+    answer: 'Typed 503 from the global boundary; the maintenance run asks for the page again, and what it is handed is recorded then.',
+  },
 ];
 
 export interface TransactionParticipant {
@@ -1558,8 +1582,11 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   // touches one row of one of the owner's own spaces, neither is part of anybody else's fact, and a
   // settings write that does not arrive changes nothing a reader decides from — the space's entries
   // and its review queue are untouched by either.
-  { at: "wiki/wiki.service.ts#updateSpace", class: "ONE_ROW_BY_KEY", statements: 1, note: "The space's settings (push, autoAcceptReinforce, automaticSpotChecks, and the review mode with when and by whom it last changed) and its title. One UPDATE predicated on the space and its owner, which is what makes another account's id write nothing; the settings themselves are merged from the row as it was read a moment before, so a concurrent settings write to the OTHER key survives rather than being overwritten by this one's snapshot." },
+  { at: "wiki/wiki.service.ts#updateSpace", class: "ONE_ROW_BY_KEY", statements: 1, note: "The space's settings (push, autoAcceptReinforce, automaticSpotChecks, and the review mode with when and by whom it last changed) and its title. One UPDATE predicated on the space and its owner, which is what makes another account's id write nothing; the keys it writes are merged into the stored settings in SQL (`settings || $patch`) and never include `maintenance`, so a concurrent write of the maintenance key — `wiki.setWikiMaintenance`, the unit this method calls first when a request names maintenance — survives it." },
   { at: "wiki/wiki.service.ts#bindWorkspace", class: "ONE_ROW_CAS", statements: 1, note: "The manual half of the binding (§2.1): one upsert keyed by the workspace, whose unique index is what makes a workspace belong to at most one space. The workspace and the space are read first, each owner-scoped, so another account's workspace or space is a 404 rather than a row written; the upsert's `update` half is what re-binds a workspace the owner moved to another space." },
+  { at: 'wiki/wiki-maintenance.ts#cursorRow', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The space\'s cursor row, made the first time anything reads it: one upsert keyed by (space_id, source), whose unique index makes it one row per space; the empty update writes nothing to a row that exists.' },
+  { at: 'wiki/wiki-maintenance.ts#stateOf', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The backlog as just counted from the facts, written back onto the cursor row by id so that a reader that does not count (the Wiki home page\'s status line) reads it. A later count overwrites it; nothing decides anything from this copy.' },
+  { at: 'wiki/wiki-maintenance.ts#advanceCursor', class: 'ONE_ROW_CAS', statements: 2, note: 'At most two statements on the space\'s cursor row. A run that did not succeed: one UPDATE by id that counts the failure. One that succeeded: the move itself is one UPDATE whose WHERE is the compare-and-set — the watermark still behind the token and the furthest issued position not behind it — so of two runs the later position wins; a token at the watermark, or a move another run made first, is one UPDATE by id that records the success. Refusals write nothing.' },
 ];
 
 export interface TriggerWriteSource {

@@ -102,7 +102,20 @@
         "serverWritten": true,
         "means": "Who changed it last: the owner, the spot checks sending the space back to manual, or the verification sending an automatic space back to tiered."
       },
-      "reservedForPhase2": ["maintenance", "embedding"]
+      "maintenance": {
+        "type": "object",
+        "phase": 2,
+        "default": { "enabled": false, "workspaceId": null, "provider": "local-vllm", "dailyTokenBudget": 2000000, "listId": null },
+        "keys": {
+          "enabled": "boolean. Off by default: in a space whose maintenance is off, no fact starts a maintenance task.",
+          "workspaceId": "The owner's workspace the maintenance task runs in, which decides the runner. Maintenance cannot be turned on without one.",
+          "provider": "The provider the run is pinned to, with no fallback (design section 8.2): the codex path ignores disallowedTools, and its usage reaches no usage table.",
+          "dailyTokenBudget": "Input plus output tokens the space's maintenance sessions may spend in one UTC day. A whole number, 0 or more.",
+          "listId": "Server-written and never taken from a request: the space's hidden Wiki maintenance task list (maintenance.list), made the first time maintenance is turned on and kept when it is turned off."
+        },
+        "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header, and WIKI_OWNER_CHANNEL_ONLY otherwise. A request names any of enabled, workspaceId, provider and dailyTokenBudget; what it leaves out stays as it was."
+      },
+      "reservedForPhase2": ["embedding"]
     }
   },
 
@@ -680,6 +693,95 @@
     "exposure": "one wiki_exposure row per entry pushed, channel push"
   },
 
+  "maintenance": {
+    "phase": 2,
+    "doc": "docs/wiki-contract.md section 16; design section 8.2 step 1 and section 3 wiki_cursor",
+    "migration": "src/apiserver/prisma/migrations/0315_wiki_cursor/migration.sql",
+    "tables": ["wiki_cursor", "wiki_dossier"],
+    "rules": {
+      "dossierMaxTokens": 8000,
+      "pageSessionsDefault": 20,
+      "pageSessionsMax": 50,
+      "settleGraceSeconds": 120,
+      "errorClusterMinSessions": 3,
+      "errorClusterLookbackDays": 14,
+      "batchTemplateMinTasks": 20,
+      "commentTail": 3,
+      "backlogThreshold": 20,
+      "maxPendingAgeHours": 24
+    },
+    "session": "A maintenance session is a session whose task is in its space's maintenance list (space.settings.maintenance.listId). isWikiMaintenanceSession in src/apiserver/src/wiki/wiki-maintenance-settings.ts is the one test of it, and every maintenance-only route asks it.",
+    "list": {
+      "title": "Wiki maintenance",
+      "hidden": true,
+      "maxConcurrent": 1,
+      "means": "One per space, made by the first PATCH that turns maintenance on and recorded as settings.maintenance.listId. Hidden from the owner's list index (task_list.hidden); its tasks are the maintenance runs."
+    },
+    "dossier": {
+      "route": "GET /api/runner/wiki/spaces/:id/dossiers",
+      "query": {
+        "after": "optional: a cursor token; the page starts after the later of it and the watermark",
+        "limit": "optional: sessions a page carries, 1 to rules.pageSessionsMax, default rules.pageSessionsDefault"
+      },
+      "who": "Maintenance sessions of the space, and no other: a headless call is refused 400, any other session of the owner WIKI_NOT_MAINTENANCE_SESSION, another owner's space a plain 404.",
+      "page": "The facts after the start, oldest first, up to rules.settleGraceSeconds ago, until the page holds limit sessions. Each session a fact names gets one dossier; the page's cursor token names the last fact it covers.",
+      "contents": [
+        "the header: the session's title, provider and status, its task's title, status and acceptance criteria, and the taint mark",
+        "the opening prompt of a task's session (task boilerplate cut), the owner's messages and steers, interrupts, and the other senders' turns",
+        "AskUserQuestion questions with their answers, an ExitPlanMode plan and how it was decided, and a denial that gave a reason",
+        "the agent's own trace: its replies, the sentences of its thinking that carry a signal, and a compressed tool timeline ($ first line of a command, then its result's first and last line; a run of reads or edits folded into one line)",
+        "a settled task's agent comments, the newest rules.commentTail, on the task's latest session",
+        "the session's merge receipts with their shas",
+        "the resolution note of a blocker the owner resolved"
+      ],
+      "memory": "A tool call that reads or writes an agent memory file (~/.claude/projects/<p>/memory, MEMORY.md) is left out with its result, and a sentence that points at the memory library is cut from the text around it.",
+      "signals": "Lines are scored as the demo's packer v2 scored them: an owner rule or decision, a surprise in the agent's words or thinking, a failure followed by a success of the same command, an irreversible command, the agent's explanation after an owner's question. The owner's words and decisions, the task's opening prompt, a settled task's closing comments, the merge receipts and the session's closing reply are taken first, then windows around the signals, then the agent's longer replies.",
+      "redaction": "Every line and every header string goes through src/apiserver/src/common/secret-redaction.ts, with the owner's workspace.env values as literals, BEFORE it is measured or packed: what is cut to the budget is already redacted.",
+      "budget": "A dossier is at most rules.dossierMaxTokens by wikiEstimateTokens (ASCII characters / 3.4 plus other characters / 1.25, plus one). A session whose timeline does not fit is cut to it and marked truncated.",
+      "determinism": "The same records give the same text byte for byte, and the same hash: sha256 of the text, a NUL, and the sources as JSON. Nothing in a dossier reads the clock.",
+      "sources": "Each line of the text starts with its short name (L1, L2, …), and sources maps each to the first-hand record it came from: turn, event, tool_call, task, task_comment, approval, merge_receipt or owner_decision. A proposal made from the dossier cites those records, never the dossier.",
+      "storage": "Only the sources and the hash are stored (wiki_dossier, one row per space and session, rewritten each time the session is handed out). The text is never stored. unchanged says the same hash was handed out on a page the cursor has since advanced past.",
+      "batchProjects": "A session whose task shares its title template (digits read as #) with rules.batchTemplateMinTasks or more tasks of its project, or of its list when it has no project, is a batch project's: such sessions get no dossier each, only the batch's counts — its tasks by status, its sessions on the page, and its commonest tool error signatures.",
+      "errorClusters": "tool_call.is_error grouped by the tool and the normalized first line of its output (numbers, hex, paths and quoted text read as placeholders), over the space's sessions that came to rest in the last rules.errorClusterLookbackDays days; a signature is a cluster when rules.errorClusterMinSessions or more sessions share it, and a page carries the clusters its own sessions are in."
+    },
+    "cursor": {
+      "table": "wiki_cursor",
+      "row": "One per space (source 'facts'): the watermark, the furthest position a page handed out, the backlog as last counted with its oldest fact and the lag, and the health — last_ok_at, last_run_at, last_outcome, consecutive_failures, last_error.",
+      "factKinds": {
+        "session_settled": "A session of the space (maintenance.cursor.scope) at rest (awaiting input, succeeded, failed, cancelled or interrupted), at its last_turn_at: once per session, and again each time it comes to rest later.",
+        "task_terminal": "A task of the space (assigned to one of its workspaces, or with a session in one) that is DONE, CANCELLED or FAILED, at its updated_at.",
+        "approval_answered": "An answered AskUserQuestion, a decided ExitPlanMode, or a denial with a reason, in a session of the space, at its decided_at.",
+        "merge_receipt": "A merge receipt of a session of the space, at its created_at.",
+        "criterion_revised": "A project acceptance criterion of a project of the space (maintenance.cursor.scope), at its updated_at: written, or revised."
+      },
+      "scope": "An ordinary session is the space's when it ran in one of the space's workspaces. A session that speaks for a project — the project's coordinator session, or a judgment session one of its coordinator wakes opened — is the space's only when one of its projects works here: the coordinator's workspace says where it was set up, not what the project works on. A project works here when one of its task sessions ran in one of the space's workspaces, one of its tasks is assigned to one, or its codebase is the space's repository; a project that says nothing of where it works — no task assigned or run anywhere, no codebase — goes by its coordinator's workspace. Nothing outside the scope is a fact, a dossier or part of an error cluster.",
+      "excluded": "Nothing of a maintenance session or of a task in the maintenance list is a fact: a run does not feed its own backlog.",
+      "order": "Facts are ordered by their time to the millisecond, then kind, then id. The watermark is one such position; a fact is after it or not.",
+      "backlog": "Every fact after the watermark is one: each of the five kinds adds one. Counted from the facts themselves whenever the cursor is read, so no fact is missed for want of an event.",
+      "token": "Opaque: the position of the last fact a page covered and the space it belongs to.",
+      "advance": {
+        "route": "POST /api/runner/wiki/spaces/:id/cursor",
+        "body": { "to": "required: a cursor token", "outcome": "optional: one of outcomes, default succeeded", "error": "optional: why the run did not succeed, at most 2000 characters, redacted" },
+        "outcomes": ["succeeded", "failed", "truncated"],
+        "who": "Maintenance sessions of the space, as the dossier route.",
+        "rules": [
+          "Only a succeeded run moves the cursor. A failed or truncated one moves nothing: it records the failure (consecutive_failures + 1, last_error, last_run_at) and is answered 200 with advanced false.",
+          "The cursor only moves forward: a token behind the watermark is refused WIKI_CURSOR_BEHIND and changes nothing; a token at the watermark is a success that moves nothing.",
+          "A token no page of this space handed out is refused WIKI_CURSOR_INVALID.",
+          "A move is one compare-and-set on the watermark, so of two runs the later position wins and the earlier is refused behind."
+        ]
+      },
+      "due": "A maintenance task is due when the backlog reaches rules.backlogThreshold, or when a new fact arrives while the oldest fact after the watermark is older than rules.maxPendingAgeHours (criterion 3). No clock starts one."
+    },
+    "cli": {
+      "dossier": "orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]",
+      "cursorAdvance": "orbit wiki cursor advance --space <id> --to <token> [--outcome succeeded|failed|truncated] [--error TEXT] [--json]",
+      "tool": "none: maintenance verbs are CLI only, for a maintenance session, and have no MCP tool beside them.",
+      "dossierPrecondition": "Read dossiers only as a Wiki maintenance run of the space, and cite the records their lines name, never the dossier itself: a dossier is sessions compressed, redacted and cut to a budget, not a record.",
+      "cursorPrecondition": "Advance the cursor only when the run succeeded and every dossier up to the token was processed: a run that failed or was cut short reports that outcome instead, and moves nothing."
+    }
+  },
+
   "refusals": [
     { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
     { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },
@@ -694,7 +796,9 @@
     { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide, a revert, an entry's Reject, a change of the review mode or of automaticSpotChecks arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session." },
     { "code": "WIKI_NOT_MAINTENANCE_SESSION", "httpStatus": 403, "scope": "request", "phase": 2, "when": "A maintenance-only route was called by a session that is not a maintenance run of that space." },
     { "code": "WIKI_SESSION_EXCLUDED", "httpStatus": 403, "scope": "request", "addedByThisContract": true, "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes." },
-    { "code": "WIKI_IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer." }
+    { "code": "WIKI_IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer." },
+    { "code": "WIKI_CURSOR_BEHIND", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A succeeded run asked to advance the cursor to a token behind the space's watermark: another run already went further, and the cursor only moves forward (maintenance.cursor.advance). The answer carries the cursor as it stands." },
+    { "code": "WIKI_CURSOR_INVALID", "httpStatus": 400, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A cursor token that no dossier page of this space handed out: one that does not decode, one of another space, or a position past the furthest page the space's dossier route has issued." }
   ],
   "refusalRules": {
     "order": ["changesetSize", "schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "taint", "effect", "quota", "similar"],

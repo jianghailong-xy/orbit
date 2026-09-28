@@ -133,6 +133,8 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_NOT_MAINTENANCE_SESSION',
   'WIKI_SESSION_EXCLUDED',
   'WIKI_IDEMPOTENCY_KEY_REUSED',
+  'WIKI_CURSOR_BEHIND',
+  'WIKI_CURSOR_INVALID',
 ] as const;
 export type WikiRefusalCode = (typeof WIKI_REFUSAL_CODES)[number];
 
@@ -775,7 +777,56 @@ export interface WikiSpaceSettings {
   /** Server-written: when the mode last changed, and who changed it. Absent until it first does. */
   reviewModeChangedAt?: string;
   reviewModeChangedBy?: 'owner' | 'spot_checks' | 'verification';
+  /** The space's Wiki maintenance run (contract `space.settings.maintenance`): off by default. */
+  maintenance: WikiMaintenanceSettings;
 }
+
+/**
+ * The Wiki maintenance run of a space (design §8.2, contract `space.settings.maintenance`). The
+ * owner's alone, on the owner channel only, like the review mode.
+ */
+export type WikiMaintenanceSettings = {
+  /** Off until the owner turns it on: in a space that is off, no fact starts a maintenance task. */
+  enabled: boolean;
+  /** The workspace the maintenance task runs in, which decides the runner. Required to turn it on. */
+  workspaceId: string | null;
+  /** The provider the run is pinned to, with no fallback. */
+  provider: string;
+  /** Input plus output tokens the space's maintenance sessions may spend in one UTC day. */
+  dailyTokenBudget: number;
+  /** Server-written, never taken from a request: the space's hidden «Wiki maintenance» task list,
+   *  made the first time maintenance is turned on and kept when it is turned off. A maintenance
+   *  session is a session whose task is in it. */
+  listId: string | null;
+};
+
+export const WIKI_DEFAULT_MAINTENANCE_SETTINGS: Readonly<WikiMaintenanceSettings> = {
+  enabled: false,
+  workspaceId: null,
+  provider: 'local-vllm',
+  dailyTokenBudget: 2_000_000,
+  listId: null,
+};
+
+/** The title of a space's hidden maintenance list (UI copy is English). */
+export const WIKI_MAINTENANCE_LIST_TITLE = 'Wiki maintenance';
+
+/** Stored maintenance settings as they read: every absent or malformed key its default. */
+export function wikiMaintenanceSettings(stored: unknown): WikiMaintenanceSettings {
+  const raw = (stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) as Record<string, unknown>;
+  const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() !== '' ? value : null);
+  const budget = raw.dailyTokenBudget;
+  return {
+    enabled: raw.enabled === true,
+    workspaceId: text(raw.workspaceId),
+    provider: text(raw.provider) ?? WIKI_DEFAULT_MAINTENANCE_SETTINGS.provider,
+    dailyTokenBudget: typeof budget === 'number' && Number.isInteger(budget) && budget >= 0
+      ? budget
+      : WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyTokenBudget,
+    listId: text(raw.listId),
+  };
+}
+
 /** What a space is created with. A stored space whose settings lack `reviewMode` reads as
  *  {@link WIKI_UNSET_REVIEW_MODE} instead — see {@link wikiSpaceSettings}. */
 export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = {
@@ -783,6 +834,7 @@ export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = {
   autoAcceptReinforce: true,
   reviewMode: 'tiered',
   automaticSpotChecks: false,
+  maintenance: WIKI_DEFAULT_MAINTENANCE_SETTINGS,
 };
 
 /** A stored space's settings as they read: every absent key its default, and an absent or unknown
@@ -790,7 +842,144 @@ export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = {
 export function wikiSpaceSettings(stored: unknown): WikiSpaceSettings {
   const raw = (stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) as Partial<WikiSpaceSettings>;
   const reviewMode = (WIKI_REVIEW_MODES as readonly unknown[]).includes(raw.reviewMode) ? raw.reviewMode! : WIKI_UNSET_REVIEW_MODE;
-  return { ...WIKI_DEFAULT_SPACE_SETTINGS, ...raw, reviewMode };
+  return { ...WIKI_DEFAULT_SPACE_SETTINGS, ...raw, reviewMode, maintenance: wikiMaintenanceSettings(raw.maintenance) };
+}
+
+// ── Wiki maintenance: the dossier and the cursor (contract `maintenance`, criterion 2) ──────────
+
+/**
+ * The numbers the dossier and the cursor run by (contract `maintenance.rules`). The token budget is
+ * the demo's: 8k a session recalled more than 16k did.
+ */
+export const WIKI_MAINTENANCE_RULES = {
+  /** A session's dossier, estimated with {@link wikiEstimateTokens}, never passes this. */
+  dossierMaxTokens: 8_000,
+  /** Sessions a dossier page carries when the caller names no limit, and the most it may name. */
+  pageSessionsDefault: 20,
+  pageSessionsMax: 50,
+  /** How long a fact is left to commit before a page may hand it out. */
+  settleGraceSeconds: 120,
+  /** A tool error signature is a cluster once this many sessions of the space share it… */
+  errorClusterMinSessions: 3,
+  /** …counting the sessions that came to rest in this many days. */
+  errorClusterLookbackDays: 14,
+  /** Tasks of one project (or list) that share a title template make it a batch project. */
+  batchTemplateMinTasks: 20,
+  /** A settled task's agent comments, the newest this many, are what its dossier carries. */
+  commentTail: 3,
+  /** The two conditions a maintenance task is due on (criterion 3 reads them). */
+  backlogThreshold: 20,
+  maxPendingAgeHours: 24,
+} as const;
+
+/** The committed facts each of which adds one to a space's backlog (contract `maintenance.cursor.factKinds`). */
+export const WIKI_CURSOR_FACT_KINDS = [
+  'session_settled',
+  'task_terminal',
+  'approval_answered',
+  'merge_receipt',
+  'criterion_revised',
+] as const;
+export type WikiCursorFactKind = (typeof WIKI_CURSOR_FACT_KINDS)[number];
+
+/** How a maintenance run ended, as `orbit wiki cursor advance` reports it. Only `succeeded` moves the cursor. */
+export const WIKI_CURSOR_OUTCOMES = ['succeeded', 'failed', 'truncated'] as const;
+export type WikiCursorOutcome = (typeof WIKI_CURSOR_OUTCOMES)[number];
+
+/**
+ * Tokens a text is counted as: ASCII characters at 3.4 a token, every other character at 1.25, plus
+ * one. The demo's estimate (`pack.py`), kept because the 8k budget was measured with it.
+ */
+export function wikiEstimateTokens(text: string): number {
+  if (!text) return 0;
+  let ascii = 0;
+  let other = 0;
+  for (const ch of text) {
+    if (ch.codePointAt(0)! < 128) ascii += 1;
+    else other += 1;
+  }
+  return Math.floor(ascii / 3.4 + other / 1.25) + 1;
+}
+
+/** One line's first-hand record: what a proposal made from the dossier cites (contract `sourceKinds`). */
+export interface WikiDossierSource {
+  /** The line's short name in the dossier text, `L1`, `L2`, … */
+  ref: string;
+  kind: WikiSourceKind;
+  id: string;
+}
+
+/** One session's dossier. Its text is never stored: only `sources` and `hash` are (wiki_dossier). */
+export interface WikiDossier {
+  sessionId: string;
+  taskId: string | null;
+  title: string;
+  text: string;
+  tokens: number;
+  /** The session's whole timeline did not fit in the budget, and lines were left out or cut. */
+  truncated: boolean;
+  /** A session that read the web: what it says is external until the owner confirms it. */
+  tainted: boolean;
+  sources: WikiDossierSource[];
+  /** sha256 of the text and the sources: the same records give the same hash. */
+  hash: string;
+  /** The same hash was handed out on a page the cursor has since advanced past. */
+  unchanged: boolean;
+}
+
+/** A batch project's sessions, which get these counts and no dossier each (contract `maintenance.dossier.batchProjects`). */
+export interface WikiDossierBatch {
+  projectId: string | null;
+  listId: string | null;
+  template: string;
+  /** Every task of the project (or list) under this template, and how many are in each status. */
+  tasks: number;
+  byStatus: Record<string, number>;
+  /** The sessions of this page the batch stands for. */
+  sessions: number;
+  errors: Array<{ tool: string; signature: string; count: number }>;
+}
+
+/** One tool error signature that sessions of the space share (contract `maintenance.dossier.errorClusters`). */
+export interface WikiErrorCluster {
+  tool: string;
+  signature: string;
+  sessions: number;
+  occurrences: number;
+  examples: Array<{ toolCallId: string; sessionId: string; firstLine: string }>;
+}
+
+/** Where a space's maintenance stands (the `wiki_cursor` row and what is after it). */
+export interface WikiCursorState {
+  spaceId: string;
+  /** The watermark as a token, or null before the first advance. */
+  position: string | null;
+  backlog: number;
+  byKind: Record<WikiCursorFactKind, number>;
+  pendingSessions: number;
+  oldestPendingAt: string | null;
+  lagSeconds: number | null;
+  lastOkAt: string | null;
+  lastRunAt: string | null;
+  lastOutcome: WikiCursorOutcome | null;
+  consecutiveFailures: number;
+  lastError: string | null;
+  /** The two due conditions (rules.backlogThreshold, rules.maxPendingAgeHours). */
+  due: { backlog: boolean; age: boolean };
+}
+
+/** `GET /api/runner/wiki/spaces/:id/dossiers`. */
+export interface WikiDossierPage {
+  spaceId: string;
+  /** Advance to this once every dossier of the page was processed. */
+  cursor: string;
+  /** Facts past this page remain. */
+  more: boolean;
+  facts: number;
+  dossiers: WikiDossier[];
+  batches: WikiDossierBatch[];
+  errorClusters: WikiErrorCluster[];
+  state: WikiCursorState;
 }
 
 export interface WikiSpace {

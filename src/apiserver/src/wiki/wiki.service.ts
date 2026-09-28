@@ -47,6 +47,8 @@ import {
 } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
 import { redactSecrets } from '../common/secret-redaction';
+import { mergeReceiptText, ownerResolutionText } from './wiki-dossier';
+import { setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { canonicalRepoUrl } from '../projects/project-integration-line';
@@ -162,6 +164,8 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_NOT_MAINTENANCE_SESSION: 403,
   WIKI_SESSION_EXCLUDED: 403,
   WIKI_IDEMPOTENCY_KEY_REUSED: 409,
+  WIKI_CURSOR_BEHIND: 409,
+  WIKI_CURSOR_INVALID: 400,
 };
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */
@@ -907,8 +911,8 @@ export class WikiService {
   }
 
   /**
-   * The owner's settings: whether the space pushes, whether a reinforce applies at once, and its
-   * review mode.
+   * The owner's settings: whether the space pushes, whether a reinforce applies at once, its review
+   * mode, and its Wiki maintenance run (the owner channel's alone, like the mode).
    *
    * THE REVIEW MODE IS THE OWNER CHANNEL'S, like a decide (contract `space.settings.reviewMode`): a
    * request that would change it and carries a session header is refused WIKI_OWNER_CHANNEL_ONLY
@@ -926,10 +930,18 @@ export class WikiService {
       autoAcceptReinforce?: boolean;
       reviewMode?: WikiReviewMode;
       automaticSpotChecks?: boolean;
+      maintenance?: WikiMaintenanceInput;
       title?: string;
     },
     actingSessionId: string | null = null,
   ) {
+    if (input.maintenance !== undefined && actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        "a space's Wiki maintenance is the account owner's to set, through an owner channel with no acting session: "
+          + 'report what should change, and let a person change it.',
+      );
+    }
     if (input.reviewMode !== undefined && actingSessionId) {
       return refuse(
         'WIKI_OWNER_CHANNEL_ONLY',
@@ -945,7 +957,11 @@ export class WikiService {
       );
     }
     const current = await this.requireSpace(ownerId, spaceId);
-    const settings: Record<string, unknown> = { ...current.settings };
+    // Maintenance is written by its own unit, under the space row's lock and with the hidden list it
+    // may need (`setWikiMaintenance`); every other key below is merged over the row as it stands, so
+    // neither write can put back what the other just changed.
+    if (input.maintenance !== undefined) await setWikiMaintenance(this.prisma, ownerId, spaceId, input.maintenance);
+    const { maintenance: _maintenance, ...settings }: Record<string, unknown> = { ...current.settings };
     if (input.push !== undefined) settings.push = input.push;
     if (input.autoAcceptReinforce !== undefined) settings.autoAcceptReinforce = input.autoAcceptReinforce;
     if (input.automaticSpotChecks !== undefined) settings.automaticSpotChecks = input.automaticSpotChecks;
@@ -954,10 +970,11 @@ export class WikiService {
       settings.reviewModeChangedAt = new Date().toISOString();
       settings.reviewModeChangedBy = 'owner' satisfies WikiSpaceSettings['reviewModeChangedBy'];
     }
-    await this.prisma.wikiSpace.updateMany({
-      where: { id: spaceId, ownerId },
-      data: { settings: settings as Prisma.InputJsonValue, ...(input.title ? { title: input.title } : {}) },
-    });
+    await this.prisma.$executeRaw`
+      UPDATE "wiki_space"
+         SET "settings" = "settings" || ${JSON.stringify(settings)}::jsonb, "updated_at" = now()
+             ${input.title ? Prisma.sql`, "title" = ${input.title}` : Prisma.empty}
+       WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid`;
     return this.requireSpace(ownerId, spaceId);
   }
 
@@ -2878,7 +2895,9 @@ export class WikiService {
    *
    * The set is the first-hand records a phase-1 door can reach: a conversation turn (the calling
    * session's own, or one named by id), a run event, a tool call, a task, a task comment, an approval,
-   * and a commit resolved through the merge receipt that named it. Everything else the contract lists
+   * and a commit resolved through the merge receipt that named it — and the two a maintenance run's
+   * dossier cites besides (contract `maintenance.dossier.sources`): a merge receipt itself, and an
+   * owner decision, a blocker the owner resolved with a note. Everything else the contract lists
    * belongs to a phase that does not write yet — a `note` has no row, and a `url` is an assumption's,
    * which phase 1 refuses.
    */
@@ -2993,6 +3012,34 @@ export class WikiService {
           tainted: await this.sessionWasTainted(tx, approval.sessionId),
           ownerWords: isOwnerAnswer(approval),
           sessionId: approval.sessionId,
+        };
+      }
+      case 'merge_receipt': {
+        // A merge receipt, as a dossier line shows it (`mergeReceiptText`): what was merged where, by sha.
+        if (!ref) return null;
+        const receipt = await tx.sessionMergeReceipt.findFirst({
+          where: { id: ref, ownerId: principal.ownerId },
+          select: { id: true, result: true, sourceBranch: true, sourceSha: true, targetBranch: true, targetShaAfter: true, sessionId: true },
+        });
+        if (!receipt) return null;
+        return { ref: receipt.id, text: mergeReceiptText(receipt), tainted: false, ownerWords: false, sessionId: receipt.sessionId };
+      }
+      case 'owner_decision': {
+        // A decision the owner recorded: a blocker the owner resolved with a note, what it asked and what
+        // they answered, as a dossier line carries them. Not the owner's words for Tiered, whose
+        // `ownerWords` is a message, a steer or an answer and nothing else.
+        if (!ref) return null;
+        const blocker = await tx.projectBlocker.findFirst({
+          where: { id: ref, project: { ownerId: principal.ownerId }, resolvedBy: 'USER', resolutionNote: { not: null } },
+          select: { id: true, requiredAction: true, resolutionNote: true },
+        });
+        if (!blocker || !blocker.resolutionNote) return null;
+        return {
+          ref: blocker.id,
+          text: ownerResolutionText({ requiredAction: blocker.requiredAction, resolutionNote: blocker.resolutionNote }),
+          tainted: false,
+          ownerWords: false,
+          sessionId: null,
         };
       }
       case 'commit': {
