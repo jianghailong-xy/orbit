@@ -92,25 +92,37 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──选账号/
 - P0 要验证：同一个 codex 线程换账号后还能否继续（加密 reasoning、prompt cache）。
   不能的话，换账号时丢弃加密 reasoning，或者新开线程接续。
 
-### 2.4 数据模型（草案，P1 定稿）
+### 2.4 数据模型（P1 定稿，迁移 0320；池里放组织/项目 API key）
 
-- `provider_pool` 加列：
-  - `engine`：`claude` | `codex`；
-  - `shared`；
-  - `members_can_add`；
-  - `own_account_first`。
-- `provider_pool_person(pool_id, user_id, role ADMIN|MEMBER)`：共享池的成员。创建者是 ADMIN。
-- `pool_codex_account`：池里的一个账号。
-  - 字段：`id, pool_id, contributor_id, label, plan, account_fingerprint, auth_enc, state, plan_usage, …`；
-  - 复合外键 `(pool_id, contributor_id) → provider_pool_person(pool_id, user_id) ON DELETE CASCADE`。
-    这样「贡献者必须是成员」由库保证，「成员离开，账号跟着走」也由库保证，
-    和 0265 用外键做租户围栏的做法一致；
-  - `unique(pool_id, account_fingerprint)` 用于判重。
-- `pool_codex_login`：服务器端设备码登录的中继状态（状态、验证链接、一次性码、过期时间）。
-- `pool_gateway_token(token_hash, pool_id, user_id, session_id, expires_at, revoked_at)`。
-- `pool_usage(pool_id, account_id, user_id, session_id, at, input_tokens, output_tokens)`。
-- `session.pool_account_id`。
+- `provider_pool` 加列：`engine`（`claude` | `codex`）、`shared`、`members_can_add`、`own_key_first`（两条规则默认都开）。
+  个人池是 `claude` 且不共享（0265 建的都是），共享池是 `codex` 且共享，`provider_pool_engine_check` 把两者绑死。
+  `owner_id` 在共享池上是创建者：永远是 ADMIN，不能被降级或移出，要走只能删池。
+- `provider_pool_person(pool_id, user_id, role ADMIN|MEMBER)`：共享池的人。
+- `pool_api_key`：池里的一把 key。
+  - 列：`id, pool_id, contributor_id, label, key_fingerprint, key_hint, secret_encrypted, state, enabled, share_cap, created_at, updated_at`；
+  - `secret_encrypted` 用 `PROVIDER_SECRET_KEY` 加密；`key_fingerprint` 是 key 的 SHA-256，`unique(pool_id, key_fingerprint)` 判重；
+    `key_hint` 是末 4 位，响应只给 `sk-…AB12`；
+  - `state`：`ACTIVE` / `INVALID`（上游 401，由贡献者或管理员替换）/ `DISABLED`（上游因组织/项目停用而拒绝）；
+    `enabled` 是贡献者自己的开关；claim 只选 ACTIVE 且 enabled 的；
+  - `share_cap`：别人每个自然月（UTC）最多花多少美元（整数，可空 = 不设上限），贡献者自己用不受限；
+  - 复合外键 `(pool_id, contributor_id) → provider_pool_person(pool_id, user_id) ON DELETE CASCADE`：
+    「贡献者必须是成员」「成员离开，key 跟着走」都由库保证，和 0265 用外键做租户围栏的做法一致。
+- `pool_gateway_token(id, token_hash, pool_id, user_id, session_id, created_at, expires_at, revoked_at)`：只存 hash。
+  `(pool_id, user_id) → provider_pool_person ON DELETE CASCADE`，`session_id → session ON DELETE CASCADE`：
+  成员被移出、池被删除、会话被删，令牌行在同一条语句里消失。
+- `pool_usage(pool_id, key_id, user_id, window_start, input_tokens, output_tokens, cost_micros)`：按人、按 key、按月记账，
+  `window_start` 是当月 1 日，`cost_micros` 是美元 × 10⁶；`(key_id, pool_id) → pool_api_key(id, pool_id)`。由网关写（P2）。
+- `session.pool_key_id`：claim 选定的 key。和 `pool_member_provider_id` 一样不建外键。
 - 个人 Claude 池（0265 的同 owner 外键）**不动**。
+
+claim（P1 已落地，`QueueService.resolveSharedPool`）：
+
+- 成员的会话下发 `OPENAI_BASE_URL = <PUBLIC_ORIGIN>/api/gw/codex`、`OPENAI_API_KEY = 会话令牌`，runtime = codex；
+  非成员的会话什么都拿不到（按不存在处理）。
+- 每次构建引擎环境（claim、runner 重启后的 reclaim、换 provider 的 reload）都签发一个新令牌（`orbit-gw-…`），库里只存 SHA-256。
+  同一会话的旧令牌继续有效、过期时间跟着新令牌顺延 7 天——warm 引擎会一直用它被拉起时的那个令牌。
+- 选 key 按 `pool-key-select.ts`：粘住当前 key；否则（`own_key_first` 时）先自己的 key；再按剩余额度（无上限 > 有上限且剩得多）；
+  跳过关掉的、INVALID/DISABLED 的、别人已把 share cap 花完的；都不行时 `pool_key_id = null`，由网关回话。
 
 ### 2.5 权限
 
@@ -125,6 +137,10 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──选账号/
 - 所有接受 provider slug 的入口都要改：建会话、建任务或改任务、改 agent、会话中途换 provider。
   它们现在按「池属于 `session.ownerId`」放行，改成「`session.ownerId` 是池成员」。
 - runner 仍然只跑自己 owner 的会话，这一点不变。
+- P1 按 key 落地时补的几条（`SharedPoolsService`，接口在 `/api/providers/shared-pools`）：
+  - 池的创建者始终是管理员，谁都不能把他降成成员或移出；管理员要离开，得先被别的管理员改成成员；
+  - key 的 label / share cap / 开关只有贡献者本人能改；key 被上游 401 置为 INVALID 后，贡献者本人或管理员可以替换；
+  - 非成员对池页的每个接口都得到 404，和池不存在时一样。
 
 ## 3. 界面
 

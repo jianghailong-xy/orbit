@@ -236,7 +236,7 @@ import {
   withTaskStart,
 } from './control-plane-note';
 import { readTaskStartCard } from '../tasks/task-start-card';
-import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
@@ -2087,7 +2087,8 @@ export class RunnerApiController {
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
       // scope mirrors the claim path: a personal provider resolves only for its owner's sessions,
-      // and an account pool is rebuilt on the member the claim would choose, not the runner's login.
+      // and an account pool is rebuilt on the member the claim would choose, not the runner's login — a
+      // shared pool on the gateway, with a token of its own, as the claim builds it.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
       const customRow = declaredIsBuiltin
         ? null
@@ -2096,7 +2097,9 @@ export class RunnerApiController {
               slug: declared!,
               OR: [{ ownerId: null }, { ownerId: s.ownerId }],
             },
-          })) ?? (await this.queue.resolvePoolMember(this.prisma, s, declared!)));
+          })) ??
+          (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
+          (await this.queue.resolveSharedPool(this.prisma, s, declared!)));
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
           declaredProvider: declared,
@@ -3258,7 +3261,9 @@ export class RunnerApiController {
    *
    * A switch onto one of the owner's account pools re-spawns on the member the claim would choose,
    * recorded as the claim records it (QueueService.resolvePoolMember) — through `tx`, which holds this
-   * session's row. Resolved as a plain slug, it would come up on the runner's own login.
+   * session's row. Resolved as a plain slug, it would come up on the runner's own login. A switch onto a
+   * shared pool re-spawns on its gateway with a token minted for the new process
+   * (QueueService.resolveSharedPool).
    */
   private async reloadProviderEnv(
     tx: Prisma.TransactionClient,
@@ -3281,6 +3286,7 @@ export class RunnerApiController {
         provider: true,
         providerBuiltin: true,
         poolMemberProviderId: true,
+        poolKeyId: true,
         usesRuntimeDefaultModel: true,
         workspace: { select: { model: true, env: true, codexAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
@@ -3294,7 +3300,9 @@ export class RunnerApiController {
             slug: session.provider!,
             OR: [{ ownerId: null }, { ownerId: session.ownerId }],
           },
-        })) ?? (await this.queue.resolvePoolMember(tx, session, session.provider!)));
+        })) ??
+        (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
+        (await this.queue.resolveSharedPool(tx, session, session.provider!)));
     const exec = resolveProviderExec({
       declaredProvider: session.provider,
       declaredProviderBuiltin: session.providerBuiltin,
@@ -3467,7 +3475,11 @@ export class RunnerApiController {
         where: { slug: session.provider!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
         select: { runtime: true },
       });
-      runtime = normalizeRuntimeProvider(customRow?.runtime, true);
+      // A pool has no row of its own: a shared pool runs Codex.
+      runtime = normalizeRuntimeProvider(
+        customRow?.runtime ?? (await accountPoolRuntime(this.prisma, session.ownerId, session.provider!)),
+        true,
+      );
     }
     if (!serverMatchedRuntime(runtime)) return false;
     const rules = await this.prisma.workspacePermissionRule.findMany({

@@ -280,6 +280,8 @@ model User {
   deviceTokens     DeviceToken[] // registered iOS devices for APNs push
   modelProviders   ModelProvider[] // personal (BYOK) model providers
   providerPools    ProviderPool[] // account pools of those providers, each dispatchable by its own slug
+  poolPlaces       ProviderPoolPerson[] // the shared pools this user is in (migration 0320)
+  poolUsage        PoolUsage[] // what this user spent on shared-pool keys, by key and month
   sessionTags      SessionTag[] // personal colored session labels (tenant scope)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   clientVersions   ClientVersion[] // which build of each client this user is running
@@ -995,6 +997,10 @@ model Session {
   // start event carries it (RunnerApiController.events). Not a run_event of its own: the runner
   // numbers those, and a row inserted here would take the seq its next event is about to use.
   poolSwitchNotice     String?   @map("pool_switch_notice")
+  // Only for a session whose provider is a shared pool (migration 0320): the PoolApiKey its last claim
+  // chose, which the next claim stays on while that key can run (QueueService.resolveSharedPool). No
+  // relation, for the reason poolMemberProviderId has none.
+  poolKeyId            String?   @map("pool_key_id") @db.Uuid
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
   inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid
@@ -1323,6 +1329,7 @@ model Session {
   turns                 ConversationTurn[]
   backgroundJobWakes    BackgroundJobWake[]
   scheduledWakeups      SessionScheduledWakeup[]
+  poolGatewayTokens     PoolGatewayToken[]
   toolCalls             ToolCall[]
   llmUsage              LlmUsage[]
   approvals             Approval[]
@@ -5139,10 +5146,21 @@ model ProviderPool {
   id        String               @id @default(uuid(7)) @db.Uuid
   slug      String               @unique
   label     String
-  // Always a person: a pool is personal, like every provider allowed into it.
+  // Always a person: a pool is personal, like every provider allowed into it. A shared pool's is the
+  // person who created it, who stays one of its admins (SharedPoolsService).
   ownerId   String               @map("owner_id") @db.Uuid
   owner     User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   members   ProviderPoolMember[]
+  // Migration 0320. A personal pool is `claude` and not shared — every pool 0265 made; a shared pool is
+  // `codex`, runs on the organization/project OpenAI keys its people put in (PoolApiKey), and is reached
+  // by its people only. `provider_pool_engine_check` holds the pair together.
+  engine        String               @default("claude")
+  shared        Boolean              @default(false)
+  // A shared pool's two rules, set by its admins: whether a MEMBER may put a key in (an admin always
+  // may), and whether a person's sessions start on a key of their own while one can run.
+  membersCanAdd Boolean              @default(true) @map("members_can_add")
+  ownKeyFirst   Boolean              @default(true) @map("own_key_first")
+  people        ProviderPoolPerson[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
 
@@ -5164,6 +5182,100 @@ model ProviderPoolMember {
   @@id([poolId, providerId])
   @@index([providerId, ownerId])
   @@map("provider_pool_member")
+}
+
+/// One person in a shared pool (migration 0320), and whether they run it (ADMIN) or use it (MEMBER).
+/// Their keys and their session tokens hang off this row, so removing it takes both with it.
+model ProviderPoolPerson {
+  poolId    String             @map("pool_id") @db.Uuid
+  pool      ProviderPool       @relation(fields: [poolId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId    String             @map("user_id") @db.Uuid
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  // ADMIN | MEMBER (provider_pool_person_role_check).
+  role      String
+  keys      PoolApiKey[]
+  tokens    PoolGatewayToken[]
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  @@id([poolId, userId])
+  @@index([userId])
+  @@map("provider_pool_person")
+}
+
+/// An organization/project OpenAI API key in a shared pool (migration 0320). The key is held only as
+/// `secretEncrypted` and leaves this server only through the pool gateway; nothing a client or a
+/// runner is handed carries it. `keyFingerprint` (its SHA-256) is what a second add of the same key
+/// collides on, and `keyHint` (its last four characters) is all any response shows of it.
+model PoolApiKey {
+  id              String             @id @default(uuid(7)) @db.Uuid
+  poolId          String             @map("pool_id") @db.Uuid
+  // Who put it in, and whose it is: only they change its label, cap and switch. The key names the
+  // person's row in this very pool, so a contributor who is not in it is refused by the database.
+  contributorId   String             @map("contributor_id") @db.Uuid
+  contributor     ProviderPoolPerson @relation(fields: [poolId, contributorId], references: [poolId, userId], onDelete: Cascade, onUpdate: NoAction)
+  label           String
+  keyFingerprint  String             @map("key_fingerprint")
+  keyHint         String             @map("key_hint")
+  secretEncrypted String             @map("secret_encrypted")
+  // What OpenAI last said about the key: ACTIVE, INVALID (a 401 — wrong or revoked; replaced by its
+  // contributor or an admin) or DISABLED (refused for its organization or project).
+  state           String             @default("ACTIVE")
+  // The contributor's own switch.
+  enabled         Boolean            @default(true)
+  // Whole US dollars a calendar month everyone but the contributor may spend on it; null = no cap.
+  shareCap        Int?               @map("share_cap")
+  usage           PoolUsage[]
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  @@unique([poolId, keyFingerprint])
+  // What a ledger row's composite key points at: this key, in this pool.
+  @@unique([id, poolId])
+  @@index([poolId, contributorId])
+  @@map("pool_api_key")
+}
+
+/// The credential a shared-pool session runs with in place of a key (migration 0320): minted by each
+/// build of the session's engine environment — the claim, a reclaim, a provider-switch reload — and
+/// stored only as its SHA-256. Bound to the pool, the person and the session; removing the person or
+/// deleting the pool deletes it through the person's row.
+model PoolGatewayToken {
+  id        String             @id @default(uuid(7)) @db.Uuid
+  tokenHash String             @unique @map("token_hash")
+  poolId    String             @map("pool_id") @db.Uuid
+  userId    String             @map("user_id") @db.Uuid
+  person    ProviderPoolPerson @relation(fields: [poolId, userId], references: [poolId, userId], onDelete: Cascade, onUpdate: NoAction)
+  sessionId String             @map("session_id") @db.Uuid
+  session   Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdAt DateTime           @default(now()) @map("created_at")
+  expiresAt DateTime           @map("expires_at")
+  revokedAt DateTime?          @map("revoked_at")
+
+  @@index([sessionId])
+  @@index([poolId, userId])
+  @@map("pool_gateway_token")
+}
+
+/// What one person spent on one key of a shared pool in one calendar month, UTC (migration 0320):
+/// `windowStart` is the month's first day. Written by the pool gateway; read by the pool page and by the
+/// claim, which passes over a key whose share cap the others have spent.
+model PoolUsage {
+  poolId       String     @map("pool_id") @db.Uuid
+  keyId        String     @map("key_id") @db.Uuid
+  key          PoolApiKey @relation(fields: [keyId, poolId], references: [id, poolId], onDelete: Cascade, onUpdate: NoAction)
+  userId       String     @map("user_id") @db.Uuid
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  windowStart  DateTime   @map("window_start") @db.Date
+  inputTokens  BigInt     @default(0) @map("input_tokens")
+  outputTokens BigInt     @default(0) @map("output_tokens")
+  // US dollars × 1,000,000.
+  costMicros   BigInt     @default(0) @map("cost_micros")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@id([keyId, userId, windowStart])
+  @@index([poolId, windowStart])
+  @@index([userId])
+  @@map("pool_usage")
 }
 
 /// One confirmed Codex earned rate-limit reset (docs/codex-rate-limit-reset-contract.md §5, §7, §9.3).

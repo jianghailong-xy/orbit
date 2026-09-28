@@ -20,6 +20,7 @@ import { WorkspacesController } from '../workspaces/workspaces.controller';
 import { AttachmentsController } from '../attachments/attachments.controller';
 import { AdminProvidersController } from '../providers/admin-providers.controller';
 import { ProvidersController } from '../providers/providers.controller';
+import { SharedPoolsController } from '../providers/shared-pools.controller';
 import { RunnersController } from '../runners/runners.controller';
 import { SessionTagsController } from '../session-tags/session-tags.controller';
 import { SessionsController } from '../sessions/sessions.controller';
@@ -80,6 +81,8 @@ const CONTROLLERS = [
   AttachmentsController,
   AdminProvidersController,
   ProvidersController,
+  // Shared Codex pools (migration 0320): the pool, a person and a key, each addressed by its public id.
+  SharedPoolsController,
   RunnersController,
   SessionTagsController,
   SessionsController,

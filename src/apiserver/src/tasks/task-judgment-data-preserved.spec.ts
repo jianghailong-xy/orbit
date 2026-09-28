@@ -1296,7 +1296,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // of the six preserved objects. No table, column, constraint, index, trigger or type is created,
       // altered or dropped, and no `task`, `session`, `project` or `project_acceptance_*` object is
       // named. No INSERT, UPDATE or DELETE: no row is read, locked or rewritten.
-      '0313_wiki_search_text_cost'],
+      '0313_wiki_search_text_cost',
+      // Shared Codex pools: four `ADD COLUMN`s on `provider_pool` (constant defaults, so catalog-only)
+      // and one CHECK over two of them, which every stored pool — `claude`, not shared — satisfies; one
+      // nullable `ADD COLUMN` on `session` (`pool_key_id`, no default, no index, no CHECK, no foreign
+      // key, so no stored session row is rewritten or constrained); and four new tables —
+      // `provider_pool_person`, `pool_api_key`, `pool_gateway_token`, `pool_usage` — with their CHECKs,
+      // indexes and foreign keys, which constrain only their own new rows. Read against every claim
+      // above: `task`, `project` and `project_acceptance_criterion_definition` are not named, so the 0177
+      // pair and every stored task and criterion row are out of its reach; `session` and `user` are
+      // named otherwise only as the tables foreign keys reference, and the keys' `ON DELETE CASCADE` is a
+      // referential action on the new tables' rows. It names no `project_acceptance_*` object and none
+      // of the six preserved triggers/functions, creates no function, trigger, enum or type — so it is
+      // not another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP TYPE`. No
+      // INSERT, UPDATE or DELETE: every new table starts empty and nothing is backfilled.
+      '0320_shared_provider_pool'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

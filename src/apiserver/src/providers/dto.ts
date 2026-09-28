@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
 
 // Custom providers borrow one of the configurable runtimes: `claude` for Anthropic-compatible endpoints,
@@ -68,4 +68,50 @@ export class CreateProviderPoolDto {
 
 export class AddProviderPoolMemberDto {
   @IsPublicId() providerId!: string;
+}
+
+// A shared pool (migration 0320): organization/project OpenAI keys several people run Codex on, through
+// the pool gateway. Its slug is derived from the label the way an account pool's is.
+export class CreateSharedPoolDto {
+  @IsString() @MinLength(1) label!: string;
+}
+
+// What an admin may change of the pool itself: its name and its two rules. Omitted fields stay.
+export class UpdateSharedPoolDto {
+  @IsOptional() @IsString() @MinLength(1) label?: string;
+  @IsOptional() @IsBoolean() membersCanAdd?: boolean;
+  @IsOptional() @IsBoolean() ownKeyFirst?: boolean;
+}
+
+const POOL_ROLES = ['ADMIN', 'MEMBER'];
+
+// A person an admin adds, by the email of their Orbit account.
+export class AddSharedPoolPersonDto {
+  @IsString() @MinLength(3) email!: string;
+  @IsOptional() @IsIn(POOL_ROLES) role?: string;
+}
+
+export class UpdateSharedPoolPersonDto {
+  @IsIn(POOL_ROLES) role!: string;
+}
+
+// A key put in by the caller, who is its contributor. `apiKey` is plaintext here and nowhere after: it is
+// stored encrypted and no response carries it (SharedPoolsService.addKey).
+export class AddPoolKeyDto {
+  @IsString() @MinLength(1) label!: string;
+  @IsString() @MinLength(1) apiKey!: string;
+  /** Whole US dollars a calendar month everyone else may spend on it; omit or null for no cap. */
+  @IsOptional() @IsInt() @Min(0) shareCap?: number | null;
+}
+
+// What the contributor may change of their key. Omitted fields stay; `shareCap: null` removes the cap.
+export class UpdatePoolKeyDto {
+  @IsOptional() @IsString() @MinLength(1) label?: string;
+  @IsOptional() @IsInt() @Min(0) shareCap?: number | null;
+  @IsOptional() @IsBoolean() enabled?: boolean;
+}
+
+// A new secret for a key — what an INVALID key needs, from its contributor or an admin.
+export class ReplacePoolKeyDto {
+  @IsString() @MinLength(1) apiKey!: string;
 }

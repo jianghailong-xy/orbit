@@ -35,6 +35,10 @@ export interface ModelProviderRow {
   runtime: string;
   baseUrl: string;
   apiKeyEnc: string;
+  /** A credential that is stored nowhere: a shared pool's session token, minted for this one build of
+   *  the engine's environment (shared-pool.ts sharedPoolExecRow). When set it is the key, and
+   *  `apiKeyEnc` is not read. */
+  sessionToken?: string;
   defaultModel: string | null;
   /** The vendor preset this row came from, and whether it still owns the model list — when it
    *  does, the default model resolves from the catalogue rather than from the row. */
@@ -124,41 +128,56 @@ export async function sessionExecRuntime(
   tx: Prisma.TransactionClient,
   session: { provider: string; providerBuiltin?: boolean; ownerId: string },
 ): Promise<AgentProvider> {
-  const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
+  const builtin = isBuiltinProvider(session.provider, session.providerBuiltin);
+  const customRow = builtin
     ? null
     : await tx.modelProvider.findFirst({
         where: { slug: session.provider, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
       });
-  return execRuntime({
-    declaredProvider: session.provider,
-    declaredProviderBuiltin: session.providerBuiltin,
-    customRow,
-  });
+  // A pool holds no provider row: it runs on its own engine — a shared pool on Codex, not the Claude a
+  // slug nothing holds falls back to.
+  const pool = builtin || customRow ? null : await accountPoolRuntime(tx, session.ownerId, session.provider);
+  return (
+    pool ??
+    execRuntime({
+      declaredProvider: session.provider,
+      declaredProviderBuiltin: session.providerBuiltin,
+      customRow,
+    })
+  );
 }
 
 /**
- * The runtime `slug` borrows when it names one of `ownerId`'s own account pools, else null. Always
- * Claude: a pool runs on whichever member the claim picks (QueueService.resolvePoolMember), and only a
- * Claude subscription is admitted as one (ProvidersService.assertPoolMembers).
+ * The runtime `slug` borrows when it names a pool `ownerId` may dispatch with, else null: one of their own
+ * account pools, which runs on Claude — a pool runs on whichever member the claim picks
+ * (QueueService.resolvePoolMember), and only a Claude subscription is admitted as one
+ * (ProvidersService.assertPoolMembers) — or a shared pool they are a person of (migration 0320), which runs
+ * on Codex through the pool gateway (QueueService.resolveSharedPool).
  *
- * Asked by the doors that accept a provider slug once no provider holds it. Owner-scoped with no shared
- * branch because a pool has none: another owner's pool is refused like a slug nothing holds, which is
- * also how the claim treats it.
+ * Asked by the doors that accept a provider slug once no provider holds it. Somebody else's account pool,
+ * and a shared pool `ownerId` is not in, is refused like a slug nothing holds, which is also how the claim
+ * treats it.
  */
 export async function accountPoolRuntime(
   db: Prisma.TransactionClient,
   ownerId: string,
   slug: string,
 ): Promise<AgentProvider | null> {
-  const pool = await db.providerPool.findFirst({ where: { slug, ownerId }, select: { id: true } });
-  return pool ? AgentProvider.CLAUDE : null;
+  const own = await db.providerPool.findFirst({ where: { slug, ownerId }, select: { shared: true } });
+  if (own && !own.shared) return AgentProvider.CLAUDE;
+  // A shared pool is reached by its people, whoever created it.
+  const shared = await db.providerPool.findFirst({
+    where: { slug, shared: true, people: { some: { userId: ownerId } } },
+    select: { id: true },
+  });
+  return shared ? AgentProvider.CODEX : null;
 }
 
 // Env injected so the borrowed runtime CLI talks to the provider's endpoint. Claude runtime →
 // Anthropic-compatible vars (Phase 1); codex runtime → OpenAI-compatible (Phase 2); kimi runtime →
 // the Kimi CLI's own KIMI_MODEL_* provider.
 function injectedEnv(row: ModelProviderRow, model: string): Record<string, string> {
-  const apiKey = decryptSecret(row.apiKeyEnc);
+  const apiKey = row.sessionToken ?? decryptSecret(row.apiKeyEnc);
   if (runtimeOf(row) === AgentProvider.CODEX) {
     return { OPENAI_BASE_URL: row.baseUrl, OPENAI_API_KEY: apiKey };
   }

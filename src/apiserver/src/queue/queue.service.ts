@@ -10,9 +10,16 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import { isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
+import { choosePoolKey } from '../providers/pool-key-select';
+import {
+  mintPoolGatewayToken,
+  sharedPoolExecRow,
+  sharedPoolKeyCandidates,
+  sharedPoolUnavailableReason,
+} from '../providers/shared-pool';
 import {
   choosePoolMember,
   poolFallbackNotice,
@@ -384,13 +391,16 @@ export class QueueService {
     // here, so the runner receives a plain claude/codex job and needs no changes. Ownership
     // scope: a personal (BYOK) provider resolves only for its owner's sessions — otherwise a
     // user could burn another tenant's key by naming their slug. A slug no provider holds may be one
-    // of the owner's account pools, which dispatches as the member chosen for this claim.
+    // of the owner's account pools, which dispatches as the member chosen for this claim, or a shared
+    // pool the owner is in, which dispatches through the pool gateway on a token minted for this claim.
     const declaredIsBuiltin = isBuiltinProvider(declared, session.providerBuiltin);
     const customRow = declaredIsBuiltin
       ? null
       : ((await this.prisma.modelProvider.findFirst({
           where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
-        })) ?? (await this.resolvePoolMember(this.prisma, session, declared!)));
+        })) ??
+        (await this.resolvePoolMember(this.prisma, session, declared!)) ??
+        (await this.resolveSharedPool(this.prisma, session, declared!)));
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
         declaredProvider: declared,
@@ -605,6 +615,10 @@ export class QueueService {
    *
    * A pool whose members are all spent is not refused. It waits for the first of them to reset, as
    * the claim and the brakes above already make it.
+   *
+   * A shared pool `ownerId` is in (migration 0320) is refused the same way when none of its keys can run
+   * — it has none, or each is switched off or refused by OpenAI — and not when its keys are only spent to
+   * their share caps, which come back on the first of the month (sharedPoolUnavailableReason).
    */
   async accountPoolRefusal(
     ownerId: string,
@@ -612,18 +626,31 @@ export class QueueService {
     db: Prisma.TransactionClient = this.prisma,
   ): Promise<string | null> {
     const pool = await this.accountPool(ownerId, slug, db);
-    if (!pool || selectPoolMember(pool.candidates, null, new Date()).kind !== 'UNAVAILABLE') return null;
+    if (!pool) {
+      const shared = await db.providerPool.findFirst({
+        where: { slug, shared: true, people: { some: { userId: ownerId } } },
+        select: { id: true, label: true },
+      });
+      if (!shared) return null;
+      const keys = await db.poolApiKey.findMany({
+        where: { poolId: shared.id },
+        orderBy: { id: 'asc' },
+        select: { label: true, enabled: true, state: true },
+      });
+      return sharedPoolUnavailableReason(shared.label, keys);
+    }
+    if (selectPoolMember(pool.candidates, null, new Date()).kind !== 'UNAVAILABLE') return null;
     return poolUnavailableReason(pool.label, pool.rows);
   }
 
   /**
    * `ownerId`'s account pool on `slug`: its name, its member rows, and the ones a claim may choose from
    * (isPoolCandidate) as candidates with their quota as the cache has it. Null when `slug` names no pool
-   * of theirs.
+   * of theirs — and when it names a shared pool (migration 0320), whose keys are no members of this kind.
    */
   private async accountPool(ownerId: string, slug: string, db: Prisma.TransactionClient = this.prisma) {
     const pool = await db.providerPool.findFirst({
-      where: { slug, ownerId },
+      where: { slug, ownerId, shared: false },
       select: {
         label: true,
         members: {
@@ -709,6 +736,51 @@ export class QueueService {
       },
     });
     return chosen;
+  }
+
+  /**
+   * What a session on a shared pool (migration 0320) dispatches as, or null when `slug` names no shared
+   * pool this session's owner is in — which then dispatches as a deleted provider does, exactly as a slug
+   * nothing holds. A shared pool is reached by its people only: nobody else's session is handed its
+   * gateway, a token or anything about its keys.
+   *
+   * The engine gets the pool gateway as its OpenAI endpoint and a session token minted here as its key
+   * (shared-pool.ts sharedPoolExecRow) — never a key of the pool, which only the gateway ever reads. The
+   * key this session's requests go out on is chosen here, the way pool-key-select.ts chooses (staying on
+   * the one it had, the owner's own first when the pool says so, none spent to its share cap), and
+   * recorded as `poolKeyId` for the gateway; null when no key can run for this person, which the gateway
+   * answers. Every door that builds such a session's engine environment resolves it here — this claim,
+   * a restarted runner's reclaim and a provider-switch reload (RunnerApiController) — and each mints its
+   * own token, since only a hash is kept and a new process needs the token in its environment.
+   * `db` is the caller's client: the reload runs inside the transaction that holds this session's row.
+   */
+  async resolveSharedPool(
+    db: Prisma.TransactionClient | PrismaService,
+    session: { id: string; ownerId: string; poolKeyId: string | null },
+    slug: string,
+  ): Promise<ModelProviderRow | null> {
+    const pool = await db.providerPool.findFirst({
+      where: { slug, shared: true, people: { some: { userId: session.ownerId } } },
+      select: { id: true, ownKeyFirst: true },
+    });
+    if (!pool) return null;
+    const now = new Date();
+    const chosen = choosePoolKey(
+      await sharedPoolKeyCandidates(db, pool.id, now),
+      session.ownerId,
+      pool.ownKeyFirst,
+      session.poolKeyId,
+    );
+    const keyId = chosen?.id ?? null;
+    if (keyId !== session.poolKeyId) {
+      await db.session.update({ where: { id: session.id }, data: { poolKeyId: keyId } });
+    }
+    const token = await mintPoolGatewayToken(
+      db,
+      { poolId: pool.id, userId: session.ownerId, sessionId: session.id },
+      now,
+    );
+    return sharedPoolExecRow(token);
   }
 
   /**
