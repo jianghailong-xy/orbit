@@ -18,6 +18,7 @@ import {
 } from '../lib/providerPools';
 import type { ProviderRow } from '../lib/providerAdmin';
 import {
+  allOutOfBudget,
   canRemoveKey,
   canReplaceKey,
   formatCapReset,
@@ -82,8 +83,9 @@ export function PoolEngineMark({ pool, size = 18 }: { pool: ProviderPool; size?:
 export function PoolGauge({ pool }: { pool: ProviderPool }) {
   const head = poolHeadline(pool);
   if (head.kind === 'spent') {
-    // A shared pool's keys are capped rather than spent, and come back with the month.
-    const spent = pool.shared ? 'All at cap' : 'All spent';
+    // A shared pool's keys are capped rather than spent, and come back with the month — unless what
+    // stopped them is OpenAI's own out-of-budget mark, which comes back at a date of its own.
+    const spent = !pool.shared ? 'All spent' : allOutOfBudget(pool.shared) ? 'All out of budget' : 'All at cap';
     return (
       <span className="pool-gauge spent">
         {head.resetsAt ? (

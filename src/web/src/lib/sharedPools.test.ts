@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeId } from './idCodec';
 import { availableCount, memberQuota, memberStatus, poolHeadline, poolsAsProviders } from './providerPools';
 import {
+  allOutOfBudget,
   canAddKey,
   canRemoveKey,
   formatCapReset,
@@ -36,6 +37,7 @@ const key = (n: number, contributor: string, over: Partial<SharedPoolKey> = {}):
   state: 'ACTIVE',
   enabled: true,
   shareCap: 50,
+  spentUntil: null,
   contributor: { userId: contributor, name: contributor === ANN ? 'Ann' : 'Mia', you: contributor === ANN },
   usage: { ...spend(0), othersCostUsd: 0 },
   running: false,
@@ -76,6 +78,22 @@ describe('where a shared pool key stands, for whoever reads it', () => {
     expect(keyState(key(1, MIA, { ...others(50), running: true }))).toBe('SPENT');
     expect(keyState(key(1, MIA, { running: true }))).toBe('RUNNING');
   });
+
+  it('reads OpenAI putting a key out of budget before anything but refused or switched off', () => {
+    const until = '2026-09-30T06:00:00.000Z';
+    expect(keyState(key(1, MIA, { spentUntil: until }))).toBe('SPENT');
+    expect(memberStatus(sharedPoolAsProviderPool(pool([key(1, MIA, { spentUntil: until })])).members[0])).toEqual({
+      label: 'Out of budget · resets Sep 30',
+      color: 'orange',
+    });
+    // Out of budget outranks the cap, and holds for the key's own contributor too — where a cap
+    // stops only the others.
+    expect(keyState(key(1, MIA, { spentUntil: until, ...others(50), running: true }))).toBe('SPENT');
+    expect(keyState(key(1, ANN, { spentUntil: until, ...others(50) }))).toBe('SPENT');
+    expect(keyState(key(1, MIA, { state: 'INVALID', spentUntil: until }))).toBe('INVALID');
+    expect(keyState(key(1, MIA, { state: 'DISABLED', spentUntil: until }))).toBe('DISABLED');
+    expect(keyState(key(1, MIA, { enabled: false, spentUntil: until }))).toBe('DISABLED');
+  });
 });
 
 describe('a shared pool drawn as an account pool', () => {
@@ -106,6 +124,27 @@ describe('a shared pool drawn as an account pool', () => {
     const capped = sharedPoolAsProviderPool(pool([key(1, MIA, others(50))]));
     expect(capped.unavailable).toBeNull();
     expect(poolHeadline(capped)).toEqual({ kind: 'spent', resetsAt: '2026-10-01T00:00:00.000Z' });
+  });
+
+  it('counts a key OpenAI put out of budget as one no session starts on, and heads the pool with its reset', () => {
+    const until = '2026-09-30T06:00:00.000Z';
+    const shown = sharedPoolAsProviderPool(
+      pool([key(1, ANN, { next: true }), key(2, MIA, { spentUntil: until }), key(3, MIA, others(50))]),
+    );
+    expect(shown.members.map((m) => m.state)).toEqual(['AVAILABLE', 'SPENT', 'SPENT']);
+    expect(availableCount(shown, new Map())).toBe(1);
+    // A key that can run is enough: the pool names no reset while one is free.
+    expect(shown.resetsAt).toBeNull();
+    // With nothing to run on, the pool's own reset is the EARLIEST of the stops — OpenAI's mark comes
+    // before the month turns.
+    const stopped = sharedPoolAsProviderPool(pool([key(2, MIA, { spentUntil: until }), key(3, MIA, others(50))]));
+    expect(stopped.resetsAt).toBe(until);
+    expect(poolHeadline(stopped)).toEqual({ kind: 'spent', resetsAt: until });
+    // Out of budget alone is the head's words; a cap among the stops keeps the cap's.
+    expect(allOutOfBudget(pool([key(2, MIA, { spentUntil: until })]))).toBe(true);
+    expect(allOutOfBudget(pool([key(2, MIA, { spentUntil: until }), key(3, MIA, others(50))]))).toBe(false);
+    expect(allOutOfBudget(pool([key(2, MIA, others(50))]))).toBe(false);
+    expect(allOutOfBudget(pool([key(1, ANN)]))).toBe(false);
   });
 });
 

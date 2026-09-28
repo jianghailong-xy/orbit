@@ -58,6 +58,7 @@ function team(viewer: string, over: Partial<SharedPool> = {}): SharedPool {
     state: 'ACTIVE',
     enabled: true,
     shareCap: 50,
+    spentUntil: null,
     contributor: { userId: contributor, name: NAMES[contributor], you: contributor === viewer },
     usage: { ...spend(0), othersCostUsd: 0 },
     running: false,
@@ -83,6 +84,28 @@ function team(viewer: string, over: Partial<SharedPool> = {}): SharedPool {
       key(15, 'zhang-old', ZHANG, { fingerprint: 'sk-…31FD', enabled: false }),
     ],
     ...over,
+  };
+}
+
+/** The board's pool plus one key OpenAI has put out of budget (`spentUntil`, migration 0321), which
+ *  P2's gateway sets on an upstream `insufficient_quota` and the claim skips. */
+function teamWithOutOfBudget(): SharedPool {
+  const board = team(WIKOVA);
+  return {
+    ...board,
+    keys: [
+      ...board.keys,
+      {
+        ...board.keys[0],
+        id: id(16),
+        label: 'chen-org-2',
+        fingerprint: 'sk-…5V8N',
+        spentUntil: '2026-09-30T06:00:00.000Z',
+        next: false,
+        contributor: { userId: CHEN, name: NAMES[CHEN], you: false },
+        usage: { ...spend(18), othersCostUsd: 18 },
+      },
+    ],
   };
 }
 
@@ -287,6 +310,24 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(button('Replace key', rowOf('wikova-backup'))).not.toBeNull();
     expect(container.querySelectorAll('[aria-label^="Remove "]')).toHaveLength(0);
     expect(container.querySelectorAll('[aria-label^="Disable "]')).toHaveLength(0);
+  });
+
+  it('says a key OpenAI put out of budget is out of budget, and counts it as no session can start on it', async () => {
+    shared = [teamWithOutOfBudget()];
+    await mount('/providers');
+    expect(rowOf('chen-org-2').querySelector('.pool-status')?.textContent).toBe('Out of budget · resets Sep 30');
+    // The one OpenAI put out of budget and the one at its cap are both out; the other two can run.
+    expect(container.querySelector('.pool-sec .pool-card .re-summary')?.textContent).toBe('2 of 6 keys available');
+    // It is not the key a session starting now runs on, and the card's head still names the one that is.
+    expect(rowOf('chen-org-2').querySelector('.re-chip')).toBeNull();
+    expect(container.querySelector('.pool-sec .pool-card .pool-gauge-name')?.textContent).toBe('Next: orbit-org-1');
+  });
+
+  it('says the same of that key on the pool page, where the whole pool reads as its own head', async () => {
+    shared = [teamWithOutOfBudget()];
+    await mount(`/providers/pools/${POOL_ID}`);
+    expect(rowOf('chen-org-2').querySelector('.pool-status')?.textContent).toBe('Out of budget · resets Sep 30');
+    expect(text()).toContain('2 of 6 keys available');
   });
 
   it('shows somebody who may not replace a refused key who can, and no button', async () => {

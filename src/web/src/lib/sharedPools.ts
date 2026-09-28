@@ -47,6 +47,10 @@ export interface SharedPoolKey {
   enabled: boolean;
   /** Whole dollars a month everyone but its contributor may spend on it; null = no cap. */
   shareCap: number | null;
+  /** Out of budget until then — OpenAI answered `insufficient_quota` for it, and the page says
+   *  `Out of budget · resets …` (`pool-key-select.ts` spent). Null when it is not, which the server
+   *  sends as null too once the mark is behind us. */
+  spentUntil: string | null;
   contributor: { userId: string; name: string; you: boolean };
   /** This month's; `othersCostUsd` is the part its cap limits. */
   usage: PoolSpend & { othersCostUsd: number };
@@ -87,13 +91,25 @@ export const sharedPoolsQuery = () =>
 const atCap = (key: SharedPoolKey): boolean =>
   !key.contributor.you && key.shareCap !== null && key.usage.othersCostUsd >= key.shareCap;
 
+/** Whether OpenAI itself has `key` out of budget: the one gate a share cap does not put up, since it
+ *  stops its contributor's sessions too. */
+export const outOfBudget = (key: SharedPoolKey): boolean => key.spentUntil !== null;
+
 /** Where a key stands for a session the viewer starts now. Refused by OpenAI outranks switched off:
- *  it is the one somebody has to act on. */
+ *  it is the one somebody has to act on. Out of budget outranks the cap: it is OpenAI's own answer,
+ *  and it holds for the key's contributor where the cap only holds for the others. */
 export function keyState(key: SharedPoolKey): PoolMemberState {
   if (key.state === 'INVALID') return 'INVALID';
   if (!key.enabled || key.state === 'DISABLED') return 'DISABLED';
-  if (atCap(key)) return 'SPENT';
+  if (outOfBudget(key) || atCap(key)) return 'SPENT';
   return key.running ? 'RUNNING' : 'AVAILABLE';
+}
+
+/** Whether every key of `pool` that cannot run is out of budget rather than at its cap — which of the
+ *  two the Keys header names when none of them can run (AccountPools' PoolGauge). */
+export function allOutOfBudget(pool: SharedPool): boolean {
+  const stopped = pool.keys.filter((key) => keyState(key) === 'SPENT');
+  return stopped.length > 0 && stopped.every(outOfBudget);
 }
 
 /** A capped key's gauge, in the shape a quota bar reads (planUsageRows): the share of its cap the others
@@ -123,18 +139,22 @@ export function sharedPoolAsProviderPool(pool: SharedPool): ProviderPool {
       enabled: key.enabled,
       planUsage: keyWindow(key, pool),
       state,
-      resetsAt: state === 'SPENT' ? pool.window.end : null,
+      // A capped key comes back with the month; one out of budget, at OpenAI's own mark.
+      resetsAt: state === 'SPENT' ? (key.spentUntil ?? pool.window.end) : null,
       next: key.next,
       key,
     };
   });
   const free = members.some((member) => member.state === 'AVAILABLE' || member.state === 'RUNNING');
   const runnable = pool.keys.some((key) => key.enabled && key.state === 'ACTIVE');
+  const stops = members.flatMap((member) => (member.state === 'SPENT' && member.resetsAt ? [member.resetsAt] : []));
   return {
     id: pool.id,
     slug: pool.slug,
     label: pool.label,
-    resetsAt: !free && members.some((member) => member.state === 'SPENT') ? pool.window.end : null,
+    // The EARLIEST of the stops, as an account pool's own `resetsAt` is: one key free of its reason is
+    // enough for work to continue, whether that is the month turning or OpenAI's mark running out.
+    resetsAt: !free && stops.length > 0 ? stops.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b)) : null,
     unavailable: runnable ? null : pool.keys.length === 0 ? 'No keys' : 'No key can run',
     members,
     shared: pool,
