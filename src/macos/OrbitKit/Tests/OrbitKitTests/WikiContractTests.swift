@@ -195,4 +195,21 @@ final class WikiContractTests: XCTestCase {
             XCTAssertTrue(routes.contains(route), "\(route) is not a route the user door declares: \(routes.sorted())")
         }
     }
+
+    // MARK: maintenance
+
+    /// A space's maintenance settings carry exactly the contract's keys, read the contract's own
+    /// default as `.default` — off — and decode to it when the server sends none of them.
+    func testMaintenanceSettingsAreTheContracts() throws {
+        let settings = try object(try object(contract()["space"], "space")["settings"], "space.settings")
+        let maintenance = try object(settings["maintenance"], "space.settings.maintenance")
+        let defaults = try object(maintenance["default"], "space.settings.maintenance.default")
+        XCTAssertEqual(Set(defaults.keys), Set(WikiMaintenanceSettings.CodingKeys.allCases.map(\.rawValue)))
+        let data = try JSONSerialization.data(withJSONObject: defaults)
+        XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: data), .default)
+        XCTAssertFalse(WikiMaintenanceSettings.default.enabled, "maintenance is off until the owner turns it on")
+        XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: Data("{}".utf8)), .default)
+        let older = try JSONDecoder().decode(WikiSpaceSettings.self, from: Data(#"{"push":true}"#.utf8))
+        XCTAssertNil(older.maintenance, "a server that predates maintenance sends none, and nothing fails to decode")
+    }
 }

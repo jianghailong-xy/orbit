@@ -813,7 +813,8 @@ func TestWikiCommandsNeedASessionAndTheSwitch(t *testing.T) {
 	}
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	t.Setenv(envWiki, "off")
-	for _, command := range [][]string{{"search", "anything"}, {"get", "e1"}, {"propose", "--ops", "[]"}, {"verify", "--space", "s1"}} {
+	for _, command := range [][]string{{"search", "anything"}, {"get", "e1"}, {"propose", "--ops", "[]"}, {"verify", "--space", "s1"},
+		{"dossier", "--space", "s1"}, {"cursor", "advance", "--space", "s1", "--to", "wc1.x"}} {
 		err := cmdWikiCLI(command, strings.NewReader(""), &out)
 		if err == nil || !strings.Contains(err.Error(), "ORBIT_WIKI=off") {
 			t.Errorf("orbit wiki %s with the wiki off = %v, want the refusal that names ORBIT_WIKI=off", command[0], err)
@@ -827,7 +828,7 @@ func TestWikiCommandsNeedASessionAndTheSwitch(t *testing.T) {
 	if _, ok := cmdHelp["wiki"]; !ok || !strings.Contains(usage, "orbit wiki") {
 		t.Error("`orbit` and `orbit help` do not list the wiki family")
 	}
-	for _, action := range []string{"search", "get", "propose", "verify"} {
+	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor"} {
 		var text strings.Builder
 		if err := cmdWikiCLI([]string{action, "--help"}, strings.NewReader(""), &text); err != nil {
 			t.Fatalf("orbit wiki %s --help: %v", action, err)
@@ -1026,6 +1027,11 @@ func TestWikiCLIFlagsBecomeTheToolArguments(t *testing.T) {
 	}
 }
 
+// wikiCLIOnlyCapabilities are the wiki verbs no MCP tool stands beside: verify runs a model (contract
+// `agentSurface.verify.tool`), and dossier and cursor advance are a Wiki maintenance run's and no
+// other session's (`maintenance.cli.tool`).
+var wikiCLIOnlyCapabilities = map[string]bool{"wiki_verify": true, "wiki_dossier": true, "wiki_cursor_advance": true}
+
 // The commands an agent is told about are the commands that exist, and the flags in the capability
 // document are the flags the parsers take. cli_mcp_parity_test.go and
 // cli_help_flag_coverage_test.go walk the tables; this checks the tables are about THIS family —
@@ -1033,9 +1039,12 @@ func TestWikiCLIFlagsBecomeTheToolArguments(t *testing.T) {
 // nobody wrote.
 func TestWikiCapabilitiesDescribeTheFlagsTheParserTakes(t *testing.T) {
 	for _, spec := range wikiCLICapabilities {
-		// `orbit wiki verify` is the one verb with no tool beside it (contract `agentSurface.verify`).
-		if !wikiToolNames[spec.Tool] && spec.Tool != "wiki_verify" {
+		if !wikiToolNames[spec.Tool] && !wikiCLIOnlyCapabilities[spec.Tool] {
 			t.Errorf("capability %s is advertised and is not a wiki tool", spec.Tool)
+		}
+		// A verb with no tool beside it has no descriptor to take a description and a schema from.
+		if wikiCLIOnlyCapabilities[spec.Tool] && (wikiToolNames[spec.Tool] || spec.Description == "" || spec.InputSchema == nil) {
+			t.Errorf("capability %s is CLI only, and must carry its own description and schema and no tool", spec.Tool)
 		}
 		if spec.Argv[0] != "orbit" || spec.Argv[1] != "wiki" {
 			t.Errorf("capability %s is %v, want `orbit wiki <verb>`", spec.Tool, spec.Argv)
@@ -1043,7 +1052,10 @@ func TestWikiCapabilitiesDescribeTheFlagsTheParserTakes(t *testing.T) {
 		if !spec.SessionOnly {
 			t.Errorf("capability %s is advertised to a terminal outside a session, where it can only fail", spec.Tool)
 		}
+		// The help is the family's word for the verb (`cursor`); the parser is the whole command
+		// (`cursor advance`), since a verb with sub-commands parses each of them on its own.
 		documented := wikiActionHelp[spec.Argv[2]]
+		verb := strings.Join(spec.Argv[2:], " ")
 		for _, argument := range spec.Arguments {
 			for _, flag := range strings.Fields(argument) {
 				if !strings.HasPrefix(flag, "--") {
@@ -1051,10 +1063,10 @@ func TestWikiCapabilitiesDescribeTheFlagsTheParserTakes(t *testing.T) {
 				}
 				name := strings.TrimSuffix(strings.SplitN(strings.TrimPrefix(flag, "--"), "=", 2)[0], ",")
 				if !strings.Contains(documented, "--"+name) {
-					t.Errorf("`orbit wiki %s --help` does not document --%s, which capabilities advertises", spec.Argv[2], name)
+					t.Errorf("`orbit wiki %s --help` does not document --%s, which capabilities advertises", verb, name)
 				}
-				if !writtenFlagIsParsed(spec.Argv[2], name) {
-					t.Errorf("capabilities advertise --%s for `orbit wiki %s`, which its parser does not take", name, spec.Argv[2])
+				if !writtenFlagIsParsed(verb, name) {
+					t.Errorf("capabilities advertise --%s for `orbit wiki %s`, which its parser does not take", name, verb)
 				}
 			}
 		}
@@ -1062,7 +1074,7 @@ func TestWikiCapabilitiesDescribeTheFlagsTheParserTakes(t *testing.T) {
 }
 
 // writtenFlagIsParsed registers a command's flags the way the command does and reports whether the
-// name is among them.
+// name is among them. action is the command after `orbit wiki`, sub-command and all.
 func writtenFlagIsParsed(action, name string) bool {
 	fs := newCLIFlagSet("orbit wiki " + action)
 	var list stringList
@@ -1085,6 +1097,15 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("space", "", "")
 		fs.String("model", "", "")
 		fs.Int("max", 0, "")
+	case "dossier":
+		fs.String("space", "", "")
+		fs.String("after", "", "")
+		fs.Int("limit", 0, "")
+	case "cursor advance":
+		fs.String("space", "", "")
+		fs.String("to", "", "")
+		fs.String("outcome", "", "")
+		fs.String("error", "", "")
 	default:
 		return false
 	}
@@ -1110,7 +1131,7 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 		t.Errorf("the citation is not the link shape the clients draw: %q", instructions)
 	}
 	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
-	for _, action := range []string{"search", "get", "propose", "verify"} {
+	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance"} {
 		if !strings.Contains(rules, "Bash("+exe+" wiki "+action+" *)") {
 			t.Errorf("orbit wiki %s is advertised and pre-approved for nobody: %q", action, rules)
 		}
