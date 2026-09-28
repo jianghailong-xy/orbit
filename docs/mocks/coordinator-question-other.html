@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>协调者提问卡 · 「其他」选项 — mockup</title>
+<link rel="stylesheet" href="../../src/web/src/index.css">
+<link rel="stylesheet" href="project-progress/mock.css">
+<style>
+  /* Mock-only overrides. The card itself is drawn with the SHIPPED classes
+     (.coordinator-question-*) so it cannot drift from the real card. The one
+     hand-drawn piece is the textarea: the real one is antd's Input.TextArea and
+     its CSS-in-JS does not load in a static page. */
+  .approval-card { margin: 0; }
+  .m-sheet { width: 900px; }
+  .q-free {
+    display: block;
+    width: 100%;
+    min-height: 56px;
+    margin: 6px 0 0;
+    padding: 5px 11px;
+    font: 14px/1.5714285714 -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--text-1);
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-sizing: border-box;
+    resize: vertical;
+  }
+  .q-free::placeholder { color: var(--text-4); }
+  .m-flag { outline: 1.5px dashed var(--warning-solid); outline-offset: 4px; border-radius: 8px; }
+  .m-stack { display: flex; flex-direction: column; gap: 14px; }
+  .m-colhead { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.body.setAttribute('data-h',String(Math.ceil(s.getBoundingClientRect().height)))})</script>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1 zh">协调者提问卡：加一个「其他」选项</h1>
+  <p class="m-sub zh">卡片截图上写的那句 —— 「文字有输入的时候，应该有一个其他的选项」。现在是：推荐项默认选中，附言框占位写着 <code>Add a note (optional)</code>，于是自己写的答案会被记成<b>「推荐项 — 你的文字」</b>。下面两版都是纯前端改动，服务端 answer 门本来就收 <code>{option}</code> / <code>{text}</code> / 两者，不用动。</p>
+
+  <!-- ── 现状：问题 ─────────────────────────────────────────────── -->
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">现状</span>输入框有字，但它只是「推荐项」的附言</div>
+    <div class="m-stack">
+      <div class="approval-card coordinator-question">
+        <div class="approval-head coordinator-question-head">
+          <span class="coordinator-question-heading">The coordinator has a question</span>
+          <span class="criteria-provenance prov-brand" title="Orbit filed this question on behalf of the conversation coordinating this project.">FROM COORDINATOR</span>
+        </div>
+        <div class="approval-body is-questions coordinator-question-body">
+          <p class="coordinator-question-text">你说没有 OpenAI API key、想改成「用普通账户登录」。先把硬线说清：把多人的个人 ChatGPT/Codex 登录放到服务器上、由网关替别人换凭据，这条路我不建——三个执行会话按 OpenAI 条款拒过（跨用户共享个人订阅 + 绕开单人限额），换个说法也还是这件事。但你要的目标（不用 API key、用普通 Codex 账户登录、不手动切号）在<b>你自己的账号 + 你自己的 runner</b> 上是成立的，而且正是 9-27 你一度选过的方向。共享那条线只剩两条合规路：组织/项目 API key（你说没有）或 ChatGPT Business/Enterprise 的共享额度。你怎么定？</p>
+          <label class="coordinator-question-option is-chosen">
+            <input type="radio" name="q0" checked>
+            <span class="coordinator-question-option-text">改向：自己的账号 + 自己的 runner<span class="coordinator-question-recommended">Recommended</span>
+              <span class="coordinator-question-option-why">Codex 账号登在你自己机器上（一个账号一个 CODEX_HOME 槽，现在就有），Orbit 只做「按剩余额度自动选、撞限自动换、会话里提示」；不需要 API key、不需要网关。</span>
+            </span>
+          </label>
+          <label class="coordinator-question-option">
+            <input type="radio" name="q0">
+            <span class="coordinator-question-option-text">走 ChatGPT Business 共享额度
+              <span class="coordinator-question-option-why">每人用自己的席位/登录，基本零改动。需要团队已在 Business/Enterprise 工作区。</span>
+            </span>
+          </label>
+          <label class="coordinator-question-option">
+            <input type="radio" name="q0">
+            <span class="coordinator-question-option-text">先把项目停在这里
+              <span class="coordinator-question-option-why">共享池不删、不上线新东西，端到端先不跑。</span>
+            </span>
+          </label>
+          <textarea class="q-free">先只做自动选号：额度剩多少自己选、撞限自动换，其余先不动。</textarea>
+          <p class="coordinator-question-meta">Blocks 1 task &nbsp;·&nbsp; If you don’t answer: 我什么都不动：已建好的共享池（组织 key 版）保持现状，端到端继续等你的决定。</p>
+        </div>
+        <div class="card-actions approval-actions coordinator-question-actions">
+          <span class="a-btn primary">Send answer</span><span class="coordinator-question-asked">asked 1m ago</span>
+        </div>
+      </div>
+      <div class="m-flag">
+        <div class="approval-card coordinator-question is-answered" style="border:none">
+          <div class="approval-head coordinator-question-head">
+            <span class="coordinator-question-heading">Answered</span>
+            <span class="criteria-provenance prov-brand" title="Orbit filed this question on behalf of the conversation coordinating this project.">FROM COORDINATOR</span>
+          </div>
+          <p class="coordinator-question-receipt">
+            <span class="coordinator-question-verdict">✓ 改向：自己的账号 + 自己的 runner — 先只做自动选号：额度剩多少自己选、撞限自动换，其余先不动。</span>
+            <span class="coordinator-question-foot">by you · delivered to the current coordinator</span>
+          </p>
+        </div>
+      </div>
+    </div>
+    <p class="m-cap zh">你写的是「其他」，记下来的却是「<b>推荐项 — 你的话</b>」。协调者按这条回执去改作业指导，会当成你选了推荐项、只是补了一句限制。</p>
+  </div>
+
+  <!-- ── 方案 A ────────────────────────────────────────────────── -->
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">方案 A（推荐）</span>选项列表末尾固定一行「其他」</div>
+    <div class="m-stack">
+      <div class="approval-card coordinator-question">
+        <div class="approval-head coordinator-question-head">
+          <span class="coordinator-question-heading">The coordinator has a question</span>
+          <span class="criteria-provenance prov-brand" title="Orbit filed this question on behalf of the conversation coordinating this project.">FROM COORDINATOR</span>
+        </div>
+        <div class="approval-body is-questions coordinator-question-body">
+          <p class="coordinator-question-text">你说没有 OpenAI API key、想改成「用普通账户登录」。……共享那条线只剩两条合规路：组织/项目 API key（你说没有）或 ChatGPT Business/Enterprise 的共享额度。你怎么定？</p>
+          <label class="coordinator-question-option">
+            <input type="radio" name="qA">
+            <span class="coordinator-question-option-text">改向：自己的账号 + 自己的 runner<span class="coordinator-question-recommended">Recommended</span></span>
+          </label>
+          <label class="coordinator-question-option">
+            <input type="radio" name="qA">
+            <span class="coordinator-question-option-text">走 ChatGPT Business 共享额度</span>
+          </label>
+          <label class="coordinator-question-option">
+            <input type="radio" name="qA">
+            <span class="coordinator-question-option-text">先把项目停在这里</span>
+          </label>
+          <label class="coordinator-question-option is-chosen">
+            <input type="radio" name="qA" checked>
+            <span class="coordinator-question-option-text">Other — say it in my own words</span>
+          </label>
+          <textarea class="q-free">先只做自动选号：额度剩多少自己选、撞限自动换，其余先不动。</textarea>
+          <p class="coordinator-question-meta">Blocks 1 task &nbsp;·&nbsp; If you don’t answer: 我什么都不动：已建好的共享池（组织 key 版）保持现状，端到端继续等你的决定。</p>
+        </div>
+        <div class="card-actions approval-actions coordinator-question-actions">
+          <span class="a-btn primary">Send answer</span><span class="coordinator-question-asked">asked 1m ago</span>
+        </div>
+      </div>
+      <div class="approval-card coordinator-question is-answered">
+        <div class="approval-head coordinator-question-head">
+          <span class="coordinator-question-heading">Answered</span>
+          <span class="criteria-provenance prov-brand" title="Orbit filed this question on behalf of the conversation coordinating this project.">FROM COORDINATOR</span>
+        </div>
+        <p class="coordinator-question-receipt">
+          <span class="coordinator-question-verdict">✓ 先只做自动选号：额度剩多少自己选、撞限自动换，其余先不动。</span>
+          <span class="coordinator-question-foot">by you · delivered to the current coordinator</span>
+        </p>
+      </div>
+    </div>
+    <p class="m-cap zh">选中「其他」= 文字自己就是答案（发送 body 只有 <code>text</code>，回执不带选项前缀）。<b>选着任一选项时写字，仍然是那一项的附言</b>，行为不变。顺带删掉「再点一次已选项取消选择」那个隐藏手势 —— 「其他」行取代它。没有选项的纯文字提问不变（占位仍是 <code>Your answer</code>）。</p>
+  </div>
+
+  <!-- ── 方案 B ────────────────────────────────────────────────── -->
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k state">方案 B</span>一开始打字，末尾才冒出「其他」行，并自动选中</div>
+    <div class="m-grid2">
+      <div class="m-col">
+        <div class="m-colhead zh">输入前 —— 和今天一模一样</div>
+        <div class="approval-card coordinator-question">
+          <div class="approval-head coordinator-question-head">
+            <span class="coordinator-question-heading">The coordinator has a question</span>
+            <span class="criteria-provenance prov-brand">FROM COORDINATOR</span>
+          </div>
+          <div class="approval-body is-questions coordinator-question-body">
+            <p class="coordinator-question-text">……你怎么定？</p>
+            <label class="coordinator-question-option is-chosen">
+              <input type="radio" name="qB1" checked>
+              <span class="coordinator-question-option-text">改向：自己的账号 + 自己的 runner<span class="coordinator-question-recommended">Recommended</span></span>
+            </label>
+            <label class="coordinator-question-option">
+              <input type="radio" name="qB1">
+              <span class="coordinator-question-option-text">走 ChatGPT Business 共享额度</span>
+            </label>
+            <label class="coordinator-question-option">
+              <input type="radio" name="qB1">
+              <span class="coordinator-question-option-text">先把项目停在这里</span>
+            </label>
+            <textarea class="q-free" placeholder="Add a note (optional)"></textarea>
+            <p class="coordinator-question-meta">Blocks 1 task</p>
+          </div>
+          <div class="card-actions approval-actions coordinator-question-actions">
+            <span class="a-btn primary">Send answer</span><span class="coordinator-question-asked">asked 1m ago</span>
+          </div>
+        </div>
+      </div>
+      <div class="m-col">
+        <div class="m-colhead zh">打了字 —— 「其他」行出现并选中</div>
+        <div class="approval-card coordinator-question">
+          <div class="approval-head coordinator-question-head">
+            <span class="coordinator-question-heading">The coordinator has a question</span>
+            <span class="criteria-provenance prov-brand">FROM COORDINATOR</span>
+          </div>
+          <div class="approval-body is-questions coordinator-question-body">
+            <p class="coordinator-question-text">……你怎么定？</p>
+            <label class="coordinator-question-option">
+              <input type="radio" name="qB2">
+              <span class="coordinator-question-option-text">改向：自己的账号 + 自己的 runner<span class="coordinator-question-recommended">Recommended</span></span>
+            </label>
+            <label class="coordinator-question-option">
+              <input type="radio" name="qB2">
+              <span class="coordinator-question-option-text">走 ChatGPT Business 共享额度</span>
+            </label>
+            <label class="coordinator-question-option">
+              <input type="radio" name="qB2">
+              <span class="coordinator-question-option-text">先把项目停在这里</span>
+            </label>
+            <label class="coordinator-question-option is-chosen">
+              <input type="radio" name="qB2" checked>
+              <span class="coordinator-question-option-text">Other — say it in my own words</span>
+            </label>
+            <textarea class="q-free">先只做自动选号：额度剩多少自己选、撞限自动换，其余先不动。</textarea>
+            <p class="coordinator-question-meta">Blocks 1 task</p>
+          </div>
+          <div class="card-actions approval-actions coordinator-question-actions">
+            <span class="a-btn primary">Send answer</span><span class="coordinator-question-asked">asked 1m ago</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="m-cap zh">B 是照你原话做的：有输入才出现。代价是状态会自己变 —— 点回某个选项，文字又变成那一项的附言（「其他」行留在原地不再选中）；把文字清空，「其他」行消失、退回推荐项默认选中。另外打字的一瞬间选中项会被悄悄换成「其他」，想给推荐项加附言的人得再点一下推荐项。</p>
+  </div>
+
+  <ul class="m-notes zh">
+    <li><span class="m-n">A</span><span><b>两版共同的规则：</b>选中的是哪个「行」，决定发出去的是 <code>{option: n}</code> 还是 <code>{text}</code>；选着选项时写的字是附言，选了「其他」（或没选项时）写的字就是答案本身。服务端不动，回执渲染 <code>answerInWords</code> 也不动。</span></li>
+    <li><span class="m-n">1</span><span><b>A 和 B 只差「这一行什么时候在」</b>：A 一直在（没打字也看得见有这条路），B 打了字才出现（照你原话，但会自己变选中项）。</span></li>
+    <li><span class="m-n">2</span><span><b>选中的「其他」+ 空文字 = 发不出去</b>（按钮灰）：门要求至少给 option 或 text 之一，两者都没有就是没答案。</span></li>
+    <li><span class="m-n" style="background:var(--text-4)">·</span><span><b>Mac/iOS 孪生卡这次不跟</b>：那两张还是旧规则（连附言框都还没有），要跟得三处一起改、走 CI 编译，另说。</span></li>
+  </ul>
+</div>
+</body>
+</html>

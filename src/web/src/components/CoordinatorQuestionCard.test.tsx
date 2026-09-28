@@ -11,6 +11,7 @@ import {
   DELIVERED_TO_COORDINATOR,
   FROM_COORDINATOR,
   NOTE_PROMPT,
+  OTHER_OPTION,
   OWN_ANSWER_PROMPT,
   RECOMMENDED,
   SEND_ANSWER,
@@ -100,6 +101,18 @@ describe('what the card says', () => {
     expect(html).toContain(NOTE_PROMPT);
   });
 
+  it('ends the options with the row that means “in my own words”', () => {
+    const html = markup(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
+    // After every option the coordinator offered, so it reads as one more answer rather than as a
+    // footnote to the last one — and the recommendation is still the chosen row, because something
+    // the coordinator proposed is what the question starts out answered with.
+    expect(html).toContain(OTHER_OPTION);
+    expect(html.indexOf(OTHER_OPTION)).toBeGreaterThan(html.indexOf('Start both now'));
+    expect(html.indexOf('coordinator-question-option is-chosen')).toBeLessThan(
+      html.indexOf(OTHER_OPTION),
+    );
+  });
+
   it('grows with its question instead of scrolling inside the card', () => {
     // `.approval-body` alone is capped at 360px, and a long question with its options and the box
     // outgrows that — what spills over is the part the owner answers with.
@@ -122,6 +135,8 @@ describe('what the card says', () => {
     expect(html).toContain('What should the integration branch be called?');
     expect(html).toContain('textarea');
     expect(html).not.toContain(RECOMMENDED);
+    // No options means the box is the answer, so the Other row would say nothing the card has not.
+    expect(html).not.toContain(OTHER_OPTION);
   });
 });
 
@@ -276,17 +291,19 @@ describe('answering it', () => {
     );
   });
 
-  it('takes words alone once the chosen option is pressed again', async () => {
+  it('takes words alone from the Other row, with no option on the answer', async () => {
     apiMock.mockResolvedValue(DELIVERED);
     await draw(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
 
-    // The recommendation came chosen; pressing it again takes it back, and the box says its text
-    // is now the whole answer.
+    // The recommendation came chosen; the Other row — drawn last, after the coordinator's own —
+    // takes the choice off it, and the box says its text is now the whole answer.
     const options = host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
-    await act(async () => options[0]!.click());
-    expect([...options].some((option) => option.checked)).toBe(false);
+    const other = options[options.length - 1]!;
+    await act(async () => other.click());
+    expect(other.checked).toBe(true);
+    expect(options[0]!.checked).toBe(false);
     expect(box().placeholder).toBe(OWN_ANSWER_PROMPT);
-    // Nothing chosen and nothing written is not an answer.
+    // Nothing chosen as an option and nothing written is not an answer: the door refuses it.
     expect(press(SEND_ANSWER).disabled).toBe(true);
 
     await type('Neither: split session_pool.go first');
@@ -299,6 +316,18 @@ describe('answering it', () => {
       body: { text: 'Neither: split session_pool.go first' },
     });
     expect(host.textContent).toContain('✓ Neither: split session_pool.go first');
+  });
+
+  it('keeps a chosen option chosen when its own row is pressed again', async () => {
+    // The Other row is the way back to words alone now, so a second press on a chosen option — the
+    // gesture this card used to carry — must not quietly take the choice away and leave the box
+    // meaning something else than it says.
+    await draw(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
+    const options = host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    await act(async () => options[0]!.click());
+    expect(options[0]!.checked).toBe(true);
+    expect(box().placeholder).toBe(NOTE_PROMPT);
+    expect(press(SEND_ANSWER).disabled).toBe(false);
   });
 
   it('says the answer is waiting when no conversation coordinates the project', async () => {

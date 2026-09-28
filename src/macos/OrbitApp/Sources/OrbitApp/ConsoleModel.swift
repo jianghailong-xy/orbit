@@ -2976,9 +2976,10 @@ final class ConsoleModel {
     /// The receipt is handed back rather than kept here: the card that made the press is the one
     /// that shows what was sent and where it went, which is also what the browser's card does. A
     /// refusal leaves the card standing and says which refusal it met.
-    func answerQuestion(_ row: ProjectOpenItemRow, option: Int?, text: String) async -> OwnerAnswerReceipt? {
+    func answerQuestion(_ row: ProjectOpenItemRow, chosen: CoordinatorQuestionChoice?,
+                        text: String) async -> OwnerAnswerReceipt? {
         guard let projectID, let question = row.question,
-              let request = CoordinatorQuestions.request(question: question, chosen: option, text: text)
+              let request = CoordinatorQuestions.request(question: question, chosen: chosen, text: text)
         else { return nil }
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
