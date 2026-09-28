@@ -106,15 +106,16 @@
       "maintenance": {
         "type": "object",
         "phase": 2,
-        "default": { "enabled": false, "workspaceId": null, "provider": "local-vllm", "dailyTokenBudget": 2000000, "listId": null },
+        "default": { "enabled": false, "workspaceId": null, "provider": "local-vllm", "dailyRunLimit": 8, "listId": null },
         "keys": {
           "enabled": "boolean. Off by default: in a space whose maintenance is off, no fact starts a maintenance task.",
           "workspaceId": "The owner's workspace the maintenance task runs in, which decides the runner. Maintenance cannot be turned on without one.",
-          "provider": "The provider the run is pinned to, with no fallback (design section 8.2): the codex path ignores disallowedTools, and its usage reaches no usage table.",
-          "dailyTokenBudget": "Input plus output tokens the space's maintenance sessions may spend in one UTC day. A whole number, 0 or more.",
+          "provider": "The provider the run is pinned to, with no fallback (design section 8.2, maintenance.run): a configured provider on the Claude Code runtime. The door refuses a built-in engine, a provider on another runtime and an account pool (400); a name no provider has yet is taken, and a run that finds it still missing is refused when it is claimed.",
+          "dailyRunLimit": "How many maintenance tasks the space may make in one UTC day: a whole number within bounds.dailyRunLimit. Counted as the tasks of the space's maintenance list made since midnight UTC, however they ended; the maintenance job reads the count (wikiMaintenanceRunsToday) before it makes one.",
           "listId": "Server-written and never taken from a request: the space's hidden Wiki maintenance task list (maintenance.list), made the first time maintenance is turned on and kept when it is turned off."
         },
-        "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header, and WIKI_OWNER_CHANNEL_ONLY otherwise. A request names any of enabled, workspaceId, provider and dailyTokenBudget; what it leaves out stays as it was."
+        "bounds": { "dailyRunLimit": { "min": 1, "max": 48 } },
+        "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header, and WIKI_OWNER_CHANNEL_ONLY otherwise. A request names any of enabled, workspaceId, provider and dailyRunLimit; what it leaves out stays as it was. A stored value out of bounds, or of a key this contract no longer has, reads as the default."
       },
       "reservedForPhase2": ["embedding"]
     }
@@ -900,6 +901,29 @@
         ]
       },
       "due": "A maintenance task is due when the backlog reaches rules.backlogThreshold, or when a new fact arrives while the oldest fact after the watermark is older than rules.maxPendingAgeHours (criterion 3). No clock starts one."
+    },
+    "run": {
+      "doc": "docs/wiki-contract.md section 16.5; design section 8.2 cost guardrails",
+      "who": "Every maintenance session (maintenance.session), on the claim and on the reclaim a restarted runner rebuilds it from; no other session.",
+      "field": "wikiMaintenance on the claimed or reclaimed session: { spaceId, workspaceId, provider, providerFallbacks, maxTurns, disallowedTools, cleanStart, refusal? }.",
+      "maxTurns": 120,
+      "disallowedTools": ["Task", "Agent", "WebFetch", "WebSearch"],
+      "providerFallbacks": [],
+      "permissionMode": "dontAsk",
+      "runtime": "claude",
+      "agent": "The same guardrails go into the claim's agent config, where every runtime reads them: maxTurns, disallowedTools (added to the workspace's own), permissionMode dontAsk (what is not pre-approved is refused, never asked: nobody watches a maintenance run), no effort. A maintenance session never orchestrates.",
+      "pinned": "The provider and the workspace are the space's maintenance settings. The run starts only when maintenance is on, the session is in settings.workspaceId, it names settings.provider, and that provider is an enabled configured provider on the Claude Code runtime; otherwise refusal says why, and the runner ends the run FAILED with it and starts no engine. Nothing falls back: not to the runner's own Claude login, not through an account pool.",
+      "capability": "wiki-maintenance-run/v1",
+      "undeclared": "A runner that does not declare the capability (X-Orbit-Runner-Capabilities) is never handed a maintenance session: the claim does not offer it the row and the reclaim leaves it out, so the session waits for a runner that can start it clean.",
+      "cleanStart": {
+        "flags": ["-p", "--bare", "--setting-sources ''", "--tools Bash", "--strict-mcp-config", "--mcp-config <the orbit server alone>", "--system-prompt <what a maintenance run does>", "--settings {apiKeyHelper}", "--max-turns 120", "--disallowedTools <disallowedTools and the built-in task tools>", "--permission-mode dontAsk", "--allowedTools <the orbit MCP tools below and the orbit wiki commands>"],
+        "home": "HOME and CLAUDE_CONFIG_DIR are the session's own directories under the runner's scratch, empty but for onboarding when first made: no login, memory, settings or CLAUDE.md of the machine's reaches the engine, and the session's own transcript stays there for --resume.",
+        "mcpTools": ["task_get", "task_comment", "task_progress_report"],
+        "auth": "apiKeyHelper prints ANTHROPIC_AUTH_TOKEN, which goes out as a bearer token: a bare run sends ANTHROPIC_API_KEY as x-api-key alone, which a local vLLM answers 401, so that variable is not handed to the engine at all.",
+        "thinking": "Off: CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0, whatever effort the workspace or the provider declares.",
+        "environment": "Built from nothing: the endpoint, token, model, custom headers and context window of the provider; PATH, locale, TMPDIR, certificates and proxies of the runner; ORBIT_HOME and the session context; nothing else of the runner's or the workspace's."
+      },
+      "truncated": "A run whose opening prompt reaches maxTurns ends with the CLI's error_max_turns: its turn is FAILED, and the runner reports it on the cursor route as outcome truncated, one more of the space's consecutive failures, with the cursor where it was."
     },
     "cli": {
       "dossier": "orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]",
