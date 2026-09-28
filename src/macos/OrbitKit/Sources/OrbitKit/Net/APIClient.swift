@@ -88,6 +88,10 @@ public final class APIClient: @unchecked Sendable {
     public func updatePreferences(_ req: UpdatePreferencesRequest) async throws -> User {
         try await patch("users/me/preferences", body: req)
     }
+    /// Rename the signed-in account; answers with the account as `me` reads it.
+    public func updateProfile(_ req: UpdateProfileRequest) async throws -> User {
+        try await patch("users/me", body: req)
+    }
     public func changePassword(_ req: ChangePasswordRequest) async throws {
         _ = try await postRaw("auth/change-password", body: req)
     }

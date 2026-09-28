@@ -126,6 +126,30 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(Set(SettingsCopy.alwaysSent).count, SettingsCopy.alwaysSent.count)
     }
 
+    // MARK: - Edit profile
+
+    /// Save is live only for a name that is there and is new: an unchanged name, or one that is
+    /// only spaces, has nothing to save — and spaces around a name are not a new name.
+    func testSaveIsLiveForANewNameOnly() {
+        XCTAssertFalse(ProfileEdit.canSave("jianghailong.rd", saved: "jianghailong.rd"))
+        XCTAssertFalse(ProfileEdit.canSave("  jianghailong.rd \n", saved: "jianghailong.rd"))
+        XCTAssertFalse(ProfileEdit.canSave("", saved: "jianghailong.rd"))
+        XCTAssertFalse(ProfileEdit.canSave(" \t ", saved: "jianghailong.rd"))
+        XCTAssertTrue(ProfileEdit.canSave("Hailong Jiang", saved: "jianghailong.rd"))
+        XCTAssertTrue(ProfileEdit.canSave("江海", saved: nil), "an account with no name yet can be given one")
+        XCTAssertFalse(ProfileEdit.canSave("  ", saved: nil))
+    }
+
+    /// What is sent is the name without the spaces around it — the spaces inside stay.
+    func testTheNameIsSentTrimmed() {
+        XCTAssertEqual(ProfileEdit.name("  Hailong  Jiang \n"), "Hailong  Jiang")
+    }
+
+    func testAFailedSaveSaysWhy() {
+        XCTAssertEqual(SettingsCopy.nameNotSaved("the connection dropped"),
+                       "Couldn't save your name — the connection dropped.")
+    }
+
     // MARK: - Shared links
 
     private func link(_ state: ShareLinkState, kind: ShareRootKind = .session, reason: String? = nil,

@@ -170,6 +170,34 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(list.contains("Button(SettingsCopy.signOut, role: .destructive) { model.logout() }"))
     }
 
+    /// The avatar and name are one button, pencilled as ChatGPT's are, that opens the edit-profile
+    /// card; the card writes only through `AppModel.saveName` — from Save or Return in the field —
+    /// and the account it answers with is the one every view goes on showing. Cancel writes nothing.
+    func testTheHeaderOpensTheEditProfileCard() throws {
+        let sheet = try appSource("Views/SettingsSheet.swift")
+        let header = code(try slice(sheet, from: "private var header: some View {",
+                                    to: ".listRowBackground(Color.clear)"))
+        XCTAssertTrue(header.contains("Button { editingProfile = true } label: {"))
+        XCTAssertTrue(header.contains(".overlay(alignment: .bottomTrailing) { EditBadge() }"))
+        XCTAssertTrue(header.contains(".accessibilityLabel(SettingsCopy.editProfile)"))
+        XCTAssertTrue(code(sheet).contains(".sheet(isPresented: $editingProfile) {"))
+
+        let card = code(try slice(sheet, from: "private struct ProfileEditSheet: View {",
+                                  to: "// MARK: - Notifications"))
+        XCTAssertTrue(card.contains("AvatarMonogram(name: draft,"), "the card's avatar follows the field")
+        XCTAssertTrue(card.contains(".onSubmit(save)"))
+        XCTAssertTrue(card.contains("Button(action: save)"))
+        XCTAssertTrue(card.contains(".disabled(!ProfileEdit.canSave(draft, saved: model.user?.name))"))
+        XCTAssertTrue(card.contains("failure = await model.saveName(draft)"))
+        XCTAssertTrue(card.contains("Button(SharePanelCopy.cancel) { dismiss() }"))
+
+        let saveName = code(try slice(try appSource("AppModel.swift"),
+                                      from: "func saveName(_ name: String) async -> String? {",
+                                      to: "func changePassword("))
+        XCTAssertTrue(saveName.contains("user = try await api.updateProfile(UpdateProfileRequest(name: ProfileEdit.name(name)))"))
+        XCTAssertTrue(saveName.contains("SettingsCopy.nameNotSaved(APIClient.failureReason(error))"))
+    }
+
     /// The runners list the sheet pushes carries the same `runnerDetail` frame the Runners section's
     /// rows do, pushed by hand through `AppModel.push` — which lands on Settings' stack while the
     /// sheet is up. One frame type, two stacks: the stack on screen is what decides where it lands.

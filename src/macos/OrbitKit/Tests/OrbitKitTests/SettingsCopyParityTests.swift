@@ -82,6 +82,11 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "hint=\"\(SettingsCopy.letSessionsOrchestrateHint)\"", in: Self.settings)
     }
 
+    /// The edit-profile card's field is called what the web Profile page calls the same value.
+    func testTheNameFieldSaysWhatTheProfilePageSays() throws {
+        assertSays(try web(Self.profile), ">\(SettingsCopy.nameLabel)</div>", in: Self.profile)
+    }
+
     /// Change password: the web Profile page's form.
     func testThePasswordFormSaysWhatTheProfilePageSays() throws {
         let page = try web(Self.profile)

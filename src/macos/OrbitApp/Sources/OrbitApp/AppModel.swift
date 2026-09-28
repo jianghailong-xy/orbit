@@ -502,6 +502,18 @@ final class AppModel {
         }
     }
 
+    /// Rename the account. Returns nil once the server has the name — `user` then carries it, so
+    /// every place that shows the account follows — else what went wrong, for the edit card to say.
+    func saveName(_ name: String) async -> String? {
+        do {
+            guard let api else { throw APIError.notConfigured }
+            user = try await api.updateProfile(UpdateProfileRequest(name: ProfileEdit.name(name)))
+            return nil
+        } catch {
+            return SettingsCopy.nameNotSaved(APIClient.failureReason(error))
+        }
+    }
+
     /// Returns nil on success, else a message. Wrong current password is a 400 (not a 401, so it
     /// won't bounce the session).
     func changePassword(current: String, new: String) async -> String? {

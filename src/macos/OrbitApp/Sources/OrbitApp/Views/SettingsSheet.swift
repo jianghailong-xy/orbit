@@ -89,6 +89,8 @@ struct SettingsHomeView: View {
     /// The avatar and name are the page's title while they are on screen; the bar names the page
     /// once they have scrolled under it.
     @State private var headerScrolledAway = false
+    /// The edit-profile card, which the avatar and name open.
+    @State private var editingProfile = false
 
     private var isAdmin: Bool { model.user?.role == "ADMIN" }
 
@@ -118,6 +120,9 @@ struct SettingsHomeView: View {
                             isPresented: $confirmingSignOut, titleVisibility: .visible) {
             Button(SettingsCopy.signOut, role: .destructive) { model.logout() }
             Button(SharePanelCopy.cancel, role: .cancel) {}
+        }
+        .sheet(isPresented: $editingProfile) {
+            ProfileEditSheet(name: model.user?.name ?? "")
         }
         // Changes apply the moment they are made, as settings do on iOS. Each write is guarded
         // against the value the account already has, so seeding the pickers never writes.
@@ -152,14 +157,24 @@ struct SettingsHomeView: View {
         return model.user?.email ?? ""
     }
 
+    /// The account, as ChatGPT's sheet opens: the avatar with a pencil on it and the name under it,
+    /// both one button that opens the edit-profile card.
     private var header: some View {
         Section {
-            VStack(spacing: 8) {
-                AvatarMonogram(name: displayName, diameter: 72, font: .largeTitle.weight(.medium))
-                Text(displayName)
-                    .font(.headline)
-                    .lineLimit(1)
+            Button { editingProfile = true } label: {
+                VStack(spacing: 8) {
+                    AvatarMonogram(name: displayName, diameter: 72, font: .largeTitle.weight(.medium))
+                        .overlay(alignment: .bottomTrailing) { EditBadge() }
+                    Text(displayName)
+                        .font(.headline)
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(SettingsCopy.editProfile)
+            .accessibilityValue(displayName)
             .frame(maxWidth: .infinity)
             .onGeometryChange(for: Bool.self) { proxy in
                 proxy.frame(in: .scrollView).maxY < 0
@@ -276,6 +291,19 @@ struct SettingsHomeView: View {
     }
 }
 
+/// The pencil on the header's avatar, where ChatGPT puts it: a grey disc rimmed in the page's own
+/// colour, so it reads as set into the avatar's corner.
+private struct EditBadge: View {
+    var body: some View {
+        Image(systemName: "pencil")
+            .font(.orbitLabel.weight(.semibold))
+            .foregroundStyle(Color.primary)
+            .frame(width: 30, height: 30)
+            .background(Color(uiColor: .systemGray5), in: Circle())
+            .overlay(Circle().strokeBorder(Color(uiColor: .systemGroupedBackground), lineWidth: 2))
+    }
+}
+
 /// A row's glyph and name, both in the label colour: a form row's icon would otherwise take the
 /// accent, and inside a button's label even `.primary` resolves to it.
 private struct SettingsRowLabel: View {
@@ -319,6 +347,102 @@ private func turnOnAlerts(_ model: AppModel, now: Bool?) async -> Bool? {
         _ = await UIApplication.shared.open(url)
     }
     return now
+}
+
+// MARK: - Edit profile
+
+/// The card the header opens — ChatGPT's edit-profile card, with what an Orbit account has: the
+/// name, and the avatar that is its first letter, following the field as it is typed. Nothing is
+/// written until Save; Cancel or a swipe down leaves the account as it was. A save that fails keeps
+/// the card up and says why where the caption was.
+private struct ProfileEditSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var draft: String
+    @State private var saving = false
+    @State private var failure: String?
+    /// The card is as tall as what it holds, as ChatGPT's is — this is that height as last measured.
+    @State private var height: CGFloat = 440
+
+    init(name: String) {
+        _draft = State(initialValue: name)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                AvatarMonogram(name: draft, diameter: 96, font: .orbitHeroGlyph.weight(.medium))
+                    .padding(.top, 28)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(SettingsCopy.nameLabel)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                    TextField(SettingsCopy.namePlaceholder, text: $draft)
+                        .font(.orbitControl)
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .onSubmit(save)
+                        .disabled(saving)
+                        .accessibilityLabel(SettingsCopy.nameLabel)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 50)
+                        .overlay(Capsule().strokeBorder(Color(uiColor: .separator), lineWidth: 1))
+                    Text(failure ?? SettingsCopy.nameCaption)
+                        .font(.orbitLabel)
+                        .foregroundStyle(failure == nil ? Color.secondary : Color.red)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 24)
+
+                Button(action: save) {
+                    Text(SettingsCopy.saveProfile)
+                        .fontWeight(.semibold)
+                        .opacity(saving ? 0 : 1)
+                        .overlay { if saving { ProgressView().tint(.white) } }
+                        .padding(.horizontal, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .disabled(!ProfileEdit.canSave(draft, saved: model.user?.name))
+                .padding(.top, 28)
+
+                Button(SharePanelCopy.cancel) { dismiss() }
+                    .padding(.vertical, 12)
+                    .padding(.top, 4)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 12)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { measured in
+                height = measured
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationDetents([.height(height)])
+        .interactiveDismissDisabled(saving)
+        .onChange(of: draft) { _, _ in failure = nil }
+        // A presentation of its own, like the Settings sheet under it.
+        .preferredColorScheme(model.preferredColorScheme)
+    }
+
+    private func save() {
+        guard !saving, ProfileEdit.canSave(draft, saved: model.user?.name) else { return }
+        saving = true
+        Task {
+            failure = await model.saveName(draft)
+            saving = false
+            if failure == nil { dismiss() }
+        }
+    }
 }
 
 // MARK: - Notifications

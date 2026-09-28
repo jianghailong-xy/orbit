@@ -141,6 +141,22 @@ public enum SettingsHome {
     }
 }
 
+/// The card Settings' header opens on iOS — ChatGPT's edit-profile card, with only what an Orbit
+/// account has. The avatar is the name's first letter, so the name is the whole profile; the email is
+/// the sign-in and is not changed here.
+public enum ProfileEdit {
+    /// The name as it is sent: without the spaces around it.
+    public static func name(_ draft: String) -> String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Save is live once the draft names someone, and someone other than the account already is.
+    public static func canSave(_ draft: String, saved: String?) -> Bool {
+        let name = name(draft)
+        return !name.isEmpty && name != saved
+    }
+}
+
 /// The words of Settings' own pages. Wherever the web says the same thing, these are its words byte
 /// for byte (`SettingsCopyParityTests` reads them back out of `SettingsPage.tsx` and
 /// `ProfilePage.tsx`); the rest are the app's own — what only a phone has to say.
@@ -186,6 +202,19 @@ public enum SettingsCopy {
     public static let passwordsDoNotMatch = "Passwords do not match"
     public static let changePassword = "Change password"
     public static let passwordChanged = "Password changed"
+
+    // MARK: Edit profile (the card Settings' header opens)
+
+    /// What the header does, for VoiceOver: the avatar and name are the button.
+    public static let editProfile = "Edit profile"
+    /// Over the field — the web Profile page's word for it.
+    public static let nameLabel = "Name"
+    public static let namePlaceholder = "Your name"
+    /// Who sees the name besides its owner: the people in their shared pools, on the member list and
+    /// beside each key given. A public link never shows it.
+    public static let nameCaption = "People in your shared pools see you by this name."
+    public static let saveProfile = "Save profile"
+    public static func nameNotSaved(_ reason: String) -> String { "Couldn't save your name — \(reason)." }
 
     // MARK: Sign out
 
