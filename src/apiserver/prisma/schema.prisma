@@ -3576,6 +3576,11 @@ model TaskList {
   /// Exact, database-maintained, and never assigned by application code — same contract as above.
   taskDoneCount Int @default(0) @map("task_done_count")
 
+  /// A list the owner's list index leaves out (migration 0315): a wiki space's «Wiki maintenance»
+  /// list, whose tasks are that space's maintenance runs (contracts/wiki.contract.json
+  /// `maintenance.list`). Its tasks stay reachable by id; only the index does not show it.
+  hidden Boolean @default(false)
+
   tasks     Task[]
   revisions TaskListRevision[]
   events    TaskListEvent[]
@@ -5427,17 +5432,20 @@ model WikiSpace {
   /// The repository's first root commit, once a runner reports it: two repositories behind one URL
   /// are told apart by it.
   rootCommitSha String? @map("root_commit_sha") @db.Char(40)
-  /// `{ push, autoAcceptReinforce, reviewMode }` (contract `space.settings`). An absent key reads as
-  /// its default — both switches on — except `reviewMode`, which a space made before review modes
-  /// lacks and reads as `manual`; a space made since is written `tiered`.
+  /// `{ push, autoAcceptReinforce, reviewMode, maintenance }` (contract `space.settings`). An absent
+  /// key reads as its default — both switches on, maintenance off — except `reviewMode`, which a
+  /// space made before review modes lacks and reads as `manual`; a space made since is written `tiered`.
   settings      Json    @default("{}")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   workspaces WikiSpaceWorkspace[]
+  notes      WikiNote[]
   topics     WikiTopic[]
   entries    WikiEntry[]
   changesets WikiChangeset[]
+  cursors    WikiCursor[]
+  dossiers   WikiDossier[]
 
   /// The key every child's composite foreign key names.
   @@unique([id, ownerId], map: "wiki_space_id_owner_id_key")
@@ -5621,6 +5629,28 @@ model WikiSource {
   @@map("wiki_source")
 }
 
+/// A file `orbit wiki import` read (migration 0316, contracts/wiki.contract.json `import`): the `note`
+/// source an imported entry cites. Only its REDACTED text is kept, with the sha256 of that text, and one
+/// content is one note in a space — the same file imported again is the note already there.
+model WikiNote {
+  id      String    @id @default(uuid(7)) @db.Uuid
+  spaceId String    @map("space_id") @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_note_space_fkey")
+
+  /// Where the file was read from, relative to the directory the import named (redacted).
+  path          String
+  /// The file's text after the shared redactor: never the text as it was read.
+  text          String
+  contentSha256 String   @map("content_sha256") @db.Char(64)
+  /// Whether the redactor took anything out.
+  redacted      Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([spaceId, contentSha256], map: "wiki_note_space_id_content_sha256_key")
+  @@map("wiki_note")
+}
+
 /// One submission to WikiService.submitChangeset, the only door anything is written through: an
 /// agent's proposal or the owner's edit. `pending` while any op of it waits for the owner (and then
 /// it has an `expiresAt`), `settled` once none does.
@@ -5700,6 +5730,12 @@ model WikiChangesetOp {
   verificationModel       String?   @map("verification_model")
   verifiedAt              DateTime? @map("verified_at") @db.Timestamptz(3)
   verificationDuplicateOf String?   @map("verification_duplicate_of") @db.Uuid
+  /// What the verifier could read when its verdict was recorded (0314): `readable` or `unreadable`
+  /// — the text of no source at all, which caps the verdict at Unreviewed. NULL for a verdict recorded
+  /// before 0314, and for an op without one.
+  verificationEvidence    String?   @map("verification_evidence")
+  /// The trail of every earlier verdict of an op that was reopened (0314), oldest first: a JSON array.
+  verificationHistory     Json      @default("[]") @map("verification_history")
 
   @@unique([changesetId, seq], map: "wiki_changeset_op_changeset_seq_key")
   @@map("wiki_changeset_op")
@@ -5721,4 +5757,62 @@ model WikiExposure {
 
   @@index([entryId, at], map: "wiki_exposure_entry_at_idx")
   @@map("wiki_exposure")
+}
+
+/// A space's maintenance cursor (migration 0315, contracts/wiki.contract.json `maintenance.cursor`):
+/// the watermark a succeeded run advanced to, the furthest position a dossier page handed out, the
+/// backlog as last counted, and the run's health. A position is (at, kind, ref), compared as a row;
+/// the three columns are set together or not at all.
+model WikiCursor {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  spaceId             String    @map("space_id") @db.Uuid
+  ownerId             String    @map("owner_id") @db.Uuid
+  space               WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_cursor_space_fkey")
+  /// `facts`, the one source there is.
+  source              String    @default("facts")
+  positionAt          DateTime? @map("position_at") @db.Timestamptz(3)
+  positionKind        String?   @map("position_kind")
+  positionRef         String?   @map("position_ref")
+  issuedAt            DateTime? @map("issued_at") @db.Timestamptz(3)
+  issuedKind          String?   @map("issued_kind")
+  issuedRef           String?   @map("issued_ref")
+  backlog             Int       @default(0)
+  pendingSessions     Int       @default(0) @map("pending_sessions")
+  oldestPendingAt     DateTime? @map("oldest_pending_at") @db.Timestamptz(3)
+  lagSeconds          Int?      @map("lag_seconds")
+  countedAt           DateTime? @map("counted_at") @db.Timestamptz(3)
+  lastOkAt            DateTime? @map("last_ok_at") @db.Timestamptz(3)
+  lastRunAt           DateTime? @map("last_run_at") @db.Timestamptz(3)
+  /// `succeeded` | `failed` | `truncated`.
+  lastOutcome         String?   @map("last_outcome")
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  lastError           String?   @map("last_error")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([spaceId, source], map: "wiki_cursor_space_id_source_key")
+  @@map("wiki_cursor")
+}
+
+/// What is kept of a dossier once it is handed out: its sources and its hash, never its text
+/// (migration 0315, contract `maintenance.dossier.storage`). One row per space and session.
+model WikiDossier {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  spaceId   String    @map("space_id") @db.Uuid
+  ownerId   String    @map("owner_id") @db.Uuid
+  space     WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_dossier_space_fkey")
+  /// A history reference: no foreign key (contract `storage.historyRefs`).
+  sessionId String    @map("session_id") @db.Uuid
+  hash      String    @db.Char(64)
+  /// `[{ ref, kind, id }, …]`.
+  sourceIds Json      @map("source_ids")
+  tokens    Int
+  truncated Boolean
+  pageAt    DateTime  @map("page_at") @db.Timestamptz(3)
+  pageKind  String    @map("page_kind")
+  pageRef   String    @map("page_ref")
+  issuedAt  DateTime  @default(now()) @map("issued_at") @db.Timestamptz(3)
+
+  @@unique([spaceId, sessionId], map: "wiki_dossier_space_id_session_id_key")
+  @@map("wiki_dossier")
 }

@@ -1046,7 +1046,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'wiki/wiki.service.ts#decide',
     shape: 'TX_RETRIED',
-    locks: 'wiki_changeset (60) and its ops (60), then the wiki_entry each decided op names, by plain UPDATE, and whatever the op applies: wiki_entry_revision (60), wiki_source (60), the entry a supersede names, and the ops of an entry that left active (withdrawn in the same statement that wrote the status). A challenge decision takes the entry row twice for the same reason every other branch does — once to write the flag and once to recompute it from the decision just recorded.',
+    locks: 'wiki_changeset (60) and its ops (60), then the wiki_entry each decided op names, by plain UPDATE, and whatever the op applies: wiki_entry_revision (60), wiki_source (60), the entry a supersede names, and the ops of an entry that left active (withdrawn in the same statement that wrote the status). A challenge decision takes the entry row twice for the same reason every other branch does — once to write the flag and once to recompute it from the decision just recorded. A challenge answered Re-confirm or Amend writes the entry\'s next revision, the owner\'s, through applyOp as an accepted amend does; one answered Retire records the owner\'s own retire through recordChangeset in the same transaction — its changeset (60) and op (60), then the entry by plain UPDATE and the challenge withdrawn behind it — the order `wiki.submitChangeset` takes them in.',
     identity: 'The changeset and each op id, with the op\'s own decision as the compare-and-set: only an op still PENDING is decidable, and a second press, another window pressing the same card, or a decision racing the op\'s expiry matches no row and is told the op is already decided. The changeset settles in the same transaction, from a count of the ops still pending.',
     isolation: '',
     attempts: 4,
@@ -1114,6 +1114,70 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     replay: 'Everything is re-read inside the closure: the op and whether it still waits, the space\'s mode and settings, the entry an amend names and its revision, the entry a duplicate names, and the verdicts the fallback counts. A retried attempt decides against the committed world, and the first attempt\'s writes roll back with it, so a verdict cannot apply twice.',
     effects: 'After the commit and outside the closure: one `wiki.changed` for the space once any verdict of the request was recorded, and — only for the verdict whose compare-and-set moved the space to Tiered — one push notification to the owner (`PushService.notifyWikiVerificationTripped`). Neither is inside a closure, so a retried attempt sends neither twice.',
     answer: 'Typed 503 from the global boundary; the verifier reports again, and a verdict already recorded answers with itself.',
+  },
+  // The anchor re-verification (contracts/wiki.contract.json `anchorRules.verify`, criterion 4): what a
+  // maintenance run's `orbit wiki anchors verify` found on origin/main. ONE TRANSACTION PER ENTRY, as a
+  // verdict is, so what one entry's check recorded stands whatever the next entry of the report meets.
+  {
+    at: 'wiki/wiki.service.ts#recordAnchorChecks',
+    shape: 'TX_RETRIED',
+    locks: 'Per entry, wiki rows alone: the wiki_entry (60) by one plain UPDATE (FOR NO KEY UPDATE) whose WHERE is the compare-and-set — still active, still at the revision the list handed out — writing the anchors\' checks and the anchor state, and a second UPDATE of the same row, already held, when a Tiered pitfall becomes auto; then, only when the check leaves it changed or missing and no challenge of it is open, exactly the locks `wiki.submitChangeset` states for the system challenge it files: that changeset (60) and its op (60), whose foreign key takes the entry KEY SHARE — compatible with the lock this transaction already holds — and the entry again, held, to write the flag. Reads of the entry, the space, the Tiered op and its sources, and the open challenges are unlocked; the open-challenge count comes after the entry UPDATE, so a second report racing this one waits on the row and then sees the challenge this one filed.',
+    identity: 'The entry and its revision: the check is written by an UPDATE predicated on the entry being active at the revision the report names, so a report against a revision that moved matches no row and is answered stale. The system challenge is filed only while no challenge of the entry is pending, read under the row lock, so a report sent twice files one; the checks it rewrites are the same values again.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read inside the closure: the entry, its revision and anchors, the space\'s mode, the op that applied a Tiered pitfall and its sources, and the open challenges. The checks and the state are a pure function of those and the report, and a rolled-back attempt takes its entry write and its challenge changeset with it, so a re-run cannot file two.',
+    effects: 'After the commits and outside every closure: one `wiki.changed` for the space once any entry of the report was recorded. Nothing depends on it.',
+    answer: 'Typed 503 from the global boundary; the maintenance run reports again, and what it reports again writes the same checks and files no second challenge.',
+  },
+  // Criterion 7, revision 4 (contracts/wiki.contract.json `reviewModes.entryConfirm` and
+  // `reviewModes.verification.reopen`, migration 0314): the owner's Confirm of what a review mode
+  // applied, and the reopening of what a verdict decided without being able to read its evidence.
+  // Wiki rows alone, in the order `wiki.decide` takes them.
+  {
+    at: 'wiki/wiki.service.ts#confirmEntry',
+    shape: 'TX_RETRIED',
+    locks: 'The wiki_entry (60) by plain UPDATE (FOR NO KEY UPDATE) — the owner\'s revision of it, whose WHERE on the current revision is its compare-and-set — with the wiki_entry_revision (60) and wiki_source (60) rows that revision brings; then each op the review mode applied to it and nobody had answered (60), by one UPDATE each, and their changesets (60) when that settles them. Reads of the entry, its current revision\'s sources and those ops are unlocked and come first.',
+    identity: 'The entry and its trust: only an active entry whose trust is auto or unreviewed is confirmed, and the write that confirms it moves its trust off both, so a second press finds a confirmed entry and answers 409 without writing.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The entry, its trust and revision, its current sources and the ops it answers are re-read inside the closure, so a retried attempt decides against the committed world and the first attempt\'s writes roll back with it.',
+    effects: 'After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the owner presses again, and an entry already confirmed answers 409.',
+  },
+  {
+    at: 'wiki/wiki.service.ts#reopenVerifications',
+    shape: 'TX_RETRIED',
+    locks: 'Per op, in a transaction of its own and wiki rows alone. A rejected op: its add\'s lineage (wiki_entry, 60) by plain UPDATE whose WHERE is the rejection still standing, then the op (60) by one UPDATE predicated on the same, then its changeset (60) by one UPDATE when it had settled. A tainted op: the op (60) by one UPDATE predicated on it still waiting for the owner. Reads of the space, the op, its sources and an amend\'s entry are unlocked and come first.',
+    identity: 'Each op and its decision: a rejected op is reopened by an UPDATE predicated on `decision = rejected` with its unsupported verdict, and a tainted op moved by one predicated on `decision = pending`, so of two calls racing only one moves it — the other matches no row, its transaction rolls back, and the op is named in `skipped`. A second call finds nothing left to move.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The op, whether it still stands as it did, the space\'s settings and an amend\'s entry are re-read inside each closure, so a retried attempt decides against the committed world and the first attempt\'s writes roll back with it.',
+    effects: 'After the last commit and outside every closure: one `wiki.changed` for the space when anything moved (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the caller calls again, and what already moved is not found a second time.',
+  },
+  // The Wiki maintenance run (contracts/wiki.contract.json `maintenance`, migration 0315): the owner's
+  // maintenance settings with the hidden list they make, and what a dossier page records it handed out.
+  {
+    at: 'wiki/wiki-maintenance-settings.ts#setWikiMaintenance',
+    shape: 'TX_RETRIED',
+    locks: 'When maintenance is being turned on and the space has no list yet: the task_list INSERT first, whose owner foreign key takes the user row FOR KEY SHARE (rank 10) and which creates the list row (rank 20); then the wiki_space row FOR UPDATE (rank 60), read again under that lock; then, only for the loser of two first enables, the DELETE of the list it just made (the same rank-20 row, its own); then one UPDATE of that wiki_space row, merging the maintenance key alone. Ascending throughout: the list is written before the space row is locked, never after.',
+    identity: 'The space and its owner. The list is recorded in the settings only when the locked row has none, so two first enables leave one list: the second finds the first one\'s and deletes its own.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The settings are re-read under the row lock inside the closure, and the merge and the list decision are re-derived from them, so a re-run after a conflict reaches what the committed row says. A rolled-back attempt takes the list it made with it.',
+    effects: 'None inside, and none after: the list is hidden, so no list-index event is owed.',
+    answer: 'Typed 503 from the global boundary; the owner saves the setting again.',
+  },
+  {
+    at: 'wiki/wiki-maintenance.ts#recordIssue',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s wiki_cursor row (rank 60) by one conditional UPDATE, then one wiki_dossier row (rank 60) per dossier by upsert on (space_id, session_id). Both reach wiki_space through (space_id, owner_id) and take it FOR KEY SHARE, which no wiki write conflicts with; no session, task or other row is locked — they were read before, unlocked.',
+    identity: 'The page\'s end position and the space. The cursor\'s furthest issued position only moves forward — the UPDATE\'s WHERE is that compare-and-set — and each dossier row is keyed by its space and session, so a re-run writes the same rows with the same hashes.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The closure writes values computed before it and reads nothing: re-running it re-applies the same forward-only issue and the same upserts, which is the same outcome.',
+    effects: 'None inside. The page is returned to the maintenance run after the commit.',
+    answer: 'Typed 503 from the global boundary; the maintenance run asks for the page again, and what it is handed is recorded then.',
   },
 ];
 
@@ -1257,20 +1321,20 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/project-integration-line.ts#configureProjectIntegration', under: "projects.configureIntegration and projects.update — the account owner's integration settings, under the binding lock taken after the project row when that write holds one" },
   { at: 'projects/project-integration-line.ts#startOnFirstIntegration', under: 'the transaction that queues a project’s first integration — it takes the same binding lock and writes only that row' },
   // Orbit Wiki (0307). Every one of these runs inside `submitChangeset`, `decide`,
-  // `createSpace` or `bindOnFirstUse` above, in the order that unit states, and takes no lock its
+  // `createSpace`, `bindOnFirstUse` or `recordAnchorChecks` above, in the order that unit states, and takes no lock its
   // caller did not already take. `applyOp` and `recomputeFlags` are the ONLY two that write
   // `wiki_entry.status`, `trust`, `challenged` and `unsupported` — contracts/wiki.contract.json
   // `storage.singleWriter` — which is why they are listed as participants with their caller named
   // rather than left to the scan's own reading.
   { at: 'wiki/wiki.service.ts#createSpaceRow', under: 'wiki.createSpace and wiki.bindOnFirstUse — it is the one statement pair that makes a space, and it does it under the same user-key read both of those units argue for' },
-  { at: 'wiki/wiki.service.ts#recordChangeset', under: 'wiki.submitChangeset and wiki.revertChangeset — one transaction per submission, so the changeset and every op of it are written under the idempotency identity that unit states or not at all' },
-  { at: 'wiki/wiki.service.ts#recordOp', under: 'wiki.submitChangeset and wiki.revertChangeset — one op\'s row and the effect the contract\'s policy and the space\'s review mode give it, decided against the reads the same closure made' },
-  { at: 'wiki/wiki.service.ts#applyOp', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry and wiki.recordVerifications — THE writer of an entry\'s status, trust, challenged and unsupported (storage.singleWriter), reached identically by an agent\'s proposal that applies at once, what a review mode applies, what a verdict applies, the owner\'s own write, and the owner\'s answer to any of them' },
-  { at: 'wiki/wiki.service.ts#recomputeFlags', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry and wiki.recordVerifications, through applyOp — the second and last writer of those four columns: it derives them from what is now true of the entry (its live sources, its open challenges) rather than from what the op asked for' },
-  { at: 'wiki/wiki.service.ts#insertRevision', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset and wiki.recordVerifications, through applyOp — the append-only revision a change adds, never a rewrite of one (storage.appendOnly); its foreign key to the entry takes that row KEY SHARE and the entry is already held BY the same transaction' },
-  { at: 'wiki/wiki.service.ts#insertSources', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset and wiki.recordVerifications, through applyOp and insertRevision — the first-hand records a revision rests on, written once with the revision they support' },
-  { at: 'wiki/wiki.service.ts#writeOpDecision', under: 'wiki.decide, wiki.rejectEntry and wiki.revertChangeset — the owner\'s answer on one op row, after whatever it applied, so what the op did and what was decided about it are one fact; a revert withdraws with it the ops of its run still waiting for a verdict' },
-  { at: 'wiki/wiki.service.ts#settleChangeset', under: 'wiki.decide, wiki.rejectEntry, wiki.revertChangeset and wiki.recordVerifications — the changeset\'s own terminal marker, written in the same transaction as the last decision or verdict that left nothing of it waiting' },
+  { at: 'wiki/wiki.service.ts#recordChangeset', under: 'wiki.submitChangeset and wiki.revertChangeset — one transaction per submission, so the changeset and every op of it are written under the idempotency identity that unit states or not at all; and inside wiki.decide (a Retire answering a challenge is the owner\'s own retire) and wiki.recordAnchorChecks (the system challenge a broken anchor files), in the order those units state' },
+  { at: 'wiki/wiki.service.ts#recordOp', under: 'wiki.submitChangeset, wiki.revertChangeset, wiki.decide and wiki.recordAnchorChecks, through recordChangeset — one op\'s row and the effect the contract\'s policy and the space\'s review mode give it, decided against the reads the same closure made' },
+  { at: 'wiki/wiki.service.ts#applyOp', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry, wiki.confirmEntry, wiki.recordVerifications, wiki.reopenVerifications and wiki.recordAnchorChecks — THE writer of an entry\'s status, trust, challenged and unsupported (storage.singleWriter), reached identically by an agent\'s proposal that applies at once, what a review mode applies, what a verdict applies, the owner\'s own write, the owner\'s answer to any of them, and what an anchor re-verification found (its anchors\' checks and anchor state, and a Tiered pitfall made auto)' },
+  { at: 'wiki/wiki.service.ts#recomputeFlags', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry, wiki.confirmEntry, wiki.recordVerifications, wiki.reopenVerifications and wiki.recordAnchorChecks, through applyOp — the second and last writer of those four columns: it derives them from what is now true of the entry (its live sources, its open challenges) rather than from what the op asked for' },
+  { at: 'wiki/wiki.service.ts#insertRevision', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.confirmEntry and wiki.recordVerifications, through applyOp — the append-only revision a change adds, never a rewrite of one (storage.appendOnly); its foreign key to the entry takes that row KEY SHARE and the entry is already held BY the same transaction' },
+  { at: 'wiki/wiki.service.ts#insertSources', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.confirmEntry and wiki.recordVerifications, through applyOp and insertRevision — the first-hand records a revision rests on, written once with the revision they support' },
+  { at: 'wiki/wiki.service.ts#writeOpDecision', under: 'wiki.decide, wiki.rejectEntry, wiki.confirmEntry and wiki.revertChangeset — the owner\'s answer on one op row, after whatever it applied, so what the op did and what was decided about it are one fact; a revert withdraws with it the ops of its run still waiting for a verdict' },
+  { at: 'wiki/wiki.service.ts#settleChangeset', under: 'wiki.decide, wiki.rejectEntry, wiki.confirmEntry, wiki.revertChangeset and wiki.recordVerifications — the changeset\'s own terminal marker, written in the same transaction as the last decision or verdict that left nothing of it waiting' },
   // The review modes' one space write (0311): a space whose spot checks' reject rate passed the line
   // goes back to Manual, by a compare-and-set on its mode merged into its settings in SQL, in the
   // transaction of the rejection that took it over — so the switch and the fact that caused it are
@@ -1280,6 +1344,10 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // trip, each inside `recordVerifications`' per-verdict transaction and in the order it states.
   { at: 'wiki/wiki.service.ts#applyVerdict', under: 'wiki.recordVerifications — the entry writes through applyOp, then the op\'s decision and trail by one UPDATE predicated on the op still verifying (the compare-and-set that makes a verdict land once), then its changeset settled' },
   { at: 'wiki/wiki.service.ts#tripIfUnsupported', under: 'wiki.recordVerifications — after the verdict\'s own writes, the wiki_space row (60) by one UPDATE whose WHERE is the compare-and-set on the mode being automatic; it takes no other lock, and its caller announces the switch only after the commit' },
+  // Revision 4's reopening (0314): one op at a time, each inside `reopenVerifications`' own
+  // per-op transaction and in the order it states.
+  { at: 'wiki/wiki.service.ts#reopenRejectedOp', under: 'wiki.reopenVerifications — an add\'s lineage proposed again through applyOp, then the op\'s verdict moved into its history by one UPDATE predicated on the rejection still standing, then its changeset opened again' },
+  { at: 'wiki/wiki.service.ts#verifyTaintedOp', under: 'wiki.reopenVerifications — the op by one UPDATE predicated on it still waiting for the owner, after the unlocked reads of the space and an amend\'s entry that decide whether Automatic takes it' },
   // The wiki's opening context, appended to what `dequeueTurn` is about to deliver (design §7.1).
   // It runs inside that unit's rank-30 Session transaction and reads unlocked: the session's
   // workspace binding, its space's settings, the space's eligible entries, and the task or first
@@ -1391,6 +1459,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "runner-api/integration-job-relay.ts#receiveIntegrationJobProgress", class: "ONE_ROW_CAS", statements: 1, note: "A claimed integration job's lease renewal and the step it reached (contract §2.2 J-T4). One conditional UPDATE whose predicate is the job, this runner, RUNNING, and the exact (leaseOwner, claimGeneration) the report names: a process whose claim was taken over matches no row and is told STALE_CLAIM, which is how it learns to stop rather than going on working against a job that is no longer its. Deliberately no transaction — it writes two columns of one row, holds nothing, and a renewal that does not arrive costs only the lease, whose expiry is the takeover this fence exists to make safe." },
   { at: "projects/project-promotion.service.ts#markPromotionRechecking", class: "ONE_ROW_CAS", statements: 1, note: "A confirmed promotion whose landing job found the upstream had moved, so the merge and the checks are being redone on the new tip (contract §3.3 M-T7). One conditional UPDATE predicated on `state = 'CONFIRMED'`, which is what makes a progress report arriving twice, or arriving after the owner cancelled, write nothing. Deliberately no transaction: it runs on a heartbeat-sized progress report whose only other effect is a lease renewal, and a report that does not arrive costs the reader the word RECHECKING while the landing carries on regardless — the upstream the job actually merged onto is in the result either way." },
   { at: "attachments/attachments.service.ts#create", class: "INSERT", statements: 1 },
+  { at: "wiki/wiki-import.ts#registerWikiNote", class: "INSERT", statements: 1, note: "One imported file as a wiki note (migration 0316, contract `import.note`): one INSERT of the redacted text and its sha256 into one of the owner's spaces, whose foreign key takes that space row FOR KEY SHARE and nothing else — a wiki write that locks wiki rows only. The note is read first by (space, content hash); two imports of the same text racing to write it meet the unique index, and the loser's P2002 is answered by reading the winner's row, so it is the same note either way. Deliberately no transaction: nothing else is written with it, and a registration that does not arrive is made again by the next run of the import." },
   { at: "attachments/attachments.service.ts#removeTaskInput", class: "MANY_ROWS", statements: 1, note: "Deletes at most one row — the id is a primary key — but written as a filtered deleteMany because the tenancy and scope predicates (`owner_id`, `task_id IS NOT NULL`) are what make a foreign id and a transcript's image indistinguishable 404s. The selection can overlap no other writer: a task input is deleted by its owner or by its task's CASCADE, and both remove the same row." },
   { at: "auth/auth.service.ts#bootstrap", class: "INSERT", statements: 1 },
   { at: "auth/auth.service.ts#changePassword", class: "ONE_ROW_BY_KEY", statements: 1 },
@@ -1558,8 +1627,11 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   // touches one row of one of the owner's own spaces, neither is part of anybody else's fact, and a
   // settings write that does not arrive changes nothing a reader decides from — the space's entries
   // and its review queue are untouched by either.
-  { at: "wiki/wiki.service.ts#updateSpace", class: "ONE_ROW_BY_KEY", statements: 1, note: "The space's settings (push, autoAcceptReinforce, automaticSpotChecks, and the review mode with when and by whom it last changed) and its title. One UPDATE predicated on the space and its owner, which is what makes another account's id write nothing; the settings themselves are merged from the row as it was read a moment before, so a concurrent settings write to the OTHER key survives rather than being overwritten by this one's snapshot." },
+  { at: "wiki/wiki.service.ts#updateSpace", class: "ONE_ROW_BY_KEY", statements: 1, note: "The space's settings (push, autoAcceptReinforce, automaticSpotChecks, and the review mode with when and by whom it last changed) and its title. One UPDATE predicated on the space and its owner, which is what makes another account's id write nothing; the keys it writes are merged into the stored settings in SQL (`settings || $patch`) and never include `maintenance`, so a concurrent write of the maintenance key — `wiki.setWikiMaintenance`, the unit this method calls first when a request names maintenance — survives it." },
   { at: "wiki/wiki.service.ts#bindWorkspace", class: "ONE_ROW_CAS", statements: 1, note: "The manual half of the binding (§2.1): one upsert keyed by the workspace, whose unique index is what makes a workspace belong to at most one space. The workspace and the space are read first, each owner-scoped, so another account's workspace or space is a 404 rather than a row written; the upsert's `update` half is what re-binds a workspace the owner moved to another space." },
+  { at: 'wiki/wiki-maintenance.ts#cursorRow', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The space\'s cursor row, made the first time anything reads it: one upsert keyed by (space_id, source), whose unique index makes it one row per space; the empty update writes nothing to a row that exists.' },
+  { at: 'wiki/wiki-maintenance.ts#stateOf', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The backlog as just counted from the facts, written back onto the cursor row by id so that a reader that does not count (the Wiki home page\'s status line) reads it. A later count overwrites it; nothing decides anything from this copy.' },
+  { at: 'wiki/wiki-maintenance.ts#advanceCursor', class: 'ONE_ROW_CAS', statements: 2, note: 'At most two statements on the space\'s cursor row. A run that did not succeed: one UPDATE by id that counts the failure. One that succeeded: the move itself is one UPDATE whose WHERE is the compare-and-set — the watermark still behind the token and the furthest issued position not behind it — so of two runs the later position wins; a token at the watermark, or a move another run made first, is one UPDATE by id that records the success. Refusals write nothing.' },
 ];
 
 export interface TriggerWriteSource {

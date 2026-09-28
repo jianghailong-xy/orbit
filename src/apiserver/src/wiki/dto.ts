@@ -6,16 +6,24 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
+  Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import {
+  WIKI_CURSOR_OUTCOMES,
   WIKI_DECIDE_ACTIONS,
+  WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_MODES,
+  type WikiCursorOutcome,
   type WikiDecideAction,
   type WikiRejectReason,
   type WikiReviewMode,
@@ -52,6 +60,35 @@ export class CreateWikiSpaceDto {
   slug?: string;
 }
 
+/**
+ * `maintenance` in PATCH /api/wiki/spaces/:id (contract `space.settings.maintenance`): any of the
+ * four the owner sets. `listId` is the server's and is not a field here — the whitelist drops it.
+ */
+export class WikiMaintenanceSettingsDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  /** The workspace the runs take place in; null clears it (and maintenance cannot then be on). */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsPublicId()
+  workspaceId?: string | null;
+
+  /** A provider slug: a built-in engine or one of the owner's configured providers. */
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z0-9][a-z0-9._-]{0,63}$/)
+  provider?: string;
+
+  /** How many maintenance tasks the space may make in one UTC day (contract `space.settings.maintenance.bounds`). */
+  @IsOptional()
+  @IsInt()
+  @Min(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min)
+  @Max(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max)
+  dailyRunLimit?: number;
+}
+
 /** PATCH /api/wiki/spaces/:id — the owner's settings (§2.1 settings, contract `space.settings`). */
 export class UpdateWikiSpaceDto {
   @IsOptional()
@@ -72,11 +109,38 @@ export class UpdateWikiSpaceDto {
   @IsBoolean()
   automaticSpotChecks?: boolean;
 
+  /** The space's Wiki maintenance run. The owner channel's alone, like the mode: WIKI_OWNER_CHANNEL_ONLY otherwise. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WikiMaintenanceSettingsDto)
+  maintenance?: WikiMaintenanceSettingsDto;
+
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(120)
   title?: string;
+}
+
+/**
+ * POST /api/runner/wiki/spaces/:id/cursor — how a maintenance run ended (contract
+ * `maintenance.cursor.advance`). `to` is required of a run that succeeded; the service says so, as
+ * WIKI_CURSOR_INVALID, when it is missing.
+ */
+export class WikiCursorAdvanceDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_000)
+  to?: string;
+
+  @IsOptional()
+  @IsIn(WIKI_CURSOR_OUTCOMES)
+  outcome?: WikiCursorOutcome;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20_000)
+  error?: string;
 }
 
 /** POST /api/wiki/spaces/:id/workspaces — binding a workspace the owner named (§2.1 binding). */
@@ -163,6 +227,19 @@ export class WikiEntryRejectDto {
 export class WikiVerificationReportDto {
   @Allow()
   verdicts?: unknown;
+}
+
+/**
+ * POST /api/runner/wiki/spaces/:id/anchor-checks — what a maintenance run's re-verification found
+ * (contract `anchorRules.verify.report`). `@Allow()`d and left to WikiService like the verdicts: the
+ * report is refused WIKI_SCHEMA naming its field, and each entry is judged on its own.
+ */
+export class WikiAnchorReportDto {
+  @Allow()
+  ref?: unknown;
+
+  @Allow()
+  entries?: unknown;
 }
 
 /** The owner's answer to one pending op, or to several of one changeset in one call. */

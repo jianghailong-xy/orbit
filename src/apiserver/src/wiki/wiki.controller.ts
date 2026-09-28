@@ -198,6 +198,21 @@ export class WikiController {
     return this.wiki.rejectEntry(user.userId, user.userId, id, dto, actingSession(request.headers));
   }
 
+  /**
+   * The owner's Confirm of an entry a review mode applied and nobody has vouched for, tainted or not
+   * (contract `reviewModes.entryConfirm`): trust confirmed, a revision the owner authored, and pushed
+   * from then on. The owner channel's alone, like a decide — no agent confirms anything.
+   */
+  @Post('entries/:id/confirm')
+  @HttpCode(HttpStatus.OK)
+  confirmEntry(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.confirmEntry(user.userId, user.userId, id, actingSession(request.headers));
+  }
+
   /** What waits for the owner, newest first, across every space or one of them. */
   @Get('review')
   review(@CurrentUser() user: AuthUser, @Query('space', PublicIdPipe) space?: string) {
@@ -222,7 +237,8 @@ export class WikiController {
   }
 
   /**
-   * The owner's answer to one or more pending ops: accept, edit or reject.
+   * The owner's answer to one or more pending ops: accept, edit or reject — and, for a challenge,
+   * Re-confirm, Amend or Retire the entry it names (contract `anchorRules.verify.answers`).
    *
    * `assertOwnerChannel` runs before anything is read: a request that carries a session header is
    * refused WIKI_OWNER_CHANNEL_ONLY however it authenticated, because an agent reporting a person's
@@ -251,6 +267,23 @@ export class WikiController {
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
     return this.wiki.revertChangeset(user.userId, user.userId, id, actingSession(request.headers));
+  }
+
+  /**
+   * Send back to their verification the ops of one space that a verdict decided without being able
+   * to read any of their sources, and — in an automatic space — the tainted ops that wait for the
+   * owner (contract `reviewModes.verification.reopen`). The owner channel's alone; the one-off import
+   * calls the service method itself.
+   */
+  @Post('spaces/:id/verifications/reopen')
+  @HttpCode(HttpStatus.OK)
+  reopenVerifications(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    const principal: WikiPrincipal = { origin: 'owner', ownerId: user.userId, userId: user.userId, sessionId: null, toolCallId: null };
+    return this.wiki.reopenVerifications(principal, id, actingSession(request.headers));
   }
 }
 

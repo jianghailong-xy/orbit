@@ -2,6 +2,7 @@ import { ConflictException, HttpException, Injectable, Logger, NotFoundException
 import { Prisma } from '@prisma/client';
 import {
   KIND_SPECS,
+  WIKI_CHALLENGE_ANSWERS,
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_KINDS,
   WIKI_LIMITS,
@@ -10,6 +11,7 @@ import {
   WIKI_REVIEW_RULES,
   WIKI_SOURCE_KINDS,
   WIKI_VERIFICATION_VERDICTS,
+  WIKI_VOUCHED_TRUST,
   validateWikiEntryChanges,
   validateWikiEntryDraft,
   validateWikiSources,
@@ -18,9 +20,13 @@ import {
   wikiReviewEffect,
   wikiSpaceSettings,
   wikiTieredBasis,
-  wikiVerdictTrust,
+  wikiVerdictEffect,
+  type WikiAnchor,
   type WikiAnchorInput,
+  type WikiAnchorOutcome,
+  type WikiAnchorReportResult,
   type WikiAnchorState,
+  type WikiChallengeAnswer,
   type WikiChangesetOrigin,
   type WikiDecideAction,
   type WikiEntryChanges,
@@ -30,7 +36,9 @@ import {
   type WikiKind,
   type WikiOp,
   type WikiOpOutcome,
+  type WikiOpVerificationHistory,
   type WikiRejectReason,
+  type WikiReopenResult,
   type WikiRefusal,
   type WikiRefusalCode,
   type WikiReviewEffect,
@@ -41,18 +49,33 @@ import {
   type WikiTieredBasis,
   type WikiTrust,
   type WikiVerdictInput,
+  type WikiVerificationEvidence,
   type WikiVerificationItem,
   type WikiVerificationOutcome,
   type WikiVerificationVerdict,
 } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
 import { redactSecrets } from '../common/secret-redaction';
+import {
+  anchorChallengeReason,
+  anchorReportEntry,
+  anchorReportShape,
+  anchorsChecked,
+  anchorsWithoutChecks,
+  entryAnchorState,
+  rebaselinedAnchors,
+  storedAnchors,
+  type AnchorReportEntry,
+} from './wiki-anchors';
+import { mergeReceiptText, ownerResolutionText } from './wiki-dossier';
+import { setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { canonicalRepoUrl } from '../projects/project-integration-line';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { evidenceOf, readBeforeRevision4, runEventText, verifierText } from './wiki-verify-evidence';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
 type Tx = Prisma.TransactionClient;
@@ -85,7 +108,8 @@ type Tx = Prisma.TransactionClient;
  * anywhere below could name another owner.
  *
  * WHAT THIS FILE DOES NOT DO YET, and who owns it: the `<orbit_wiki_context>` delivery (T6),
- * anchors' re-verification, which needs git on a runner (phase 2), and the review queue's 14-day
+ * the git half of the anchors' re-verification, which runs on a runner (`orbit wiki anchors verify`;
+ * what it found is recorded here, `recordAnchorChecks`), and the review queue's 14-day
  * expiry sweep, which the contract gives an `expires_at` and no worker yet. Of the writes the contract has announce a change
  * (`realtime.publishedWhen`), the two below do: a recorded changeset, and a decided one. A space
  * created, a setting changed and a workspace bound announce nothing yet.
@@ -162,6 +186,8 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_NOT_MAINTENANCE_SESSION: 403,
   WIKI_SESSION_EXCLUDED: 403,
   WIKI_IDEMPOTENCY_KEY_REUSED: 409,
+  WIKI_CURSOR_BEHIND: 409,
+  WIKI_CURSOR_INVALID: 400,
 };
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */
@@ -298,10 +324,13 @@ interface PreparedOp {
  * One thing to apply to an entry. `promote`, `confirm` and `reject` are not wiki ops: they are what
  * the owner's acceptance and refusal do to a proposal, or to what a review mode applied at once, and
  * they go through `applyOp` for the one reason that matters — the entry's status and trust have
- * exactly one writer.
+ * exactly one writer. `reopen` is the one way back out of a rejection: a lineage a verdict rejected
+ * without being able to read its sources, proposed again (`reviewModes.verification.reopen`).
+ * `anchor_check` is not a wiki op either: it is what a maintenance run's re-verification found
+ * (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too.
  */
 interface WikiApplyInstruction {
-  op: WikiOp | 'promote' | 'confirm' | 'reject';
+  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check';
   entryId: string | null;
   draft: PreparedDraft | null;
   changes: WikiEntryChanges | null;
@@ -504,13 +533,6 @@ function asText(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value ?? null);
 }
 
-/** The text a run event carries, for the two types that carry prose. */
-function eventText(type: string, payload: unknown): string | null {
-  if (type !== 'user' && type !== 'assistant') return null;
-  const text = (payload as { text?: unknown } | null)?.text;
-  return typeof text === 'string' ? text : null;
-}
-
 /** The kind a draft names, when it names one this phase writes. */
 function draftKind(value: unknown): WikiKind | null {
   const kind = (value as { kind?: unknown } | null)?.kind;
@@ -591,6 +613,8 @@ const CHANGESET_SELECT = {
       verificationModel: true,
       verifiedAt: true,
       verificationDuplicateOf: true,
+      verificationEvidence: true,
+      verificationHistory: true,
     },
     orderBy: { seq: 'asc' },
   },
@@ -661,6 +685,7 @@ export function changesetView(row: ChangesetRow): Record<string, unknown> {
       appliedByMode: op.appliedByMode,
       spotCheck: op.spotCheck,
       verification: verificationView(op),
+      verificationHistory: op.verificationHistory,
     })),
   };
 }
@@ -672,6 +697,7 @@ function verificationView(op: {
   verificationModel: string | null;
   verifiedAt: Date | null;
   verificationDuplicateOf: string | null;
+  verificationEvidence: string | null;
 }): Record<string, unknown> | null {
   if (op.verificationVerdict === null || op.verifiedAt === null) return null;
   return {
@@ -680,6 +706,7 @@ function verificationView(op: {
     model: op.verificationModel,
     at: op.verifiedAt.toISOString(),
     duplicateOf: op.verificationDuplicateOf,
+    evidence: op.verificationEvidence,
   };
 }
 
@@ -907,8 +934,8 @@ export class WikiService {
   }
 
   /**
-   * The owner's settings: whether the space pushes, whether a reinforce applies at once, and its
-   * review mode.
+   * The owner's settings: whether the space pushes, whether a reinforce applies at once, its review
+   * mode, and its Wiki maintenance run (the owner channel's alone, like the mode).
    *
    * THE REVIEW MODE IS THE OWNER CHANNEL'S, like a decide (contract `space.settings.reviewMode`): a
    * request that would change it and carries a session header is refused WIKI_OWNER_CHANNEL_ONLY
@@ -926,10 +953,18 @@ export class WikiService {
       autoAcceptReinforce?: boolean;
       reviewMode?: WikiReviewMode;
       automaticSpotChecks?: boolean;
+      maintenance?: WikiMaintenanceInput;
       title?: string;
     },
     actingSessionId: string | null = null,
   ) {
+    if (input.maintenance !== undefined && actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        "a space's Wiki maintenance is the account owner's to set, through an owner channel with no acting session: "
+          + 'report what should change, and let a person change it.',
+      );
+    }
     if (input.reviewMode !== undefined && actingSessionId) {
       return refuse(
         'WIKI_OWNER_CHANNEL_ONLY',
@@ -945,7 +980,11 @@ export class WikiService {
       );
     }
     const current = await this.requireSpace(ownerId, spaceId);
-    const settings: Record<string, unknown> = { ...current.settings };
+    // Maintenance is written by its own unit, under the space row's lock and with the hidden list it
+    // may need (`setWikiMaintenance`); every other key below is merged over the row as it stands, so
+    // neither write can put back what the other just changed.
+    if (input.maintenance !== undefined) await setWikiMaintenance(this.prisma, ownerId, spaceId, input.maintenance);
+    const { maintenance: _maintenance, ...settings }: Record<string, unknown> = { ...current.settings };
     if (input.push !== undefined) settings.push = input.push;
     if (input.autoAcceptReinforce !== undefined) settings.autoAcceptReinforce = input.autoAcceptReinforce;
     if (input.automaticSpotChecks !== undefined) settings.automaticSpotChecks = input.automaticSpotChecks;
@@ -954,10 +993,11 @@ export class WikiService {
       settings.reviewModeChangedAt = new Date().toISOString();
       settings.reviewModeChangedBy = 'owner' satisfies WikiSpaceSettings['reviewModeChangedBy'];
     }
-    await this.prisma.wikiSpace.updateMany({
-      where: { id: spaceId, ownerId },
-      data: { settings: settings as Prisma.InputJsonValue, ...(input.title ? { title: input.title } : {}) },
-    });
+    await this.prisma.$executeRaw`
+      UPDATE "wiki_space"
+         SET "settings" = "settings" || ${JSON.stringify(settings)}::jsonb, "updated_at" = now()
+             ${input.title ? Prisma.sql`, "title" = ${input.title}` : Prisma.empty}
+       WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid`;
     return this.requireSpace(ownerId, spaceId);
   }
 
@@ -1475,6 +1515,8 @@ export class WikiService {
           + 'session: report what should be accepted, and let a person accept it.',
       );
     }
+    // A Retire is the owner's own changeset, redacted like any other write (`anchorRules.verify.answers`).
+    const literals = decisions.some((decision) => decision.action === 'retire') ? await this.envLiterals(this.prisma, ownerId) : [];
     const decided = await withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -1485,7 +1527,7 @@ export class WikiService {
         if (!changeset) throw new NotFoundException('no such changeset');
         let rejectedSpotCheck = false;
         for (const decision of decisions) {
-          if (await this.applyDecision(tx, ownerId, userId, changeset, decision)) rejectedSpotCheck = true;
+          if (await this.applyDecision(tx, ownerId, userId, changeset, decision, literals)) rejectedSpotCheck = true;
         }
         await this.settleChangeset(tx, ownerId, changesetId);
         // In the same transaction as the rejection that could take the rate over: a space is sent back
@@ -1715,6 +1757,79 @@ export class WikiService {
   }
 
   /**
+   * The owner's Confirm of an entry a review mode applied and nobody has vouched for — trust `auto`
+   * or `unreviewed`, tainted or not — from the entry itself (contract `reviewModes.entryConfirm`).
+   *
+   * THE OWNER CHANNEL ONLY, like a decide: an agent never confirms (criterion 7, hard constraint 2).
+   * The confirmation is a revision the owner authored — the same content and live sources, trust
+   * confirmed — written through `applyOp`, so the history says who vouched for it and when, and the
+   * push and an agent's search take it from here: what rests on the web reaches an agent only once a
+   * person has vouched for it. What the review mode applied to it and nobody had answered — the op,
+   * and a spot check still open on it — is answered `accepted`, so no revert of that run undoes what
+   * the owner has just kept. Anything else answers 409: a proposal is accepted in Review, and what the
+   * owner wrote or confirmed is theirs already.
+   */
+  async confirmEntry(
+    ownerId: string,
+    userId: string,
+    entryId: string,
+    actingSessionId: string | null,
+  ): Promise<Record<string, unknown>> {
+    if (actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        'confirming what the wiki holds is the account owner\'s, through an owner channel with no acting session: '
+          + 'report what should be confirmed, and let a person confirm it.',
+      );
+    }
+    const view = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const entry = await this.ownEntryById(tx, ownerId, entryId);
+        if (!entry) throw new NotFoundException('no such wiki entry');
+        if (entry.status !== 'active' || !WIKI_MACHINE_TRUST.includes(entry.trust as WikiTrust)) {
+          throw new ConflictException(
+            'only an active entry the review mode applied, and nobody has confirmed, is confirmed from the entry: '
+              + 'a proposal is accepted in Review, and what the owner wrote or confirmed is theirs already',
+          );
+        }
+        const owner: WikiAuthor = { authorKind: 'owner', authorUserId: userId, authorSessionId: null, authorToolCallId: null, changesetOpId: null };
+        const current = await tx.wikiEntryRevision.findFirstOrThrow({
+          where: { entryId: entry.id, ownerId, revision: entry.currentRevision },
+          select: { id: true },
+        });
+        await this.applyOp(tx, ownerId, entry.spaceId, {
+          op: 'amend',
+          entryId: entry.id,
+          draft: null,
+          changes: null,
+          payload: { changes: {} },
+          sources: await this.sourcesOfRevision(tx, ownerId, current.id),
+          tainted: false,
+          trustAfter: 'confirmed',
+        }, owner);
+        const answered = await tx.wikiChangesetOp.findMany({
+          where: {
+            ownerId,
+            appliedByMode: { not: null },
+            AND: [
+              { OR: [{ resultEntryId: entry.id }, { entryId: entry.id }] },
+              { OR: [{ decision: 'auto_applied' }, { decision: 'pending', spotCheck: true }] },
+            ],
+          },
+          select: { id: true, changesetId: true },
+        });
+        for (const op of answered) await this.writeOpDecision(tx, ownerId, op.id, { decision: 'accepted', decisionNote: null });
+        for (const changesetId of new Set(answered.map((op) => op.changesetId))) await this.settleChangeset(tx, ownerId, changesetId);
+        return entryView((await this.ownEntryById(tx, ownerId, entry.id))!);
+      },
+      loggedRetry(this.logger, 'wiki.confirmEntry'),
+    );
+    this.realtime?.publishWikiChanged(ownerId, String(view.spaceId));
+    return view;
+  }
+
+  /**
    * Send the space back to Manual when the spot checks say its review mode is not to be trusted
    * (contract `reviewModes.spotChecks.window` and `trip`), and say whether THIS call did it.
    *
@@ -1870,25 +1985,7 @@ export class WikiService {
         aliases: (draft.aliases ?? []) as string[],
       };
     }
-    // Resolved against the session that proposed the op, as a decide resolves them: `{session:'self'}`
-    // names THAT session's turn, whoever is reading.
-    const as: WikiPrincipal = { origin: 'agent', ownerId, userId: null, sessionId: row.changeset.sessionId, toolCallId: null };
-    const sources: WikiVerificationItem['sources'] = [];
-    for (const raw of rawOpSources(payload)) {
-      const cited = raw as { kind: WikiSourceKind; ref?: string; session?: 'self'; seq?: number; quote?: string };
-      const found = await this.sourceText(reader, as, cited);
-      const full = found?.text ?? null;
-      const redacted = full === null ? null : redactSecrets(full, { literals }).text;
-      const max = WIKI_REVIEW_RULES.verificationSourceMaxChars;
-      const chars = redacted === null ? [] : [...redacted];
-      sources.push({
-        kind: cited.kind,
-        ref: found?.ref ?? cited.ref ?? '',
-        quote: typeof cited.quote === 'string' ? cited.quote : null,
-        text: redacted === null ? null : chars.slice(0, max).join(''),
-        truncated: chars.length > max,
-      });
-    }
+    const { sources, evidence } = await this.verifierSources(reader, ownerId, row.changeset.sessionId, payload, literals);
     // The neighbours as recorded, each as it reads now: a duplicate may only name one still live.
     const recorded = (Array.isArray(row.similar) ? row.similar : []) as unknown as WikiSimilar[];
     const now = recorded.length === 0
@@ -1902,12 +1999,18 @@ export class WikiService {
       .filter((near) => byId.has(near.id))
       .map((near) => {
         const current = byId.get(near.id)!;
+        // A rejection's reason belongs to a neighbour that is still rejected: one whose verdict was
+        // reopened since (verification.reopen) is a counter-example no longer.
+        const { rejectedReason, rejectedBecause, ...rest } = near;
+        const stillRejected = current.status === 'rejected';
         return {
-          ...near,
+          ...rest,
           kind: current.kind as WikiEntryKind,
           title: current.title,
           status: current.status as WikiEntryStatus,
           trust: current.trust as WikiTrust,
+          ...(stillRejected && rejectedReason ? { rejectedReason } : {}),
+          ...(stillRejected && rejectedBecause ? { rejectedBecause } : {}),
         };
       });
     return {
@@ -1917,7 +2020,48 @@ export class WikiService {
       entryId: row.op === 'amend' ? row.entryId : null,
       entry,
       sources,
+      evidence,
       similar,
+    };
+  }
+
+  /**
+   * An op's sources as its verifier reads them (contract `reviewModes.verification.list` and
+   * `.evidence`): each record's text resolved against the session that proposed the op, as a decide
+   * resolves it — `{session:'self'}` names THAT session's turn, whoever is reading — then redacted and
+   * cut. And what that makes of the op's evidence: today, and as the reader of a verdict recorded
+   * before revision 4 had it, which handed a verifier the text of no event but a user's or an
+   * assistant's.
+   */
+  private async verifierSources(
+    reader: Tx,
+    ownerId: string,
+    sessionId: string | null,
+    payload: Record<string, unknown>,
+    literals: readonly string[],
+  ): Promise<{
+    sources: WikiVerificationItem['sources'];
+    evidence: WikiVerificationEvidence;
+    evidenceBeforeRevision4: WikiVerificationEvidence;
+  }> {
+    const as: WikiPrincipal = { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null };
+    const sources: WikiVerificationItem['sources'] = [];
+    const before: Array<string | null> = [];
+    for (const raw of rawOpSources(payload)) {
+      const cited = raw as { kind: WikiSourceKind; ref?: string; session?: 'self'; seq?: number; quote?: string };
+      const found = await this.sourceText(reader, as, cited);
+      sources.push({
+        kind: cited.kind,
+        ref: found?.ref ?? cited.ref ?? '',
+        quote: typeof cited.quote === 'string' ? cited.quote : null,
+        ...verifierText(found?.text ?? null, literals),
+      });
+      before.push(found ? readBeforeRevision4({ kind: cited.kind, eventType: found.eventType }, found.text) : null);
+    }
+    return {
+      sources,
+      evidence: evidenceOf(sources.map((source) => source.text)),
+      evidenceBeforeRevision4: evidenceOf(before),
     };
   }
 
@@ -2066,7 +2210,13 @@ export class WikiService {
       authorToolCallId: op.changeset.toolCallId,
       changesetOpId: op.id,
     };
-    const trust = wikiVerdictTrust(verdict.verdict);
+    // What the verifier could read decides how far its verdict reaches, and the server reads it here
+    // rather than taking the runner's word (contract `reviewModes.verification.evidence`): with no
+    // source readable, whatever it said leaves the op no more than unreviewed and is not counted; and a
+    // tainted op is never more than unreviewed, its duplicate adding nothing (`floors.taintedWaits`).
+    const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals);
+    const effect = wikiVerdictEffect({ verdict: verdict.verdict, tainted: op.tainted, evidence });
+    const trust = effect.trust;
     let status: 'applied' | 'rejected' | 'reinforced' | 'conflict';
     let decision: 'auto_applied' | 'pending' | 'rejected' | 'conflict';
     let decisionReason: WikiRejectReason | null = null;
@@ -2127,8 +2277,9 @@ export class WikiService {
       } else {
         status = 'reinforced';
         decisionReason = 'duplicate';
-        // What it cited is kept, on the entry it duplicates — unless the owner reviews every reinforce.
-        reinforced = settings.autoAcceptReinforce !== false;
+        // What it cited is kept, on the entry it duplicates — unless the owner reviews every reinforce,
+        // or a session that read the web cited it.
+        reinforced = effect.reinforce && settings.autoAcceptReinforce !== false;
         if (reinforced) {
           const lineage = op.op === 'add' && op.resultEntryId
             ? await tx.wikiEntryRevision.findFirst({ where: { entryId: op.resultEntryId, ownerId, revision: 1 }, select: { id: true } })
@@ -2157,13 +2308,16 @@ export class WikiService {
         verificationModel: model,
         verifiedAt: now,
         verificationDuplicateOf: duplicateOf,
+        verificationEvidence: evidence,
       },
     });
     if (recorded.count !== 1) {
       throw new VerdictRefusal(409, 'another verdict for this op landed at the same moment: read the list again');
     }
     await this.settleChangeset(tx, ownerId, op.changesetId);
-    const trip = verdict.verdict === 'unsupported' ? await this.tripIfUnsupported(tx, ownerId, spaceId) : null;
+    // Only a rejection the verifier could read its way to counts toward the fallback: an unsupported
+    // verdict about records it could not read rejected nothing.
+    const trip = status === 'rejected' && effect.counted ? await this.tripIfUnsupported(tx, ownerId, spaceId) : null;
     return {
       outcome: {
         opId: op.id,
@@ -2195,8 +2349,16 @@ export class WikiService {
     if (settings.reviewMode !== 'automatic') return null;
     const since = settings.reviewModeChangedAt ? new Date(settings.reviewModeChangedAt) : new Date(0);
     const window = WIKI_REVIEW_RULES.verificationWindow;
+    // A verdict given when none of its op's sources could be read is out of the window altogether
+    // (`verification.evidence`); one recorded before the server kept the mark is in it, as it was.
     const latest = await tx.wikiChangesetOp.findMany({
-      where: { ownerId, verificationVerdict: { not: null }, verifiedAt: { gte: since }, changeset: { spaceId } },
+      where: {
+        ownerId,
+        verificationVerdict: { not: null },
+        verifiedAt: { gte: since },
+        changeset: { spaceId },
+        OR: [{ verificationEvidence: null }, { verificationEvidence: 'readable' }],
+      },
       orderBy: [{ verifiedAt: 'desc' }, { id: 'desc' }],
       take: window,
       select: { verificationVerdict: true },
@@ -2217,6 +2379,377 @@ export class WikiService {
     return switched === 1 ? { spaceId, title: space.title, unsupported, window } : null;
   }
 
+  // ── Anchor re-verification: what a maintenance run found (contract `anchorRules.verify`) ───────
+
+  /**
+   * Record what a Wiki maintenance run's `orbit wiki anchors verify` found on origin/main, and what it
+   * means for each entry (contract `anchorRules.verify.report`).
+   *
+   * THE CALLER IS A MAINTENANCE RUN OF THE SPACE: the runner door asks `isWikiMaintenanceSession`
+   * before it calls this, and nothing else calls it.
+   *
+   * EACH ENTRY ON ITS OWN, IN A TRANSACTION OF ITS OWN, as a verdict is: what one entry's check
+   * recorded stands whatever the next one meets. An entry that moved since the list handed it out — a
+   * later revision, no longer live, an anchor no longer where the list put it — is `stale`, nothing of
+   * it is written, and the next run reads it again.
+   *
+   * WHAT A CHECK WRITES, all through `applyOp`: each anchor's last check, the entry's anchor state, and
+   * the ref and time of the check. An entry that comes out `changed` or `missing` is out of the push
+   * at once, and — unless a challenge of it is already open — a system challenge is filed in the same
+   * transaction, through `recordChangeset` like any other write: origin maintenance and no session, so
+   * it counts against no session's quota. A Tiered pitfall the check leaves verified may become Auto.
+   */
+  async recordAnchorChecks(
+    caller: { ownerId: string; sessionId: string },
+    spaceId: string,
+    report: unknown,
+  ): Promise<WikiAnchorReportResult> {
+    const space = await this.requireSpace(caller.ownerId, spaceId);
+    const shape = anchorReportShape(report);
+    if ('errors' in shape) return refuse('WIKI_SCHEMA', 'the report does not have the shape this contract gives it', shape.errors);
+    const literals = await this.envLiterals(this.prisma, caller.ownerId);
+    const at = new Date().toISOString();
+    const outcomes: WikiAnchorOutcome[] = [];
+    let wrote = false;
+    for (const [index, raw] of shape.entries.entries()) {
+      const named = typeof (raw as { entryId?: unknown } | null)?.entryId === 'string' ? String((raw as { entryId: string }).entryId) : '';
+      const item = anchorReportEntry(raw, index);
+      if ('errors' in item) {
+        const message = item.errors.map((error) => `${error.path} ${error.message}`).join('; ');
+        outcomes.push({ entryId: named, status: 'refused', httpStatus: 400, code: 'WIKI_SCHEMA', message });
+        continue;
+      }
+      try {
+        const outcome = await withTransactionRetry(
+          this.prisma,
+          (tx) => this.applyAnchorCheck(tx, caller, space, shape.ref, at, item, literals),
+          loggedRetry(this.logger, 'wiki.recordAnchorChecks'),
+        );
+        outcomes.push(outcome);
+        if (outcome.status === 'recorded') wrote = true;
+      } catch (error) {
+        if (!(error instanceof WikiRefusalError)) throw error;
+        outcomes.push({ entryId: item.entryId, status: 'refused', httpStatus: WIKI_HTTP_STATUS[error.refusal.code], code: error.refusal.code, message: error.refusal.message });
+      }
+    }
+    // After the commits, and outside them, for `submitChangeset`'s reason.
+    if (wrote) this.realtime?.publishWikiChanged(caller.ownerId, space.id);
+    return { spaceId: space.id, ref: shape.ref, outcomes };
+  }
+
+  /** One entry's report, inside its own transaction: see {@link recordAnchorChecks}. */
+  private async applyAnchorCheck(
+    tx: Tx,
+    caller: { ownerId: string; sessionId: string },
+    space: { id: string; settings: unknown },
+    ref: string,
+    at: string,
+    item: AnchorReportEntry,
+    literals: readonly string[],
+  ): Promise<WikiAnchorOutcome> {
+    const ownerId = caller.ownerId;
+    const entry = await tx.wikiEntry.findFirst({ where: { id: item.entryId, ownerId, spaceId: space.id }, select: ENTRY_SELECT });
+    if (!entry) {
+      return { entryId: item.entryId, status: 'refused', httpStatus: 404, message: 'no such entry in this space: report the entries the anchors list gave' };
+    }
+    const stale = (message: string): WikiAnchorOutcome => ({ entryId: entry.id, status: 'stale', message });
+    if (entry.status !== 'active') return stale(`the entry is ${entry.status} now, and only a live entry is re-verified`);
+    if (entry.currentRevision !== item.revision) {
+      return stale(`the entry is at revision ${entry.currentRevision} now, not ${item.revision}: read the anchors list again`);
+    }
+    const anchors = storedAnchors(entry.anchors);
+    const moved = item.checks.find((check) => anchors[check.index]?.type !== check.type);
+    if (moved) return stale(`the entry has no ${moved.type} anchor at ${moved.index}: read the anchors list again`);
+    const checked = anchorsChecked(anchors, item.checks, ref, at);
+    const state = entryAnchorState(checked);
+    const auto = state === 'verified' && (await this.tieredPitfallQualifies(tx, ownerId, entry));
+    const written = await this.applyOp(tx, ownerId, space.id, {
+      op: 'anchor_check',
+      entryId: entry.id,
+      draft: null,
+      changes: null,
+      payload: { anchors: checked, anchorState: state, ref, at, revision: item.revision },
+      sources: [],
+      tainted: entry.tainted,
+      ...(auto ? { trustAfter: 'auto' as const } : {}),
+    }, { authorKind: 'system', authorUserId: null, authorSessionId: null, authorToolCallId: null, changesetOpId: null });
+    if (written.revision === null) return stale('the entry moved while its check was being recorded: read the anchors list again');
+    let challengeOpId: string | null = null;
+    if (state === 'changed' || state === 'missing') {
+      // One open challenge is enough: while one waits for the owner, the entry is out of the push and
+      // in Review already, and a second card would only say it twice.
+      const open = await tx.wikiChangesetOp.count({ where: { ownerId, entryId: entry.id, op: 'challenge', decision: 'pending' } });
+      if (open === 0) {
+        const system: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
+        const ops = [{ op: 'challenge', entryId: entry.id, reason: anchorChallengeReason(checked, ref) }];
+        const rationale = `Anchor re-verification on origin/main at ${ref.slice(0, 12)}, reported by maintenance session `
+          + `${uuidToBase62(caller.sessionId)}: this entry's anchors no longer hold as recorded.`;
+        const recorded = await this.recordChangeset(tx, system, space, ops, { ops, rationale }, null, literals);
+        const outcome = (recorded.ops as WikiOpOutcome[])[0];
+        if (outcome?.status === 'refused') throw new WikiRefusalError(outcome.reasons[0]);
+        if (outcome?.status === 'applied') challengeOpId = outcome.opId;
+      }
+    }
+    const after = (await this.ownEntryById(tx, ownerId, entry.id))!;
+    return {
+      entryId: entry.id,
+      status: 'recorded',
+      anchorState: after.anchorState as WikiAnchorState,
+      trust: after.trust as WikiTrust,
+      challenged: after.challenged,
+      challengeOpId,
+    };
+  }
+
+  /**
+   * Would Tiered make this pitfall Auto, now that its anchors verified (contract
+   * `anchorRules.verify.tiered`)? Only a live, untainted pitfall the space's Tiered mode applied as
+   * Unreviewed — its current revision is the one a tiered op wrote, so nothing a person or a revert
+   * put back since — in a space that is still Tiered: the classification that op was given
+   * (`tieredBasisOf`), read again from its own sources with the anchor state the check found.
+   */
+  private async tieredPitfallQualifies(tx: Tx, ownerId: string, entry: EntryRow): Promise<boolean> {
+    if (entry.kind !== 'pitfall' || entry.trust !== 'unreviewed' || entry.status !== 'active' || entry.tainted) return false;
+    const space = await tx.wikiSpace.findFirst({ where: { id: entry.spaceId, ownerId }, select: { settings: true } });
+    if (!space || wikiSpaceSettings(space.settings).reviewMode !== 'tiered') return false;
+    const op = await tx.wikiChangesetOp.findFirst({
+      where: {
+        ownerId,
+        resultEntryId: entry.id,
+        resultRevision: entry.currentRevision,
+        appliedByMode: 'tiered',
+        decision: { in: ['auto_applied', 'pending'] },
+      },
+      select: { payload: true, changeset: { select: { sessionId: true } } },
+    });
+    if (!op) return false;
+    let sources: ResolvedSource[];
+    try {
+      sources = await this.sourcesOfOp(tx, ownerId, op.changeset.sessionId, (op.payload ?? {}) as Record<string, unknown>);
+    } catch (error) {
+      // A source that no longer resolves supports nothing: the entry stays as it is.
+      if (error instanceof WikiRefusalError) return false;
+      throw error;
+    }
+    return tieredBasisOf('pitfall', { anchorState: 'verified' }, undefined, sources) !== null;
+  }
+
+  /**
+   * Send back to their verification the ops a verdict should not have decided, and the tainted ops an
+   * Automatic space verifies now (contract `reviewModes.verification.reopen`). The owner's door and
+   * the import's own call; never a session's.
+   *
+   * TWO KINDS OF OP, EACH IN A TRANSACTION OF ITS OWN:
+   *  - an add or an amend an unsupported verdict rejected while none of its sources could be read —
+   *    by the evidence mark recorded with the verdict, or, for a verdict recorded before the server
+   *    kept one, by the reader of that time, which handed a verifier no event's text but a user's or an
+   *    assistant's. It waits for its verification again with the earlier verdict kept in its
+   *    `verification_history`, and an add's lineage is proposed again, so the next similar[] no
+   *    longer offers it as a claim found not true;
+   *  - in a space that is automatic now, a tainted add or amend that waits for the owner and that
+   *    Automatic would verify today (`wikiReviewEffect`): it waits for its verification instead, and
+   *    leaves the review queue. An amend of what the owner wrote or confirmed keeps waiting for them.
+   *
+   * WHOSE: the owner reaches every op of the space; the import, the ops of its own changesets
+   * (`proposerScope`), which are the ones its verifier lists. Nothing a clock does: it runs when it is
+   * called, and a second call finds nothing left to move.
+   */
+  async reopenVerifications(
+    principal: WikiPrincipal,
+    spaceId: string,
+    actingSessionId: string | null = null,
+  ): Promise<WikiReopenResult> {
+    if (actingSessionId || (principal.origin !== 'owner' && principal.origin !== 'import')) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        'sending ops back to their verification is the account owner\'s, or the import\'s own, through a channel '
+          + 'with no acting session: report which ops should be verified again, and let a person reopen them.',
+      );
+    }
+    const ownerId = principal.ownerId;
+    const space = await this.requireSpace(ownerId, spaceId);
+    const scope = principal.origin === 'owner' ? {} : proposerScope(principal);
+    const literals = await this.envLiterals(this.prisma, ownerId);
+    const reader = this.prisma as unknown as Tx;
+    const result: WikiReopenResult = { spaceId: space.id, mode: space.settings.reviewMode, reopened: [], toVerification: [], skipped: [] };
+    const move = async (step: (tx: Tx) => Promise<string | null>): Promise<string | null> => {
+      try {
+        return await withTransactionRetry(this.prisma, step, loggedRetry(this.logger, 'wiki.reopenVerifications'));
+      } catch (error) {
+        if (error instanceof ConflictException) return 'it changed while this ran';
+        throw error;
+      }
+    };
+
+    for (let after: string | null = null; ;) {
+      const page: Array<{ id: string; payload: Prisma.JsonValue; verificationEvidence: string | null; changeset: { sessionId: string | null } }> =
+        await this.prisma.wikiChangesetOp.findMany({
+          where: {
+            ownerId,
+            op: { in: ['add', 'amend'] },
+            decision: 'rejected',
+            decisionReason: 'not_true',
+            verificationVerdict: 'unsupported',
+            OR: [{ verificationEvidence: null }, { verificationEvidence: 'unreadable' }],
+            ...(after ? { id: { gt: after } } : {}),
+            changeset: { spaceId: space.id, ...scope },
+          },
+          orderBy: { id: 'asc' },
+          take: 100,
+          select: { id: true, payload: true, verificationEvidence: true, changeset: { select: { sessionId: true } } },
+        });
+      if (page.length === 0) break;
+      after = page[page.length - 1].id;
+      for (const row of page) {
+        const unreadable = row.verificationEvidence === 'unreadable'
+          || (await this.verifierSources(reader, ownerId, row.changeset.sessionId, (row.payload ?? {}) as Record<string, unknown>, literals))
+            .evidenceBeforeRevision4 === 'unreadable';
+        if (!unreadable) continue;
+        const skipped = await move((tx) => this.reopenRejectedOp(tx, ownerId, space.id, row.id));
+        if (skipped === null) result.reopened.push(row.id);
+        else result.skipped.push({ opId: row.id, reason: skipped });
+      }
+    }
+
+    if (space.settings.reviewMode === 'automatic') {
+      for (let after: string | null = null; ;) {
+        const page: Array<{ id: string }> = await this.prisma.wikiChangesetOp.findMany({
+          where: {
+            ownerId,
+            op: { in: ['add', 'amend'] },
+            decision: 'pending',
+            tainted: true,
+            spotCheck: false,
+            ...(after ? { id: { gt: after } } : {}),
+            changeset: { spaceId: space.id, origin: { not: 'owner' }, ...scope },
+          },
+          orderBy: { id: 'asc' },
+          take: 100,
+          select: { id: true },
+        });
+        if (page.length === 0) break;
+        after = page[page.length - 1].id;
+        for (const row of page) {
+          const skipped = await move((tx) => this.verifyTaintedOp(tx, ownerId, space.id, row.id));
+          if (skipped === null) result.toVerification.push(row.id);
+          else result.skipped.push({ opId: row.id, reason: skipped });
+        }
+      }
+    }
+
+    if (result.reopened.length > 0 || result.toVerification.length > 0) this.realtime?.publishWikiChanged(ownerId, space.id);
+    const now = await this.requireSpace(ownerId, space.id);
+    return { ...result, mode: now.settings.reviewMode };
+  }
+
+  /**
+   * One rejected op back to `verifying` (`reviewModes.verification.reopen`): an add's lineage proposed
+   * again through `applyOp`, the op's verdict moved into its history by one UPDATE predicated on the
+   * rejection still standing, and its changeset open again — a verifying op keeps it pending, with the
+   * expiry every pending changeset carries (which a verifying op itself never reaches).
+   */
+  private async reopenRejectedOp(tx: Tx, ownerId: string, spaceId: string, opId: string): Promise<string | null> {
+    const standing = { id: opId, ownerId, decision: 'rejected', decisionReason: 'not_true', verificationVerdict: 'unsupported' };
+    const op = await tx.wikiChangesetOp.findFirst({
+      where: standing,
+      select: {
+        id: true,
+        op: true,
+        changesetId: true,
+        resultEntryId: true,
+        decision: true,
+        decisionReason: true,
+        decidedAt: true,
+        verificationVerdict: true,
+        verificationReason: true,
+        verificationModel: true,
+        verifiedAt: true,
+        verificationDuplicateOf: true,
+        verificationHistory: true,
+      },
+    });
+    if (!op) return 'it is no longer rejected as unsupported';
+    if (op.op === 'add' && op.resultEntryId) {
+      await this.applyOp(tx, ownerId, spaceId, {
+        op: 'reopen', entryId: op.resultEntryId, draft: null, changes: null, payload: {}, sources: [], tainted: false,
+      }, { authorKind: 'system', authorUserId: null, authorSessionId: null, authorToolCallId: null, changesetOpId: op.id });
+    }
+    const now = new Date();
+    const earlier: WikiOpVerificationHistory = {
+      verdict: op.verificationVerdict as WikiVerificationVerdict,
+      reason: op.verificationReason ?? '',
+      model: op.verificationModel ?? '',
+      at: (op.verifiedAt ?? now).toISOString(),
+      duplicateOf: op.verificationDuplicateOf,
+      // What made it reopenable: none of its sources could be read when this verdict was given.
+      evidence: 'unreadable',
+      decision: op.decision as WikiOpVerificationHistory['decision'],
+      decisionReason: op.decisionReason as WikiRejectReason | null,
+      decidedAt: op.decidedAt?.toISOString() ?? null,
+      reopenedAt: now.toISOString(),
+    };
+    const history = [...(Array.isArray(op.verificationHistory) ? op.verificationHistory : []), earlier];
+    const moved = await tx.wikiChangesetOp.updateMany({
+      where: standing,
+      data: {
+        decision: 'verifying',
+        decisionReason: null,
+        decisionNote: null,
+        decidedAt: null,
+        appliedByMode: null,
+        spotCheck: false,
+        verificationVerdict: null,
+        verificationReason: null,
+        verificationModel: null,
+        verifiedAt: null,
+        verificationDuplicateOf: null,
+        verificationEvidence: null,
+        verificationHistory: history as unknown as Prisma.InputJsonValue,
+      },
+    });
+    // Read and written in one transaction: a miss here is a concurrent write, and everything this
+    // attempt changed goes back with it.
+    if (moved.count !== 1) throw new ConflictException('the op changed while it was being reopened');
+    await tx.wikiChangeset.updateMany({
+      where: { id: op.changesetId, ownerId, status: 'settled' },
+      data: { status: 'pending', decidedAt: null, expiresAt: new Date(now.getTime() + WIKI_LIMITS.pendingExpiryDays * 86_400_000) },
+    });
+    return null;
+  }
+
+  /**
+   * One tainted op that waits for the owner in an automatic space, sent to its verification instead
+   * when Automatic would take it today (`wikiReviewEffect`, `floors.taintedWaits`); the reason it
+   * stays, otherwise.
+   */
+  private async verifyTaintedOp(tx: Tx, ownerId: string, spaceId: string, opId: string): Promise<string | null> {
+    const waiting = { id: opId, ownerId, decision: 'pending', tainted: true, spotCheck: false };
+    const op = await tx.wikiChangesetOp.findFirst({
+      where: waiting,
+      select: { id: true, op: true, entryId: true, changeset: { select: { origin: true } } },
+    });
+    if (!op) return 'it no longer waits for the owner';
+    const space = await tx.wikiSpace.findFirstOrThrow({ where: { id: spaceId, ownerId }, select: { settings: true } });
+    const settings = wikiSpaceSettings(space.settings);
+    const target = op.op === 'amend' && op.entryId ? await this.ownEntryById(tx, ownerId, op.entryId) : null;
+    const decided = wikiReviewEffect({
+      mode: settings.reviewMode,
+      origin: op.changeset.origin as WikiChangesetOrigin,
+      op: op.op as WikiOp,
+      tainted: true,
+      autoAcceptReinforce: settings.autoAcceptReinforce !== false,
+      target: target ? await this.reviewTarget(tx, ownerId, target) : null,
+      basis: null,
+    });
+    if (decided.effect !== 'verifying') {
+      return settings.reviewMode !== 'automatic'
+        ? `the space is ${settings.reviewMode} now, where a tainted op waits for the owner`
+        : 'it changes what the owner wrote or confirmed, or an entry no longer live: it waits for the owner';
+    }
+    const moved = await tx.wikiChangesetOp.updateMany({ where: waiting, data: { decision: 'verifying' } });
+    return moved.count === 1 ? null : 'it changed while this ran';
+  }
+
   /** One op's answer: what the owner decided, and what it applied. True for a rejected spot check. */
   private async applyDecision(
     tx: Tx,
@@ -2224,6 +2757,7 @@ export class WikiService {
     userId: string,
     changeset: ChangesetRow,
     decision: WikiDecisionInput,
+    literals: readonly string[],
   ): Promise<boolean> {
     const op = changeset.ops.find((row) => row.id === decision.opId);
     if (!op) throw new NotFoundException('no such op in this changeset');
@@ -2232,9 +2766,17 @@ export class WikiService {
       // row's state rather than about the request's shape. A second press must not decide twice.
       throw new ConflictException('this op has already been decided');
     }
+    const answer = (WIKI_CHALLENGE_ANSWERS as readonly string[]).includes(decision.action)
+      ? (decision.action as WikiChallengeAnswer)
+      : null;
+    if (answer && op.op !== 'challenge') {
+      return refuse('WIKI_SCHEMA', `${answer} answers a challenge, and this op is a${op.op === 'add' || op.op === 'amend' ? 'n' : ''} ${op.op}: `
+        + 'accept, edit or reject it');
+    }
     // Taken here, not left to the row: one call may name the same op twice, and the snapshot it decides
     // from was read before the first decision wrote.
     op.decision = 'deciding';
+    if (answer) return this.answerChallenge(tx, ownerId, userId, changeset, op, answer, decision, literals);
     if (op.spotCheck) return this.answerSpotCheck(tx, ownerId, userId, changeset, op, decision);
     const opName = op.op as WikiOp;
     // The lineage the decision is ABOUT. An add has no target of its own, and a supersede's `entry_id`
@@ -2452,6 +2994,112 @@ export class WikiService {
   }
 
   /**
+   * The owner's answer to a challenge (contract `anchorRules.verify.answers`): Re-confirm, Amend or
+   * Retire the entry it names.
+   *
+   * - RE-CONFIRM keeps the entry as it stands on the ref its anchors were last checked on: a symbol
+   *   whose region changed is held to the region that check found, an anchor it found missing is
+   *   dropped — as a revision of the owner's when that changed anything — and an entry the machine
+   *   wrote is confirmed. The op is `accepted`.
+   * - AMEND lays the owner's changes over the entry as the owner's revision, confirmed like Re-confirm's;
+   *   anchors the changes leave alone are re-baselined as Re-confirm would, because the owner has read
+   *   the entry against the code as it was last checked. The op is `edited`.
+   * - RETIRE is the owner's own retire, recorded through the one write path as any write of theirs is;
+   *   the challenge goes with the entry, withdrawn as every op of an entry that left active is.
+   *
+   * A revision this writes rests on the sources the entry rests on: the owner answered for the words
+   * and the anchors, not for the evidence. A challenge of an entry that is not live has nothing left
+   * to answer for, and is recorded `conflict`.
+   */
+  private async answerChallenge(
+    tx: Tx,
+    ownerId: string,
+    userId: string,
+    changeset: ChangesetRow,
+    op: ChangesetRow['ops'][number],
+    answer: WikiChallengeAnswer,
+    decision: WikiDecisionInput,
+    literals: readonly string[],
+  ): Promise<boolean> {
+    const entry = op.entryId ? await this.ownEntryById(tx, ownerId, op.entryId) : null;
+    if (!entry || entry.status !== 'active') {
+      await this.writeOpDecision(tx, ownerId, op.id, { decision: 'conflict', decisionNote: null });
+      return false;
+    }
+    if (answer === 'retire') {
+      const challenge = (op.payload ?? {}) as { reason?: unknown };
+      const reason = cutTo(
+        decision.note?.trim() || `Retired in answer to a challenge: ${typeof challenge.reason === 'string' ? challenge.reason : ''}`,
+        WIKI_LIMITS.fieldTextMaxChars,
+      );
+      const space = await tx.wikiSpace.findFirstOrThrow({ where: { id: changeset.spaceId, ownerId }, select: { id: true, settings: true } });
+      const owner: WikiPrincipal = { origin: 'owner', ownerId, userId, sessionId: null, toolCallId: null };
+      const ops = [{ op: 'retire', entryId: entry.id, baseRevision: entry.currentRevision, reason }];
+      const rationale = `Retired in answer to the challenge in changeset ${uuidToBase62(changeset.id)}.`;
+      const recorded = await this.recordChangeset(tx, owner, space, ops, { ops, rationale }, null, literals);
+      const outcome = (recorded.ops as WikiOpOutcome[])[0];
+      if (outcome?.status === 'refused') throw new WikiRefusalError(outcome.reasons[0]);
+      // Applied, the retire has withdrawn this challenge with every other op still waiting on the entry.
+      if (outcome?.status !== 'applied') await this.writeOpDecision(tx, ownerId, op.id, { decision: 'conflict', decisionNote: null });
+      return false;
+    }
+    let changes: WikiEntryChanges = {};
+    if (answer === 'amend') {
+      const edited = decision.edited;
+      if (edited === null || typeof edited !== 'object' || Array.isArray(edited) || Object.keys(edited).length === 0) {
+        return refuse('WIKI_SCHEMA', "amend carries the owner's changes: any of title, summary, fields, topics, aliases and "
+          + 'anchors — Re-confirm keeps the entry as it is', [{ path: 'edited', message: 'is required' }]);
+      }
+      const kind = entry.kind as WikiKind;
+      if (!KIND_SPECS[kind]?.amendable) {
+        return refuse('WIKI_SCHEMA', `a ${entry.kind} is only ever superseded, never rewritten: re-confirm it, retire it, or write its successor`);
+      }
+      const errors = validateWikiEntryChanges(edited, kind, 'edited');
+      if (errors.length > 0) return refuse('WIKI_SCHEMA', "the owner's edit does not have the shape this contract gives it", errors);
+      changes = { ...(edited as WikiEntryChanges) };
+    }
+    if (changes.anchors === undefined) {
+      const rebaselined = rebaselinedAnchors(storedAnchors(entry.anchors));
+      if (rebaselined.changed) changes.anchors = rebaselined.anchors as unknown as WikiAnchorInput[];
+    }
+    const owner: WikiAuthor = { authorKind: 'owner', authorUserId: userId, authorSessionId: null, authorToolCallId: null, changesetOpId: op.id };
+    const machine = WIKI_MACHINE_TRUST.includes(entry.trust as WikiTrust);
+    let revision: number | null = null;
+    if (Object.keys(changes).length > 0) {
+      try {
+        const written = await this.applyOp(tx, ownerId, changeset.spaceId, {
+          op: 'amend',
+          entryId: entry.id,
+          draft: null,
+          changes: null,
+          payload: { changes },
+          sources: await this.liveSourcesOf(tx, ownerId, entry),
+          tainted: false,
+          ...(machine ? { trustAfter: 'confirmed' as const } : {}),
+        }, owner);
+        revision = written.revision;
+      } catch (error) {
+        if (!(error instanceof WikiConflict)) throw error;
+        await this.writeOpDecision(tx, ownerId, op.id, { decision: 'conflict', decisionNote: null });
+        return false;
+      }
+    } else if (machine) {
+      await this.applyOp(tx, ownerId, changeset.spaceId, {
+        op: 'confirm', entryId: entry.id, draft: null, changes: null, payload: {}, sources: [], tainted: false,
+      }, owner);
+    }
+    await this.writeOpDecision(tx, ownerId, op.id, {
+      decision: answer === 'amend' ? 'edited' : 'accepted',
+      decisionNote: decision.note ?? null,
+      resultEntryId: entry.id,
+      resultRevision: revision,
+    });
+    // After the decision is on the row: the challenge is answered by it, so the flag is read after it.
+    await this.recomputeFlags(tx, ownerId, entry.id);
+    return false;
+  }
+
+  /**
    * Put an earlier revision's content back as the entry's next revision, with the sources that
    * revision rested on, and leave the entry unreviewed (`trust.onApply.undoneByRevertOrSpotCheck`):
    * what the owner has just said about the change it undoes is reason enough to take the entry out
@@ -2616,10 +3264,18 @@ export class WikiService {
       case 'amend': {
         const target = await tx.wikiEntry.findFirstOrThrow({
           where: { id: instruction.entryId!, ownerId },
-          select: { id: true, kind: true, currentRevision: true, title: true, summary: true, fields: true, topics: true, aliases: true, anchors: true },
+          select: {
+            id: true, kind: true, currentRevision: true, title: true, summary: true, fields: true, topics: true, aliases: true, anchors: true,
+            anchorCheckedRef: true, anchorCheckedAt: true,
+          },
         });
         const merged = mergeChanges(target, instruction.payload);
         const revision = target.currentRevision + 1;
+        // Anchors given anew are anchors nobody has checked (`anchorRules.verify.aggregate`) — unless they
+        // are Re-confirm's, which carry the checks they were re-baselined from. Anchors left alone keep
+        // their checks and the entry its state.
+        const reanchored = changedAnchors(instruction.payload);
+        const checked = reanchored && storedAnchors(merged.anchors).some((anchor) => anchor.check !== undefined);
         const applied = await tx.wikiEntry.updateMany({
           where: { id: target.id, ownerId, currentRevision: target.currentRevision },
           data: {
@@ -2630,6 +3286,13 @@ export class WikiService {
             topics: merged.topics,
             aliases: merged.aliases,
             anchors: merged.anchors as unknown as Prisma.InputJsonValue,
+            ...(reanchored
+              ? {
+                  anchorState: entryAnchorState(storedAnchors(merged.anchors)),
+                  anchorCheckedRef: checked ? target.anchorCheckedRef : null,
+                  anchorCheckedAt: checked ? target.anchorCheckedAt : null,
+                }
+              : {}),
             ...(instruction.tainted ? { tainted: true } : {}),
             ...(instruction.trustAfter ? { trust: instruction.trustAfter } : {}),
           },
@@ -2701,6 +3364,44 @@ export class WikiService {
         await this.recomputeFlags(tx, ownerId, instruction.entryId!);
         return { entryId: instruction.entryId!, revision: null };
       }
+      case 'reopen': {
+        // A lineage a verdict rejected without being able to read one of its sources goes back to
+        // proposed, to wait for the verdict that will decide it (`reviewModes.verification.reopen`).
+        // Only a rejected one moves: the predicate is the compare-and-set.
+        await tx.wikiEntry.updateMany({
+          where: { id: instruction.entryId!, ownerId, status: 'rejected' },
+          data: { status: 'proposed', trust: 'proposed', retiredAt: null, validTo: null },
+        });
+        await this.recomputeFlags(tx, ownerId, instruction.entryId!);
+        return { entryId: instruction.entryId!, revision: null };
+      }
+      case 'anchor_check': {
+        // What a re-verification found (contract `anchorRules.verify`): the anchors with their last
+        // checks, the state they add up to, and the ref and time of the check — written only while the
+        // entry is live at the revision the list handed out. A revision is null when it has moved since.
+        const found = instruction.payload as { anchors: WikiAnchor[]; anchorState: WikiAnchorState; ref: string; at: string; revision: number };
+        const written = await tx.wikiEntry.updateMany({
+          where: { id: instruction.entryId!, ownerId, status: 'active', currentRevision: found.revision },
+          data: {
+            anchors: found.anchors as unknown as Prisma.InputJsonValue,
+            anchorState: found.anchorState,
+            anchorCheckedRef: found.ref,
+            anchorCheckedAt: new Date(found.at),
+          },
+        });
+        if (written.count !== 1) return { entryId: instruction.entryId!, revision: null };
+        // Tiered's pitfall made Auto by the check (`anchorRules.verify.tiered`). A second statement under
+        // the row lock the first one took, predicated on the trust it moves from: an owner's confirmation
+        // that landed since the caller read the entry is never taken back to auto.
+        if (instruction.trustAfter === 'auto') {
+          await tx.wikiEntry.updateMany({
+            where: { id: instruction.entryId!, ownerId, status: 'active', trust: 'unreviewed' },
+            data: { trust: 'auto' },
+          });
+        }
+        await this.recomputeFlags(tx, ownerId, instruction.entryId!);
+        return { entryId: instruction.entryId!, revision: found.revision };
+      }
     }
   }
 
@@ -2751,6 +3452,10 @@ export class WikiService {
     sources: readonly ResolvedSource[],
     author: WikiAuthor,
   ): Promise<string> {
+    // What was written, never the server's last check of it (`anchorRules.verify.check`): an amend
+    // carries its entry's anchors over with their checks, and a revision put back later must not bring
+    // an old check back with it.
+    const anchors = anchorsWithoutChecks(content.anchors);
     const row = await tx.wikiEntryRevision.create({
       data: {
         entryId,
@@ -2761,8 +3466,8 @@ export class WikiService {
         fields: content.fields as Prisma.InputJsonValue,
         topics: content.topics,
         aliases: content.aliases,
-        anchors: content.anchors as unknown as Prisma.InputJsonValue,
-        contentSha256: contentSha256(content),
+        anchors: anchors as unknown as Prisma.InputJsonValue,
+        contentSha256: contentSha256({ ...content, anchors }),
         authorKind: author.authorKind,
         authorUserId: author.authorUserId,
         authorSessionId: author.authorSessionId,
@@ -2878,9 +3583,11 @@ export class WikiService {
    *
    * The set is the first-hand records a phase-1 door can reach: a conversation turn (the calling
    * session's own, or one named by id), a run event, a tool call, a task, a task comment, an approval,
-   * and a commit resolved through the merge receipt that named it. Everything else the contract lists
-   * belongs to a phase that does not write yet — a `note` has no row, and a `url` is an assumption's,
-   * which phase 1 refuses.
+   * and a commit resolved through the merge receipt that named it — and the two a maintenance run's
+   * dossier cites besides (contract `maintenance.dossier.sources`): a merge receipt itself, and an
+   * owner decision, a blocker the owner resolved with a note — and a `note`, a file `orbit wiki import`
+   * registered (contract `import.source`). Everything else the contract lists belongs to a phase that
+   * does not write yet: a `url` is an assumption's, which phase 1 refuses.
    */
   private async sourceText(
     tx: Tx,
@@ -2889,6 +3596,8 @@ export class WikiService {
   ): Promise<{
     ref: string;
     text: string | null;
+    /** A run event's type: what the reader of a verdict recorded before revision 4 could read of it. */
+    eventType?: string;
     locator?: Record<string, unknown>;
     tainted: boolean;
     ownerWords: boolean;
@@ -2940,7 +3649,10 @@ export class WikiService {
         if (!event) return null;
         return {
           ref: event.id,
-          text: eventText(event.type, event.payload),
+          // The one text of the record, for the quote check and the verifier alike (contract
+          // `reviewModes.verification.evidence`): a tool call's name and input, a result, a thinking.
+          text: runEventText(event.type, event.payload),
+          eventType: event.type,
           tainted: await this.sessionWasTainted(tx, event.sessionId),
           ownerWords: false,
           sessionId: event.sessionId,
@@ -2995,6 +3707,34 @@ export class WikiService {
           sessionId: approval.sessionId,
         };
       }
+      case 'merge_receipt': {
+        // A merge receipt, as a dossier line shows it (`mergeReceiptText`): what was merged where, by sha.
+        if (!ref) return null;
+        const receipt = await tx.sessionMergeReceipt.findFirst({
+          where: { id: ref, ownerId: principal.ownerId },
+          select: { id: true, result: true, sourceBranch: true, sourceSha: true, targetBranch: true, targetShaAfter: true, sessionId: true },
+        });
+        if (!receipt) return null;
+        return { ref: receipt.id, text: mergeReceiptText(receipt), tainted: false, ownerWords: false, sessionId: receipt.sessionId };
+      }
+      case 'owner_decision': {
+        // A decision the owner recorded: a blocker the owner resolved with a note, what it asked and what
+        // they answered, as a dossier line carries them. Not the owner's words for Tiered, whose
+        // `ownerWords` is a message, a steer or an answer and nothing else.
+        if (!ref) return null;
+        const blocker = await tx.projectBlocker.findFirst({
+          where: { id: ref, project: { ownerId: principal.ownerId }, resolvedBy: 'USER', resolutionNote: { not: null } },
+          select: { id: true, requiredAction: true, resolutionNote: true },
+        });
+        if (!blocker || !blocker.resolutionNote) return null;
+        return {
+          ref: blocker.id,
+          text: ownerResolutionText({ requiredAction: blocker.requiredAction, resolutionNote: blocker.resolutionNote }),
+          tainted: false,
+          ownerWords: false,
+          sessionId: null,
+        };
+      }
       case 'commit': {
         if (!ref) return null;
         // The repository is not this database's to read, so a commit resolves through the record that
@@ -3008,6 +3748,18 @@ export class WikiService {
         });
         if (!receipt) return null;
         return { ref, text: null, tainted: false, ownerWords: false, sessionId: null };
+      }
+      case 'note': {
+        // A file `orbit wiki import` registered (contract `import.source`), among this owner's notes
+        // alone: its stored text — redacted before it was kept — and the file it came from. Agent-written
+        // second-hand content, never the owner's own words.
+        if (!ref || !isDecodableId(ref)) return null;
+        const note = await tx.wikiNote.findFirst({
+          where: { id: ref, ownerId: principal.ownerId },
+          select: { id: true, path: true, text: true },
+        });
+        if (!note) return null;
+        return { ref: note.id, text: note.text, locator: { path: note.path }, tainted: false, ownerWords: false, sessionId: null };
       }
       default:
         return null;
@@ -3038,7 +3790,7 @@ export class WikiService {
    * Read as a flat list of strings: an environment value is the one secret no shape can recognize, and
    * a quote may repeat one without ever looking like a credential.
    */
-  private async envLiterals(reader: Pick<PrismaService, 'workspace'>, ownerId: string): Promise<string[]> {
+  async envLiterals(reader: Pick<PrismaService, 'workspace'>, ownerId: string): Promise<string[]> {
     const workspaces = await reader.workspace.findMany({ where: { ownerId }, select: { env: true } });
     const literals: string[] = [];
     for (const workspace of workspaces) {
@@ -3169,6 +3921,15 @@ export class WikiService {
     }));
   }
 
+  /** The live sources of an entry's current revision, which a revision the owner writes over it cites again. */
+  private async liveSourcesOf(tx: Tx, ownerId: string, entry: { id: string; currentRevision: number }): Promise<ResolvedSource[]> {
+    const revision = await tx.wikiEntryRevision.findFirst({
+      where: { entryId: entry.id, ownerId, revision: entry.currentRevision },
+      select: { id: true },
+    });
+    return revision ? this.sourcesOfRevision(tx, ownerId, revision.id) : [];
+  }
+
   /** The sources of an op being applied at decide time, resolved against the session that proposed it. */
   private async sourcesOfOp(
     tx: Tx,
@@ -3218,7 +3979,9 @@ export class WikiService {
    *
    * `spaceId` is the runner door's read boundary: a session reads a space's entries only when its
    * workspace is bound to that space (contract `readBoundary`), and an entry of another codebase is
-   * the same 404 as one that does not exist.
+   * the same 404 as one that does not exist. So is a live one that rests on a web-derived record and
+   * that no person has vouched for (`reviewModes.floors.taintedWaits`): the owner reads it, an agent
+   * does not.
    */
   async getEntry(
     ownerId: string,
@@ -3227,7 +3990,13 @@ export class WikiService {
     spaceId?: string,
   ): Promise<Record<string, unknown>> {
     const entry = await this.prisma.wikiEntry.findFirst({
-      where: { id: entryId, ownerId, ...(spaceId ? { spaceId } : {}) },
+      where: {
+        id: entryId,
+        ownerId,
+        ...(spaceId
+          ? { spaceId, OR: [{ tainted: false }, { trust: { in: [...WIKI_VOUCHED_TRUST] } }, { status: { not: 'active' } }] }
+          : {}),
+      },
       select: ENTRY_SELECT,
     });
     if (!entry) throw new NotFoundException('no such wiki entry');
@@ -3728,9 +4497,10 @@ function verdictInput(raw: unknown, index: number): VerdictInput {
 
 /** What a verdict recorded earlier did, for its replay. */
 function verdictStatus(verdict: WikiVerificationVerdict, decision: string): 'applied' | 'rejected' | 'reinforced' | 'conflict' {
-  if (verdict === 'unsupported') return 'rejected';
   if (verdict === 'duplicate') return 'reinforced';
-  return decision === 'conflict' ? 'conflict' : 'applied';
+  if (decision === 'conflict') return 'conflict';
+  // An unsupported verdict about records nobody could read applied its op as unreviewed.
+  return verdict === 'unsupported' && decision === 'rejected' ? 'rejected' : 'applied';
 }
 
 /** A text cut to at most `max` characters, counted the way the schema's CHECK counts them. */
@@ -3843,6 +4613,12 @@ function mergeChanges(
   };
 }
 
+/** Does an amend give the anchors anew? Its changes read the way `mergeChanges` reads them. */
+function changedAnchors(payload: Record<string, unknown>): boolean {
+  const changes = ((payload.changes ?? payload) ?? {}) as WikiEntryChanges;
+  return changes.anchors !== undefined;
+}
+
 /** The answer an out-of-date compare-and-set gets: the current revision, and a diff of the two. */
 function revisionConflict(seq: number, current: EntryRow, baseRevision: number, payload: Record<string, unknown>): WikiOpOutcome {
   const now: WikiEntryChanges = {
@@ -3851,7 +4627,8 @@ function revisionConflict(seq: number, current: EntryRow, baseRevision: number, 
     fields: current.fields as unknown as WikiEntryChanges['fields'],
     topics: current.topics,
     aliases: current.aliases,
-    anchors: current.anchors as WikiAnchorInput[],
+    // As a proposer writes them: an amend built from this answer is refused a `check` it never wrote.
+    anchors: anchorsWithoutChecks(current.anchors),
   };
   return {
     seq,

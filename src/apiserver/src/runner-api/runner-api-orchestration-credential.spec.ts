@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
-import { SESSION_SOURCE_PIN_V1 } from '@orbit/shared';
+import { SESSION_SOURCE_PIN_V1, WIKI_MAINTENANCE_RUN_V1 } from '@orbit/shared';
 import {
   RunnerApiController,
   SESSION_ORCHESTRATION_CREDENTIAL_V1,
@@ -110,30 +110,30 @@ test('runner capability parsing accepts lists without accepting partial names', 
 });
 
 test('claim forwards every capability negotiation to the queue', async () => {
-  // Both booleans reach the claim SQL, and both are the RUNNER's answer rather than a default:
+  // Every boolean reaches the claim SQL, and each is the RUNNER's answer rather than a default:
   // each decides whether a row this process cannot drive correctly is offered to it at all.
   const capable = makeController({ claimed: null });
   await capable.controller.claim(
     RUNNER,
-    `${SESSION_TERMINAL_HANDOFF_V1},${SESSION_SOURCE_PIN_V1}`,
+    `${SESSION_TERMINAL_HANDOFF_V1},${SESSION_SOURCE_PIN_V1},${WIKI_MAINTENANCE_RUN_V1}`,
     'claude,codex,opencode',
   );
   assert.deepEqual(capable.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, true],
+    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, true, true],
   ]);
 
-  // One capability without the other negotiates only that one off: a runner that can hand a
+  // One capability without the others negotiates only that one off: a runner that can hand a
   // terminal session over but cannot pin a SOURCE is still offered every Legacy session.
   const handoffOnly = makeController({ claimed: null });
   await handoffOnly.controller.claim(RUNNER, SESSION_TERMINAL_HANDOFF_V1, 'claude,codex,opencode');
   assert.deepEqual(handoffOnly.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, false],
+    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, false, false],
   ]);
 
   const legacy = makeController({ claimed: null });
   await legacy.controller.claim(RUNNER);
   assert.deepEqual(legacy.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: [] }, 25_000, false, false],
+    [{ id: RUNNER.id, supportedProviders: [] }, 25_000, false, false, false],
   ]);
 });
 

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>协调者提问卡 · 附言始终可写 — mockup</title>
+<link rel="stylesheet" href="../../src/web/src/index.css">
+<link rel="stylesheet" href="project-progress/mock.css">
+<style>
+  /* Mock-only overrides. The card itself is drawn with the SHIPPED classes
+     (.coordinator-question-*) so it cannot drift from the real card. */
+  .approval-card { margin: 0; }
+  .m-sheet { width: 780px; }
+  .q-note {
+    width: 100%;
+    margin: 6px 0 0;
+    padding: 4px 11px;
+    font: 14px/1.5714285714 -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--text-1);
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  .q-note:focus { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-tint); outline: none; }
+  .q-note::placeholder { color: var(--text-4); }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.body.setAttribute('data-h',String(Math.ceil(s.getBoundingClientRect().height)))})</script>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1 zh">协调者提问卡：附言始终可写，「都不是我要的」也能答</h1>
+  <p class="m-sub zh">有选项时附言框不再隐藏；发送规则从「必须选一项」放宽为「选了选项 <b>或</b> 写了文字」。服务端门已支持（option 与 text 可同传、可只传 text），纯前端改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">现状</span>有选项 → 只有选项可选，附言无处可写</div>
+    <div class="approval-card coordinator-question">
+      <div class="approval-head coordinator-question-head">
+        <span class="coordinator-question-heading">The coordinator has a question</span>
+        <span class="criteria-provenance prov-brand" title="Orbit filed this question on behalf of the conversation coordinating this project.">FROM COORDINATOR</span>
+      </div>
+      <div class="approval-body">
+        <p class="coordinator-question-text">Codex 共享池走不通「个人订阅共享」，请定方向：</p>
+        <label class="coordinator-question-option">
+          <input type="radio" name="q1" />
+          <span class="coordinator-question-option-text">
+            改为「组织 API key + 网关」<span class="coordinator-question-recommended">Recommended</span>
+            <span class="coordinator-question-option-why">一把组织 API key 存在服务器，runner 只拿会话令牌；按人记账、设上限。网关/选号/记账/界面可复用，只把「成员加个人账号」换成「管理员填 key」</span>
+          </span>
+        </label>
+        <label class="coordinator-question-option is-chosen">
+          <input type="radio" name="q1" checked />
+          <span class="coordinator-question-option-text">
+            改为 Business 共享额度
+            <span class="coordinator-question-option-why">Orbit 几乎零改动：每人自己的席位登录，超额从工作区共享 credit 扣。前提是团队已在 Business/Enterprise 工作区</span>
+          </span>
+        </label>
+        <label class="coordinator-question-option">
+          <input type="radio" name="q1" />
+          <span class="coordinator-question-option-text">
+            取消这个项目
+            <span class="coordinator-question-option-why">其余任务作废；已完成的换号文案任务摘成独立任务保留</span>
+          </span>
+        </label>
+        <p class="coordinator-question-meta">Blocks 5 tasks &nbsp;·&nbsp; If you don’t answer: 项目停在原地，T6 也不落地</p>
+      </div>
+      <div class="card-actions approval-actions coordinator-question-actions">
+        <span class="a-btn primary">Send answer</span><span class="coordinator-question-asked">asked 35m ago</span>
+      </div>
+    </div>
+    <p class="m-cap zh">选了 B 想加「但前提是……」、或者三个都不想要 —— 都没有出口；不选一项 <code>Send answer</code> 就一直是灰的。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">新</span>附言框始终显示：选了选项也能附言</div>
+    <div class="approval-card coordinator-question m-mark"><span class="m-n">1</span>
+      <div class="approval-head coordinator-question-head">
+        <span class="coordinator-question-heading">The coordinator has a question</span>
+        <span class="criteria-provenance prov-brand" title="Orbit filed this question on behalf of the conversation coordinating this project.">FROM COORDINATOR</span>
+      </div>
+      <div class="approval-body is-questions">
+        <p class="coordinator-question-text">Codex 共享池走不通「个人订阅共享」，请定方向：</p>
+        <label class="coordinator-question-option">
+          <input type="radio" name="q2" />
+          <span class="coordinator-question-option-text">
+            改为「组织 API key + 网关」<span class="coordinator-question-recommended">Recommended</span>
+            <span class="coordinator-question-option-why">一把组织 API key 存在服务器，runner 只拿会话令牌；按人记账、设上限。网关/选号/记账/界面可复用，只把「成员加个人账号」换成「管理员填 key」</span>
+          </span>
+        </label>
+        <label class="coordinator-question-option is-chosen">
+          <input type="radio" name="q2" checked />
+          <span class="coordinator-question-option-text">
+            改为 Business 共享额度
+            <span class="coordinator-question-option-why">Orbit 几乎零改动：每人自己的席位登录，超额从工作区共享 credit 扣。前提是团队已在 Business/Enterprise 工作区</span>
+          </span>
+        </label>
+        <label class="coordinator-question-option">
+          <input type="radio" name="q2" />
+          <span class="coordinator-question-option-text">
+            取消这个项目
+            <span class="coordinator-question-option-why">其余任务作废；已完成的换号文案任务摘成独立任务保留</span>
+          </span>
+        </label>
+        <textarea class="q-note" placeholder="Or type your own answer…">可以，但上限得在 Orbit 里按人设，别让团队去 OpenAI 后台操作</textarea>
+        <p class="coordinator-question-meta">Blocks 5 tasks &nbsp;·&nbsp; If you don’t answer: 项目停在原地，T6 也不落地</p>
+      </div>
+      <div class="card-actions approval-actions coordinator-question-actions">
+        <span class="a-btn primary">Send answer</span><span class="coordinator-question-asked">asked 35m ago</span>
+      </div>
+    </div>
+    <p class="m-cap zh">答案 = 「选项 + 附言」一起送达协调者，receipt 渲染成「<b>选项 — 附言</b>」。选中选项时输入框占位写 <code>Add a note (optional)</code>。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">新</span>「都不是我要的」：只写文字，不选选项，也能发</div>
+    <div class="approval-card coordinator-question m-mark"><span class="m-n">2</span>
+      <div class="approval-head coordinator-question-head">
+        <span class="coordinator-question-heading">The coordinator has a question</span>
+        <span class="criteria-provenance prov-brand" title="Orbit filed this question on behalf of the conversation coordinating this project.">FROM COORDINATOR</span>
+      </div>
+      <div class="approval-body is-questions">
+        <p class="coordinator-question-text">Codex 共享池走不通「个人订阅共享」，请定方向：</p>
+        <label class="coordinator-question-option">
+          <input type="radio" name="q3" />
+          <span class="coordinator-question-option-text">
+            改为「组织 API key + 网关」<span class="coordinator-question-recommended">Recommended</span>
+            <span class="coordinator-question-option-why">一把组织 API key 存在服务器，runner 只拿会话令牌；按人记账、设上限。网关/选号/记账/界面可复用，只把「成员加个人账号」换成「管理员填 key」</span>
+          </span>
+        </label>
+        <label class="coordinator-question-option">
+          <input type="radio" name="q3" />
+          <span class="coordinator-question-option-text">
+            改为 Business 共享额度
+            <span class="coordinator-question-option-why">Orbit 几乎零改动：每人自己的席位登录，超额从工作区共享 credit 扣。前提是团队已在 Business/Enterprise 工作区</span>
+          </span>
+        </label>
+        <label class="coordinator-question-option">
+          <input type="radio" name="q3" />
+          <span class="coordinator-question-option-text">
+            取消这个项目
+            <span class="coordinator-question-option-why">其余任务作废；已完成的换号文案任务摘成独立任务保留</span>
+          </span>
+        </label>
+        <textarea class="q-note" placeholder="Or type your own answer…">都不是。我要 D：个人订阅保留、共享池改为 Orbit 统一采购 Business 席位，凭据服务端代持 —— 效果和 A 一样，但不用团队任何人登录</textarea>
+        <p class="coordinator-question-meta">Blocks 5 tasks &nbsp;·&nbsp; If you don’t answer: 项目停在原地，T6 也不落地</p>
+      </div>
+      <div class="card-actions approval-actions coordinator-question-actions">
+        <span class="a-btn primary">Send answer</span><span class="coordinator-question-asked">asked 35m ago</span>
+      </div>
+    </div>
+    <p class="m-cap zh">推荐项默认选中，<b>再点一次即取消</b>；没有选中项时占位变成 <code>Or type your own answer…</code>（claude 提问卡同一句）。发送规则：<code>选项 !== null || 文字非空</code>。文字单独就是答案，送达协调者、关条目；协调者按它重新提问。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k state">答完</span>两种 receipt：选项+附言 / 纯文字</div>
+    <div class="approval-card coordinator-question is-answered" style="margin-bottom:8px">
+      <div class="approval-head coordinator-question-head">
+        <span class="coordinator-question-heading">Answered</span>
+        <span class="criteria-provenance prov-brand" title="Orbit filed this question on behalf of the conversation coordinating this project.">FROM COORDINATOR</span>
+      </div>
+      <p class="coordinator-question-receipt">
+        <span class="coordinator-question-verdict">✓ 改为 Business 共享额度 — 可以，但上限得在 Orbit 里按人设，别让团队去 OpenAI 后台操作</span>
+        <span class="coordinator-question-foot">by you · delivered to the current coordinator</span>
+      </p>
+    </div>
+    <div class="approval-card coordinator-question is-answered">
+      <div class="approval-head coordinator-question-head">
+        <span class="coordinator-question-heading">Answered</span>
+        <span class="criteria-provenance prov-brand" title="Orbit filed this question on behalf of the conversation coordinating this project.">FROM COORDINATOR</span>
+      </div>
+      <p class="coordinator-question-receipt">
+        <span class="coordinator-question-verdict">✓ 都不是。我要 D：个人订阅保留、共享池改为 Orbit 统一采购 Business 席位，凭据服务端代持 —— 效果和 A 一样，但不用团队任何人登录</span>
+        <span class="coordinator-question-foot">by you · delivered to the current coordinator</span>
+      </p>
+    </div>
+    <p class="m-cap zh">拼接逻辑 <code>answerInWords</code> 已支持两种形态，不动。</p>
+  </div>
+
+  <ul class="m-notes zh">
+    <li><span class="m-n">1</span><span><b>附言框从「无选项时才显示」改为「始终显示」</b>，复用现有 <code>Input.TextArea</code> 与 placeholder 文案。</span></li>
+    <li><span class="m-n">2</span><span><b>发送规则放宽为「选项或文字」</b>：门已接受（<code>'an answer needs an option or some text'</code>），纯前端改动 + 组件测试。</span></li>
+    <li><span class="m-n">3</span><span><b>正文取消 360px 内滚</b>：和 Claude 提问卡同一条豁免（<code>.is-questions</code>），正文随内容长高。现在的卡片正文被 <code>.approval-body</code> 限高 360px —— 你截图那张量出来正好 360px，已经在卡内滚动；手机宽度下选项会被卷进滚动区。</span></li>
+    <li><span class="m-n" style="background:var(--text-4)">·</span><span><b>不引入 Chat about this 按钮</b>：聊不回关条目、blocks 不动；「先聊再答」走项目页已有的协调会话入口。</span></li>
+  </ul>
+</div>
+</body>
+</html>

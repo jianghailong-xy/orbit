@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -55,7 +56,8 @@ const wikiVerifyDescription = wikiVerifyPrecondition + " This is how what an aut
 	"Each verdict is reported as soon as it is read, and the server applies it: supported as Auto and pushed, partial as " +
 	"Unreviewed, unsupported rejected with its reason, a duplicate's sources added to the entry it duplicates. It stops " +
 	"at the first 401 from the model's endpoint, and when the space is no longer automatic, and it exits non-zero when " +
-	"any op it looked at was left without a verdict: those ops keep waiting, and the next run tries them again."
+	"any op it looked at was left without a verdict: those ops keep waiting, and the next run tries them again. The model " +
+	"does not think unless --effort names a level."
 
 // wikiVerifySystemPrompt is the whole system prompt the clean call carries: what the model is for,
 // and the one shape its answer may take. The rest is in the prompt, one op at a time.
@@ -77,25 +79,32 @@ const (
 
 // wikiVerifyEnvPass is what of the session's environment the clean Claude Code is handed besides
 // its own HOME, CLAUDE_CONFIG_DIR and the endpoint and token: what a process needs to run at all,
-// and the model window and effort the provider declared. Everything else stays behind — the
-// session's ORBIT_* (the child never reaches Orbit), its own Claude Code's CLAUDE_CODE_* (a messaging
-// socket, a session id), and ANTHROPIC_API_KEY, which a bare run would send as x-api-key.
+// and the model window the provider declared. Everything else stays behind — the session's ORBIT_*
+// (the child never reaches Orbit), its own Claude Code's CLAUDE_CODE_* (a messaging socket, a
+// session id, the effort the provider declared for the session's own work), and ANTHROPIC_API_KEY,
+// which a bare run would send as x-api-key.
 var wikiVerifyEnvPass = []string{
 	"PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR",
 	"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS",
 	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
-	"ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_MAX_CONTEXT_TOKENS", "CLAUDE_CODE_EFFORT_LEVEL",
+	"ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
 }
+
+// wikiVerifyEfforts are the levels --effort takes: Claude Code's own, handed to it as
+// CLAUDE_CODE_EFFORT_LEVEL.
+var wikiVerifyEfforts = []string{"low", "medium", "high", "xhigh", "max"}
 
 // wikiVerifyClaudeBinary is the Claude Code a test drives instead of the one this machine runs.
 // Empty in the product.
 var wikiVerifyClaudeBinary = ""
 
-// wikiVerifyConfig is the model a run verifies with, as the session's provider named it.
+// wikiVerifyConfig is the model a run verifies with, as the session's provider named it, and the
+// effort it was asked to think with: none unless --effort names one.
 type wikiVerifyConfig struct {
 	baseURL string
 	token   string
 	model   string
+	effort  string
 }
 
 // wikiVerifyConfigFromEnv reads the endpoint, the token and the model the session's provider
@@ -462,6 +471,13 @@ func wikiVerifyClaudeArgs(model, settings string) []string {
 }
 
 // wikiVerifyEnv is the clean call's whole environment, built from an allowlist (wikiVerifyEnvPass).
+//
+// THINKING IS OFF UNLESS ASKED FOR (contract `agentSurface.verify.thinking`). Claude Code sends a
+// custom endpoint's model it does not know output_config.effort "high" and thinking {type: adaptive}
+// of its own accord, and on the local model that is a verdict of a minute and some thousand tokens
+// of reasoning where one without takes two seconds. CLAUDE_CODE_EFFORT_LEVEL=unset takes the effort
+// out of the request, and MAX_THINKING_TOKENS=0 the thinking block with it; --effort puts an effort
+// back, and thinking with it.
 func wikiVerifyEnv(home, config string, cfg wikiVerifyConfig) []string {
 	env := []string{
 		"HOME=" + home,
@@ -470,6 +486,11 @@ func wikiVerifyEnv(home, config string, cfg wikiVerifyConfig) []string {
 		"ANTHROPIC_AUTH_TOKEN=" + cfg.token,
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 		"DISABLE_AUTOUPDATER=1",
+	}
+	if cfg.effort != "" {
+		env = append(env, "CLAUDE_CODE_EFFORT_LEVEL="+cfg.effort)
+	} else {
+		env = append(env, "CLAUDE_CODE_EFFORT_LEVEL=unset", "MAX_THINKING_TOKENS=0")
 	}
 	for _, key := range wikiVerifyEnvPass {
 		if value, ok := os.LookupEnv(key); ok {
@@ -657,6 +678,7 @@ func cliWikiVerify(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	fs := newCLIFlagSet("orbit wiki verify")
 	space := fs.String("space", "", "the automatic space this session proposed into")
 	model := fs.String("model", "", "the model to verify with")
+	effort := fs.String("effort", "", "think with this effort; the model does not think without it")
 	max := fs.Int("max", 0, "verify at most this many ops")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
@@ -675,10 +697,15 @@ func cliWikiVerify(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	if *max < 0 {
 		return fmt.Errorf("--max must be a whole number, 1 or more")
 	}
+	level := strings.TrimSpace(*effort)
+	if level != "" && !slices.Contains(wikiVerifyEfforts, level) {
+		return fmt.Errorf("--effort must be one of %s; leave it out and the model does not think", strings.Join(wikiVerifyEfforts, ", "))
+	}
 	cfg, err := wikiVerifyConfigFromEnv(*model)
 	if err != nil {
 		return err
 	}
+	cfg.effort = level
 	t, err := cliTransport()
 	if err != nil {
 		return err

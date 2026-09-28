@@ -1296,7 +1296,36 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // of the six preserved objects. No table, column, constraint, index, trigger or type is created,
       // altered or dropped, and no `task`, `session`, `project` or `project_acceptance_*` object is
       // named. No INSERT, UPDATE or DELETE: no row is read, locked or rewritten.
-      '0313_wiki_search_text_cost'],
+      '0313_wiki_search_text_cost',
+      // Orbit Wiki verification evidence (a verdict has to be able to read its sources): two columns
+      // on `wiki_changeset_op` — one nullable with no default, one NOT NULL with a constant default
+      // ('[]'), both catalog-only — and two CHECKs over them. Read against every claim above: only
+      // `wiki_changeset_op` is named, which is not a preserved relation, and no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named. No function, trigger or type is created,
+      // replaced or dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every stored op has no evidence mark and an empty history,
+      // so every row satisfies both CHECKs as it stands.
+      '0314_wiki_verification_evidence',
+      // The Wiki maintenance run's cursor and what it keeps of a dossier: two new tables,
+      // `wiki_cursor` and `wiki_dossier`, each reaching `wiki_space` through (space_id, owner_id) and
+      // carrying its own CHECKs, with a unique index each; and `task_list` gains one BOOLEAN NOT NULL
+      // DEFAULT false column, `hidden` (a constant default, so catalog-only). Read against every claim
+      // above: `task_list` is not a preserved relation, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach. No function, trigger or type is created, replaced or dropped — no
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE: every existing list reads false, and
+      // nothing is backfilled.
+      '0315_wiki_cursor',
+      // Orbit Wiki import's notes: one new table, `wiki_note` (the redacted text of an imported file
+      // and its hash), reaching `wiki_space` through (space_id, owner_id) with its own CHECKs, and one
+      // unique index over it. Read against every claim above: no existing table is named but
+      // `wiki_space`, as the parent its foreign key references, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach. No function, trigger or type is created, replaced or dropped — no
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE: the table starts empty.
+      '0316_wiki_note'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

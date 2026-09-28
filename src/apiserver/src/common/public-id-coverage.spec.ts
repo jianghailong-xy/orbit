@@ -40,6 +40,8 @@ import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from '../runner-api/runner-task-completion-evidence.controller';
 import { RunnerTaskProgressController } from '../runner-api/runner-task-progress.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
+import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
+import { RunnerWikiAnchorsController } from '../runner-api/runner-wiki-anchors.controller';
 import { WikiController } from '../wiki/wiki.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
@@ -103,6 +105,10 @@ const CONTROLLERS = [
   // controller nothing lists here is a controller whose ids nothing checks.
   WikiController,
   RunnerWikiController,
+  // The maintenance run's routes (migration 0315, contract `maintenance`), on the same runner door.
+  RunnerWikiMaintenanceController,
+  // The anchor re-verification's routes (contract `anchorRules.verify`), on the same runner door.
+  RunnerWikiAnchorsController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed
