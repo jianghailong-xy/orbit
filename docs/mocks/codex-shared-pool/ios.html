@@ -47,13 +47,11 @@ body { margin: 0; padding: 40px; background: #e4e4e9; font: 15px/1.4 "Nimbus San
 .chipx.brand { background: var(--tint-bg); color: var(--tint); }
 .as { font-size: 14px; color: var(--label-2); margin-top: 2px; }
 .as.ok { color: var(--green-ink); } .as.run { color: var(--tint); } .as.warn { color: var(--amber-ink); } .as.bad { color: #C9261B; }
-.keymask { font-size: 13px; color: var(--label-2); margin-top: 1px; }
 .why { font-size: 13px; color: #C9261B; margin-top: 4px; line-height: 1.35; }
 .rowact { margin-top: 9px; }
-.ar { flex: none; width: 104px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 3px; }
+.ar { flex: none; width: 64px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 3px; }
 .pct { font-size: 14px; color: var(--label-2); font-variant-numeric: tabular-nums; }
-.money { font-size: 13px; color: var(--label-2); font-variant-numeric: tabular-nums; }
-.gauge { width: 96px; height: 5px; border-radius: 3px; background: var(--fill); overflow: hidden; display: block; }
+.gauge { width: 56px; height: 5px; border-radius: 3px; background: var(--fill); overflow: hidden; display: block; }
 .gauge i { display: block; height: 100%; border-radius: 3px; }
 .btn { display: inline-block; font-size: 14px; font-weight: 600; border-radius: 999px; padding: 6px 14px; }
 .btn.primary { background: var(--tint); color: #fff; }
@@ -76,7 +74,6 @@ body { margin: 0; padding: 40px; background: #e4e4e9; font: 15px/1.4 "Nimbus San
 .fact { padding: 11px 16px; font-size: 14.5px; line-height: 1.38; color: var(--label-2); position: relative; }
 .fact b { color: var(--label); font-weight: 600; }
 .risk { margin: 0 16px; padding: 11px 14px; border-radius: 14px; background: rgba(255,149,0,.14); color: var(--amber-ink); font-size: 14px; line-height: 1.38; }
-.risk b { color: var(--amber-ink); font-weight: 600; }
 .snote { padding: 10px 28px 0; font-size: 13px; color: var(--label-2); line-height: 1.38; text-align: center; }
 .mk { outline: 1.6px dashed var(--mark); outline-offset: 4px; border-radius: 26px; }
 .mk::after { content: attr(data-n); position: absolute; top: -12px; right: -12px; width: 22px; height: 22px; border-radius: 50%;
@@ -88,117 +85,164 @@ body { margin: 0; padding: 40px; background: #e4e4e9; font: 15px/1.4 "Nimbus San
 .lt2 .lt { flex: none; }
 .lsub { font-size: 13.5px; color: var(--label-2); margin-top: 1px; }
 .phead.mk::after { top: 2px; right: -10px; }
+
+.as.sm { font-size: 13px; }
+.shr.bad { color: #C9261B; } .shr.warn { color: var(--amber-ink); }
+.wins { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.winh { display: flex; justify-content: space-between; font-size: 13px; color: var(--label-2); }
+.winh b { color: var(--label); font-weight: 600; }
+.wgauge { display: block; height: 5px; border-radius: 3px; background: var(--fill); overflow: hidden; margin-top: 4px; }
+.wgauge i { display: block; height: 100%; border-radius: 3px; }
+.wres { font-size: 11px; color: var(--label-2); margin-top: 4px; }
+.arow .mark { margin-top: 2px; }
+.url { text-align: center; font-size: 13px; color: var(--label-2); margin-top: 6px; }
+.hint { font-size: 15px; color: var(--label-2); margin-top: 14px; }
+.codebox { background: var(--surface); border-radius: 18px; padding: 16px; text-align: center; margin-top: 14px; }
+.code { font: 600 22px/1.2 "DejaVu Sans Mono", monospace; letter-spacing: 2px; }
+.copy { font-size: 13px; color: var(--tint); margin-top: 8px; }
+.wait { display: flex; align-items: center; gap: 8px; font-size: 15px; margin-top: 14px; }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(60,60,67,.25); border-top-color: rgba(60,60,67,.7); }
+.expiry { font-size: 13px; color: var(--label-2); margin-top: 14px; }
+.cancel { text-align: center; color: var(--tint); font-size: 17px; margin-top: 18px; }
+.done { display: flex; gap: 12px; align-items: flex-start; }
+.done .ok { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--green-ink); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; }
+.dt { font-size: 17px; font-weight: 600; }
+.ds { font-size: 15px; color: var(--label-2); margin-top: 4px; line-height: 1.35; }
 </style></head>
-<body><div class="row">
-<div class="phone grouped">
+<body><div class="row"><div data-name="providers">
+<div class="phone grouped " style="height:852px">
   <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
   <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">Providers</span><span></span></div>
   <div class="scroll" style="top:103px">
     <div class="sh">On your runners</div>
     <div class="card">
-      <div class="lrow"><span class="lt">wikova</span><span class="lv">All signed in</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow"><span class="lt">workstation</span><span class="lv">1 of 3 signed in</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow"><span class="lt">longdeMac-mini.local</span><span class="lv">1 of 3 signed in</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow"><span class="lt">workstation-gpu</span><span class="lv">0 of 3 signed in</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div class="lrow"><span class="lt">wikova</span><span class="lv">All signed in</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div class="lrow"><span class="lt">workstation</span><span class="lv">1 of 3 signed in</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
     </div>
     <div class="sf">Signed in on the machine itself — a session spends that subscription, nothing to paste.</div>
-
     <div class="sh">Account pools</div>
     <div class="card mk" data-n="1">
-      <div class="lrow two"><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="15" height="15" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span><span class="lt2"><span class="lt">Team Codex</span><span class="lsub">Shared · 4 members</span></span><span class="lv">2 of 5 available</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div class="lrow two"><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="15" height="15" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span><span class="lt2"><span class="lt">Team Codex</span><span class="lsub">Shared · 4 members</span></span><span class="lv">2 of 3 available</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div class="lrow two"><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="15" height="15" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span><span class="lt2"><span class="lt">My Codex</span><span class="lsub">Just me · wikova@orbitd.io</span></span><span class="lv">Available</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
       <div class="lrow"><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg viewBox="0 0 24 24" width="15" height="15" fill="#fff"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"></path></svg></span><span class="lt">Claude accounts</span><span class="lv">2 of 2 available</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
     </div>
     <div class="sf">Several keys under one name — each session starts on the one with the most room, and moves on when it runs out.</div>
-
     <div class="sh">Your API keys</div>
     <div class="card">
       <div class="lrow"><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg viewBox="0 0 24 24" width="15" height="15" fill="#fff"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"></path></svg></span><span class="lt">jianghailong.rd@Claude</span></div>
       <div class="lrow"><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg viewBox="0 0 24 24" width="15" height="15" fill="#fff"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"></path></svg></span><span class="lt">orbitd@Claude</span></div>
-      <div class="lrow"><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#5b7cff,#3a57e8);color:#fff;font-weight:700;font-size:13px">D</span><span class="lt">DeepSeek</span></div>
     </div>
     <div class="sf">On your account and usable from every runner — billed per token. Adding or changing a key happens on the web.</div>
   </div>
-</div>
-<div class="phone grouped tall" style="height:1660px">
+</div></div><div data-name="pool">
+<div class="phone grouped " style="height:852px">
   <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
-  <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">Team Codex</span><span></span></div>
+  <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">My Codex</span><span></span></div>
   <div class="scroll" style="top:103px">
-    <div class="phead mk" data-n="2">
-      <div class="phl"><span class="mark" style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="17" height="17" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span><div><div class="pht">Shared Codex pool <span class="chipx brand">SHARED</span></div>
-      <div class="phs">4 members · 2 of 5 keys available</div></div></div>
-      <div class="btn wide primary">Add a key</div>
-    </div>
-
-    <div class="sh">Keys<span class="shr">Next: orbit-org-1</span></div>
-    <div class="card mk" data-n="3"><div class="arow"><span class="av" style="width:32px;height:32px;background:#3370ff;font-size:13px">W</span>
-      <div class="ab"><div class="at">orbit-org-1 <span class="you">you</span> <span class="chipx">NEXT</span></div>
-      <div class="keymask">Wikova · sk-…AB12</div>
-      <div class="as ok">Available</div></div>
-      <div class="ar"><span class="money">$12.40 of $50</span><span class="gauge"><i style="width:25%;background:var(--tint)"></i></span></div></div><div class="arow"><span class="av" style="width:32px;height:32px;background:#16a34a;font-size:13px">Z</span>
-      <div class="ab"><div class="at">orbit-org-2</div>
-      <div class="keymask">Zhang Min · sk-…7K2P</div>
-      <div class="as run">Running now</div></div>
-      <div class="ar"><span class="money">$31.00 of $50</span><span class="gauge"><i style="width:62%;background:var(--tint)"></i></span></div></div><div class="arow"><span class="av" style="width:32px;height:32px;background:#db2777;font-size:13px">C</span>
-      <div class="ab"><div class="at">ios-build</div>
-      <div class="keymask">Chen Yu · sk-…QZ03</div>
-      <div class="as warn">At cap · resets Thu 02:00</div></div>
-      <div class="ar"><span class="money">$50.00 of $50</span><span class="gauge"><i style="width:100%;background:var(--amber)"></i></span></div></div><div class="arow"><span class="av" style="width:32px;height:32px;background:#3370ff;font-size:13px">W</span>
-      <div class="ab"><div class="at">wikova-backup <span class="you">you</span></div>
-      <div class="keymask">Wikova · sk-…M4T7</div>
-      <div class="as bad">Invalid</div><div class="why">Rejected by OpenAI — replace it with a working key to put it back in the pool.</div><div class="rowact"><span class="btn primary">Replace key</span></div></div>
-      <div class="ar"><span class="money">$6.20 of $50</span><span class="gauge"><i style="width:12%;background:var(--tint)"></i></span></div></div><div class="arow"><span class="av" style="width:32px;height:32px;background:#16a34a;font-size:13px">Z</span>
-      <div class="ab"><div class="at">zhang-old</div>
-      <div class="keymask">Zhang Min · sk-…31FD</div>
-      <div class="as">Disabled</div></div>
-      <div class="ar"><span class="money">$0.00 of $50</span><span class="gauge"><i style="width:0%;background:var(--tint)"></i></span></div></div></div>
-    <div class="sf">Each session starts on the key with the most room, and stays on it until that one runs out.</div>
-
-    <div class="sh">Members<span class="shr">Share of this month’s use</span></div>
-    <div class="card"><div class="arow"><span class="av" style="width:32px;height:32px;background:#3370ff;font-size:13px">W</span>
-      <div class="ab"><div class="at" style="font-weight:500">Wikova <span class="you">you</span> <span class="chipx">ADMIN</span></div>
-      <div class="as">2 keys · 23 sessions</div></div>
-      <div class="ar"><span class="pct">34%</span><span class="gauge"><i style="width:34%;background:var(--tint)"></i></span></div></div><div class="arow"><span class="av" style="width:32px;height:32px;background:#16a34a;font-size:13px">Z</span>
-      <div class="ab"><div class="at" style="font-weight:500">Zhang Min</div>
-      <div class="as">2 keys · 19 sessions</div></div>
-      <div class="ar"><span class="pct">30%</span><span class="gauge"><i style="width:30%;background:var(--tint)"></i></span></div></div><div class="arow"><span class="av" style="width:32px;height:32px;background:#db2777;font-size:13px">C</span>
-      <div class="ab"><div class="at" style="font-weight:500">Chen Yu</div>
-      <div class="as">1 key · 14 sessions</div></div>
-      <div class="ar"><span class="pct">24%</span><span class="gauge"><i style="width:24%;background:var(--tint)"></i></span></div></div><div class="arow"><span class="av" style="width:32px;height:32px;background:#ea580c;font-size:13px">L</span>
-      <div class="ab"><div class="at" style="font-weight:500">Lin Wei</div>
-      <div class="as">No key · 6 sessions</div></div>
-      <div class="ar"><span class="pct">12%</span><span class="gauge"><i style="width:12%;background:var(--tint)"></i></span></div></div>
-      <div class="lrow tintrow"><span style="font-size:20px;line-height:1">+</span><span class="lt" style="color:var(--tint)">Add members</span></div>
-    </div>
-
-    <div class="sh">Rules</div>
-    <div class="card"><div class="trow2"><span class="lt">Members can add keys</span><span class="toggle"></span></div></div>
-    <div class="sf">Anyone in Team Codex can put an OpenAI API key in. Off: only admins can.</div>
-    <div class="card" style="margin-top:14px"><div class="trow2"><span class="lt">Own key first</span><span class="toggle"></span></div></div>
-    <div class="sf">A member’s sessions start on a key they added while it has room, then move on to the others’.</div>
-
-    <div class="card"><div class="lrow" style="justify-content:center"><span class="lt" style="color:var(--red);flex:none">Delete pool</span></div></div>
-    <div class="sf">Its keys are removed from the Orbit server and no session can run on it.</div>
+    <div class="phead"><div class="phl"><span class="mark" style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="17" height="17" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span><div><div class="pht">Codex pool</div>
+      <div class="phs">Just me</div></div></div></div>
+    <div class="sh">Account</div>
+    <div class="card"><div class="arow"><span class="mark" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="16" height="16" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span>
+      <div class="ab"><div class="at">wikova@orbitd.io</div>
+      <div class="as sm">ChatGPT Pro · …7QX4</div>
+      <div class="as ok">Available</div>
+      <div class="wins"><div class="win"><div class="winh"><b>5h limit</b><span>23%</span></div>
+      <span class="wgauge"><i style="width:23%;background:var(--tint)"></i></span>
+      <div class="wres">resets 12:17</div></div><div class="win"><div class="winh"><b>Weekly limit</b><span>41%</span></div>
+      <span class="wgauge"><i style="width:41%;background:var(--tint)"></i></span>
+      <div class="wres">resets Thu 15:04</div></div></div>
+      </div></div></div>
+    <div class="sf">Sessions run on your own ChatGPT account, and its sign-in stays on the Orbit server.</div>
+    <div class="card" style="margin-top:22px"><div class="lrow" style="justify-content:center"><span class="lt" style="color:var(--red);flex:none">Delete pool</span></div></div>
+    <div class="sf">Its ChatGPT sign-in is deleted from the Orbit server with it.</div>
   </div>
-</div>
-<div class="phone grouped">
+</div></div><div data-name="pool-out">
+<div class="phone grouped " style="height:852px">
   <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
-  <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">Team Codex</span><span></span></div>
-  <div class="scrim"></div>
-  <div class="sheet mk" data-n="4">
-    <div class="grab"></div>
-    <div class="snav"><span class="platter circle" style="width:40px;height:40px"><svg class="ico" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
-      <span class="stt">Add a key</span><span style="width:40px"></span></div>
-    <div class="slead">Paste an OpenAI API key to put in <b>Team Codex</b>.</div>
-    <div class="card" style="margin:0 16px 12px">
-      <div class="fact"><b>Everyone in Team Codex can run sessions on it</b> — 4 people. Their sessions spend this key’s budget.</div>
-      <div class="fact"><b>The key stays on the Orbit server.</b> It never goes to a runner — runners get a session token, not the key — and nobody in the pool sees it or its full value.</div>
-      <div class="fact"><b>Take it out, or replace it, any time.</b> Its usage shows on the pool’s page for everyone in it.</div>
-    </div>
-    <div class="risk">⚠︎ <b>Keys can’t be resold.</b> Everything run with this key is billed to its account, and the person who adds it is responsible for it.</div>
-    <div class="btn wide primary" style="margin-top:14px">Continue</div>
-    <div class="snote">Next: name it, paste it, and set what the others may spend on it.</div>
+  <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">My Codex</span><span></span></div>
+  <div class="scroll" style="top:103px">
+    <div class="phead"><div class="phl"><span class="mark" style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="17" height="17" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span><div><div class="pht">Codex pool</div>
+      <div class="phs">Just me</div></div></div></div>
+    <div class="sh">Account<span class="shr bad">Signed out</span></div>
+    <div class="card"><div class="arow"><span class="mark" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="16" height="16" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span>
+      <div class="ab"><div class="at">wikova@orbitd.io</div>
+      <div class="as sm">ChatGPT Pro · …7QX4</div>
+      <div class="as bad">Signed out</div><div class="why">OpenAI signed this account out — sign in again to put it back in the pool.</div><div class="rowact"><span class="btn primary">Sign in again</span></div>
+      <div class="wins"><div class="win"><div class="winh"><b>5h limit</b><span>23%</span></div>
+      <span class="wgauge"><i style="width:23%;background:var(--tint)"></i></span>
+      <div class="wres">resets 12:17</div></div><div class="win"><div class="winh"><b>Weekly limit</b><span>41%</span></div>
+      <span class="wgauge"><i style="width:41%;background:var(--tint)"></i></span>
+      <div class="wres">resets Thu 15:04</div></div></div>
+      </div></div></div>
+    <div class="sf">Sessions run on your own ChatGPT account, and its sign-in stays on the Orbit server.</div>
+    <div class="card" style="margin-top:22px"><div class="lrow" style="justify-content:center"><span class="lt" style="color:var(--red);flex:none">Delete pool</span></div></div>
+    <div class="sf">Its ChatGPT sign-in is deleted from the Orbit server with it.</div>
   </div>
-</div></div>
+</div></div><div data-name="pool-none">
+<div class="phone grouped " style="height:852px">
+  <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
+  <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">My Codex</span><span></span></div>
+  <div class="scroll" style="top:103px">
+    <div class="phead"><div class="phl"><span class="mark" style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="17" height="17" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span><div><div class="pht">Codex pool</div>
+      <div class="phs">Just me</div></div></div><div class="btn wide primary">Sign in with ChatGPT</div></div>
+    <div class="sh">Account<span class="shr bad">Not signed in</span></div>
+    <div class="card"><div class="lrow"><span class="lt" style="color:var(--label-2);white-space:normal">No account yet — no session can start on this pool until you sign in with ChatGPT.</span></div></div>
+    <div class="sf">Sessions run on your own ChatGPT account, and its sign-in stays on the Orbit server.</div>
+    <div class="card" style="margin-top:22px"><div class="lrow" style="justify-content:center"><span class="lt" style="color:var(--red);flex:none">Delete pool</span></div></div>
+    <div class="sf">Its ChatGPT sign-in is deleted from the Orbit server with it.</div>
+  </div>
+</div></div><div data-name="consent">
+<div class="phone grouped " style="height:852px">
+  <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
+  <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">My Codex</span><span></span></div>
+  <div class="scrim"></div>
+  <div class="sheet"><div class="grab"></div>
+    <div class="snav"><span class="platter circle" style="width:40px;height:40px"><svg class="ico" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="stt">Sign in with ChatGPT</span><span style="width:40px"></span></div>
+    <div class="slead">Sign in with your own ChatGPT account to run <b>My Codex</b> on it.</div>
+    <div class="card" style="margin:0 16px 12px">
+      <div class="fact"><b>Only you can use it.</b> Sessions on My Codex are yours alone — nobody else in Orbit sees this pool or its account.</div>
+      <div class="fact"><b>The sign-in stays on the Orbit server.</b> It never goes to a runner — runners get a session token, not your login — and nobody sees its tokens.</div>
+      <div class="fact"><b>Sign out any time.</b> Its usage, and when it resets, show on this pool’s page.</div>
+    </div>
+    <div class="risk">⚠︎ <b>Don’t share your account.</b> OpenAI’s terms don’t allow a ChatGPT account to be shared — an account used that way can be suspended.</div>
+    <div class="btn wide primary" style="margin-top:14px">Sign in with ChatGPT</div>
+  </div>
+</div></div><div data-name="code">
+<div class="phone grouped " style="height:852px">
+  <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
+  <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">My Codex</span><span></span></div>
+  <div class="scrim"></div>
+  <div class="sheet"><div class="grab"></div>
+    <div class="snav"><span class="platter circle" style="width:40px;height:40px"><svg class="ico" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="stt">Sign in with ChatGPT</span><span style="width:40px"></span></div>
+    <div style="padding:4px 16px 0">
+      <div class="btn wide primary" style="margin:0">↗︎ Open the sign-in page</div>
+      <div class="url">https://auth.openai.com/codex/device</div>
+      <div class="hint">Sign in there, then enter this one-time code:</div>
+      <div class="codebox"><div class="code">QX7M-4TZPK</div><div class="copy">⧉ Copy code</div></div>
+      <div class="wait"><span class="spin"></span>Waiting for you to approve it…</div>
+      <div class="expiry">The code works until 10:19.</div>
+      <div class="cancel">Cancel</div>
+    </div>
+  </div>
+</div></div><div data-name="done">
+<div class="phone grouped " style="height:852px">
+  <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
+  <div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">My Codex</span><span></span></div>
+  <div class="scrim"></div>
+  <div class="sheet"><div class="grab"></div>
+    <div class="snav"><span class="platter circle" style="width:40px;height:40px"><svg class="ico" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="stt">Sign in with ChatGPT</span><span style="width:40px"></span></div>
+    <div style="padding:8px 16px 0">
+      <div class="done"><span class="ok">✓</span><div><div class="dt">wikova@orbitd.io is in My Codex</div>
+      <div class="ds">It’s ready for the next session. Only you can sign it out or sign it in again.</div></div></div>
+      <div class="card" style="margin:16px 0 0"><div class="arow"><span class="mark" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226)"><svg viewBox="0 0 24 24" width="16" height="16" fill="#fff"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg></span><div class="ab"><div class="at">wikova@orbitd.io</div>
+      <div class="as sm">ChatGPT Pro · …7QX4 · its sign-in stays on the Orbit server</div></div></div></div>
+      <div class="btn wide primary" style="margin:16px 0 0">Done</div>
+    </div>
+  </div>
+</div></div></div>
 <script>
 setTimeout(() => {
-  const r = [...document.querySelectorAll('.phone')].map(p => { const b = p.getBoundingClientRect(); return [b.x, b.y, b.width, b.height]; });
+  const r = Object.fromEntries([...document.querySelectorAll('[data-name]')].map(p => { const b = p.querySelector('.phone').getBoundingClientRect(); return [p.dataset.name, [b.x, b.y, b.width, b.height]]; }));
   document.title = 'PHONES ' + JSON.stringify(r);
 }, 300);
 </script></body></html>
