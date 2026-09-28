@@ -176,6 +176,23 @@ final class RealAppShotTests: XCTestCase {
         return centred?.0
     }
 
+    /// The composer's pool pill, measured. The pill is the account's label beside its quota gauge, so
+    /// both halves are printed: what the toolbar gives the label is what says whether it is legible on
+    /// this device at this width, or squeezed down to the model control's ellipsis.
+    private func measureComposerPill(_ app: XCUIApplication, stage: String) {
+        let device = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] ?? "?"
+        note("composer-pill-frame [\(stage)]: screen=\(app.frame.size) device=\(device) "
+             + "orientation=\(XCUIDevice.shared.orientation == .portrait ? "portrait" : "landscape")")
+        let key = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'orbit-org-1'")).firstMatch
+        note(key.waitForExistence(timeout: 10)
+             ? "composer-pill-frame [\(stage)] account element: frame=\(key.frame) label=\"\(key.label)\""
+             : "composer-pill-frame [\(stage)] account element: NOT FOUND")
+        let gauge = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Plan usage'")).firstMatch
+        note(gauge.exists
+             ? "composer-pill-frame [\(stage)] gauge element: frame=\(gauge.frame) label=\"\(gauge.label)\""
+             : "composer-pill-frame [\(stage)] gauge element: NOT FOUND")
+    }
+
     // MARK: the journey
 
     func test1PickerHeroAndComposer() {
@@ -205,11 +222,21 @@ final class RealAppShotTests: XCTestCase {
         shoot("12-real-picker-current-team-codex")
         closePicker(app)
 
-        let key = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'orbit-org-1'")).firstMatch
-        note(key.waitForExistence(timeout: 10)
-             ? "composer account label: \(key.label) frame=\(key.frame)"
-             : "composer account label: NOT FOUND")
+        // The draft on the pool, as the phone lays it out: measured, then photographed.
+        measureComposerPill(app, stage: "draft, portrait")
         shoot("13-real-composer-pool-key")
+
+        // The same draft on a phone held sideways, where the model control stops taking the room the
+        // account's label needs — the capture to read the pill's two halves off if the portrait one
+        // has squeezed it. Named for the state it is in, which report.txt repeats.
+        XCUIDevice.shared.orientation = .landscapeLeft
+        Thread.sleep(forTimeInterval: 2.5)
+        measureComposerPill(app, stage: "draft, landscape")
+        note("17-real-composer-pool-key-legible: the Team Codex draft, phone landscape — the same "
+             + "composer, the same pool pill, on a toolbar with room for the account's label")
+        shoot("17-real-composer-pool-key-legible")
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 2)
 
         let input = app.textViews.firstMatch
         if input.waitForExistence(timeout: 10) {
@@ -228,11 +255,11 @@ final class RealAppShotTests: XCTestCase {
         Thread.sleep(forTimeInterval: 4)
         shoot("16-real-after-send-settled")
 
-        // The same row on a phone held sideways, where the model control stops taking the room the
-        // account's label needs. Last, so nothing else depends on the rotation.
+        // The same pill again, now on the created session's own console (its provider is the pool),
+        // held sideways.
         XCUIDevice.shared.orientation = .landscapeLeft
         Thread.sleep(forTimeInterval: 2.5)
-        shoot("17-real-composer-landscape")
+        shoot("18-real-console-pool-key-landscape")
         XCUIDevice.shared.orientation = .portrait
     }
 

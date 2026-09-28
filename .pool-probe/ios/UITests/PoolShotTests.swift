@@ -107,9 +107,11 @@ final class PoolShotTests: XCTestCase {
         // The row's drawn text is the key's label; its accessibility label is
         // `ProviderPools.accountHelp`, which is the sentence web puts in the tooltip.
         let key = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'orbit-org-1'")).firstMatch
-        note(key.exists ? "composer account label: \(key.label)" : "composer account label: NOT FOUND")
+        note(key.exists ? "composer account label: \(key.label) frame=\(key.frame)"
+                        : "composer account label: NOT FOUND")
         let gauge = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Plan usage'")).firstMatch
-        note(gauge.exists ? "composer gauge: \(gauge.label)" : "composer gauge: NOT FOUND")
+        note(gauge.exists ? "composer gauge: \(gauge.label) frame=\(gauge.frame)"
+                          : "composer gauge: NOT FOUND")
         _ = launch("composer", dark: true)
         shoot("03-2-composer-pool-key-dark")
     }
