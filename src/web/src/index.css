@@ -12495,15 +12495,20 @@ button.chat-jump-start:hover {
 /* ============================================================================
    Providers → "Account pools": several Claude subscriptions under one name. The
    runner cards' skeleton (fold, head, three-column rows), with a status column
-   wide enough for "Unavailable · key refused" (151px measured) and "Spent ·
-   resets Mon 14:05", and no wider: at the narrowest desktop card (617px, the
-   default sidebar at a 961px window) the name column is what pays for it.
+   wide enough for "Unavailable · usage unreadable" (185px measured — the widest
+   a member's tag gets; "Unavailable · key refused" is 151px and "Spent · resets
+   Mon 14:05" less) and a little wider, so a font that rounds a pixel or two
+   differently does not bring the ellipsis back. A fixed track rather than
+   max-content so the columns of every row in a card line up; what it costs is
+   the name column, and at a 900px card that is 36px of 386 against a name that
+   needs 149 — nothing — while at the narrowest desktop card (617px, the default
+   sidebar at a 961px window) the name is truncated already, as it was at 160px.
    ========================================================================== */
 .pool-sec .re-card + .re-card {
   margin-top: 10px;
 }
 .pool-row {
-  grid-template-columns: minmax(0, 1fr) 160px 140px 110px;
+  grid-template-columns: minmax(0, 1fr) 196px 140px 110px;
 }
 .pool-status {
   min-width: 0;
@@ -12539,7 +12544,7 @@ button.chat-jump-start:hover {
 /* The pool's page takes accounts out, so its rows carry up to two actions: Re-add key and the
    remove mark (88 + 8 + 24px measured). */
 .pool-detail .pool-row {
-  grid-template-columns: minmax(0, 1fr) 160px 130px 124px;
+  grid-template-columns: minmax(0, 1fr) 196px 130px 124px;
 }
 /* The head's gauge: the account the next session runs on, never an average of them. */
 .pool-gauge {

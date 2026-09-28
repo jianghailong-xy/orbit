@@ -120,9 +120,10 @@ public enum ProviderPools {
     }
 
     /// The "2" of "2 of 3 accounts available": the members a session could start on now (web's
-    /// `canTakeWork`). One that reports no quota counts — the claim still picks it, just last.
+    /// `canTakeWork`). One that reports no quota counts — the claim still picks it, just last — and so
+    /// does one whose quota the endpoint would not report: the key is not refused.
     public static func readyCount(_ pool: ProviderPool) -> Int {
-        pool.members.filter { [.available, .running, .noQuota].contains($0.state) }.count
+        pool.members.filter { [.available, .running, .noQuota, .usageUnknown].contains($0.state) }.count
     }
 
     /// The Accounts header's trailing words (web's `PoolGauge`): the account the next session starts
@@ -149,6 +150,7 @@ public enum ProviderPools {
             }
             return PoolStatus(label: "Spent · resets \(time)", tone: .warning)
         case .refused: return PoolStatus(label: "Unavailable · key refused", tone: .danger)
+        case .usageUnknown: return PoolStatus(label: "Unavailable · usage unreadable", tone: .neutral)
         case .disabled: return PoolStatus(label: "Disabled", tone: .neutral)
         case .noQuota, .unknown: return PoolStatus(label: "No quota reported", tone: .neutral)
         }

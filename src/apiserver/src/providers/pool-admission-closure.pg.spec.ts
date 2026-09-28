@@ -13,6 +13,8 @@
  *      @mention — refuses a pool with no account in it, and a pool none of whose accounts can run (each
  *      disabled, turned away by the pool's own admission, or refused by the usage endpoint), saying why in
  *      English. A pool whose accounts are only spent is taken at every one of them: it waits for a reset.
+ *      So is a pool whose only account is a setup token the endpoint will not report on: the key runs
+ *      sessions, only its quota is unreadable (SCOPE_REFUSAL), and every door takes that pool.
  *  (3) A pool that loses its last account that can run under a session it already has — emptied, or every
  *      key refused — still dispatches that session's claim, on the Claude default as it always did, and the
  *      transcript now says so: which pool, and where the run went.
@@ -99,8 +101,14 @@ const fiveHour = (utilization: number) => ({
   status: 200,
   body: { five_hour: { utilization, resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() } },
 });
-/** The endpoint turning the credential itself away — final, as ProviderPlanUsageService takes it. */
-const REFUSED = { status: 401, body: { error: { message: 'OAuth token does not meet scope requirement user:profile' } } };
+/** The endpoint turning the credential itself away — a 401 about the key, which is final for it. */
+const REFUSED = { status: 401, body: { error: { message: 'invalid x-api-key' } } };
+/**
+ * The endpoint refusing the READ of a credential that is otherwise fine: the live case of a Claude Code
+ * setup token, which carries no `user:profile` scope. Sessions run on it; only the quota is unreadable —
+ * so a pool of nothing but these still runs, and no door may refuse it.
+ */
+const SCOPE_REFUSAL = { status: 403, body: { error: { message: 'OAuth token does not meet scope requirement user:profile' } } };
 
 /** The network the server calls out on: the usage endpoint, and nothing else that answers. */
 const serverNetwork = (async (input: unknown, init?: { headers?: Record<string, string> }) => {
@@ -441,9 +449,16 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
     providerIds: [refusedKey.row.id, meteredSince.row.id, switchedOff.row.id],
   });
   await usage.refresh(refusedKey.row);
-  assert.equal(usage.refused(refusedKey.row), true, 'the endpoint refusal did not register');
+  assert.equal(usage.usageStanding(refusedKey.row), 'KEY_REFUSED', 'the endpoint refusal did not register');
   await db.modelProvider.update({ where: { id: meteredSince.row.id }, data: { apiKeyEnc: encryptSecret(metered()) } });
   await db.modelProvider.update({ where: { id: switchedOff.row.id }, data: { enabled: false } });
+  // One account whose quota the endpoint will not report at all: a setup token, which runs sessions
+  // perfectly well. The pool of nothing but it is the live regression — every door must take it.
+  const setup = await account(db, alice, 'Setup token');
+  usageAnswers.set(setup.key, SCOPE_REFUSAL);
+  await usage.refresh(setup.row);
+  assert.equal(usage.usageStanding(setup.row), 'USAGE_UNKNOWN', 'the scope refusal did not register');
+  const setupPool = await providers.createPool(alice, { label: 'Setup tokens', providerIds: [setup.row.id] });
   // Two accounts whose every window is spent: nothing runs until a reset, and then it does.
   const spentA = await account(db, alice, 'Spent A');
   const spentB = await account(db, alice, 'Spent B');
@@ -543,6 +558,16 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
       prompt: 'hello', title: 'on the spent pool', workspaceId: at.workspaceId, provider: spent.slug,
     });
     assert.equal((await recorded(onSpent.id)).provider, spent.slug);
+
+    // So is the pool whose only account is a setup token — the door takes it, and the claim dispatches
+    // that very token: unreadable quota is not a credential nobody can use.
+    const setupAt = await machine(db, alice, 'alice-opens-setup-token');
+    const onSetup = await sessions.create(alice, {
+      prompt: 'hello', title: 'on the setup-token pool', workspaceId: setupAt.workspaceId, provider: setupPool.slug,
+    });
+    const setupClaim = await claim(setupAt.runnerId, onSetup.id);
+    assert.equal(token(setupClaim.agent.env), setup.key, 'the setup-token pool did not dispatch on its own account');
+    assert.equal((await recorded(onSetup.id)).poolMemberProviderId, setup.row.id);
 
     // A project whose last session ran on the pool: a session opened without naming one starts there — or,
     // when the pool can run nothing, not at all.
@@ -697,7 +722,7 @@ suite("an account pool's admission, closed at every door, on real PostgreSQL", {
     await providers.removePoolMember(alice, vanishing.id, lone.row.id);
     usageAnswers.set(fades.key, REFUSED);
     await usage.refresh(fades.row);
-    assert.equal(usage.refused(fades.row), true);
+    assert.equal(usage.usageStanding(fades.row), 'KEY_REFUSED');
 
     for (const { at, sessionId, pool } of [
       { at: emptiedAt, sessionId: onEmptied.id, pool: vanishing },

@@ -11,7 +11,7 @@ import Foundation
 
 /// Where one member of a pool stands, in the order the claim reads a member.
 public enum PoolMemberState: String, Codable, Sendable, CaseIterable {
-    /// Its key was refused (401/403). Final for that key: a new one is the way back.
+    /// Its key was refused (401). Final for that key: a new one is the way back.
     case refused = "REFUSED"
     case disabled = "DISABLED"
     /// A window is used up; `PoolMember.resetsAt` says when it frees up.
@@ -21,6 +21,11 @@ public enum PoolMemberState: String, Codable, Sendable, CaseIterable {
     case available = "AVAILABLE"
     /// It runs, but reports no 5-hour window: last in line, which is not the same as idle.
     case noQuota = "NO_QUOTA"
+    /// The usage endpoint would not report this credential's quota (403 — a Claude Code setup token
+    /// carries no `user:profile` scope), while the credential itself is fine: it runs, ranked behind
+    /// every member whose quota could be read. Not `.refused`, which is the endpoint turning the key
+    /// itself away (401).
+    case usageUnknown = "USAGE_UNKNOWN"
     /// Forward-compatibility floor: a state this build does not know. Nothing here reads it as spent,
     /// and whether its pool can run at all is the server's to say (`ProviderPool.unavailable`).
     case unknown = "UNKNOWN"
@@ -100,9 +105,10 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
     /// account freeing up is enough for work to continue.
     public let resetsAt: String?
     /// Set only when no member can run at all, and no reset will change that — none in it, or each
-    /// one disabled, refused by the endpoint, or one the pool would not admit today: why, in a few
-    /// words ("No accounts", "No account can run"). The server refuses to start or switch a session
-    /// onto such a pool, or to pin a task to it. A pool whose members are only spent never carries it.
+    /// one disabled, its key refused by the endpoint, or one the pool would not admit today: why, in a
+    /// few words ("No accounts", "No account can run"). The server refuses to start or switch a session
+    /// onto such a pool, or to pin a task to it. A pool whose members are only spent never carries it,
+    /// and neither does one whose members' quotas could not be read: it runs on one of them.
     public let unavailable: String?
     public let members: [PoolMember]
     /// A shared pool (web's `sharedPoolAsProviderPool`): the whole of it as its page reads it — its

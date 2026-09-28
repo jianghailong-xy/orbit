@@ -125,11 +125,25 @@ const POOL_QUOTA_SELECT = {
 type PoolRow = Prisma.ProviderPoolGetPayload<{ select: typeof POOL_QUOTA_SELECT }>;
 
 /**
- * Where one member of a pool stands, in the order the claim reads a member: a refused key and a disabled
- * row are no candidates at all, a spent one waits for its reset, and of the rest one with no 5-hour
+ * Where one member of a pool stands, in the order the claim reads a member: a key the endpoint refused
+ * and a disabled row are no candidates at all, a spent one waits for its reset, one whose quota could
+ * not be read is a candidate only after every member with a reading, and of the rest one with no 5-hour
  * reading is last in line — not idle at 0%.
+ *
+ * REFUSED and USAGE_UNKNOWN are the two ways the usage endpoint turns a credential away, and they are
+ * not the same thing (plan-usage.ts usageFailureKind): REFUSED is the endpoint refusing to
+ * authenticate the token (401), while USAGE_UNKNOWN is it refusing to *report on* a token that works —
+ * a Claude Code setup token carrying no `user:profile` scope. A pool whose members are all
+ * USAGE_UNKNOWN still runs, on one of them.
  */
-export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA';
+export type PoolMemberState =
+  | 'REFUSED'
+  | 'DISABLED'
+  | 'SPENT'
+  | 'RUNNING'
+  | 'AVAILABLE'
+  | 'NO_QUOTA'
+  | 'USAGE_UNKNOWN';
 
 @Injectable()
 export class ProvidersService {
@@ -579,7 +593,9 @@ export class ProvidersService {
    * that can run is spent, and is the EARLIEST of their resets: one account freeing up is enough for work
    * to continue. A spent member's own `resetsAt` is the latest of its windows, as for any single account.
    * `unavailable` is set only when no member can run at all, no reset included — the pool every door that
-   * takes a provider refuses (QueueService.accountPoolRefusal), in the words a picker has room for.
+   * takes a provider refuses (QueueService.accountPoolRefusal), in the words a picker has room for. A
+   * member whose quota the endpoint would not report is not one of those: it is state USAGE_UNKNOWN, it
+   * ranks behind every member with a reading, and a pool of nothing else runs on one of them.
    */
   private async poolViews(ownerId: string, pools: PoolRow[]) {
     const now = new Date();
@@ -588,11 +604,15 @@ export class ProvidersService {
       pools.flatMap((pool) => pool.members.map((member) => member.provider)),
     );
     return pools.map(({ members, ...pool }) => {
-      const quota = members.map(({ provider: row }) => ({
-        row,
-        usage: this.planUsage.snapshot(row),
-        refused: this.planUsage.refused(row),
-      }));
+      const quota = members.map(({ provider: row }) => {
+        const standing = this.planUsage.usageStanding(row);
+        return {
+          row,
+          usage: this.planUsage.snapshot(row),
+          refused: standing === 'KEY_REFUSED',
+          usageUnreadable: standing === 'USAGE_UNKNOWN',
+        };
+      });
       const selection = selectPoolMember(
         quota.filter((member) => isPoolCandidate(member.row)),
         null,
@@ -603,7 +623,7 @@ export class ProvidersService {
         resetsAt: selection.kind === 'EXHAUSTED' ? (selection.resetsAt?.toISOString() ?? null) : null,
         unavailable:
           selection.kind !== 'UNAVAILABLE' ? null : members.length > 0 ? 'No account can run' : 'No accounts',
-        members: quota.map(({ row, usage, refused }) => {
+        members: quota.map(({ row, usage, refused, usageUnreadable }) => {
           const spent = spentUntil(usage, now);
           const state: PoolMemberState = refused
             ? 'REFUSED'
@@ -611,11 +631,13 @@ export class ProvidersService {
               ? 'DISABLED'
               : spent !== undefined
                 ? 'SPENT'
-                : running.has(row.id)
-                  ? 'RUNNING'
-                  : usage?.fiveHour
-                    ? 'AVAILABLE'
-                    : 'NO_QUOTA';
+                : usageUnreadable
+                  ? 'USAGE_UNKNOWN'
+                  : running.has(row.id)
+                    ? 'RUNNING'
+                    : usage?.fiveHour
+                      ? 'AVAILABLE'
+                      : 'NO_QUOTA';
           // Named field by field: the row also holds the key and the endpoint, and neither leaves here.
           return {
             id: row.id,

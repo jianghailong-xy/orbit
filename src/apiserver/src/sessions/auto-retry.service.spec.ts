@@ -49,7 +49,7 @@ function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
           : null,
     },
   };
-  const planUsage = { snapshot: (row: (typeof rows)[number]) => row.usage, refused: () => false };
+  const planUsage = { snapshot: (row: (typeof rows)[number]) => row.usage, usageStanding: () => null };
   return new QueueService(prisma as never, {} as never, planUsage as never);
 }
 
