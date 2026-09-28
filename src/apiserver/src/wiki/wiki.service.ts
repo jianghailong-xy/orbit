@@ -68,6 +68,7 @@ import {
   type AnchorReportEntry,
 } from './wiki-anchors';
 import { mergeReceiptText, ownerResolutionText } from './wiki-dossier';
+import { wikiMaintenanceRunChanges } from './wiki-maintenance-breaker';
 import { setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -372,6 +373,8 @@ interface ChangesetBudget {
   /** The space's active entries when the changeset began, and the entries the mode changed in it. */
   activeAtStart: number;
   changedByMode: Set<string>;
+  /** A maintenance run's changeset counts the breaker over the whole run (wiki-maintenance-breaker.ts). */
+  breakerScope: 'changeset' | 'run';
   /** How many ops the space's review mode had applied before this one: what the spot-check draw counts. */
   appliedByModeBefore: number;
 }
@@ -1124,6 +1127,11 @@ export class WikiService {
     const dryRun = input.dryRun === true;
     const settings = wikiSpaceSettings(space.settings);
     const mode = settings.reviewMode;
+    // A Wiki maintenance run's changesets are one run to the circuit breaker: what its earlier ones
+    // changed through the mode is spent, and the space is counted as it stood when the run began.
+    const run = principal.origin === 'maintenance' && principal.sessionId && mode !== 'manual'
+      ? await wikiMaintenanceRunChanges(tx, principal.ownerId, space.id, principal.sessionId)
+      : null;
     const budget: ChangesetBudget = {
       mode,
       autoAcceptReinforce: settings.autoAcceptReinforce !== false,
@@ -1151,8 +1159,10 @@ export class WikiService {
       // neither this read nor the draw's below.
       activeAtStart: mode === 'manual'
         ? 0
-        : await tx.wikiEntry.count({ where: { ownerId: principal.ownerId, spaceId: space.id, status: 'active' } }),
-      changedByMode: new Set<string>(),
+        : (await tx.wikiEntry.count({ where: { ownerId: principal.ownerId, spaceId: space.id, status: 'active' } }))
+          - (run?.addedActive ?? 0),
+      changedByMode: new Set<string>(run?.changed ?? []),
+      breakerScope: run ? 'run' : 'changeset',
       // Only Tiered draws a spot check as it records; Automatic's verdicts draw theirs (`applyVerdict`).
       appliedByModeBefore: mode !== 'tiered'
         ? 0
@@ -1373,9 +1383,13 @@ export class WikiService {
     if (decided.byMode && breakerTrips(budget, opName === 'amend' ? (target?.id ?? null) : null)) {
       return refuse(
         'WIKI_QUOTA',
-        `circuit breaker: this changeset has already changed ${budget.changedByMode.size} of the space's `
-          + `${budget.activeAtStart} active entries, and one changeset may change at most `
-          + `${WIKI_REVIEW_RULES.breakerMaxChangedPercent}% of them — submit the rest in another changeset`,
+        budget.breakerScope === 'run'
+          ? `circuit breaker: this Wiki maintenance run has already changed ${budget.changedByMode.size} of the `
+            + `${budget.activeAtStart} entries the space held active when it began, and one run may change at most `
+            + `${WIKI_REVIEW_RULES.breakerMaxChangedPercent}% of them — the run stops here, and moves no cursor`
+          : `circuit breaker: this changeset has already changed ${budget.changedByMode.size} of the space's `
+            + `${budget.activeAtStart} active entries, and one changeset may change at most `
+            + `${WIKI_REVIEW_RULES.breakerMaxChangedPercent}% of them — submit the rest in another changeset`,
       );
     }
 

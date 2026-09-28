@@ -13,11 +13,13 @@ import (
 // composition inside a session. Like the MCP tools they act for the session they run in — what a
 // session may read is what its bound workspace shares, and a proposal is recorded against it — so
 // there is no headless form: at a terminal outside a session there is nowhere to read from and
-// nobody to propose as. Six verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go) and
+// nobody to propose as. Eight verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go) and
 // `orbit wiki import` (wiki_import.go) run a model, which is a runner's work rather than a tool call's,
 // and `orbit wiki dossier`, `orbit wiki cursor advance` (wiki_dossier.go), `orbit wiki anchors
-// verify` (wiki_anchors.go) and `orbit wiki articles` (wiki_articles.go) are a Wiki maintenance
-// run's, and no other session's.
+// verify` (wiki_anchors.go), `orbit wiki articles` (wiki_articles.go) and `orbit wiki maintain`
+// (wiki_maintain.go) are a Wiki maintenance run's, and no other session's. `orbit wiki check`
+// (wiki_maintain.go) is the one with a headless form: it is a maintenance task's acceptance command,
+// which runs after the session's turn in a shell with no session.
 
 const wikiHelp = `orbit wiki — read the Orbit wiki and propose to it
 
@@ -33,17 +35,21 @@ Usage:
                             [--error TEXT] [--json]
   orbit wiki anchors verify --space <id> [--repo <path>] [--json]
   orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]
+  orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]
+  orbit wiki check --space <id> --expect-cursor <token> [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
 fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. An agent's write
 is a proposal that waits for the owner in Review — or, in an automatic space, for its verification,
 which 'orbit wiki verify' runs with the local model — so never report one as saved.
 
-'orbit wiki dossier', 'orbit wiki cursor advance', 'orbit wiki anchors verify' and 'orbit wiki
-articles' are a Wiki maintenance run's, and no other session's: the run reads what happened in its
-space since the cursor, proposes what it learned citing the records behind it, re-verifies the
-anchors of its space's entries on origin/main, advances the cursor once it has processed a page, and
-has the local model write the articles of the topics whose entries changed.
+'orbit wiki dossier', 'orbit wiki cursor advance', 'orbit wiki anchors verify', 'orbit wiki
+articles' and 'orbit wiki maintain' are a Wiki maintenance run's, and no other session's: the run
+reads what happened in its space since the cursor, proposes what it learned citing the records
+behind it, re-verifies the anchors of its space's entries on origin/main, advances the cursor once
+it has processed a page, and has the local model write the articles of the topics whose entries
+changed. 'orbit wiki maintain' does all of it in one run; 'orbit wiki check' is its task's
+acceptance command, and needs no session.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -53,6 +59,49 @@ Run 'orbit wiki <command> --help' for options.
 var wikiActionHelp = map[string]string{
 	// Written beside the command it documents (wiki_import.go), as its capability is.
 	"import": wikiImportHelp,
+	"maintain": `orbit wiki maintain — run a space's Wiki maintenance, whole, as its maintenance run
+
+Usage:
+  orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]
+
+Options:
+  --space ID               The space this maintenance run maintains. Required
+  --model MODEL            The model to extract with. Default: ANTHROPIC_MODEL, the model this
+                           session's provider names, at its ANTHROPIC_BASE_URL
+  --concurrency N          Model calls in flight at once while extracting, 1 to 16. Default: ` + fmt.Sprint(wikiMaintainExtractConcurrency) + `
+  --json                   Print the run's summary as JSON
+
+` + wikiMaintainPrecondition + `
+
+It reads where the run starts, fetches the maintenance workspace's checkout (a clone of the space's
+repository, or the run fails), reads the dossiers from the space's cursor up to the position its
+task expects, and has the local model extract at most ` + fmt.Sprint(wikiMaintainEntriesPerSession) + ` entries from each through a clean
+Claude Code (--bare, no tools, an empty HOME and CLAUDE_CONFIG_DIR, the token through an
+apiKeyHelper, thinking off). Each entry is checked against its dossier (every source a line of it,
+its quote copied from that line) and the checkout (anchors that exist on origin/main); a session
+about something else than the repository gives none. The entries are proposed by topic, with dryRun
+first; the ops the review mode would apply may change at most the circuit breaker's share of the
+active entries. Then, in an automatic space, the run's ops are verified; the anchors are
+re-verified; the articles of the topics whose entries changed are rewritten; and the cursor
+advances. Any step that fails ends the run failed and moves nothing. It prints what it did, the
+token spend included, and exits non-zero when the run failed.
+`,
+	"check": `orbit wiki check — whether a Wiki maintenance run did what its task expected
+
+Usage:
+  orbit wiki check --space <id> --expect-cursor <token> [--json]
+
+Options:
+  --space ID               The space the maintenance task maintains. Required
+  --expect-cursor TOKEN    The cursor token the task was made with. Required
+  --json                   Print the server's answer as JSON
+
+` + wikiCheckPrecondition + `
+
+It exits 0 when the space's cursor is at or past the position the token names, and the run of the
+task that expects it ended succeeded with none of its ops refused; otherwise it prints each reason
+and exits non-zero. It reads and changes nothing else, and needs no session.
+`,
 	"search": `orbit wiki search — what the wiki already knows about this codebase
 
 Usage:
@@ -400,6 +449,50 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 		Mutates:     true,
 		SessionOnly: true,
 	},
+	{
+		// The maintenance job's run (contract `maintenance.job.cli`): the whole pipeline in one command.
+		Tool:  "wiki_maintain",
+		Argv:  []string{"orbit", "wiki", "maintain"},
+		Usage: "orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]",
+		Arguments: []string{
+			"--space <id> (required; the space this maintenance run maintains)",
+			"--model <model> (default ANTHROPIC_MODEL, the model this session's provider names)",
+			"--concurrency <n> (1-16 model calls in flight while extracting; default " + fmt.Sprint(wikiMaintainExtractConcurrency) + ")",
+			"--json",
+		},
+		Description: wikiMaintainDescription,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"space":       map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
+				"model":       map[string]interface{}{"type": "string", "description": "The model to extract with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
+				"concurrency": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 16, "description": "Model calls in flight at once while extracting."},
+			},
+			"required": []string{"space"},
+		},
+		Mutates:     true,
+		SessionOnly: true,
+	},
+	{
+		// The maintenance task's acceptance command: headless, since that command runs with no session.
+		Tool:  "wiki_check",
+		Argv:  []string{"orbit", "wiki", "check"},
+		Usage: "orbit wiki check --space <id> --expect-cursor <token> [--json]",
+		Arguments: []string{
+			"--space <id> (required; the space the maintenance task maintains)",
+			"--expect-cursor <token> (required; the cursor token the task was made with)",
+			"--json",
+		},
+		Description: wikiCheckDescription,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"space":         map[string]interface{}{"type": "string", "description": "The space the maintenance task maintains."},
+				"expect-cursor": map[string]interface{}{"type": "string", "description": "The cursor token the maintenance task was made with."},
+			},
+			"required": []string{"space", "expect-cursor"},
+		},
+	},
 }
 
 // wikiCLIContext is the session a wiki command acts for. There is no headless form, and no
@@ -474,11 +567,17 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		}
 		command += " verify"
 	}
+	if action == "check" {
+		// A maintenance task's acceptance command: it runs after the session's turn, with no session.
+		return cliWikiCheck(args[1:], out)
+	}
 	ctx, err := wikiCLIContext(command)
 	if err != nil {
 		return err
 	}
 	switch action {
+	case "maintain":
+		return cliWikiMaintain(args[1:], out, ctx)
 	case "import":
 		return cliWikiImport(args[1:], out, ctx)
 	case "search":

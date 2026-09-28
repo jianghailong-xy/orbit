@@ -5,6 +5,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiCursorAdvanceDto } from '../wiki/dto';
 import { isWikiMaintenanceSession, WikiMaintenance } from '../wiki/wiki-maintenance';
+import { noteWikiMaintenanceRunEnd } from '../wiki/wiki-maintenance-run';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
 import { WikiRefusalError, WikiService } from '../wiki/wiki.service';
 import { CurrentRunner } from './current-runner.decorator';
@@ -46,13 +47,15 @@ export class RunnerWikiMaintenanceController {
     /** A cursor token a page handed out; left out, the page starts at the watermark. */
     @Query('after') after?: string,
     @Query('limit') limit?: string,
+    /** A cursor token the page does not go past: the position the run's task expects it to reach. */
+    @Query('until') until?: string,
   ) {
     await this.maintainer(runner, callingSessionId, id);
     const asked = limit === undefined ? undefined : Number(limit);
     if (asked !== undefined && (!Number.isInteger(asked) || asked < 1)) {
       throw new BadRequestException('limit must be a whole number of sessions, 1 or more');
     }
-    return this.maintenance.dossierPage(runner.ownerId, id, { after: after?.trim() || null, limit: asked });
+    return this.maintenance.dossierPage(runner.ownerId, id, { after: after?.trim() || null, until: until?.trim() || null, limit: asked });
   }
 
   /**
@@ -67,12 +70,18 @@ export class RunnerWikiMaintenanceController {
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: WikiCursorAdvanceDto,
   ) {
-    await this.maintainer(runner, callingSessionId, id);
-    return this.maintenance.advanceCursor(runner.ownerId, id, {
+    const sessionId = await this.maintainer(runner, callingSessionId, id);
+    const answer = await this.maintenance.advanceCursor(runner.ownerId, id, {
       to: dto.to ?? '',
       outcome: dto.outcome,
       error: dto.error ?? null,
     });
+    // A run that did not succeed is its task's too: a run cut short by its turn limit says so here, and
+    // `orbit wiki check` reads it off the run's row (contract `maintenance.job.check`).
+    if (answer.outcome !== 'succeeded') {
+      await noteWikiMaintenanceRunEnd(this.prisma, runner.ownerId, id, sessionId, { outcome: answer.outcome, error: dto.error ?? null });
+    }
+    return answer;
   }
 
   /**
