@@ -3009,6 +3009,18 @@ export class WikiService {
         if (!receipt) return null;
         return { ref, text: null, tainted: false, ownerWords: false, sessionId: null };
       }
+      case 'note': {
+        // A file `orbit wiki import` registered (contract `import.source`), among this owner's notes
+        // alone: its stored text — redacted before it was kept — and the file it came from. Agent-written
+        // second-hand content, never the owner's own words.
+        if (!ref || !isDecodableId(ref)) return null;
+        const note = await tx.wikiNote.findFirst({
+          where: { id: ref, ownerId: principal.ownerId },
+          select: { id: true, path: true, text: true },
+        });
+        if (!note) return null;
+        return { ref: note.id, text: note.text, locator: { path: note.path }, tainted: false, ownerWords: false, sessionId: null };
+      }
       default:
         return null;
     }
@@ -3038,7 +3050,7 @@ export class WikiService {
    * Read as a flat list of strings: an environment value is the one secret no shape can recognize, and
    * a quote may repeat one without ever looking like a credential.
    */
-  private async envLiterals(reader: Pick<PrismaService, 'workspace'>, ownerId: string): Promise<string[]> {
+  async envLiterals(reader: Pick<PrismaService, 'workspace'>, ownerId: string): Promise<string[]> {
     const workspaces = await reader.workspace.findMany({ where: { ownerId }, select: { env: true } });
     const literals: string[] = [];
     for (const workspace of workspaces) {

@@ -1296,7 +1296,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // of the six preserved objects. No table, column, constraint, index, trigger or type is created,
       // altered or dropped, and no `task`, `session`, `project` or `project_acceptance_*` object is
       // named. No INSERT, UPDATE or DELETE: no row is read, locked or rewritten.
-      '0313_wiki_search_text_cost'],
+      '0313_wiki_search_text_cost',
+      // Orbit Wiki import's notes: one new table, `wiki_note` (the redacted text of an imported file
+      // and its hash), reaching `wiki_space` through (space_id, owner_id) with its own CHECKs, and one
+      // unique index over it. Read against every claim above: no existing table is named but
+      // `wiki_space`, as the parent its foreign key references, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach. No function, trigger or type is created, replaced or dropped — no
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE: the table starts empty.
+      '0316_wiki_note'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
