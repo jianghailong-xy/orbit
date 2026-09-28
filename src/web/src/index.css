@@ -16203,16 +16203,16 @@ button.chat-jump-start:hover {
 .wk-status-review { display: inline-flex; align-items: center; gap: 8px; }
 /* The maintenance part of the status row (criterion 5, mocks 11 ② and 12 ④): amber while the run waits and red
    when it broke, as the session list's dots are; Set up and View run are links. */
-.wk-maint { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.wk-maint { display: inline-flex; align-items: center; white-space: nowrap; }
 .wk-maint--muted { color: var(--text-3); }
 .wk-maint--warn, .wk-status-row .wk-maint--warn b { color: var(--warning); }
 .wk-maint--error, .wk-status-row .wk-maint--error b { color: var(--error); }
-.wk-maint-ok { color: var(--success); font-weight: 600; }
-.wk-maint-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.wk-maint-ok { margin-left: 6px; color: var(--success); font-weight: 600; }
+.wk-maint-dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; flex: none; vertical-align: 1px; }
 .wk-maint--warn .wk-maint-dot { background: var(--warning-solid); }
 .wk-maint--error .wk-maint-dot { background: var(--error-solid); }
-.wk-maint-spin { width: 11px; height: 11px; border-radius: 50%; flex: none; border: 1.6px solid var(--brand-border);
-                 border-top-color: var(--brand); animation: runner-spin 0.9s linear infinite; }
+.wk-maint-spin { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border-radius: 50%; flex: none;
+                 border: 1.6px solid var(--brand-border); border-top-color: var(--brand); animation: runner-spin 0.9s linear infinite; }
 .wk-maint-link { color: var(--brand); text-decoration: none; white-space: nowrap; }
 .wk-maint-link:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .wk-maint-spin { animation: none; } }
@@ -16743,6 +16743,11 @@ button.chat-jump-start:hover {
   .wk-page > .wk-search { order: 2; margin-top: 12px; height: 40px; }
   .wk-page > .wk-layout, .wk-page > .wk-body { order: 3; }
   .wk-status-review { display: none; }
+  /* The phone's status line is one sentence that wraps where its words do (mock 12 ④), not a row of chips. */
+  .wk-page > .wk-status-row .project-integration-facts { display: block; line-height: 1.6; }
+  .wk-page > .wk-status-row .project-integration-facts > :not(.wk-status-review),
+  .wk-page > .wk-status-row .wk-maint { display: inline; white-space: normal; }
+  .wk-page > .wk-status-row .wk-sep { margin: 0 6px; }
   .wk-maint-spin { display: none; }
   .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search, .wk-page--reading > .wk-status-row { display: none; }
   .wk-layout { display: block; margin-top: 0; }
