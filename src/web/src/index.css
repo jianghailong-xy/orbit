@@ -16200,6 +16200,7 @@ button.chat-jump-start:hover {
 .wk-status-row { margin-top: 14px; }
 .wk-status-row .wk-sep { color: var(--text-4); }
 .wk-status-row .wk-warn-text, .wk-status-row .wk-warn-text b { color: var(--warning); }
+.wk-status-review { display: inline-flex; align-items: center; gap: 8px; }
 .wk-crumb { font-size: 13px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
 .wk-crumb a { color: var(--brand); text-decoration: none; }
 .wk-crumb .ic { font-size: 10px; color: var(--text-4); }
@@ -16608,6 +16609,8 @@ button.chat-jump-start:hover {
 .wk-tag.cat { background: var(--brand-tint); color: var(--brand-strong); }
 .wk-art-page .t-meta { flex-wrap: wrap; gap: 6px 9px; }
 .wk-art-page .t-meta .ic { font-size: 12px; color: var(--text-3); }
+.wk-art-page .wk-art-updated { display: block; line-height: 1.6; }
+.wk-art-page .wk-art-updated .ic { margin-right: 6px; }
 .wk-art { margin-top: 20px; font-size: 15px; line-height: 1.85; color: var(--text-1); }
 .wk-art p { margin: 0 0 12px; }
 .wk-art h2 { margin: 26px 0 10px; padding-bottom: 6px; font-size: 18px; font-weight: 650; line-height: 1.4;
@@ -16616,7 +16619,8 @@ button.chat-jump-start:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: .86em;
   background: var(--fill-inset); border-radius: 4px; padding: 1px 4px; overflow-wrap: anywhere; }
 .wk-fn { font-size: 11px; line-height: 0; vertical-align: super; margin-left: 1px; white-space: nowrap; }
-.wk-fn-n { padding: 0 1px; border: 0; border-radius: 3px; background: transparent; font: inherit; color: var(--brand); cursor: pointer; }
+.wk-fn-n { display: inline-block; padding: 0 1px; border: 0; border-radius: 3px; background: transparent; font: inherit;
+            line-height: 1.15; color: var(--brand); cursor: pointer; }
 .wk-fn-n:hover { text-decoration: underline; }
 .wk-fn-n.on { background: var(--brand); color: #fff; text-decoration: none; }
 .wk-art .hl { background: color-mix(in srgb, var(--brand-tint) 80%, transparent); border-radius: 3px;
@@ -16739,6 +16743,9 @@ button.chat-jump-start:hover {
   .wk-fnlist li .no { text-align: left; }
   .wk-fnlist li .tt { font-size: 14px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .wk-fnlist li .mt { grid-column: 2; margin-top: 2px; font-size: 12.5px; }
+  /* An article's entries on a phone: the title with its mark beside it, the summary under (mock 14 ④). */
+  .wk-art-entries .wk-erow { grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; }
+  .wk-art-entries .wk-erow > .wk-kind, .wk-art-entries .wk-erow > span:nth-child(4), .wk-art-entries .wk-erow .used { display: none; }
   .wk-browse-caret { display: inline-flex; }
   .wk-browse-list { grid-template-columns: minmax(0, 1fr); margin: 6px 0 0 14px; }
   .wk-browse-list a { padding: 9px 0; border-bottom: 1px solid var(--border-subtle); font-size: 14px; }
