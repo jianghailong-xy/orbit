@@ -745,6 +745,10 @@ func (r *wikiMaintainRun) extract(dossier wikiDossier) ([]wikiMaintainOp, error)
 	}
 	entries, parsed := parseWikiImportAnswer(answer)
 	built := r.build(entries, dossier, lines)
+	problems := built.problems
+	if !parsed {
+		problems = []string{"the answer was not a JSON array of entries"}
+	}
 	if !parsed || len(built.problems) > 0 {
 		retry, err := r.ask(prompt + wikiMaintainRetrySuffix(answer, parsed, built))
 		if err != nil {
@@ -753,8 +757,16 @@ func (r *wikiMaintainRun) extract(dossier wikiDossier) ([]wikiMaintainOp, error)
 				return nil, err
 			}
 		} else if again, ok := parseWikiImportAnswer(retry); ok {
-			built.merge(r.build(again, dossier, lines))
+			corrected := r.build(again, dossier, lines)
+			problems = corrected.problems
+			built.merge(corrected)
 		}
+	}
+	if built.dropped > 0 || !parsed {
+		if len(problems) > 3 {
+			problems = problems[:3]
+		}
+		r.say("  %q: %s dropped — %s", cutRunes(dossier.Title, 60), wikiCount(built.dropped, "entry", "entries"), strings.Join(problems, "; "))
 	}
 	r.mu.Lock()
 	r.report.Entries.Extracted += built.extracted
@@ -794,7 +806,9 @@ type wikiMaintainLine struct {
 var wikiMaintainLineHead = regexp.MustCompile(`^L(\d+) ([a-z-]+): ?(.*)$`)
 
 // wikiMaintainLines are a dossier's named lines: each `L12 owner: …` with the lines that continue it, and
-// the record its sources map the name to.
+// the record its sources map the name to. The server writes every newline of a line's text as a newline and
+// four spaces (wiki-dossier.ts), a blank one included, so a line continues exactly as far as the lines under
+// it carry that indent; an omission marker (`   … (N lines omitted)`) has three, and ends it.
 func wikiMaintainLines(dossier wikiDossier) map[string]wikiMaintainLine {
 	records := map[string]wikiDossierSource{}
 	for _, source := range dossier.Sources {
@@ -813,17 +827,19 @@ func wikiMaintainLines(dossier wikiDossier) map[string]wikiMaintainLine {
 			lines[current] = wikiMaintainLine{text: m[3], kind: record.Kind, id: record.ID, author: m[2]}
 			continue
 		}
-		trimmed := strings.TrimSpace(raw)
-		if current == "" || trimmed == "" || strings.HasPrefix(trimmed, "… (") {
+		if current == "" || !strings.HasPrefix(raw, wikiMaintainContinuation) {
 			current = ""
 			continue
 		}
 		line := lines[current]
-		line.text += "\n" + trimmed
+		line.text += "\n" + strings.TrimPrefix(raw, wikiMaintainContinuation)
 		lines[current] = line
 	}
 	return lines
 }
+
+// wikiMaintainContinuation is the indent a dossier line's own later lines carry.
+const wikiMaintainContinuation = "    "
 
 // wikiMaintainBuilt is what a set of the model's entries became: the adds that hold up, and what was
 // wrong with the rest (for the retry).
@@ -849,8 +865,8 @@ func (b *wikiMaintainBuilt) merge(retry wikiMaintainBuilt) {
 			b.dropped--
 		}
 	}
+	// A principle in the retry is one the first answer already had, and was counted there.
 	b.foreign += retry.foreign
-	b.principles += retry.principles
 }
 
 var wikiMaintainDate = regexp.MustCompile(`started (\d{4}-\d{2}-\d{2})`)

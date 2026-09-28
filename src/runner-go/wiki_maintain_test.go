@@ -481,6 +481,32 @@ func TestWikiMaintainTakesNothingFromASessionAboutSomethingElse(t *testing.T) {
 	}
 }
 
+// A line of a dossier runs on as far as its own four-space indent does — through its blank lines too —
+// and a quote from its third paragraph is a quote from that line.
+func TestWikiMaintainReadsALineOfManyParagraphsWhole(t *testing.T) {
+	dossier := wikiDossier{
+		Text: "SESSION: a long prompt\nclaude · started 2026-09-27 · status SUCCEEDED\n\n" +
+			"L1 taskprompt: 请开始执行任务「近邻查询走索引」。\n    \n    任务描述：\n    ## 背景\n      - `nearNeighbours` 随行数线性增长；\n" +
+			"   … (3 lines omitted)\n" +
+			"L5 owner: 先诊断，再改。\n" +
+			"SESSION: not a continuation\n",
+		Sources: []wikiDossierSource{{Ref: "L1", Kind: "turn", ID: "turn-1"}, {Ref: "L5", Kind: "turn", ID: "turn-5"}},
+	}
+	lines := wikiMaintainLines(dossier)
+	if got := lines["L1"].text; got != "请开始执行任务「近邻查询走索引」。\n\n任务描述：\n## 背景\n  - `nearNeighbours` 随行数线性增长；" {
+		t.Errorf("L1 = %q", got)
+	}
+	if got := lines["L5"].text; got != "先诊断，再改。" {
+		t.Errorf("L5 = %q: the header after it is not part of it", got)
+	}
+	sources, problems := wikiMaintainSources([]interface{}{
+		map[string]interface{}{"ref": "L1", "quote": "nearNeighbours 随行数线性增长"},
+	}, lines)
+	if len(problems) != 0 || len(sources) != 1 {
+		t.Errorf("a quote from the line's third paragraph: sources %v, problems %v", sources, problems)
+	}
+}
+
 // ── Failures move nothing ───────────────────────────────────────────────────────────────────────
 
 func TestWikiMaintainMovesNothingWhenTheServerRefusesAnOp(t *testing.T) {
