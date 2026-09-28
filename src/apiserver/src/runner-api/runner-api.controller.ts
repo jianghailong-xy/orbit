@@ -108,6 +108,7 @@ import {
   TakeoverTurnLeasesResponse,
   TurnAttachment,
   TurnCompleteRequest,
+  WIKI_MAINTENANCE_RUN_V1,
   WorktreesRemovableRequest,
   WorktreesRemovableResponse,
   gracefulEndStatus,
@@ -172,6 +173,7 @@ import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { wikiMaintenanceRunOf, withWikiMaintenanceRun } from '../wiki/wiki-maintenance-session';
 import {
   type TaskFailure,
   openItemIdOfTurn,
@@ -1972,6 +1974,7 @@ export class RunnerApiController {
       LONG_POLL_MS,
       supportsTerminalHandoff,
       supportsSourcePin,
+      runnerSupportsCapability(capabilities, WIKI_MAINTENANCE_RUN_V1),
     );
     if (job?.allowOrchestration) {
       if (runnerSupportsCapability(capabilities, SESSION_ORCHESTRATION_CREDENTIAL_V1)) {
@@ -2008,6 +2011,7 @@ export class RunnerApiController {
       SESSION_TERMINAL_HANDOFF_V1,
     );
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
+    const supportsWikiMaintenance = runnerSupportsCapability(capabilities, WIKI_MAINTENANCE_RUN_V1);
     const sessions = await this.prisma.session.findMany({
       where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
       include: {
@@ -2082,13 +2086,20 @@ export class RunnerApiController {
       if (!supportsSourcePin && hasResolvedSource(s.sourceState)) {
         continue;
       }
+      // A Wiki maintenance session, and the run it is rebuilt on (wiki/wiki-maintenance-session.ts). The same
+      // refusal again as SR35 above: a runner that cannot start it clean is not handed it back at all.
+      const maintenance = await wikiMaintenanceRunOf(this.prisma, s);
+      if (maintenance && !supportsWikiMaintenance) {
+        continue;
+      }
       const workspace = s.workspace;
       const declared = s.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
       // scope mirrors the claim path: a personal provider resolves only for its owner's sessions,
       // and an account pool is rebuilt on the member the claim would choose, not the runner's login — a
-      // shared pool on the gateway, with a token of its own, as the claim builds it.
+      // shared pool on the gateway, with a token of its own, as the claim builds it. A maintenance run, as
+      // on the claim, never through a pool.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
       const customRow = declaredIsBuiltin
         ? null
@@ -2098,8 +2109,10 @@ export class RunnerApiController {
               OR: [{ ownerId: null }, { ownerId: s.ownerId }],
             },
           })) ??
-          (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
-          (await this.queue.resolveSharedPool(this.prisma, s, declared!)));
+          (maintenance
+            ? null
+            : ((await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
+              (await this.queue.resolveSharedPool(this.prisma, s, declared!)))));
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
           declaredProvider: declared,
@@ -2196,6 +2209,7 @@ export class RunnerApiController {
       // but orchestration discovery and credential issuance use the authorizer's exact live
       // eligibility conditions. This prevents tools from appearing only to fail every call.
       const allowOrchestration =
+        maintenance === null &&
         supportsOrchestrationCredential &&
         s.ownerId === runner.ownerId &&
         s.assignedRunnerId === runner.id &&
@@ -2204,7 +2218,7 @@ export class RunnerApiController {
         OPEN.includes(s.status) &&
         workspace?.deletedAt === null &&
         orchestrationEnabled(s.owner);
-      out.push({
+      out.push(withWikiMaintenanceRun({
         sessionId: s.id,
         status: s.status as SharedRunStatus,
         provider,
@@ -2244,7 +2258,7 @@ export class RunnerApiController {
           s,
           s.sourceCodebaseId ? (sourceBindings.get(s.sourceCodebaseId) ?? null) : null,
         ),
-      });
+      }, maintenance));
     }
     return { sessions: out };
   }

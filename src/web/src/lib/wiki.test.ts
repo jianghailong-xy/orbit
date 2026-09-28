@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WikiEntry } from '@orbit/shared';
+import type { WikiAnchorCheck, WikiEntry } from '@orbit/shared';
 import {
   WIKI_REJECT_MENU,
   WIKI_TRUST_LABELS,
@@ -108,6 +108,19 @@ describe('the anchor column', () => {
     });
     expect(wikiAnchorStateOf({ check: { state: 'missing' } }).tone).toBe('red');
     expect(wikiAnchorStateOf({}).word).toBe('Unchecked');
+  });
+
+  it('reads the check the anchor re-verification keeps, a symbol’s hashes and all', () => {
+    // What `anchorRules.verify.check` stores beside a symbol: the region it found and the baseline it holds it to.
+    const check: WikiAnchorCheck = {
+      state: 'changed',
+      ref: 'c'.repeat(40),
+      at: '2026-09-28T02:00:00.000Z',
+      regionSha256: 'b'.repeat(64),
+      baselineSha256: 'a'.repeat(64),
+    };
+    expect(wikiAnchorStateOf({ check })).toEqual({ word: 'Changed', tone: 'amber' });
+    expect(wikiAnchorStateOf({ check: { ...check, state: 'verified' } })).toEqual({ word: 'ccccccc', tone: 'green' });
   });
 });
 

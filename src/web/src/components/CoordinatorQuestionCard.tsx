@@ -60,6 +60,9 @@ export const FROM_COORDINATOR_TITLE =
   'Orbit filed this question on behalf of the conversation coordinating this project. '
   + 'It is not something an agent turn wrote into this page.';
 export const SEND_ANSWER = 'Send answer';
+/** The box beside the options says what its text will be: a note on the choice, or the answer. */
+export const NOTE_PROMPT = 'Add a note (optional)';
+export const OWN_ANSWER_PROMPT = 'Or type your own answer…';
 export const RECOMMENDED = 'Recommended';
 export const ANSWERED_HEADING = 'Answered';
 /** An answer with nobody to tell yet: R11 tells the next coordinator when one is bound. */
@@ -146,10 +149,15 @@ export function CoordinatorQuestionCard({
 
   const free = question.options.length === 0;
   const trimmed = text.trim();
-  const sendable = free ? trimmed !== '' : chosen !== null;
+  // A choice, some text, or both — the door takes any of them. Beside a choice the text is a note on
+  // it; on its own it is the answer, which is how the owner says none of the options is theirs.
+  const sendable = chosen !== null || trimmed !== '';
   const send = () => {
     if (!sendable || answer.isPending) return;
-    answer.mutate(free ? { text: trimmed } : { option: chosen!, ...(trimmed ? { text: trimmed } : {}) });
+    answer.mutate({
+      ...(chosen !== null ? { option: chosen } : {}),
+      ...(trimmed ? { text: trimmed } : {}),
+    });
   };
 
   return (
@@ -160,7 +168,7 @@ export function CoordinatorQuestionCard({
           {FROM_COORDINATOR}
         </span>
       </div>
-      <div className="approval-body coordinator-question-body">
+      <div className="approval-body is-questions coordinator-question-body">
         <p className="coordinator-question-text">{question.question}</p>
         {/* The options are the answer: one tap, with the recommendation marked where it was made
             rather than as a sentence above them. A question asked without any is prose only. */}
@@ -174,6 +182,11 @@ export function CoordinatorQuestionCard({
               name={`question-${row.itemId}`}
               checked={chosen === index}
               onChange={() => setChosen(index)}
+              // Pressing the chosen option again takes it back: the recommendation starts out
+              // chosen, and without this there is no way back to answering in words alone.
+              onClick={() => {
+                if (chosen === index) setChosen(null);
+              }}
             />
             <span className="coordinator-question-option-text">
               {option.label}
@@ -186,16 +199,16 @@ export function CoordinatorQuestionCard({
             </span>
           </label>
         ))}
-        {free ? (
-          <Input.TextArea
-            className="coordinator-question-free"
-            value={text}
-            maxLength={2000}
-            autoSize={{ minRows: 2, maxRows: 8 }}
-            placeholder="Your answer"
-            onChange={(event) => setText(event.target.value)}
-          />
-        ) : null}
+        {/* Always there: none of the options may be what the owner wants, and one that is may
+            still need a condition said with it. */}
+        <Input.TextArea
+          className="coordinator-question-free"
+          value={text}
+          maxLength={2000}
+          autoSize={{ minRows: 2, maxRows: 8 }}
+          placeholder={free ? 'Your answer' : chosen !== null ? NOTE_PROMPT : OWN_ANSWER_PROMPT}
+          onChange={(event) => setText(event.target.value)}
+        />
         {/* What it holds up and what happens if nobody answers, in the server's own words — the
             same line the item's row carries, so the card and the list cannot say different things. */}
         {row.detailLine ? (

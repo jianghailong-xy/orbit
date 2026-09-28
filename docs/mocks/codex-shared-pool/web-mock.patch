@@ -1,12 +1,13 @@
 diff --git a/src/web/src/components/AccountPools.tsx b/src/web/src/components/AccountPools.tsx
-index ad1580e..6c56625 100644
+index ad1580e..74d389d 100644
 --- a/src/web/src/components/AccountPools.tsx
 +++ b/src/web/src/components/AccountPools.tsx
-@@ -13,9 +13,11 @@ import {
+@@ -12,10 +12,12 @@ import {
+   memberRefusal,
    memberStatus,
    poolHeadline,
++  type PoolContributor,
    type PoolMember,
-+  type PoolOwner,
    type PoolRefusals,
    type ProviderPool,
  } from '../lib/providerPools';
@@ -14,12 +15,13 @@ index ad1580e..6c56625 100644
  import type { ProviderRow } from '../lib/providerAdmin';
  import { useIsMobile } from '../lib/useMediaQuery';
  import { useToast } from '../lib/toast';
-@@ -37,6 +39,37 @@ function readFold(): Record<string, boolean> {
+@@ -37,17 +39,54 @@ function readFold(): Record<string, boolean> {
  
  const accounts = (n: number) => `${n} account${n === 1 ? '' : 's'}`;
  
+-/** "2 of 3 accounts available": the members a session could start on right now. */
 +/** MOCK: a person is a circle with their initial — the Team mock's mark for people. */
-+export function OwnerAvatar({ owner, size = 28 }: { owner: PoolOwner; size?: number }) {
++export function OwnerAvatar({ owner, size = 28 }: { owner: PoolContributor; size?: number }) {
 +  return (
 +    <span
 +      className="pool-av"
@@ -49,10 +51,30 @@ index ad1580e..6c56625 100644
 +  return <ProviderTile slug={codex ? 'openai' : 'anthropic'} label={codex ? 'Codex' : 'Claude'} size={size} />;
 +}
 +
- /** "2 of 3 accounts available": the members a session could start on right now. */
++// MOCK: a shared pool is made of API keys, so its count is a count of keys — the personal Claude
++// pool keeps counting accounts, which is what its members are.
++const memberNoun = (pool: ProviderPool, n: number) =>
++  pool.shared ? `${n} key${n === 1 ? '' : 's'}` : accounts(n);
++
++/** "2 of 3 keys available": the members a session could start on right now. */
  export const availabilityOf = (pool: ProviderPool, refusals: PoolRefusals): string =>
-   `${availableCount(pool, refusals)} of ${accounts(pool.members.length)} available`;
-@@ -99,21 +132,33 @@ function MemberRow({
+-  `${availableCount(pool, refusals)} of ${accounts(pool.members.length)} available`;
++  `${availableCount(pool, refusals)} of ${memberNoun(pool, pool.members.length)} available`;
+ 
+-/** The same words for a head line, where a phone drops "accounts" to keep the pool's name. */
++/** The same words for a head line, where a phone drops the noun to keep the pool's name. */
+ function Availability({ pool, refusals }: { pool: ProviderPool; refusals: PoolRefusals }) {
+   const total = pool.members.length;
++  const one = pool.shared ? 'key' : 'account';
+   return (
+     <span className="re-summary">
+       {availableCount(pool, refusals)} of {total}
+-      <span className="pool-wide"> account{total === 1 ? '' : 's'}</span> available
++      <span className="pool-wide"> {one}{total === 1 ? '' : 's'}</span> available
+     </span>
+   );
+ }
+@@ -99,23 +138,50 @@ function MemberRow({
    member,
    refusal,
    onRemove,
@@ -63,17 +85,27 @@ index ad1580e..6c56625 100644
    onRemove?: () => void;
 +  pool?: ProviderPool;
  }) {
-+  // MOCK: in a shared pool an account is someone's — only they can sign it back in, and only they or
-+  // an admin can take it out.
-+  const owner = member.owner;
++  // MOCK: in a shared pool an account is a key someone contributed — only they (or an admin) may
++  // replace it once the upstream rejects it, and only they or an admin can take it out.
++  const owner = member.contributor;
 +  const mine = !!owner?.you;
 +  const canRemove = !owner || mine || pool?.viewerRole === 'Admin';
    const navigate = useNavigate();
    const status = memberStatus(member, undefined, refusal);
    const quota = memberQuota(member);
++  // MOCK: a key's own gauge is money, not a window: what the others spent on it this month against
++  // the cap its contributor set. A key with no cap shows the spend alone.
++  const cap = member.capUsd;
++  const spent = member.spentUsd ?? 0;
++  const capped = owner != null && cap != null;
++  const percent = capped ? Math.min(100, Math.round((spent / (cap as number)) * 100)) : null;
    return (
 -    <div className="re-row pool-row" data-member={member.id}>
-+    <div className="re-row pool-row" data-member={member.id} data-mk={`acct-${member.slug}`}>
++    <div
++      className={`re-row pool-row${owner ? ' pool-row-key' : ''}`}
++      data-member={member.id}
++      data-mk={`acct-${member.slug}`}
++    >
        <div className="re-id">
 -        <ProviderTile slug={member.presetSlug ?? member.slug} label={member.label} size={28} />
 +        {owner ? (
@@ -87,8 +119,60 @@ index ad1580e..6c56625 100644
 +            {mine && <span className="pool-you">you</span>}
              {member.next && <span className="re-chip">NEXT</span>}
            </div>
++          {owner && member.keyMask && (
++            <div className="pool-key-mask">
++              {owner.name} · {member.keyMask}
++            </div>
++          )}
          </div>
-@@ -146,9 +191,14 @@ function MemberRow({
+       </div>
+       <div className="pool-status">
+@@ -123,8 +189,28 @@ function MemberRow({
+           {status.label}
+         </Tag>
+       </div>
+-      <div className="re-quota">
+-        {quota ? (
++      <div className={`re-quota${owner ? ' pool-key-money' : ''}`}>
++        {owner ? (
++          <>
++            {/* Short on purpose: what the others spent on this key, against the cap its contributor
++                set — the full sentence is the cell's own title. */}
++            <div
++              className="re-quota-head"
++              title={`What the others spent on this key this month${capped ? `, of the $${(cap as number).toFixed(0)} its contributor allows` : ''}`}
++            >
++              <b>Others</b>
++              <span>
++                ${spent.toFixed(2)}
++                {capped ? ` of $${(cap as number).toFixed(0)}` : ''}
++              </span>
++            </div>
++            {percent != null && (
++              <div className={`runner-util ${percent >= 90 ? 'full' : ''}`}>
++                <span className="runner-util-fill" style={{ width: `${percent}%` }} />
++              </div>
++            )}
++          </>
++        ) : quota ? (
+           <>
+             <div className="re-quota-head">
+               <b>{quota.label}</b>
+@@ -139,6 +225,13 @@ function MemberRow({
+         )}
+       </div>
+       <div className="re-act">
++        {/* A key the upstream rejects is final for that key, not for the pool: only its contributor
++            or an admin may paste a replacement over it. */}
++        {member.state === 'INVALID' && (mine || pool?.viewerRole === 'Admin') && (
++          <Button size="small" type="primary" data-mk="row-replace">
++            Replace key
++          </Button>
++        )}
+         {/* A refused key is final for the key, not for the account: a new one is the way back, and
+             it is pasted on the provider's own page. */}
+         {member.state === 'REFUSED' && (
+@@ -146,9 +239,14 @@ function MemberRow({
              Re-add key
            </Button>
          )}
@@ -104,10 +188,17 @@ index ad1580e..6c56625 100644
            <Tooltip title="Remove from this pool">
              <Button
                size="small"
-@@ -162,6 +212,13 @@ function MemberRow({
+@@ -162,6 +260,20 @@ function MemberRow({
          )}
        </div>
        {refusal && <div className="pool-why">{refusal}</div>}
++      {member.state === 'INVALID' && (
++        <div className="pool-why" data-mk="row-invalid">
++          {mine
++            ? 'Rejected by OpenAI — replace it with a working key to put it back in the pool.'
++            : `Rejected by OpenAI — only ${owner?.name ?? 'its contributor'} can replace it.`}
++        </div>
++      )}
 +      {member.state === 'SIGNED_OUT' && (
 +        <div className="pool-why" data-mk="row-signedout">
 +          {mine
@@ -118,7 +209,16 @@ index ad1580e..6c56625 100644
      </div>
    );
  }
-@@ -186,7 +243,7 @@ export function PoolMembers({
+@@ -182,11 +294,15 @@ export function PoolMembers({
+       {/* Every door that takes a provider refuses a pool with nothing in it (the server's
+           `unavailable`), so this says that rather than where such a session would run. */}
+       {pool.members.length === 0 && (
+-        <div className="pool-note">No accounts yet — no session can start on this pool until one is added.</div>
++        <div className="pool-note">
++          {pool.shared
++            ? 'No keys yet — no session can start on this pool until one is added.'
++            : 'No accounts yet — no session can start on this pool until one is added.'}
++        </div>
        )}
        {/* Not of one the pool no longer admits: on its own that account still runs, and in the pool
            it can't. */}
@@ -127,7 +227,7 @@ index ad1580e..6c56625 100644
          <div className="pool-note">
            With one account this pool is the same as using <b>{only.label}</b> on its own. Add another
            so a session can move when this one runs out.
-@@ -198,6 +255,7 @@ export function PoolMembers({
+@@ -198,6 +314,7 @@ export function PoolMembers({
            member={member}
            refusal={memberRefusal(member, refusals)}
            onRemove={onRemove && (() => onRemove(member))}
@@ -135,7 +235,7 @@ index ad1580e..6c56625 100644
          />
        ))}
      </>
-@@ -216,16 +274,23 @@ function PoolCard({
+@@ -216,16 +333,23 @@ function PoolCard({
    onToggle: () => void;
  }) {
    return (
@@ -161,7 +261,7 @@ index ad1580e..6c56625 100644
          <PoolGauge pool={pool} />
          <Link className="re-manage" to={`/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
            <span className="pool-wide">Manage </span>→
-@@ -258,12 +323,16 @@ export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refus
+@@ -258,12 +382,16 @@ export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refus
  
    return (
      <div className="re-sec pool-sec">
@@ -172,8 +272,8 @@ index ad1580e..6c56625 100644
 -          Several Claude subscriptions under one name — each session starts on the account with the
 -          most room in its 5-hour window.
 +        <span className="re-sec-sub" data-mk="pools-sub">
-+          Several subscriptions under one name — each session starts on the account with the most
-+          room in its 5-hour window.
++          Several keys under one name — each session starts on the one with the most room, and moves
++          on when it runs out.
          </span>
 +        {/* MOCK: a way to make a second pool once there is one — until now only the keys list offered it. */}
 +        <Button size="small" className="pool-new" data-mk="new-pool">
@@ -182,241 +282,19 @@ index ad1580e..6c56625 100644
        </div>
        {pools.map((pool) => {
          const open = fold[pool.id] ?? !isMobile;
-diff --git a/src/web/src/lib/providerPools.ts b/src/web/src/lib/providerPools.ts
-index dc6701f..1c100e1 100644
---- a/src/web/src/lib/providerPools.ts
-+++ b/src/web/src/lib/providerPools.ts
-@@ -15,7 +15,21 @@ import type { ConfiguredProvider } from './workspaceDefaults';
-  */
- 
- /** Where one member stands, in the order the claim reads a member. */
--export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA';
-+export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA' | 'SIGNED_OUT';
-+
-+// MOCK (scratch tree only): what a shared pool adds — whose account each member is, and the people in it.
-+export interface PoolOwner {
-+  name: string;
-+  color: string;
-+  you?: boolean;
-+}
-+export interface PoolPerson extends PoolOwner {
-+  role: 'Admin' | 'Member';
-+  accounts: number;
-+  /** Share of this week's use of the pool, 0..100. */
-+  share: number;
-+  sessions: number;
-+}
- 
- export interface PoolMember {
-   id: string;
-@@ -31,6 +45,9 @@ export interface PoolMember {
-   resetsAt: string | null;
-   /** The member a session starting now would run on. */
-   next: boolean;
-+  /** MOCK: a shared pool's member is someone's account. */
-+  owner?: PoolOwner;
-+  plan?: string;
- }
- 
- export interface ProviderPool {
-@@ -45,6 +62,13 @@ export interface ProviderPool {
-    *  The server refuses to start or switch a session onto such a pool, or to pin a task to it. */
-   unavailable?: string | null;
-   members: PoolMember[];
-+  /** MOCK: shared-pool fields. */
-+  engine?: 'claude' | 'codex';
-+  shared?: boolean;
-+  viewerRole?: 'Admin' | 'Member';
-+  ownFirst?: boolean;
-+  membersCanAdd?: boolean;
-+  people?: PoolPerson[];
- }
- 
- /** Under ['providers'], so every provider change — a key, a pool, a quota the server re-read —
-@@ -103,10 +127,10 @@ export const poolsAsProviders = (pools: readonly ProviderPool[]): ConfiguredProv
-   pools.map((pool) => ({
-     slug: pool.slug,
-     label: pool.label,
--    runtime: AgentProvider.CLAUDE,
-+    runtime: pool.engine === 'codex' ? AgentProvider.CODEX : AgentProvider.CLAUDE,
-     models: [],
-     defaultModel: null,
--    presetSlug: 'anthropic',
-+    presetSlug: pool.engine === 'codex' ? 'openai' : 'anthropic',
-     modelsFromRuntime: true,
-     planUsage: null,
-   }));
-@@ -172,6 +196,8 @@ export function memberStatus(
-       };
-     case 'REFUSED':
-       return { label: 'Unavailable · key refused', color: 'red' };
-+    case 'SIGNED_OUT':
-+      return { label: 'Unavailable · signed out', color: 'red' };
-     case 'DISABLED':
-       return { label: 'Disabled', color: 'default' };
-     default:
-diff --git a/src/web/src/lib/sessionProviderChoices.ts b/src/web/src/lib/sessionProviderChoices.ts
-index 6a132e7..f165e61 100644
---- a/src/web/src/lib/sessionProviderChoices.ts
-+++ b/src/web/src/lib/sessionProviderChoices.ts
-@@ -192,7 +192,8 @@ export function providerChoices(
-     slug: pool.slug,
-     label: pool.label,
-     kind: 'pool' as const,
--    ...brandForProvider(pool.slug, pool.label, 'anthropic'),
-+    // MOCK: a Codex pool wears the Codex mark.
-+    ...brandForProvider(pool.slug, pool.label, (pool as { engine?: string }).engine === 'codex' ? 'openai' : 'anthropic'),
-     modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
-     poolSize: pool.members.length,
-     ...(claudeBlocker
-diff --git a/src/web/src/pages/ProviderPoolPage.tsx b/src/web/src/pages/ProviderPoolPage.tsx
-index acf1cd0..6711664 100644
---- a/src/web/src/pages/ProviderPoolPage.tsx
-+++ b/src/web/src/pages/ProviderPoolPage.tsx
-@@ -3,7 +3,23 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
- import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
- import { Button, Popconfirm, Spin } from 'antd';
- import { api } from '../api';
--import { availabilityOf, PoolAccountsModal, PoolGauge, PoolMembers } from '../components/AccountPools';
-+import { availabilityOf, PoolAccountsModal, PoolEngineMark, PoolGauge, PoolMembers } from '../components/AccountPools';
-+import { AddAccountModal, PoolPeopleCard, PoolRulesCard, type AddStep } from '../components/SharedPool';
-+import type { ProviderPool } from '../lib/providerPools';
-+
-+// MOCK: ?as=<first name> shows the page as that member sees it; ?add=<step> opens "Add my account".
-+const mq = new URLSearchParams(location.search);
-+function asViewer(pool: ProviderPool, first: string | null): ProviderPool {
-+  if (!first || !pool.shared) return pool;
-+  const is = (name: string) => name.split(' ')[0].toLowerCase() === first;
-+  const people = (pool.people ?? []).map((p) => ({ ...p, you: is(p.name) }));
-+  return {
-+    ...pool,
-+    people,
-+    viewerRole: people.find((p) => p.you)?.role ?? 'Member',
-+    members: pool.members.map((m) => (m.owner ? { ...m, owner: { ...m.owner, you: is(m.owner.name) } } : m)),
-+  };
-+}
- import { encodeId, routeId } from '../lib/idCodec';
- import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
- import { poolRefusals, providerPoolsQuery, type PoolMember } from '../lib/providerPools';
-@@ -50,7 +66,8 @@ export function ProviderPoolPage() {
-       </div>
-     );
-   }
--  const pool = pools.data?.find((row) => routeId(row.id) === poolId);
-+  const found = pools.data?.find((row) => routeId(row.id) === poolId);
-+  const pool = found && asViewer(found, mq.get('as'));
-   const refusals = poolRefusals(keys.data ?? []);
-   if (!pool) {
-     return (
-@@ -63,6 +80,8 @@ export function ProviderPoolPage() {
-     );
-   }
- 
-+  if (pool.shared) return <SharedPoolPage pool={pool} refusals={refusals} />;
-+
-   return (
-     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-       <Link className="provider-back" to="/providers">
-@@ -108,3 +127,63 @@ export function ProviderPoolPage() {
-     </div>
-   );
- }
-+
-+/** MOCK: a shared pool's page — the same accounts card, then its people and its rules. */
-+function SharedPoolPage({ pool, refusals }: { pool: ProviderPool; refusals: ReturnType<typeof poolRefusals> }) {
-+  const admin = pool.viewerRole === 'Admin';
-+  const me = pool.people?.find((p) => p.you);
-+  const step = mq.get('add') as AddStep | null;
-+  return (
-+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
-+      <Link className="provider-back" to="/providers">
-+        ‹ All providers
-+      </Link>
-+      <div className="pool-page-head">
-+        <div style={{ minWidth: 0 }}>
-+          <div className="pool-page-title">
-+            <PoolEngineMark pool={pool} size={26} />
-+            <h1 className="page-title">{pool.label}</h1>
-+            <span className="re-chip pool-shared-chip">SHARED</span>
-+          </div>
-+          <div style={{ color: 'var(--text-3)', fontSize: 12 }} data-mk="page-sub">
-+            Shared Codex pool · {pool.people?.length ?? 0} members · {availabilityOf(pool, refusals)} ·
-+            each session starts on the account with the most room in its 5-hour window, and stays on it
-+            until that one runs out.
-+          </div>
-+        </div>
-+        {(admin || pool.membersCanAdd) && (
-+          <Button type="primary" data-mk="add-mine">
-+            Add my account
-+          </Button>
-+        )}
-+      </div>
-+
-+      <div className="re-card pool-card pool-detail" data-pool={pool.id} data-mk="accounts-card">
-+        <div className="re-head">
-+          <span className="re-runner">Accounts</span>
-+          <span className="re-head-sp" />
-+          <PoolGauge pool={pool} />
-+        </div>
-+        <PoolMembers pool={pool} refusals={refusals} onRemove={() => {}} />
-+      </div>
-+
-+      <PoolPeopleCard pool={pool} />
-+      <PoolRulesCard pool={pool} />
-+
-+      <div className="pool-danger pool-danger-row" data-mk="danger">
-+        {admin ? (
-+          <>
-+            <Button danger>Delete pool</Button>
-+            <span className="pool-danger-note">Every account in it is signed out of the Orbit server.</span>
-+          </>
-+        ) : (
-+          <>
-+            <Button danger>Leave pool</Button>
-+            <span className="pool-danger-note">Your accounts leave with you.</span>
-+          </>
-+        )}
-+      </div>
-+      {step && me && <AddAccountModal pool={pool} step={step} me={me} />}
-+    </div>
-+  );
-+}
-diff --git a/src/web/src/pages/ProvidersPage.tsx b/src/web/src/pages/ProvidersPage.tsx
-index 25ed26f..083b59c 100644
---- a/src/web/src/pages/ProvidersPage.tsx
-+++ b/src/web/src/pages/ProvidersPage.tsx
-@@ -7,6 +7,7 @@ import { providersQuery } from '../lib/queries';
- import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
- import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
- import { AccountPools, PoolHint } from '../components/AccountPools';
-+import { NewPoolModal } from '../components/SharedPool';
- import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
- import { RunnerEngines } from '../components/RunnerEngines';
- import { useIsMobile } from '../lib/useMediaQuery';
-@@ -157,6 +158,8 @@ export function ProvidersPage() {
-       {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
-           leave sessions dispatching to something the page no longer lets you see or delete. */}
-       {poolList.length > 0 && <AccountPools pools={poolList} refusals={refusals} />}
-+      {/* MOCK: ?create=1 opens the new-pool dialog. */}
-+      {new URLSearchParams(location.search).get('create') && <NewPoolModal />}
- 
-       <div className="re-sec-head" style={{ marginTop: 28 }}>
-         <h3>Your API keys</h3>
 diff --git a/src/web/src/components/SharedPool.tsx b/src/web/src/components/SharedPool.tsx
 new file mode 100644
-index 0000000..187553f
+index 0000000..6cc3b66
 --- /dev/null
 +++ b/src/web/src/components/SharedPool.tsx
-@@ -0,0 +1,283 @@
-+// MOCK (scratch tree only): the parts a shared account pool adds to the pool page — its people, its
-+// rules, the way an account joins it, and the dialog that makes one.
+@@ -0,0 +1,303 @@
++// MOCK (scratch tree only): the parts a shared key pool adds to the pool page — its people, its
++// rules, the way an OpenAI API key joins it, and the dialog that adds one.
 +import { Button, Checkbox, Input, Modal, Radio, Segmented, Select, Switch } from 'antd';
 +import {
 +  CheckCircleFilled,
 +  EllipsisOutlined,
 +  ExclamationCircleFilled,
-+  ExportOutlined,
-+  LoadingOutlined,
 +  UserAddOutlined,
 +  WarningFilled,
 +} from '@ant-design/icons';
@@ -427,7 +305,7 @@ index 0000000..187553f
 +
 +const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 +
-+/** Who is in the pool: what each has put in, and how much of this week's use was theirs. */
++/** Who is in the pool: what each has put in, and how much of this window's use was theirs. */
 +export function PoolPeopleCard({ pool }: { pool: ProviderPool }) {
 +  const people = pool.people ?? [];
 +  const admin = pool.viewerRole === 'Admin';
@@ -438,7 +316,7 @@ index 0000000..187553f
 +          Members<span className="pool-head-count">{people.length}</span>
 +        </span>
 +        <span className="re-head-sp" />
-+        <span className="pool-head-note">Share of this week’s use</span>
++        <span className="pool-head-note">Share of this month’s use</span>
 +        {admin && (
 +          <Button size="small" icon={<UserAddOutlined />} data-mk="add-members">
 +            Add members
@@ -463,9 +341,8 @@ index 0000000..187553f
 +            {person.you && <span className="pool-you">you</span>}
 +            {person.role === 'Admin' && <span className="re-chip">ADMIN</span>}
 +          </div>
-+          <div className={`pool-person-meta${person.accounts ? '' : ' none'}`}>
-+            {person.accounts ? plural(person.accounts, 'account') : 'No account'} ·{' '}
-+            {plural(person.sessions, 'session')}
++          <div className={`pool-person-meta${person.keys ? '' : ' none'}`}>
++            {person.keys ? plural(person.keys, 'key') : 'No key'} · {plural(person.sessions, 'session')}
 +          </div>
 +        </div>
 +      </div>
@@ -492,88 +369,107 @@ index 0000000..187553f
 +      </div>
 +      <div className="pool-rule">
 +        <div>
-+          <div className="pool-rule-t">Members can add accounts</div>
++          <div className="pool-rule-t">Members can add keys</div>
 +          <div className="pool-rule-h">
-+            Anyone in {pool.label} can put their own Codex account in. Off: only admins can.
++            Anyone in {pool.label} can put an OpenAI API key in. Off: only admins can.
 +          </div>
 +        </div>
 +        <Switch checked={!!pool.membersCanAdd} disabled={!admin} />
 +      </div>
 +      <div className="pool-rule" data-mk="rule-own">
 +        <div>
-+          <div className="pool-rule-t">Own account first</div>
++          <div className="pool-rule-t">Own key first</div>
 +          <div className="pool-rule-h">
-+            A member’s sessions start on their own account while it has room, then move on to the
++            A member’s sessions start on a key they added while it has room, then move on to the
 +            others’.
 +          </div>
 +        </div>
-+        <Switch checked={!!pool.ownFirst} disabled={!admin} />
++        <Switch checked={!!pool.ownKeyFirst} disabled={!admin} />
 +      </div>
 +    </div>
 +  );
 +}
 +
-+export type AddStep = 'consent' | 'code' | 'done' | 'dup';
++export type AddStep = 'consent' | 'form' | 'done' | 'dup';
 +
-+/** Putting one's own ChatGPT account in: what that means, the device sign-in, and how it ended. */
-+export function AddAccountModal({ pool, step, me }: { pool: ProviderPool; step: AddStep; me: PoolPerson }) {
++/** Putting one's own API key in: what that means, the two fields that add it, and how it ended. */
++export function AddKeyModal({ pool, step, me }: { pool: ProviderPool; step: AddStep; me: PoolPerson }) {
 +  const people = pool.people?.length ?? 0;
++  const named = `${me.name.split(' ')[0].toLowerCase()}-org-1`;
 +  const footer =
 +    step === 'consent' ? (
 +      <>
 +        <Button>Cancel</Button>
 +        <Button type="primary" data-mk="consent-go">
-+          Sign in with ChatGPT
++          Continue
 +        </Button>
 +      </>
-+    ) : step === 'code' ? (
-+      <Button>Cancel</Button>
++    ) : step === 'form' ? (
++      <>
++        <Button>Cancel</Button>
++        <Button type="primary" data-mk="add-key-go">
++          Add key
++        </Button>
++      </>
 +    ) : step === 'dup' ? (
 +      <>
 +        <Button>Close</Button>
-+        <Button type="primary">Use another account</Button>
++        <Button type="primary">Add another key</Button>
 +      </>
 +    ) : (
 +      <Button type="primary">Done</Button>
 +    );
 +  return (
-+    <Modal open width={500} title={`Add your Codex account to ${pool.label}`} footer={footer} onCancel={() => {}}>
++    <Modal open width={500} title={`Add a key to ${pool.label}`} footer={footer} onCancel={() => {}}>
 +      {step === 'consent' && (
 +        <div data-mk="add-consent">
-+          <div className="pa-lead">Sign in with the ChatGPT account you want to put in this pool.</div>
++          <div className="pa-lead">Paste an OpenAI API key to put in this pool.</div>
 +          <ul className="pa-facts">
 +            <li>
 +              <b>Everyone in {pool.label} can run sessions on it</b> — {people} people. Their sessions
-+              spend this account’s Codex usage.
++              spend this key’s budget.
 +            </li>
 +            <li>
-+              <b>The sign-in stays on the Orbit server.</b> It never goes to a runner, and nobody in the
-+              pool sees it or the account’s email.
++              <b>The key stays on the Orbit server.</b> It never goes to a runner — runners get a
++              session token, not the key — and nobody in the pool sees it or its full value.
 +            </li>
 +            <li>
-+              <b>Take it out, or sign it in again, any time.</b> Its usage shows on this page for
-+              everyone in the pool.
++              <b>Take it out, or replace it, any time.</b> Its usage shows on this page for everyone
++              in the pool.
 +            </li>
 +          </ul>
 +          <div className="pa-risk" data-mk="add-risk">
 +            <WarningFilled />
-+            <span>OpenAI’s terms don’t allow an account to be shared. An account used this way can be suspended.</span>
++            <span>
++              <b>Keys can’t be resold.</b> Everything run with this key is billed to its account, and
++              the person who adds it is responsible for it.
++            </span>
 +          </div>
 +        </div>
 +      )}
-+      {step === 'code' && (
-+        <div className="rsi" style={{ marginTop: 0 }} data-mk="add-code">
-+          <a className="rsi-open" href="#">
-+            <ExportOutlined /> Open the sign-in page
-+          </a>
-+          <div className="rsi-hint">
-+            Sign in <b>with the account you’re adding</b>, then enter this one-time code:
++      {step === 'form' && (
++        <div data-mk="add-form">
++          <div className="pa-lead">Name it, paste it, and set what the others may spend on it.</div>
++          <label className="np-field">
++            <span className="np-field-l">Name</span>
++            <Input value={named} />
++          </label>
++          <div className="np-field">
++            <span className="np-field-l">Key</span>
++            <Input.Password value="sk-proj-9tRkQm2Zx8VbN4Lc7Hd39E4D" readOnly />
++            <div className="np-field-h">
++              Checked once, then only its fingerprint (<b>sk-…9E4D</b>) is shown — the key itself
++              stays on the Orbit server.
++            </div>
 +          </div>
-+          <div className="rsi-usercode">QX7M-4TZPK</div>
-+          <div className="rsi-row">
-+            <LoadingOutlined /> Waiting for you to approve it…
++          <div className="np-field">
++            <span className="np-field-l">Limit</span>
++            <Input prefix="$" suffix="a month" value="50" />
++            <div className="np-field-h">
++              Others in {pool.label} can spend up to this on the key each month. Your own sessions
++              aren’t limited by it.
++            </div>
 +          </div>
-+          <div className="rsi-hint">The code works for 15 minutes. You can close this — the sign-in finishes on its own.</div>
 +        </div>
 +      )}
 +      {step === 'done' && (
@@ -581,15 +477,20 @@ index 0000000..187553f
 +          <div className="pa-done">
 +            <CheckCircleFilled />
 +            <div>
-+              <div className="pa-done-t">{me.name} · Plus is in {pool.label}</div>
-+              <div className="pa-done-s">It’s ready for the next session. Only you can take it out or sign it in again.</div>
++              <div className="pa-done-t">{named} is in {pool.label}</div>
++              <div className="pa-done-s">
++                <b>sk-…9E4D</b> · ready for the next session. Only you and the pool’s admins can
++                replace it.
++              </div>
 +            </div>
 +          </div>
 +          <div className="pa-acct">
 +            <OwnerAvatar owner={me} />
 +            <div>
-+              <div className="pa-acct-t">{me.name} · Plus</div>
-+              <div className="pa-acct-s">lin.wei@wikova.test · ChatGPT Plus · only you see the email</div>
++              <div className="pa-acct-t">{named}</div>
++              <div className="pa-acct-s">
++                {me.name} · sk-…9E4D · only its fingerprint is ever shown
++              </div>
 +            </div>
 +          </div>
 +        </div>
@@ -598,10 +499,9 @@ index 0000000..187553f
 +        <div className="pa-done pa-dup" data-mk="add-dup">
 +          <ExclamationCircleFilled />
 +          <div>
-+            <div className="pa-done-t">This ChatGPT account is already in {pool.label}</div>
++            <div className="pa-done-t">This key is already in {pool.label}</div>
 +            <div className="pa-done-s">
-+              Zhang Min put it in. Signing in twice doesn’t add usage — sign in with a different
-+              account.
++              Wikova added it. The same key twice doesn’t add budget — add a different one.
 +            </div>
 +          </div>
 +        </div>
@@ -660,8 +560,8 @@ index 0000000..187553f
 +          ]}
 +        />
 +        <div className="np-field-h">
-+          A Codex pool holds ChatGPT sign-ins, kept by the Orbit server — each person signs theirs in
-+          once the pool exists. A Claude pool is made of your Claude API keys.
++          A Codex pool holds OpenAI API keys — each person pastes their own once the pool exists. A
++          Claude pool is made of your Anthropic API keys.
 +        </div>
 +      </div>
 +      <label className="np-field">
@@ -685,7 +585,7 @@ index 0000000..187553f
 +          They see it on their Providers page and in the session picker, and can start sessions on it.
 +        </div>
 +        <Checkbox checked style={{ marginTop: 8 }}>
-+          They can add their own accounts
++          They can add their own keys
 +        </Checkbox>
 +      </div>
 +    </Modal>
@@ -693,10 +593,10 @@ index 0000000..187553f
 +}
 diff --git a/src/web/src/components/pool-mock.css b/src/web/src/components/pool-mock.css
 new file mode 100644
-index 0000000..7e2dc55
+index 0000000..a0f5e26
 --- /dev/null
 +++ b/src/web/src/components/pool-mock.css
-@@ -0,0 +1,346 @@
+@@ -0,0 +1,377 @@
 +/* MOCK (scratch tree only): what a shared account pool adds. Tokens come from index.css. */
 +
 +/* People are circles with an initial — the Team mock's mark. */
@@ -854,7 +754,7 @@ index 0000000..7e2dc55
 +  color: var(--text-3);
 +}
 +
-+/* ── "Add my account" ────────────────────────────────────────────────────────────────────── */
++/* ── "Add a key" ────────────────────────────────────────────────────────────────────── */
 +.pa-lead {
 +  font-size: 13px;
 +  color: var(--text-2);
@@ -1043,3 +943,321 @@ index 0000000..7e2dc55
 +    display: none;
 +  }
 +}
++
++/* ── a key's row: whose key it is, its masked fingerprint, and what the others spent on it ────── */
++/* A key's status says more than an account's — "At cap · resets Thu 02:00" against the shared 108px
++   column came out as "resets T…". Key rows take the room the quota's bar can spare. Desktop only:
++   the phone's own two-column row is narrower than this and the whole row must not outgrow it. */
++@media (min-width: 701px) {
++  .pool-card .re-row.pool-row-key,
++  .pool-detail .re-row.pool-row-key {
++    grid-template-columns: minmax(137px, 1fr) 178px minmax(128px, 190px) 172px;
++  }
++}
++.pool-key-mask {
++  margin-top: 1px;
++  font-size: 12px;
++  color: var(--text-3);
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
++}
++/* Phone: the money is what a key's row is about, so it keeps a line of its own there — the bar is
++   the part that can wait for a wider window, as it does on a personal pool's row. */
++@media (max-width: 700px) {
++  .pool-row .re-quota.pool-key-money {
++    display: block;
++    grid-column: 1 / -1;
++    margin-left: 38px;
++  }
++  .pool-row .re-quota.pool-key-money .runner-util {
++    display: none;
++  }
++}
+diff --git a/src/web/src/lib/providerPools.ts b/src/web/src/lib/providerPools.ts
+index dc6701f..3f7705e 100644
+--- a/src/web/src/lib/providerPools.ts
++++ b/src/web/src/lib/providerPools.ts
+@@ -14,8 +14,31 @@ import type { ConfiguredProvider } from './workspaceDefaults';
+  * it — so nothing here re-derives them.
+  */
+ 
+-/** Where one member stands, in the order the claim reads a member. */
+-export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA';
++/** Where one member stands, in the order the claim reads a member. INVALID is MOCK: in a shared
++ *  pool a member is an API key, and the upstream can reject it (401) instead of a person signing out. */
++export type PoolMemberState =
++  | 'REFUSED'
++  | 'DISABLED'
++  | 'INVALID'
++  | 'SPENT'
++  | 'RUNNING'
++  | 'AVAILABLE'
++  | 'NO_QUOTA'
++  | 'SIGNED_OUT';
++
++// MOCK (scratch tree only): what a shared pool adds — whose key each member is, and the people in it.
++export interface PoolContributor {
++  name: string;
++  color: string;
++  you?: boolean;
++}
++export interface PoolPerson extends PoolContributor {
++  role: 'Admin' | 'Member';
++  keys: number;
++  /** Share of this month's use of the pool, 0..100. */
++  share: number;
++  sessions: number;
++}
+ 
+ export interface PoolMember {
+   id: string;
+@@ -31,6 +54,15 @@ export interface PoolMember {
+   resetsAt: string | null;
+   /** The member a session starting now would run on. */
+   next: boolean;
++  /** MOCK: a shared pool's member is a key someone contributed. */
++  contributor?: PoolContributor;
++  /** MOCK: the masked fingerprint the server shows for a key (`sk-…AB12`). The key itself never
++   *  leaves the server, so this is all a page or a claim payload ever carries. */
++  keyMask?: string;
++  /** MOCK: what others have spent on this key this window, in dollars. */
++  spentUsd?: number;
++  /** MOCK: the monthly cap on what others may spend on it. Null: the contributor set none. */
++  capUsd?: number | null;
+ }
+ 
+ export interface ProviderPool {
+@@ -45,6 +77,13 @@ export interface ProviderPool {
+    *  The server refuses to start or switch a session onto such a pool, or to pin a task to it. */
+   unavailable?: string | null;
+   members: PoolMember[];
++  /** MOCK: shared-pool fields. */
++  engine?: 'claude' | 'codex';
++  shared?: boolean;
++  viewerRole?: 'Admin' | 'Member';
++  ownKeyFirst?: boolean;
++  membersCanAdd?: boolean;
++  people?: PoolPerson[];
+ }
+ 
+ /** Under ['providers'], so every provider change — a key, a pool, a quota the server re-read —
+@@ -103,10 +142,10 @@ export const poolsAsProviders = (pools: readonly ProviderPool[]): ConfiguredProv
+   pools.map((pool) => ({
+     slug: pool.slug,
+     label: pool.label,
+-    runtime: AgentProvider.CLAUDE,
++    runtime: pool.engine === 'codex' ? AgentProvider.CODEX : AgentProvider.CLAUDE,
+     models: [],
+     defaultModel: null,
+-    presetSlug: 'anthropic',
++    presetSlug: pool.engine === 'codex' ? 'openai' : 'anthropic',
+     modelsFromRuntime: true,
+     planUsage: null,
+   }));
+@@ -140,16 +179,27 @@ export function memberQuota(member: PoolMember): PlanUsageDisplayRow | null {
+ 
+ const pad = (n: number) => String(n).padStart(2, '0');
+ 
+-/** When a window resets, as the page says it: `14:05` within a day, `Mon 14:05` beyond that — a
+- *  weekly limit can be days out, and a bare time would read as today. */
+-export function formatResetTime(iso: string, now: number = Date.now()): string {
++/** When a window resets, as the page says it: `14:05` within a day, `Mon 14:05` within the week — a
++ *  weekly limit can be days out, and a bare time would read as today — and `Oct 1` beyond it, where
++ *  a weekday alone would be ambiguous. A window that IS a month (a key's cap) is named by its date
++ *  from the start, and makes no difference to the other two. */
++export function formatResetTime(iso: string, now: number = Date.now(), monthly = false): string {
+   const at = new Date(iso);
+   if (Number.isNaN(at.getTime())) return '';
+   const time = `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+-  if (at.getTime() - now < 24 * 60 * 60 * 1000) return time;
+-  return `${at.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`;
++  const away = at.getTime() - now;
++  if (!monthly && away < 24 * 60 * 60 * 1000) return time;
++  if (!monthly && away < 7 * 24 * 60 * 60 * 1000) return `${at.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`;
++  return at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+ }
+ 
++/** Whether the window that stopped this member is a month long: the same question the gauge answers,
++ *  asked so the reset can be said as a date. */
++const monthlyWindow = (member: PoolMember): boolean => {
++  const minutes = member.planUsage?.primary?.windowDurationMins;
++  return typeof minutes === 'number' && minutes >= 28 * 24 * 60;
++};
++
+ /** A member's status tag: its words and its colour. `refusal` is why the pool would no longer admit it
+  *  (memberRefusal), which outranks whatever the view says. */
+ export function memberStatus(
+@@ -166,12 +216,23 @@ export function memberStatus(
+     case 'AVAILABLE':
+       return { label: 'Available', color: 'green' };
+     case 'SPENT':
++      // "At cap", not "Spent": what ran out is the cap the contributor set on what the others may
++      // spend on this key this month — a month-long window, so its reset is a date ("At cap ·
++      // resets Oct 1"), which is what keeps the tag inside the row's status column.
+       return {
+-        label: member.resetsAt ? `Spent · resets ${formatResetTime(member.resetsAt, now)}` : 'Spent',
++        label: member.resetsAt
++          ? `At cap · resets ${formatResetTime(member.resetsAt, now, monthlyWindow(member))}`
++          : 'At cap',
+         color: 'orange',
+       };
++    case 'INVALID':
++      // The reason ("rejected by OpenAI") is the row's own line: it runs longer than a status has
++      // room for, and only its contributor or an admin can act on it.
++      return { label: 'Invalid', color: 'red' };
+     case 'REFUSED':
+       return { label: 'Unavailable · key refused', color: 'red' };
++    case 'SIGNED_OUT':
++      return { label: 'Unavailable · signed out', color: 'red' };
+     case 'DISABLED':
+       return { label: 'Disabled', color: 'default' };
+     default:
+diff --git a/src/web/src/lib/sessionProviderChoices.ts b/src/web/src/lib/sessionProviderChoices.ts
+index 6a132e7..f165e61 100644
+--- a/src/web/src/lib/sessionProviderChoices.ts
++++ b/src/web/src/lib/sessionProviderChoices.ts
+@@ -192,7 +192,8 @@ export function providerChoices(
+     slug: pool.slug,
+     label: pool.label,
+     kind: 'pool' as const,
+-    ...brandForProvider(pool.slug, pool.label, 'anthropic'),
++    // MOCK: a Codex pool wears the Codex mark.
++    ...brandForProvider(pool.slug, pool.label, (pool as { engine?: string }).engine === 'codex' ? 'openai' : 'anthropic'),
+     modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
+     poolSize: pool.members.length,
+     ...(claudeBlocker
+diff --git a/src/web/src/pages/ProviderPoolPage.tsx b/src/web/src/pages/ProviderPoolPage.tsx
+index acf1cd0..21506ed 100644
+--- a/src/web/src/pages/ProviderPoolPage.tsx
++++ b/src/web/src/pages/ProviderPoolPage.tsx
+@@ -3,7 +3,23 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
+ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+ import { Button, Popconfirm, Spin } from 'antd';
+ import { api } from '../api';
+-import { availabilityOf, PoolAccountsModal, PoolGauge, PoolMembers } from '../components/AccountPools';
++import { availabilityOf, PoolAccountsModal, PoolEngineMark, PoolGauge, PoolMembers } from '../components/AccountPools';
++import { AddKeyModal, PoolPeopleCard, PoolRulesCard, type AddStep } from '../components/SharedPool';
++import type { ProviderPool } from '../lib/providerPools';
++
++// MOCK: ?as=<first name> shows the page as that member sees it; ?add=<step> opens "Add a key".
++const mq = new URLSearchParams(location.search);
++function asViewer(pool: ProviderPool, first: string | null): ProviderPool {
++  if (!first || !pool.shared) return pool;
++  const is = (name: string) => name.split(' ')[0].toLowerCase() === first;
++  const people = (pool.people ?? []).map((p) => ({ ...p, you: is(p.name) }));
++  return {
++    ...pool,
++    people,
++    viewerRole: people.find((p) => p.you)?.role ?? 'Member',
++    members: pool.members.map((m) => (m.owner ? { ...m, owner: { ...m.owner, you: is(m.owner.name) } } : m)),
++  };
++}
+ import { encodeId, routeId } from '../lib/idCodec';
+ import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
+ import { poolRefusals, providerPoolsQuery, type PoolMember } from '../lib/providerPools';
+@@ -50,7 +66,8 @@ export function ProviderPoolPage() {
+       </div>
+     );
+   }
+-  const pool = pools.data?.find((row) => routeId(row.id) === poolId);
++  const found = pools.data?.find((row) => routeId(row.id) === poolId);
++  const pool = found && asViewer(found, mq.get('as'));
+   const refusals = poolRefusals(keys.data ?? []);
+   if (!pool) {
+     return (
+@@ -63,6 +80,8 @@ export function ProviderPoolPage() {
+     );
+   }
+ 
++  if (pool.shared) return <SharedPoolPage pool={pool} refusals={refusals} />;
++
+   return (
+     <div style={{ maxWidth: 900, margin: '0 auto' }}>
+       <Link className="provider-back" to="/providers">
+@@ -108,3 +127,64 @@ export function ProviderPoolPage() {
+     </div>
+   );
+ }
++
++/** MOCK: a shared pool's page — the same accounts card, then its people and its rules. */
++function SharedPoolPage({ pool, refusals }: { pool: ProviderPool; refusals: ReturnType<typeof poolRefusals> }) {
++  const admin = pool.viewerRole === 'Admin';
++  const me = pool.people?.find((p) => p.you);
++  const step = mq.get('add') as AddStep | null;
++  return (
++    <div style={{ maxWidth: 900, margin: '0 auto' }}>
++      <Link className="provider-back" to="/providers">
++        ‹ All providers
++      </Link>
++      <div className="pool-page-head">
++        <div style={{ minWidth: 0 }}>
++          <div className="pool-page-title">
++            <PoolEngineMark pool={pool} size={26} />
++            <h1 className="page-title">{pool.label}</h1>
++            <span className="re-chip pool-shared-chip">SHARED</span>
++          </div>
++          <div style={{ color: 'var(--text-3)', fontSize: 12 }} data-mk="page-sub">
++            Shared Codex pool · {pool.people?.length ?? 0} members · {availabilityOf(pool, refusals)} ·
++            each session starts on the key with the most room, and stays on it until that one runs out.
++          </div>
++        </div>
++        {(admin || pool.membersCanAdd) && (
++          <Button type="primary" data-mk="add-mine">
++            Add a key
++          </Button>
++        )}
++      </div>
++
++      <div className="re-card pool-card pool-detail" data-pool={pool.id} data-mk="accounts-card">
++        <div className="re-head">
++          <span className="re-runner">Keys</span>
++          <span className="re-head-sp" />
++          <PoolGauge pool={pool} />
++        </div>
++        <PoolMembers pool={pool} refusals={refusals} onRemove={() => {}} />
++      </div>
++
++      <PoolPeopleCard pool={pool} />
++      <PoolRulesCard pool={pool} />
++
++      <div className="pool-danger pool-danger-row" data-mk="danger">
++        {admin ? (
++          <>
++            <Button danger>Delete pool</Button>
++            <span className="pool-danger-note">
++              Its keys are removed from the Orbit server and no session can run on it.
++            </span>
++          </>
++        ) : (
++          <>
++            <Button danger>Leave pool</Button>
++            <span className="pool-danger-note">Your keys leave with you.</span>
++          </>
++        )}
++      </div>
++      {step && me && <AddKeyModal pool={pool} step={step} me={me} />}
++    </div>
++  );
++}
+diff --git a/src/web/src/pages/ProvidersPage.tsx b/src/web/src/pages/ProvidersPage.tsx
+index 25ed26f..083b59c 100644
+--- a/src/web/src/pages/ProvidersPage.tsx
++++ b/src/web/src/pages/ProvidersPage.tsx
+@@ -7,6 +7,7 @@ import { providersQuery } from '../lib/queries';
+ import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
+ import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
+ import { AccountPools, PoolHint } from '../components/AccountPools';
++import { NewPoolModal } from '../components/SharedPool';
+ import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+ import { RunnerEngines } from '../components/RunnerEngines';
+ import { useIsMobile } from '../lib/useMediaQuery';
+@@ -157,6 +158,8 @@ export function ProvidersPage() {
+       {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
+           leave sessions dispatching to something the page no longer lets you see or delete. */}
+       {poolList.length > 0 && <AccountPools pools={poolList} refusals={refusals} />}
++      {/* MOCK: ?create=1 opens the new-pool dialog. */}
++      {new URLSearchParams(location.search).get('create') && <NewPoolModal />}
+ 
+       <div className="re-sec-head" style={{ marginTop: 28 }}>
+         <h3>Your API keys</h3>

@@ -10,6 +10,8 @@ import {
   CoordinatorQuestions,
   DELIVERED_TO_COORDINATOR,
   FROM_COORDINATOR,
+  NOTE_PROMPT,
+  OWN_ANSWER_PROMPT,
   RECOMMENDED,
   SEND_ANSWER,
   WAITING_FOR_COORDINATOR,
@@ -91,6 +93,20 @@ describe('what the card says', () => {
     expect(html.indexOf('Start t4 first')).toBeGreaterThan(chosen);
   });
 
+  it('keeps a box beside the options, for a note on the choice', () => {
+    const html = markup(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
+    // The recommendation starts out chosen, so what the box takes is a note on it.
+    expect(html).toContain('textarea');
+    expect(html).toContain(NOTE_PROMPT);
+  });
+
+  it('grows with its question instead of scrolling inside the card', () => {
+    // `.approval-body` alone is capped at 360px, and a long question with its options and the box
+    // outgrows that — what spills over is the part the owner answers with.
+    const html = markup(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
+    expect(html).toContain('approval-body is-questions');
+  });
+
   it('takes prose when the coordinator named no alternatives', () => {
     const asked = row({
       question: {
@@ -131,6 +147,16 @@ describe('answering it', () => {
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     apiMock.mockReset();
+    // The answer box sizes itself with a ResizeObserver, which jsdom does not have. Its height is
+    // not what these tests are about.
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -139,6 +165,7 @@ describe('answering it', () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    vi.unstubAllGlobals();
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
@@ -185,6 +212,27 @@ describe('answering it', () => {
     return button;
   }
 
+  function box(): HTMLTextAreaElement {
+    const field = host.querySelector('textarea');
+    if (!field) throw new Error('no answer box');
+    return field;
+  }
+
+  async function type(value: string) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(box(), value);
+      box().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  const DELIVERED = {
+    itemId: ITEM_ID,
+    state: 'RESOLVED',
+    resolution: 'ANSWERED',
+    delivery: { sessionId: '34OAa5LxnQ1JXpUOfN21W', turnId: '4L0l8RFe6zL6GgEFbUBh6L' },
+  };
+
   it('posts the chosen option to the answer door and leaves a receipt', async () => {
     apiMock.mockResolvedValue({
       itemId: ITEM_ID,
@@ -207,6 +255,50 @@ describe('answering it', () => {
     expect(apiMock.mock.calls[0]![1]).toEqual({ method: 'POST', body: { option: 1 } });
     expect(host.textContent).toContain('Start both now');
     expect(host.textContent).toContain(DELIVERED_TO_COORDINATOR);
+  });
+
+  it('sends a note with the chosen option, and the receipt says both', async () => {
+    apiMock.mockResolvedValue(DELIVERED);
+    await draw(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
+
+    const options = host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    await act(async () => options[1]!.click());
+    await type(' they can share a runner ');
+    await act(async () => press(SEND_ANSWER).click());
+    await until(() => host.textContent!.includes(DELIVERED_TO_COORDINATOR), 'the receipt');
+
+    expect(apiMock.mock.calls[0]![1]).toEqual({
+      method: 'POST',
+      body: { option: 1, text: 'they can share a runner' },
+    });
+    expect(host.textContent).toContain(
+      'Start both now — expect a merge conflict to resolve — they can share a runner',
+    );
+  });
+
+  it('takes words alone once the chosen option is pressed again', async () => {
+    apiMock.mockResolvedValue(DELIVERED);
+    await draw(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
+
+    // The recommendation came chosen; pressing it again takes it back, and the box says its text
+    // is now the whole answer.
+    const options = host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    await act(async () => options[0]!.click());
+    expect([...options].some((option) => option.checked)).toBe(false);
+    expect(box().placeholder).toBe(OWN_ANSWER_PROMPT);
+    // Nothing chosen and nothing written is not an answer.
+    expect(press(SEND_ANSWER).disabled).toBe(true);
+
+    await type('Neither: split session_pool.go first');
+    expect(press(SEND_ANSWER).disabled).toBe(false);
+    await act(async () => press(SEND_ANSWER).click());
+    await until(() => host.textContent!.includes(DELIVERED_TO_COORDINATOR), 'the receipt');
+
+    expect(apiMock.mock.calls[0]![1]).toEqual({
+      method: 'POST',
+      body: { text: 'Neither: split session_pool.go first' },
+    });
+    expect(host.textContent).toContain('✓ Neither: split session_pool.go first');
   });
 
   it('says the answer is waiting when no conversation coordinates the project', async () => {

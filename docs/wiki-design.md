@@ -320,7 +320,7 @@ GET    /runner/wiki/context         推送块预览（调试用；正式投递�
 —— 以下仅对维护作业会话开放（会话的任务属于该 space 的维护清单）——
 GET    /runner/wiki/spaces/:id/dossiers?after=<cursor>&limit
 GET    /runner/wiki/spaces/:id/anchors?due=true
-POST   /runner/wiki/anchor-checks
+POST   /runner/wiki/spaces/:id/anchor-checks
 POST   /runner/wiki/spaces/:id/cursor          只在运行成功结束时推进
 ```
 
@@ -356,7 +356,7 @@ orbit wiki search <query> [--kind] [--topic] [--json]
 orbit wiki get <id...> [--json]
 orbit wiki propose --file ops.json [--dry-run] [--json]
 orbit wiki dossier --space <id> [--after <cursor>]          # 仅维护会话
-orbit wiki anchors verify --space <id>                      # 仅维护会话；在本地 checkout 里跑 git
+orbit wiki anchors verify --space <id> [--repo <path>]      # 仅维护会话；在本地 checkout 里跑 git（契约 §17）
 orbit wiki cursor advance --space <id> --to <token>         # 仅维护会话
 orbit wiki check --space <id> --expect-cursor <token>       # 维护任务的 EXECUTABLE 判据
 orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.md / AGENTS.md / 记忆目录 → 待审提议

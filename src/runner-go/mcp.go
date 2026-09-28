@@ -38,6 +38,7 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		onlyTools:             mcpToolsFromEnv(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
@@ -52,6 +53,9 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (a Wiki maintenance
+	// run, wiki_maintenance_session.go). Nil serves every tool.
+	onlyTools map[string]bool
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
@@ -167,6 +171,9 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if s.wikiOff {
 			tools = withoutWikiTools(tools)
 		}
+		if s.onlyTools != nil {
+			tools = onlyMCPTools(tools, s.onlyTools)
+		}
 		return s.ok(req.ID, map[string]interface{}{"tools": tools}), true
 	case "tools/call":
 		var p struct {
@@ -175,6 +182,9 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		}
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
+		}
+		if s.onlyTools != nil && !s.onlyTools[p.Name] {
+			return s.ok(req.ID, toolResult(p.Name+" is not served in this session", true)), true
 		}
 		return s.ok(req.ID, s.callTool(p.Name, p.Arguments)), true
 	default:

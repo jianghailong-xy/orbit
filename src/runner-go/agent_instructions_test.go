@@ -234,6 +234,7 @@ var advertisedCapabilityFamilies = []struct {
 	// Ungated like the watch commands and SessionOnly for the same kind of reason: a wiki command
 	// acts for the session it runs in, and needs no power over anybody else's session to do it.
 	{"wikiCLICapabilities", wikiCLICapabilities, false},
+	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
 	{"sessionCLICapabilities", sessionCLICapabilities, true},
 	{"agentCLICapabilities", agentCLICapabilities, true},
 }

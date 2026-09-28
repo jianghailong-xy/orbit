@@ -12,8 +12,8 @@
  *      what the runner echoed back is stored as the control plane's note rather than as the
  *      person's words.
  *   2. An entry the owner has not confirmed is not sent, and neither is one something is wrong
- *      with: still a proposal, web-tainted, challenged, unsupported, or anchored to something that
- *      moved.
+ *      with: still a proposal, web-tainted with no person's word for it, challenged, unsupported, or
+ *      anchored to something that moved.
  *   3. A space that turned the push off sends nothing.
  *   4. A run that verifies, forems or judges work is handed nothing at all, and records no
  *      exposure — knowledge is not evidence (§7.3).
@@ -537,7 +537,9 @@ test('the wiki context a session is handed when it starts', {
     });
     const withheld: Record<string, string> = {
       'still a proposal': await entry(spaceId, { title: 'Still a proposal', status: 'proposed', trust: 'proposed' }),
-      'web-tainted': await entry(spaceId, { title: 'Web-tainted', tainted: true }),
+      // Pushable trust, but it rests on the web and no person has vouched for it (contract
+      // `push.eligible.taintedOnlyWithTrust`): the owner's Confirm is what would send it.
+      'web-tainted': await entry(spaceId, { title: 'Web-tainted', tainted: true, trust: 'auto' }),
       'open challenge': await entry(spaceId, { title: 'Open challenge', challenged: true }),
       'no live source': await entry(spaceId, { title: 'No live source', unsupported: true }),
       'anchors moved': await entry(spaceId, { title: 'Anchors moved', anchorState: 'changed' }),

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PushModule } from '../push/push.module';
 import { WikiController } from './wiki.controller';
+import { WikiMaintenance } from './wiki-maintenance';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
@@ -19,7 +20,10 @@ import { WikiService } from './wiki.service';
   // PushService is a sender with no feature state, not a Sessions or Projects service.
   imports: [PushModule],
   controllers: [WikiController],
-  providers: [WikiService, WikiRetrieval],
-  exports: [WikiService, WikiRetrieval],
+  // WikiMaintenance serves the maintenance run's dossiers and cursor (contract `maintenance`) to
+  // `RunnerWikiMaintenanceController`, and reads the Sessions' and Projects' rows the way the other two
+  // do: through Prisma, with no service of theirs.
+  providers: [WikiService, WikiRetrieval, WikiMaintenance],
+  exports: [WikiService, WikiRetrieval, WikiMaintenance],
 })
 export class WikiModule {}
