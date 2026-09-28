@@ -594,7 +594,8 @@ public enum WikiLogic {
         case .supersede?: return "Superseded"
         case .reinforce?: return "Reinforced"
         case .challenge?: return "Challenged"
-        case .add?:       return item.origin == .owner ? "Added by you" : "Proposed"
+        // What a review mode applied is in the wiki already — `Added`, and its mark says by whom.
+        case .add?:       return item.origin == .owner ? "Added by you" : (item.appliedByMode != nil ? "Added" : "Proposed")
         default:          return item.origin == .owner ? "Amended by you" : "Amended"
         }
     }
@@ -795,14 +796,18 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// Proposals waiting in this space — the banner's number, as the web home's Review card counts it
     /// (the drawer's row sums every space's).
     public let proposals: Int
+    /// This space's changesets that still have something waiting in Review — the one read that ties
+    /// an op of the timeline to the run it came in, so Recently changed can fold a run into a row.
+    public let runs: [WikiChangeset]
 
     public init(space: WikiSpace, spaces: [WikiSpace], entries: [WikiEntry],
-                timeline: [WikiTimelineItem], proposals: Int) {
+                timeline: [WikiTimelineItem], proposals: Int, runs: [WikiChangeset] = []) {
         self.space = space
         self.spaces = spaces
         self.entries = entries
         self.timeline = timeline
         self.proposals = proposals
+        self.runs = runs
     }
 
     /// Every principle, of any status, oldest recorded first — the web's order for the owner's own
@@ -828,6 +833,12 @@ public struct WikiHomeContent: Equatable, Sendable {
 
     /// The five newest changes.
     public var recentlyChanged: [WikiTimelineItem] { Array(timeline.prefix(5)) }
+
+    /// The five newest rows of Recently changed, a run folded into one row wherever Review ties its
+    /// ops to it (`wikiRecentRows(...).slice(0, 5)` on the web).
+    public var recentRows: [WikiModeLogic.RecentRow] {
+        Array(WikiModeLogic.recentRows(timeline, runs: runs).prefix(5))
+    }
 
     /// The three most used entries this week.
     public var mostUsed: [WikiUsageEntry] {

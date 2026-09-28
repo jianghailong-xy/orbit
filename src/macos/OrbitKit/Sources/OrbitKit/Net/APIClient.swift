@@ -846,6 +846,25 @@ public final class APIClient: @unchecked Sendable {
     public func submitWikiChangeset(spaceID: String, _ req: WikiChangesetRequest) async throws -> WikiChangeResult {
         try await post("wiki/spaces/\(spaceID)/changesets", body: req)
     }
+    /// `PATCH /wiki/spaces/:id`: the owner's settings — the review mode, Automatic's spot checks and
+    /// maintenance; answers with the space as the server kept it. Refused to every session.
+    public func updateWikiSpace(_ id: String, _ req: WikiSpaceUpdate) async throws -> WikiSpace {
+        try await patch("wiki/spaces/\(id)", body: req)
+    }
+    /// `POST /wiki/entries/:id/confirm`: the owner vouching for what a review mode applied — the entry
+    /// becomes Confirmed and is pushed from then on.
+    public func confirmWikiEntry(_ id: String) async throws {
+        try await postRaw("wiki/entries/\(id)/confirm", body: Optional<Empty>.none)
+    }
+    /// `POST /wiki/entries/:id/reject`: the owner taking back what a review mode applied, with a reason.
+    public func rejectWikiEntry(_ id: String, reason: WikiRejectReason) async throws {
+        try await postRaw("wiki/entries/\(id)/reject", body: WikiEntryRejectRequest(reason: reason))
+    }
+    /// `POST /wiki/changesets/:id/revert`: every op of one run its review mode applied that nobody has
+    /// answered, taken back at once. Keyed by the run, so a second press answers with the first.
+    public func revertWikiChangeset(_ id: String) async throws -> WikiRevertResult {
+        try await postEmpty("wiki/changesets/\(id)/revert")
+    }
 
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
