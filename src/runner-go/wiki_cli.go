@@ -23,6 +23,7 @@ Usage:
   orbit wiki get <id>[,<id>...] [--include WHAT]... [--json]
   orbit wiki propose (--ops JSON | --ops-file -) [--rationale TEXT | --rationale-file -]
                      [--idempotency-key KEY] [--dry-run] [--json]
+  orbit wiki import --from <dir|file> --space ID [--max-ops N] [--concurrency N] [--json]
   orbit wiki verify --space ID [--model MODEL] [--max N] [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
@@ -36,6 +37,8 @@ Run 'orbit wiki <command> --help' for options.
 `
 
 var wikiActionHelp = map[string]string{
+	// Written beside the command it documents (wiki_import.go), as its capability is.
+	"import": wikiImportHelp,
 	"search": `orbit wiki search — what the wiki already knows about this codebase
 
 Usage:
@@ -234,6 +237,8 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		return err
 	}
 	switch action {
+	case "import":
+		return cliWikiImport(args[1:], out, ctx)
 	case "search":
 		return cliWikiSearch(args[1:], out, ctx)
 	case "get":
