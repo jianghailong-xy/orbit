@@ -96,11 +96,17 @@ export function CodexSignInModal({
   const path = codexLoginPath(pool.id);
   // Whether a sign-in may be running on the server for this dialog: what closing it has to give up.
   const live = useRef(false);
+  // The dialog is gone: a start still on its way gives the sign-in it started up rather than show it.
+  const closed = useRef(false);
 
   const start = async () => {
     setStarting(true);
     try {
       const attempt = await api<CodexLoginAttempt>(path, { method: 'POST' });
+      if (closed.current) {
+        void api(path, { method: 'DELETE' }).catch(() => undefined);
+        return;
+      }
       live.current = true;
       setStep({ kind: 'code', url: attempt.verificationUrl, code: attempt.userCode, expiresAt: attempt.expiresAt });
     } catch (e) {
@@ -145,6 +151,7 @@ export function CodexSignInModal({
 
   // Leaving before it was approved gives the sign-in up — the code and the CLI waiting on it with it.
   const close = () => {
+    closed.current = true;
     if (live.current) {
       live.current = false;
       void api(path, { method: 'DELETE' }).catch(() => undefined);
@@ -153,6 +160,7 @@ export function CodexSignInModal({
   };
   useEffect(
     () => () => {
+      closed.current = true;
       if (live.current) void api(path, { method: 'DELETE' }).catch(() => undefined);
     },
     [path],

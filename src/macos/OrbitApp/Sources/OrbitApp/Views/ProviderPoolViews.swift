@@ -1096,8 +1096,9 @@ struct CodexSignInSheet: View {
 
     @State private var step: CodexSignIn.Step
     @State private var starting = false
-    /// A sign-in the server is running for this sheet: what closing it has to give up.
-    @State private var live = false
+    /// What this sheet has going on the server — a reference, so a start that answers after the sheet
+    /// closed still reads that it closed.
+    @State private var run = CodexSignInRun()
     @State private var copied = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -1357,10 +1358,16 @@ struct CodexSignInSheet: View {
     private func start() {
         starting = true
         copied = false
+        let run = run
         Task {
             do {
                 let attempt = try await actions.start()
-                live = true
+                // Closed while the code was on its way: give the sign-in it started up rather than show it.
+                if run.closed {
+                    await actions.cancel()
+                    return
+                }
+                run.live = true
                 step = .code(url: attempt.verificationUrl, code: attempt.userCode, expiresAt: attempt.expiresAt)
             } catch {
                 step = CodexSignIn.step(afterStartFailure: error)
@@ -1382,7 +1389,7 @@ struct CodexSignInSheet: View {
             }
             if Task.isCancelled { return }
             guard let next else { continue }
-            live = false
+            run.live = false
             if case .done = next { await actions.refresh() }
             step = next
             return
@@ -1396,10 +1403,20 @@ struct CodexSignInSheet: View {
 
     /// Leaving before the code was approved gives the sign-in up on the server.
     private func giveUp() {
-        guard live else { return }
-        live = false
+        run.closed = true
+        guard run.live else { return }
+        run.live = false
         Task { await actions.cancel() }
     }
+}
+
+/// What a "Sign in with ChatGPT" sheet has going on the server, read by the presses it started even once
+/// the sheet is gone. Only ever touched from the sheet's own (main-thread) presses.
+private final class CodexSignInRun {
+    /// A sign-in the server is running for the sheet: what closing it has to give up.
+    var live = false
+    /// The sheet closed: a start still on its way gives its sign-in up instead of showing it.
+    var closed = false
 }
 
 /// One thing signing in means: its claim in bold, then what follows from it.
