@@ -3248,9 +3248,9 @@ export class WikiService {
    * session's own, or one named by id), a run event, a tool call, a task, a task comment, an approval,
    * and a commit resolved through the merge receipt that named it — and the two a maintenance run's
    * dossier cites besides (contract `maintenance.dossier.sources`): a merge receipt itself, and an
-   * owner decision, a blocker the owner resolved with a note. Everything else the contract lists
-   * belongs to a phase that does not write yet — a `note` has no row, and a `url` is an assumption's,
-   * which phase 1 refuses.
+   * owner decision, a blocker the owner resolved with a note — and a `note`, a file `orbit wiki import`
+   * registered (contract `import.source`). Everything else the contract lists belongs to a phase that
+   * does not write yet: a `url` is an assumption's, which phase 1 refuses.
    */
   private async sourceText(
     tx: Tx,
@@ -3412,6 +3412,18 @@ export class WikiService {
         if (!receipt) return null;
         return { ref, text: null, tainted: false, ownerWords: false, sessionId: null };
       }
+      case 'note': {
+        // A file `orbit wiki import` registered (contract `import.source`), among this owner's notes
+        // alone: its stored text — redacted before it was kept — and the file it came from. Agent-written
+        // second-hand content, never the owner's own words.
+        if (!ref || !isDecodableId(ref)) return null;
+        const note = await tx.wikiNote.findFirst({
+          where: { id: ref, ownerId: principal.ownerId },
+          select: { id: true, path: true, text: true },
+        });
+        if (!note) return null;
+        return { ref: note.id, text: note.text, locator: { path: note.path }, tainted: false, ownerWords: false, sessionId: null };
+      }
       default:
         return null;
     }
@@ -3441,7 +3453,7 @@ export class WikiService {
    * Read as a flat list of strings: an environment value is the one secret no shape can recognize, and
    * a quote may repeat one without ever looking like a credential.
    */
-  private async envLiterals(reader: Pick<PrismaService, 'workspace'>, ownerId: string): Promise<string[]> {
+  async envLiterals(reader: Pick<PrismaService, 'workspace'>, ownerId: string): Promise<string[]> {
     const workspaces = await reader.workspace.findMany({ where: { ownerId }, select: { env: true } });
     const literals: string[] = [];
     for (const workspace of workspaces) {
