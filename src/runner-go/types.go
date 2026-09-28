@@ -890,6 +890,10 @@ type ClaimedSession struct {
 	// was created and nothing runs in the workDir; runSessionProcess ends the run FAILED with it
 	// instead of starting an engine. Runner-internal.
 	SourceRefusal *SourcePinRefusal `json:"-"`
+	// WikiMaintenance is present on a Wiki maintenance session only: the run it is pinned to and started
+	// clean for (wiki_maintenance_session.go). A runner is handed one only once it declares
+	// wiki-maintenance-run/v1.
+	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
 }
 
 // SessionSource is the frozen SOURCE snapshot: the INTENT (which repository, which line), frozen
@@ -1071,6 +1075,8 @@ type ReclaimSession struct {
 	// Source, cf. ClaimedSession.Source. On reclaim it is read, never re-derived (SR29): a session
 	// already PINNED comes back on the SHA its first claim froze.
 	Source *SessionSource `json:"source,omitempty"`
+	// WikiMaintenance, cf. ClaimedSession.WikiMaintenance: a restarted runner starts the run clean again.
+	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
 }
 
 type ReclaimResponse struct {

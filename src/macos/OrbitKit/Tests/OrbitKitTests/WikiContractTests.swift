@@ -211,5 +211,16 @@ final class WikiContractTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: Data("{}".utf8)), .default)
         let older = try JSONDecoder().decode(WikiSpaceSettings.self, from: Data(#"{"push":true}"#.utf8))
         XCTAssertNil(older.maintenance, "a server that predates maintenance sends none, and nothing fails to decode")
+        // A day's runs, not its tokens: the contract's bounds, and a value outside them reads as the default.
+        let bounds = try object(try object(maintenance["bounds"], "space.settings.maintenance.bounds")["dailyRunLimit"],
+                                "space.settings.maintenance.bounds.dailyRunLimit")
+        XCTAssertEqual(bounds["min"] as? Int, WikiMaintenanceSettings.dailyRunLimitRange.lowerBound)
+        XCTAssertEqual(bounds["max"] as? Int, WikiMaintenanceSettings.dailyRunLimitRange.upperBound)
+        XCTAssertEqual(WikiMaintenanceSettings.default.dailyRunLimit, 8)
+        for (stored, reads) in [("1", 1), ("48", 48), ("0", 8), ("49", 8), ("2.5", 8), (#""12""#, 8)] {
+            let json = Data(#"{"dailyRunLimit":\#(stored)}"#.utf8)
+            XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: json).dailyRunLimit, reads,
+                           "dailyRunLimit \(stored)")
+        }
     }
 }

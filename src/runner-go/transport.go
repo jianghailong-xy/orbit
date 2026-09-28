@@ -76,6 +76,7 @@ func init() {
 		codexAccountRemoveCapabilityV1,
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
+		wikiMaintenanceRunV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 

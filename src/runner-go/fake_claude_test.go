@@ -51,6 +51,12 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {
 		os.Exit(runFakeVerifyClaude(dir))
 	}
+	// This binary as the real `orbit mcp`, when a real Claude Code starts it from a maintenance run's
+	// MCP config (wiki_maintenance_session_test.go) — rather than the whole suite again.
+	if os.Getenv(testOrbitMCPEnv) != "" {
+		cmdMcp()
+		os.Exit(0)
+	}
 	os.Exit(m.Run())
 }
 

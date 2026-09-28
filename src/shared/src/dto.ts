@@ -24,6 +24,7 @@ import {
 } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
+import type { WikiMaintenanceRun } from './wiki';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -1298,6 +1299,10 @@ export interface ClaimedSession {
    *  `source-pin/v1` (SR35), so a payload carrying this field only ever reaches a process that
    *  knows it must pin before it may create a worktree or spawn an engine (SR33). */
   source?: SessionSourceSnapshot;
+  /** Present on a Wiki maintenance session only (contracts/wiki.contract.json `maintenance.run`): the run it is
+   *  pinned to, and the clean start and guardrails it is started with. Only a runner that declares
+   *  `wiki-maintenance-run/v1` is handed such a session at all. */
+  wikiMaintenance?: WikiMaintenanceRun;
 }
 
 export interface RunEventBatch {
@@ -1638,6 +1643,8 @@ export interface ReclaimSession {
    *  (SR29): a session already `PINNED` keeps the SHA its first claim froze, whatever the
    *  binding's configuration or the ref's tip have done since. */
   source?: SessionSourceSnapshot;
+  /** The maintenance run, cf. ClaimedSession.wikiMaintenance: a restarted runner starts it clean again. */
+  wikiMaintenance?: WikiMaintenanceRun;
 }
 
 /** Control plane → runner response for GET /runner/sessions/reclaim. */

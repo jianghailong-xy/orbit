@@ -20,6 +20,7 @@ import {
 import {
   WIKI_CURSOR_OUTCOMES,
   WIKI_DECIDE_ACTIONS,
+  WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_MODES,
   type WikiCursorOutcome,
@@ -80,11 +81,12 @@ export class WikiMaintenanceSettingsDto {
   @Matches(/^[a-z0-9][a-z0-9._-]{0,63}$/)
   provider?: string;
 
+  /** How many maintenance tasks the space may make in one UTC day (contract `space.settings.maintenance.bounds`). */
   @IsOptional()
   @IsInt()
-  @Min(0)
-  @Max(1_000_000_000)
-  dailyTokenBudget?: number;
+  @Min(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min)
+  @Max(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max)
+  dailyRunLimit?: number;
 }
 
 /** PATCH /api/wiki/spaces/:id — the owner's settings (§2.1 settings, contract `space.settings`). */

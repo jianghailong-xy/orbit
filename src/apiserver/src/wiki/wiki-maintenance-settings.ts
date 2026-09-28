@@ -1,8 +1,9 @@
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { WIKI_MAINTENANCE_LIST_TITLE, wikiMaintenanceSettings, type WikiMaintenanceSettings } from '@orbit/shared';
+import { AgentProvider, WIKI_MAINTENANCE_LIST_TITLE, wikiMaintenanceSettings, type WikiMaintenanceSettings } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
+import { execRuntime, isBuiltinProvider } from '../providers/custom-provider';
 
 /**
  * Who a Wiki maintenance session is, and the owner's maintenance settings of a space (design §8.2,
@@ -51,6 +52,60 @@ export async function isWikiMaintenanceSession(
   return maintained !== null && maintained.ownerId === input.ownerId && maintained.spaceId === input.spaceId;
 }
 
+// ── Which provider a maintenance run may be pinned to ───────────────────────────────────────────
+
+/** Why a provider cannot carry a maintenance run. */
+export interface WikiMaintenanceProviderProblem {
+  why: string;
+  /**
+   * Nothing the owner can run holds the slug now — no provider has it, or the one that has it is turned
+   * off. The claim refuses it like any other problem; the settings door takes it, a name the owner may
+   * configure next.
+   */
+  unavailable: boolean;
+}
+
+/** Why `slug` cannot carry a maintenance run of `ownerId`'s, or null when it can. */
+export async function wikiMaintenanceProviderProblem(
+  db: Pick<Prisma.TransactionClient, 'modelProvider' | 'providerPool'>,
+  ownerId: string,
+  slug: string,
+): Promise<WikiMaintenanceProviderProblem | null> {
+  const offRuntime = (runtime: string): WikiMaintenanceProviderProblem => ({
+    why: `'${slug}' runs on the ${runtime} runtime, and a Wiki maintenance run takes a provider on the Claude Code `
+      + 'runtime only: its clean start and its disallowedTools hold there, and the codex path ignores disallowedTools '
+      + '(design §8.2)',
+    unavailable: false,
+  });
+  if (isBuiltinProvider(slug)) {
+    if (slug !== AgentProvider.CLAUDE) return offRuntime(slug);
+    return {
+      why: "'claude' is this machine's own Claude Code sign-in, which a clean start cannot use: it reads no login, only "
+        + "the key of a configured provider's endpoint. Pin a configured provider on the Claude Code runtime",
+      unavailable: false,
+    };
+  }
+  const row = await db.modelProvider.findFirst({
+    where: { slug, OR: [{ ownerId: null }, { ownerId }] },
+    select: { runtime: true, baseUrl: true, apiKeyEnc: true, defaultModel: true, enabled: true },
+  });
+  if (row) {
+    if (!row.enabled) {
+      return { why: `the provider '${slug}' is turned off, and a Wiki maintenance run falls back to no other`, unavailable: true };
+    }
+    const runtime = execRuntime({ declaredProvider: slug, customRow: row });
+    return runtime === AgentProvider.CLAUDE ? null : offRuntime(runtime);
+  }
+  if (await db.providerPool.findFirst({ where: { slug, ownerId }, select: { id: true } })) {
+    return {
+      why: `'${slug}' is an account pool: its members are Claude Code sign-ins, which a clean start cannot use, and a `
+        + "pool with none free runs on the runner's own. Pin one configured provider on the Claude Code runtime",
+      unavailable: false,
+    };
+  }
+  return { why: `no provider of this account is called '${slug}', and a Wiki maintenance run falls back to no other`, unavailable: true };
+}
+
 // ── The owner's maintenance settings ────────────────────────────────────────────────────────────
 
 /** What a request may set of a space's maintenance (contract `space.settings.maintenance.channel`). */
@@ -58,7 +113,7 @@ export interface WikiMaintenanceInput {
   enabled?: boolean;
   workspaceId?: string | null;
   provider?: string;
-  dailyTokenBudget?: number;
+  dailyRunLimit?: number;
 }
 
 /**
@@ -104,7 +159,14 @@ class MaintenanceSettingsWriter {
         );
       }
     };
-    needsWorkspace(merged(storedMaintenance(before.settings), input));
+    const asked = merged(storedMaintenance(before.settings), input);
+    needsWorkspace(asked);
+    // A provider no maintenance run could start on is refused here, where the owner names it. One that is
+    // merely not there (yet) is taken: the claim refuses the run that finds it still missing.
+    if (input.provider !== undefined || asked.enabled) {
+      const problem = await wikiMaintenanceProviderProblem(this.prisma, ownerId, asked.provider);
+      if (problem && !problem.unavailable) throw new BadRequestException(`maintenance.provider: ${problem.why}`);
+    }
     return withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -145,7 +207,7 @@ function merged(current: WikiMaintenanceSettings, input: WikiMaintenanceInput): 
     enabled: input.enabled ?? current.enabled,
     workspaceId: input.workspaceId === undefined ? current.workspaceId : input.workspaceId,
     provider: input.provider?.trim() || current.provider,
-    dailyTokenBudget: input.dailyTokenBudget ?? current.dailyTokenBudget,
+    dailyRunLimit: input.dailyRunLimit ?? current.dailyRunLimit,
     listId: current.listId,
   };
 }
