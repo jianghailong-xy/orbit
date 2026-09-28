@@ -50,10 +50,17 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
     /// The member a session starting now would run on — the claim's own selector, asked the way the
     /// claim asks it. At most one member of a pool carries it.
     public let next: Bool
+    /// In a shared pool a member is one of its keys: the key as the server reads it, which is where
+    /// this client keeps what web marks its members with (`sharedPools.ts`'s `member.key`) — that a
+    /// key OpenAI refused is INVALID rather than the pool's own `refused` words, and that its cap is
+    /// a month, not a window. Added by the adapter (`SharedPools.asProviderPool`), never decoded:
+    /// the server's own pools carry no such field.
+    public let key: SharedPoolKey?
 
     public init(id: String, slug: String, label: String, presetSlug: String? = nil,
                 enabled: Bool = true, planUsage: PlanUsageSnapshot? = nil,
-                state: PoolMemberState, resetsAt: String? = nil, next: Bool = false) {
+                state: PoolMemberState, resetsAt: String? = nil, next: Bool = false,
+                key: SharedPoolKey? = nil) {
         self.id = id
         self.slug = slug
         self.label = label
@@ -63,6 +70,7 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
         self.state = state
         self.resetsAt = resetsAt
         self.next = next
+        self.key = key
     }
 
     public init(from decoder: Decoder) throws {
@@ -76,6 +84,8 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
         state = try c.decodeIfPresent(PoolMemberState.self, forKey: .state) ?? .unknown
         resetsAt = try c.decodeIfPresent(String.self, forKey: .resetsAt)
         next = try c.decodeIfPresent(Bool.self, forKey: .next) ?? false
+        // Not on the wire: a shared pool's key is attached by the adapter that draws it as a member.
+        key = nil
     }
 }
 
@@ -95,15 +105,22 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
     /// onto such a pool, or to pin a task to it. A pool whose members are only spent never carries it.
     public let unavailable: String?
     public let members: [PoolMember]
+    /// A shared pool (web's `sharedPoolAsProviderPool`): the whole of it as its page reads it — its
+    /// people, its rules and the viewer's place in it. Absent on an account pool of the user's own,
+    /// and the one field that says which kind this is: a shared pool runs Codex on one of its keys,
+    /// its members are those keys, and its caps are a month. Attached by the adapter, never decoded.
+    public let shared: SharedPool?
 
     public init(id: String, slug: String, label: String, resetsAt: String? = nil,
-                unavailable: String? = nil, members: [PoolMember] = []) {
+                unavailable: String? = nil, members: [PoolMember] = [],
+                shared: SharedPool? = nil) {
         self.id = id
         self.slug = slug
         self.label = label
         self.resetsAt = resetsAt
         self.unavailable = unavailable
         self.members = members
+        self.shared = shared
     }
 
     public init(from decoder: Decoder) throws {
@@ -117,6 +134,9 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
         unavailable = reason?.isEmpty == false ? reason : nil
         members = try c.decodeIfPresent([LossyDecodable<PoolMember>].self, forKey: .members)?
             .compactMap(\.value) ?? []
+        // Not on the wire: this says which *kind* of pool a row is, and only the client's own
+        // catalogue knows it (a shared pool is read from its own endpoint, Models/SharedPools.swift).
+        shared = nil
     }
 }
 
