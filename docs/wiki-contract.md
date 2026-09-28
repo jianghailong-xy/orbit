@@ -1119,8 +1119,9 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
 | `references` | 会话条件里的项目是 owner 的（按 id，或只有一个项目叫这个名字的完整标题）、主题是本 space 的、条目 kind 在闭集里；文档的大类是本 plan 的大类；`scopeOut` 指向的篇是本 plan 的篇；建议的事实是本 space 的条目或 owner 的会话 |
 
 - 不过闸：`WIKI_PLAN_GATE`（422），`errors[]` 逐条给出 `{ check, path, message }`，`path` 从请求根算起
-  （`plan.docs[3].sections[2].sources.sessions.projects[0]`），最多列 `rules.errorsMax`（200）条，消息里写总数。什么都不存，起草作业把
-  清单交回模型重做。
+  （草稿是 `plan.docs[3].sections[2].sources.sessions.projects[0]`，编辑是 `doc.…` / `section.…`，建议是 `change.doc.…`）；编辑和建议
+  会让整个 plan 变成什么样，关于那份结果的错误按结果 plan 的位置写（`plan.docs[20].protected`）。最多列 `rules.errorsMax`（200）条，
+  消息里写总数。什么都不存，起草作业把清单交回模型重做。
 - **仓库引用不在服务端查**：文件、docs 章节、符号、契约只在 checkout 里有，服务端没有。起草作业在 runner 上、在某个 sha 上核对，随草稿报
   `repoCheck: { sha, checked, missing: [{ kind, ref, at }] }`（`kind` 为 file / docSection / symbol / contract）；服务端原样存在版本上
   （`repo_sha`、`repo_check`），不评判。owner 做出的版本没有 runner 核对过，这两项为空。
