@@ -253,28 +253,31 @@ public struct WikiSpaceSettings: Codable, Equatable, Sendable {
 }
 
 /// A space's Wiki maintenance run (contract `space.settings.maintenance`): whether facts start
-/// maintenance tasks, where they run, on which provider, and the daily token budget. The owner's
-/// alone to change; `listId` is the hidden list the server made for the runs, and is never sent.
+/// maintenance tasks, where they run, on which provider, and how many runs a UTC day may make. The
+/// owner's alone to change; `listId` is the hidden list the server made for the runs, and is never sent.
 public struct WikiMaintenanceSettings: Codable, Equatable, Sendable {
     public let enabled: Bool
     public let workspaceId: String?
     public let provider: String
-    public let dailyTokenBudget: Int
+    public let dailyRunLimit: Int
     public let listId: String?
 
     /// The contract's `default`: what a space reads as before its owner turns maintenance on.
     public static let `default` = WikiMaintenanceSettings(enabled: false, workspaceId: nil, provider: "local-vllm",
-                                                          dailyTokenBudget: 2_000_000, listId: nil)
+                                                          dailyRunLimit: 8, listId: nil)
+
+    /// The contract's `bounds.dailyRunLimit`: what the settings page offers, and what the server takes.
+    public static let dailyRunLimitRange: ClosedRange<Int> = 1...48
 
     public enum CodingKeys: String, CodingKey, CaseIterable {
-        case enabled, workspaceId, provider, dailyTokenBudget, listId
+        case enabled, workspaceId, provider, dailyRunLimit, listId
     }
 
-    public init(enabled: Bool, workspaceId: String?, provider: String, dailyTokenBudget: Int, listId: String?) {
+    public init(enabled: Bool, workspaceId: String?, provider: String, dailyRunLimit: Int, listId: String?) {
         self.enabled = enabled
         self.workspaceId = workspaceId
         self.provider = provider
-        self.dailyTokenBudget = dailyTokenBudget
+        self.dailyRunLimit = dailyRunLimit
         self.listId = listId
     }
 
@@ -285,7 +288,8 @@ public struct WikiMaintenanceSettings: Codable, Equatable, Sendable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? fallback.enabled
         workspaceId = try c.decodeIfPresent(String.self, forKey: .workspaceId)
         provider = try c.decodeIfPresent(String.self, forKey: .provider) ?? fallback.provider
-        dailyTokenBudget = try c.decodeIfPresent(Int.self, forKey: .dailyTokenBudget) ?? fallback.dailyTokenBudget
+        let limit = try? c.decodeIfPresent(Int.self, forKey: .dailyRunLimit)
+        dailyRunLimit = limit.flatMap { Self.dailyRunLimitRange.contains($0) ? $0 : nil } ?? fallback.dailyRunLimit
         listId = try c.decodeIfPresent(String.self, forKey: .listId)
     }
 }

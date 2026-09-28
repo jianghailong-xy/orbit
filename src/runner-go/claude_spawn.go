@@ -25,6 +25,10 @@ import (
 // firstSpawn opens a new conversation (--session-id); a re-spawn continues the existing one
 // (--resume), whose local transcript file the caller must have ensured already.
 func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) []string {
+	// A Wiki maintenance run is not started the way its workspace starts every other session.
+	if job.wikiMaintenanceCleanStart() {
+		return wikiMaintenanceClaudeArgs(job, scratchDir, firstSpawn)
+	}
 	a := job.Agent
 	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
 	// intentionally NOT passed for a long-lived interactive session.
@@ -212,6 +216,10 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a
 	// background job the runner will own (bgJobEnvPairs).
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// A Wiki maintenance run's environment is built from nothing instead (wiki_maintenance_session.go).
+	if job.wikiMaintenanceCleanStart() {
+		cmd.Env = wikiMaintenanceEnv(job)
+	}
 	sp := &claudeSpawn{cmd: cmd}
 	var err error
 	if sp.stdin, err = cmd.StdinPipe(); err != nil {

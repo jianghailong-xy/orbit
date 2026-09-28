@@ -662,9 +662,14 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 
 ### 16.1 维护设置与维护会话
 
-- `settings.maintenance = { enabled, workspaceId, provider, dailyTokenBudget, listId }`，默认
-  `{ false, null, 'local-vllm', 2000000, null }`。只能经用户门 `PATCH /api/wiki/spaces/:id` 改，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
+- `settings.maintenance = { enabled, workspaceId, provider, dailyRunLimit, listId }`，默认
+  `{ false, null, 'local-vllm', 8, null }`。只能经用户门 `PATCH /api/wiki/spaces/:id` 改，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
   runner 门没有改设置的路由。只写 `maintenance` 这一个键，在 SQL 里合并，其他设置的并发写不会互相覆盖。
+- `dailyRunLimit`：这个 space 每个 UTC 自然日最多建几个维护任务，整数 1–48（`bounds.dailyRunLimit`），默认 8，不按 token 算。
+  计数是维护清单里自 UTC 零点起建出的任务数，不论结局；维护作业建任务前用 `wikiMaintenanceRunsToday` 读它。存着的值越界、
+  或是契约已经没有的键（早先的 `dailyTokenBudget`），读出来一律是默认值。
+- `provider` 只收 Claude Code 运行时上的配置型 provider：内置引擎（`claude` 是本机登录，干净启动用不了；codex / kimi / opencode
+  不是 Claude Code）、别的运行时上的 provider、账号池一律 400 并说明原因；还没有的名字照收，认领时仍没有就拒绝那次运行（16.5）。
 - 打开维护必须给出 owner 自己的 workspace。第一次打开时建一个隐藏的任务清单（标题「Wiki maintenance」、`hidden = true`、
   `maxConcurrent = 1`），id 写进 `listId`；关掉时清单和 `listId` 都保留。`listId` 永远不从请求里取。
 - **维护会话 = 任务在这个清单里的会话**。判定是导出函数 `isWikiMaintenanceSession` / `wikiMaintenanceSpaceOf`，
@@ -722,6 +727,32 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 - CLI：`orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]`、
   `orbit wiki cursor advance --space <id> --to <token> [--outcome …] [--error TEXT] [--json]`，只有 CLI、没有 MCP 工具，三张 family 表都登记。
 
+### 16.5 维护会话的运行：干净启动与护栏
+
+JSON 里是 `maintenance.run`；服务端在 `wiki/wiki-maintenance-session.ts`，runner 在 `runner-go/wiki_maintenance_session.go`。
+
+- **只有维护会话拿到它**：认领（`GET /runner/sessions/claim`）和 runner 重启后的 reclaim 都给维护会话带上
+  `wikiMaintenance = { spaceId, workspaceId, provider, providerFallbacks: [], maxTurns: 120, disallowedTools, cleanStart: true, refusal? }`，
+  其他会话一个字段都不多。护栏同时写进 agent 配置：`maxTurns 120`、`disallowedTools` 加上 Task / Agent / WebFetch / WebSearch、
+  `permissionMode dontAsk`（没人看着的运行：没预批准的一律拒绝，不去问人）、不带 effort；维护会话不做编排。
+- **钉死，否则不跑**：provider 与 workspace 取 space 的维护设置，没有回退。维护关着、会话不在设置的 workspace、会话的 provider
+  不是设置钉的那个、那个 provider 不存在 / 已关闭 / 不在 Claude Code 运行时 / 是账号池——任一条都写进 `refusal`，runner 以它把
+  这次运行记为 FAILED，不起引擎。绝不落到 runner 自己的 Claude 登录上，也不经账号池换成员。
+- **只交给认得它的 runner**：runner 在 `X-Orbit-Runner-Capabilities` 里声明 `wiki-maintenance-run/v1` 才会被派到维护会话；
+  不声明的，认领 SQL 不给这一行、reclaim 也跳过它（同 SR35 对待钉了 SOURCE 的会话），会话等能干净启动的 runner。
+- **干净启动**（runner 见到 `cleanStart`）：`claude -p --bare --setting-sources '' --tools Bash --strict-mcp-config`，
+  `--mcp-config` 只挂 orbit 一个 server，且它只提供 `task_get`、`task_comment`、`task_progress_report`（不给 `task_update`：
+  光它的 schema 每次请求就约 4k token，运行的成败由任务的验收命令判，不由运行自己写）；
+  `--system-prompt` 只说维护运行做什么（按任务执行 `orbit wiki maintain`，按结果汇报）；`--max-turns 120`、`--disallowedTools`、
+  `--permission-mode dontAsk`、`--allowedTools`（上面三个 orbit 工具和 `orbit wiki …` 命令）。HOME 与 CLAUDE_CONFIG_DIR 是会话
+  自己在 runner scratch 下的目录，第一次建出来时只有 onboarding 标记——不读本机的登录、记忆、设置和 CLAUDE.md，会话自己的
+  transcript 留在那里供 `--resume`。项目里的 `.claude/settings.json` 在 `--bare` 下照样会读，所以要 `--setting-sources ''`。
+- **鉴权与 thinking**：`--settings` 只有 `apiKeyHelper: printenv ANTHROPIC_AUTH_TOKEN`（Bearer）；bare 模式下 `ANTHROPIC_API_KEY`
+  走 x-api-key，vLLM 回 401，所以这个变量根本不交给引擎。thinking 默认关：`CLAUDE_CODE_EFFORT_LEVEL=unset` 加
+  `MAX_THINKING_TOKENS=0`（只设前者仍会发 `thinking: adaptive`）。环境从零搭：provider 的端点、token、模型、自定义头、上下文窗口，
+  runner 的 PATH、locale、TMPDIR、证书与代理，`ORBIT_HOME` 和会话上下文；runner 与 workspace 的其他变量都不带。
+- **截断算失败**：开场 prompt 用满 120 个模型回合，CLI 以 `error_max_turns` 结束这一回合；runner 把回合记为 FAILED，并在游标路由上
+  报 `outcome: truncated`——space 的连续失败加一，游标不动。
 
 ## 17. 锚点复验（判据 4）
 

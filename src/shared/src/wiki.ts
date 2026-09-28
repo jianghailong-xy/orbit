@@ -863,19 +863,22 @@ export type WikiMaintenanceSettings = {
   workspaceId: string | null;
   /** The provider the run is pinned to, with no fallback. */
   provider: string;
-  /** Input plus output tokens the space's maintenance sessions may spend in one UTC day. */
-  dailyTokenBudget: number;
+  /** How many maintenance tasks the space may make in one UTC day, within {@link WIKI_MAINTENANCE_DAILY_RUN_LIMIT}. */
+  dailyRunLimit: number;
   /** Server-written, never taken from a request: the space's hidden «Wiki maintenance» task list,
    *  made the first time maintenance is turned on and kept when it is turned off. A maintenance
    *  session is a session whose task is in it. */
   listId: string | null;
 };
 
+/** The bounds of `dailyRunLimit` (contract `space.settings.maintenance.bounds.dailyRunLimit`). */
+export const WIKI_MAINTENANCE_DAILY_RUN_LIMIT = { min: 1, max: 48 } as const;
+
 export const WIKI_DEFAULT_MAINTENANCE_SETTINGS: Readonly<WikiMaintenanceSettings> = {
   enabled: false,
   workspaceId: null,
   provider: 'local-vllm',
-  dailyTokenBudget: 2_000_000,
+  dailyRunLimit: 8,
   listId: null,
 };
 
@@ -886,14 +889,15 @@ export const WIKI_MAINTENANCE_LIST_TITLE = 'Wiki maintenance';
 export function wikiMaintenanceSettings(stored: unknown): WikiMaintenanceSettings {
   const raw = (stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) as Record<string, unknown>;
   const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() !== '' ? value : null);
-  const budget = raw.dailyTokenBudget;
+  const limit = raw.dailyRunLimit;
   return {
     enabled: raw.enabled === true,
     workspaceId: text(raw.workspaceId),
     provider: text(raw.provider) ?? WIKI_DEFAULT_MAINTENANCE_SETTINGS.provider,
-    dailyTokenBudget: typeof budget === 'number' && Number.isInteger(budget) && budget >= 0
-      ? budget
-      : WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyTokenBudget,
+    dailyRunLimit: typeof limit === 'number' && Number.isInteger(limit)
+      && limit >= WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min && limit <= WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max
+      ? limit
+      : WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyRunLimit,
     listId: text(raw.listId),
   };
 }
@@ -1051,6 +1055,47 @@ export interface WikiDossierPage {
   batches: WikiDossierBatch[];
   errorClusters: WikiErrorCluster[];
   state: WikiCursorState;
+}
+
+// ── Wiki maintenance: the run a maintenance session is claimed with (contract `maintenance.run`) ──
+
+/**
+ * The guardrails of a maintenance run (design §8.2): every maintenance session is claimed with these,
+ * whatever its workspace or its owner's defaults say. Tools a run may not have are named even when the
+ * clean start leaves them out anyway: a runtime that ignored the one would still meet the other.
+ */
+export const WIKI_MAINTENANCE_RUN = {
+  /** Model turns the run's opening prompt may take; a run cut short by it failed. */
+  maxTurns: 120,
+  /** Sub-agents (Task, Agent) and the web (WebFetch, WebSearch). */
+  disallowedTools: ['Task', 'Agent', 'WebFetch', 'WebSearch'],
+  /** Nobody watches a maintenance run: what is not pre-approved is refused, never asked. */
+  permissionMode: 'dontAsk',
+  /** The one runtime whose clean start and disallowedTools hold (the codex path ignores disallowedTools). */
+  runtime: 'claude',
+} as const;
+
+/**
+ * What a runner declares to be handed maintenance sessions. A runner that does not is never sent one —
+ * it would start the session as an ordinary one, without the clean start or the turn limit.
+ */
+export const WIKI_MAINTENANCE_RUN_V1 = 'wiki-maintenance-run/v1';
+
+/** `wikiMaintenance` on a claimed or reclaimed session: present on a maintenance session only. */
+export interface WikiMaintenanceRun {
+  /** The space the session maintains. */
+  spaceId: string;
+  /** The space's maintenance settings, as the run was claimed under them. */
+  workspaceId: string | null;
+  provider: string;
+  /** Always empty: a maintenance run falls back to no other provider. */
+  providerFallbacks: [];
+  maxTurns: number;
+  disallowedTools: string[];
+  /** Start the engine clean (contract `maintenance.run.cleanStart`). */
+  cleanStart: true;
+  /** Why the run may not start, when it may not: the runner ends it FAILED with this and starts no engine. */
+  refusal?: string;
 }
 
 // ── Anchor re-verification (criterion 4, contract `anchorRules.verify`) ────────────────────────

@@ -446,12 +446,12 @@ test('maintenance is off by default, only the owner changes it, and turning it o
 
   const fresh = await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${spaceId}`);
   expectStatus(fresh, 200, 'the owner reads the space');
-  const { enabled, workspaceId, provider, dailyTokenBudget, listId: noList } = fresh.body.settings.maintenance;
-  assert.deepEqual({ enabled, workspaceId, provider, dailyTokenBudget, listId: noList }, {
+  const { enabled, workspaceId, provider, dailyRunLimit, listId: noList } = fresh.body.settings.maintenance;
+  assert.deepEqual({ enabled, workspaceId, provider, dailyRunLimit, listId: noList }, {
     enabled: false,
     workspaceId: null,
     provider: 'local-vllm',
-    dailyTokenBudget: 2_000_000,
+    dailyRunLimit: 8,
     listId: null,
   }, 'maintenance is off until the owner turns it on');
 
@@ -484,14 +484,14 @@ test('maintenance is off by default, only the owner changes it, and turning it o
   const decoy = randomUUID();
   const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, {
     push: false,
-    maintenance: { enabled: true, workspaceId: ws, provider: 'local-vllm', dailyTokenBudget: 500_000, listId: decoy },
+    maintenance: { enabled: true, workspaceId: ws, provider: 'local-vllm', dailyRunLimit: 12, listId: decoy },
   });
   expectStatus(on, 200, 'the owner turns maintenance on');
   const settings = on.body.settings;
   assert.equal(settings.push, false, 'the other settings of the same request are written too');
   assert.equal(settings.maintenance.enabled, true);
   assert.equal(toUuid(settings.maintenance.workspaceId), ws);
-  assert.equal(settings.maintenance.dailyTokenBudget, 500_000);
+  assert.equal(settings.maintenance.dailyRunLimit, 12);
   const listId = toUuid(settings.maintenance.listId);
   assert.notEqual(listId, decoy, 'the list is the server\'s, never the request\'s');
   const list = await h.sql.query<{ title: string; hidden: boolean; max_concurrent: number | null; owner_id: string }>(
@@ -501,8 +501,8 @@ test('maintenance is off by default, only the owner changes it, and turning it o
   assert.deepEqual(list.rows[0], { title: 'Wiki maintenance', hidden: true, max_concurrent: 1, owner_id: owner.id });
 
   // Changing it again, turning it off and on: still the one list.
-  const budget = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { dailyTokenBudget: 750_000 } });
-  expectStatus(budget, 200, 'the owner changes the budget');
+  const budget = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { dailyRunLimit: 24 } });
+  expectStatus(budget, 200, 'the owner changes the daily limit');
   assert.equal(budget.body.settings.maintenance.enabled, true, 'a key left out stays as it was');
   const off = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: false } });
   expectStatus(off, 200, 'the owner turns it off');
@@ -516,7 +516,7 @@ test('maintenance is off by default, only the owner changes it, and turning it o
   const push = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { push: true });
   expectStatus(push, 200, 'the owner turns push back on');
   assert.equal(push.body.settings.maintenance.enabled, true);
-  assert.equal(push.body.settings.maintenance.dailyTokenBudget, 750_000);
+  assert.equal(push.body.settings.maintenance.dailyRunLimit, 24);
 });
 
 // ── 4. only a maintenance session of the space, and no other tenant ──────────────────────────────
