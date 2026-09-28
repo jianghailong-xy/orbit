@@ -80,6 +80,7 @@ import {
   wikiMaintenanceCheckCommand,
   wikiMaintenanceRunSessions,
 } from './wikiMaintain';
+import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 
 /**
  * Holds `src/shared/src/wiki.ts` to `contracts/wiki.contract.json`, the hand-written authority
@@ -615,6 +616,36 @@ describe('wiki contract', () => {
     expect(size('tiered', 100_000)).toBe(WIKI_MAINTENANCE_JOB.runSessionsMax);
     expect(size('manual', 0)).toBe(Math.floor(WIKI_LIMITS.opsPerSession / 6));
     expect(size('manual', 0, WIKI_LIMITS.pendingOpsPerSpace - 5)).toBe(0);
+  });
+
+  it('reads a space\'s health the way the contract states it, and tells the owner once a streak', () => {
+    // Criterion 5: the Wiki home's status line reads the space's entries and its maintenance run's health.
+    const health = CONTRACT.maintenance.health;
+    expect(health.criterion).toBe(5);
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(health.route);
+    expect(health.route).toBe('GET /api/wiki/spaces/:id/health');
+    expect(health.looks).toEqual([...WIKI_MAINTENANCE_LOOKS]);
+    expect(keysOf(health.maintenance)).toEqual([
+      'enabled', 'look', 'lastOkAt', 'lastRunAt', 'consecutiveFailures', 'backlog', 'oldestPendingAt', 'lagSeconds',
+      'dailyLimitReached', 'held', 'running', 'lastRun',
+    ]);
+    expect(health.notify.afterFailures).toBe(WIKI_MAINTENANCE_HEALTH.notifyAfterFailures);
+    expect(health.notify.once).toMatch(/exactly afterFailures/u);
+    expect(health.notify.reset).toMatch(/back to 0/u);
+    // The looks win in the order the contract lists them.
+    const now = new Date('2026-09-28T12:00:00.000Z');
+    const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
+    const base = { enabled: true, consecutiveFailures: 0, running: null, oldestPendingAt: null };
+    const running = { sessionId: 's', startedAt: hoursAgo(0.1) };
+    const late = hoursAgo(WIKI_MAINTENANCE_RULES.maxPendingAgeHours + 2);
+    expect(wikiMaintenanceLook({ ...base, enabled: false, consecutiveFailures: 3, running, oldestPendingAt: late }, now)).toBe('off');
+    expect(wikiMaintenanceLook({ ...base, consecutiveFailures: 1, running, oldestPendingAt: late }, now)).toBe('failing');
+    expect(wikiMaintenanceLook({ ...base, running, oldestPendingAt: late }, now)).toBe('running');
+    expect(wikiMaintenanceLook({ ...base, oldestPendingAt: late }, now)).toBe('behind');
+    expect(wikiMaintenanceLook({ ...base, oldestPendingAt: hoursAgo(WIKI_MAINTENANCE_RULES.maxPendingAgeHours - 1) }, now)).toBe('ok');
+    expect(wikiMaintenanceLook(base, now)).toBe('ok');
+    expect(health.look).toMatch(/maintenance\.rules\.maxPendingAgeHours/u);
+    expect(health.client).toMatch(/wiki-health\.fixture\.json/u);
   });
 
   it('ships the run a maintenance session is claimed with, as the contract states it', () => {
