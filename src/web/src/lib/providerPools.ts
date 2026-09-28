@@ -175,8 +175,15 @@ export function memberStatus(
       return { label: 'Available', color: 'green' };
     case 'SPENT':
       // A key is not spent but capped: what ran out is what its contributor lets the others spend on
-      // it this month, and that comes back on the first of the next one.
+      // it this month, and that comes back on the first of the next one. One OpenAI itself put out of
+      // budget comes back at its own mark instead — a date of its own, said the same way.
       if (member.key) {
+        if (member.key.spentUntil) {
+          return {
+            label: `Out of budget · resets ${formatCapReset(member.key.spentUntil)}`,
+            color: 'orange',
+          };
+        }
         return {
           label: member.resetsAt ? `At cap · resets ${formatCapReset(member.resetsAt)}` : 'At cap',
           color: 'orange',

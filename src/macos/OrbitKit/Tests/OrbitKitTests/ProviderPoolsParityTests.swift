@@ -166,12 +166,17 @@ final class ProviderPoolsParityTests: XCTestCase {
 
         let key = SharedPoolKey(id: "k", label: "orbit-org-1", fingerprint: "sk-…0000",
                                 state: .active, enabled: true, shareCap: 50,
+                                spentUntil: "2026-09-30T06:00:00.000Z",
                                 contributor: PoolKeyContributor(userId: "u", name: "Wikova", you: false),
                                 usage: PoolSpend(inputTokens: 10, outputTokens: 20, costUsd: 1.5,
                                                  othersCostUsd: 1.25),
                                 running: true, next: true)
+        // The mark a key is out of budget until is one of the fields web declares, mirrored here — the
+        // tripwire this file used to carry ("web does not carry `spentUntil` yet") has fired, and the
+        // mark in the fixture above is what makes the two sets of fields line up.
         XCTAssertEqual(try encodedKeys(key), declaredFields(try interfaceBody("SharedPoolKey", in: web, file: lib)))
-        XCTAssertFalse(web.contains("spentUntil"), "\(lib) now carries the server's own `spentUntil` — mirror it")
+        XCTAssertTrue(web.contains("spentUntil: string | null;"),
+                      "\(lib) no longer declares the mark a key is out of budget until — drop it from this check")
 
         let person = SharedPoolPerson(userId: "u", name: "Wikova", role: .admin, creator: true, you: true,
                                       keys: 2, sessions: 3, usage: PoolSpend(costUsd: 4))
@@ -266,10 +271,11 @@ final class ProviderPoolsParityTests: XCTestCase {
                                  members: [PoolMember(id: "m", slug: "k", label: "K", state: .spent)])
         let withReset = try XCTUnwrap(ProviderPools.spentNote(spent, now: now))
         let head = try XCTUnwrap(withReset.components(separatedBy: " · resets ").first)
-        // The head's first run is chosen by the pool's kind — a shared pool's keys are capped, not spent —
-        // and an account pool's reset is `formatResetTime`, the same clock this client reads.
+        // The head's first run is chosen by the pool's kind — a shared pool's keys are capped, not spent,
+        // unless what stopped them is OpenAI's own out-of-budget mark (`allOutOfBudget`) — and an account
+        // pool's reset is `formatResetTime`, the same clock this client reads.
         let prose = web.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        XCTAssertTrue(prose.contains("const spent = pool.shared ? 'All at cap' : '\(head)';"),
+        XCTAssertTrue(prose.contains("const spent = !pool.shared ? '\(head)' : allOutOfBudget(pool.shared) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)';"),
                       "AccountPools.tsx no longer heads a spent account pool with `\(head)`")
         XCTAssertTrue(prose.contains("{spent} · </span>resets{' '} {pool.shared ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}"),
                       "AccountPools.tsx no longer says `\(head) · resets <time>`")
