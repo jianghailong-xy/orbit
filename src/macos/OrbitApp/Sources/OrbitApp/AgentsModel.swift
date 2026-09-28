@@ -36,6 +36,13 @@ final class AgentsModel {
     /// keys: a new-session draft is what offers pools, and the draft seed resolves a workspace that
     /// runs on one through them.
     private(set) var providerPools: [ProviderPool] = []
+    /// The shared Codex pools this account is in (GET /providers/shared-pools), read into their own
+    /// model. A new-session draft offers them beside the account pools (`allPools`), and the
+    /// Providers page lists them on their own — which is why the two are kept apart here.
+    private(set) var sharedPools: [SharedPool] = []
+    /// Every pool a new-session draft may offer, in web's order: the shared ones drawn as account
+    /// pools whose members are their keys (`SharedPools.asProviderPool`), then this account's own.
+    var allPools: [ProviderPool] { SharedPools.asProviderPools(sharedPools) + providerPools }
     /// How the workspace-list fetches have gone: tells a failed fetch from an empty list, and holds
     /// the launch landing open until one succeeds (`LoadFailureLogic`).
     private(set) var loadState = ListLoadState()
@@ -94,7 +101,7 @@ final class AgentsModel {
         let catalog = modelCatalog(for: runnerId)
         return AgentDefaults.effectiveDefaultModel(
             for: provider, catalog: catalog,
-            configured: configuredProviders + ProviderPools.asProviders(providerPools),
+            configured: configuredProviders + ProviderPools.asProviders(allPools),
             runtimeDefaults: runnerId.flatMap { runnerRuntimeDefaultModels[$0] })
     }
 
@@ -112,6 +119,7 @@ final class AgentsModel {
                 configuredProvidersLoaded = true
             }
             if let pools = try? await api.providerPools() { providerPools = pools }
+            if let shared = try? await api.sharedPools() { sharedPools = shared }
             loadState.succeed()
         } catch {
             errorText = friendly(error)

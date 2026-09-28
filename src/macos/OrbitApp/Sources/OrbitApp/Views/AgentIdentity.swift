@@ -20,7 +20,9 @@ struct ProviderMark: View {
     /// label when a provider has no preset. Falls back to the slug, then "?".
     var label: String? = nil
     /// An account pool's number of accounts, worn in the mark's corner. Nil for anything else.
-    var poolSize: Int? = nil
+    var poolSize: Int?
+    /// What that number counts when it is not accounts: a shared pool's keys. Nil counts accounts.
+    var poolUnit: String? = nil
 
     /// What the mark and gradient resolve from — the preset when one is known, else the raw slug.
     private var identity: String? { brandKey ?? provider }
@@ -42,7 +44,8 @@ struct ProviderMark: View {
             // After the shadow, which belongs to the tile: web's badge is the tile's sibling.
             .overlay(alignment: .topTrailing) {
                 if let poolSize {
-                    PoolCountBadge(count: poolSize, markSize: size).offset(x: 5, y: -4)
+                    PoolCountBadge(count: poolSize, unit: poolUnit, markSize: size)
+                        .offset(x: 5, y: -4)
                 }
             }
     }
@@ -72,6 +75,8 @@ struct ProviderMark: View {
 /// stands off the mark.
 private struct PoolCountBadge: View {
     let count: Int
+    /// What is being counted, for VoiceOver: an account pool's accounts, a shared pool's keys.
+    let unit: String?
     let markSize: CGFloat
 
     var body: some View {
@@ -85,7 +90,7 @@ private struct PoolCountBadge: View {
             .frame(minWidth: em * 1.6 + 3)
             .background(Capsule().fill(.primary))
             .overlay(Capsule().strokeBorder(.background, lineWidth: 1.5))
-            .accessibilityLabel(count == 1 ? "1 account" : "\(count) accounts")
+            .accessibilityLabel(SessionProviderChoices.poolBadgeLabel(size: count, unit: unit))
     }
 }
 
@@ -197,7 +202,8 @@ struct ProviderSwitchSheet: View {
             HStack(spacing: 12) {
                 Group {
                     ProviderMark(provider: choice.slug, size: 28, brandKey: choice.brandKey,
-                                 label: choice.label, poolSize: choice.poolSize)
+                                 label: choice.label, poolSize: choice.poolSize,
+                                 poolUnit: choice.poolUnit)
                     Text(choice.label).foregroundStyle(.primary).lineLimit(1)
                 }
                 .opacity(greyed ? 0.5 : 1)

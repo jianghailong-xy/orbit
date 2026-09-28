@@ -146,6 +146,55 @@ final class ProviderPoolsParityTests: XCTestCase {
         XCTAssertTrue(try encodedKeys(session).contains("poolMemberProviderId"))
     }
 
+    // MARK: - a shared pool's own model
+
+    /// Web's `SharedPoolKey` / `SharedPoolPerson` / `SharedPool` are what this client decodes
+    /// (Models/SharedPools.swift), field for field — a field added at one end and not the other would
+    /// otherwise just stop showing up, silently. The differences are declared here rather than left to
+    /// be discovered:
+    ///
+    /// - `PoolSpend.othersCostUsd` is spelled inline in web's key usage (`PoolSpend & { othersCostUsd }`),
+    ///   so this client's one `PoolSpend` is the union of the two declarations;
+    /// - the server's own `spentUntil` is not part of the view: it is a column the gateway writes and
+    ///   the key selector reads, and neither web's types nor this client's carry it — a page's closest
+    ///   thing is `shareCap` beside `usage.othersCostUsd`;
+    /// - a key OpenAI refused is web's member state `INVALID`, and this client keeps that on the key
+    ///   (`PoolKeyState.invalid`) rather than in its member states — see the member checks above.
+    func testTheSharedPoolDecodesTheShapeWebDeclares() throws {
+        let lib = "src/web/src/lib/sharedPools.ts"
+        let web = try source(lib)
+
+        let key = SharedPoolKey(id: "k", label: "orbit-org-1", fingerprint: "sk-…0000",
+                                state: .active, enabled: true, shareCap: 50,
+                                contributor: PoolKeyContributor(userId: "u", name: "Wikova", you: false),
+                                usage: PoolSpend(inputTokens: 10, outputTokens: 20, costUsd: 1.5,
+                                                 othersCostUsd: 1.25),
+                                running: true, next: true)
+        XCTAssertEqual(try encodedKeys(key), declaredFields(try interfaceBody("SharedPoolKey", in: web, file: lib)))
+        XCTAssertFalse(web.contains("spentUntil"), "\(lib) now carries the server's own `spentUntil` — mirror it")
+
+        let person = SharedPoolPerson(userId: "u", name: "Wikova", role: .admin, creator: true, you: true,
+                                      keys: 2, sessions: 3, usage: PoolSpend(costUsd: 4))
+        XCTAssertEqual(try encodedKeys(person),
+                       declaredFields(try interfaceBody("SharedPoolPerson", in: web, file: lib)))
+
+        let spend = PoolSpend(inputTokens: 0, outputTokens: 0, costUsd: 0, othersCostUsd: 0)
+        XCTAssertEqual(try encodedKeys(spend),
+                       declaredFields(try interfaceBody("PoolSpend", in: web, file: lib)).union(["othersCostUsd"]))
+        XCTAssertTrue(try source(lib).contains("othersCostUsd"),
+                      "\(lib) no longer declares what a key's cap counts — drop `othersCostUsd` from this check")
+
+        // The month is two fields spelled inline on the pool rather than an interface of its own.
+        XCTAssertTrue(web.contains("window: { start: string; end: string };"),
+                      "\(lib)'s pool no longer spells out its month — drop this check")
+        let window = SharedPoolWindow(start: "2026-09-01T00:00:00.000Z", end: "2026-10-01T00:00:00.000Z")
+        XCTAssertEqual(try encodedKeys(window), ["start", "end"])
+        let pool = SharedPool(id: "p", slug: "team-codex", label: "Team Codex", engine: "codex",
+                              membersCanAdd: true, ownKeyFirst: true, viewerRole: .member,
+                              window: window, people: [person], keys: [key])
+        XCTAssertEqual(try encodedKeys(pool), declaredFields(try interfaceBody("SharedPool", in: web, file: lib)))
+    }
+
     // MARK: - the words
 
     /// The status bar's account names whose it is in the web's own sentences (WorkspaceView's tooltip).
@@ -171,6 +220,24 @@ final class ProviderPoolsParityTests: XCTestCase {
         let opening = next.dropLast(chosen.count)
         XCTAssertTrue(web.contains("`\(opening) — ${ shownPool.shared ? 'the key it picks for you' : 'the account with the most room' } right now`"),
                       "WorkspaceView.tsx no longer says `\(next)` for an account pool")
+        // A shared pool's key says the same sentence with the web's other branch, which the ternary
+        // above already carries — so it has to be the same opening and the one word changed.
+        let shared = ProviderPool(id: "p", slug: "s", label: "POOLNAME", members: [member],
+                                  shared: SharedPool(id: "p", slug: "s", label: "POOLNAME"))
+        let asKey = ProviderPools
+            .accountHelp(pool: shared, account: PoolAccount(member: member, current: false))
+            .replacingOccurrences(of: "POOLNAME", with: "${shownPool.label}")
+            .replacingOccurrences(of: "MEMBERNAME", with: "${shownPoolAccount.member.label}")
+        XCTAssertTrue(asKey.hasSuffix(" — the key it picks for you right now"), asKey)
+        XCTAssertEqual(asKey.replacingOccurrences(of: "the key it picks for you",
+                                                  with: "the account with the most room"),
+                       next, "a shared pool's sentence differs from an account pool's in one branch only")
+        // Running — as opposed to starting — names the key the same way either kind does.
+        XCTAssertEqual(ProviderPools
+            .accountHelp(pool: shared, account: PoolAccount(member: member, current: true))
+            .replacingOccurrences(of: "POOLNAME", with: "${shownPool.label}")
+            .replacingOccurrences(of: "MEMBERNAME", with: "${shownPoolAccount.member.label}"),
+                       theirs(true))
     }
 
     /// A pool that cannot run is greyed in the words the server puts on it (`poolViews`' `unavailable`),
