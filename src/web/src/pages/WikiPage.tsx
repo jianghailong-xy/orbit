@@ -223,7 +223,7 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
         </WikiFrame>
       </div>
       <button type="button" className="wk-scrim" aria-label="Close" onClick={() => navigate(back)} />
-      <WikiRunDrawer spaceId={space.id} spaceSlug={space.slug} changesetId={changesetId} onClose={() => navigate(back)} />
+      <WikiRunDrawer spaceSlug={space.slug} changesetId={changesetId} onClose={() => navigate(back)} />
     </div>
   );
 }

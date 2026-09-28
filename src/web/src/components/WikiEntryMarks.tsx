@@ -1,9 +1,7 @@
 import { CheckCircleOutlined, CheckOutlined, GlobalOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { App, Button } from 'antd';
-import { useQuery } from '@tanstack/react-query';
 import { relTime } from './Transcript';
 import { WikiRejectButton, useRejectEntry } from './WikiRunPage';
-import { wikiReviewQuery } from '../lib/queries';
 import {
   WIKI_HISTORY_CONFIRMED_BY,
   WIKI_HISTORY_MAINTENANCE,
@@ -58,23 +56,18 @@ export function WikiEntryAnswers({ entry }: { entry: WikiEntryDetail }) {
 
 /**
  * The bar under an entry's head (mock 17 ③): what its mark means for agents in one sentence, then who
- * checked it and what they said — when the page can know — and who applied it, when.
+ * checked it and what they said, and who applied it, when.
  *
- * THE VERDICT IS READ WHERE IT IS KEPT, on the op: the entry says what it is, not how it got there. The
- * one read that carries ops is Review's, so the verdict is shown for an entry whose op still waits
- * there (a spot check); for the others the line says who applied it and when, from the entry's own
- * History, and nothing it cannot back.
+ * THE VERDICT IS THE ONE ITS CURRENT REVISION WAS APPLIED ON: the entry's read says where that revision
+ * came from (`verification`, contract `reviewModes.run.entry`), whether or not anything of its run
+ * still waits in Review; who applied it and when come from the entry's own History.
  */
 export function WikiMarkBar({ entry }: { entry: WikiEntryDetail }) {
-  const review = useQuery({ ...wikiReviewQuery(entry.spaceId), enabled: wikiEntryAnswerable(entry) });
   const banner = wikiMarkBanner(entry);
   if (!banner) return null;
-  const op = (review.data ?? [])
-    .flatMap((changeset) => changeset.ops)
-    .find((row) => row.verification && (row.resultEntryId === entry.id || row.entryId === entry.id));
   const current = [...(entry.history ?? [])].sort((a, b) => b.revision - a.revision)[0];
   const line = wikiCheckedLine({
-    verification: op?.verification ?? null,
+    verification: entry.verification ?? null,
     tainted: entry.tainted,
     who: current ? historyWho(current.authorKind) : null,
     when: current ? relTime(current.createdAt) : null,

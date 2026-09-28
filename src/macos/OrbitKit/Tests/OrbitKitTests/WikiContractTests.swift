@@ -227,6 +227,64 @@ final class WikiContractTests: XCTestCase {
         XCTAssertEqual(WikiLogic.anchorInputKeys, keys)
     }
 
+    /// Criterion 8, every run: the timeline names each op's changeset, a run is read by its id, and an
+    /// entry says where its current revision came from — all three decode as the contract states them.
+    func testARunIsReadByItsIdAndAnEntrySaysWhereItsRevisionCameFrom() throws {
+        let c = try contract()
+        let run = try object(try object(c["reviewModes"], "reviewModes")["run"], "reviewModes.run")
+        let read = try object(run["read"], "reviewModes.run.read")
+        XCTAssertEqual(read["route"] as? String, "GET /api/wiki/changesets/:id")
+        let user = try object(try object(try object(c["agentSurface"], "agentSurface")["doors"], "agentSurface.doors")["user"],
+                              "agentSurface.doors.user")
+        XCTAssertTrue(Set(try strings(user["routes"], "agentSurface.doors.user.routes")).contains("GET /api/wiki/changesets/:id"))
+        XCTAssertTrue((read["door"] as? String)?.contains("WIKI_OWNER_CHANNEL_ONLY") == true)
+        XCTAssertEqual(Set(try object(run["counts"], "reviewModes.run.counts").keys),
+                       ["applied", "auto", "unreviewed", "rejectedByCheck", "toReview"])
+
+        let item = #"{"opId":"o1","op":"add","decision":"auto_applied","origin":"maintenance","appliedByMode":"automatic","changesetId":"34WRun","changesetAppliedByMode":"automatic"}"#
+        let decodedItem = try JSONDecoder().decode(WikiTimelineItem.self, from: Data(item.utf8))
+        XCTAssertEqual(decodedItem.changesetId, "34WRun")
+        XCTAssertEqual(decodedItem.changesetAppliedByMode, .automatic)
+        XCTAssertNil(try JSONDecoder().decode(WikiTimelineItem.self, from: Data(#"{"opId":"o2"}"#.utf8)).changesetId,
+                     "a server that predates the field sends none")
+
+        let view = #"""
+        {"id":"34WRun","spaceId":"34WSpace","origin":"maintenance","status":"settled","createdAt":"2026-09-28T09:12:00.000Z",
+         "ops":[{"id":"o1","changesetId":"34WRun","seq":0,"op":"add","decision":"auto_applied","resultEntryId":"34WEntry","resultRevision":1,
+                 "appliedByMode":"automatic","spotCheck":false,
+                 "verification":{"verdict":"supported","reason":"The cited record says so.","model":"qwen3.8-27b-fp8","at":"2026-09-28T09:13:00.000Z","duplicateOf":null,"evidence":"readable"}}],
+         "appliedByMode":"automatic",
+         "entries":[{"id":"34WEntry","kind":"pitfall","status":"active","trust":"auto","currentRevision":1,"title":"A pitfall"}],
+         "counts":{"applied":1,"auto":1,"unreviewed":0,"rejectedByCheck":0,"toReview":0},
+         "revertible":true,"revert":{"adds":1,"amends":0}}
+        """#
+        let decodedView = try JSONDecoder().decode(WikiChangesetView.self, from: Data(view.utf8))
+        XCTAssertEqual(decodedView.id, "34WRun")
+        XCTAssertEqual(decodedView.changeset.origin, .maintenance)
+        XCTAssertEqual(decodedView.changeset.ops?.first?.verification?.verdict, .supported)
+        XCTAssertEqual(decodedView.appliedByMode, .automatic)
+        XCTAssertEqual(decodedView.entries.map(\.id), ["34WEntry"])
+        XCTAssertEqual(decodedView.counts, WikiChangesetCounts(applied: 1, auto: 1))
+        XCTAssertTrue(decodedView.revertible)
+        XCTAssertEqual(decodedView.revert, WikiRevertPlan(adds: 1, amends: 0))
+        let settled = try JSONDecoder().decode(WikiChangesetView.self, from: Data(#"{"id":"34WRun","revertible":false,"revert":null}"#.utf8))
+        XCTAssertFalse(settled.revertible)
+        XCTAssertNil(settled.revert)
+
+        let entry = #"""
+        {"id":"34WEntry","status":"active","trust":"unreviewed","changesetId":"34WRun","appliedByMode":"automatic",
+         "verification":{"verdict":"partial","reason":"The cited record says part of it.","model":"qwen3.8-27b-fp8","at":"2026-09-28T09:13:00.000Z","duplicateOf":null}}
+        """#
+        let detail = try JSONDecoder().decode(WikiEntryDetail.self, from: Data(entry.utf8))
+        XCTAssertEqual(detail.changesetId, "34WRun")
+        XCTAssertEqual(detail.appliedByMode, .automatic)
+        XCTAssertEqual(detail.verification?.verdict, .partial)
+        XCTAssertEqual(detail.verification?.model, "qwen3.8-27b-fp8")
+        let owners = try JSONDecoder().decode(WikiEntryDetail.self, from: Data(#"{"id":"34WEntry","changesetId":null,"appliedByMode":null,"verification":null}"#.utf8))
+        XCTAssertNil(owners.appliedByMode)
+        XCTAssertNil(owners.verification)
+    }
+
     // MARK: the event
 
     /// The contract names the event Swift decodes, and the one field it carries.
@@ -248,7 +306,7 @@ final class WikiContractTests: XCTestCase {
         for route in ["GET /api/wiki/spaces", "GET /api/wiki/spaces/:id", "GET /api/wiki/spaces/:id/entries",
                       "GET /api/wiki/entries/:id", "GET /api/wiki/review", "POST /api/wiki/changesets/:id/decide",
                       "POST /api/wiki/spaces/:id/changesets", "GET /api/wiki/spaces/:id/timeline",
-                      "GET /api/wiki/search"] {
+                      "GET /api/wiki/search", "GET /api/wiki/changesets/:id"] {
             XCTAssertTrue(routes.contains(route), "\(route) is not a route the user door declares: \(routes.sorted())")
         }
     }

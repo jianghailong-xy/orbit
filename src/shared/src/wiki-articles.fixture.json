@@ -11,7 +11,8 @@
     "count the entries its article was written from, null before it has one). `browse`: the same read → the",
     "lines Browse says. `index`: the index read's items → the letters and rows, Chinese titles by pinyin",
     "(`initials` pins the characters the old boundary string got wrong: 六 is L, 入 is R). `updated`: an",
-    "article's head line, in `timeZone`. `segments`: a sentence's runs. `articleGroups`: an article's entries",
+    "article's head line, in `timeZone`. `entriesHints`: what the list under an article says it is — the entries the",
+    "article's read says it was written from (`entryIds`). `segments`: a sentence's runs. `articleGroups`: an article's entries",
     "by kind, the cited ones leading their group in footnote order, the rest newest first."
   ],
   "timeZone": "Asia/Shanghai",
@@ -23,7 +24,6 @@
     "other": "Other",
     "footnotes": "Footnotes",
     "entries": "Entries",
-    "entriesHint": "filed under this topic, by kind",
     "footnoteGone": "This entry is no longer in the wiki.",
     "openEntry": "Open entry",
     "topicOverview": "Topic overview",
@@ -954,6 +954,20 @@
     {
       "n": 0,
       "says": "0 entries cited"
+    }
+  ],
+  "entriesHints": [
+    {
+      "n": 59,
+      "says": "the 59 this article is written from, by kind"
+    },
+    {
+      "n": 725,
+      "says": "the 725 this article is written from, by kind"
+    },
+    {
+      "n": 1200,
+      "says": "the 1,200 this article is written from, by kind"
     }
   ],
   "sourcesLines": [

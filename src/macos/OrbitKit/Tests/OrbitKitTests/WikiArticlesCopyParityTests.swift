@@ -91,7 +91,7 @@ final class WikiArticlesCopyParityTests: XCTestCase {
 
     private struct Fixture: Decodable {
         struct Words: Decodable {
-            let contents, home, browse, azIndex, other, footnotes, entries, entriesHint, footnoteGone: String
+            let contents, home, browse, azIndex, other, footnotes, entries, footnoteGone: String
             let openEntry, topicOverview, noArticleYet, noArticles: String
             let moreArticles: [Says]
         }
@@ -223,6 +223,7 @@ final class WikiArticlesCopyParityTests: XCTestCase {
         let counts: [Says]
         let updated: [Updated]
         let entriesCited: [Says]
+        let entriesHints: [Says]
         let sourcesLines: [SourcesLine]
         let segments: [Segments]
         let noteLabels: [Says]
@@ -246,7 +247,6 @@ final class WikiArticlesCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiArticleCopy.other, words.other)
         XCTAssertEqual(WikiArticleCopy.footnotes, words.footnotes)
         XCTAssertEqual(WikiArticleCopy.entries, words.entries)
-        XCTAssertEqual(WikiArticleCopy.entriesHint, words.entriesHint)
         XCTAssertEqual(WikiArticleCopy.footnoteGone, words.footnoteGone)
         XCTAssertEqual(WikiArticleCopy.openEntry, words.openEntry)
         XCTAssertEqual(WikiArticleCopy.topicOverview, words.topicOverview)
@@ -255,6 +255,7 @@ final class WikiArticlesCopyParityTests: XCTestCase {
         for row in words.moreArticles { XCTAssertEqual(WikiArticleCopy.moreArticles(row.n), row.says) }
         for row in shared.counts { XCTAssertEqual(WikiArticleCopy.count(row.n), row.says) }
         for row in shared.entriesCited { XCTAssertEqual(WikiArticleCopy.entriesCited(row.n), row.says) }
+        for row in shared.entriesHints { XCTAssertEqual(WikiArticleCopy.entriesHint(row.n), row.says) }
         for row in shared.sourcesLines {
             XCTAssertEqual(WikiArticleCopy.sourcesLine(sources: row.sources, sessions: row.sessions), row.says)
         }
@@ -274,13 +275,13 @@ final class WikiArticlesCopyParityTests: XCTestCase {
                               ("WIKI_BROWSE", WikiArticleCopy.browse), ("WIKI_AZ_INDEX", WikiArticleCopy.azIndex),
                               ("WIKI_OTHER_TOPICS", WikiArticleCopy.other), ("WIKI_FOOTNOTES", WikiArticleCopy.footnotes),
                               ("WIKI_ARTICLE_ENTRIES", WikiArticleCopy.entries),
-                              ("WIKI_ARTICLE_ENTRIES_HINT", WikiArticleCopy.entriesHint),
                               ("WIKI_FOOTNOTE_GONE", WikiArticleCopy.footnoteGone),
                               ("WIKI_NO_ARTICLE_YET", WikiArticleCopy.noArticleYet),
                               ("WIKI_NO_ARTICLES", WikiArticleCopy.noArticles),
                               ("WIKI_TOPIC_OVERVIEW", WikiArticleCopy.topicOverview)] {
             assertDeclares(lib, name, value, in: Self.lib)
         }
+        assertSays(lib, "`the ${wikiCount(count)} this article is written from, by kind`", in: Self.lib)
         let wiki = try web(Self.wikiLib)
         for (name, value) in [("WIKI_ACTION_OPEN", WikiArticleCopy.openEntry),
                               ("WIKI_GROUP_PRINCIPLES", WikiArticleCopy.groupPrinciples),
@@ -440,9 +441,14 @@ final class WikiArticlesCopyParityTests: XCTestCase {
         assertSays(article, "{WIKI_FOOTNOTES} <small>{wikiEntriesCited(article.footnotes.length)}</small>", in: Self.articlePage)
         assertSays(nativePage, "header(WikiArticleCopy.footnotes, hint: WikiArticleCopy.entriesCited(article.footnotes.count))",
                    in: "WikiArticleView.swift")
-        assertSays(article, "{wikiCount(entries.length)} {WIKI_ARTICLE_ENTRIES_HINT}", in: Self.articlePage)
-        assertSays(nativePage, "header(WikiArticleCopy.entries, hint: \"\\(WikiArticleCopy.count(held.count)) \\(WikiArticleCopy.entriesHint)\")",
+        // The entries it was written from, counted by what its read names (`entryIds`), at both ends.
+        assertSays(article, "<small>{wikiArticleEntriesHint(article.entryIds.length)}</small>", in: Self.articlePage)
+        assertSays(nativePage, "header(WikiArticleCopy.entries, hint: WikiArticleCopy.entriesHint(article.entryIds?.count ?? held.count))",
                    in: "WikiArticleView.swift")
+        assertSays(article, "const entries = article.entries;", in: Self.articlePage)
+        let screens = try native("Views/WikiScreens.swift")
+        assertSays(screens, "WikiArticlePage(article: article, entries: article.entries ?? wiki.topicEntries[address.topic],",
+                   in: "WikiScreens.swift")
         assertSays(article, "wikiArticleGroups(entries, cited)", in: Self.articlePage)
         assertSays(nativePage, "WikiArticleLogic.entryGroups(held, cited: article.footnotes.map(\\.entryId))", in: "WikiArticleView.swift")
         // A footnote opens a card: a popover on a desktop, a sheet on a phone — and on iOS.

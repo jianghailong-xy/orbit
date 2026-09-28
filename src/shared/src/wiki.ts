@@ -1428,6 +1428,57 @@ export interface WikiChangeset {
   ops: WikiChangesetOp[];
 }
 
+/** What one changeset did, counted the way its page says it (contract `reviewModes.run.counts`). */
+export interface WikiChangesetCounts {
+  /** Ops whose effect stands from the changeset itself: what its mode applied, and what needed nobody. */
+  applied: number;
+  /** Of the applied adds and amends, those whose entry is now active with trust `auto`… */
+  auto: number;
+  /** …and with trust `unreviewed`. */
+  unreviewed: number;
+  /** Ops an `unsupported` or `duplicate` verdict rejected. */
+  rejectedByCheck: number;
+  /** Ops waiting for the owner in Review: its spot checks, and what the floors kept for the owner. */
+  toReview: number;
+}
+
+/** What `POST /api/wiki/changesets/:id/revert` would undo if it were called now (contract `reviewModes.revert`). */
+export interface WikiRevertPlan {
+  /** Adds whose entry is still active: each is withdrawn. */
+  adds: number;
+  /** Entries an amend changed and nobody has changed since: each goes back to its previous revision. */
+  amends: number;
+}
+
+/**
+ * `GET /api/wiki/changesets/:id` — one changeset as a run's page reads it, whether or not anything of
+ * it still waits in Review (contract `reviewModes.run`).
+ */
+export interface WikiChangesetView extends WikiChangeset {
+  /** The review mode that applied any of its ops — `automatic` over `tiered` — or null when no mode
+   *  applied any: a changeset that is no run. */
+  appliedByMode: Exclude<WikiReviewMode, 'manual'> | null;
+  /** Every entry its ops name, as it stands now. */
+  entries: WikiEntry[];
+  counts: WikiChangesetCounts;
+  /** Whether Revert run… would take anything back now. */
+  revertible: boolean;
+  /** What it would take back; null when it would take back nothing. */
+  revert: WikiRevertPlan | null;
+}
+
+/**
+ * Where an entry's current revision came from, as `GET /api/wiki/entries/:id` adds it (contract
+ * `reviewModes.run.entry`): the changeset whose op wrote it, the review mode that applied that op, and
+ * that op's verdict. Each is null when there is none — a revision no op wrote, an op no mode applied,
+ * an op no verification decided.
+ */
+export interface WikiEntryAppliedBy {
+  changesetId: string | null;
+  appliedByMode: Exclude<WikiReviewMode, 'manual'> | null;
+  verification: WikiOpVerification | null;
+}
+
 /** The owner's answer to one pending op. `reject` names a reason; `edit` carries the owner's version. */
 export interface WikiOpDecisionInput {
   opId: string;

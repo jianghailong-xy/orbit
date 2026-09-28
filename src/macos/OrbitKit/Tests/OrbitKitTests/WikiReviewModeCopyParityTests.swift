@@ -211,8 +211,8 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         }
         struct Run: Decodable {
             let name: String
-            let changeset: WikiChangeset
-            let entries: [WikiEntry]
+            /// The run as its read answers it: `GET /api/wiki/changesets/:id`.
+            let view: WikiChangesetView
             let isRun: Bool
             let kicker: String
             let title: String
@@ -222,7 +222,8 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             let amended: [String]
             let reinforced: [String]
             let marks: [String: String?]
-            let revert: String
+            let revertOffered: Bool
+            let revert: String?
         }
         struct RevertDialog: Decodable {
             let title: String
@@ -238,13 +239,13 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         struct Recent: Decodable {
             struct Row: Decodable {
                 let run: String?
+                let origin: WikiChangesetOrigin?
                 let at: String?
                 let items: [String]?
                 let op: String?
             }
             let name: String
             let items: [WikiTimelineItem]
-            let runs: [String]
             let rows: [Row]
         }
         struct ChallengeWords: Decodable {
@@ -368,12 +369,13 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
     // MARK: one run
 
     func testOneRunIsCountedAndGroupedAsTheFixtureSays() throws {
-        for run in try fixture().runs {
-            let summary = WikiModeLogic.runSummary(run.changeset, entries: run.entries)
-            XCTAssertEqual(WikiModeLogic.isRun(run.changeset), run.isRun, run.name)
-            XCTAssertEqual(WikiModeCopy.runKicker(run.changeset.origin), run.kicker, run.name)
+        let runs = try fixture().runs
+        for run in runs {
+            let summary = WikiModeLogic.runSummary(run.view)
+            XCTAssertEqual(WikiModeLogic.isRun(run.view), run.isRun, run.name)
+            XCTAssertEqual(WikiModeCopy.runKicker(run.view.changeset.origin), run.kicker, run.name)
             XCTAssertEqual(WikiModeCopy.appliedChanges(summary.applied), run.title, run.name)
-            XCTAssertEqual(WikiModeLogic.runWhen(run.changeset.createdAt ?? "", timeZone: utc), run.when, run.name)
+            XCTAssertEqual(WikiModeLogic.runWhen(run.view.changeset.createdAt ?? "", timeZone: utc), run.when, run.name)
             XCTAssertEqual(WikiModeLogic.runCounts(summary), run.counts, run.name)
             XCTAssertEqual(summary.added.map(\.title), run.added, run.name)
             XCTAssertEqual(summary.amended.map(\.title), run.amended, run.name)
@@ -382,8 +384,14 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             // `updateValue`, not a subscript write: assigning nil through the subscript drops the key.
             for row in summary.added + summary.amended + summary.reinforced { marks.updateValue(row.trust?.rawValue, forKey: row.title) }
             XCTAssertEqual(marks, run.marks, run.name)
-            XCTAssertEqual(WikiModeLogic.revertBody(summary), run.revert, run.name)
+            // Revert run… is offered exactly when the server says it can, and says the server's numbers.
+            XCTAssertEqual(summary.revertible, run.revertOffered, run.name)
+            XCTAssertEqual(summary.revertible ? WikiModeLogic.revertBody(summary) : nil, run.revert, run.name)
         }
+        // The case criterion 8 was missing: a run nothing of which waits in Review, read and revertible.
+        XCTAssertTrue(runs.contains { run in
+            run.revertOffered && (run.view.changeset.ops ?? []).allSatisfy { $0.decision != .pending }
+        })
     }
 
     func testTheRevertDialogAndTheRunsWords() throws {
@@ -395,18 +403,17 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         XCTAssertEqual([WikiModeCopy.runAdded, WikiModeCopy.runAmended, WikiModeCopy.runReinforced], dialog.groups)
     }
 
-    func testRecentlyChangedFoldsARunIntoOneRow() throws {
-        let shared = try fixture()
-        let byID = Dictionary(uniqueKeysWithValues: shared.runs.map { ($0.changeset.id, $0.changeset) })
-        for recent in shared.recent {
-            let rows = WikiModeLogic.recentRows(recent.items, runs: recent.runs.compactMap { byID[$0] })
+    func testRecentlyChangedFoldsEveryRunIntoOneRow() throws {
+        for recent in try fixture().recent {
+            let rows = WikiModeLogic.recentRows(recent.items)
             XCTAssertEqual(rows.count, recent.rows.count, recent.name)
             for (row, expected) in zip(rows, recent.rows) {
                 switch row {
                 case .op(let item):
                     XCTAssertEqual(item.opId, expected.op, recent.name)
-                case .run(let changeset, let at, let items):
-                    XCTAssertEqual(changeset.id, expected.run, recent.name)
+                case .run(let changesetId, let origin, let at, let items):
+                    XCTAssertEqual(changesetId, expected.run, recent.name)
+                    XCTAssertEqual(origin, expected.origin, recent.name)
                     XCTAssertEqual(at, expected.at, recent.name)
                     XCTAssertEqual(items.map(\.opId), expected.items, recent.name)
                 }
@@ -495,7 +502,6 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             ("WIKI_RUN_ADDED", WikiModeCopy.runAdded),
             ("WIKI_RUN_AMENDED", WikiModeCopy.runAmended),
             ("WIKI_RUN_REINFORCED", WikiModeCopy.runReinforced),
-            ("WIKI_NO_SUCH_RUN", WikiModeCopy.noSuchRun),
             ("WIKI_RECONFIRM", WikiModeCopy.reconfirm),
             ("WIKI_AMEND", WikiModeCopy.amend),
             ("WIKI_RETIRE", WikiModeCopy.retire),
@@ -504,6 +510,8 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             ("WIKI_AMEND_NOTE", WikiModeCopy.amendNote),
         ]
         for (name, word) in pairs { assertDeclares(lib, name, word) }
+        // The sentence for a run Review no longer held is gone with the branch that said it.
+        XCTAssertFalse(lib.contains("WIKI_NO_SUCH_RUN"), "\(Self.lib) still says a run cannot be opened")
         // The one constant that names another, and the tables.
         assertSays(lib, "export const WIKI_MAINTENANCE_NAME = WIKI_HISTORY_MAINTENANCE;", in: Self.lib)
         XCTAssertEqual(WikiModeCopy.maintenanceName, WikiCopy.historyMaintenance)
@@ -590,6 +598,9 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         let marks = try web(Self.marks)
         assertOrder(marks, ["{wikiCanConfirm(entry) && (", "{WIKI_CONFIRM}", "<WikiRejectButton"], "Confirm, then Reject")
         assertSays(marks, "const line = wikiCheckedLine({", in: Self.marks)
+        // The verdict is the entry read's own, at both ends: Review is not where it comes from.
+        assertSays(marks, "verification: entry.verification ?? null,", in: Self.marks)
+        XCTAssertFalse(marks.contains("wikiReviewQuery"), "\(Self.marks) reads the verdict from Review again")
         assertOrder(marks, ["<b>{banner.lead}</b> · {banner.text}", "{line && <div className=\"wk-markbar-line\">{line}</div>}"],
                     "the bar's two lines")
         let run = try web(Self.runPage)
@@ -602,6 +613,8 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         assertOrder(head, ["chips", "WikiModeLogic.answerable(status: entry.status, trust: entry.trust)", "answers",
                            "WikiModeLogic.banner(status: entry.status, trust: entry.trust", "markBar(banner)"],
                     "the native head, answers and bar")
+        let bar = try slice(page, from: "private func markBar(", to: "private static func historyWord(")
+        assertSays(bar, "let verification = detail.verification", in: "WikiView.swift")
         let answers = try slice(page, from: "private var answers: some View {", to: "private func markBar(")
         assertOrder(answers, ["WikiModeLogic.canConfirm(status: entry.status, trust: entry.trust)", "WikiModeCopy.confirm",
                               "Section(WikiModeCopy.rejectOnRecord)", "ForEach(WikiRejectReason.allCases, id: \\.self)",
@@ -625,8 +638,14 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                               "okText: WIKI_REVERT_RUN_CONFIRM", "okButtonProps: { danger: true }", "cancelText: WIKI_CANCEL"],
                     "the web's Revert confirm")
         let row = try slice(run, from: "export function WikiRunTimelineRow(", to: "export function WikiRejectButton(")
-        assertOrder(row, ["{WIKI_ORIGIN_WORDS[changeset.origin] ?? changeset.origin}", "{wikiAppliedChanges(summary.applied)}",
+        assertOrder(row, ["{WIKI_ORIGIN_WORDS[origin] ?? origin}", "{wikiAppliedChanges(summary?.applied ?? changes)}",
                           "counts.join(' · ')", "{WIKI_VIEW_RUN}", "{WIKI_REVERT_RUN}"], "the web's Recently changed run row")
+        // Both read the run by its own id, whatever of it waits in Review, and offer Revert as the server says.
+        assertSays(drawer, "const read = useQuery(wikiChangesetQuery(changesetId));", in: Self.runPage)
+        assertSays(drawer, "disabled={!summary.revertible}", in: Self.runPage)
+        assertSays(row, "const read = useQuery(wikiChangesetQuery(changesetId));", in: Self.runPage)
+        assertSays(row, "{summary?.revertible && (", in: Self.runPage)
+        XCTAssertFalse(run.contains("wikiReviewQuery"), "\(Self.runPage) opens a run from Review again")
 
         let native = try self.native("Views/WikiRunView.swift")
         let page = try slice(native, from: "struct WikiRunPage: View {", to: "struct WikiRunView: View {")
@@ -638,19 +657,22 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                            "WikiModeLogic.runWhen(at)", "WikiModeCopy.revertRun", "WikiModeCopy.openSession"],
                     "the native run head")
         assertSays(page, ".swipeActions(edge: .trailing)", in: "WikiRunView.swift")
+        assertSays(head, ".disabled(busy || !summary.revertible)", in: "WikiRunView.swift")
         let screen = try slice(native, from: "struct WikiRunView: View {", to: "private func actions(")
         assertOrder(screen, [".alert(WikiModeCopy.revertTitle, isPresented: $reverting)", "WikiModeCopy.cancel, role: .cancel",
                              "WikiModeCopy.revertRunConfirm, role: .destructive", "await wiki.revert(changeset)",
                              "WikiModeLogic.revertBody(summary) + \"\\n\" + WikiModeCopy.revertKeeps"],
                     "the native Revert confirm")
+        assertSays(screen, ".task(id: changesetID) { await wiki.loadRun(changesetID) }", in: "WikiRunView.swift")
 
         // Recently changed folds a run into a row at both ends, and a row opens the run's page.
         let home = try web(Self.home)
         assertSays(home, "row.kind === 'run' ? ( <WikiRunTimelineRow", in: Self.home)
         let view = try self.native("Views/WikiView.swift")
         XCTAssertTrue(view.contains("ForEach(content.recentRows) { row in"))
-        XCTAssertTrue(view.contains("case .run(let changeset, let at, _):  runRow(changeset, at: at)"))
-        XCTAssertTrue(view.contains("actions.openRun(changeset.id)"))
+        XCTAssertTrue(view.contains("case .run(let changesetId, let origin, let at, let items):"))
+        XCTAssertTrue(view.contains("runRow(changesetId, origin: origin, at: at, changes: items.count)"))
+        XCTAssertTrue(view.contains("actions.openRun(changesetId)"))
     }
 
     /// The head's way into the settings: the web's Settings button beside New entry, the native gear.
@@ -718,7 +740,8 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         let doors = try XCTUnwrap(agentSurface["doors"] as? [String: Any])
         let routes = Set(try XCTUnwrap((doors["user"] as? [String: Any])?["routes"] as? [String]))
         for route in ["PATCH /api/wiki/spaces/:id", "POST /api/wiki/entries/:id/confirm",
-                      "POST /api/wiki/entries/:id/reject", "POST /api/wiki/changesets/:id/revert"] {
+                      "POST /api/wiki/entries/:id/reject", "POST /api/wiki/changesets/:id/revert",
+                      "GET /api/wiki/changesets/:id"] {
             XCTAssertTrue(routes.contains(route), "\(route) is not a route the user door declares")
         }
     }

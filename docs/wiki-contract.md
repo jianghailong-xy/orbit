@@ -461,6 +461,33 @@ owner 2026-09-27 定：核实必须拿得到证据。预览 space 里出处全�
     对 owner 写过或确认过的条目的 amend 继续等 owner，列在 `skipped` 里。
   - 回答 `{spaceId, mode, reopened[], toVerification[], skipped[{opId, reason}]}`。
 
+### 7.6 一次运行的读：时间线、按 id 读变更集、条目的生效来源（判据 8）
+
+Review 只列还有 op 等 owner 的变更集，时间线列的是 op、不说它来自哪个变更集。所以客户端只有在一次运行还有卡片挂在 Review
+里时，才能把它的 op 对到运行上：折成一行、打开运行页、整次撤回。Automatic 默认不抽检，结论让它全部生效之后 Review 里
+什么都不剩，这次运行在客户端里就撤不回了。下面三个读把每一次运行都点得出名字。JSON 的 `reviewModes.run` 是权威，下面是说明。
+
+- **时间线**：`GET /api/wiki/spaces/:id/timeline` 的每个 item 带 `changesetId`（这个 op 所在的变更集）和
+  `changesetAppliedByMode`（这个变更集的生效方式，见下）。`changesetAppliedByMode` 不为空的，客户端把同一变更集的 item 折成一行，
+  用下面的读打开；为空的（owner 自己的写入、Review 里接受的提议、撤回本身）照旧一个 op 一行。`origin` 是变更集的，
+  `appliedByMode` 仍是这个 op 自己的。
+- **按 id 读变更集**：`GET /api/wiki/changesets/:id`，只在用户门，带会话头拒 `WIKI_OWNER_CHANNEL_ONLY`，别的 owner 的一律 404。
+  不管它还有没有东西在 Review 里，都回答 `changesetView`：
+  - 变更集本身与它的 op，形状同 Review（决定、结果、核实留痕）；
+  - `appliedByMode`：有 op 由核实结论生效就是 `automatic`，否则有 op 按 Tiered 规则生效就是 `tiered`，都没有是 `null`（不算一次运行）；
+  - `entries`：它的 op 提到的每个条目，按现在的样子；
+  - `counts`：`applied`（由这次运行生效、效果还在的 op：`auto_applied`，或模式生效后作为抽检卡等着、或已被接受 / 编辑的）、
+    `auto` 与 `unreviewed`（生效的 add / amend 里，条目现在 active、仍停在这个 op 写的那一版、trust 是 auto / unreviewed 的）、
+    `rejectedByCheck`（被 unsupported / duplicate 结论拒掉的）、`toReview`（等 owner 的：抽检卡和底线扣下的）；
+  - `revertible` 与 `revert: {adds, amends}`：**现在**调整次撤回会做什么，照撤回自己的规则算（§7.3「整次撤回」）：还 active 的 add
+    各退役一条，被 amend 过、之后没人再改过的条目各退回一版。任一个大于 0 就是 `revertible: true`；已经撤回过（幂等键
+    `revert:<变更集 id>`）的一律 `false`；`revert` 在 `revertible` 为 false 时是 `null`。客户端只在 `revertible` 时给出 Revert run…，
+    确认框说的就是这两个数。
+- **条目的生效来源**：用户门的 `GET /api/wiki/entries/:id` 给当前修订带上 `changesetId`（写出这一版的 op 所在的变更集）、
+  `appliedByMode`（那个 op 的）和 `verification`（那个 op 的核实结论：模型、结论、理由、时间，同 §7.4 的留痕），没有的就是 `null`
+  （owner 的 Confirm 自己写一版、没有 op）。条目说明条的第二行「Checked by <model>: <verdict>」读的就是它。runner 门的条目读不带这三项：
+  给 agent 的是条目，不是它怎么被判的。
+
 ---
 
 ## 8. op 的形状
@@ -565,14 +592,14 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   描述文案把「只核实本会话的 op、绝不手写结论」写成前置条件（`agentSurface.verify.precondition`），逐词测试。
 - **`wiki_propose` 的描述**把「这是提议、要等 owner 审」写成前置条件（JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。
 - **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表与待审数、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
-  时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、decide、整次撤回、
-  重开核实（§7.5）。
+  时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、
+  按 id 读一次运行（`GET /api/wiki/changesets/:id`，§7.6）、decide、整次撤回、重开核实（§7.5）。
 - **runner 门** `/api/runner/wiki`（RunnerAuthGuard，外加照 `runner-watches.controller.ts` 校验调用会话）：search（只返回 active 条目，
   外加本会话自己的待审提议；tainted 且没人担保——trust 不是 owner / confirmed——的 active 条目不返回，get 同样 404）、条目、提议、推送块预览；阶段 2 的维护专用路由（dossiers、anchors、anchor-checks、cursor）；
   核实的两条路由 `GET` / `POST /api/runner/wiki/spaces/:id/verifications`（§7.4，只对提交这批 op 的会话）。
 - **decide 只在用户门**：任何带会话头的请求都拒 `WIKI_OWNER_CHANNEL_ONLY`（先例：`coordinator-authority.ts` 的
   `refuseSessionAuthoredConfirmation`）。runner 里弹的确认卡不是闸门：服务端不校验它，headless 调用直接放行。
-  整次撤回、逐条 Reject 与 Confirm、重开核实、切换审阅模式同样只在用户门、同样拒绝带会话头的请求。
+  整次撤回、逐条 Reject 与 Confirm、重开核实、切换审阅模式、读一次运行同样只在用户门、同样拒绝带会话头的请求。
 - **读的边界**：只有绑在 space 上的 workspace 里的会话能读这个 space 的条目；把 workspace 绑进来就是 owner 同意在这些
   workspace 之间共享**已确认**的条目。待审提议只有提出它的会话看得见。
 - **灰度**：`ORBIT_WIKI=off|canary|on`，默认 `on`；`canary` 只给 `ORBIT_WIKI_CANARY_OWNERS` 列出的账号（逗号分隔的 id），其余账号同 `off`。
@@ -903,6 +930,9 @@ JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（�
 - **读**：owner 经 user 门：`GET /api/wiki/spaces/:id/articles`（大类 → 主题 → 文章与子主题）、`GET …/articles/:slug`、
   `GET …/articles/:slug/:part`（脚注解析成条目的标题、摘要、种类、状态、trust）、`GET …/article-index`（全部文章按标题 A–Z）。
   跨租户一律 404。
+- **文章依据的条目**：文章读带 `entryIds`，就是生成时存进 `wiki_topic_summary.entry_ids` 的条目池（总览是整个主题，子主题是它那一组），
+  另带 `entries`：这些条目按现在的样子，被引用的排在前面，最多 `reads.entriesListed`（200）条——总览能有几百条，读里给全部 id、只带前 200 条。
+  文章下面的条目列表就用它画，文案是「the N this article is written from, by kind」，N 是 `entryIds` 的条数。
 
 ### 18.7 `orbit wiki articles`
 

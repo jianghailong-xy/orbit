@@ -24,6 +24,7 @@ import {
   type WikiRollout,
 } from './wiki-rollout';
 import { WikiController } from './wiki.controller';
+import { WikiRunsController } from './wiki-runs.controller';
 
 /**
  * The wiki's rollout flag (wiki-rollout.ts) without a database: how ORBIT_WIKI is read, who has the wiki under each
@@ -177,6 +178,8 @@ test('both doors are closed by the flag on every route, after the credential gua
   for (const [controller, credential, atLeast] of [
     [WikiController, JwtAuthGuard, 13],
     [RunnerWikiController, RunnerAuthGuard, 3],
+    // One run's read (contract `reviewModes.run`): a door of its own, closed by the same flag.
+    [WikiRunsController, JwtAuthGuard, 1],
   ] as const) {
     // On the CLASS: a guard on the class runs before every handler, and a handler's own guards can only add to it,
     // never take it away — so no route this controller has, or is given later, can answer without asking the flag.
