@@ -536,21 +536,32 @@ public struct WikiExposure: Codable, Equatable, Sendable {
 
 /// `GET /wiki/entries/:id?include=sources,history,exposure`: the entry, with what its page draws
 /// beneath it. The entry's own fields sit at the top level of the same object, so it is read once
-/// as a `WikiEntry` and once for the three lists.
+/// as a `WikiEntry` and once for the three lists — and for where its current revision came from,
+/// which the user door adds (contract `reviewModes.run.entry`).
 public struct WikiEntryDetail: Decodable, Equatable, Sendable {
     public let entry: WikiEntry
     public let sources: [WikiSource]
     public let history: [WikiRevision]
     public let exposure: [WikiExposure]
+    /// The changeset whose op wrote the current revision; nil for a revision no op wrote.
+    public let changesetId: String?
+    /// The review mode that applied that op; nil when the owner or the effect policy did.
+    public let appliedByMode: WikiReviewMode?
+    /// That op's verdict — what the mark bar's `Checked by <model>: <verdict>` says; nil without one.
+    public let verification: WikiOpVerification?
 
-    private enum CodingKeys: String, CodingKey { case sources, history, exposure }
+    private enum CodingKeys: String, CodingKey { case sources, history, exposure, changesetId, appliedByMode, verification }
 
     public init(entry: WikiEntry, sources: [WikiSource] = [], history: [WikiRevision] = [],
-                exposure: [WikiExposure] = []) {
+                exposure: [WikiExposure] = [], changesetId: String? = nil, appliedByMode: WikiReviewMode? = nil,
+                verification: WikiOpVerification? = nil) {
         self.entry = entry
         self.sources = sources
         self.history = history
         self.exposure = exposure
+        self.changesetId = changesetId
+        self.appliedByMode = appliedByMode
+        self.verification = verification
     }
 
     public init(from decoder: Decoder) throws {
@@ -559,6 +570,9 @@ public struct WikiEntryDetail: Decodable, Equatable, Sendable {
         sources = try values.decodeIfPresent([WikiSource].self, forKey: .sources) ?? []
         history = try values.decodeIfPresent([WikiRevision].self, forKey: .history) ?? []
         exposure = try values.decodeIfPresent([WikiExposure].self, forKey: .exposure) ?? []
+        changesetId = try values.decodeIfPresent(String.self, forKey: .changesetId)
+        appliedByMode = try values.decodeIfPresent(WikiReviewMode.self, forKey: .appliedByMode)
+        verification = try values.decodeIfPresent(WikiOpVerification.self, forKey: .verification)
     }
 }
 
@@ -612,6 +626,16 @@ public struct WikiOpVerification: Codable, Equatable, Sendable {
     public let at: String?
     public let duplicateOf: String?
     public let evidence: WikiVerificationEvidence?
+
+    public init(verdict: WikiVerificationVerdict?, reason: String? = nil, model: String? = nil, at: String? = nil,
+                duplicateOf: String? = nil, evidence: WikiVerificationEvidence? = nil) {
+        self.verdict = verdict
+        self.reason = reason
+        self.model = model
+        self.at = at
+        self.duplicateOf = duplicateOf
+        self.evidence = evidence
+    }
 }
 
 /// One op of a changeset. `payload` is the op as it was submitted (redacted), which is where a
@@ -706,6 +730,81 @@ public struct WikiChangeset: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// What one changeset did, counted the way its page says it (contract `reviewModes.run.counts`).
+public struct WikiChangesetCounts: Codable, Equatable, Sendable {
+    /// Ops whose effect stands from the changeset itself: what its mode applied, and what needed nobody.
+    public let applied: Int
+    /// Of the applied adds and amends, those whose entry is now active with trust Auto…
+    public let auto: Int
+    /// …and with trust Unreviewed.
+    public let unreviewed: Int
+    /// Ops an unsupported or duplicate verdict rejected.
+    public let rejectedByCheck: Int
+    /// Ops waiting for the owner in Review.
+    public let toReview: Int
+
+    public init(applied: Int = 0, auto: Int = 0, unreviewed: Int = 0, rejectedByCheck: Int = 0, toReview: Int = 0) {
+        self.applied = applied
+        self.auto = auto
+        self.unreviewed = unreviewed
+        self.rejectedByCheck = rejectedByCheck
+        self.toReview = toReview
+    }
+}
+
+/// What `POST /wiki/changesets/:id/revert` would undo if it were called now (contract `reviewModes.revert`).
+public struct WikiRevertPlan: Codable, Equatable, Sendable {
+    /// Adds whose entry is still active: each is withdrawn.
+    public let adds: Int
+    /// Entries an amend changed that nobody has changed since: each goes back a revision.
+    public let amends: Int
+
+    public init(adds: Int, amends: Int) {
+        self.adds = adds
+        self.amends = amends
+    }
+}
+
+/// `GET /wiki/changesets/:id`: one run as its page reads it, whether or not anything of it still waits
+/// in Review (contract `reviewModes.run`). The changeset's own fields sit at the top level, so it is read
+/// once as a `WikiChangeset` and once for what the read adds.
+public struct WikiChangesetView: Decodable, Equatable, Sendable, Identifiable {
+    public let changeset: WikiChangeset
+    /// The review mode that applied any of its ops — Automatic over Tiered — or nil: no run.
+    public let appliedByMode: WikiReviewMode?
+    /// Every entry its ops name, as it stands now.
+    public let entries: [WikiEntry]
+    public let counts: WikiChangesetCounts
+    /// Whether Revert run… would take anything back now.
+    public let revertible: Bool
+    /// What it would take back; nil when it would take back nothing.
+    public let revert: WikiRevertPlan?
+
+    public var id: String { changeset.id }
+
+    private enum CodingKeys: String, CodingKey { case appliedByMode, entries, counts, revertible, revert }
+
+    public init(changeset: WikiChangeset, appliedByMode: WikiReviewMode? = nil, entries: [WikiEntry] = [],
+                counts: WikiChangesetCounts = WikiChangesetCounts(), revertible: Bool = false, revert: WikiRevertPlan? = nil) {
+        self.changeset = changeset
+        self.appliedByMode = appliedByMode
+        self.entries = entries
+        self.counts = counts
+        self.revertible = revertible
+        self.revert = revert
+    }
+
+    public init(from decoder: Decoder) throws {
+        changeset = try WikiChangeset(from: decoder)
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        appliedByMode = try values.decodeIfPresent(WikiReviewMode.self, forKey: .appliedByMode)
+        entries = try values.decodeIfPresent([WikiEntry].self, forKey: .entries) ?? []
+        counts = try values.decodeIfPresent(WikiChangesetCounts.self, forKey: .counts) ?? WikiChangesetCounts()
+        revertible = try values.decodeIfPresent(Bool.self, forKey: .revertible) ?? false
+        revert = try values.decodeIfPresent(WikiRevertPlan.self, forKey: .revert)
+    }
+}
+
 /// `GET /wiki/spaces/:id/timeline`: what changed, newest first.
 public struct WikiTimeline: Codable, Equatable, Sendable {
     public let items: [WikiTimelineItem]?
@@ -730,6 +829,10 @@ public struct WikiTimelineItem: Codable, Equatable, Sendable, Identifiable {
     public let appliedByMode: WikiReviewMode?
     /// An op the mode applied that is also waiting in Review as a spot check.
     public let spotCheck: Bool?
+    /// The changeset the op came in (contract `reviewModes.run.timeline`)…
+    public let changesetId: String?
+    /// …and the review mode that applied any op of it: not nil makes it a run, one row of Recently changed.
+    public let changesetAppliedByMode: WikiReviewMode?
 
     public var id: String { opId }
 
@@ -738,7 +841,8 @@ public struct WikiTimelineItem: Codable, Equatable, Sendable, Identifiable {
                 title: String? = nil, kind: WikiEntryKind? = nil, status: WikiEntryStatus? = nil,
                 trust: WikiTrust? = nil, supersededById: String? = nil,
                 supersededByTitle: String? = nil, reason: String? = nil,
-                appliedByMode: WikiReviewMode? = nil, spotCheck: Bool? = nil) {
+                appliedByMode: WikiReviewMode? = nil, spotCheck: Bool? = nil,
+                changesetId: String? = nil, changesetAppliedByMode: WikiReviewMode? = nil) {
         self.opId = opId
         self.op = op
         self.decision = decision
@@ -754,6 +858,8 @@ public struct WikiTimelineItem: Codable, Equatable, Sendable, Identifiable {
         self.reason = reason
         self.appliedByMode = appliedByMode
         self.spotCheck = spotCheck
+        self.changesetId = changesetId
+        self.changesetAppliedByMode = changesetAppliedByMode
     }
 }
 

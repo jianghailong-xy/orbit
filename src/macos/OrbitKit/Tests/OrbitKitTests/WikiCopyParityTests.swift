@@ -310,9 +310,9 @@ final class WikiCopyParityTests: XCTestCase {
     /// decisions, the five newest changes, the three most used — and the verbs.
     func testTheHomeRowsAreTheWebsRows() throws {
         let home = try source(Self.home)
-        // One run is one row: the five newest rows once Review's runs are folded in (`wikiRecentRows`).
-        assertSays(home, "wikiRecentRows(timeline.data?.items ?? [], review.data ?? []).slice(0, 5).map((row) =>",
-                   in: Self.home)
+        // One run is one row: the five newest rows, every run folded in by the changeset its items name
+        // (`wikiRecentRows`) — the same five `WikiHomeContent.recentRows` draws.
+        assertSays(home, "wikiRecentRows(timeline.data?.items ?? []).slice(0, 5).map((row) =>", in: Self.home)
         let lib = try source(Self.lib)
         for verb in ["if (item.decision === 'accepted') return WIKI_HISTORY_CONFIRMED_BY;",
                      "if (item.decision === 'edited') return 'Edited by you';",

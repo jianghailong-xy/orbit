@@ -102,6 +102,32 @@ final class WikiArticlesContractTests: XCTestCase {
         XCTAssertEqual(decoded.topic.category, .unknown)
     }
 
+    /// The article read names the entries it was written from (`entryIds`) and carries them as they stand
+    /// (`entries`, the cited ones first, at most `reads.entriesListed`); a server that predates them sends
+    /// neither, and the article still decodes.
+    func testAnArticleNamesTheEntriesItIsWrittenFrom() throws {
+        let reads = try XCTUnwrap(articles()["reads"] as? [String: Any])
+        XCTAssertEqual(reads["entriesListed"] as? Int, 200)
+        let article = try XCTUnwrap(reads["article"] as? String)
+        XCTAssertTrue(article.contains("(entryIds"), article)
+        XCTAssertTrue(article.contains("(entries)"), article)
+        let json = #"""
+        {"topic":{"slug":"wiki"},"part":1,"blocks":[],"footnotes":[{"n":1,"entryId":"34WEntryB","revision":1,"entry":null}],
+         "entryCount":3,"entryIds":["34WEntryB","34WEntryA","34WEntryC"],
+         "entries":[{"id":"34WEntryB","kind":"pitfall","status":"active","trust":"auto","title":"Cited first"},
+                    {"id":"34WEntryA","kind":"concept","status":"active","trust":"owner","title":"Of another topic"},
+                    {"id":"34WEntryC","kind":"recipe","status":"retired","trust":"auto","title":"Retired since"}]}
+        """#
+        let decoded = try JSONDecoder().decode(WikiArticle.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.entryIds, ["34WEntryB", "34WEntryA", "34WEntryC"])
+        XCTAssertEqual(decoded.entries?.map(\.id), ["34WEntryB", "34WEntryA", "34WEntryC"])
+        XCTAssertEqual(decoded.entries?.last?.status, .retired)
+        XCTAssertEqual(WikiArticleCopy.entriesHint(decoded.entryIds?.count ?? 0), "the 3 this article is written from, by kind")
+        let older = try JSONDecoder().decode(WikiArticle.self, from: Data(#"{"topic":{"slug":"wiki"},"part":0,"blocks":[],"footnotes":[]}"#.utf8))
+        XCTAssertNil(older.entryIds)
+        XCTAssertNil(older.entries)
+    }
+
     func testTheDirectoryAndTheIndexDecode() throws {
         let directory = #"""
         {"spaceId":"34WSpace","categories":[{"key":"platform","title":"Platform core","topics":[

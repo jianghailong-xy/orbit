@@ -163,7 +163,7 @@ struct WikiOpenNote: Identifiable, Equatable {
 /// topic's entries by kind — `WikiArticleLogic.Section`'s order, which is the web phone's.
 struct WikiArticlePage: View {
     let article: WikiArticle
-    /// The topic's entries, as the topic read answers them; nil while it is on its way.
+    /// The entries it was written from, as its read carries them; nil while they are on their way.
     let entries: [WikiEntry]?
     /// What a footnote's entry has behind it, once its card has read it.
     var detail: (String) -> WikiEntryDetail? = { _ in nil }
@@ -254,7 +254,7 @@ struct WikiArticlePage: View {
             ForEach(article.footnotes, id: \.n) { footnote in footnoteRow(footnote) }
         case .entries:
             let held = entries ?? []
-            header(WikiArticleCopy.entries, hint: "\(WikiArticleCopy.count(held.count)) \(WikiArticleCopy.entriesHint)")
+            header(WikiArticleCopy.entries, hint: WikiArticleCopy.entriesHint(article.entryIds?.count ?? held.count))
             if entries != nil && held.isEmpty {
                 Text(WikiArticleCopy.noTopicEntries)
                     .font(.orbitLabel)
