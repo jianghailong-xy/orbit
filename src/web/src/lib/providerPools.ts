@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { AgentProvider, type PlanUsageSnapshot } from '@orbit/shared';
 import { api } from '../api';
+import { withLogin, type CodexLogin } from './codexLogin';
 import { routeId } from './idCodec';
 import { planUsageRows, type PlanUsageDisplayRow } from './planUsage';
 import type { ProviderRow } from './providerAdmin';
@@ -17,7 +18,8 @@ import type { ConfiguredProvider } from './workspaceDefaults';
 
 /**
  * Where one member stands, in the order the claim reads a member. INVALID is a shared pool's key that
- * OpenAI refused (a 401): its contributor or an admin replaces it.
+ * OpenAI refused (a 401): its contributor or an admin replaces it. SIGNED_OUT is the ChatGPT account of
+ * a Codex pool of one's own that OpenAI refused: only its owner's sign-in again puts it back.
  *
  * REFUSED and USAGE_UNKNOWN are the two ways the usage endpoint turns a credential away, and they are
  * not the same thing: REFUSED is it refusing to authenticate the key (401), while USAGE_UNKNOWN is it
@@ -28,6 +30,7 @@ export type PoolMemberState =
   | 'REFUSED'
   | 'DISABLED'
   | 'INVALID'
+  | 'SIGNED_OUT'
   | 'SPENT'
   | 'RUNNING'
   | 'AVAILABLE'
@@ -50,6 +53,8 @@ export interface PoolMember {
   next: boolean;
   /** In a shared pool a member is one of its keys: the key as the server reads it (sharedPools.ts). */
   key?: SharedPoolKey;
+  /** In a Codex pool of one's own the one member is its ChatGPT account (codexLogin.ts `withLogin`). */
+  login?: CodexLogin;
 }
 
 export interface ProviderPool {
@@ -65,19 +70,26 @@ export interface ProviderPool {
    *  A member whose quota could not be READ is not one of those: the pool is offered, and runs on it. */
   unavailable?: string | null;
   members: PoolMember[];
+  /** What it runs on: `claude` (the 0265 pools of one's own Claude keys) or `codex` — a pool of one's
+   *  own ChatGPT account (migration 0323), or a shared pool. Absent from an older server: `claude`. */
+  engine?: string;
+  /** A Codex pool of one's own: the ChatGPT account it runs on, or null before anyone signed in. */
+  login?: CodexLogin | null;
   /** A shared pool (sharedPoolAsProviderPool): the whole of it as its page reads it — its people, its
    *  rules and the viewer's place in it. Absent on an account pool of the user's own. */
   shared?: SharedPool;
 }
 
-/** Under ['providers'], so every provider change — a key, a pool, a quota the server re-read —
- *  refreshes it along with the rest of the catalogue. */
+/** Under ['providers'], so every provider change — a key, a pool, a quota the server re-read, an
+ *  account signed in — refreshes it along with the rest of the catalogue. */
 export const PROVIDER_POOLS_KEY = ['providers', 'pools'] as const;
 
+/** A Codex pool of one's own comes out of here with its ChatGPT account as its member (withLogin), so
+ *  every reader of the list draws it as it draws any pool. */
 export const providerPoolsQuery = () =>
   queryOptions({
     queryKey: PROVIDER_POOLS_KEY,
-    queryFn: () => api<ProviderPool[]>('/providers/pools'),
+    queryFn: async () => (await api<ProviderPool[]>('/providers/pools')).map((pool) => withLogin(pool)),
   });
 
 /** A member that can take work now — what "N of M accounts available" counts. One that reports no
@@ -121,20 +133,26 @@ export const availableCount = (pool: ProviderPool, refusals: PoolRefusals): numb
 export const poolEligibleCount = (rows: readonly ProviderRow[]): number =>
   rows.filter((row) => row.poolRefusal === null).length;
 
+/** Whether a pool runs Codex — a shared pool of OpenAI keys, or a pool of one's own ChatGPT account —
+ *  rather than its members' Claude subscriptions. */
+export const poolRunsCodex = (pool: Pick<ProviderPool, 'engine' | 'shared'>): boolean =>
+  !!pool.shared || pool.engine === AgentProvider.CODEX;
+
 /**
  * The pools as providers a session picker can offer and a composer can run: a pool runs on its
  * members' Claude subscriptions, whose models are the Claude CLI's own — the same model space an
  * Anthropic key has — and it carries no quota of its own (each member has one). A shared pool runs
- * Codex on OpenAI's own endpoint, so its models are the Codex CLI's.
+ * Codex on OpenAI's own endpoint, and so does a pool of one's own ChatGPT account: their models are the
+ * Codex CLI's.
  */
 export const poolsAsProviders = (pools: readonly ProviderPool[]): ConfiguredProvider[] =>
   pools.map((pool) => ({
     slug: pool.slug,
     label: pool.label,
-    runtime: pool.shared ? AgentProvider.CODEX : AgentProvider.CLAUDE,
+    runtime: poolRunsCodex(pool) ? AgentProvider.CODEX : AgentProvider.CLAUDE,
     models: [],
     defaultModel: null,
-    presetSlug: pool.shared ? 'openai' : 'anthropic',
+    presetSlug: poolRunsCodex(pool) ? 'openai' : 'anthropic',
     modelsFromRuntime: true,
     planUsage: null,
   }));
@@ -216,6 +234,9 @@ export function memberStatus(
     case 'INVALID':
       // Why is a line of the row's own: "Rejected by OpenAI — …" runs past the status column.
       return { label: 'Invalid', color: 'red' };
+    case 'SIGNED_OUT':
+      // Its line says what brings it back: its owner's sign-in again.
+      return { label: 'Signed out', color: 'red' };
     case 'REFUSED':
       return { label: 'Unavailable · key refused', color: 'red' };
     case 'USAGE_UNKNOWN':

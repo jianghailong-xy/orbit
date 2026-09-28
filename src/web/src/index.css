@@ -12998,6 +12998,93 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 
+/* ── A Codex pool of one's own: its ChatGPT account, and "Sign in with ChatGPT" ───────────── */
+/* The account's row: its status says little ("Available", "Signed out"), its quota says more — two
+   windows, each with when it resets — and its actions are "Sign in again" beside the sign-out mark. */
+@media (min-width: 701px) {
+  .pool-card .re-row.pool-row-login,
+  .pool-detail .re-row.pool-row-login {
+    grid-template-columns: minmax(137px, 1fr) 150px minmax(128px, 180px) 136px;
+    align-items: start;
+  }
+}
+.pool-login-window + .pool-login-window {
+  margin-top: 8px;
+}
+.pool-login-reset {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* The one-time code, as the page it is typed into prints it: large, spaced, and copied in one press. */
+.cx-open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 2px 0 14px;
+}
+.cx-url {
+  font-size: 12px;
+  color: var(--text-3);
+  word-break: break-all;
+}
+.cx-hint {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.cx-code {
+  margin: 8px 0 12px;
+  padding: 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-sunken);
+  text-align: center;
+}
+.cx-code .cx-code-text {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--text-1);
+}
+/* The copy mark beside it stays a control's size, not the code's. */
+.cx-code .ant-typography-copy {
+  margin-inline-start: 10px;
+  font-size: 16px;
+  vertical-align: 4px;
+}
+.cx-wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.cx-expiry {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+@media (max-width: 700px) {
+  /* The quota is what an account's row is about: a line of its own under the name, bars and resets
+     kept — unlike a Claude account's, whose gauge waits for a wider window. */
+  .pool-row .re-quota.pool-login-quota {
+    display: block;
+    grid-column: 1 / -1;
+    margin-left: 38px;
+  }
+  .pool-row.pool-row-login .re-act {
+    grid-column: 1 / -1;
+    margin-top: -4px;
+  }
+  .cx-code .cx-code-text {
+    font-size: 22px;
+  }
+}
+
 /* ── New pool ─────────────────────────────────────────────────────────────────── */
 .np-field {
   display: block;
