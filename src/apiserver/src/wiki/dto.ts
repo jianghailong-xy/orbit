@@ -143,6 +143,16 @@ export class WikiCursorAdvanceDto {
   error?: string;
 }
 
+/**
+ * POST /api/runner/wiki/spaces/:id/maintenance/finish — how a Wiki maintenance run ended, and what it did
+ * (contract `maintenance.job.finish`): the cursor advance's three fields, and the run's report.
+ */
+export class WikiMaintenanceFinishDto extends WikiCursorAdvanceDto {
+  @IsOptional()
+  @Allow()
+  report?: Record<string, unknown>;
+}
+
 /** POST /api/wiki/spaces/:id/workspaces — binding a workspace the owner named (§2.1 binding). */
 export class BindWikiWorkspaceDto {
   @IsPublicId()

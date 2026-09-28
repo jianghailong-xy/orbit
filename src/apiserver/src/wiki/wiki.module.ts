@@ -4,6 +4,7 @@ import { WikiController } from './wiki.controller';
 import { WikiArticles } from './wiki-articles';
 import { WikiArticlesController } from './wiki-articles.controller';
 import { WikiMaintenance } from './wiki-maintenance';
+import { WikiMaintenanceTrigger } from './wiki-maintenance-run';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
@@ -28,7 +29,10 @@ import { WikiService } from './wiki.service';
   // `RunnerWikiMaintenanceController`, and reads the Sessions' and Projects' rows the way the other two
   // do: through Prisma, with no service of theirs. WikiArticles serves the articles to both doors the
   // same way (contract `articles`).
-  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles],
+  // WikiMaintenanceTrigger makes a space's maintenance task when a committed fact finds it due (contract
+  // `maintenance.job.trigger`): it takes the events this replica publishes as hints, through the global
+  // RealtimeService, and reads and writes rows through Prisma alone.
+  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger],
   exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles],
 })
 export class WikiModule {}

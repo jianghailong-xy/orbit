@@ -1179,6 +1179,19 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. The page is returned to the maintenance run after the commit.',
     answer: 'Typed 503 from the global boundary; the maintenance run asks for the page again, and what it is handed is recorded then.',
   },
+  // The maintenance job (contracts/wiki.contract.json `maintenance.job`, migration 0320): the task a
+  // committed fact makes for a due space, made under its list's lock.
+  {
+    at: 'wiki/wiki-maintenance-run.ts#makeTask',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s maintenance task_list row (rank 20) by SELECT … FOR NO KEY UPDATE — the one maker of a maintenance task at a time — before any task of it is read or written; then the list\'s unended tasks and today\'s count are read under it; then one task INSERT (its foreign keys take the user, the list this transaction already holds and the workspace FOR KEY SHARE), one wiki_maintenance_run INSERT (rank 60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE), and one UPDATE of the space\'s wiki_cursor row by id (60). Ascending throughout: the list before the task, the task before the wiki rows.',
+    identity: 'The space\'s maintenance list. Under its lock a task of the list that has not ended, or a day whose runs are used up, makes the closure write nothing and answer why, so of two facts arriving together one makes the task and the other finds it.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The unended task and the day\'s count are re-read under the list lock inside the closure, and the rows written are built before it from reads that do not change with a retry, so a re-run either finds its own committed task (and writes nothing) or writes the same task, run row and cursor update.',
+    effects: 'None inside. After the commit and outside the closure: one `task.changed` for the task made (nothing depends on it; the dispatcher reads runAt).',
+    answer: 'Typed 503 from the global boundary is never reached: the trigger runs off the request path, logs the failure, and the next fact of the space asks again.',
+  },
   // The articles (contracts/wiki.contract.json `articles`, migration 0317): one topic's articles
   // replaced together, by a maintenance run of the space or the server's own import.
   {
@@ -1645,6 +1658,11 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-maintenance.ts#cursorRow', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The space\'s cursor row, made the first time anything reads it: one upsert keyed by (space_id, source), whose unique index makes it one row per space; the empty update writes nothing to a row that exists.' },
   { at: 'wiki/wiki-maintenance.ts#stateOf', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The backlog as just counted from the facts, written back onto the cursor row by id so that a reader that does not count (the Wiki home page\'s status line) reads it. A later count overwrites it; nothing decides anything from this copy.' },
   { at: 'wiki/wiki-maintenance.ts#advanceCursor', class: 'ONE_ROW_CAS', statements: 2, note: 'At most two statements on the space\'s cursor row. A run that did not succeed: one UPDATE by id that counts the failure. One that succeeded: the move itself is one UPDATE whose WHERE is the compare-and-set — the watermark still behind the token and the furthest issued position not behind it — so of two runs the later position wins; a token at the watermark, or a move another run made first, is one UPDATE by id that records the success. Refusals write nothing.' },
+  { at: 'wiki/wiki-maintenance-run.ts#cursorOf', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The space\'s cursor row, made the first time a fact asks about the space: one upsert keyed by (space_id, source) whose empty update writes nothing to a row that exists — the same statement `wiki-maintenance.ts#cursorRow` makes. Two first facts racing: the loser\'s unique violation reads the winner\'s row.' },
+  { at: 'wiki/wiki-maintenance-run.ts#hold', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'Why a due space made no task (contract `maintenance.job.held`), written onto its cursor row by id, and only when the reason is not already the one it holds. The next task made clears it.' },
+  { at: 'wiki/wiki-maintenance-run.ts#runOfSession', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'A maintenance session\'s run row: one upsert keyed by its task id (unique), whose empty update writes nothing to the row the trigger made; a task somebody else put in the list gets its row the first time its run asks.' },
+  { at: 'wiki/wiki-maintenance-run.ts#wikiMaintenanceRunContext', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The run started: the calling session and the time, written onto the run row by id. A later start of the same task (a retried session) overwrites both.' },
+  { at: 'wiki/wiki-maintenance-run.ts#noteWikiMaintenanceRunEnd', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'How the run ended — outcome, error, report and the ops the server refused — written onto the run row by id after the cursor was advanced or refused. A later end of the same run overwrites it; `orbit wiki check` reads what is there.' },
   { at: 'wiki/wiki-articles.ts#plan', class: 'INSERT', statements: 1, note: 'A space with no topic is given the default ones (contracts/wiki.contract.json `articles.seeding`): one INSERT of the batch, ON CONFLICT DO NOTHING on (space_id, slug), so two first plans leave one set. Only when a count found none; a space that has topics is never written. Outside a transaction on purpose: the rows are names and path prefixes, nothing reads them as a fact about anything else, and a plan that loses the race simply reads the winner\'s.' },
 ];
 

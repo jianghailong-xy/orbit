@@ -67,6 +67,13 @@ import {
   WIKI_DEFAULT_TOPICS,
   wikiArticleChars,
 } from './wikiArticles';
+import {
+  WIKI_MAINTENANCE_DUE,
+  WIKI_MAINTENANCE_HELD_REASONS,
+  WIKI_MAINTENANCE_JOB,
+  wikiMaintenanceCheckCommand,
+  wikiMaintenanceRunSessions,
+} from './wikiMaintain';
 
 /**
  * Holds `src/shared/src/wiki.ts` to `contracts/wiki.contract.json`, the hand-written authority
@@ -526,6 +533,43 @@ describe('wiki contract', () => {
     // The dossier's text is never stored: the one table that keeps anything of it keeps its sources and hash.
     expect(maintenance.tables).toEqual(['wiki_cursor', 'wiki_dossier']);
     expect(maintenance.dossier.storage).toMatch(/text is never stored/u);
+  });
+
+  it('ships the maintenance job the contract states: its trigger, its task, its run and its check', () => {
+    // Criterion 3: a committed fact makes the task, its run proposes as maintenance, and its check judges it.
+    const job = CONTRACT.maintenance.job;
+    expect(job.rules).toEqual(WIKI_MAINTENANCE_JOB);
+    // The demo's A2+6: at most six entries from one 8k dossier, and never more than twenty sessions a run.
+    expect(WIKI_MAINTENANCE_JOB.entriesPerSessionMax).toBe(6);
+    expect(WIKI_MAINTENANCE_JOB.runSessionsMax).toBe(WIKI_MAINTENANCE_RULES.backlogThreshold);
+    expect(job.trigger.due).toEqual([...WIKI_MAINTENANCE_DUE]);
+    expect(job.held.reasons).toEqual([...WIKI_MAINTENANCE_HELD_REASONS]);
+    for (const reason of WIKI_MAINTENANCE_HELD_REASONS) expect(job.held[reason]).toBeTruthy();
+    // The due threshold counts sessions (design §8.2's «20 个会话»), and no clock starts a task.
+    expect(CONTRACT.maintenance.cursor.due).toMatch(/sessions have a fact after the watermark/u);
+    expect(job.trigger.conditions).toMatch(/No clock starts a task/u);
+    // The task's one criterion is the check, in exactly the shape the server writes it.
+    expect(job.task.completionCriterion).toBe('EXECUTABLE');
+    expect(job.task.acceptanceCommand).toBe(wikiMaintenanceCheckCommand('<id>', '<token>'));
+    expect(job.task.acceptanceExpectedExitCode).toBe(0);
+    expect(job.cli.check).toMatch(/^orbit wiki check --space <id> --expect-cursor <token>/u);
+    expect(job.cli.maintain).toMatch(/^orbit wiki maintain --space <id>/u);
+    // Every route of the job is a runner-door maintenance route.
+    const routes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
+    for (const route of Object.values(job.routes) as string[]) expect(routes).toContain(route);
+    expect(job.check.route).toBe(job.routes.check);
+    expect(CONTRACT.maintenance.dossier.query.until).toMatch(/does not go past/u);
+    expect(job.tables).toEqual(['wiki_maintenance_run']);
+    // A run's size fits its guardrails at six entries a session.
+    const size = (mode: 'manual' | 'tiered' | 'automatic', activeEntries: number, pendingInSpace = 0) =>
+      wikiMaintenanceRunSessions({ mode, activeEntries, pendingInSpace });
+    expect(size('tiered', 0)).toBe(WIKI_MAINTENANCE_JOB.runSessionsMax);
+    expect(size('automatic', WIKI_REVIEW_RULES.breakerMinActiveEntries - 1)).toBe(WIKI_MAINTENANCE_JOB.runSessionsMax);
+    expect(size('tiered', 100)).toBe(1);
+    expect(size('automatic', 600)).toBe(10);
+    expect(size('tiered', 100_000)).toBe(WIKI_MAINTENANCE_JOB.runSessionsMax);
+    expect(size('manual', 0)).toBe(Math.floor(WIKI_LIMITS.opsPerSession / 6));
+    expect(size('manual', 0, WIKI_LIMITS.pendingOpsPerSpace - 5)).toBe(0);
   });
 
   it('ships the run a maintenance session is claimed with, as the contract states it', () => {

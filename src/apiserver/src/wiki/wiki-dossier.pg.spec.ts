@@ -645,9 +645,15 @@ test('each committed fact — settled session, settled task, answered approval, 
   await session(h, owner.id, { workspaceId: ws, status: 'SUCCEEDED', lastTurnAt: minutesAgo(36 * 60) });
   assert.equal((await backlog()).due.age, true, 'the oldest fact is older than 24 hours');
   for (let n = 0; n < 15; n += 1) await session(h, owner.id, { workspaceId: ws, status: 'CANCELLED', lastTurnAt: minutesAgo(30) });
+  const facts = await backlog();
+  assert.equal(facts.backlog, 21);
+  // The threshold counts SESSIONS (design §8.2: «20 个会话», criterion 3): 21 facts of 17 sessions are not due by count.
+  assert.equal(facts.pendingSessions, 17);
+  assert.equal(facts.due.backlog, false, 'twenty facts are not twenty sessions');
+  for (let n = 0; n < 3; n += 1) await session(h, owner.id, { workspaceId: ws, status: 'CANCELLED', lastTurnAt: minutesAgo(30) });
   const full = await backlog();
-  assert.equal(full.backlog, 21);
-  assert.equal(full.due.backlog, true, `${WIKI_MAINTENANCE_RULES.backlogThreshold} facts make a run due`);
+  assert.equal(full.pendingSessions, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  assert.equal(full.due.backlog, true, `${WIKI_MAINTENANCE_RULES.backlogThreshold} sessions make a run due`);
 });
 
 // ── 6. forward only, and only for a run that succeeded ───────────────────────────────────────────
