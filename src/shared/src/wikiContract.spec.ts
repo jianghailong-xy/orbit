@@ -50,6 +50,10 @@ import {
   WIKI_VOUCHED_TRUST,
   validateWikiEntryDraft,
   validateWikiSources,
+  type WikiChangeset,
+  type WikiChangesetCounts,
+  type WikiChangesetView,
+  type WikiEntryAppliedBy,
   wikiEstimateTokens,
   wikiMaintenanceSettings,
   wikiOpEffect,
@@ -62,10 +66,12 @@ import {
 import {
   WIKI_ARTICLE_CATEGORIES,
   WIKI_ARTICLE_CATEGORY_KEYS,
+  WIKI_ARTICLE_ENTRIES_LISTED,
   WIKI_ARTICLE_KINDS,
   WIKI_ARTICLE_RULES,
   WIKI_DEFAULT_TOPICS,
   wikiArticleChars,
+  type WikiArticleView,
 } from './wikiArticles';
 import {
   WIKI_MAINTENANCE_DUE,
@@ -354,6 +360,45 @@ describe('wiki contract', () => {
     expect(CONTRACT.push.eligible.taintedOnlyWithTrust).toEqual([...WIKI_VOUCHED_TRUST]);
     expect(WIKI_VOUCHED_TRUST).toEqual(['owner', 'confirmed']);
     expect(CONTRACT.trust.onApply.entryConfirmed).toBe('confirmed');
+  });
+
+  it('names every run: the changeset on the timeline, one run\'s read, and where an entry\'s revision came from (criterion 8)', () => {
+    const run = CONTRACT.reviewModes.run;
+    const user: string[] = CONTRACT.agentSurface.doors.user.routes;
+    const runner: string[] = [
+      ...CONTRACT.agentSurface.doors.runner.routes,
+      ...CONTRACT.agentSurface.doors.runner.maintenanceRoutes,
+      ...CONTRACT.agentSurface.doors.runner.verificationRoutes,
+    ];
+    // The run's read is the owner's, on the owner's door, and nowhere an agent can reach.
+    expect(run.read.route).toBe('GET /api/wiki/changesets/:id');
+    expect(user).toContain(run.read.route);
+    expect(runner.some((route) => /\/changesets\/:id$/u.test(route))).toBe(false);
+    expect(run.read.door).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
+    expect(run.read.door).toMatch(/plain 404/u);
+    // What it answers: a changeset, with what it did counted in the words the clients say it.
+    const counts: WikiChangesetCounts = { applied: 0, auto: 0, unreviewed: 0, rejectedByCheck: 0, toReview: 0 };
+    expect(keysOf(run.counts)).toEqual(Object.keys(counts));
+    const view: Omit<WikiChangesetView, keyof WikiChangeset> = {
+      appliedByMode: null, entries: [], counts, revertible: false, revert: null,
+    };
+    for (const key of keysOf(view)) expect(run.read.answers, `answers names ${key}`).toMatch(new RegExp(`\\b${key}\\b`, 'u'));
+    // Revert run… is offered exactly when the revert would do something, by the revert's own rules.
+    expect(run.revertible).toMatch(/revert\.does, revert\.skipped/u);
+    expect(run.revertible).toMatch(/revert:<changeset id>/u);
+    expect(run.revertible).toMatch(/exactly when revertible is true/u);
+    expect(CONTRACT.reviewModes.revert.how).toMatch(/revert:<changeset id>/u);
+    // The timeline names each op's changeset; an entry's read says where its current revision came from.
+    expect(run.timeline).toMatch(/changesetId/u);
+    expect(run.timeline).toMatch(/changesetAppliedByMode/u);
+    expect(user).toContain('GET /api/wiki/spaces/:id/timeline');
+    const appliedBy: WikiEntryAppliedBy = { changesetId: null, appliedByMode: null, verification: null };
+    for (const key of Object.keys(appliedBy)) expect(run.entry).toMatch(new RegExp(`\\b${key}\\b`, 'u'));
+    expect(run.entry).toMatch(/runner door's read adds none of them/u);
+    // An article's read names the entries it was written from, and lists the first entriesListed of them.
+    expect(CONTRACT.articles.reads.entriesListed).toBe(WIKI_ARTICLE_ENTRIES_LISTED);
+    const pool: Pick<WikiArticleView, 'entryIds' | 'entries'> = { entryIds: [], entries: [] };
+    for (const key of keysOf(pool)) expect(CONTRACT.articles.reads.article).toMatch(new RegExp(`\\(${key}\\b`, 'u'));
   });
 
   it('holds a verdict to what its verifier could read, and a tainted op to unreviewed (revision 4)', () => {

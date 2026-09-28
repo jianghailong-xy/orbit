@@ -3,7 +3,7 @@
 // entries stay the store; an article is a cache of them. wikiContract.spec.ts holds every constant
 // below to the contract JSON.
 
-import type { WikiEntryKind, WikiEntryStatus, WikiTrust } from './wiki';
+import type { WikiEntry, WikiEntryKind, WikiEntryStatus, WikiTrust } from './wiki';
 
 /** The six categories a topic is filed under, in the order the directory lists them (the demo's). */
 export const WIKI_ARTICLE_CATEGORIES = [
@@ -40,6 +40,13 @@ export const WIKI_ARTICLE_RULES = {
   /** The most Markdown one part may carry. */
   markdownMaxChars: 20_000,
 } as const;
+
+/**
+ * The most entries an article's read lists under it (contract `articles.reads.article`): an overview is
+ * written from its whole topic, which can run to hundreds, so the read carries every id and the first
+ * this many of the entries — the cited ones first — as the topic's own page does.
+ */
+export const WIKI_ARTICLE_ENTRIES_LISTED = 200;
 
 /** A topic a space is given when it has none (contract `articles.defaultTopics`). */
 export interface WikiDefaultTopic {
@@ -468,6 +475,10 @@ export interface WikiArticleView {
   blocks: WikiArticleBlock[];
   footnotes: WikiArticleFootnote[];
   entryCount: number;
+  /** Every entry it was written from: the pool its generation stored. */
+  entryIds: string[];
+  /** Those entries as they stand now, the cited ones first, at most `WIKI_ARTICLE_ENTRIES_LISTED`. */
+  entries: WikiEntry[];
   chars: number;
   generatedAt: string;
   ref: string | null;
