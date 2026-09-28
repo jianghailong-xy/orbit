@@ -723,16 +723,28 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
     assert.equal(await h.prisma.wikiEntry.count({ where: { spaceId: space, kind: 'principle' } }), 0, 'nothing was written');
   });
 
-  await t.test('2 · a tainted op waits for the owner', async () => {
+  await t.test('2 · a tainted op is verified, but never past Unreviewed: not pushed, and no agent finds it', async () => {
     const reader = await session(h, owner.id, ws, machine);
     await toolCall(h, reader, 'WebFetch', 'a page from the web');
     const answer = await propose([{ op: 'add', entry: draft('pitfall', 'A pitfall read off the web'), sources: cite }], reader);
     expectStatus(answer, 200, 'a tainted add');
     assert.equal(answer.body.ops[0].status, 'pending', 'held back, not applied');
-    assert.equal(answer.body.ops[0].waitsFor, undefined, 'for the owner: no verdict can apply what the floor holds');
+    assert.equal(answer.body.ops[0].waitsFor, 'verification', 'for its verification (criterion 7, revision 4), which caps what it can apply');
+    const proposed = await entryRow(h, answer.body.ops[0].entryId);
+    assert.equal(proposed.status, 'proposed');
+    assert.equal(proposed.tainted, true);
+    // The counter-example: a supported verdict, which would push anything else as Auto.
+    await verifyAll(h, agent(owner.id, reader), space, answer.body.ops);
     const entry = await entryRow(h, answer.body.ops[0].entryId);
-    assert.equal(entry.status, 'proposed');
-    assert.equal(entry.tainted, true);
+    assert.equal(entry.status, 'active');
+    assert.equal(entry.trust, 'unreviewed', 'no more than Unreviewed');
+    const bystander = await session(h, owner.id, ws, machine);
+    assert.equal((await pushed(h, owner.id, ws, bystander)).has(entry.id), false, 'never pushed');
+    const asAgent = { runner: machine, headers: { 'x-orbit-session-id': bystander } };
+    const found = await call(h, asAgent, 'GET', `/runner/wiki/search?q=${encodeURIComponent('read off the web')}`);
+    expectStatus(found, 200, 'an agent searches');
+    assert.equal((found.body.hits as Array<{ id: string }>).some((hit) => toUuid(hit.id) === entry.id), false, 'no agent finds it');
+    expectStatus(await call(h, asAgent, 'GET', `/runner/wiki/entries/${entry.id}`), 404, 'no agent reads it');
   });
 
   await t.test('3 · a change to what the owner wrote or confirmed waits for the owner', async () => {

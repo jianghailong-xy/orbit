@@ -39,6 +39,10 @@ export const WIKI_PUSHABLE_TRUST: readonly WikiTrust[] = ['owner', 'confirmed', 
 /** The trust an entry carries while the review mode's write of it is still nobody's but the machine's:
  *  what the owner can Reject from the entry itself, and what a lineage-ending op never applies to at once. */
 export const WIKI_MACHINE_TRUST: readonly WikiTrust[] = ['auto', 'unreviewed'];
+/** The trust a person gave: the owner wrote it, or confirmed it. An entry that rests on a web-derived
+ *  record (`tainted`) reaches an agent — the push, `wiki_search`, `wiki_get` — only with one of these
+ *  (contract `reviewModes.floors.taintedWaits`). */
+export const WIKI_VOUCHED_TRUST: readonly WikiTrust[] = ['owner', 'confirmed'];
 
 /** First-hand records only. A wiki entry or any view of entries is never a source. */
 export const WIKI_SOURCE_KINDS = [
@@ -287,6 +291,35 @@ export function wikiVerdictTrust(verdict: WikiVerificationVerdict): 'auto' | 'un
   return null;
 }
 
+/** What the verifier could read of an op's sources when its verdict was recorded (contract
+ *  `reviewModes.verification.evidence`): the text of at least one of them, or of none. */
+export const WIKI_VERIFICATION_EVIDENCE = ['readable', 'unreadable'] as const;
+export type WikiVerificationEvidence = (typeof WIKI_VERIFICATION_EVIDENCE)[number];
+
+/**
+ * What a verdict does to its op once the server has held it to what the verifier could read and to
+ * the tainted floor (contract `reviewModes.verification.evidence` and `floors.taintedWaits`): the
+ * trust it applies with, or null for a rejection; whether a duplicate's sources are added to the
+ * entry it names (the space's autoAcceptReinforce still decides that); and whether the verdict counts
+ * toward the fallback's window.
+ *
+ * A verdict given when no source could be read is no verdict about the claim: supported, partial and
+ * unsupported all apply it as unreviewed, a duplicate still adds its sources, and none of them is
+ * counted. A tainted op is never more than unreviewed, and its duplicate adds nothing — what a session
+ * that read the web cites must not change whether an entry already in the space is pushed.
+ */
+export function wikiVerdictEffect(input: {
+  verdict: WikiVerificationVerdict;
+  tainted: boolean;
+  evidence: WikiVerificationEvidence;
+}): { trust: 'auto' | 'unreviewed' | null; reinforce: boolean; counted: boolean } {
+  const counted = input.evidence === 'readable';
+  if (input.verdict === 'duplicate') return { trust: null, reinforce: !input.tainted, counted };
+  if (!counted) return { trust: 'unreviewed', reinforce: false, counted };
+  const trust = wikiVerdictTrust(input.verdict);
+  return { trust: input.tainted && trust === 'auto' ? 'unreviewed' : trust, reinforce: false, counted };
+}
+
 /** Why tiered applies an op as `auto`. Anything else it applies is `unreviewed`. */
 export type WikiTieredBasis = 'owner_words' | 'machine_verified';
 
@@ -330,9 +363,11 @@ export interface WikiReviewEffect {
  * challenge) is untouched by the mode. What it holds back, a mode other than Manual may take — only
  * an add or an amend, because only those can be undone (a revert retires the add and restores the
  * revision the amend replaced; a supersede or a retire ends a lineage for good), and only an amend
- * of an entry the machine wrote. The floors hold in every mode: a tainted op waits, and so does an
- * amend of anything the owner wrote or confirmed. What Automatic takes is not applied here at all:
- * it waits for its verification, and nothing of it is live until a verdict says so.
+ * of an entry the machine wrote. The floors hold in every mode: a tainted op waits — for the owner in
+ * Manual and Tiered, and in Automatic for a verification whose verdict can leave it no more than
+ * unreviewed ({@link wikiVerdictEffect}) — and an amend of anything the owner wrote or confirmed waits
+ * for the owner. What Automatic takes is not applied here at all: it waits for its verification, and
+ * nothing of it is live until a verdict says so.
  */
 export function wikiReviewEffect(input: {
   mode: WikiReviewMode;
@@ -348,7 +383,7 @@ export function wikiReviewEffect(input: {
   const effect = wikiOpEffect(input);
   if (effect === 'applied' || input.mode === 'manual') return { effect, byMode: null };
   const held: WikiReviewEffect = { effect: 'pending', byMode: null };
-  if (input.tainted) return held;
+  if (input.tainted && input.mode !== 'automatic') return held;
   if (input.op !== 'add' && input.op !== 'amend') return held;
   if (input.op === 'amend' && (!input.target || input.target.ownerVouched || !input.target.machineWritten)) return held;
   if (input.mode === 'automatic') return { effect: 'verifying', byMode: { mode: 'automatic', trust: null } };
@@ -1084,6 +1119,9 @@ export interface WikiChangesetOp {
   /** The verdict an Automatic space's verification gave it, and who gave it when; null until one
    *  arrives, and for every op no verification decides (contract `reviewModes.verification.trail`). */
   verification?: WikiOpVerification | null;
+  /** The trail of every earlier verdict of an op that was reopened, oldest first; empty for every
+   *  other op (contract `reviewModes.verification.reopen`). */
+  verificationHistory?: WikiOpVerificationHistory[];
 }
 
 /** One op's verification trail, as the op reads it back. */
@@ -1097,6 +1135,17 @@ export interface WikiOpVerification {
   at: string;
   /** The entry a duplicate named; null for every other verdict. */
   duplicateOf: string | null;
+  /** What the verifier could read when the verdict was recorded; `unreadable` capped it at Unreviewed.
+   *  Null for a verdict recorded before the server kept the mark (migration 0314). */
+  evidence?: WikiVerificationEvidence | null;
+}
+
+/** An earlier verdict of a reopened op: its trail, what it decided, and when it was reopened. */
+export interface WikiOpVerificationHistory extends WikiOpVerification {
+  decision: WikiOpDecision;
+  decisionReason: WikiRejectReason | null;
+  decidedAt: string | null;
+  reopenedAt: string;
 }
 
 /**
@@ -1122,8 +1171,25 @@ export interface WikiVerificationItem {
     /** The text was cut at `WIKI_REVIEW_RULES.verificationSourceMaxChars`. */
     truncated: boolean;
   }>;
+  /** Whether any source above has text (contract `reviewModes.verification.evidence`). With none, a
+   *  verdict would be about the claim alone: the server records whatever it says as no more than
+   *  Unreviewed and keeps it out of the fallback's count. */
+  evidence: WikiVerificationEvidence;
   /** The neighbours recorded with the op, each as it reads now: what a duplicate may name. */
   similar: WikiSimilar[];
+}
+
+/** What `reviewModes.verification.reopen` did in one space. */
+export interface WikiReopenResult {
+  spaceId: string;
+  mode: WikiReviewMode;
+  /** Ops an unsupported verdict rejected while none of their sources could be read, waiting for
+   *  their verification again; each earlier verdict kept in the op's `verificationHistory`. */
+  reopened: string[];
+  /** Tainted ops that waited for the owner in an automatic space, now waiting for their verification. */
+  toVerification: string[];
+  /** Ops that qualified and were left as they are, with why. */
+  skipped: Array<{ opId: string; reason: string }>;
 }
 
 export interface WikiVerificationList {

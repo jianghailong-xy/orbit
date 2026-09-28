@@ -1115,6 +1115,32 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'After the commit and outside the closure: one `wiki.changed` for the space once any verdict of the request was recorded, and — only for the verdict whose compare-and-set moved the space to Tiered — one push notification to the owner (`PushService.notifyWikiVerificationTripped`). Neither is inside a closure, so a retried attempt sends neither twice.',
     answer: 'Typed 503 from the global boundary; the verifier reports again, and a verdict already recorded answers with itself.',
   },
+  // Criterion 7, revision 4 (contracts/wiki.contract.json `reviewModes.entryConfirm` and
+  // `reviewModes.verification.reopen`, migration 0314): the owner's Confirm of what a review mode
+  // applied, and the reopening of what a verdict decided without being able to read its evidence.
+  // Wiki rows alone, in the order `wiki.decide` takes them.
+  {
+    at: 'wiki/wiki.service.ts#confirmEntry',
+    shape: 'TX_RETRIED',
+    locks: 'The wiki_entry (60) by plain UPDATE (FOR NO KEY UPDATE) — the owner\'s revision of it, whose WHERE on the current revision is its compare-and-set — with the wiki_entry_revision (60) and wiki_source (60) rows that revision brings; then each op the review mode applied to it and nobody had answered (60), by one UPDATE each, and their changesets (60) when that settles them. Reads of the entry, its current revision\'s sources and those ops are unlocked and come first.',
+    identity: 'The entry and its trust: only an active entry whose trust is auto or unreviewed is confirmed, and the write that confirms it moves its trust off both, so a second press finds a confirmed entry and answers 409 without writing.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The entry, its trust and revision, its current sources and the ops it answers are re-read inside the closure, so a retried attempt decides against the committed world and the first attempt\'s writes roll back with it.',
+    effects: 'After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the owner presses again, and an entry already confirmed answers 409.',
+  },
+  {
+    at: 'wiki/wiki.service.ts#reopenVerifications',
+    shape: 'TX_RETRIED',
+    locks: 'Per op, in a transaction of its own and wiki rows alone. A rejected op: its add\'s lineage (wiki_entry, 60) by plain UPDATE whose WHERE is the rejection still standing, then the op (60) by one UPDATE predicated on the same, then its changeset (60) by one UPDATE when it had settled. A tainted op: the op (60) by one UPDATE predicated on it still waiting for the owner. Reads of the space, the op, its sources and an amend\'s entry are unlocked and come first.',
+    identity: 'Each op and its decision: a rejected op is reopened by an UPDATE predicated on `decision = rejected` with its unsupported verdict, and a tainted op moved by one predicated on `decision = pending`, so of two calls racing only one moves it — the other matches no row, its transaction rolls back, and the op is named in `skipped`. A second call finds nothing left to move.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The op, whether it still stands as it did, the space\'s settings and an amend\'s entry are re-read inside each closure, so a retried attempt decides against the committed world and the first attempt\'s writes roll back with it.',
+    effects: 'After the last commit and outside every closure: one `wiki.changed` for the space when anything moved (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the caller calls again, and what already moved is not found a second time.',
+  },
   // The Wiki maintenance run (contracts/wiki.contract.json `maintenance`, migration 0315): the owner's
   // maintenance settings with the hidden list they make, and what a dossier page records it handed out.
   {
@@ -1289,12 +1315,12 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'wiki/wiki.service.ts#createSpaceRow', under: 'wiki.createSpace and wiki.bindOnFirstUse — it is the one statement pair that makes a space, and it does it under the same user-key read both of those units argue for' },
   { at: 'wiki/wiki.service.ts#recordChangeset', under: 'wiki.submitChangeset and wiki.revertChangeset — one transaction per submission, so the changeset and every op of it are written under the idempotency identity that unit states or not at all' },
   { at: 'wiki/wiki.service.ts#recordOp', under: 'wiki.submitChangeset and wiki.revertChangeset — one op\'s row and the effect the contract\'s policy and the space\'s review mode give it, decided against the reads the same closure made' },
-  { at: 'wiki/wiki.service.ts#applyOp', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry and wiki.recordVerifications — THE writer of an entry\'s status, trust, challenged and unsupported (storage.singleWriter), reached identically by an agent\'s proposal that applies at once, what a review mode applies, what a verdict applies, the owner\'s own write, and the owner\'s answer to any of them' },
-  { at: 'wiki/wiki.service.ts#recomputeFlags', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry and wiki.recordVerifications, through applyOp — the second and last writer of those four columns: it derives them from what is now true of the entry (its live sources, its open challenges) rather than from what the op asked for' },
-  { at: 'wiki/wiki.service.ts#insertRevision', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset and wiki.recordVerifications, through applyOp — the append-only revision a change adds, never a rewrite of one (storage.appendOnly); its foreign key to the entry takes that row KEY SHARE and the entry is already held BY the same transaction' },
-  { at: 'wiki/wiki.service.ts#insertSources', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset and wiki.recordVerifications, through applyOp and insertRevision — the first-hand records a revision rests on, written once with the revision they support' },
-  { at: 'wiki/wiki.service.ts#writeOpDecision', under: 'wiki.decide, wiki.rejectEntry and wiki.revertChangeset — the owner\'s answer on one op row, after whatever it applied, so what the op did and what was decided about it are one fact; a revert withdraws with it the ops of its run still waiting for a verdict' },
-  { at: 'wiki/wiki.service.ts#settleChangeset', under: 'wiki.decide, wiki.rejectEntry, wiki.revertChangeset and wiki.recordVerifications — the changeset\'s own terminal marker, written in the same transaction as the last decision or verdict that left nothing of it waiting' },
+  { at: 'wiki/wiki.service.ts#applyOp', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry, wiki.confirmEntry, wiki.recordVerifications and wiki.reopenVerifications — THE writer of an entry\'s status, trust, challenged and unsupported (storage.singleWriter), reached identically by an agent\'s proposal that applies at once, what a review mode applies, what a verdict applies, the owner\'s own write, and the owner\'s answer to any of them' },
+  { at: 'wiki/wiki.service.ts#recomputeFlags', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.rejectEntry, wiki.confirmEntry, wiki.recordVerifications and wiki.reopenVerifications, through applyOp — the second and last writer of those four columns: it derives them from what is now true of the entry (its live sources, its open challenges) rather than from what the op asked for' },
+  { at: 'wiki/wiki.service.ts#insertRevision', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.confirmEntry and wiki.recordVerifications, through applyOp — the append-only revision a change adds, never a rewrite of one (storage.appendOnly); its foreign key to the entry takes that row KEY SHARE and the entry is already held BY the same transaction' },
+  { at: 'wiki/wiki.service.ts#insertSources', under: 'wiki.submitChangeset, wiki.decide, wiki.revertChangeset, wiki.confirmEntry and wiki.recordVerifications, through applyOp and insertRevision — the first-hand records a revision rests on, written once with the revision they support' },
+  { at: 'wiki/wiki.service.ts#writeOpDecision', under: 'wiki.decide, wiki.rejectEntry, wiki.confirmEntry and wiki.revertChangeset — the owner\'s answer on one op row, after whatever it applied, so what the op did and what was decided about it are one fact; a revert withdraws with it the ops of its run still waiting for a verdict' },
+  { at: 'wiki/wiki.service.ts#settleChangeset', under: 'wiki.decide, wiki.rejectEntry, wiki.confirmEntry, wiki.revertChangeset and wiki.recordVerifications — the changeset\'s own terminal marker, written in the same transaction as the last decision or verdict that left nothing of it waiting' },
   // The review modes' one space write (0311): a space whose spot checks' reject rate passed the line
   // goes back to Manual, by a compare-and-set on its mode merged into its settings in SQL, in the
   // transaction of the rejection that took it over — so the switch and the fact that caused it are
@@ -1304,6 +1330,10 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // trip, each inside `recordVerifications`' per-verdict transaction and in the order it states.
   { at: 'wiki/wiki.service.ts#applyVerdict', under: 'wiki.recordVerifications — the entry writes through applyOp, then the op\'s decision and trail by one UPDATE predicated on the op still verifying (the compare-and-set that makes a verdict land once), then its changeset settled' },
   { at: 'wiki/wiki.service.ts#tripIfUnsupported', under: 'wiki.recordVerifications — after the verdict\'s own writes, the wiki_space row (60) by one UPDATE whose WHERE is the compare-and-set on the mode being automatic; it takes no other lock, and its caller announces the switch only after the commit' },
+  // Revision 4's reopening (0314): one op at a time, each inside `reopenVerifications`' own
+  // per-op transaction and in the order it states.
+  { at: 'wiki/wiki.service.ts#reopenRejectedOp', under: 'wiki.reopenVerifications — an add\'s lineage proposed again through applyOp, then the op\'s verdict moved into its history by one UPDATE predicated on the rejection still standing, then its changeset opened again' },
+  { at: 'wiki/wiki.service.ts#verifyTaintedOp', under: 'wiki.reopenVerifications — the op by one UPDATE predicated on it still waiting for the owner, after the unlocked reads of the space and an amend\'s entry that decide whether Automatic takes it' },
   // The wiki's opening context, appended to what `dequeueTurn` is about to deliver (design §7.1).
   // It runs inside that unit's rank-30 Session transaction and reads unlocked: the session's
   // workspace binding, its space's settings, the space's eligible entries, and the task or first
