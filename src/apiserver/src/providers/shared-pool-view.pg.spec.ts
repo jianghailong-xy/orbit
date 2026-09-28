@@ -9,6 +9,9 @@
  *  (b) `running` marks a key a session on the pool is generating on right now.
  *  (c) `sessions` counts the sessions each person started on the pool this month.
  *  (d) A second add of one key says who put it in: by name, and whether that was the one adding.
+ *  (e) A key OpenAI put out of budget (`spentUntil`, migration 0322) is nobody's next while the mark
+ *      runs, is sent with the mark, and is the next again once the mark is behind — the page's
+ *      "Out of budget · resets …" reads exactly this.
  *
  * Production code throughout: SharedPoolsService and ProvidersService over a real client. It only adds
  * rows, and refuses to run anywhere but the disposable server `coordinator-pg-test-safety` identifies.
@@ -238,5 +241,39 @@ suite("a shared pool page's next key, running keys and session counts — on rea
       assert.deepEqual(body.addedBy, { name: 'Mia', you }, `${who.name}'s refusal`);
       assert.equal(JSON.stringify(body).includes(key), false, 'the refusal repeated the key');
     }
+  });
+
+  await t.test('(e) a key OpenAI put out of budget is nobody’s next while the mark runs, and carries it', async () => {
+    // Mia's own key is the one she runs on — a contributor's own use is never capped — and the other one
+    // of hers is Max's and Ann's next.
+    assert.deepEqual(await next(mia), ['mia-org']);
+    assert.deepEqual(await next(max), ['mia-second']);
+    const until = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    assert.equal(await pools.markKeySpent(keyId('mia-org'), until), true);
+
+    // The mark is the key's, not the viewer's: every person of the pool reads the same instant, which
+    // is what the page's "Out of budget · resets …" is drawn from.
+    for (const who of [ann, mia, max]) {
+      const key = (await view(who)).keys.find((row) => row.label === 'mia-org');
+      assert.equal(key?.spentUntil?.toISOString(), until.toISOString(), `${who.name}'s view`);
+    }
+
+    // Out of budget stops a person's own key, which no share cap does, so "own key first" gives way: Mia
+    // moves off mia-org. Max and Ann were on mia-second already and stay.
+    assert.deepEqual(await next(mia), ['mia-second']);
+    assert.deepEqual(await next(max), ['mia-second']);
+
+    // A mark already behind us is sent as none at all: what the page shows a key out of budget for is a
+    // mark still running, and the claim takes the key back at once.
+    assert.equal(await pools.markKeySpent(keyId('mia-org'), new Date(Date.now() - 60_000)), true);
+    assert.equal((await view(mia)).keys.find((row) => row.label === 'mia-org')?.spentUntil, null);
+    assert.deepEqual(await next(mia), ['mia-org']);
+
+    // And a mark cleared — OpenAI's organization has budget again, which the gateway does on a request
+    // that gets through — puts the key back the same way.
+    assert.equal(await pools.markKeySpent(keyId('mia-org'), until), true);
+    assert.equal(await pools.clearKeySpent(keyId('mia-org')), true);
+    assert.equal((await view(mia)).keys.find((row) => row.label === 'mia-org')?.spentUntil, null);
+    assert.deepEqual(await next(mia), ['mia-org']);
   });
 });
