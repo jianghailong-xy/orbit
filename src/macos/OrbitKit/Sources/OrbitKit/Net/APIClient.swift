@@ -859,6 +859,37 @@ public final class APIClient: @unchecked Sendable {
         return pools.compactMap(\.value)
     }
 
+    // MARK: shared pools (GET/POST/PATCH/DELETE /api/providers/shared-pools)
+
+    /// The shared pools the caller is in, each as they read it. A pool they are not in is not listed,
+    /// and every route below answers 404 for it. Every write answers with the pool as it now stands.
+    public func sharedPools() async throws -> [SharedPool] {
+        let pools: [LossyDecodable<SharedPool>] = try await get("providers/shared-pools")
+        return pools.compactMap(\.value)
+    }
+    public func updateSharedPool(_ id: String, _ req: UpdateSharedPoolRequest) async throws -> SharedPool {
+        try await patch("providers/shared-pools/\(id)", body: req)
+    }
+    public func deleteSharedPool(_ id: String) async throws { try await deleteRaw("providers/shared-pools/\(id)") }
+    public func leaveSharedPool(_ id: String) async throws {
+        try await postRaw("providers/shared-pools/\(id)/leave", body: Optional<Empty>.none)
+    }
+    public func addSharedPoolPerson(_ id: String, _ req: AddSharedPoolPersonRequest) async throws -> SharedPool {
+        try await post("providers/shared-pools/\(id)/people", body: req)
+    }
+    public func addPoolKey(poolID: String, _ req: AddPoolKeyRequest) async throws -> SharedPool {
+        try await post("providers/shared-pools/\(poolID)/keys", body: req)
+    }
+    public func updatePoolKey(poolID: String, keyID: String, _ req: UpdatePoolKeyRequest) async throws -> SharedPool {
+        try await patch("providers/shared-pools/\(poolID)/keys/\(keyID)", body: req)
+    }
+    public func replacePoolKey(poolID: String, keyID: String, _ req: ReplacePoolKeyRequest) async throws -> SharedPool {
+        try await put("providers/shared-pools/\(poolID)/keys/\(keyID)/secret", body: req)
+    }
+    public func removePoolKey(poolID: String, keyID: String) async throws -> SharedPool {
+        try await delete("providers/shared-pools/\(poolID)/keys/\(keyID)")
+    }
+
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
     public func updateRunner(_ id: String, _ req: UpdateRunnerRequest) async throws -> Runner { try await patch("runners/\(id)", body: req) }

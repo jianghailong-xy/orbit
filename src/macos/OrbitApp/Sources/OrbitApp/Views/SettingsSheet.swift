@@ -43,6 +43,8 @@ struct SettingsSheet: View {
                     case .settingsRunners:            RunnersSettingsList()
                     case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
                     case .settingsPage(let page):     SettingsPageView(page: page)
+                    case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
+                    case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
                     case .userDetail(let userID):     AdminUserDetailView(userID: userID)
                     default:                          EmptyView()
                     }
@@ -285,7 +287,7 @@ private struct SettingsRowLabel: View {
 }
 
 /// A group's heading: title case in the secondary colour, as the list's own groups read.
-private struct SettingsHeader: View {
+struct SettingsHeader: View {
     let text: String
 
     init(_ text: String) { self.text = text }
@@ -461,67 +463,65 @@ private struct ChangePasswordPage: View {
 
 // MARK: - Providers
 
-/// Where the account's models come from, read-only: the engines signed in on each runner (a row opens
-/// that runner, where signing in lives), the account's pools, and its API keys.
+/// Where the account's models come from: the engines signed in on each runner (a row opens that runner,
+/// where signing in lives), the account's pools (a row opens the pool's page) and its API keys.
 private struct ProvidersSettingsPage: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Form {
-            Section {
-                ForEach(model.runners?.runners ?? []) { runner in
-                    NavigationLink(value: NavNode.runnerDetail(runnerID: runner.id)) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(runner.displayName?.isEmpty == false ? runner.displayName! : runner.name)
-                            Text(ProvidersOverview.runnerSummary(runner))
-                                .font(.orbitListSubtitle)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } header: {
-                SettingsHeader(ProvidersOverview.onYourRunners)
-            } footer: {
-                Text(ProvidersOverview.onYourRunnersDetail)
-            }
+        ProvidersOverviewForm(runners: model.runners?.runners ?? [],
+                              pools: model.agents?.providerPools ?? [],
+                              sharedPools: model.sharedPools?.pools ?? [],
+                              keys: model.agents?.configuredProviders ?? [])
+            .navigationTitle(SettingsPage.providers.title)
+            .task { await model.runners?.load() }
+            .task { await model.agents?.load() }
+            .task { await model.sharedPools?.load() }
+    }
+}
 
-            let pools = model.agents?.providerPools ?? []
-            if !pools.isEmpty {
-                Section {
-                    ForEach(pools) { pool in
-                        LabeledContent(pool.label, value: ProvidersOverview.poolSummary(pool))
-                    }
-                } header: {
-                    SettingsHeader(ProvidersOverview.accountPools)
-                } footer: {
-                    Text(ProvidersOverview.accountPoolsDetail)
-                }
-            }
+/// An account pool's page, read-only: the pool as Providers last read it.
+private struct AccountPoolSettingsPage: View {
+    @Environment(AppModel.self) private var model
+    let poolID: String
 
-            Section {
-                let keys = model.agents?.configuredProviders ?? []
-                if keys.isEmpty {
-                    Text(ProvidersOverview.noKeys).foregroundStyle(.secondary)
-                }
-                ForEach(keys) { key in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(key.label)
-                        if let defaultModel = key.defaultModel {
-                            Text(defaultModel)
-                                .font(.orbitListSubtitle)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } header: {
-                SettingsHeader(ProvidersOverview.apiKeys)
-            } footer: {
-                Text(ProvidersOverview.apiKeysDetail + " " + ProvidersOverview.editOnWeb)
-            }
+    var body: some View {
+        let key = PublicID.storageKey(poolID)
+        if let pool = model.agents?.providerPools.first(where: { PublicID.storageKey($0.id) == key }) {
+            AccountPoolPageView(pool: pool)
+        } else {
+            ContentUnavailableView(ProvidersOverview.poolGone, systemImage: "person.3")
         }
-        .navigationTitle(SettingsPage.providers.title)
-        .task { await model.runners?.load() }
-        .task { await model.agents?.load() }
+    }
+}
+
+/// A shared pool's page, run from here: each press goes to the server, and the pool it answers with
+/// is the one drawn. Deleting or leaving the pool closes the page.
+private struct SharedPoolSettingsPage: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let poolID: String
+
+    var body: some View {
+        if let pools = model.sharedPools, let pool = pools.pool(poolID) {
+            SharedPoolPageView(pool: pool, actions: SharedPoolActions(
+                addKey: { await pools.addKey(pool, $0) },
+                replaceKey: { await pools.replaceKey(pool, $0, secret: $1) },
+                removeKey: { await pools.removeKey(pool, $0) },
+                switchKey: { await pools.switchKey(pool, $0, on: $1) },
+                setRules: { await pools.setRules(pool, $0) },
+                addPerson: { await pools.addPerson(pool, email: $0) },
+                deletePool: { await close(pools, pool, delete: true) },
+                leavePool: { await close(pools, pool, delete: false) }))
+        } else {
+            ContentUnavailableView(ProvidersOverview.poolGone, systemImage: "person.3")
+        }
+    }
+
+    private func close(_ pools: SharedPoolsModel, _ pool: SharedPool, delete: Bool) async -> String? {
+        if let failure = await pools.exit(pool, delete: delete) { return failure }
+        dismiss()
+        return nil
     }
 }
 

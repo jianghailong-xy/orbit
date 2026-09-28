@@ -193,10 +193,14 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(ProvidersOverview.runnerSummary(try runner("d", online: true)), "Engines not reported")
     }
 
-    func testAPoolsLineSaysWhyItCantRunOrHowManyAccountsItHolds() {
+    func testAPoolsValueSaysWhyItCantRunOrHowManyOfItsAccountsCan() {
         XCTAssertEqual(ProvidersOverview.poolSummary(ProviderPool(id: "p", slug: "p", label: "P",
                                                                   unavailable: "No accounts")),
                        "No accounts")
-        XCTAssertEqual(ProvidersOverview.poolSummary(ProviderPool(id: "p", slug: "p", label: "P")), "0 accounts")
+        XCTAssertEqual(ProvidersOverview.poolSummary(ProviderPool(id: "p", slug: "p", label: "P")), "0 of 0 available")
+        let members = [PoolMemberState.running, .available, .noQuota, .spent, .refused, .disabled, .unknown]
+            .enumerated().map { PoolMember(id: "m\($0.offset)", slug: "m\($0.offset)", label: "M", state: $0.element) }
+        XCTAssertEqual(ProvidersOverview.poolSummary(ProviderPool(id: "p", slug: "p", label: "P", members: members)),
+                       "3 of 7 available", "running, available and no-quota members can take a session")
     }
 }
