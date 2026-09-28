@@ -79,7 +79,8 @@ jobs:
   macos:
     name: macOS (build + test)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY, shots branch only: this branch carries a probe, not code to compile.
+    if: false
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -105,7 +106,8 @@ jobs:
   ios:
     name: iOS (generate + build)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY, shots branch only: this branch carries a probe, not code to compile.
+    if: false
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -132,3 +134,31 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY — an evidence run, not a gate; this branch is never merged. The iPhone session list's
+  # options menu draws its titles on two edges under iOS 26; `.menu-probe/` builds the shipped menu
+  # and three candidate rewrites into a throwaway app and photographs each (see .menu-probe/README.md).
+  menu-shots-ios:
+    name: Menu probe (iOS options menu)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, test and capture
+        run: bash .menu-probe/ios/run.sh
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: menu-shots-ios
+          path: .menu-probe/ios/shots
+          if-no-files-found: error
