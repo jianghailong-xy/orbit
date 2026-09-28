@@ -134,6 +134,13 @@ final class TaskDetailCopyParityTests: XCTestCase {
                     .replacingOccurrences(of: "SENTINEL", with: "${scheduledLocal}") + "`", in: Self.schedule)
     }
 
+    // MARK: the project line
+
+    func testTheCancelledProjectNote() throws {
+        let web = try source(Self.panel)
+        assertSays(web, "PROJECT_CANCELLED_NOTE = '\(TaskDetailCopy.projectCancelledNote)'", in: Self.panel)
+    }
+
     // MARK: acceptance
 
     func testTheAcceptanceWords() throws {

@@ -281,3 +281,42 @@ describe('the composer menu on a phone', () => {
     expect(desktop).not.toMatch(/composer-attach-menu[^}]*250px/);
   });
 });
+
+/**
+ * The card's contents start where its 24px corner stops curving, 24px in from the outer edge: the
+ * staged thumbnails, the text, and — under them — the `+`'s left arm. Lining up the `+`'s arm
+ * rather than its centre was chosen on 2026-09-27 over leaving the button centred on the corner's
+ * own centre, so a `+` that drifts back onto the corner is a regression, not a tidy-up. jsdom has
+ * no layout, so the `+` is placed the way the stylesheet places it: border, toolbar padding, the
+ * icon's offset inside its circle, and PlusOutlined's own margin.
+ */
+describe('the composer card, 24px in', () => {
+  const css = indexCss;
+  const ranges = phoneBlocks(css);
+  const phone = ranges.map(([from, to]) => css.slice(from, to)).join('\n');
+  const desktop = ranges.reduceRight((acc, [from, to]) => acc.slice(0, from) + acc.slice(to), css);
+  const px = (sheet: string, rule: RegExp) => Number(rule.exec(sheet)?.[1]);
+
+  it('starts the thumbnails and the text where the corner stops curving', () => {
+    expect(px(desktop, /\.composer-box\s*\{[^}]*border-radius:\s*([\d.]+)px/)).toBe(24);
+    // 1px of border + 23. The mirror behind the textarea claims the same declaration.
+    expect(desktop).toMatch(
+      /\.composer-field \.composer-mirror,\s*\.composer-field textarea\.ant-input\s*\{[^}]*padding:\s*12px 23px 2px/,
+    );
+    expect(desktop).toMatch(/\.composer-attachments\s*\{[^}]*padding:\s*12px 23px 0/);
+  });
+
+  it("puts the +'s left arm on that line too, at both sizes, with Send mirroring it", () => {
+    const icon = px(desktop, /\.composer-box \.composer-attach-btn\.ant-btn\s*\{[^}]*font-size:\s*([\d.]+)px/);
+    // PlusOutlined draws its bar from x=152 of its 64–960 viewBox.
+    const margin = ((152 - 64) / 896) * icon;
+    const leftArm = (sheet: string) =>
+      1 +
+      // Three values, so the right side (Send's) is the same as the left.
+      px(sheet, /\.composer-toolbar\s*\{[^}]*padding:\s*[\d.]+px ([\d.]+)px [\d.]+px;/) +
+      (px(sheet, /\.composer-box \.composer-send\.ant-btn\s*\{[^}]*\swidth:\s*([\d.]+)px/) - icon) / 2 +
+      margin;
+    expect(leftArm(desktop)).toBeCloseTo(24, 1);
+    expect(leftArm(phone)).toBeCloseTo(24, 1);
+  });
+});

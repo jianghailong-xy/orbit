@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
+import { projectNotCancelledSql } from './project-cancelled-dispatch';
 import { TASK_LIST_SELECT, TasksService } from './tasks.service';
 import { recordingQueryRaw } from './query-raw-test-helper';
 
@@ -214,8 +215,11 @@ test('omitting the project leaves the scope exactly as it was', async () => {
   for (const statement of raw.statements) {
     // `t.project_id`, not any `project_id`: §13.3 DEP's epoch clause names the column too, on the
     // ledger row it looks the verdict action up by. That is not a scope — the scope is the one
-    // spelling the two positive assertions above pin, and this is its negation.
-    assert.doesNotMatch(statement.text, /t\.project_id/);
+    // spelling the two positive assertions above pin, and this is its negation. Nor is the
+    // cancelled-project gate every runnable read carries (projectNotCancelledSql), which names
+    // `t.project_id` as well, so it is taken out before looking.
+    const unscoped = statement.text.split(projectNotCancelledSql('t')).join('');
+    assert.doesNotMatch(unscoped, /t\.project_id/);
   }
   for (const where of [...countWheres, ...groupByWheres]) {
     assert.ok(!('projectId' in where), `scope grew a projectId key: ${JSON.stringify(where)}`);

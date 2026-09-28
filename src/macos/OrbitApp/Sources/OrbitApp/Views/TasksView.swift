@@ -1385,8 +1385,16 @@ private struct TaskDetailContent: View {
         VStack(alignment: .leading, spacing: 8) {
             // The project it is filed under — the web panel's line over the title. A project's tasks
             // are not listed on Tasks, so a task opened from a link names its project, and says so
-            // when that project was cancelled.
-            if let project = task.project { projectLine(project) }
+            // when that project was cancelled — and that, then, no door starts this task.
+            if let project = task.project {
+                projectLine(project)
+                if project.status == ProjectStatus.cancelled.rawValue {
+                    Text(TaskDetailCopy.projectCancelledNote)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Text(task.title)
                 .font(.title2.weight(.bold))
                 .fixedSize(horizontal: false, vertical: true)

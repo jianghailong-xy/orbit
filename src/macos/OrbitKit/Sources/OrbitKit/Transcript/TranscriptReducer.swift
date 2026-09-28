@@ -256,7 +256,13 @@ public struct TranscriptReducer: Sendable, Codable {
         case .status, .result:  applyStatus(ev)
         case .system:
             if str(ev, "subtype") == "resumed" { clearLiveToolOutputsAtBoundary() }
-            appendEngineStderr(ev)
+            // A deliberate heads-up (see `TranscriptItem.notice`) — the turn itself was fine. Never
+            // sent beside stderr; if it ever were, it wins, as on web. One row per event, unfolded.
+            if let notice = nonEmpty(str(ev, "notice")) {
+                state.items.append(.notice(id: nextID(), message: notice))
+            } else {
+                appendEngineStderr(ev)
+            }
         // An order to the consume loop, not transcript content: it can't re-fetch anything from
         // in here, so it acts on `resetForResync()` + a fresh tail page (see `ConsoleModel.run()`).
         case .resync:           break
@@ -448,6 +454,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .interrupt(_, let s):      seq = s
         case .autoRetry(let n):         seq = n.seq
         case .user, .error, .authError: seq = nil
+        case .notice:                   seq = nil
         }
         return (seq ?? 0) > 0 ? seq : nil
     }
@@ -1109,7 +1116,8 @@ public struct TranscriptReducer: Sendable, Codable {
     /// "No conversation found with session ID: …" — and it is reported on a `system` event, which
     /// carries no other transcript row. Dropped, the turn reads as a silent blank: the user sends
     /// again, the engine fails the same way, and nothing on screen ever says why (web parity:
-    /// Transcript's `system` case). Everything else on a `system` event stays lifecycle noise.
+    /// Transcript's `system` case). Everything else on a `system` event but a notice stays lifecycle
+    /// noise.
     private mutating func appendEngineStderr(_ ev: RunEvent) {
         guard let raw = str(ev, "stderr") else { return }
         let line = EngineStderr.clean(raw)

@@ -330,6 +330,10 @@ export const REOPEN_ACTION_LABEL = 'Reopen task';
 export const REOPEN_MODAL_TITLE = 'Reopen this task?';
 export const REOPEN_MODAL_OK = 'Reopen';
 export const REOPEN_RECORDED = 'Task reopened';
+/** Under the project line when that project was cancelled: its tasks do not start (any door). */
+export const PROJECT_CANCELLED_NOTE =
+  'The project was cancelled, so this task won’t start. Reopen the project to run it.';
+
 export const REOPEN_MODAL_BODY = 'Reopening puts this task back to Open and changes nothing else: '
   + 'its history, its evidence, its dependencies and the project it is filed under stay as they '
   + 'are. It is how an attempt that stopped is picked up again as this task, rather than as a new '
@@ -1115,6 +1119,9 @@ export function TaskDetailPanel({
                 <span className="tdp-badge tone-muted">Cancelled</span>
               )}
             </div>
+          )}
+          {q.data?.project?.status === 'CANCELLED' && (
+            <div className="tdp-project-note">{PROJECT_CANCELLED_NOTE}</div>
           )}
           <div className="tdp-title">{task?.title ?? 'Loading…'}</div>
           <div className="tdp-meta">

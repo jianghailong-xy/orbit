@@ -395,8 +395,11 @@ describe('ProjectDetailPage — recording the project’s own status', () => {
     expect(asked).not.toContain('settled by the work filed under them');
     expect(asked).not.toContain('merge receipt');
     // ...and what the reader does need is how much unfinished work they are walking away from.
-    expect(asked).toContain(`${UNFINISHED} unfinished tasks stay filed under it.`);
+    expect(asked).toContain(`${UNFINISHED} unfinished tasks stay filed under it and won’t start.`);
     expect(asked).toContain(`项目下还有 ${UNFINISHED} 个任务没有结束`);
+    // ...and what cancelling does to them now: nothing starts them, nothing running is stopped.
+    expect(asked).toContain('From then on its tasks do not start');
+    expect(asked).toContain('a run already going is not stopped');
 
     await click(confirmButton(/^Record as cancelled$/)!);
     await tick();
@@ -419,6 +422,8 @@ describe('ProjectDetailPage — recording the project’s own status', () => {
     expect(asked).not.toContain('merge receipt');
     expect(asked).not.toContain('settled by the work filed under them');
     expect(asked).not.toContain('Settled ·');
+    // The one thing reopening does change: the project's tasks can be started again.
+    expect(asked).toContain('so its tasks can start again');
 
     await click(confirmButton(/^Reopen$/)!);
     await tick();
