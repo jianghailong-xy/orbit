@@ -822,6 +822,24 @@ public final class APIClient: @unchecked Sendable {
     public func wikiTimeline(spaceID: String) async throws -> WikiTimeline {
         try await get("wiki/spaces/\(spaceID)/timeline")
     }
+    /// `GET /wiki/spaces/:id/articles`: the category directory — categories → topics → each topic's
+    /// article and its subtopic parts (contract `articles.reads.directory`).
+    public func wikiArticleDirectory(spaceID: String) async throws -> WikiArticleDirectory {
+        try await get("wiki/spaces/\(spaceID)/articles")
+    }
+    /// `GET /wiki/spaces/:id/articles/:slug[/:part]`: one of a topic's articles, its footnotes resolved
+    /// to the entries they name. A 404 is a topic with no such article yet.
+    public func wikiArticle(spaceID: String, slug: String, part: Int) async throws -> WikiArticle {
+        try await get(part > 0 ? "wiki/spaces/\(spaceID)/articles/\(slug)/\(part)" : "wiki/spaces/\(spaceID)/articles/\(slug)")
+    }
+    /// `GET /wiki/spaces/:id/article-index`: every article of the space, A to Z.
+    public func wikiArticleIndex(spaceID: String) async throws -> WikiArticleIndex {
+        try await get("wiki/spaces/\(spaceID)/article-index")
+    }
+    /// `GET /wiki/spaces/:id/topics/:slug`: the entries that file themselves under a topic.
+    public func wikiTopic(spaceID: String, slug: String) async throws -> WikiTopicView {
+        try await get("wiki/spaces/\(spaceID)/topics/\(slug)")
+    }
     /// `GET /wiki/review`: the changesets with an op still waiting for the owner, across every space,
     /// or one space's when `spaceID` is given. Their decided ops ride along; Review keeps the pending.
     public func wikiReview(spaceID: String? = nil) async throws -> [WikiChangeset] {

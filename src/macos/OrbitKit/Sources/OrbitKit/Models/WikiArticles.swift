@@ -163,3 +163,16 @@ public struct WikiArticleIndex: Codable, Equatable, Sendable {
     public let spaceId: String?
     public let items: [Item]
 }
+
+/// `GET /api/wiki/spaces/:id/topics/:slug`: the entries that file themselves under a topic, newest
+/// change first — what an article's page lists under the text (the article read names the entries it
+/// cites, not every one it was written from).
+public struct WikiTopicView: Decodable, Equatable, Sendable {
+    public let slug: String
+    /// The name the space declared, or the slug read as words.
+    public let title: String?
+    public let description: String?
+    public let declared: Bool?
+    public let entryCount: Int?
+    public let entries: [WikiEntry]?
+}

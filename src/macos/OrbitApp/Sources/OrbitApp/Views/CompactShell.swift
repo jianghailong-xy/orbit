@@ -335,6 +335,10 @@ private struct CompactSections: View {
                         case .wikiReview:             WikiReviewView()
                         case .wikiSettings:           WikiSettingsView()
                         case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)
+                        case .wikiArticle(let topic, let part):
+                            WikiArticleScreen(address: WikiArticleAddress(topic: topic, part: part))
+                        case .wikiBrowse:             WikiBrowseScreen()
+                        case .wikiIndex:              WikiIndexScreen()
                         default:                      EmptyView()
                         }
                     }

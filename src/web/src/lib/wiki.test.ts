@@ -15,8 +15,6 @@ import {
   wikiFieldRows,
   wikiKindWord,
   wikiTabOf,
-  wikiTopicSummaries,
-  wikiTopicsOf,
 } from './wiki';
 
 /**
@@ -121,28 +119,6 @@ describe('the anchor column', () => {
     };
     expect(wikiAnchorStateOf({ check })).toEqual({ word: 'Changed', tone: 'amber' });
     expect(wikiAnchorStateOf({ check: { ...check, state: 'verified' } })).toEqual({ word: 'ccccccc', tone: 'green' });
-  });
-});
-
-describe('topics, read out of the entries that carry them', () => {
-  it('counts each slug once per entry, and puts the most-used topic first', () => {
-    const entries = [
-      entry({ title: 'One', topics: ['tasks-dispatch', 'runner-engines'] }),
-      entry({ title: 'Two', topics: ['tasks-dispatch'] }),
-      entry({ title: 'Three', topics: ['tasks-dispatch', 'tasks-dispatch'] }),
-    ];
-    const topics = wikiTopicSummaries(entries);
-    expect(topics.map((topic) => [topic.slug, topic.count])).toEqual([
-      ['tasks-dispatch', 3],
-      ['runner-engines', 1],
-    ]);
-    // The latest entry carrying the topic is what the grid's second line says something about.
-    expect(topics[0].latest?.title).toBe('Three');
-    expect(wikiTopicsOf(entries[2])).toEqual(['tasks-dispatch']);
-  });
-
-  it('has no topics when no entry names one', () => {
-    expect(wikiTopicSummaries([entry({ topics: [] })])).toEqual([]);
   });
 });
 

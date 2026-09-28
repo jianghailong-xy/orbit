@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from 'antd';
+import { RightOutlined } from '@ant-design/icons';
 import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty, WikiPin } from './WikiCards';
 import { WikiEntryLine } from './WikiEntryRow';
@@ -19,16 +20,15 @@ import {
   WIKI_NO_DECISIONS,
   WIKI_NO_ENTRIES,
   WIKI_NO_REVIEW,
-  WIKI_NO_TOPICS,
   WIKI_PRINCIPLES,
   WIKI_PRINCIPLES_HINT,
   WIKI_RECENT_DECISIONS,
   WIKI_RECENT_DECISIONS_HINT,
   WIKI_RECENTLY_CHANGED,
+  WIKI_REVIEW_PATH,
   WIKI_REVIEW_TITLE,
   WIKI_SEARCHES,
   WIKI_SESSIONS_RECEIVED,
-  WIKI_TOPICS,
   WIKI_TRUST_TONE,
   wikiChangeNote,
   wikiChangeVerb,
@@ -37,9 +37,9 @@ import {
   wikiEntryPath,
   wikiOldest,
   wikiProposalsFrom,
+  wikiProposalsToReview,
   wikiSeenKey,
   wikiTopicPath,
-  wikiTopicSummaries,
   readWikiSeen,
   writeWikiSeen,
   type WikiTrust,
@@ -49,14 +49,16 @@ import { wikiRecentRows } from '../lib/wikiReviewMode';
 /**
  * The Wiki home: what the space holds, and what wants the owner's attention.
  *
- * THE ORDER IS THE DESIGN'S (§12.1, mock 01): Principles, then the Topics grid, then the decision
- * log, with Review leading the right rail above what changed lately and what the agents used. The
- * same order, and the same words, are what iOS draws — `WIKI_*` here is one half of that pair.
+ * THE ORDER IS THE DESIGN'S (§12.1, mock 11): Principles, then the decision log, with Review leading
+ * the right rail above what changed lately and what the agents used. The topics are no longer a grid
+ * here — they are the category directory beside the page (`WikiDirectory`, owner's call 2026-09-28).
+ * A phone draws one column: the Review bar, Principles, Recent decisions, Recently changed, Agents
+ * used the wiki (mock 12) — the order iOS draws, and `WIKI_*` here is one half of that pair.
  *
- * EVERY NUMBER IS READ, NOT INVENTED. The three counts on the status row, the topic tallies, the
- * decision log and the usage bars all come from the space and its entries; the one block whose data
- * phase 1 has no writer for ("Detector") is absent from the entry drawer rather than drawn at zero,
- * and the usage block says plainly when nothing has used the wiki yet.
+ * EVERY NUMBER IS READ, NOT INVENTED. The counts on the status row, the decision log and the usage
+ * bars all come from the space and its entries; the one block whose data phase 1 has no writer for
+ * ("Detector") is absent from the entry drawer rather than drawn at zero, and the usage block says
+ * plainly when nothing has used the wiki yet.
  */
 export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
   const entries = useQuery(wikiEntriesQuery(space.id));
@@ -78,12 +80,21 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
     [all],
   );
   const decisions = useMemo(() => wikiEntriesOfKind(all, 'decision'), [all]);
-  const topics = useMemo(() => wikiTopicSummaries(all), [all]);
   const pending = useMemo(() => reviewOps(review.data ?? []), [review.data]);
   const entryById = useMemo(() => new Map(all.map((entry) => [entry.id, entry])), [all]);
 
   return (
-    <div className="wk-cols">
+    <>
+      {/* A phone's Review is this bar rather than the right rail's card (mock 12 ①): the one block
+          that asks for anything leads the page, and it is one press into the queue. */}
+      {pending.length > 0 && (
+        <Link className="wk-banner" to={WIKI_REVIEW_PATH}>
+          <WikiDot tone="amber" />
+          <span className="t">{wikiProposalsToReview(pending.length)}</span>
+          <RightOutlined className="ic" />
+        </Link>
+      )}
+      <div className="wk-cols">
       <div className="wk-col">
         <WikiCard
           title={WIKI_PRINCIPLES}
@@ -101,31 +112,6 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
                 newSince={wikiChangedSince([entry], seen).length > 0}
               />
             ))
-          )}
-        </WikiCard>
-
-        <WikiCard title={WIKI_TOPICS} hint={`${topics.length} ${WIKI_TOPICS.toLowerCase()} · ${all.length} entries`}>
-          {topics.length === 0 ? (
-            <WikiEmpty>{WIKI_NO_TOPICS}</WikiEmpty>
-          ) : (
-            <div className="wk-topics">
-              {topics.map((topic) => (
-                <Link className="wk-topic" key={topic.slug} to={wikiTopicPath(space.slug, topic.slug)}>
-                  <div className="wk-topic-h">
-                    <span className="wk-topic-n">{topicTitle(topic.slug)}</span>
-                    <span className="wk-topic-c">{topic.count}</span>
-                  </div>
-                  <div className="wk-topic-l">
-                    {topic.latest ? (
-                      <>
-                        <b>{wikiChangeVerbOfEntry(topic.latest, entryById)}</b>{' '}
-                        <span className="when">{relTime(topic.latest.validFrom)}</span> · {topic.latest.title}
-                      </>
-                    ) : null}
-                  </div>
-                </Link>
-              ))}
-            </div>
           )}
         </WikiCard>
 
@@ -193,6 +179,7 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
         <UsageCard space={space} />
       </div>
     </div>
+    </>
   );
 }
 
@@ -220,6 +207,7 @@ function ReviewCard({
       title={WIKI_REVIEW_TITLE}
       leading={<WikiDot tone="amber" />}
       trailing={<span className="tp-count needs-you">{pending.length}</span>}
+      className="wk-review-card"
     >
       {pending.length === 0 ? (
         <WikiEmpty>{WIKI_NO_REVIEW}</WikiEmpty>
@@ -346,22 +334,6 @@ export function opTitle(op: WikiChangesetOp, entryById: Map<string, WikiEntry>):
   if (typeof payload.entry?.title === 'string') return payload.entry.title;
   if (typeof payload.changes?.title === 'string') return payload.changes.title;
   return op.op === 'add' ? 'A new entry' : 'An entry';
-}
-
-/** A topic's name, read out of its slug the way the server reads it. */
-export function topicTitle(slug: string): string {
-  const words = slug.split('-').filter(Boolean);
-  if (words.length === 0) return slug;
-  return [words[0].charAt(0).toUpperCase() + words[0].slice(1), ...words.slice(1)].join(' ');
-}
-
-/** The verb the Topics grid leads with: what the newest entry in a topic is, and who made it so. */
-function wikiChangeVerbOfEntry(entry: WikiEntry, entryById: Map<string, WikiEntry>): string {
-  if (entry.status === 'superseded') return 'Superseded';
-  if (entry.status === 'retired') return 'Retired';
-  if (entry.trust === 'owner') return 'Added by you';
-  if (entry.supersededById && entryById.has(entry.supersededById)) return 'Superseded';
-  return 'Confirmed';
 }
 
 /** When this reader last had the home page open, and the stamp that moves it forward. */
