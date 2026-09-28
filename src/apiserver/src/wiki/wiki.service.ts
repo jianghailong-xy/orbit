@@ -11,6 +11,7 @@ import {
   WIKI_REVIEW_RULES,
   WIKI_SOURCE_KINDS,
   WIKI_VERIFICATION_VERDICTS,
+  WIKI_VOUCHED_TRUST,
   validateWikiEntryChanges,
   validateWikiEntryDraft,
   validateWikiSources,
@@ -19,7 +20,7 @@ import {
   wikiReviewEffect,
   wikiSpaceSettings,
   wikiTieredBasis,
-  wikiVerdictTrust,
+  wikiVerdictEffect,
   type WikiAnchor,
   type WikiAnchorInput,
   type WikiAnchorOutcome,
@@ -35,7 +36,9 @@ import {
   type WikiKind,
   type WikiOp,
   type WikiOpOutcome,
+  type WikiOpVerificationHistory,
   type WikiRejectReason,
+  type WikiReopenResult,
   type WikiRefusal,
   type WikiRefusalCode,
   type WikiReviewEffect,
@@ -46,6 +49,7 @@ import {
   type WikiTieredBasis,
   type WikiTrust,
   type WikiVerdictInput,
+  type WikiVerificationEvidence,
   type WikiVerificationItem,
   type WikiVerificationOutcome,
   type WikiVerificationVerdict,
@@ -71,6 +75,7 @@ import { canonicalRepoUrl } from '../projects/project-integration-line';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { evidenceOf, readBeforeRevision4, runEventText, verifierText } from './wiki-verify-evidence';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
 type Tx = Prisma.TransactionClient;
@@ -319,11 +324,13 @@ interface PreparedOp {
  * One thing to apply to an entry. `promote`, `confirm` and `reject` are not wiki ops: they are what
  * the owner's acceptance and refusal do to a proposal, or to what a review mode applied at once, and
  * they go through `applyOp` for the one reason that matters — the entry's status and trust have
- * exactly one writer. `anchor_check` is not one either: it is what a maintenance run's re-verification
- * found (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too.
+ * exactly one writer. `reopen` is the one way back out of a rejection: a lineage a verdict rejected
+ * without being able to read its sources, proposed again (`reviewModes.verification.reopen`).
+ * `anchor_check` is not a wiki op either: it is what a maintenance run's re-verification found
+ * (`recordAnchorChecks`), and it can move an entry's trust, which is why it comes here too.
  */
 interface WikiApplyInstruction {
-  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'anchor_check';
+  op: WikiOp | 'promote' | 'confirm' | 'reject' | 'reopen' | 'anchor_check';
   entryId: string | null;
   draft: PreparedDraft | null;
   changes: WikiEntryChanges | null;
@@ -526,13 +533,6 @@ function asText(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value ?? null);
 }
 
-/** The text a run event carries, for the two types that carry prose. */
-function eventText(type: string, payload: unknown): string | null {
-  if (type !== 'user' && type !== 'assistant') return null;
-  const text = (payload as { text?: unknown } | null)?.text;
-  return typeof text === 'string' ? text : null;
-}
-
 /** The kind a draft names, when it names one this phase writes. */
 function draftKind(value: unknown): WikiKind | null {
   const kind = (value as { kind?: unknown } | null)?.kind;
@@ -613,6 +613,8 @@ const CHANGESET_SELECT = {
       verificationModel: true,
       verifiedAt: true,
       verificationDuplicateOf: true,
+      verificationEvidence: true,
+      verificationHistory: true,
     },
     orderBy: { seq: 'asc' },
   },
@@ -683,6 +685,7 @@ export function changesetView(row: ChangesetRow): Record<string, unknown> {
       appliedByMode: op.appliedByMode,
       spotCheck: op.spotCheck,
       verification: verificationView(op),
+      verificationHistory: op.verificationHistory,
     })),
   };
 }
@@ -694,6 +697,7 @@ function verificationView(op: {
   verificationModel: string | null;
   verifiedAt: Date | null;
   verificationDuplicateOf: string | null;
+  verificationEvidence: string | null;
 }): Record<string, unknown> | null {
   if (op.verificationVerdict === null || op.verifiedAt === null) return null;
   return {
@@ -702,6 +706,7 @@ function verificationView(op: {
     model: op.verificationModel,
     at: op.verifiedAt.toISOString(),
     duplicateOf: op.verificationDuplicateOf,
+    evidence: op.verificationEvidence,
   };
 }
 
@@ -1752,6 +1757,79 @@ export class WikiService {
   }
 
   /**
+   * The owner's Confirm of an entry a review mode applied and nobody has vouched for — trust `auto`
+   * or `unreviewed`, tainted or not — from the entry itself (contract `reviewModes.entryConfirm`).
+   *
+   * THE OWNER CHANNEL ONLY, like a decide: an agent never confirms (criterion 7, hard constraint 2).
+   * The confirmation is a revision the owner authored — the same content and live sources, trust
+   * confirmed — written through `applyOp`, so the history says who vouched for it and when, and the
+   * push and an agent's search take it from here: what rests on the web reaches an agent only once a
+   * person has vouched for it. What the review mode applied to it and nobody had answered — the op,
+   * and a spot check still open on it — is answered `accepted`, so no revert of that run undoes what
+   * the owner has just kept. Anything else answers 409: a proposal is accepted in Review, and what the
+   * owner wrote or confirmed is theirs already.
+   */
+  async confirmEntry(
+    ownerId: string,
+    userId: string,
+    entryId: string,
+    actingSessionId: string | null,
+  ): Promise<Record<string, unknown>> {
+    if (actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        'confirming what the wiki holds is the account owner\'s, through an owner channel with no acting session: '
+          + 'report what should be confirmed, and let a person confirm it.',
+      );
+    }
+    const view = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const entry = await this.ownEntryById(tx, ownerId, entryId);
+        if (!entry) throw new NotFoundException('no such wiki entry');
+        if (entry.status !== 'active' || !WIKI_MACHINE_TRUST.includes(entry.trust as WikiTrust)) {
+          throw new ConflictException(
+            'only an active entry the review mode applied, and nobody has confirmed, is confirmed from the entry: '
+              + 'a proposal is accepted in Review, and what the owner wrote or confirmed is theirs already',
+          );
+        }
+        const owner: WikiAuthor = { authorKind: 'owner', authorUserId: userId, authorSessionId: null, authorToolCallId: null, changesetOpId: null };
+        const current = await tx.wikiEntryRevision.findFirstOrThrow({
+          where: { entryId: entry.id, ownerId, revision: entry.currentRevision },
+          select: { id: true },
+        });
+        await this.applyOp(tx, ownerId, entry.spaceId, {
+          op: 'amend',
+          entryId: entry.id,
+          draft: null,
+          changes: null,
+          payload: { changes: {} },
+          sources: await this.sourcesOfRevision(tx, ownerId, current.id),
+          tainted: false,
+          trustAfter: 'confirmed',
+        }, owner);
+        const answered = await tx.wikiChangesetOp.findMany({
+          where: {
+            ownerId,
+            appliedByMode: { not: null },
+            AND: [
+              { OR: [{ resultEntryId: entry.id }, { entryId: entry.id }] },
+              { OR: [{ decision: 'auto_applied' }, { decision: 'pending', spotCheck: true }] },
+            ],
+          },
+          select: { id: true, changesetId: true },
+        });
+        for (const op of answered) await this.writeOpDecision(tx, ownerId, op.id, { decision: 'accepted', decisionNote: null });
+        for (const changesetId of new Set(answered.map((op) => op.changesetId))) await this.settleChangeset(tx, ownerId, changesetId);
+        return entryView((await this.ownEntryById(tx, ownerId, entry.id))!);
+      },
+      loggedRetry(this.logger, 'wiki.confirmEntry'),
+    );
+    this.realtime?.publishWikiChanged(ownerId, String(view.spaceId));
+    return view;
+  }
+
+  /**
    * Send the space back to Manual when the spot checks say its review mode is not to be trusted
    * (contract `reviewModes.spotChecks.window` and `trip`), and say whether THIS call did it.
    *
@@ -1907,25 +1985,7 @@ export class WikiService {
         aliases: (draft.aliases ?? []) as string[],
       };
     }
-    // Resolved against the session that proposed the op, as a decide resolves them: `{session:'self'}`
-    // names THAT session's turn, whoever is reading.
-    const as: WikiPrincipal = { origin: 'agent', ownerId, userId: null, sessionId: row.changeset.sessionId, toolCallId: null };
-    const sources: WikiVerificationItem['sources'] = [];
-    for (const raw of rawOpSources(payload)) {
-      const cited = raw as { kind: WikiSourceKind; ref?: string; session?: 'self'; seq?: number; quote?: string };
-      const found = await this.sourceText(reader, as, cited);
-      const full = found?.text ?? null;
-      const redacted = full === null ? null : redactSecrets(full, { literals }).text;
-      const max = WIKI_REVIEW_RULES.verificationSourceMaxChars;
-      const chars = redacted === null ? [] : [...redacted];
-      sources.push({
-        kind: cited.kind,
-        ref: found?.ref ?? cited.ref ?? '',
-        quote: typeof cited.quote === 'string' ? cited.quote : null,
-        text: redacted === null ? null : chars.slice(0, max).join(''),
-        truncated: chars.length > max,
-      });
-    }
+    const { sources, evidence } = await this.verifierSources(reader, ownerId, row.changeset.sessionId, payload, literals);
     // The neighbours as recorded, each as it reads now: a duplicate may only name one still live.
     const recorded = (Array.isArray(row.similar) ? row.similar : []) as unknown as WikiSimilar[];
     const now = recorded.length === 0
@@ -1939,12 +1999,18 @@ export class WikiService {
       .filter((near) => byId.has(near.id))
       .map((near) => {
         const current = byId.get(near.id)!;
+        // A rejection's reason belongs to a neighbour that is still rejected: one whose verdict was
+        // reopened since (verification.reopen) is a counter-example no longer.
+        const { rejectedReason, rejectedBecause, ...rest } = near;
+        const stillRejected = current.status === 'rejected';
         return {
-          ...near,
+          ...rest,
           kind: current.kind as WikiEntryKind,
           title: current.title,
           status: current.status as WikiEntryStatus,
           trust: current.trust as WikiTrust,
+          ...(stillRejected && rejectedReason ? { rejectedReason } : {}),
+          ...(stillRejected && rejectedBecause ? { rejectedBecause } : {}),
         };
       });
     return {
@@ -1954,7 +2020,48 @@ export class WikiService {
       entryId: row.op === 'amend' ? row.entryId : null,
       entry,
       sources,
+      evidence,
       similar,
+    };
+  }
+
+  /**
+   * An op's sources as its verifier reads them (contract `reviewModes.verification.list` and
+   * `.evidence`): each record's text resolved against the session that proposed the op, as a decide
+   * resolves it — `{session:'self'}` names THAT session's turn, whoever is reading — then redacted and
+   * cut. And what that makes of the op's evidence: today, and as the reader of a verdict recorded
+   * before revision 4 had it, which handed a verifier the text of no event but a user's or an
+   * assistant's.
+   */
+  private async verifierSources(
+    reader: Tx,
+    ownerId: string,
+    sessionId: string | null,
+    payload: Record<string, unknown>,
+    literals: readonly string[],
+  ): Promise<{
+    sources: WikiVerificationItem['sources'];
+    evidence: WikiVerificationEvidence;
+    evidenceBeforeRevision4: WikiVerificationEvidence;
+  }> {
+    const as: WikiPrincipal = { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null };
+    const sources: WikiVerificationItem['sources'] = [];
+    const before: Array<string | null> = [];
+    for (const raw of rawOpSources(payload)) {
+      const cited = raw as { kind: WikiSourceKind; ref?: string; session?: 'self'; seq?: number; quote?: string };
+      const found = await this.sourceText(reader, as, cited);
+      sources.push({
+        kind: cited.kind,
+        ref: found?.ref ?? cited.ref ?? '',
+        quote: typeof cited.quote === 'string' ? cited.quote : null,
+        ...verifierText(found?.text ?? null, literals),
+      });
+      before.push(found ? readBeforeRevision4({ kind: cited.kind, eventType: found.eventType }, found.text) : null);
+    }
+    return {
+      sources,
+      evidence: evidenceOf(sources.map((source) => source.text)),
+      evidenceBeforeRevision4: evidenceOf(before),
     };
   }
 
@@ -2103,7 +2210,13 @@ export class WikiService {
       authorToolCallId: op.changeset.toolCallId,
       changesetOpId: op.id,
     };
-    const trust = wikiVerdictTrust(verdict.verdict);
+    // What the verifier could read decides how far its verdict reaches, and the server reads it here
+    // rather than taking the runner's word (contract `reviewModes.verification.evidence`): with no
+    // source readable, whatever it said leaves the op no more than unreviewed and is not counted; and a
+    // tainted op is never more than unreviewed, its duplicate adding nothing (`floors.taintedWaits`).
+    const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals);
+    const effect = wikiVerdictEffect({ verdict: verdict.verdict, tainted: op.tainted, evidence });
+    const trust = effect.trust;
     let status: 'applied' | 'rejected' | 'reinforced' | 'conflict';
     let decision: 'auto_applied' | 'pending' | 'rejected' | 'conflict';
     let decisionReason: WikiRejectReason | null = null;
@@ -2164,8 +2277,9 @@ export class WikiService {
       } else {
         status = 'reinforced';
         decisionReason = 'duplicate';
-        // What it cited is kept, on the entry it duplicates — unless the owner reviews every reinforce.
-        reinforced = settings.autoAcceptReinforce !== false;
+        // What it cited is kept, on the entry it duplicates — unless the owner reviews every reinforce,
+        // or a session that read the web cited it.
+        reinforced = effect.reinforce && settings.autoAcceptReinforce !== false;
         if (reinforced) {
           const lineage = op.op === 'add' && op.resultEntryId
             ? await tx.wikiEntryRevision.findFirst({ where: { entryId: op.resultEntryId, ownerId, revision: 1 }, select: { id: true } })
@@ -2194,13 +2308,16 @@ export class WikiService {
         verificationModel: model,
         verifiedAt: now,
         verificationDuplicateOf: duplicateOf,
+        verificationEvidence: evidence,
       },
     });
     if (recorded.count !== 1) {
       throw new VerdictRefusal(409, 'another verdict for this op landed at the same moment: read the list again');
     }
     await this.settleChangeset(tx, ownerId, op.changesetId);
-    const trip = verdict.verdict === 'unsupported' ? await this.tripIfUnsupported(tx, ownerId, spaceId) : null;
+    // Only a rejection the verifier could read its way to counts toward the fallback: an unsupported
+    // verdict about records it could not read rejected nothing.
+    const trip = status === 'rejected' && effect.counted ? await this.tripIfUnsupported(tx, ownerId, spaceId) : null;
     return {
       outcome: {
         opId: op.id,
@@ -2232,8 +2349,16 @@ export class WikiService {
     if (settings.reviewMode !== 'automatic') return null;
     const since = settings.reviewModeChangedAt ? new Date(settings.reviewModeChangedAt) : new Date(0);
     const window = WIKI_REVIEW_RULES.verificationWindow;
+    // A verdict given when none of its op's sources could be read is out of the window altogether
+    // (`verification.evidence`); one recorded before the server kept the mark is in it, as it was.
     const latest = await tx.wikiChangesetOp.findMany({
-      where: { ownerId, verificationVerdict: { not: null }, verifiedAt: { gte: since }, changeset: { spaceId } },
+      where: {
+        ownerId,
+        verificationVerdict: { not: null },
+        verifiedAt: { gte: since },
+        changeset: { spaceId },
+        OR: [{ verificationEvidence: null }, { verificationEvidence: 'readable' }],
+      },
       orderBy: [{ verifiedAt: 'desc' }, { id: 'desc' }],
       take: window,
       select: { verificationVerdict: true },
@@ -2407,6 +2532,222 @@ export class WikiService {
       throw error;
     }
     return tieredBasisOf('pitfall', { anchorState: 'verified' }, undefined, sources) !== null;
+  }
+
+  /**
+   * Send back to their verification the ops a verdict should not have decided, and the tainted ops an
+   * Automatic space verifies now (contract `reviewModes.verification.reopen`). The owner's door and
+   * the import's own call; never a session's.
+   *
+   * TWO KINDS OF OP, EACH IN A TRANSACTION OF ITS OWN:
+   *  - an add or an amend an unsupported verdict rejected while none of its sources could be read —
+   *    by the evidence mark recorded with the verdict, or, for a verdict recorded before the server
+   *    kept one, by the reader of that time, which handed a verifier no event's text but a user's or an
+   *    assistant's. It waits for its verification again with the earlier verdict kept in its
+   *    `verification_history`, and an add's lineage is proposed again, so the next similar[] no
+   *    longer offers it as a claim found not true;
+   *  - in a space that is automatic now, a tainted add or amend that waits for the owner and that
+   *    Automatic would verify today (`wikiReviewEffect`): it waits for its verification instead, and
+   *    leaves the review queue. An amend of what the owner wrote or confirmed keeps waiting for them.
+   *
+   * WHOSE: the owner reaches every op of the space; the import, the ops of its own changesets
+   * (`proposerScope`), which are the ones its verifier lists. Nothing a clock does: it runs when it is
+   * called, and a second call finds nothing left to move.
+   */
+  async reopenVerifications(
+    principal: WikiPrincipal,
+    spaceId: string,
+    actingSessionId: string | null = null,
+  ): Promise<WikiReopenResult> {
+    if (actingSessionId || (principal.origin !== 'owner' && principal.origin !== 'import')) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        'sending ops back to their verification is the account owner\'s, or the import\'s own, through a channel '
+          + 'with no acting session: report which ops should be verified again, and let a person reopen them.',
+      );
+    }
+    const ownerId = principal.ownerId;
+    const space = await this.requireSpace(ownerId, spaceId);
+    const scope = principal.origin === 'owner' ? {} : proposerScope(principal);
+    const literals = await this.envLiterals(this.prisma, ownerId);
+    const reader = this.prisma as unknown as Tx;
+    const result: WikiReopenResult = { spaceId: space.id, mode: space.settings.reviewMode, reopened: [], toVerification: [], skipped: [] };
+    const move = async (step: (tx: Tx) => Promise<string | null>): Promise<string | null> => {
+      try {
+        return await withTransactionRetry(this.prisma, step, loggedRetry(this.logger, 'wiki.reopenVerifications'));
+      } catch (error) {
+        if (error instanceof ConflictException) return 'it changed while this ran';
+        throw error;
+      }
+    };
+
+    for (let after: string | null = null; ;) {
+      const page: Array<{ id: string; payload: Prisma.JsonValue; verificationEvidence: string | null; changeset: { sessionId: string | null } }> =
+        await this.prisma.wikiChangesetOp.findMany({
+          where: {
+            ownerId,
+            op: { in: ['add', 'amend'] },
+            decision: 'rejected',
+            decisionReason: 'not_true',
+            verificationVerdict: 'unsupported',
+            OR: [{ verificationEvidence: null }, { verificationEvidence: 'unreadable' }],
+            ...(after ? { id: { gt: after } } : {}),
+            changeset: { spaceId: space.id, ...scope },
+          },
+          orderBy: { id: 'asc' },
+          take: 100,
+          select: { id: true, payload: true, verificationEvidence: true, changeset: { select: { sessionId: true } } },
+        });
+      if (page.length === 0) break;
+      after = page[page.length - 1].id;
+      for (const row of page) {
+        const unreadable = row.verificationEvidence === 'unreadable'
+          || (await this.verifierSources(reader, ownerId, row.changeset.sessionId, (row.payload ?? {}) as Record<string, unknown>, literals))
+            .evidenceBeforeRevision4 === 'unreadable';
+        if (!unreadable) continue;
+        const skipped = await move((tx) => this.reopenRejectedOp(tx, ownerId, space.id, row.id));
+        if (skipped === null) result.reopened.push(row.id);
+        else result.skipped.push({ opId: row.id, reason: skipped });
+      }
+    }
+
+    if (space.settings.reviewMode === 'automatic') {
+      for (let after: string | null = null; ;) {
+        const page: Array<{ id: string }> = await this.prisma.wikiChangesetOp.findMany({
+          where: {
+            ownerId,
+            op: { in: ['add', 'amend'] },
+            decision: 'pending',
+            tainted: true,
+            spotCheck: false,
+            ...(after ? { id: { gt: after } } : {}),
+            changeset: { spaceId: space.id, origin: { not: 'owner' }, ...scope },
+          },
+          orderBy: { id: 'asc' },
+          take: 100,
+          select: { id: true },
+        });
+        if (page.length === 0) break;
+        after = page[page.length - 1].id;
+        for (const row of page) {
+          const skipped = await move((tx) => this.verifyTaintedOp(tx, ownerId, space.id, row.id));
+          if (skipped === null) result.toVerification.push(row.id);
+          else result.skipped.push({ opId: row.id, reason: skipped });
+        }
+      }
+    }
+
+    if (result.reopened.length > 0 || result.toVerification.length > 0) this.realtime?.publishWikiChanged(ownerId, space.id);
+    const now = await this.requireSpace(ownerId, space.id);
+    return { ...result, mode: now.settings.reviewMode };
+  }
+
+  /**
+   * One rejected op back to `verifying` (`reviewModes.verification.reopen`): an add's lineage proposed
+   * again through `applyOp`, the op's verdict moved into its history by one UPDATE predicated on the
+   * rejection still standing, and its changeset open again — a verifying op keeps it pending, with the
+   * expiry every pending changeset carries (which a verifying op itself never reaches).
+   */
+  private async reopenRejectedOp(tx: Tx, ownerId: string, spaceId: string, opId: string): Promise<string | null> {
+    const standing = { id: opId, ownerId, decision: 'rejected', decisionReason: 'not_true', verificationVerdict: 'unsupported' };
+    const op = await tx.wikiChangesetOp.findFirst({
+      where: standing,
+      select: {
+        id: true,
+        op: true,
+        changesetId: true,
+        resultEntryId: true,
+        decision: true,
+        decisionReason: true,
+        decidedAt: true,
+        verificationVerdict: true,
+        verificationReason: true,
+        verificationModel: true,
+        verifiedAt: true,
+        verificationDuplicateOf: true,
+        verificationHistory: true,
+      },
+    });
+    if (!op) return 'it is no longer rejected as unsupported';
+    if (op.op === 'add' && op.resultEntryId) {
+      await this.applyOp(tx, ownerId, spaceId, {
+        op: 'reopen', entryId: op.resultEntryId, draft: null, changes: null, payload: {}, sources: [], tainted: false,
+      }, { authorKind: 'system', authorUserId: null, authorSessionId: null, authorToolCallId: null, changesetOpId: op.id });
+    }
+    const now = new Date();
+    const earlier: WikiOpVerificationHistory = {
+      verdict: op.verificationVerdict as WikiVerificationVerdict,
+      reason: op.verificationReason ?? '',
+      model: op.verificationModel ?? '',
+      at: (op.verifiedAt ?? now).toISOString(),
+      duplicateOf: op.verificationDuplicateOf,
+      // What made it reopenable: none of its sources could be read when this verdict was given.
+      evidence: 'unreadable',
+      decision: op.decision as WikiOpVerificationHistory['decision'],
+      decisionReason: op.decisionReason as WikiRejectReason | null,
+      decidedAt: op.decidedAt?.toISOString() ?? null,
+      reopenedAt: now.toISOString(),
+    };
+    const history = [...(Array.isArray(op.verificationHistory) ? op.verificationHistory : []), earlier];
+    const moved = await tx.wikiChangesetOp.updateMany({
+      where: standing,
+      data: {
+        decision: 'verifying',
+        decisionReason: null,
+        decisionNote: null,
+        decidedAt: null,
+        appliedByMode: null,
+        spotCheck: false,
+        verificationVerdict: null,
+        verificationReason: null,
+        verificationModel: null,
+        verifiedAt: null,
+        verificationDuplicateOf: null,
+        verificationEvidence: null,
+        verificationHistory: history as unknown as Prisma.InputJsonValue,
+      },
+    });
+    // Read and written in one transaction: a miss here is a concurrent write, and everything this
+    // attempt changed goes back with it.
+    if (moved.count !== 1) throw new ConflictException('the op changed while it was being reopened');
+    await tx.wikiChangeset.updateMany({
+      where: { id: op.changesetId, ownerId, status: 'settled' },
+      data: { status: 'pending', decidedAt: null, expiresAt: new Date(now.getTime() + WIKI_LIMITS.pendingExpiryDays * 86_400_000) },
+    });
+    return null;
+  }
+
+  /**
+   * One tainted op that waits for the owner in an automatic space, sent to its verification instead
+   * when Automatic would take it today (`wikiReviewEffect`, `floors.taintedWaits`); the reason it
+   * stays, otherwise.
+   */
+  private async verifyTaintedOp(tx: Tx, ownerId: string, spaceId: string, opId: string): Promise<string | null> {
+    const waiting = { id: opId, ownerId, decision: 'pending', tainted: true, spotCheck: false };
+    const op = await tx.wikiChangesetOp.findFirst({
+      where: waiting,
+      select: { id: true, op: true, entryId: true, changeset: { select: { origin: true } } },
+    });
+    if (!op) return 'it no longer waits for the owner';
+    const space = await tx.wikiSpace.findFirstOrThrow({ where: { id: spaceId, ownerId }, select: { settings: true } });
+    const settings = wikiSpaceSettings(space.settings);
+    const target = op.op === 'amend' && op.entryId ? await this.ownEntryById(tx, ownerId, op.entryId) : null;
+    const decided = wikiReviewEffect({
+      mode: settings.reviewMode,
+      origin: op.changeset.origin as WikiChangesetOrigin,
+      op: op.op as WikiOp,
+      tainted: true,
+      autoAcceptReinforce: settings.autoAcceptReinforce !== false,
+      target: target ? await this.reviewTarget(tx, ownerId, target) : null,
+      basis: null,
+    });
+    if (decided.effect !== 'verifying') {
+      return settings.reviewMode !== 'automatic'
+        ? `the space is ${settings.reviewMode} now, where a tainted op waits for the owner`
+        : 'it changes what the owner wrote or confirmed, or an entry no longer live: it waits for the owner';
+    }
+    const moved = await tx.wikiChangesetOp.updateMany({ where: waiting, data: { decision: 'verifying' } });
+    return moved.count === 1 ? null : 'it changed while this ran';
   }
 
   /** One op's answer: what the owner decided, and what it applied. True for a rejected spot check. */
@@ -3023,6 +3364,17 @@ export class WikiService {
         await this.recomputeFlags(tx, ownerId, instruction.entryId!);
         return { entryId: instruction.entryId!, revision: null };
       }
+      case 'reopen': {
+        // A lineage a verdict rejected without being able to read one of its sources goes back to
+        // proposed, to wait for the verdict that will decide it (`reviewModes.verification.reopen`).
+        // Only a rejected one moves: the predicate is the compare-and-set.
+        await tx.wikiEntry.updateMany({
+          where: { id: instruction.entryId!, ownerId, status: 'rejected' },
+          data: { status: 'proposed', trust: 'proposed', retiredAt: null, validTo: null },
+        });
+        await this.recomputeFlags(tx, ownerId, instruction.entryId!);
+        return { entryId: instruction.entryId!, revision: null };
+      }
       case 'anchor_check': {
         // What a re-verification found (contract `anchorRules.verify`): the anchors with their last
         // checks, the state they add up to, and the ref and time of the check — written only while the
@@ -3244,6 +3596,8 @@ export class WikiService {
   ): Promise<{
     ref: string;
     text: string | null;
+    /** A run event's type: what the reader of a verdict recorded before revision 4 could read of it. */
+    eventType?: string;
     locator?: Record<string, unknown>;
     tainted: boolean;
     ownerWords: boolean;
@@ -3295,7 +3649,10 @@ export class WikiService {
         if (!event) return null;
         return {
           ref: event.id,
-          text: eventText(event.type, event.payload),
+          // The one text of the record, for the quote check and the verifier alike (contract
+          // `reviewModes.verification.evidence`): a tool call's name and input, a result, a thinking.
+          text: runEventText(event.type, event.payload),
+          eventType: event.type,
           tainted: await this.sessionWasTainted(tx, event.sessionId),
           ownerWords: false,
           sessionId: event.sessionId,
@@ -3610,7 +3967,9 @@ export class WikiService {
    *
    * `spaceId` is the runner door's read boundary: a session reads a space's entries only when its
    * workspace is bound to that space (contract `readBoundary`), and an entry of another codebase is
-   * the same 404 as one that does not exist.
+   * the same 404 as one that does not exist. So is a live one that rests on a web-derived record and
+   * that no person has vouched for (`reviewModes.floors.taintedWaits`): the owner reads it, an agent
+   * does not.
    */
   async getEntry(
     ownerId: string,
@@ -3619,7 +3978,13 @@ export class WikiService {
     spaceId?: string,
   ): Promise<Record<string, unknown>> {
     const entry = await this.prisma.wikiEntry.findFirst({
-      where: { id: entryId, ownerId, ...(spaceId ? { spaceId } : {}) },
+      where: {
+        id: entryId,
+        ownerId,
+        ...(spaceId
+          ? { spaceId, OR: [{ tainted: false }, { trust: { in: [...WIKI_VOUCHED_TRUST] } }, { status: { not: 'active' } }] }
+          : {}),
+      },
       select: ENTRY_SELECT,
     });
     if (!entry) throw new NotFoundException('no such wiki entry');
@@ -4120,9 +4485,10 @@ function verdictInput(raw: unknown, index: number): VerdictInput {
 
 /** What a verdict recorded earlier did, for its replay. */
 function verdictStatus(verdict: WikiVerificationVerdict, decision: string): 'applied' | 'rejected' | 'reinforced' | 'conflict' {
-  if (verdict === 'unsupported') return 'rejected';
   if (verdict === 'duplicate') return 'reinforced';
-  return decision === 'conflict' ? 'conflict' : 'applied';
+  if (decision === 'conflict') return 'conflict';
+  // An unsupported verdict about records nobody could read applied its op as unreviewed.
+  return verdict === 'unsupported' && decision === 'rejected' ? 'rejected' : 'applied';
 }
 
 /** A text cut to at most `max` characters, counted the way the schema's CHECK counts them. */

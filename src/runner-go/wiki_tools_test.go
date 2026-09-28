@@ -1096,6 +1096,7 @@ func writtenFlagIsParsed(action, name string) bool {
 	case "verify":
 		fs.String("space", "", "")
 		fs.String("model", "", "")
+		fs.String("effort", "", "")
 		fs.Int("max", 0, "")
 	case "dossier":
 		fs.String("space", "", "")
