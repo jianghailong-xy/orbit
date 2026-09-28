@@ -1045,6 +1045,37 @@
         "maintainPrecondition": "Run this only as a Wiki maintenance run of the space, once, and let it finish: it proposes as the space's maintenance run, and it moves the cursor only when every step succeeded — a run that failed, was cut short or tripped the breaker moves nothing.",
         "checkPrecondition": "Judge a maintenance run only by what this reads: it passes when the space's cursor reached the position the task expects and the server refused none of the run's ops, and a run cannot pass it by saying it finished."
       }
+    },
+    "health": {
+      "phase": 2,
+      "doc": "docs/wiki-contract.md section 20; design section 8.2 (health)",
+      "criterion": 5,
+      "route": "GET /api/wiki/spaces/:id/health",
+      "who": "The space's owner on the user door, as every read of the space: another account's space is the plain 404, and an account the wiki is not on for is answered WIKI_DISABLED. It writes nothing — not even the cursor row, which a space that never ran has none of yet.",
+      "entries": "The space's active entries, every one of them: the status line's N entries. The entry list stops at limits of its own and is not a count.",
+      "maintenance": {
+        "enabled": "settings.maintenance.enabled.",
+        "look": "One of looks: what the status line draws.",
+        "lastOkAt": "When a run last succeeded (the cursor row's last_ok_at), or null.",
+        "lastRunAt": "When a run last reported how it ended, however it ended, or null.",
+        "consecutiveFailures": "Runs reported in a row that did not succeed; a succeeded run sets it back to 0 (maintenance.cursor.advance).",
+        "backlog": "The facts after the cursor (maintenance.cursor.backlog), counted from the facts as the read is made — the status line's N to catch up. Counted only while maintenance is on: a space that is off reads 0.",
+        "oldestPendingAt": "The oldest of those facts, or null; null too while maintenance is off.",
+        "lagSeconds": "How long ago that fact was, in whole seconds; 0 when there is none.",
+        "dailyLimitReached": "The space has made settings.maintenance.dailyRunLimit maintenance tasks since midnight UTC (wikiMaintenanceRunsToday), however they ended: no fact makes another today.",
+        "held": "maintenance.job.held as the cursor row keeps it: {reason, at}, or null.",
+        "running": "The run under way — its row has started and not ended, and its task is OPEN or IN_PROGRESS — as {sessionId, startedAt}, or null.",
+        "lastRun": "The run that ended last, as {sessionId, outcome, endedAt}, or null: what View run opens."
+      },
+      "looks": ["off", "failing", "running", "behind", "ok"],
+      "look": "The first that holds, in the order of looks: off — maintenance is off; failing — consecutiveFailures is more than 0; running — running is not null; behind — the oldest fact after the cursor is older than maintenance.rules.maxPendingAgeHours; ok — none of those (wikiMaintenanceLook).",
+      "notify": {
+        "afterFailures": 3,
+        "push": "PushService.notifyWikiMaintenanceFailing: one alert to the owner's devices, kind wiki-maintenance-failing, thread wiki-<space>, no badge — nothing is waiting for a reply.",
+        "once": "Sent by the one failure report whose increment made consecutive_failures exactly afterFailures. The increment is one UPDATE … RETURNING on the cursor row, so of reports racing only one reads that number back, and the streak's later failures read more. After the statement, outside any transaction, best-effort: the failure is recorded whether or not the phone rang.",
+        "reset": "A succeeded run sets consecutive_failures back to 0, so the next streak is told once more, at its own third failure."
+      },
+      "client": "The Wiki home's status line, on the web at every width and on iOS: after the entries, the review count (desktop only) and the anchors, the maintenance part in the space's look — the same words and the same parts on both, locked by src/shared/src/wiki-health.fixture.json."
     }
   },
 
@@ -1247,7 +1278,8 @@
           "GET /api/wiki/spaces/:id/articles",
           "GET /api/wiki/spaces/:id/articles/:slug",
           "GET /api/wiki/spaces/:id/articles/:slug/:part",
-          "GET /api/wiki/spaces/:id/article-index"
+          "GET /api/wiki/spaces/:id/article-index",
+          "GET /api/wiki/spaces/:id/health"
         ]
       },
       "runner": {

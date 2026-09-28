@@ -582,6 +582,47 @@ export class PushService {
     }
   }
 
+  /**
+   * Tell the owner a wiki space's maintenance run has failed `failures` times in a row (wiki contract
+   * `maintenance.health.notify`): nothing new reaches the wiki until a run succeeds.
+   *
+   * Once per streak, and that is the caller's to guarantee: only the failure report whose increment
+   * made the cursor's count exactly the threshold calls here. No badge — nothing is waiting for a
+   * reply. Best-effort like the others: the failure is recorded whether or not the phone rang.
+   */
+  async notifyWikiMaintenanceFailing(input: {
+    ownerId: string;
+    spaceId: string;
+    title: string;
+    failures: number;
+    lastError: string | null;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      if (tokens.length === 0) return;
+      const auth = this.authToken();
+      if (!auth) return;
+      const said = (input.lastError ?? '').split('\n', 1)[0]!.trim();
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: `Wiki maintenance failed ${input.failures} times`,
+            body: `${input.title}: nothing new reaches the wiki until a run succeeds.`
+              + (said ? ` Last error: ${said.length > 160 ? `${said.slice(0, 159)}…` : said}` : ''),
+          },
+          sound: 'default',
+          'thread-id': `wiki-${input.spaceId}`,
+        },
+        wikiSpaceID: input.spaceId,
+        kind: 'wiki-maintenance-failing',
+      });
+      await this.deliver(tokens, body, 'alert', '10', auth);
+    } catch (err) {
+      this.log.warn(`wiki maintenance notify failed: ${(err as Error).message}`);
+    }
+  }
+
   /** Session IDs that currently "need your reply" for this owner — the badge is this set's size.
    *  Mirrors the client's SessionGrouping.needsYou: an Open, non-ending RUNNING session with at
    *  least one PENDING approval, plus the coordinator conversations carrying one of the four owner
