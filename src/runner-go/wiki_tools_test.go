@@ -1031,8 +1031,12 @@ func TestWikiCLIFlagsBecomeTheToolArguments(t *testing.T) {
 // wikiCLIOnlyCapabilities are the wiki verbs no MCP tool stands beside: verify runs a model (contract
 // `agentSurface.verify.tool`), and dossier, cursor advance and anchors verify are a Wiki maintenance
 // run's and no other session's (`maintenance.cli.tool`, `anchorRules.verify.tool`), and so are the
-// articles (`articles.cli.tool`).
-var wikiCLIOnlyCapabilities = map[string]bool{"wiki_verify": true, "wiki_dossier": true, "wiki_cursor_advance": true, "wiki_anchors_verify": true, "wiki_articles": true}
+// articles (`articles.cli.tool`), and the maintenance job's run and check (`maintenance.job.cli.tool`).
+var wikiCLIOnlyCapabilities = map[string]bool{"wiki_verify": true, "wiki_dossier": true, "wiki_cursor_advance": true, "wiki_anchors_verify": true, "wiki_articles": true, "wiki_maintain": true, "wiki_check": true}
+
+// wikiHeadlessCapabilities are the wiki verbs a terminal outside a session may run: the maintenance task's
+// check, which is its acceptance command, and that runs in a shell with no session.
+var wikiHeadlessCapabilities = map[string]bool{"wiki_check": true}
 
 // The commands an agent is told about are the commands that exist, and the flags in the capability
 // document are the flags the parsers take. cli_mcp_parity_test.go and
@@ -1051,8 +1055,11 @@ func TestWikiCapabilitiesDescribeTheFlagsTheParserTakes(t *testing.T) {
 		if spec.Argv[0] != "orbit" || spec.Argv[1] != "wiki" {
 			t.Errorf("capability %s is %v, want `orbit wiki <verb>`", spec.Tool, spec.Argv)
 		}
-		if !spec.SessionOnly {
+		if !spec.SessionOnly && !wikiHeadlessCapabilities[spec.Tool] {
 			t.Errorf("capability %s is advertised to a terminal outside a session, where it can only fail", spec.Tool)
+		}
+		if spec.SessionOnly && wikiHeadlessCapabilities[spec.Tool] {
+			t.Errorf("capability %s runs where there is no session, and is listed only inside one", spec.Tool)
 		}
 		// The help is the family's word for the verb (`cursor`); the parser is the whole command
 		// (`cursor advance`), since a verb with sub-commands parses each of them on its own.
@@ -1116,6 +1123,13 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("space", "", "")
 		fs.String("topic", "", "")
 		fs.String("model", "", "")
+	case "maintain":
+		fs.String("space", "", "")
+		fs.String("model", "", "")
+		fs.Int("concurrency", 0, "")
+	case "check":
+		fs.String("space", "", "")
+		fs.String("expect-cursor", "", "")
 	default:
 		return false
 	}
@@ -1141,7 +1155,7 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 		t.Errorf("the citation is not the link shape the clients draw: %q", instructions)
 	}
 	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
-	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles"} {
+	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "maintain", "check"} {
 		if !strings.Contains(rules, "Bash("+exe+" wiki "+action+" *)") {
 			t.Errorf("orbit wiki %s is advertised and pre-approved for nobody: %q", action, rules)
 		}

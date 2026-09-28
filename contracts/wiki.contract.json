@@ -850,6 +850,7 @@
       "route": "GET /api/runner/wiki/spaces/:id/dossiers",
       "query": {
         "after": "optional: a cursor token; the page starts after the later of it and the watermark",
+        "until": "optional: a cursor token the page does not go past — the position a maintenance task expects its run to reach (maintenance.job.task.expect)",
         "limit": "optional: sessions a page carries, 1 to rules.pageSessionsMax, default rules.pageSessionsDefault"
       },
       "who": "Maintenance sessions of the space, and no other: a headless call is refused 400, any other session of the owner WIKI_NOT_MAINTENANCE_SESSION, another owner's space a plain 404.",
@@ -875,7 +876,7 @@
     },
     "cursor": {
       "table": "wiki_cursor",
-      "row": "One per space (source 'facts'): the watermark, the furthest position a page handed out, the backlog as last counted with its oldest fact and the lag, and the health — last_ok_at, last_run_at, last_outcome, consecutive_failures, last_error.",
+      "row": "One per space (source 'facts'): the watermark, the furthest position a page handed out, the backlog as last counted with its oldest fact and the lag, and the health — last_ok_at, last_run_at, last_outcome, consecutive_failures, last_error — and, since 0320, held_reason and held_at: why the last fact that found the space due made no task (maintenance.job.held).",
       "factKinds": {
         "session_settled": "A session of the space (maintenance.cursor.scope) at rest (awaiting input, succeeded, failed, cancelled or interrupted), at its last_turn_at: once per session, and again each time it comes to rest later.",
         "task_terminal": "A task of the space (assigned to one of its workspaces, or with a session in one) that is DONE, CANCELLED or FAILED, at its updated_at.",
@@ -900,7 +901,7 @@
           "A move is one compare-and-set on the watermark, so of two runs the later position wins and the earlier is refused behind."
         ]
       },
-      "due": "A maintenance task is due when the backlog reaches rules.backlogThreshold, or when a new fact arrives while the oldest fact after the watermark is older than rules.maxPendingAgeHours (criterion 3). No clock starts one."
+      "due": "A maintenance task is due when rules.backlogThreshold sessions have a fact after the watermark (design section 8.2: twenty sessions, not twenty facts), or when a new fact arrives while the oldest fact after the watermark is older than rules.maxPendingAgeHours (criterion 3, maintenance.job.trigger). No clock starts one."
     },
     "run": {
       "doc": "docs/wiki-contract.md section 16.5; design section 8.2 cost guardrails",
@@ -931,6 +932,100 @@
       "tool": "none: maintenance verbs are CLI only, for a maintenance session, and have no MCP tool beside them.",
       "dossierPrecondition": "Read dossiers only as a Wiki maintenance run of the space, and cite the records their lines name, never the dossier itself: a dossier is sessions compressed, redacted and cut to a budget, not a record.",
       "cursorPrecondition": "Advance the cursor only when the run succeeded and every dossier up to the token was processed: a run that failed or was cut short reports that outcome instead, and moves nothing."
+    },
+    "job": {
+      "phase": 2,
+      "doc": "docs/wiki-contract.md section 19; design section 8.2",
+      "migration": "src/apiserver/prisma/migrations/0320_wiki_maintenance_run/migration.sql",
+      "tables": [
+        "wiki_maintenance_run"
+      ],
+      "rules": {
+        "runSessionsMax": 20,
+        "entriesPerSessionMax": 6,
+        "extractConcurrency": 4,
+        "checkTimeoutSeconds": 300
+      },
+      "trigger": {
+        "who": "The server (WikiMaintenanceTrigger), for every space of the owner whose maintenance is on, when an event this replica published names a committed fact of the space that is still after the cursor: a session of the space at rest, an approval it answered, a merge receipt of it (all through the session's own events), or a settled task of the space (task.changed). A merge receipt or a criterion revision that publishes nothing of its own is counted in the backlog and taken in with the next fact that arrives.",
+        "due": [
+          "backlog",
+          "age"
+        ],
+        "conditions": "Due when rules.backlogThreshold sessions have a fact after the cursor, or when the oldest fact after it is older than rules.maxPendingAgeHours as the new fact arrives. No clock starts a task: a space that turns due in silence makes its task with its next fact.",
+        "notMade": [
+          "maintenance is off, or names no workspace or list",
+          "a task of the maintenance list has not ended (OPEN or IN_PROGRESS)",
+          "the event names no fact of the space after the cursor: a rename, the maintenance run's own events, another space's work",
+          "the space is not due",
+          "no fact past the settle grace is left to cover",
+          "held: the day's runs are used up, or a Manual space's review queue has no room"
+        ],
+        "lock": "The task is made under a lock on the maintenance list's row, after the list's unended tasks and the day's count are read again under it, so two facts arriving together make one task."
+      },
+      "held": {
+        "reasons": [
+          "daily_limit_reached",
+          "review_queue_full"
+        ],
+        "where": "wiki_cursor.held_reason and held_at, served as the cursor state's held: {reason, at}, or null. Written when a due space makes no task for one of the reasons, keeping the time the reason first held; cleared when a task is made.",
+        "daily_limit_reached": "The space has made settings.maintenance.dailyRunLimit maintenance tasks since midnight UTC (wikiMaintenanceRunsToday), however they ended.",
+        "review_queue_full": "A Manual space, where every proposal waits for the owner, whose review queue has no room for one session's proposals."
+      },
+      "runSize": "How many sessions a run covers (wikiMaintenanceRunSessions), so that what it can propose fits its guardrails at rules.entriesPerSessionMax entries a session: in Manual, what one session may leave waiting (limits.opsPerSession) and what the review queue has room for; in Tiered and Automatic, reviewModes.rules.breakerMaxChangedPercent of the active entries when the space holds reviewModes.rules.breakerMinActiveEntries or more, and rules.runSessionsMax otherwise. Never more than rules.runSessionsMax.",
+      "task": {
+        "list": "the space's hidden Wiki maintenance list (maintenance.list)",
+        "title": "Wiki maintenance: <space title>",
+        "assignee": "settings.maintenance.workspaceId",
+        "provider": "settings.maintenance.provider, pinned: the session is claimed as maintenance.run says",
+        "runAt": "the moment it is made: the dispatcher's next scan starts it",
+        "creator": "USER, the space's owner",
+        "description": "the run's instructions: run `orbit wiki maintain --space <id>` once, and report what it printed",
+        "completionCriterion": "EXECUTABLE",
+        "acceptanceCommand": "orbit wiki check --space <id> --expect-cursor <token>",
+        "acceptanceExpectedExitCode": 0,
+        "acceptanceTimeoutSeconds": "rules.checkTimeoutSeconds",
+        "expect": "The position a dossier page from the cursor would end at after the next runSize sessions, over the facts past the settle grace: the run pages from the same cursor up to it (the dossier route's until) and so reaches exactly it."
+      },
+      "run": {
+        "steps": [
+          "context: GET …/maintenance/run — the space and its repository, the maintenance workspace's work directory, the topics, the guardrails' numbers and the position the task expects",
+          "checkout: the maintenance workspace's work directory, ~ expanded to the runner account's home, fetched; a checkout that is not the space's repository (its origin URL, its root commit) fails the run",
+          "dossiers: pages from the cursor up to the expected position (until); a dossier unchanged since it was processed is skipped",
+          "extract: one clean Claude Code call to the local model per dossier (the demo's A2+6: an 8k dossier, no thinking, at most rules.entriesPerSessionMax entries), told the space's repository and to answer {\"offTopic\": true} for a session about something else; each entry checked as the demo's extract.py checked it — kind, fields, each source a line of the dossier with its quote copied from that line, anchors that exist on origin/main — and the rejected ones asked for once more",
+          "self-check: the entries as adds, grouped by topic into batches of at most limits.opsPerChangeset ops (limits.opsPerTurn in Manual), each proposed with dryRun; a quote the server does not find is dropped from its source and the op checked again, an op still refused is dropped, and one the review queue holds back is not proposed",
+          "breaker: when the space holds breakerMinActiveEntries active entries or more, the ops the mode would apply across every batch may change at most breakerMaxChangedPercent of them; more trips the breaker before anything is recorded",
+          "propose: each batch through POST …/maintenance/changesets, origin maintenance; an op the server refuses now fails the run",
+          "verify: in an Automatic space, orbit wiki verify's verification of the run's own ops, and one more pass for those left without a verdict",
+          "anchors: orbit wiki anchors verify with --repo the checkout",
+          "articles: orbit wiki articles, which rewrites only the topics whose entry set changed",
+          "finish: POST …/maintenance/finish with the last page's token, outcome succeeded and the report"
+        ],
+        "failure": "A step that fails, a run cut short, or a breaker that trips ends the run with outcome failed through the same finish route (truncated, through the cursor route, when the turn limit cut it): the cursor does not move, the space's consecutive failures go up by one, and the report says where it stopped.",
+        "tokens": "The report's tokens are every model call the run made — extraction, verification and articles — as Claude Code reported them."
+      },
+      "offTopic": "A session in the space's workspaces that is not about the space's repository yields no entry: the extraction prompt names the repository and what it is, and asks for {\"offTopic\": true} for such a session; and an entry whose code anchors none exist in the repository is dropped. Both are counted in the report (offTopic, entries.foreign).",
+      "breaker": "The circuit breaker over a run (wiki-maintenance-breaker.ts): a maintenance run's changeset counts reviewModes.floors.circuitBreaker over the whole run — every entry its earlier changesets changed through the mode is spent, and the active entries are counted as they stood when the run began — and its refusal says the run stops and moves no cursor.",
+      "report": "What a run reports when it ends (WikiMaintenanceReport): sessions, dossiers, unchanged, offTopic, entries {extracted, kept, dropped, foreign, principles}, ops {proposed, recorded, refused, selfCheckDropped, heldBack, applied, waiting}, verification, anchors, articles, tokens {input, output, calls}, seconds, and stoppedAt when it did not succeed. At most 16,000 bytes of JSON, kept on the run's row with ops.refused as a column of its own.",
+      "check": {
+        "route": "GET /api/runner/wiki/spaces/:id/maintenance/check",
+        "who": "The space's owner's runner with no session — a task's acceptance command runs with none — or a maintenance run of the space; any other session WIKI_NOT_MAINTENANCE_SESSION, another owner's space a 404. It reads and writes nothing.",
+        "passes": "The cursor at or past the expected position, and the latest run whose task expects that position ended succeeded with ops.refused 0.",
+        "exit": "0 when it passes; 1 otherwise, with each reason a sentence: the cursor before the position, no run expecting it, a run that did not say how it ended or did not succeed, a run that said nothing of its ops, or ops the server refused."
+      },
+      "routes": {
+        "context": "GET /api/runner/wiki/spaces/:id/maintenance/run",
+        "propose": "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
+        "finish": "POST /api/runner/wiki/spaces/:id/maintenance/finish",
+        "check": "GET /api/runner/wiki/spaces/:id/maintenance/check"
+      },
+      "cli": {
+        "maintain": "orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]",
+        "check": "orbit wiki check --space <id> --expect-cursor <token> [--json]",
+        "tool": "none: both are CLI only. maintain is a maintenance run's alone, and check is its task's acceptance command, which runs where there is no session.",
+        "maintainPrecondition": "Run this only as a Wiki maintenance run of the space, once, and let it finish: it proposes as the space's maintenance run, and it moves the cursor only when every step succeeded — a run that failed, was cut short or tripped the breaker moves nothing.",
+        "checkPrecondition": "Judge a maintenance run only by what this reads: it passes when the space's cursor reached the position the task expects and the server refused none of the run's ops, and a run cannot pass it by saying it finished."
+      }
     }
   },
 
@@ -1150,9 +1245,13 @@
           "POST /api/runner/wiki/spaces/:id/cursor",
           "POST /api/runner/wiki/spaces/:id/article-plan",
           "GET /api/runner/wiki/spaces/:id/articles/:slug/input",
-          "POST /api/runner/wiki/spaces/:id/articles/:slug"
+          "POST /api/runner/wiki/spaces/:id/articles/:slug",
+          "GET /api/runner/wiki/spaces/:id/maintenance/run",
+          "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
+          "POST /api/runner/wiki/spaces/:id/maintenance/finish",
+          "GET /api/runner/wiki/spaces/:id/maintenance/check"
         ],
-        "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION",
+        "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION. The maintenance job's check (maintenance.job.check) also answers the space's owner's runner with no session, since a task's acceptance command runs with none.",
         "verificationRoutes": [
           "GET /api/runner/wiki/spaces/:id/verifications",
           "POST /api/runner/wiki/spaces/:id/verifications"

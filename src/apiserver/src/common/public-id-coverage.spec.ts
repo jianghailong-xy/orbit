@@ -43,6 +43,7 @@ import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
 import { RunnerWikiAnchorsController } from '../runner-api/runner-wiki-anchors.controller';
 import { RunnerWikiArticlesController } from '../runner-api/runner-wiki-articles.controller';
+import { RunnerWikiMaintainController } from '../runner-api/runner-wiki-maintain.controller';
 import { WikiController } from '../wiki/wiki.controller';
 import { WikiArticlesController } from '../wiki/wiki-articles.controller';
 
@@ -116,6 +117,9 @@ const CONTROLLERS = [
   // The articles (migration 0317, contract `articles`): the owner's reads and a maintenance run's writes.
   WikiArticlesController,
   RunnerWikiArticlesController,
+  // The maintenance job's routes (migration 0320, contract `maintenance.job`): a run's start, its
+  // proposals, its end, and its task's check.
+  RunnerWikiMaintainController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed
