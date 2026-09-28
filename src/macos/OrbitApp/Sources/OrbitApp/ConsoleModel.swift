@@ -1102,7 +1102,7 @@ final class ConsoleModel {
             provider,
             in: SessionProviderChoices.choices(configured: configuredProviders,
                                                catalog: modelCatalog, engines: runnerEngines,
-                                               pools: providerPools),
+                                               pools: allPools),
             configured: configuredProviders,
             catalog: modelCatalog)
     }
