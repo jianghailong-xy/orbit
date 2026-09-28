@@ -234,7 +234,11 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// and the agent most likely to learn something worth recording is the plain single-session
 		// one. The commands themselves need ORBIT_SESSION_ID, which a session has.
 		// verify is the session's own proposals checked by its own provider's model: no more of a power.
-		for _, action := range []string{"search", "get", "propose", "verify"} {
+		// dossier and cursor advance are a Wiki maintenance run's, and the server refuses them to every
+		// other session (WIKI_NOT_MAINTENANCE_SESSION), so the rule lets through nothing the door does
+		// not check. The cursor is named with its one command, `advance`, as the capability's argv is:
+		// a cursor command added later is a decision made here, not one it inherits.
+		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// import proposes, into a space its owner named, what the session's own provider's model read in

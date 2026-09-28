@@ -4,6 +4,7 @@ import {
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_KINDS,
   WIKI_PUSHABLE_TRUST,
+  WIKI_VOUCHED_TRUST,
   uuidToBase62,
   type WikiAnchorState,
   type WikiEntryKind,
@@ -28,7 +29,8 @@ import { currentWikiRollout, wikiOnFor, type WikiRollout } from './wiki-rollout'
  * `tasks/task-start-card.ts` compares byte for byte with the turn it was built from.
  *
  * WHAT REACHES A SESSION, AND WHO. Only this space's `active` entries that are confirmed by the
- * owner (`trust`), that no web-derived source has touched, that carry no open challenge, that
+ * owner (`trust`), that no web-derived source has touched unless a person has since vouched for
+ * them (trust owner or confirmed), that carry no open challenge, that
  * still have a first-hand source, and whose anchors have not moved out from under them. The
  * session must be bound to the space — a workspace with no binding reads nothing (§10.1) — and
  * the space must not have turned the push off. And a session that VERIFIES, FOREMS or JUDGES work
@@ -192,7 +194,8 @@ export async function appendWikiContext(
       kind: { in: [...PUSHABLE_KINDS] },
       status: 'active',
       trust: { in: [...WIKI_PUSHABLE_TRUST] },
-      tainted: false,
+      // What rests on the web goes out only once a person has vouched for it (reviewModes.floors).
+      OR: [{ tainted: false }, { trust: { in: [...WIKI_VOUCHED_TRUST] } }],
       challenged: false,
       unsupported: false,
       anchorState: { notIn: [...OUT_OF_PUSH_ANCHORS] },

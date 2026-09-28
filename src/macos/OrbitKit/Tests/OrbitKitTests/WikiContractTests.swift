@@ -81,10 +81,11 @@ final class WikiContractTests: XCTestCase {
                        known(WikiTrust.self))
         XCTAssertEqual(Set(try object(c["anchorStates"], "anchorStates").keys), Set(known(WikiAnchorState.self)))
         XCTAssertEqual(Set(try object(c["anchorTypes"], "anchorTypes").keys), Set(known(WikiAnchorType.self)))
-        // `isEnded` is the contract's terminal set: what agents are no longer handed.
-        let terminal = Set(try strings(entry["terminal"], "states.entry.terminal"))
+        // `isEnded` is the contract's ended set: what agents are no longer handed. A rejected lineage is
+        // ended without being terminal — a reopened verdict proposes it again (revision 4).
+        let ended = Set(try strings(entry["ended"], "states.entry.ended"))
         for status in WikiEntryStatus.allCases where status != .unknown {
-            XCTAssertEqual(WikiEntry(id: "e", status: status).isEnded, terminal.contains(status.rawValue),
+            XCTAssertEqual(WikiEntry(id: "e", status: status).isEnded, ended.contains(status.rawValue),
                            status.rawValue)
         }
     }
@@ -173,6 +174,31 @@ final class WikiContractTests: XCTestCase {
         XCTAssertEqual(op.verification?.verdict, .duplicate)
         XCTAssertEqual(op.verification?.model, "qwen3.8-27b-fp8")
         XCTAssertEqual(op.verification?.duplicateOf, "34VrJeVspTnzi2Ye6i8bz")
+        XCTAssertNil(op.verification?.evidence, "a verdict recorded before the server kept the mark")
+    }
+
+    /// Revision 4: a verdict says what its verifier could read, in the contract's two words, and the
+    /// owner's Confirm and the reopening are routes of the owner's door.
+    func testTheEvidenceMarkAndTheOwnersNewRoutesAreTheContracts() throws {
+        let c = try contract()
+        let modes = try object(c["reviewModes"], "reviewModes")
+        let verification = try object(modes["verification"], "reviewModes.verification")
+        let evidence = try object(verification["evidence"], "reviewModes.verification.evidence")
+        XCTAssertEqual(try strings(evidence["values"], "reviewModes.verification.evidence.values"),
+                       known(WikiVerificationEvidence.self))
+        let capped = #"{"id":"op","decision":"auto_applied","verification":{"verdict":"unsupported","reason":"No record could be read.","model":"qwen3.8-27b-fp8","at":"2026-09-28T01:00:00.000Z","duplicateOf":null,"evidence":"unreadable"}}"#
+        let op = try JSONDecoder().decode(WikiChangesetOp.self, from: Data(capped.utf8))
+        XCTAssertEqual(op.verification?.evidence, .unreadable)
+        let later = #"{"verdict":"supported","evidence":"partly"}"#
+        XCTAssertEqual(try JSONDecoder().decode(WikiOpVerification.self, from: Data(later.utf8)).evidence, .unknown)
+        let user = try object(try object(try object(c["agentSurface"], "agentSurface")["doors"], "agentSurface.doors")["user"],
+                              "agentSurface.doors.user")
+        let routes = Set(try strings(user["routes"], "agentSurface.doors.user.routes"))
+        let confirm = try XCTUnwrap(try object(modes["entryConfirm"], "reviewModes.entryConfirm")["route"] as? String)
+        XCTAssertEqual(confirm, "POST /api/wiki/entries/:id/confirm")
+        XCTAssertTrue(routes.contains(confirm))
+        let reopen = try XCTUnwrap(try object(verification["reopen"], "reviewModes.verification.reopen")["route"] as? String)
+        XCTAssertTrue(routes.contains(reopen))
     }
 
     /// What an anchor is written with is exactly what the contract's anchor types name, and `type`.
@@ -209,5 +235,22 @@ final class WikiContractTests: XCTestCase {
                       "GET /api/wiki/search"] {
             XCTAssertTrue(routes.contains(route), "\(route) is not a route the user door declares: \(routes.sorted())")
         }
+    }
+
+    // MARK: maintenance
+
+    /// A space's maintenance settings carry exactly the contract's keys, read the contract's own
+    /// default as `.default` — off — and decode to it when the server sends none of them.
+    func testMaintenanceSettingsAreTheContracts() throws {
+        let settings = try object(try object(contract()["space"], "space")["settings"], "space.settings")
+        let maintenance = try object(settings["maintenance"], "space.settings.maintenance")
+        let defaults = try object(maintenance["default"], "space.settings.maintenance.default")
+        XCTAssertEqual(Set(defaults.keys), Set(WikiMaintenanceSettings.CodingKeys.allCases.map(\.rawValue)))
+        let data = try JSONSerialization.data(withJSONObject: defaults)
+        XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: data), .default)
+        XCTAssertFalse(WikiMaintenanceSettings.default.enabled, "maintenance is off until the owner turns it on")
+        XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: Data("{}".utf8)), .default)
+        let older = try JSONDecoder().decode(WikiSpaceSettings.self, from: Data(#"{"push":true}"#.utf8))
+        XCTAssertNil(older.maintenance, "a server that predates maintenance sends none, and nothing fails to decode")
     }
 }

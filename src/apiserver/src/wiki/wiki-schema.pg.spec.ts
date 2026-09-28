@@ -583,6 +583,18 @@ test('0307 · the Orbit Wiki data model', { skip, concurrency: 1, timeout: 300_0
       'wiki_changeset_op_verification_duplicate_chk', 'a supported op naming a duplicate');
     await refuses(op({ verification_duplicate_of: ENTRY }),
       'wiki_changeset_op_verification_duplicate_chk', 'a duplicate named with no verdict at all');
+    // 0314: what the verifier could read is one of two words, and only ever beside a verdict; the
+    // earlier verdicts of a reopened op are a list, empty for every other op.
+    for (const evidence of ['readable', 'unreadable']) {
+      await admits(client, () => op({ decision: 'auto_applied', decided_at: new Date(), applied_by_mode: 'automatic', ...trail, verification_evidence: evidence })());
+    }
+    await refuses(op({ decision: 'auto_applied', decided_at: new Date(), ...trail, verification_evidence: 'partly' }),
+      'wiki_changeset_op_verification_evidence_chk', 'a mark that is neither of the two');
+    await refuses(op({ decision: 'verifying', verification_evidence: 'unreadable' }),
+      'wiki_changeset_op_verification_evidence_chk', 'what a verifier could read, with no verdict beside it');
+    await refuses(op({ verification_history: JSON.stringify({ verdict: 'unsupported' }) }),
+      'wiki_changeset_op_verification_history_chk', 'earlier verdicts that are not a list');
+    await admits(client, () => op({ decision: 'verifying', verification_history: JSON.stringify([{ verdict: 'unsupported', reopenedAt: '2026-09-28T00:00:00.000Z' }]) })());
     await insert(client, 'wiki_changeset_op', opRow());
     await refuses(op({}), 'wiki_changeset_op_changeset_seq_key', 'two ops at one place in one changeset');
   });
