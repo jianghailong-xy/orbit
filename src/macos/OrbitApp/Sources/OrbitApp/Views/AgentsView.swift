@@ -637,37 +637,41 @@ struct AgentPanes: View {
 
     /// One options menu serves both iOS shells. Compact includes lifecycle scope exactly as before;
     /// regular iPad omits that duplicate but retains tag filtering/grouping and Workspace settings.
+    /// Every row has an icon and every choice is a Toggle, so the system draws each tick in its own
+    /// column and all titles start on one edge. A checkmark drawn as a row's icon breaks that: iOS 27
+    /// starts a row without an icon at the margin, even beside rows that have one.
     private func sessionOptionsMenu(includesScope: Bool) -> some View {
         Menu {
             if includesScope {
                 ForEach(SessionView.pickerCases) { v in
-                    Button { view = v } label: {
-                        if v == view { Label(v.title, systemImage: "checkmark") }
-                        else { Text(v.title) }
+                    Toggle(isOn: Binding(get: { view == v }, set: { if $0 { view = v } })) {
+                        Label(v.title, systemImage: scopeIcon(v))
                     }
                 }
             }
             if !app.sessionTags.isEmpty {
                 if includesScope { Divider() }
-                // Filter by tag stays in a submenu instead of adding a persistent chip row. A
-                // checkmark marks the active tag; choosing it again or choosing All clears it.
+                // Filter by tag stays in a submenu instead of adding a persistent chip row. A tick
+                // marks the active tag, which the row names underneath; choosing it again or
+                // choosing All clears it.
                 Menu {
-                    Button { tagFilter = nil } label: {
-                        if tagFilter == nil { Label("All", systemImage: "checkmark") }
-                        else { Text("All") }
+                    Toggle(isOn: Binding(get: { tagFilter == nil }, set: { if $0 { tagFilter = nil } })) {
+                        Text("All")
                     }
                     ForEach(app.sessionTags) { tag in
-                        Button { tagFilter = (tagFilter == tag.id ? nil : tag.id) } label: {
-                            if tagFilter == tag.id { Label(tag.name, systemImage: "checkmark") }
-                            else { Text(tag.name) }
+                        Toggle(isOn: Binding(get: { tagFilter == tag.id },
+                                             set: { tagFilter = $0 ? tag.id : nil })) {
+                            Text(tag.name)
                         }
                     }
                 } label: {
                     Label("Filter by Tag", systemImage: "tag")
+                    if let active = app.sessionTags.first(where: { $0.id == tagFilter }) {
+                        Text(active.name)
+                    }
                 }
-                Button { groupByTag.toggle() } label: {
-                    if groupByTag { Label("Group by Tag", systemImage: "checkmark") }
-                    else { Text("Group by Tag") }
+                Toggle(isOn: $groupByTag) {
+                    Label("Group by Tag", systemImage: "rectangle.3.group")
                 }
             }
             if includesScope || !app.sessionTags.isEmpty { Divider() }
@@ -683,6 +687,15 @@ struct AgentPanes: View {
         .accessibilityLabel(Text(includesScope
                                  ? "Session scope, \(view.title)"
                                  : "Session filters and workspace settings"))
+    }
+
+    /// Each place's glyph as the rows' own actions draw it: Move to Open's tray, Complete, Delete.
+    private func scopeIcon(_ v: SessionView) -> String {
+        switch v {
+        case .open:      return "tray"
+        case .completed: return "checkmark.circle"
+        case .trash:     return "trash"
+        }
     }
     #endif
 
