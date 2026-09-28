@@ -19,7 +19,9 @@ public struct PoolStatus: Equatable, Sendable {
 /// A shared pool's page on iOS — Settings → Providers → a shared pool — in the web page's five blocks
 /// and words: what the pool is and "Add a key", its keys, its people, its two rules, and deleting or
 /// leaving it. Every sentence here is the web's (`SharedPoolCopyParityTests` reads them back out of the
-/// web source); what the page makes of the pool's numbers is worked out here, where it is tested.
+/// web source); what the page makes of the pool's numbers is worked out here the way web's
+/// `lib/sharedPools.ts` works it out, and is tested. Which key is next, which one a session is running
+/// on and who may do what are the server's answers, so nothing here re-derives them.
 public enum SharedPoolPage {
     // MARK: head
 
@@ -30,7 +32,7 @@ public enum SharedPoolPage {
 
     /// "4 members · 2 of 5 keys available".
     public static func subtitle(_ pool: SharedPool) -> String {
-        "\(members(pool.people.count)) · \(availableCount(pool)) of \(keys(pool.keys.count)) available"
+        "\(plural(pool.people.count, "member")) · \(availableCount(pool)) of \(plural(pool.keys.count, "key")) available"
     }
 
     // MARK: keys
@@ -42,37 +44,47 @@ public enum SharedPoolPage {
     public static let you = "you"
     public static let nextChip = "NEXT"
     public static let replaceKey = "Replace key"
-    public static let removeKey = "Remove"
-    public static let removeFromPool = "Remove from this pool"
     public static let disableKey = "Disable"
     public static let enableKey = "Enable"
+    public static let remove = "Remove"
+    /// What removing a key does, asked before it is done.
+    public static let removeKeyNote = "It is deleted from the Orbit server, and no session runs on it again."
 
-    /// The Keys header's trailing words: the key a session starting now runs on.
-    public static func nextLine(_ key: SharedPoolKey) -> String { "Next: \(key.label)" }
+    public static func removeKeyTitle(_ key: SharedPoolKey) -> String { "Remove \(key.label)?" }
+    public static func removedKey(_ key: SharedPoolKey) -> String { "\(key.label) is out of the pool" }
 
     /// "Wikova · sk-…AB12": whose key it is, and all anyone is shown of it.
     public static func keyLine(_ key: SharedPoolKey) -> String {
         "\(key.contributor.name) · \(key.fingerprint)"
     }
 
-    /// A key's status tag, in the order the claim reads a key: switched off or refused by OpenAI, it
-    /// cannot run at all; spent to its cap, the others cannot run on it until the month turns.
-    public static func status(_ key: SharedPoolKey, in pool: SharedPool, now: Date = Date(),
-                              timeZone: TimeZone = .current) -> PoolStatus {
-        if !key.enabled { return PoolStatus(label: "Disabled", tone: .neutral) }
-        switch key.state {
+    /// Where a key stands for a session the caller starts now (web's `keyState`). Refused by OpenAI
+    /// outranks switched off: it is the one somebody has to act on.
+    public enum KeyState: Equatable, Sendable {
+        case invalid, disabled, atCap, running, available
+    }
+
+    public static func keyState(_ key: SharedPoolKey) -> KeyState {
+        if key.state == .invalid { return .invalid }
+        if !key.enabled || key.state == .disabled { return .disabled }
+        if atCap(key) { return .atCap }
+        return key.running ? .running : .available
+    }
+
+    /// A key's status tag (web's `memberStatus` for a key): a capped key comes back on the first of the
+    /// next month, which is said as a date.
+    public static func status(_ key: SharedPoolKey, in pool: SharedPool) -> PoolStatus {
+        switch keyState(key) {
         case .invalid: return PoolStatus(label: "Invalid", tone: .danger)
         case .disabled: return PoolStatus(label: "Disabled", tone: .neutral)
-        case .active, .unknown: break
-        }
-        if atCap(key) {
-            guard let end = pool.window?.end,
-                  let time = resetTime(end, now: now, timeZone: timeZone) else {
+        case .atCap:
+            guard let end = pool.window?.end, let date = capReset(end) else {
                 return PoolStatus(label: "At cap", tone: .warning)
             }
-            return PoolStatus(label: "At cap · resets \(time)", tone: .warning)
+            return PoolStatus(label: "At cap · resets \(date)", tone: .warning)
+        case .running: return PoolStatus(label: "Running now", tone: .brand)
+        case .available: return PoolStatus(label: "Available", tone: .success)
         }
-        return PoolStatus(label: "Available", tone: .success)
     }
 
     /// Why an invalid key is out, and who can put it back: a line of the row's own, since it runs
@@ -81,30 +93,25 @@ public enum SharedPoolPage {
         guard key.state == .invalid else { return nil }
         return canReplace(key, in: pool)
             ? "Rejected by OpenAI — replace it with a working key to put it back in the pool."
-            : "Rejected by OpenAI — only \(key.contributor.name) can replace it."
+            : "Rejected by OpenAI — only \(key.contributor.name) or the pool’s admins can replace it."
     }
 
-    /// The others have spent the cap its contributor set this month. Its contributor's own sessions
-    /// are never capped, which the claim reads; the row says what the key is to everyone else.
+    /// The others have spent the cap its contributor set this month — which stops everyone's sessions on
+    /// it but its contributor's, whose own use is never capped.
     public static func atCap(_ key: SharedPoolKey) -> Bool {
-        guard let cap = key.shareCap else { return false }
+        guard !key.contributor.you, let cap = key.shareCap else { return false }
         return (key.usage.othersCostUsd ?? 0) >= Double(cap)
     }
 
-    /// A key a session could start on now: switched on, not refused by OpenAI, not spent to its cap —
-    /// the "2" of "2 of 5 keys available".
-    public static func canRun(_ key: SharedPoolKey) -> Bool {
-        key.enabled && key.state == .active && !atCap(key)
-    }
-
+    /// The "2" of "2 of 5 keys available": the keys a session of the caller's could start on now.
     public static func availableCount(_ pool: SharedPool) -> Int {
-        pool.keys.filter(canRun).count
+        pool.keys.filter { [.available, .running].contains(keyState($0)) }.count
     }
 
     /// "$12.40 of $50": what the others spent on the key this month, against the cap its contributor
     /// set. A key with no cap shows the spend alone.
     public static func money(_ key: SharedPoolKey) -> String {
-        let spent = dollars(key.usage.othersCostUsd ?? 0)
+        let spent = String(format: "$%.2f", key.usage.othersCostUsd ?? 0)
         guard let cap = key.shareCap else { return spent }
         return "\(spent) of $\(cap)"
     }
@@ -117,25 +124,23 @@ public enum SharedPoolPage {
         return min(100, max(0, Int((spent / Double(cap) * 100).rounded())))
     }
 
-    /// The key a session of the caller's starting now runs on — the claim's own rule
-    /// (apiserver `pool-key-select.ts`), asked with no key to stick to: with "Own key first", a key of
-    /// the caller's own that can run; then the most room left, a key with no cap (or the caller's own)
-    /// having all of it; then the lower id. Nil when none can run for them.
+    /// The key a session the caller starts now runs on — the server's answer.
     public static func nextKey(_ pool: SharedPool) -> SharedPoolKey? {
-        let me = pool.people.first(where: \.you).map { PublicID.storageKey($0.userId) }
-        func mine(_ key: SharedPoolKey) -> Bool { PublicID.storageKey(key.contributor.userId) == me }
-        func room(_ key: SharedPoolKey) -> Double {
-            guard !mine(key), let cap = key.shareCap else { return .infinity }
-            return Double(cap) - (key.usage.othersCostUsd ?? 0)
+        pool.keys.first(where: \.next)
+    }
+
+    /// The Keys header's trailing words (web's `PoolGauge`): the key the next session starts on; with
+    /// none, why — none in the pool, none that can run — or, when every one that can is capped, when
+    /// the month turns.
+    public static func keysHeadline(_ pool: SharedPool) -> String {
+        if let next = nextKey(pool) { return "Next: \(next.label)" }
+        if pool.keys.isEmpty { return "No keys" }
+        if !pool.keys.contains(where: { $0.enabled && $0.state == .active }) { return "No key can run" }
+        if pool.keys.contains(where: { keyState($0) == .atCap }) {
+            guard let end = pool.window?.end, let date = capReset(end) else { return "All at cap" }
+            return "All at cap · resets \(date)"
         }
-        let usable = pool.keys.filter { $0.enabled && $0.state == .active && room($0) > 0 }
-        return usable.min { a, b in
-            let rank = (pool.ownKeyFirst && mine(a) ? 0 : 1, pool.ownKeyFirst && mine(b) ? 0 : 1)
-            if rank.0 != rank.1 { return rank.0 < rank.1 }
-            let left = room(a), right = room(b)
-            if left != right { return left > right }
-            return PublicID.storageKey(a.id) < PublicID.storageKey(b.id)
-        }
+        return "No key can run"
     }
 
     // MARK: people
@@ -144,13 +149,24 @@ public enum SharedPoolPage {
     public static let shareHeader = "Share of this month’s use"
     public static let addMembers = "Add members"
     public static let adminChip = "ADMIN"
-    public static let addMembersPrompt = "Add someone by the email of their Orbit account."
-    public static let email = "Email"
+    public static let addMembersNote = "They see it on their Providers page and in the session picker, and can start sessions on it."
+    public static let emailPlaceholder = "name@example.com"
     public static let add = "Add"
+    public static let makeAdmin = "Make admin"
+    public static let makeMember = "Make member"
+    public static let removeFromPool = "Remove from pool"
+    public static let removePersonNote = "Their keys leave with them."
 
-    /// "2 keys" / "No key": what a person has put in. Having none is no bar to running on the pool.
+    public static func addMembersTitle(_ pool: SharedPool) -> String { "Add members to \(pool.label)" }
+    public static func added(_ pool: SharedPool) -> String { "Added to \(pool.label)" }
+    public static func removePersonTitle(_ person: SharedPoolPerson, in pool: SharedPool) -> String {
+        "Remove \(person.name) from \(pool.label)?"
+    }
+
+    /// "2 keys · 23 sessions" / "No key · 6 sessions": what a person put in, and how much they ran on
+    /// the pool this month. Having no key is no bar to running on it.
     public static func personLine(_ person: SharedPoolPerson) -> String {
-        person.keys == 0 ? "No key" : keys(person.keys)
+        "\(person.keys == 0 ? "No key" : plural(person.keys, "key")) · \(plural(person.sessions, "session"))"
     }
 
     /// A person's share of what the pool ran this month, 0…100. Nothing run yet reads 0 for everyone.
@@ -158,6 +174,11 @@ public enum SharedPoolPage {
         let total = pool.people.reduce(0) { $0 + $1.usage.costUsd }
         guard total > 0 else { return 0 }
         return min(100, max(0, Int((person.usage.costUsd / total * 100).rounded())))
+    }
+
+    /// Whether the caller manages `person`: an admin, over anyone but themselves and the pool's creator.
+    public static func canManage(_ person: SharedPoolPerson, in pool: SharedPool) -> Bool {
+        isAdmin(pool) && !person.you && !person.creator
     }
 
     // MARK: rules
@@ -178,12 +199,11 @@ public enum SharedPoolPage {
     public static let deletePoolNote = "Its keys are removed from the Orbit server and no session can run on it."
     public static let leavePool = "Leave pool"
     public static let leavePoolNote = "Your keys leave with you."
+    public static let delete = "Delete"
+    public static let leave = "Leave"
 
     public static func deleteTitle(_ pool: SharedPool) -> String { "Delete \(pool.label)?" }
     public static func leaveTitle(_ pool: SharedPool) -> String { "Leave \(pool.label)?" }
-    public static func removeTitle(_ key: SharedPoolKey, in pool: SharedPool) -> String {
-        "Remove \(key.label) from \(pool.label)?"
-    }
 
     // MARK: what the caller may do
 
@@ -197,9 +217,9 @@ public enum SharedPoolPage {
         key.contributor.you || isAdmin(pool)
     }
 
-    /// A key OpenAI refused, to its contributor or an admin.
+    /// The same two paste a working key over one OpenAI refused.
     public static func canReplace(_ key: SharedPoolKey, in pool: SharedPool) -> Bool {
-        key.contributor.you || isAdmin(pool)
+        canRemove(key, in: pool)
     }
 
     /// Only its contributor switches a key off and on.
@@ -207,15 +227,14 @@ public enum SharedPoolPage {
 
     // MARK: faces
 
-    /// The colours a person's initial is drawn on, by their place in the pool: whoever made it first.
-    public static let avatarPalette = ["#3370FF", "#16A34A", "#DB2777", "#EA580C", "#7C3AED", "#0891B2"]
+    /// The colours a person's initial is drawn on (web's `personColor`), one per place in the pool's
+    /// own order — creator first, then by when they joined — so a person wears the same one beside every
+    /// key they put in and in Members.
+    public static let avatarPalette = ["#3370FF", "#16A34A", "#DB2777", "#EA580C", "#7C3AED", "#0D9488", "#CA8A04", "#475569"]
 
-    /// The colour of `userId`'s circle in `pool`, the same beside their keys as in Members.
     public static func avatarHex(_ userId: String, in pool: SharedPool) -> String {
         let key = PublicID.storageKey(userId)
-        guard let at = pool.people.firstIndex(where: { PublicID.storageKey($0.userId) == key }) else {
-            return "#8E8E93"
-        }
+        let at = pool.people.firstIndex { PublicID.storageKey($0.userId) == key } ?? pool.people.count
         return avatarPalette[at % avatarPalette.count]
     }
 
@@ -227,21 +246,16 @@ public enum SharedPoolPage {
 
     // MARK: words
 
-    /// When a month's caps come back, as the page says it: `02:00` within a day, `Thu 02:00` within the
-    /// week, and `Oct 1` beyond it, where a weekday alone would be ambiguous. Nil for an unreadable time.
-    public static func resetTime(_ iso: String, now: Date = Date(), timeZone: TimeZone = .current) -> String? {
+    /// When a cap starts again, as a date (web's `formatCapReset`): always the first of a month, in UTC,
+    /// which a weekday would not say. Nil for an unreadable time.
+    public static func capReset(_ iso: String) -> String? {
         guard let at = RelativeTime.parse(iso) else { return nil }
-        let away = at.timeIntervalSince(now)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = away < 24 * 60 * 60 ? "HH:mm" : away < 7 * 24 * 60 * 60 ? "EEE HH:mm" : "MMM d"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "MMM d"
         return formatter.string(from: at)
     }
 
-    static func dollars(_ amount: Double) -> String { String(format: "$%.2f", amount) }
-
-    static func members(_ n: Int) -> String { "\(n) member\(n == 1 ? "" : "s")" }
-
-    static func keys(_ n: Int) -> String { "\(n) key\(n == 1 ? "" : "s")" }
+    static func plural(_ n: Int, _ one: String) -> String { "\(n) \(one)\(n == 1 ? "" : "s")" }
 }

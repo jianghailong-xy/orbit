@@ -125,6 +125,8 @@ struct SharedPoolActions {
     var setRules: (UpdateSharedPoolRequest) async -> String?
     /// Someone added by their Orbit account's email.
     var addPerson: (String) async -> String?
+    var setRole: (SharedPoolPerson, SharedPoolRole) async -> String?
+    var removePerson: (SharedPoolPerson) async -> String?
     var deletePool: () async -> String?
     var leavePool: () async -> String?
 }
@@ -143,16 +145,17 @@ enum SharedPoolSheet: Identifiable {
 }
 
 /// A shared pool's page, in the web page's five blocks: what the pool is and "Add a key", its keys (a
-/// key is taken out with a swipe, and a refused one is replaced from its row), its people, its two
-/// rules — each switch its own section, its sentence the footer, and only an admin's to change — and
-/// deleting the pool (an admin) or leaving it (anyone else).
+/// key is switched off or taken out with a swipe, and a refused one is replaced from its row), its
+/// people (an admin manages them with a swipe), its two rules — each switch its own section, its
+/// sentence the footer, and only an admin's to change — and deleting the pool (an admin) or leaving it
+/// (anyone else).
 struct SharedPoolPageView: View {
     let pool: SharedPool
     let actions: SharedPoolActions
-    var now: Date = Date()
 
     @State private var sheet: SharedPoolSheet?
-    @State private var removing: SharedPoolKey?
+    @State private var removingKey: SharedPoolKey?
+    @State private var removingPerson: SharedPoolPerson?
     @State private var confirmingExit = false
     @State private var addingPerson = false
     @State private var email = ""
@@ -176,16 +179,28 @@ struct SharedPoolPageView: View {
         .sheet(item: $sheet) { kind in
             sheetView(kind)
         }
-        .confirmationDialog(removing.map { SharedPoolPage.removeTitle($0, in: pool) } ?? "",
-                            isPresented: removingAsked, titleVisibility: .visible, presenting: removing) { key in
-            Button(SharedPoolPage.removeFromPool, role: .destructive) {
-                run { await actions.removeKey(key) }
+        .confirmationDialog(removingKey.map(SharedPoolPage.removeKeyTitle) ?? "",
+                            isPresented: removingKeyAsked, titleVisibility: .visible, presenting: removingKey) { key in
+            Button(SharedPoolPage.remove, role: .destructive) {
+                run(done: SharedPoolPage.removedKey(key)) { await actions.removeKey(key) }
             }
             Button(AddPoolKey.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SharedPoolPage.removeKeyNote)
+        }
+        .confirmationDialog(removingPerson.map { SharedPoolPage.removePersonTitle($0, in: pool) } ?? "",
+                            isPresented: removingPersonAsked, titleVisibility: .visible,
+                            presenting: removingPerson) { person in
+            Button(SharedPoolPage.remove, role: .destructive) {
+                run { await actions.removePerson(person) }
+            }
+            Button(AddPoolKey.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SharedPoolPage.removePersonNote)
         }
         .confirmationDialog(isAdmin ? SharedPoolPage.deleteTitle(pool) : SharedPoolPage.leaveTitle(pool),
                             isPresented: $confirmingExit, titleVisibility: .visible) {
-            Button(isAdmin ? SharedPoolPage.deletePool : SharedPoolPage.leavePool, role: .destructive) {
+            Button(isAdmin ? SharedPoolPage.delete : SharedPoolPage.leave, role: .destructive) {
                 let admin = isAdmin
                 run {
                     if admin { return await actions.deletePool() }
@@ -196,18 +211,19 @@ struct SharedPoolPageView: View {
         } message: {
             Text(isAdmin ? SharedPoolPage.deletePoolNote : SharedPoolPage.leavePoolNote)
         }
-        .alert(SharedPoolPage.addMembers, isPresented: $addingPerson) {
-            TextField(SharedPoolPage.email, text: $email)
+        .alert(SharedPoolPage.addMembersTitle(pool), isPresented: $addingPerson) {
+            TextField(SharedPoolPage.emailPlaceholder, text: $email)
                 .keyboardType(.emailAddress)
+                .textContentType(.emailAddress)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             Button(SharedPoolPage.add) {
                 let typed = email
-                run { await actions.addPerson(typed) }
+                run(done: SharedPoolPage.added(pool)) { await actions.addPerson(typed) }
             }
             Button(AddPoolKey.cancel, role: .cancel) {}
         } message: {
-            Text(SharedPoolPage.addMembersPrompt)
+            Text(SharedPoolPage.addMembersNote)
         }
         .overlay(alignment: .bottom) {
             if let notice {
@@ -251,14 +267,7 @@ struct SharedPoolPageView: View {
                 }
                 .padding(.horizontal, 4)
                 if SharedPoolPage.canAddKey(pool) {
-                    Button { sheet = .add } label: {
-                        Text(SharedPoolPage.addKey)
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.roundedRectangle(radius: 14))
+                    WideButton(title: SharedPoolPage.addKey) { sheet = .add }
                 }
             }
             .listRowBackground(Color.clear)
@@ -267,20 +276,19 @@ struct SharedPoolPageView: View {
     }
 
     private var keysSection: some View {
-        let next = SharedPoolPage.nextKey(pool)
-        return Section {
+        Section {
             if pool.keys.isEmpty {
                 Text(SharedPoolPage.noKeys)
                     .foregroundStyle(.secondary)
             }
             ForEach(pool.keys) { key in
-                PoolKeyRow(key: key, pool: pool, now: now, next: key.id == next?.id) {
+                PoolKeyRow(key: key, pool: pool) {
                     sheet = .replace(key)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if SharedPoolPage.canRemove(key, in: pool) {
-                        Button(role: .destructive) { removing = key } label: {
-                            Label(SharedPoolPage.removeKey, systemImage: "trash")
+                        Button(role: .destructive) { removingKey = key } label: {
+                            Label(SharedPoolPage.remove, systemImage: "trash")
                         }
                     }
                     if SharedPoolPage.canSwitch(key) {
@@ -295,7 +303,7 @@ struct SharedPoolPageView: View {
                 }
             }
         } header: {
-            PoolSectionHeader(title: SharedPoolPage.keysHeader, trailing: next.map(SharedPoolPage.nextLine))
+            PoolSectionHeader(title: SharedPoolPage.keysHeader, trailing: SharedPoolPage.keysHeadline(pool))
         } footer: {
             Text(SharedPoolPage.keysFooter)
         }
@@ -305,6 +313,21 @@ struct SharedPoolPageView: View {
         Section {
             ForEach(pool.people) { person in
                 PoolPersonRow(person: person, pool: pool)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if SharedPoolPage.canManage(person, in: pool) {
+                            Button(role: .destructive) { removingPerson = person } label: {
+                                Label(SharedPoolPage.removeFromPool, systemImage: "person.badge.minus")
+                            }
+                            Button {
+                                let role: SharedPoolRole = person.role == .admin ? .member : .admin
+                                run { await actions.setRole(person, role) }
+                            } label: {
+                                Label(person.role == .admin ? SharedPoolPage.makeMember : SharedPoolPage.makeAdmin,
+                                      systemImage: person.role == .admin ? "person" : "person.badge.key")
+                            }
+                            .tint(.gray)
+                        }
+                    }
             }
             if isAdmin {
                 Button {
@@ -365,21 +388,32 @@ struct SharedPoolPageView: View {
             }
         case .replace(let refused):
             AddPoolKeySheet(pool: pool, replacing: refused) { _, key, _ in
-                await actions.replaceKey(refused, key)
+                let outcome = await actions.replaceKey(refused, key)
+                if case .added = outcome { show(AddPoolKey.replaced(refused, in: pool)) }
+                return outcome
             }
         }
     }
 
     // MARK: presses
 
-    private var removingAsked: Binding<Bool> {
-        Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
+    private var removingKeyAsked: Binding<Bool> {
+        Binding(get: { removingKey != nil }, set: { if !$0 { removingKey = nil } })
     }
 
-    /// A press, and a line over the page's foot when it didn't go through.
-    private func run(_ press: @escaping () async -> String?) {
+    private var removingPersonAsked: Binding<Bool> {
+        Binding(get: { removingPerson != nil }, set: { if !$0 { removingPerson = nil } })
+    }
+
+    /// A press, and a line over the page's foot saying how it went: why it didn't go through, or — for
+    /// a press whose effect isn't on screen by itself — `done`.
+    private func run(done: String? = nil, _ press: @escaping () async -> String?) {
         Task {
-            if let failure = await press() { show(failure) }
+            if let failure = await press() {
+                show(failure)
+            } else if let done {
+                show(done)
+            }
         }
     }
 
@@ -406,12 +440,10 @@ struct SharedPoolPageView: View {
 private struct PoolKeyRow: View {
     let key: SharedPoolKey
     let pool: SharedPool
-    let now: Date
-    let next: Bool
     let replace: () -> Void
 
     var body: some View {
-        let status = SharedPoolPage.status(key, in: pool, now: now)
+        let status = SharedPoolPage.status(key, in: pool)
         HStack(alignment: .top, spacing: 12) {
             PoolAvatar(name: key.contributor.name, hex: SharedPoolPage.avatarHex(key.contributor.userId, in: pool))
                 .padding(.top, 2)
@@ -425,7 +457,7 @@ private struct PoolKeyRow: View {
                             .font(.orbitLabel)
                             .foregroundStyle(.secondary)
                     }
-                    if next {
+                    if key.next {
                         PoolChip(text: SharedPoolPage.nextChip)
                     }
                 }
@@ -457,7 +489,7 @@ private struct PoolKeyRow: View {
                     .monospacedDigit()
                 if let percent = SharedPoolPage.capPercent(key) {
                     PoolGaugeBar(percent: percent,
-                                 tint: SharedPoolPage.atCap(key) ? PoolTone.color(.warning) : Color.accentColor)
+                                 tint: percent >= 90 ? PoolTone.color(.warning) : Color.accentColor)
                 }
             }
             .padding(.top, 3)
@@ -466,7 +498,8 @@ private struct PoolKeyRow: View {
     }
 }
 
-/// One person: who, their role, what they put in, and their share of what the pool ran this month.
+/// One person: who, their role, what they put in and how much they ran, and their share of what the
+/// pool ran this month.
 private struct PoolPersonRow: View {
     let person: SharedPoolPerson
     let pool: SharedPool
@@ -511,7 +544,7 @@ private struct PoolPersonRow: View {
 
 /// "Add a key": what putting a key in means (and the warning that stays), then its name, the key and the
 /// monthly limit, then what the pool shows of it — its fingerprint, never the key. The same sheet
-/// replaces a key OpenAI refused: the key alone, its name and limit staying as they were.
+/// replaces a key OpenAI refused (web's "Replace key"): the key alone, its name and limit staying.
 struct AddPoolKeySheet: View {
     let pool: SharedPool
     let replacing: SharedPoolKey?
@@ -527,13 +560,13 @@ struct AddPoolKeySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     init(pool: SharedPool, replacing: SharedPoolKey? = nil, step: AddPoolKey.Step? = nil,
-         name: String? = nil, key: String = "", limit: String = "",
+         name: String = "", key: String = "", limit: String = "",
          submit: @escaping (String, String, Int?) async -> AddPoolKey.Outcome) {
         self.pool = pool
         self.replacing = replacing
         self.submit = submit
         _step = State(initialValue: step ?? (replacing == nil ? .consent : .form))
-        _name = State(initialValue: name ?? AddPoolKey.suggestedName(for: pool))
+        _name = State(initialValue: name)
         _key = State(initialValue: key)
         _limit = State(initialValue: limit)
     }
@@ -541,7 +574,7 @@ struct AddPoolKeySheet: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle(replacing == nil ? AddPoolKey.title : AddPoolKey.replaceTitle)
+                .navigationTitle(replacing.map(AddPoolKey.replaceTitle) ?? AddPoolKey.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -563,8 +596,8 @@ struct AddPoolKeySheet: View {
             form
         case .done(let label, let fingerprint):
             done(label: label, fingerprint: fingerprint)
-        case .duplicate(let contributor):
-            duplicate(contributor: contributor)
+        case .duplicate(let by):
+            duplicate(by)
         }
     }
 
@@ -653,8 +686,12 @@ struct AddPoolKeySheet: View {
                     HStack(spacing: 6) {
                         Text(AddPoolKey.limitPrefix)
                             .foregroundStyle(.secondary)
-                        TextField("", text: $limit)
+                        TextField(AddPoolKey.noLimit, text: $limit)
                             .keyboardType(.numberPad)
+                            .onChange(of: limit) { _, typed in
+                                let digits = AddPoolKey.limitDigits(typed)
+                                if digits != typed { limit = digits }
+                            }
                         Text(AddPoolKey.limitSuffix)
                             .foregroundStyle(.secondary)
                     }
@@ -665,8 +702,7 @@ struct AddPoolKeySheet: View {
                 }
             }
             Section {
-                WideButton(title: replacing == nil ? AddPoolKey.submit : AddPoolKey.replaceTitle,
-                           busy: sending) {
+                WideButton(title: replacing == nil ? AddPoolKey.submit : SharedPoolPage.replaceKey, busy: sending) {
                     send()
                 }
                 .disabled(!canSend || sending)
@@ -692,20 +728,22 @@ struct AddPoolKeySheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                HStack(spacing: 12) {
-                    PoolAvatar(name: me?.name ?? "", hex: me.map { SharedPoolPage.avatarHex($0.userId, in: pool) } ?? "")
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(label)
-                            .font(.headline)
-                        Text(AddPoolKey.doneRow(me: me?.name ?? "", fingerprint: fingerprint))
-                            .font(.orbitLabel)
-                            .foregroundStyle(.secondary)
+                if let me {
+                    HStack(spacing: 12) {
+                        PoolAvatar(name: me.name, hex: SharedPoolPage.avatarHex(me.userId, in: pool))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(label)
+                                .font(.headline)
+                            Text(AddPoolKey.doneRow(me: me.name, fingerprint: fingerprint))
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(uiColor: .secondarySystemGroupedBackground),
-                            in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 WideButton(title: AddPoolKey.done) { dismiss() }
             }
             .padding(16)
@@ -714,7 +752,7 @@ struct AddPoolKeySheet: View {
     }
 
     /// The same key is in the pool already: whose it is, and why a second copy adds nothing.
-    private func duplicate(contributor: String?) -> some View {
+    private func duplicate(_ by: AddPoolKey.AddedBy) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 12) {
@@ -724,7 +762,7 @@ struct AddPoolKeySheet: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(AddPoolKey.duplicateTitle(pool))
                             .font(.headline)
-                        Text(AddPoolKey.duplicateDetail(contributor: contributor))
+                        Text(AddPoolKey.duplicateDetail(by))
                             .font(.orbitListSubtitle)
                             .foregroundStyle(.secondary)
                     }
@@ -747,27 +785,32 @@ struct AddPoolKeySheet: View {
 
     private var canSend: Bool {
         replacing == nil
-            ? AddPoolKey.canSubmit(name: name, key: key, limit: limit)
+            ? AddPoolKey.canSubmit(name: name, key: key)
             : !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func send() {
-        let typed = key
+        let typed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         let label = name.trimmingCharacters(in: .whitespaces)
         let cap = AddPoolKey.shareCap(limit)
+        let before = pool
         sending = true
         Task {
             let outcome = await submit(label, typed, cap)
             sending = false
             switch outcome {
-            case .added(let updated):
+            case .added(let after):
                 // A replaced key is back in its row on the page underneath; a new one is shown here once.
                 guard replacing == nil else { dismiss(); return }
-                let fingerprint = AddPoolKey.added(label, in: updated)?.fingerprint ?? AddPoolKey.fingerprint(of: typed)
+                let added = AddPoolKey.added(before: before, after: after)
                 key = ""
-                step = .done(label: label, fingerprint: fingerprint)
-            case .duplicate(let contributor):
-                step = .duplicate(contributor: contributor)
+                step = .done(label: added?.label ?? label, fingerprint: added?.fingerprint ?? AddPoolKey.fingerprint(of: typed))
+            case .duplicate(let by):
+                if replacing == nil {
+                    step = .duplicate(by)
+                } else {
+                    failure = AddPoolKey.replaceDuplicate(by, pool: pool)
+                }
             case .refused(let reason):
                 failure = reason
             }

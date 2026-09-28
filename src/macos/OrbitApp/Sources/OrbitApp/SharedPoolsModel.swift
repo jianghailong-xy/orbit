@@ -41,7 +41,7 @@ final class SharedPoolsModel {
         do {
             return .added(adopt(try await api.addPoolKey(poolID: pool.id, req)))
         } catch {
-            return AddPoolKey.outcome(of: error, typed: req.apiKey, pool: pool)
+            return AddPoolKey.outcome(of: error)
         }
     }
 
@@ -51,7 +51,7 @@ final class SharedPoolsModel {
                                                        ReplacePoolKeyRequest(apiKey: secret))
             return .added(adopt(updated))
         } catch {
-            return AddPoolKey.outcome(of: error, typed: secret, pool: pool)
+            return AddPoolKey.outcome(of: error)
         }
     }
 
@@ -71,6 +71,17 @@ final class SharedPoolsModel {
         let typed = email.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty else { return nil }
         return await write { try await self.api.addSharedPoolPerson(pool.id, AddSharedPoolPersonRequest(email: typed)) }
+    }
+
+    func setRole(_ pool: SharedPool, _ person: SharedPoolPerson, _ role: SharedPoolRole) async -> String? {
+        await write {
+            try await self.api.updateSharedPoolPerson(pool.id, userID: person.userId,
+                                                      UpdateSharedPoolPersonRequest(role: role))
+        }
+    }
+
+    func removePerson(_ pool: SharedPool, _ person: SharedPoolPerson) async -> String? {
+        await write { try await self.api.removeSharedPoolPerson(pool.id, userID: person.userId) }
     }
 
     /// Delete the pool (an admin) or leave it (anyone else): it is gone from this account's list.

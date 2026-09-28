@@ -877,6 +877,13 @@ public final class APIClient: @unchecked Sendable {
     public func addSharedPoolPerson(_ id: String, _ req: AddSharedPoolPersonRequest) async throws -> SharedPool {
         try await post("providers/shared-pools/\(id)/people", body: req)
     }
+    public func updateSharedPoolPerson(_ id: String, userID: String,
+                                       _ req: UpdateSharedPoolPersonRequest) async throws -> SharedPool {
+        try await patch("providers/shared-pools/\(id)/people/\(userID)", body: req)
+    }
+    public func removeSharedPoolPerson(_ id: String, userID: String) async throws -> SharedPool {
+        try await delete("providers/shared-pools/\(id)/people/\(userID)")
+    }
     public func addPoolKey(poolID: String, _ req: AddPoolKeyRequest) async throws -> SharedPool {
         try await post("providers/shared-pools/\(poolID)/keys", body: req)
     }

@@ -3,17 +3,30 @@ import Foundation
 /// "Add a key" on iOS — a sheet over a shared pool's page, in the web dialog's steps and words: what
 /// putting a key in means (with the warning that stays: a key can't be resold, and whoever adds it
 /// answers for it), then its name, the key and the monthly limit, then what the pool shows of it — its
-/// fingerprint, never the key. `SharedPoolCopyParityTests` holds the words to the web source.
+/// fingerprint, never the key. The same sheet replaces a key OpenAI refused (web's "Replace key").
+/// `SharedPoolCopyParityTests` holds the words to the web source.
 public enum AddPoolKey {
     public enum Step: Equatable, Sendable {
         /// What putting a key in means.
         case consent
-        /// Name, key, limit.
+        /// Name, key, limit — or, replacing a refused key, the key alone.
         case form
         /// It went in: its name and its fingerprint.
         case done(label: String, fingerprint: String)
-        /// The same key is in the pool already, put in by `contributor` (nil when that can't be told).
-        case duplicate(contributor: String?)
+        /// The same key is in the pool already.
+        case duplicate(AddedBy)
+    }
+
+    /// Who put in the key a second add was refused over, as the server's refusal names them.
+    public struct AddedBy: Equatable, Sendable {
+        public let name: String?
+        /// The caller did.
+        public let you: Bool
+
+        public init(name: String?, you: Bool = false) {
+            self.name = name
+            self.you = you
+        }
     }
 
     public static let title = "Add a key"
@@ -30,9 +43,11 @@ public enum AddPoolKey {
     public static let limit = "Limit"
     public static let limitPrefix = "$"
     public static let limitSuffix = "a month"
+    public static let noLimit = "No limit"
     public static let keyPlaceholder = "sk-…"
 
-    /// The lead, as two runs — the pool's name is set in bold.
+    /// The lead, as two runs — the pool's name is set in bold. The web dialog carries the name in its
+    /// title ("Add a key to Team Codex") and says "this pool" here; a sheet's bar has room for less.
     public static let leadPrefix = "Paste an OpenAI API key to put in "
 
     /// One of the three things putting a key in means: a bold claim, then what follows from it.
@@ -66,7 +81,7 @@ public enum AddPoolKey {
         "Others in \(pool.label) can spend up to this on the key each month. Your own sessions aren’t limited by it."
     }
 
-    /// "wikova-org-1" is in Team Codex.
+    /// "wikova-org-1 is in Team Codex".
     public static func doneTitle(label: String, pool: SharedPool) -> String { "\(label) is in \(pool.label)" }
     public static let doneDetail = " · ready for the next session. Only you and the pool’s admins can replace it."
     /// The key's row as the pool now lists it.
@@ -75,94 +90,78 @@ public enum AddPoolKey {
     }
 
     public static func duplicateTitle(_ pool: SharedPool) -> String { "This key is already in \(pool.label)" }
-    public static func duplicateDetail(contributor: String?) -> String {
-        let rest = "The same key twice doesn’t add budget — add a different one."
-        guard let contributor, !contributor.isEmpty else { return rest }
-        return "\(contributor) added it. \(rest)"
+    public static func duplicateDetail(_ by: AddedBy) -> String {
+        "\(by.you ? "You" : by.name ?? "Someone") added it. The same key twice doesn’t add budget — add a different one."
     }
 
     // MARK: replacing a key OpenAI refused
 
-    public static let replaceTitle = "Replace key"
+    public static func replaceTitle(_ key: SharedPoolKey) -> String { "Replace \(key.label)" }
     public static func replaceLead(_ key: SharedPoolKey) -> String {
-        "Paste a working key to put \(key.label) back in the pool."
+        "OpenAI rejected \(key.fingerprint). Paste a working key to put \(key.label) back in the pool."
+    }
+    public static func replaced(_ key: SharedPoolKey, in pool: SharedPool) -> String {
+        "\(key.label) is back in \(pool.label)"
+    }
+    /// A replacement that is some other key of the pool's already.
+    public static func replaceDuplicate(_ by: AddedBy, pool: SharedPool) -> String {
+        "This key is already in \(pool.label) — \(by.you ? "you" : by.name ?? "Someone") added it."
     }
 
     // MARK: working it out
 
-    /// What the pool will show of what is typed: `sk-…` and its last four characters — the server's own
-    /// `maskedKey`. Plain `sk-…` until there is enough of a key to take four from.
+    /// What the pool will show of what is typed (web's `maskTyped`): `sk-…` and its last four characters.
     public static func fingerprint(of typed: String) -> String {
-        let key = typed.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard key.count >= 8 else { return "sk-…" }
-        return "sk-…" + key.suffix(4)
+        "sk-…" + typed.trimmingCharacters(in: .whitespacesAndNewlines).suffix(4)
     }
 
-    /// A name for the caller's next key that no key in the pool has: `wikova-org-1`, then `-2`, ….
-    public static func suggestedName(for pool: SharedPool) -> String {
-        let me = pool.people.first(where: \.you)?.name ?? ""
-        let first = me.split(separator: " ").first.map { String($0).lowercased() } ?? ""
-        let stem = first.isEmpty ? "key" : "\(first)-org"
-        let taken = Set(pool.keys.map(\.label))
-        var n = 1
-        while taken.contains("\(stem)-\(n)") { n += 1 }
-        return "\(stem)-\(n)"
-    }
+    /// The limit field keeps digits only: whole dollars.
+    public static func limitDigits(_ typed: String) -> String { typed.filter(\.isASCIIDigit) }
 
-    /// The limit as the server takes it: whole dollars, or nil for none. Nil too for what isn't a
-    /// whole number of dollars, which the form refuses before it asks.
-    public static func shareCap(_ typed: String) -> Int? {
-        Int(typed.trimmingCharacters(in: .whitespaces))
-    }
+    /// The limit as the server takes it: whole dollars, or nil for none.
+    public static func shareCap(_ typed: String) -> Int? { Int(typed) }
 
-    /// Whether the form can be sent: a name, a key, and a limit that is empty or whole dollars.
-    public static func canSubmit(name: String, key: String, limit: String) -> Bool {
-        let trimmedLimit = limit.trimmingCharacters(in: .whitespaces)
-        return !name.trimmingCharacters(in: .whitespaces).isEmpty
+    /// Whether the form can be sent: a name and a key.
+    public static func canSubmit(name: String, key: String) -> Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
             && !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && (trimmedLimit.isEmpty || (shareCap(trimmedLimit).map { $0 >= 0 } ?? false))
     }
 
     /// How sending a key went.
     public enum Outcome: Equatable, Sendable {
         /// It went in: the pool as it now stands.
         case added(SharedPool)
-        /// It is in the pool already, put in by this person (nil when that can't be told).
-        case duplicate(contributor: String?)
+        /// It is in the pool already.
+        case duplicate(AddedBy)
         /// Refused for another reason, in the server's words — a key of the wrong shape, say.
         case refused(String)
-    }
-
-    /// A failed send, read: the server's duplicate refusal names who put the key in; anything else
-    /// is its reason, as one sentence.
-    public static func outcome(of error: Error, typed: String, pool: SharedPool) -> Outcome {
-        guard APIClient.refusalCode(error) == duplicateCode else {
-            return .refused(APIClient.failureReason(error))
-        }
-        var message: String?
-        if case APIError.http(_, let body) = error { message = ComposerLogic.serverMessage(body) }
-        return .duplicate(contributor: duplicateContributor(typed: typed, pool: pool, message: message))
-    }
-
-    /// The key the server just put in for the caller: the newest of theirs by that name.
-    public static func added(_ label: String, in pool: SharedPool) -> SharedPoolKey? {
-        pool.keys.last { $0.contributor.you && $0.label == label }
     }
 
     /// The server's code for a key that is in the pool already.
     public static let duplicateCode = "POOL_KEY_DUPLICATE"
 
-    /// Who put in the key the server refused as a duplicate. The pool shows each key's last four
-    /// characters, so the key of the typed one's four is the one — the server's refusal names them too
-    /// ("… — Wikova put it in"), which is the fallback when the pool has since moved.
-    public static func duplicateContributor(typed: String, pool: SharedPool, message: String?) -> String? {
-        let fingerprint = fingerprint(of: typed)
-        if fingerprint != "sk-…", let key = pool.keys.first(where: { $0.fingerprint == fingerprint }) {
-            return key.contributor.name
+    /// A failed send, read: the duplicate refusal carries who put the key in (`addedBy`); anything else
+    /// is its reason, as one sentence.
+    public static func outcome(of error: Error) -> Outcome {
+        guard APIClient.refusalCode(error) == duplicateCode else {
+            return .refused(APIClient.failureReason(error))
         }
-        guard let message, let dash = message.range(of: " — ", options: .backwards),
-              message.hasSuffix(" put it in") else { return nil }
-        let name = message[dash.upperBound...].dropLast(" put it in".count)
-        return name.isEmpty ? nil : String(name)
+        var by = AddedBy(name: nil)
+        if case APIError.http(_, let body) = error, let data = body?.data(using: .utf8),
+           let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           let addedBy = object["addedBy"] as? [String: Any] {
+            by = AddedBy(name: addedBy["name"] as? String, you: addedBy["you"] as? Bool ?? false)
+        }
+        return .duplicate(by)
     }
+
+    /// The key a send just put in: the one in `after` that wasn't in `before`.
+    public static func added(before: SharedPool, after: SharedPool) -> SharedPoolKey? {
+        let old = Set(before.keys.map { PublicID.storageKey($0.id) })
+        return after.keys.first { !old.contains(PublicID.storageKey($0.id)) }
+    }
+}
+
+private extension Character {
+    var isASCIIDigit: Bool { ("0"..."9").contains(self) }
 }

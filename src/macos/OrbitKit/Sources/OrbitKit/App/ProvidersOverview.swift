@@ -42,6 +42,6 @@ public enum ProvidersOverview {
 
     /// A shared pool's second line, under its name: "Shared · 4 members".
     public static func sharedPoolLine(_ pool: SharedPool) -> String {
-        "Shared · \(SharedPoolPage.members(pool.people.count))"
+        "Shared · \(SharedPoolPage.plural(pool.people.count, "member"))"
     }
 }

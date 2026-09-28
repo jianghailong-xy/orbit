@@ -511,6 +511,8 @@ private struct SharedPoolSettingsPage: View {
                 switchKey: { await pools.switchKey(pool, $0, on: $1) },
                 setRules: { await pools.setRules(pool, $0) },
                 addPerson: { await pools.addPerson(pool, email: $0) },
+                setRole: { await pools.setRole(pool, $0, $1) },
+                removePerson: { await pools.removePerson(pool, $0) },
                 deletePool: { await close(pools, pool, delete: true) },
                 leavePool: { await close(pools, pool, delete: false) }))
         } else {

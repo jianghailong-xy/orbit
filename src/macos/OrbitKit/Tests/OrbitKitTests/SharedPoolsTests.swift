@@ -25,35 +25,35 @@ final class SharedPoolsTests: XCTestCase {
       "window": {"start": "2026-09-01T00:00:00.000Z", "end": "2026-10-01T00:00:00.000Z"},
       "people": [
         {"userId": "\(wikova)", "name": "Wikova", "role": "ADMIN", "creator": true, "you": true, "keys": 2,
-         "usage": {"inputTokens": 900, "outputTokens": 90, "costUsd": 34}},
+         "sessions": 23, "usage": {"inputTokens": 900, "outputTokens": 90, "costUsd": 34}},
         {"userId": "\(zhang)", "name": "Zhang Min", "role": "MEMBER", "creator": false, "you": false, "keys": 2,
-         "usage": {"inputTokens": 800, "outputTokens": 80, "costUsd": 30}},
+         "sessions": 19, "usage": {"inputTokens": 800, "outputTokens": 80, "costUsd": 30}},
         {"userId": "\(chen)", "name": "Chen Yu", "role": "MEMBER", "creator": false, "you": false, "keys": 1,
-         "usage": {"inputTokens": 700, "outputTokens": 70, "costUsd": 24}},
+         "sessions": 14, "usage": {"inputTokens": 700, "outputTokens": 70, "costUsd": 24}},
         {"userId": "\(lin)", "name": "Lin Wei", "role": "MEMBER", "creator": false, "you": false, "keys": 0,
-         "usage": {"inputTokens": 300, "outputTokens": 30, "costUsd": 12}}
+         "sessions": 6, "usage": {"inputTokens": 300, "outputTokens": 30, "costUsd": 12}}
       ],
       "keys": [
         {"id": "\(id(11))", "label": "orbit-org-1", "fingerprint": "sk-…AB12", "state": "ACTIVE", "enabled": true,
          "shareCap": 50, "contributor": {"userId": "\(wikova)", "name": "Wikova", "you": true},
          "usage": {"inputTokens": 1, "outputTokens": 1, "costUsd": 20.5, "othersCostUsd": 12.4},
-         "createdAt": "2026-09-02T00:00:00.000Z"},
+         "running": false, "next": true, "createdAt": "2026-09-02T00:00:00.000Z"},
         {"id": "\(id(12))", "label": "orbit-org-2", "fingerprint": "sk-…7K2P", "state": "ACTIVE", "enabled": true,
          "shareCap": 50, "contributor": {"userId": "\(zhang)", "name": "Zhang Min", "you": false},
          "usage": {"inputTokens": 1, "outputTokens": 1, "costUsd": 40, "othersCostUsd": 31},
-         "createdAt": "2026-09-03T00:00:00.000Z"},
+         "running": true, "next": false, "createdAt": "2026-09-03T00:00:00.000Z"},
         {"id": "\(id(13))", "label": "ios-build", "fingerprint": "sk-…QZ03", "state": "ACTIVE", "enabled": true,
          "shareCap": 50, "contributor": {"userId": "\(chen)", "name": "Chen Yu", "you": false},
          "usage": {"inputTokens": 1, "outputTokens": 1, "costUsd": 55, "othersCostUsd": 50},
-         "createdAt": "2026-09-04T00:00:00.000Z"},
+         "running": false, "next": false, "createdAt": "2026-09-04T00:00:00.000Z"},
         {"id": "\(id(14))", "label": "wikova-backup", "fingerprint": "sk-…M4T7", "state": "INVALID", "enabled": true,
          "shareCap": 50, "contributor": {"userId": "\(wikova)", "name": "Wikova", "you": true},
          "usage": {"inputTokens": 1, "outputTokens": 1, "costUsd": 6.2, "othersCostUsd": 6.2},
-         "createdAt": "2026-09-05T00:00:00.000Z"},
+         "running": false, "next": false, "createdAt": "2026-09-05T00:00:00.000Z"},
         {"id": "\(id(15))", "label": "zhang-old", "fingerprint": "sk-…31FD", "state": "ACTIVE", "enabled": false,
          "shareCap": 50, "contributor": {"userId": "\(zhang)", "name": "Zhang Min", "you": false},
          "usage": {"inputTokens": 0, "outputTokens": 0, "costUsd": 0, "othersCostUsd": 0},
-         "createdAt": "2026-09-06T00:00:00.000Z"}
+         "running": false, "next": false, "createdAt": "2026-09-06T00:00:00.000Z"}
       ],
       "createdAt": "2026-09-01T00:00:00.000Z", "updatedAt": "2026-09-27T00:00:00.000Z"
     }]
@@ -67,18 +67,20 @@ final class SharedPoolsTests: XCTestCase {
         try XCTUnwrap(try pools(json).first)
     }
 
-    /// The pool as another person in it reads it: their role, and whose keys are "you".
+    /// The pool as another person in it reads it: their role, and whose keys are "you". Which key is next
+    /// is the server's answer for each reader; a test that needs it says so.
     private func asMember(_ pool: SharedPool, userId: String, role: SharedPoolRole = .member) -> SharedPool {
         func mark(_ person: SharedPoolPerson) -> SharedPoolPerson {
             SharedPoolPerson(userId: person.userId, name: person.name, role: person.role, creator: person.creator,
-                             you: person.userId == userId, keys: person.keys, usage: person.usage)
+                             you: person.userId == userId, keys: person.keys, sessions: person.sessions,
+                             usage: person.usage)
         }
         func mark(_ key: SharedPoolKey) -> SharedPoolKey {
             let c = key.contributor
             return SharedPoolKey(id: key.id, label: key.label, fingerprint: key.fingerprint, state: key.state,
                                  enabled: key.enabled, shareCap: key.shareCap,
                                  contributor: PoolKeyContributor(userId: c.userId, name: c.name, you: c.userId == userId),
-                                 usage: key.usage)
+                                 usage: key.usage, running: key.running)
         }
         return SharedPool(id: pool.id, slug: pool.slug, label: pool.label, engine: pool.engine,
                           membersCanAdd: pool.membersCanAdd, ownKeyFirst: pool.ownKeyFirst, viewerRole: role,
@@ -107,11 +109,14 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(pool.people.map(\.name), ["Wikova", "Zhang Min", "Chen Yu", "Lin Wei"])
         XCTAssertEqual(pool.people.map(\.role), [.admin, .member, .member, .member])
         XCTAssertEqual(pool.people.map(\.keys), [2, 2, 1, 0])
+        XCTAssertEqual(pool.people.map(\.sessions), [23, 19, 14, 6])
         XCTAssertEqual(pool.people.first?.creator, true)
         XCTAssertEqual(pool.people.first?.you, true)
         XCTAssertEqual(pool.keys.map(\.label), ["orbit-org-1", "orbit-org-2", "ios-build", "wikova-backup", "zhang-old"])
         XCTAssertEqual(pool.keys.map(\.state), [.active, .active, .active, .invalid, .active])
         XCTAssertEqual(pool.keys.map(\.enabled), [true, true, true, true, false])
+        XCTAssertEqual(pool.keys.map(\.next), [true, false, false, false, false])
+        XCTAssertEqual(pool.keys.map(\.running), [false, true, false, false, false])
         XCTAssertEqual(pool.keys.first?.fingerprint, "sk-…AB12")
         XCTAssertEqual(pool.keys.first?.shareCap, 50)
         XCTAssertEqual(pool.keys.first?.usage.othersCostUsd, 12.4)
@@ -158,6 +163,8 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertTrue(only.enabled)
         XCTAssertNil(only.shareCap)
         XCTAssertEqual(only.usage, PoolSpend())
+        XCTAssertFalse(only.next)
+        XCTAssertFalse(only.running)
     }
 
     /// The only place a key is sent: the add and the replace. The limit is left out when there is none.
@@ -172,6 +179,7 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(try json(UpdatePoolKeyRequest(enabled: false)), #"{"enabled":false}"#)
         XCTAssertEqual(try json(UpdateSharedPoolRequest(ownKeyFirst: false)), #"{"ownKeyFirst":false}"#)
         XCTAssertEqual(try json(AddSharedPoolPersonRequest(email: "a@b.c")), #"{"email":"a@b.c"}"#)
+        XCTAssertEqual(try json(UpdateSharedPoolPersonRequest(role: .admin)), #"{"role":"ADMIN"}"#)
     }
 
     // MARK: - Settings → Providers
@@ -193,25 +201,34 @@ final class SharedPoolsTests: XCTestCase {
 
     // MARK: - keys
 
-    /// Each key's status, in the words and colours of the web's tags.
+    /// Each key's status, in the words and colours of the web's tags (`keyState` → `memberStatus`).
     func testEachKeysStatusIsTheWebsWordsAndColour() throws {
         let pool = try team()
-        func status(_ label: String) throws -> PoolStatus {
-            SharedPoolPage.status(try key(pool, label), in: pool, now: now, timeZone: berlin)
-        }
+        func status(_ label: String) throws -> PoolStatus { SharedPoolPage.status(try key(pool, label), in: pool) }
         XCTAssertEqual(try status("orbit-org-1"), PoolStatus(label: "Available", tone: .success))
-        XCTAssertEqual(try status("orbit-org-2"), PoolStatus(label: "Available", tone: .success))
-        XCTAssertEqual(try status("ios-build"), PoolStatus(label: "At cap · resets Thu 02:00", tone: .warning))
+        XCTAssertEqual(try status("orbit-org-2"), PoolStatus(label: "Running now", tone: .brand))
+        XCTAssertEqual(try status("ios-build"), PoolStatus(label: "At cap · resets Oct 1", tone: .warning))
         XCTAssertEqual(try status("wikova-backup"), PoolStatus(label: "Invalid", tone: .danger))
         XCTAssertEqual(try status("zhang-old"), PoolStatus(label: "Disabled", tone: .neutral))
         // OpenAI switched its organization off: out, however its contributor has it.
         let refused = SharedPoolKey(id: "k", label: "k", fingerprint: "sk-…0000", state: .disabled,
                                     contributor: PoolKeyContributor(userId: Self.lin, name: "Lin Wei"))
-        XCTAssertEqual(SharedPoolPage.status(refused, in: pool, now: now), PoolStatus(label: "Disabled", tone: .neutral))
+        XCTAssertEqual(SharedPoolPage.status(refused, in: pool), PoolStatus(label: "Disabled", tone: .neutral))
+        // Refused by OpenAI outranks switched off: it is the one somebody has to act on.
+        let both = SharedPoolKey(id: "k", label: "k", fingerprint: "sk-…0000", state: .invalid, enabled: false,
+                                 contributor: PoolKeyContributor(userId: Self.lin, name: "Lin Wei"))
+        XCTAssertEqual(SharedPoolPage.status(both, in: pool).label, "Invalid")
         // A pool read with no month to name says the cap without its reset.
         let noWindow = SharedPool(id: pool.id, slug: pool.slug, label: pool.label, keys: pool.keys)
-        XCTAssertEqual(SharedPoolPage.status(try key(pool, "ios-build"), in: noWindow, now: now),
+        XCTAssertEqual(SharedPoolPage.status(try key(pool, "ios-build"), in: noWindow),
                        PoolStatus(label: "At cap", tone: .warning))
+    }
+
+    /// A cap stops everyone's sessions on the key but its contributor's.
+    func testAKeyAtItsCapIsAvailableToItsContributor() throws {
+        let chen = asMember(try team(), userId: Self.chen)
+        XCTAssertEqual(SharedPoolPage.status(try key(chen, "ios-build"), in: chen).label, "Available")
+        XCTAssertEqual(SharedPoolPage.subtitle(chen), "4 members · 3 of 5 keys available")
     }
 
     /// Its contributor, or an admin, is told to replace a refused key; anyone else is told who can.
@@ -223,7 +240,8 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertTrue(SharedPoolPage.canReplace(mine, in: pool))
         let zhang = asMember(pool, userId: Self.zhang)
         let theirs = try key(zhang, "wikova-backup")
-        XCTAssertEqual(SharedPoolPage.invalidReason(theirs, in: zhang), "Rejected by OpenAI — only Wikova can replace it.")
+        XCTAssertEqual(SharedPoolPage.invalidReason(theirs, in: zhang),
+                       "Rejected by OpenAI — only Wikova or the pool’s admins can replace it.")
         XCTAssertFalse(SharedPoolPage.canReplace(theirs, in: zhang))
         // An admin who didn't put it in may replace it too.
         let admin = asMember(pool, userId: Self.chen, role: .admin)
@@ -245,7 +263,7 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(SharedPoolPage.money(uncapped), "$3.10")
         XCTAssertNil(SharedPoolPage.capPercent(uncapped))
         XCTAssertFalse(SharedPoolPage.atCap(uncapped))
-        // Nothing for the others at all: spent before anyone starts.
+        // Nothing for the others at all: capped before anyone starts.
         let closed = SharedPoolKey(id: "k", label: "k", fingerprint: "sk-…0000", shareCap: 0,
                                    contributor: PoolKeyContributor(userId: Self.lin, name: "Lin Wei"))
         XCTAssertEqual(SharedPoolPage.capPercent(closed), 100)
@@ -256,41 +274,29 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(SharedPoolPage.keyLine(try key(try team(), "orbit-org-2")), "Zhang Min · sk-…7K2P")
     }
 
-    /// The claim's own rule for the key a session starting now runs on, asked for whoever reads the page.
-    func testTheNextKeyIsTheClaimsChoiceForTheReader() throws {
+    /// The Keys header: the key the server says a session starting now runs on, or why there is none.
+    func testTheKeysHeaderNamesTheNextKeyOrWhyThereIsNone() throws {
         let pool = try team()
-        // Wikova, with "Own key first": the key of theirs that can run, however much room others have.
         XCTAssertEqual(SharedPoolPage.nextKey(pool)?.label, "orbit-org-1")
-        XCTAssertEqual(SharedPoolPage.nextKey(pool).map(SharedPoolPage.nextLine), "Next: orbit-org-1")
-        // Lin Wei has no key: the most room left, which orbit-org-1 has ($37.60 against $19).
-        XCTAssertEqual(SharedPoolPage.nextKey(asMember(pool, userId: Self.lin))?.label, "orbit-org-1")
-        // Chen Yu's own key is spent to its cap for the others — never for Chen Yu.
-        XCTAssertEqual(SharedPoolPage.nextKey(asMember(pool, userId: Self.chen))?.label, "ios-build")
-        // Without the rule, room decides: a key of one's own has all of it.
-        let off = SharedPool(id: pool.id, slug: pool.slug, label: pool.label, ownKeyFirst: false,
-                             viewerRole: .member, window: pool.window,
-                             people: asMember(pool, userId: Self.zhang).people,
-                             keys: asMember(pool, userId: Self.zhang).keys)
-        XCTAssertEqual(SharedPoolPage.nextKey(off)?.label, "orbit-org-2")
-        // Equal room goes to the lower id, compared as the ids the server orders by.
-        let tie = SharedPool(id: "p", slug: "p", label: "P", people: [SharedPoolPerson(userId: Self.lin, name: "Lin Wei", you: true)],
-                             keys: [SharedPoolKey(id: Self.id(22), label: "b", fingerprint: "sk-…0002",
-                                                  contributor: PoolKeyContributor(userId: Self.chen, name: "Chen Yu")),
-                                    SharedPoolKey(id: Self.id(21), label: "a", fingerprint: "sk-…0001",
-                                                  contributor: PoolKeyContributor(userId: Self.zhang, name: "Zhang Min"))])
-        XCTAssertEqual(SharedPoolPage.nextKey(tie)?.label, "a")
-        // Nothing can run: no next key, and the header says nothing.
-        let dead = SharedPool(id: "p", slug: "p", label: "P", keys: [try key(pool, "wikova-backup"), try key(pool, "zhang-old")])
-        XCTAssertNil(SharedPoolPage.nextKey(dead))
+        XCTAssertEqual(SharedPoolPage.keysHeadline(pool), "Next: orbit-org-1")
+        XCTAssertEqual(SharedPoolPage.keysHeadline(SharedPool(id: "p", slug: "p", label: "P")), "No keys")
+        let dead = SharedPool(id: "p", slug: "p", label: "P",
+                              keys: [try key(pool, "wikova-backup"), try key(pool, "zhang-old")])
+        XCTAssertEqual(SharedPoolPage.keysHeadline(dead), "No key can run")
+        let capped = SharedPool(id: "p", slug: "p", label: "P", window: pool.window, keys: [try key(pool, "ios-build")])
+        XCTAssertEqual(SharedPoolPage.keysHeadline(capped), "All at cap · resets Oct 1")
     }
 
     // MARK: - people
 
     func testEachPersonsLineAndShareOfTheMonth() throws {
         let pool = try team()
-        XCTAssertEqual(pool.people.map(SharedPoolPage.personLine), ["2 keys", "2 keys", "1 key", "No key"])
+        XCTAssertEqual(pool.people.map(SharedPoolPage.personLine),
+                       ["2 keys · 23 sessions", "2 keys · 19 sessions", "1 key · 14 sessions", "No key · 6 sessions"])
         XCTAssertEqual(pool.people.map { SharedPoolPage.share($0, in: pool) }, [34, 30, 24, 12])
-        let quiet = SharedPool(id: "p", slug: "p", label: "P", people: [SharedPoolPerson(userId: "u", name: "U")])
+        let quiet = SharedPool(id: "p", slug: "p", label: "P",
+                               people: [SharedPoolPerson(userId: "u", name: "U", keys: 1, sessions: 1)])
+        XCTAssertEqual(SharedPoolPage.personLine(quiet.people[0]), "1 key · 1 session")
         XCTAssertEqual(SharedPoolPage.share(quiet.people[0], in: quiet), 0)
     }
 
@@ -301,7 +307,8 @@ final class SharedPoolsTests: XCTestCase {
                        ["#3370FF", "#16A34A", "#DB2777", "#EA580C"])
         // Either spelling of the id names the same person.
         XCTAssertEqual(SharedPoolPage.avatarHex(try XCTUnwrap(PublicID.toUUID(Self.chen)), in: pool), "#DB2777")
-        XCTAssertEqual(SharedPoolPage.avatarHex("nobody", in: pool), "#8E8E93")
+        // Somebody not (or no longer) in the list takes the next place's.
+        XCTAssertEqual(SharedPoolPage.avatarHex("nobody", in: pool), "#7C3AED")
         XCTAssertEqual(SharedPoolPage.initial(" zhang Min"), "Z")
         XCTAssertEqual(SharedPoolPage.initial(""), "?")
     }
@@ -314,12 +321,15 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertTrue(SharedPoolPage.canRemove(try key(pool, "orbit-org-2"), in: pool), "an admin removes anyone's key")
         XCTAssertFalse(SharedPoolPage.canSwitch(try key(pool, "orbit-org-2")), "only its contributor switches it")
         XCTAssertTrue(SharedPoolPage.canSwitch(try key(pool, "orbit-org-1")))
+        // An admin manages everyone but themselves and the pool's creator.
+        XCTAssertEqual(pool.people.map { SharedPoolPage.canManage($0, in: pool) }, [false, true, true, true])
 
         let zhang = asMember(pool, userId: Self.zhang)
         XCTAssertFalse(SharedPoolPage.isAdmin(zhang))
         XCTAssertTrue(SharedPoolPage.canAddKey(zhang), "members add keys while the rule is on")
         XCTAssertTrue(SharedPoolPage.canRemove(try key(zhang, "orbit-org-2"), in: zhang))
         XCTAssertFalse(SharedPoolPage.canRemove(try key(zhang, "orbit-org-1"), in: zhang))
+        XCTAssertEqual(zhang.people.map { SharedPoolPage.canManage($0, in: zhang) }, [false, false, false, false])
         let closed = SharedPool(id: zhang.id, slug: zhang.slug, label: zhang.label, membersCanAdd: false,
                                 viewerRole: .member, people: zhang.people, keys: zhang.keys)
         XCTAssertFalse(SharedPoolPage.canAddKey(closed))
@@ -327,14 +337,24 @@ final class SharedPoolsTests: XCTestCase {
                        "Anyone in Team Codex can put an OpenAI API key in. Off: only admins can.")
     }
 
+    func testTheSentencesThatNameThePoolAKeyOrAPerson() throws {
+        let pool = try team()
+        let key = try key(pool, "orbit-org-2")
+        XCTAssertEqual(SharedPoolPage.removeKeyTitle(key), "Remove orbit-org-2?")
+        XCTAssertEqual(SharedPoolPage.removedKey(key), "orbit-org-2 is out of the pool")
+        XCTAssertEqual(SharedPoolPage.deleteTitle(pool), "Delete Team Codex?")
+        XCTAssertEqual(SharedPoolPage.leaveTitle(pool), "Leave Team Codex?")
+        XCTAssertEqual(SharedPoolPage.addMembersTitle(pool), "Add members to Team Codex")
+        XCTAssertEqual(SharedPoolPage.added(pool), "Added to Team Codex")
+        XCTAssertEqual(SharedPoolPage.removePersonTitle(pool.people[1], in: pool), "Remove Zhang Min from Team Codex?")
+    }
+
     // MARK: - words
 
-    func testTheResetIsATimeADayOrADate() {
-        let at = { (iso: String) in SharedPoolPage.resetTime(iso, now: self.now, timeZone: self.berlin) }
-        XCTAssertEqual(at("2026-09-28T20:30:00Z"), "22:30")
-        XCTAssertEqual(at("2026-10-01T00:00:00.000Z"), "Thu 02:00")
-        XCTAssertEqual(at("2026-11-01T00:00:00.000Z"), "Nov 1")
-        XCTAssertNil(at("soon"))
+    func testACapComesBackOnADateInUTC() {
+        XCTAssertEqual(SharedPoolPage.capReset("2026-10-01T00:00:00.000Z"), "Oct 1")
+        XCTAssertEqual(SharedPoolPage.capReset("2027-01-01T00:00:00Z"), "Jan 1")
+        XCTAssertNil(SharedPoolPage.capReset("soon"))
     }
 
     // MARK: - Add a key
@@ -354,74 +374,69 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(AddPoolKey.doneRow(me: "Wikova", fingerprint: "sk-…9E4D"),
                        "Wikova · sk-…9E4D · only its fingerprint is ever shown")
         XCTAssertEqual(AddPoolKey.duplicateTitle(pool), "This key is already in Team Codex")
-        XCTAssertEqual(AddPoolKey.duplicateDetail(contributor: "Wikova"),
+        XCTAssertEqual(AddPoolKey.duplicateDetail(AddPoolKey.AddedBy(name: "Wikova")),
                        "Wikova added it. The same key twice doesn’t add budget — add a different one.")
-        XCTAssertEqual(AddPoolKey.duplicateDetail(contributor: nil),
-                       "The same key twice doesn’t add budget — add a different one.")
+        XCTAssertEqual(AddPoolKey.duplicateDetail(AddPoolKey.AddedBy(name: "Wikova", you: true)),
+                       "You added it. The same key twice doesn’t add budget — add a different one.")
+        XCTAssertEqual(AddPoolKey.duplicateDetail(AddPoolKey.AddedBy(name: nil)),
+                       "Someone added it. The same key twice doesn’t add budget — add a different one.")
         let one = SharedPool(id: "p", slug: "p", label: "Solo", people: [SharedPoolPerson(userId: "u", name: "U", you: true)])
         XCTAssertEqual(AddPoolKey.facts(one).first.map { $0.lead + $0.rest },
                        "Everyone in Solo can run sessions on it — 1 person. Their sessions spend this key’s budget.")
+    }
+
+    func testReplacingARefusedKeyNamesItAndItsFingerprint() throws {
+        let pool = try team()
+        let refused = try key(pool, "wikova-backup")
+        XCTAssertEqual(AddPoolKey.replaceTitle(refused), "Replace wikova-backup")
+        XCTAssertEqual(AddPoolKey.replaceLead(refused),
+                       "OpenAI rejected sk-…M4T7. Paste a working key to put wikova-backup back in the pool.")
+        XCTAssertEqual(AddPoolKey.replaced(refused, in: pool), "wikova-backup is back in Team Codex")
+        XCTAssertEqual(AddPoolKey.replaceDuplicate(AddPoolKey.AddedBy(name: "Chen Yu"), pool: pool),
+                       "This key is already in Team Codex — Chen Yu added it.")
+        XCTAssertEqual(AddPoolKey.replaceDuplicate(AddPoolKey.AddedBy(name: "Wikova", you: true), pool: pool),
+                       "This key is already in Team Codex — you added it.")
     }
 
     /// What the form shows of a key is what the pool will: `sk-…` and its last four characters.
     func testTheFormShowsOnlyTheFingerprintOfWhatIsTyped() {
         XCTAssertEqual(AddPoolKey.fingerprint(of: "sk-proj-9tRkQm2Zx8VbN4Lc7Hd39E4D"), "sk-…9E4D")
         XCTAssertEqual(AddPoolKey.fingerprint(of: "  sk-proj-9tRkQm2Zx8VbN4Lc7Hd39E4D\n"), "sk-…9E4D")
-        XCTAssertEqual(AddPoolKey.fingerprint(of: "sk-12"), "sk-…")
+        XCTAssertEqual(AddPoolKey.fingerprint(of: "sk-12"), "sk-…k-12")
         XCTAssertEqual(AddPoolKey.fingerprint(of: ""), "sk-…")
     }
 
-    func testTheFormSuggestsANameNoKeyHasAndReadsTheLimit() throws {
-        let pool = try team()
-        XCTAssertEqual(AddPoolKey.suggestedName(for: pool), "wikova-org-1")
-        let taken = SharedPool(id: pool.id, slug: pool.slug, label: pool.label, people: pool.people,
-                               keys: pool.keys + [SharedPoolKey(id: "k", label: "wikova-org-1", fingerprint: "sk-…0000",
-                                                                contributor: PoolKeyContributor(userId: Self.wikova, name: "Wikova", you: true))])
-        XCTAssertEqual(AddPoolKey.suggestedName(for: taken), "wikova-org-2")
-        XCTAssertEqual(AddPoolKey.suggestedName(for: asMember(pool, userId: Self.zhang)), "zhang-org-1")
+    func testTheFormTakesAWholeDollarLimitAndNeedsANameAndAKey() {
+        XCTAssertEqual(AddPoolKey.limitDigits("$5a0 "), "50")
+        XCTAssertEqual(AddPoolKey.limitDigits("12.5"), "125")
         XCTAssertEqual(AddPoolKey.shareCap("50"), 50)
-        XCTAssertEqual(AddPoolKey.shareCap(" 7 "), 7)
         XCTAssertNil(AddPoolKey.shareCap(""))
-        XCTAssertTrue(AddPoolKey.canSubmit(name: "a", key: "sk-x", limit: ""))
-        XCTAssertTrue(AddPoolKey.canSubmit(name: "a", key: "sk-x", limit: "50"))
-        XCTAssertFalse(AddPoolKey.canSubmit(name: " ", key: "sk-x", limit: ""))
-        XCTAssertFalse(AddPoolKey.canSubmit(name: "a", key: "", limit: ""))
-        XCTAssertFalse(AddPoolKey.canSubmit(name: "a", key: "sk-x", limit: "12.5"))
-        XCTAssertFalse(AddPoolKey.canSubmit(name: "a", key: "sk-x", limit: "-3"))
+        XCTAssertTrue(AddPoolKey.canSubmit(name: "a", key: "sk-x"))
+        XCTAssertFalse(AddPoolKey.canSubmit(name: " ", key: "sk-x"))
+        XCTAssertFalse(AddPoolKey.canSubmit(name: "a", key: " \n"))
     }
 
-    /// Who put in the key the server turned away as a duplicate: read off the pool by the key's last four
-    /// characters, else off the refusal itself.
-    func testADuplicateNamesWhoPutTheKeyIn() throws {
-        let pool = try team()
-        XCTAssertEqual(AddPoolKey.duplicateContributor(typed: "sk-proj-aaaaaaaaaaaaaaaaaaaa7K2P", pool: pool, message: nil),
-                       "Zhang Min")
-        XCTAssertEqual(AddPoolKey.duplicateContributor(typed: "sk-proj-aaaaaaaaaaaaaaaaaaaaZZZZ", pool: pool,
-                                                       message: "This key is already in \"Team Codex\" — Chen Yu put it in"),
-                       "Chen Yu")
-        XCTAssertNil(AddPoolKey.duplicateContributor(typed: "sk-proj-aaaaaaaaaaaaaaaaaaaaZZZZ", pool: pool,
-                                                     message: "Conflict"))
-    }
-
-    /// A failed send, as the sheet reads it: the duplicate refusal names who put the key in, and any
-    /// other refusal is the server's own sentence.
+    /// A failed send, as the sheet reads it: the duplicate refusal names who put the key in (`addedBy`),
+    /// and any other refusal is the server's own sentence.
     func testAFailedSendIsADuplicateOrTheServersReason() throws {
-        let pool = try team()
-        let duplicate = APIError.http(status: 409, body: #"{"code":"POOL_KEY_DUPLICATE","message":"This key is already in \"Team Codex\" — Chen Yu put it in"}"#)
-        XCTAssertEqual(AddPoolKey.outcome(of: duplicate, typed: "sk-proj-aaaaaaaaaaaaaaaaaaaaZZZZ", pool: pool),
-                       .duplicate(contributor: "Chen Yu"))
-        XCTAssertEqual(AddPoolKey.outcome(of: duplicate, typed: "sk-proj-aaaaaaaaaaaaaaaaaaaaAB12", pool: pool),
-                       .duplicate(contributor: "Wikova"))
+        let theirs = APIError.http(status: 409, body: #"{"code":"POOL_KEY_DUPLICATE","message":"This key is already in \"Team Codex\" — Chen Yu put it in","addedBy":{"name":"Chen Yu","you":false}}"#)
+        XCTAssertEqual(AddPoolKey.outcome(of: theirs), .duplicate(AddPoolKey.AddedBy(name: "Chen Yu")))
+        let mine = APIError.http(status: 409, body: #"{"code":"POOL_KEY_DUPLICATE","message":"…","addedBy":{"name":"Wikova","you":true}}"#)
+        XCTAssertEqual(AddPoolKey.outcome(of: mine), .duplicate(AddPoolKey.AddedBy(name: "Wikova", you: true)))
+        // An older server's refusal names nobody in a field: "Someone".
+        let bare = APIError.http(status: 409, body: #"{"code":"POOL_KEY_DUPLICATE","message":"…"}"#)
+        XCTAssertEqual(AddPoolKey.outcome(of: bare), .duplicate(AddPoolKey.AddedBy(name: nil)))
         let shape = APIError.http(status: 400, body: #"{"code":"POOL_KEY_FORMAT","message":"That isn't an OpenAI API key — paste an organization or project key (sk-…)"}"#)
-        XCTAssertEqual(AddPoolKey.outcome(of: shape, typed: "abc", pool: pool),
+        XCTAssertEqual(AddPoolKey.outcome(of: shape),
                        .refused("That isn't an OpenAI API key — paste an organization or project key (sk-…)"))
-        XCTAssertEqual(AddPoolKey.outcome(of: URLError(.networkConnectionLost), typed: "abc", pool: pool),
-                       .refused("the connection dropped"))
+        XCTAssertEqual(AddPoolKey.outcome(of: URLError(.networkConnectionLost)), .refused("the connection dropped"))
     }
 
-    func testTheAddedKeyIsTheCallersNewestOfThatName() throws {
-        let pool = try team()
-        XCTAssertEqual(AddPoolKey.added("orbit-org-1", in: pool)?.fingerprint, "sk-…AB12")
-        XCTAssertNil(AddPoolKey.added("orbit-org-2", in: pool), "a key of that name that isn't the caller's")
+    func testTheAddedKeyIsTheOneThatWasntThereBefore() throws {
+        let after = try team()
+        let before = SharedPool(id: after.id, slug: after.slug, label: after.label, people: after.people,
+                                keys: Array(after.keys.dropLast()))
+        XCTAssertEqual(AddPoolKey.added(before: before, after: after)?.label, "zhang-old")
+        XCTAssertNil(AddPoolKey.added(before: after, after: after))
     }
 }

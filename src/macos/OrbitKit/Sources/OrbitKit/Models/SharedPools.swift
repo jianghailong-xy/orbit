@@ -97,10 +97,15 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
     public let contributor: PoolKeyContributor
     /// This month's use of it; `othersCostUsd` is what its cap counts.
     public let usage: PoolSpend
+    /// A session on the pool is generating on it right now.
+    public let running: Bool
+    /// The key a session the caller starts now runs on — the claim's own choice, asked for them. At
+    /// most one key of a pool carries it.
+    public let next: Bool
 
     public init(id: String, label: String, fingerprint: String, state: PoolKeyState = .active,
                 enabled: Bool = true, shareCap: Int? = nil, contributor: PoolKeyContributor,
-                usage: PoolSpend = PoolSpend()) {
+                usage: PoolSpend = PoolSpend(), running: Bool = false, next: Bool = false) {
         self.id = id
         self.label = label
         self.fingerprint = fingerprint
@@ -109,6 +114,8 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
         self.shareCap = shareCap
         self.contributor = contributor
         self.usage = usage
+        self.running = running
+        self.next = next
     }
 
     public init(from decoder: Decoder) throws {
@@ -121,6 +128,8 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
         shareCap = (try? c.decodeIfPresent(Int.self, forKey: .shareCap)) ?? nil
         contributor = try c.decode(PoolKeyContributor.self, forKey: .contributor)
         usage = (try? c.decodeIfPresent(PoolSpend.self, forKey: .usage)) ?? PoolSpend()
+        running = (try? c.decodeIfPresent(Bool.self, forKey: .running)) ?? false
+        next = (try? c.decodeIfPresent(Bool.self, forKey: .next)) ?? false
     }
 }
 
@@ -135,19 +144,22 @@ public struct SharedPoolPerson: Codable, Equatable, Sendable, Identifiable {
     public let you: Bool
     /// How many keys they put in.
     public let keys: Int
+    /// How many sessions they started on the pool this month.
+    public let sessions: Int
     /// What they ran on the pool this month, on anyone's keys.
     public let usage: PoolSpend
 
     public var id: String { userId }
 
     public init(userId: String, name: String, role: SharedPoolRole = .member, creator: Bool = false,
-                you: Bool = false, keys: Int = 0, usage: PoolSpend = PoolSpend()) {
+                you: Bool = false, keys: Int = 0, sessions: Int = 0, usage: PoolSpend = PoolSpend()) {
         self.userId = userId
         self.name = name
         self.role = role
         self.creator = creator
         self.you = you
         self.keys = keys
+        self.sessions = sessions
         self.usage = usage
     }
 
@@ -159,6 +171,7 @@ public struct SharedPoolPerson: Codable, Equatable, Sendable, Identifiable {
         creator = try c.decodeIfPresent(Bool.self, forKey: .creator) ?? false
         you = try c.decodeIfPresent(Bool.self, forKey: .you) ?? false
         keys = try c.decodeIfPresent(Int.self, forKey: .keys) ?? 0
+        sessions = (try? c.decodeIfPresent(Int.self, forKey: .sessions)) ?? 0
         usage = (try? c.decodeIfPresent(PoolSpend.self, forKey: .usage)) ?? PoolSpend()
     }
 }
@@ -270,4 +283,11 @@ public struct AddSharedPoolPersonRequest: Encodable, Equatable, Sendable {
     public let email: String
 
     public init(email: String) { self.email = email }
+}
+
+/// PATCH /providers/shared-pools/:id/people/:userId — an admin makes a person an admin or a member.
+public struct UpdateSharedPoolPersonRequest: Encodable, Equatable, Sendable {
+    public let role: SharedPoolRole
+
+    public init(role: SharedPoolRole) { self.role = role }
 }
