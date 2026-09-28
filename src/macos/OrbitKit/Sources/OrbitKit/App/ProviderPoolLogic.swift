@@ -25,8 +25,7 @@ public enum ProviderPools {
     /// The picker's section of pools, in the words the /providers page heads its pools with (web's
     /// `AccountPools`).
     public static let sectionTitle = "Account pools"
-    public static let sectionFooter = "Several Claude subscriptions under one name — each session "
-        + "starts on the account with the most room in its 5-hour window."
+    public static let sectionFooter = ProvidersOverview.accountPoolsDetail
 
     /// The pools as providers the pickers and the composer resolve like any configured one: a pool
     /// runs on its members' Claude subscriptions, whose models are the Claude CLI's own — the model
