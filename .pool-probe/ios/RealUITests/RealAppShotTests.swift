@@ -80,6 +80,15 @@ final class RealAppShotTests: XCTestCase {
     private func signIn(_ app: XCUIApplication) -> Bool {
         let email = app.textFields["Email"]
         guard email.waitForExistence(timeout: 30) else {
+            // No sign-in screen: a second pass on the same simulator launches into the session the
+            // first one left in the Keychain (`AppModel.init` restores it). That is the app's own
+            // behaviour, not a failure — say so, so a run's report reads right.
+            let newSession = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Start a new session'"))
+                .firstMatch
+            if newSession.waitForExistence(timeout: 20) {
+                note("sign-in: already signed in (the token from an earlier pass is in the Keychain)")
+                return true
+            }
             missing("sign-in-email", app)
             return false
         }
@@ -178,11 +187,14 @@ final class RealAppShotTests: XCTestCase {
 
     /// The composer's pool pill, measured. The pill is the account's label beside its quota gauge, so
     /// both halves are printed: what the toolbar gives the label is what says whether it is legible on
-    /// this device at this width, or squeezed down to the model control's ellipsis.
+    /// this device at this width, or squeezed down to the model control's ellipsis. The orientation is
+    /// read off the screen the shot is taken on — `XCUIDevice.shared.orientation` reports the last
+    /// orientation a test SET, which is not where the app is.
     private func measureComposerPill(_ app: XCUIApplication, stage: String) {
         let device = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] ?? "?"
-        note("composer-pill-frame [\(stage)]: screen=\(app.frame.size) device=\(device) "
-             + "orientation=\(XCUIDevice.shared.orientation == .portrait ? "portrait" : "landscape")")
+        let screen = app.frame.size
+        let shape = screen.width < screen.height ? "portrait" : "landscape"
+        note("composer-pill-frame [\(stage)]: screen=\(screen) \(shape) device=\(device)")
         let key = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'orbit-org-1'")).firstMatch
         note(key.waitForExistence(timeout: 10)
              ? "composer-pill-frame [\(stage)] account element: frame=\(key.frame) label=\"\(key.label)\""

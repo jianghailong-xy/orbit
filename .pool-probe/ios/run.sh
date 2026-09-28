@@ -88,6 +88,15 @@ xcrun simctl ui "$UDID" appearance light 2>/dev/null || true
 kill $STUB 2>/dev/null || true
 trap - EXIT
 
+# A capture taken with the phone in landscape comes back on a portrait canvas with its content
+# rotated; turn the one that exists to be read (17) upright, and keep the raw capture beside it.
+if [ -f "$OUT/17-real-composer-pool-key-legible.png" ]; then
+  cp "$OUT/17-real-composer-pool-key-legible.png" "$OUT/17-real-composer-pool-key-legible-landscape-raw.png"
+  sips -r 270 "$OUT/17-real-composer-pool-key-legible.png" >/dev/null 2>&1 \
+    && echo "run.sh: 17-real-composer-pool-key-legible.png rotated upright (landscape capture; the raw one is beside it)" \
+       >> "$OUT/report.txt"
+fi
+
 echo "==> shots:"
 ls -la "$OUT" || true
 ls "$OUT"/*.png || exit 1
