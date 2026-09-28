@@ -206,8 +206,9 @@ final class RealAppShotTests: XCTestCase {
         closePicker(app)
 
         let key = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'orbit-org-1'")).firstMatch
-        note(key.waitForExistence(timeout: 10) ? "composer account label: \(key.label)"
-                                                : "composer account label: NOT FOUND")
+        note(key.waitForExistence(timeout: 10)
+             ? "composer account label: \(key.label) frame=\(key.frame)"
+             : "composer account label: NOT FOUND")
         shoot("13-real-composer-pool-key")
 
         let input = app.textViews.firstMatch
@@ -226,6 +227,13 @@ final class RealAppShotTests: XCTestCase {
         shoot("15-real-after-send")
         Thread.sleep(forTimeInterval: 4)
         shoot("16-real-after-send-settled")
+
+        // The same row on a phone held sideways, where the model control stops taking the room the
+        // account's label needs. Last, so nothing else depends on the rotation.
+        XCUIDevice.shared.orientation = .landscapeLeft
+        Thread.sleep(forTimeInterval: 2.5)
+        shoot("17-real-composer-landscape")
+        XCUIDevice.shared.orientation = .portrait
     }
 
     /// The picker in dark. Only run in the dark pass — the appearance is the simulator's, which a test

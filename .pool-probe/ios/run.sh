@@ -41,29 +41,33 @@ xcrun simctl status_bar "$UDID" override --time "10:04" --batteryState dischargi
   2>/dev/null || true
 
 # One scheme at a time, each tolerated: the pure-view app carries the deliverable, the real-app run is
-# the strongest evidence and must not be able to take the pictures down with it.
+# the strongest evidence and must not be able to take the pictures down with it. Every invocation gets
+# its own result bundle — xcodebuild refuses an existing one, and the passes are re-runs of a scheme.
+RUN=0
 run_scheme() {
   local scheme="$1"; shift
-  local log="$OUT/xcodebuild-$scheme.log"
+  RUN=$((RUN + 1))
+  local log="$OUT/xcodebuild-$scheme-$RUN.log"
   echo "==> $scheme $*"
   TEST_RUNNER_SHOTS_DIR="$OUT" xcodebuild test -project PoolProbe.xcodeproj -scheme "$scheme" \
     -destination "id=$UDID" -derivedDataPath .dd \
-    -resultBundlePath "results/$scheme.xcresult" "$@" > "$log" 2>&1
+    -resultBundlePath "results/$scheme-$RUN.xcresult" "$@" > "$log" 2>&1
   local status=$?
   grep -E "Test Case|Executed|error:|failed|passed" "$log" | tail -60 || true
   if [ "$status" -ne 0 ]; then
     echo "==> $scheme exited $status; last 80 lines:"
     tail -80 "$log"
   fi
-  xcrun xcresulttool export attachments --path "results/$scheme.xcresult" \
-    --output-path "$OUT/attachments-$scheme" 2>&1 | tail -3 || true
+  xcrun xcresulttool export attachments --path "results/$scheme-$RUN.xcresult" \
+    --output-path "$OUT/attachments-$scheme-$RUN" 2>&1 | tail -3 || true
   return "$status"
 }
 
 run_scheme PoolProbe
 
-# The real app talks to the stub on the host's loopback (the simulator shares it).
-python3 ../stub.py > "$OUT/stub.log" 2>&1 &
+# The real app talks to the stub on the host's loopback (the simulator shares it). The stub writes
+# the POST body it receives into the shots directory, beside the pictures.
+STUB_OUT="$OUT" python3 ../stub.py > "$OUT/stub.log" 2>&1 &
 STUB=$!
 trap 'kill $STUB 2>/dev/null' EXIT
 for _ in $(seq 1 20); do
