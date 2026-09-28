@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AgentProvider, RunEventType } from '@orbit/shared';
+import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
@@ -12,6 +13,7 @@ import {
   UpdateSharedPoolDto,
   UpdateSharedPoolPersonDto,
 } from './dto';
+import { choosePoolKey } from './pool-key-select';
 import { encryptSecret } from './provider-crypto';
 import { slugBase } from './provider-slug';
 import { ProvidersService } from './providers.service';
@@ -68,15 +70,42 @@ function spend(rows: UsageRow[]) {
   return { inputTokens: Number(input), outputTokens: Number(output), costUsd: Number(cost) / 1_000_000 };
 }
 
+/** What a pool's sessions are doing, read beside its rows: which keys a session is generating on right
+ *  now, and how many sessions each person started on the pool this month. */
+interface PoolActivity {
+  running: ReadonlySet<string>;
+  sessions: ReadonlyMap<string, number>;
+}
+
 /**
- * A shared pool as one of its people reads it: the rules, who is in it and what each spent this month,
- * and each key — whose it is, its label, `sk-…` and its last four characters, where it stands, its cap,
- * and what it has run this month (of which `othersCostUsd` is what its cap limits). No key's secret or
- * fingerprint is selected to build this, so none can reach it.
+ * A shared pool as one of its people reads it: the rules, who is in it, how many sessions each started on
+ * it and what each spent this month, and each key — whose it is, its label, `sk-…` and its last four
+ * characters, where it stands, its cap, what it has run this month (of which `othersCostUsd` is what its
+ * cap limits), whether a session is generating on it now, and whether it is the one a session the viewer
+ * starts now would run on (`next`: the claim's own choice, choosePoolKey, asked for a session that has
+ * no key yet). No key's secret or fingerprint is selected to build this, so none can reach it.
  */
-function poolView(pool: PoolRow, keys: KeyRow[], usage: UsageRow[], viewerId: string, now: Date) {
+function poolView(
+  pool: PoolRow,
+  keys: KeyRow[],
+  usage: UsageRow[],
+  activity: PoolActivity,
+  viewerId: string,
+  now: Date,
+) {
   const names = new Map(pool.people.map((person) => [person.userId, person.user.name]));
   const viewer = pool.people.find((person) => person.userId === viewerId);
+  const othersOn = (key: KeyRow) =>
+    usage.filter((row) => row.keyId === key.id && row.userId !== key.contributorId);
+  const next = choosePoolKey(
+    keys.map((key) => ({
+      ...key,
+      othersCostMicros: othersOn(key).reduce((sum, row) => sum + Number(row.costMicros), 0),
+    })),
+    viewerId,
+    pool.ownKeyFirst,
+    null,
+  );
   return {
     id: pool.id,
     slug: pool.slug,
@@ -96,6 +125,7 @@ function poolView(pool: PoolRow, keys: KeyRow[], usage: UsageRow[], viewerId: st
       creator: person.userId === pool.ownerId,
       you: person.userId === viewerId,
       keys: keys.filter((key) => key.contributorId === person.userId).length,
+      sessions: activity.sessions.get(person.userId) ?? 0,
       usage: spend(usage.filter((row) => row.userId === person.userId)),
     })),
     keys: keys.map((key) => {
@@ -116,8 +146,10 @@ function poolView(pool: PoolRow, keys: KeyRow[], usage: UsageRow[], viewerId: st
         },
         usage: {
           ...spend(onKey),
-          othersCostUsd: spend(onKey.filter((row) => row.userId !== key.contributorId)).costUsd,
+          othersCostUsd: spend(othersOn(key)).costUsd,
         },
+        running: activity.running.has(key.id),
+        next: next?.id === key.id,
         createdAt: key.createdAt,
       };
     }),
@@ -126,11 +158,13 @@ function poolView(pool: PoolRow, keys: KeyRow[], usage: UsageRow[], viewerId: st
   };
 }
 
-/** The refusal a second add of one key gets, naming who put it in — somebody the adder shares the pool with. */
-function duplicateKey(label: string, contributor: string) {
+/** The refusal a second add of one key gets, naming who put it in — somebody the adder shares the pool with,
+ *  or the adder themselves. `addedBy` says the same for a page to put in its own words. */
+function duplicateKey(label: string, contributor: { name: string; you: boolean }) {
   return new ConflictException({
     code: 'POOL_KEY_DUPLICATE',
-    message: `This key is already in "${label}" — ${contributor} put it in`,
+    message: `This key is already in "${label}" — ${contributor.name} put it in`,
+    addedBy: contributor,
   });
 }
 
@@ -287,7 +321,7 @@ export class SharedPoolsService {
       throw new ForbiddenException("Only the pool's admins can put keys in it");
     }
     const key = parsePoolApiKey(dto.apiKey);
-    await this.assertNotInPool(poolId, key.fingerprint, place.pool.label);
+    await this.assertNotInPool(poolId, key.fingerprint, place.pool.label, userId);
     try {
       await this.prisma.poolApiKey.create({
         data: {
@@ -303,7 +337,7 @@ export class SharedPoolsService {
     } catch (e) {
       // Two adds of one key racing: the index decides, and the loser is answered as a duplicate.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        await this.assertNotInPool(poolId, key.fingerprint, place.pool.label);
+        await this.assertNotInPool(poolId, key.fingerprint, place.pool.label, userId);
       }
       throw e;
     }
@@ -344,7 +378,7 @@ export class SharedPoolsService {
     }
     const next = parsePoolApiKey(dto.apiKey);
     if (next.fingerprint !== key.keyFingerprint) {
-      await this.assertNotInPool(poolId, next.fingerprint, place.pool.label);
+      await this.assertNotInPool(poolId, next.fingerprint, place.pool.label, userId);
     }
     await this.prisma.poolApiKey.update({
       where: { id: keyId },
@@ -442,12 +476,19 @@ export class SharedPoolsService {
   }
 
   /** A 409 when a key of this fingerprint is in the pool already, naming who put it in. */
-  private async assertNotInPool(poolId: string, fingerprint: string, poolLabel: string): Promise<void> {
+  private async assertNotInPool(
+    poolId: string,
+    fingerprint: string,
+    poolLabel: string,
+    userId: string,
+  ): Promise<void> {
     const held = await this.prisma.poolApiKey.findUnique({
       where: { poolId_keyFingerprint: { poolId, keyFingerprint: fingerprint } },
-      select: { contributor: { select: { user: { select: { name: true } } } } },
+      select: { contributorId: true, contributor: { select: { user: { select: { name: true } } } } },
     });
-    if (held) throw duplicateKey(poolLabel, held.contributor.user.name);
+    if (held) {
+      throw duplicateKey(poolLabel, { name: held.contributor.user.name, you: held.contributorId === userId });
+    }
   }
 
   private async peopleOf(poolId: string): Promise<string[]> {
@@ -455,11 +496,12 @@ export class SharedPoolsService {
     return people.map((person) => person.userId);
   }
 
-  /** Every pool given, as `viewerId` reads it, with its keys and this month's ledger. */
+  /** Every pool given, as `viewerId` reads it, with its keys, this month's ledger and its sessions. */
   private async views(pools: PoolRow[], viewerId: string) {
     if (pools.length === 0) return [];
     const now = new Date();
     const ids = pools.map((pool) => pool.id);
+    const slugs = pools.map((pool) => pool.slug);
     const keys = await this.prisma.poolApiKey.findMany({
       where: { poolId: { in: ids } },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -468,11 +510,41 @@ export class SharedPoolsService {
     const usage = await this.prisma.poolUsage.findMany({
       where: { poolId: { in: ids }, windowStart: usageWindowStart(now) },
     });
+    // A session is on a key while it is on the pool and the claim recorded that key for it
+    // (session.pool_key_id), and running on it while its engine is producing output (the Running now
+    // an account pool's member shows, ProvidersService.runningMemberIds).
+    const running = await this.prisma.session.findMany({
+      where: {
+        provider: { in: slugs },
+        poolKeyId: { in: keys.map((key) => key.id) },
+        deletedAt: null,
+        ...GENERATING_SESSION_FILTER,
+      },
+      select: { poolKeyId: true },
+    });
+    // What each person started on the pool this month — a pool's slug is nobody else's
+    // (ProvidersService.withFreeSlug), so a session named by it is on the pool.
+    const started = await this.prisma.session.groupBy({
+      by: ['provider', 'ownerId'],
+      where: {
+        provider: { in: slugs },
+        ownerId: { in: [...new Set(pools.flatMap((pool) => pool.people.map((person) => person.userId)))] },
+        createdAt: { gte: usageWindowStart(now) },
+      },
+      _count: { _all: true },
+    });
+    const runningKeys = new Set(running.flatMap((session) => (session.poolKeyId ? [session.poolKeyId] : [])));
     return pools.map((pool) =>
       poolView(
         pool,
         keys.filter((key) => key.poolId === pool.id),
         usage.filter((row) => row.poolId === pool.id),
+        {
+          running: runningKeys,
+          sessions: new Map(
+            started.filter((row) => row.provider === pool.slug).map((row) => [row.ownerId, row._count._all]),
+          ),
+        },
         viewerId,
         now,
       ),
