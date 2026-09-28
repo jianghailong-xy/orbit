@@ -146,6 +146,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_IDEMPOTENCY_KEY_REUSED',
   'WIKI_CURSOR_BEHIND',
   'WIKI_CURSOR_INVALID',
+  'WIKI_ARTICLE_STALE',
 ] as const;
 export type WikiRefusalCode = (typeof WIKI_REFUSAL_CODES)[number];
 

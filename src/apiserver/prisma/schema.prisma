@@ -5471,7 +5471,9 @@ model WikiSpaceWorkspace {
 }
 
 /// A named group of a space's entries. An entry belongs to a topic when it names the topic's slug in
-/// `topics`, or when one of its anchors sits under one of `pathPrefixes`.
+/// `topics`, or when one of its anchors sits under one of `pathPrefixes`. For the articles (migration
+/// 0317, contract `articles.membership`) an entry is in exactly one topic: its anchors' paths decide
+/// first, the slug it names second, and the words of its title and summary last.
 model WikiTopic {
   id           String    @id @default(uuid(7)) @db.Uuid
   spaceId      String    @map("space_id") @db.Uuid
@@ -5479,13 +5481,64 @@ model WikiTopic {
   space        WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_topic_space_fkey")
   /// Same shape as a space's slug; unique within the space.
   slug         String
+  /// The topic's display name.
   title        String
   description  String?
   pathPrefixes String[]  @default([]) @map("path_prefixes")
+  /// One of the contract's six categories (`articles.categories`), or NULL for a topic nothing has
+  /// filed yet (0317).
+  category     String?
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
+  summaries WikiTopicSummary[]
+
+  /// The key a summary's composite foreign key names (0317).
+  @@unique([id, ownerId], map: "wiki_topic_id_owner_id_key")
   @@unique([spaceId, slug], map: "wiki_topic_space_id_slug_key")
   @@map("wiki_topic")
+}
+
+/// One article of a topic (migration 0317, design §3 `wiki_topic_summary`, contract `articles`): a
+/// disposable cache the local model writes from the topic's active entries, every sentence
+/// footnoted to one of them. Part 0 is the topic's own article, or the overview of a topic split
+/// into subtopics; parts 1… are those subtopic articles, each hanging on its overview. It is a view:
+/// never pushed, never a source, and nothing points at it.
+model WikiTopicSummary {
+  id       String    @id @default(uuid(7)) @db.Uuid
+  topicId  String    @map("topic_id") @db.Uuid
+  ownerId  String    @map("owner_id") @db.Uuid
+  topic    WikiTopic @relation(fields: [topicId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_topic_summary_topic_fkey")
+  /// 0 for the article or overview, 1… for the subtopic articles.
+  part     Int
+  /// `article` | `overview` | `subtopic`.
+  kind     String
+  /// The overview a subtopic article hangs on; set exactly for a subtopic.
+  parentId String?           @map("parent_id") @db.Uuid
+  parent   WikiTopicSummary? @relation("WikiTopicSummaryParts", fields: [parentId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_topic_summary_parent_fkey")
+  parts    WikiTopicSummary[] @relation("WikiTopicSummaryParts")
+  /// At most 120 characters.
+  title    String
+  /// `[{ heading, sentences: [{ text, notes }] }, …]`: the validated body, every sentence with its
+  /// footnote numbers.
+  body      Json
+  /// `[{ n, entryId, revision }, …]`: what each footnote number names.
+  citations Json
+  /// The entries it was written from. No foreign key: a snapshot the next generation replaces.
+  entryIds       String[] @default([]) @map("entry_ids") @db.Uuid
+  /// The fingerprint of the entry set it was generated from (contract `articles.fingerprint`).
+  entrySetSha256 String   @map("entry_set_sha256") @db.Char(64)
+  /// The git ref it was generated at, when the run knew one.
+  ref            String?
+  /// The model that wrote it.
+  model          String?
+  /// What the validation did: sentences kept and deleted, footnotes kept and stripped, characters.
+  stats          Json     @default("{}")
+  generatedAt    DateTime @default(now()) @map("generated_at") @db.Timestamptz(3)
+
+  @@unique([id, ownerId], map: "wiki_topic_summary_id_owner_id_key")
+  @@unique([topicId, part], map: "wiki_topic_summary_topic_id_part_key")
+  @@index([parentId], map: "wiki_topic_summary_parent_id_idx")
+  @@map("wiki_topic_summary")
 }
 
 /// One lineage: its id never changes across revisions, and it is what `orbit-wiki:<id>` names. The
