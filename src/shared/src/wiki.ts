@@ -39,6 +39,10 @@ export const WIKI_PUSHABLE_TRUST: readonly WikiTrust[] = ['owner', 'confirmed', 
 /** The trust an entry carries while the review mode's write of it is still nobody's but the machine's:
  *  what the owner can Reject from the entry itself, and what a lineage-ending op never applies to at once. */
 export const WIKI_MACHINE_TRUST: readonly WikiTrust[] = ['auto', 'unreviewed'];
+/** The trust a person gave: the owner wrote it, or confirmed it. An entry that rests on a web-derived
+ *  record (`tainted`) reaches an agent — the push, `wiki_search`, `wiki_get` — only with one of these
+ *  (contract `reviewModes.floors.taintedWaits`). */
+export const WIKI_VOUCHED_TRUST: readonly WikiTrust[] = ['owner', 'confirmed'];
 
 /** First-hand records only. A wiki entry or any view of entries is never a source. */
 export const WIKI_SOURCE_KINDS = [
@@ -133,6 +137,8 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_NOT_MAINTENANCE_SESSION',
   'WIKI_SESSION_EXCLUDED',
   'WIKI_IDEMPOTENCY_KEY_REUSED',
+  'WIKI_CURSOR_BEHIND',
+  'WIKI_CURSOR_INVALID',
 ] as const;
 export type WikiRefusalCode = (typeof WIKI_REFUSAL_CODES)[number];
 
@@ -285,6 +291,35 @@ export function wikiVerdictTrust(verdict: WikiVerificationVerdict): 'auto' | 'un
   return null;
 }
 
+/** What the verifier could read of an op's sources when its verdict was recorded (contract
+ *  `reviewModes.verification.evidence`): the text of at least one of them, or of none. */
+export const WIKI_VERIFICATION_EVIDENCE = ['readable', 'unreadable'] as const;
+export type WikiVerificationEvidence = (typeof WIKI_VERIFICATION_EVIDENCE)[number];
+
+/**
+ * What a verdict does to its op once the server has held it to what the verifier could read and to
+ * the tainted floor (contract `reviewModes.verification.evidence` and `floors.taintedWaits`): the
+ * trust it applies with, or null for a rejection; whether a duplicate's sources are added to the
+ * entry it names (the space's autoAcceptReinforce still decides that); and whether the verdict counts
+ * toward the fallback's window.
+ *
+ * A verdict given when no source could be read is no verdict about the claim: supported, partial and
+ * unsupported all apply it as unreviewed, a duplicate still adds its sources, and none of them is
+ * counted. A tainted op is never more than unreviewed, and its duplicate adds nothing — what a session
+ * that read the web cites must not change whether an entry already in the space is pushed.
+ */
+export function wikiVerdictEffect(input: {
+  verdict: WikiVerificationVerdict;
+  tainted: boolean;
+  evidence: WikiVerificationEvidence;
+}): { trust: 'auto' | 'unreviewed' | null; reinforce: boolean; counted: boolean } {
+  const counted = input.evidence === 'readable';
+  if (input.verdict === 'duplicate') return { trust: null, reinforce: !input.tainted, counted };
+  if (!counted) return { trust: 'unreviewed', reinforce: false, counted };
+  const trust = wikiVerdictTrust(input.verdict);
+  return { trust: input.tainted && trust === 'auto' ? 'unreviewed' : trust, reinforce: false, counted };
+}
+
 /** Why tiered applies an op as `auto`. Anything else it applies is `unreviewed`. */
 export type WikiTieredBasis = 'owner_words' | 'machine_verified';
 
@@ -328,9 +363,11 @@ export interface WikiReviewEffect {
  * challenge) is untouched by the mode. What it holds back, a mode other than Manual may take — only
  * an add or an amend, because only those can be undone (a revert retires the add and restores the
  * revision the amend replaced; a supersede or a retire ends a lineage for good), and only an amend
- * of an entry the machine wrote. The floors hold in every mode: a tainted op waits, and so does an
- * amend of anything the owner wrote or confirmed. What Automatic takes is not applied here at all:
- * it waits for its verification, and nothing of it is live until a verdict says so.
+ * of an entry the machine wrote. The floors hold in every mode: a tainted op waits — for the owner in
+ * Manual and Tiered, and in Automatic for a verification whose verdict can leave it no more than
+ * unreviewed ({@link wikiVerdictEffect}) — and an amend of anything the owner wrote or confirmed waits
+ * for the owner. What Automatic takes is not applied here at all: it waits for its verification, and
+ * nothing of it is live until a verdict says so.
  */
 export function wikiReviewEffect(input: {
   mode: WikiReviewMode;
@@ -346,7 +383,7 @@ export function wikiReviewEffect(input: {
   const effect = wikiOpEffect(input);
   if (effect === 'applied' || input.mode === 'manual') return { effect, byMode: null };
   const held: WikiReviewEffect = { effect: 'pending', byMode: null };
-  if (input.tainted) return held;
+  if (input.tainted && input.mode !== 'automatic') return held;
   if (input.op !== 'add' && input.op !== 'amend') return held;
   if (input.op === 'amend' && (!input.target || input.target.ownerVouched || !input.target.machineWritten)) return held;
   if (input.mode === 'automatic') return { effect: 'verifying', byMode: { mode: 'automatic', trust: null } };
@@ -775,7 +812,56 @@ export interface WikiSpaceSettings {
   /** Server-written: when the mode last changed, and who changed it. Absent until it first does. */
   reviewModeChangedAt?: string;
   reviewModeChangedBy?: 'owner' | 'spot_checks' | 'verification';
+  /** The space's Wiki maintenance run (contract `space.settings.maintenance`): off by default. */
+  maintenance: WikiMaintenanceSettings;
 }
+
+/**
+ * The Wiki maintenance run of a space (design §8.2, contract `space.settings.maintenance`). The
+ * owner's alone, on the owner channel only, like the review mode.
+ */
+export type WikiMaintenanceSettings = {
+  /** Off until the owner turns it on: in a space that is off, no fact starts a maintenance task. */
+  enabled: boolean;
+  /** The workspace the maintenance task runs in, which decides the runner. Required to turn it on. */
+  workspaceId: string | null;
+  /** The provider the run is pinned to, with no fallback. */
+  provider: string;
+  /** Input plus output tokens the space's maintenance sessions may spend in one UTC day. */
+  dailyTokenBudget: number;
+  /** Server-written, never taken from a request: the space's hidden «Wiki maintenance» task list,
+   *  made the first time maintenance is turned on and kept when it is turned off. A maintenance
+   *  session is a session whose task is in it. */
+  listId: string | null;
+};
+
+export const WIKI_DEFAULT_MAINTENANCE_SETTINGS: Readonly<WikiMaintenanceSettings> = {
+  enabled: false,
+  workspaceId: null,
+  provider: 'local-vllm',
+  dailyTokenBudget: 2_000_000,
+  listId: null,
+};
+
+/** The title of a space's hidden maintenance list (UI copy is English). */
+export const WIKI_MAINTENANCE_LIST_TITLE = 'Wiki maintenance';
+
+/** Stored maintenance settings as they read: every absent or malformed key its default. */
+export function wikiMaintenanceSettings(stored: unknown): WikiMaintenanceSettings {
+  const raw = (stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) as Record<string, unknown>;
+  const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() !== '' ? value : null);
+  const budget = raw.dailyTokenBudget;
+  return {
+    enabled: raw.enabled === true,
+    workspaceId: text(raw.workspaceId),
+    provider: text(raw.provider) ?? WIKI_DEFAULT_MAINTENANCE_SETTINGS.provider,
+    dailyTokenBudget: typeof budget === 'number' && Number.isInteger(budget) && budget >= 0
+      ? budget
+      : WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyTokenBudget,
+    listId: text(raw.listId),
+  };
+}
+
 /** What a space is created with. A stored space whose settings lack `reviewMode` reads as
  *  {@link WIKI_UNSET_REVIEW_MODE} instead — see {@link wikiSpaceSettings}. */
 export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = {
@@ -783,6 +869,7 @@ export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = {
   autoAcceptReinforce: true,
   reviewMode: 'tiered',
   automaticSpotChecks: false,
+  maintenance: WIKI_DEFAULT_MAINTENANCE_SETTINGS,
 };
 
 /** A stored space's settings as they read: every absent key its default, and an absent or unknown
@@ -790,7 +877,144 @@ export const WIKI_DEFAULT_SPACE_SETTINGS: Readonly<WikiSpaceSettings> = {
 export function wikiSpaceSettings(stored: unknown): WikiSpaceSettings {
   const raw = (stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) as Partial<WikiSpaceSettings>;
   const reviewMode = (WIKI_REVIEW_MODES as readonly unknown[]).includes(raw.reviewMode) ? raw.reviewMode! : WIKI_UNSET_REVIEW_MODE;
-  return { ...WIKI_DEFAULT_SPACE_SETTINGS, ...raw, reviewMode };
+  return { ...WIKI_DEFAULT_SPACE_SETTINGS, ...raw, reviewMode, maintenance: wikiMaintenanceSettings(raw.maintenance) };
+}
+
+// ── Wiki maintenance: the dossier and the cursor (contract `maintenance`, criterion 2) ──────────
+
+/**
+ * The numbers the dossier and the cursor run by (contract `maintenance.rules`). The token budget is
+ * the demo's: 8k a session recalled more than 16k did.
+ */
+export const WIKI_MAINTENANCE_RULES = {
+  /** A session's dossier, estimated with {@link wikiEstimateTokens}, never passes this. */
+  dossierMaxTokens: 8_000,
+  /** Sessions a dossier page carries when the caller names no limit, and the most it may name. */
+  pageSessionsDefault: 20,
+  pageSessionsMax: 50,
+  /** How long a fact is left to commit before a page may hand it out. */
+  settleGraceSeconds: 120,
+  /** A tool error signature is a cluster once this many sessions of the space share it… */
+  errorClusterMinSessions: 3,
+  /** …counting the sessions that came to rest in this many days. */
+  errorClusterLookbackDays: 14,
+  /** Tasks of one project (or list) that share a title template make it a batch project. */
+  batchTemplateMinTasks: 20,
+  /** A settled task's agent comments, the newest this many, are what its dossier carries. */
+  commentTail: 3,
+  /** The two conditions a maintenance task is due on (criterion 3 reads them). */
+  backlogThreshold: 20,
+  maxPendingAgeHours: 24,
+} as const;
+
+/** The committed facts each of which adds one to a space's backlog (contract `maintenance.cursor.factKinds`). */
+export const WIKI_CURSOR_FACT_KINDS = [
+  'session_settled',
+  'task_terminal',
+  'approval_answered',
+  'merge_receipt',
+  'criterion_revised',
+] as const;
+export type WikiCursorFactKind = (typeof WIKI_CURSOR_FACT_KINDS)[number];
+
+/** How a maintenance run ended, as `orbit wiki cursor advance` reports it. Only `succeeded` moves the cursor. */
+export const WIKI_CURSOR_OUTCOMES = ['succeeded', 'failed', 'truncated'] as const;
+export type WikiCursorOutcome = (typeof WIKI_CURSOR_OUTCOMES)[number];
+
+/**
+ * Tokens a text is counted as: ASCII characters at 3.4 a token, every other character at 1.25, plus
+ * one. The demo's estimate (`pack.py`), kept because the 8k budget was measured with it.
+ */
+export function wikiEstimateTokens(text: string): number {
+  if (!text) return 0;
+  let ascii = 0;
+  let other = 0;
+  for (const ch of text) {
+    if (ch.codePointAt(0)! < 128) ascii += 1;
+    else other += 1;
+  }
+  return Math.floor(ascii / 3.4 + other / 1.25) + 1;
+}
+
+/** One line's first-hand record: what a proposal made from the dossier cites (contract `sourceKinds`). */
+export interface WikiDossierSource {
+  /** The line's short name in the dossier text, `L1`, `L2`, … */
+  ref: string;
+  kind: WikiSourceKind;
+  id: string;
+}
+
+/** One session's dossier. Its text is never stored: only `sources` and `hash` are (wiki_dossier). */
+export interface WikiDossier {
+  sessionId: string;
+  taskId: string | null;
+  title: string;
+  text: string;
+  tokens: number;
+  /** The session's whole timeline did not fit in the budget, and lines were left out or cut. */
+  truncated: boolean;
+  /** A session that read the web: what it says is external until the owner confirms it. */
+  tainted: boolean;
+  sources: WikiDossierSource[];
+  /** sha256 of the text and the sources: the same records give the same hash. */
+  hash: string;
+  /** The same hash was handed out on a page the cursor has since advanced past. */
+  unchanged: boolean;
+}
+
+/** A batch project's sessions, which get these counts and no dossier each (contract `maintenance.dossier.batchProjects`). */
+export interface WikiDossierBatch {
+  projectId: string | null;
+  listId: string | null;
+  template: string;
+  /** Every task of the project (or list) under this template, and how many are in each status. */
+  tasks: number;
+  byStatus: Record<string, number>;
+  /** The sessions of this page the batch stands for. */
+  sessions: number;
+  errors: Array<{ tool: string; signature: string; count: number }>;
+}
+
+/** One tool error signature that sessions of the space share (contract `maintenance.dossier.errorClusters`). */
+export interface WikiErrorCluster {
+  tool: string;
+  signature: string;
+  sessions: number;
+  occurrences: number;
+  examples: Array<{ toolCallId: string; sessionId: string; firstLine: string }>;
+}
+
+/** Where a space's maintenance stands (the `wiki_cursor` row and what is after it). */
+export interface WikiCursorState {
+  spaceId: string;
+  /** The watermark as a token, or null before the first advance. */
+  position: string | null;
+  backlog: number;
+  byKind: Record<WikiCursorFactKind, number>;
+  pendingSessions: number;
+  oldestPendingAt: string | null;
+  lagSeconds: number | null;
+  lastOkAt: string | null;
+  lastRunAt: string | null;
+  lastOutcome: WikiCursorOutcome | null;
+  consecutiveFailures: number;
+  lastError: string | null;
+  /** The two due conditions (rules.backlogThreshold, rules.maxPendingAgeHours). */
+  due: { backlog: boolean; age: boolean };
+}
+
+/** `GET /api/runner/wiki/spaces/:id/dossiers`. */
+export interface WikiDossierPage {
+  spaceId: string;
+  /** Advance to this once every dossier of the page was processed. */
+  cursor: string;
+  /** Facts past this page remain. */
+  more: boolean;
+  facts: number;
+  dossiers: WikiDossier[];
+  batches: WikiDossierBatch[];
+  errorClusters: WikiErrorCluster[];
+  state: WikiCursorState;
 }
 
 export interface WikiSpace {
@@ -895,6 +1119,9 @@ export interface WikiChangesetOp {
   /** The verdict an Automatic space's verification gave it, and who gave it when; null until one
    *  arrives, and for every op no verification decides (contract `reviewModes.verification.trail`). */
   verification?: WikiOpVerification | null;
+  /** The trail of every earlier verdict of an op that was reopened, oldest first; empty for every
+   *  other op (contract `reviewModes.verification.reopen`). */
+  verificationHistory?: WikiOpVerificationHistory[];
 }
 
 /** One op's verification trail, as the op reads it back. */
@@ -908,6 +1135,17 @@ export interface WikiOpVerification {
   at: string;
   /** The entry a duplicate named; null for every other verdict. */
   duplicateOf: string | null;
+  /** What the verifier could read when the verdict was recorded; `unreadable` capped it at Unreviewed.
+   *  Null for a verdict recorded before the server kept the mark (migration 0314). */
+  evidence?: WikiVerificationEvidence | null;
+}
+
+/** An earlier verdict of a reopened op: its trail, what it decided, and when it was reopened. */
+export interface WikiOpVerificationHistory extends WikiOpVerification {
+  decision: WikiOpDecision;
+  decisionReason: WikiRejectReason | null;
+  decidedAt: string | null;
+  reopenedAt: string;
 }
 
 /**
@@ -933,8 +1171,25 @@ export interface WikiVerificationItem {
     /** The text was cut at `WIKI_REVIEW_RULES.verificationSourceMaxChars`. */
     truncated: boolean;
   }>;
+  /** Whether any source above has text (contract `reviewModes.verification.evidence`). With none, a
+   *  verdict would be about the claim alone: the server records whatever it says as no more than
+   *  Unreviewed and keeps it out of the fallback's count. */
+  evidence: WikiVerificationEvidence;
   /** The neighbours recorded with the op, each as it reads now: what a duplicate may name. */
   similar: WikiSimilar[];
+}
+
+/** What `reviewModes.verification.reopen` did in one space. */
+export interface WikiReopenResult {
+  spaceId: string;
+  mode: WikiReviewMode;
+  /** Ops an unsupported verdict rejected while none of their sources could be read, waiting for
+   *  their verification again; each earlier verdict kept in the op's `verificationHistory`. */
+  reopened: string[];
+  /** Tainted ops that waited for the owner in an automatic space, now waiting for their verification. */
+  toVerification: string[];
+  /** Ops that qualified and were left as they are, with why. */
+  skipped: Array<{ opId: string; reason: string }>;
 }
 
 export interface WikiVerificationList {

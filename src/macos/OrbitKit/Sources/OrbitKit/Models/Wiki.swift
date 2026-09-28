@@ -244,6 +244,47 @@ public struct WikiAnchor: Codable, Equatable, Sendable {
 public struct WikiSpaceSettings: Codable, Equatable, Sendable {
     public let push: Bool?
     public let autoAcceptReinforce: Bool?
+    /// The space's Wiki maintenance run (contract `space.settings.maintenance`). Nil from a server
+    /// that predates it, which reads as `WikiMaintenanceSettings.default`: off.
+    public let maintenance: WikiMaintenanceSettings?
+}
+
+/// A space's Wiki maintenance run (contract `space.settings.maintenance`): whether facts start
+/// maintenance tasks, where they run, on which provider, and the daily token budget. The owner's
+/// alone to change; `listId` is the hidden list the server made for the runs, and is never sent.
+public struct WikiMaintenanceSettings: Codable, Equatable, Sendable {
+    public let enabled: Bool
+    public let workspaceId: String?
+    public let provider: String
+    public let dailyTokenBudget: Int
+    public let listId: String?
+
+    /// The contract's `default`: what a space reads as before its owner turns maintenance on.
+    public static let `default` = WikiMaintenanceSettings(enabled: false, workspaceId: nil, provider: "local-vllm",
+                                                          dailyTokenBudget: 2_000_000, listId: nil)
+
+    public enum CodingKeys: String, CodingKey, CaseIterable {
+        case enabled, workspaceId, provider, dailyTokenBudget, listId
+    }
+
+    public init(enabled: Bool, workspaceId: String?, provider: String, dailyTokenBudget: Int, listId: String?) {
+        self.enabled = enabled
+        self.workspaceId = workspaceId
+        self.provider = provider
+        self.dailyTokenBudget = dailyTokenBudget
+        self.listId = listId
+    }
+
+    /// A key the server left out reads as its default, the way `wikiMaintenanceSettings` reads it.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = WikiMaintenanceSettings.default
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? fallback.enabled
+        workspaceId = try c.decodeIfPresent(String.self, forKey: .workspaceId)
+        provider = try c.decodeIfPresent(String.self, forKey: .provider) ?? fallback.provider
+        dailyTokenBudget = try c.decodeIfPresent(Int.self, forKey: .dailyTokenBudget) ?? fallback.dailyTokenBudget
+        listId = try c.decodeIfPresent(String.self, forKey: .listId)
+    }
 }
 
 /// One owner's wiki for one codebase. `GET /wiki/spaces` answers these with `pendingOps` — the
@@ -476,14 +517,29 @@ public enum WikiVerificationVerdict: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// What the verifier could read of an op's sources when its verdict was recorded (contract
+/// `reviewModes.verification.evidence`): with none of them readable, the verdict applied nothing
+/// past Unreviewed.
+public enum WikiVerificationEvidence: String, Codable, Sendable, CaseIterable {
+    case readable, unreadable
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiVerificationEvidence(rawValue: raw) ?? .unknown
+    }
+}
+
 /// An op's verification trail: the verdict, the verifier's reason, the model that gave it and when,
-/// and the entry a duplicate named (contract `reviewModes.verification.trail`).
+/// the entry a duplicate named (contract `reviewModes.verification.trail`), and what the verifier
+/// could read — nil for a verdict recorded before the server kept that mark.
 public struct WikiOpVerification: Codable, Equatable, Sendable {
     public let verdict: WikiVerificationVerdict?
     public let reason: String?
     public let model: String?
     public let at: String?
     public let duplicateOf: String?
+    public let evidence: WikiVerificationEvidence?
 }
 
 /// One op of a changeset. `payload` is the op as it was submitted (redacted), which is where a

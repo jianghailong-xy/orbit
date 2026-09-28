@@ -6,16 +6,23 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
+  Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import {
+  WIKI_CURSOR_OUTCOMES,
   WIKI_DECIDE_ACTIONS,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_MODES,
+  type WikiCursorOutcome,
   type WikiDecideAction,
   type WikiRejectReason,
   type WikiReviewMode,
@@ -52,6 +59,34 @@ export class CreateWikiSpaceDto {
   slug?: string;
 }
 
+/**
+ * `maintenance` in PATCH /api/wiki/spaces/:id (contract `space.settings.maintenance`): any of the
+ * four the owner sets. `listId` is the server's and is not a field here — the whitelist drops it.
+ */
+export class WikiMaintenanceSettingsDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  /** The workspace the runs take place in; null clears it (and maintenance cannot then be on). */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsPublicId()
+  workspaceId?: string | null;
+
+  /** A provider slug: a built-in engine or one of the owner's configured providers. */
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-z0-9][a-z0-9._-]{0,63}$/)
+  provider?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1_000_000_000)
+  dailyTokenBudget?: number;
+}
+
 /** PATCH /api/wiki/spaces/:id — the owner's settings (§2.1 settings, contract `space.settings`). */
 export class UpdateWikiSpaceDto {
   @IsOptional()
@@ -72,11 +107,38 @@ export class UpdateWikiSpaceDto {
   @IsBoolean()
   automaticSpotChecks?: boolean;
 
+  /** The space's Wiki maintenance run. The owner channel's alone, like the mode: WIKI_OWNER_CHANNEL_ONLY otherwise. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WikiMaintenanceSettingsDto)
+  maintenance?: WikiMaintenanceSettingsDto;
+
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(120)
   title?: string;
+}
+
+/**
+ * POST /api/runner/wiki/spaces/:id/cursor — how a maintenance run ended (contract
+ * `maintenance.cursor.advance`). `to` is required of a run that succeeded; the service says so, as
+ * WIKI_CURSOR_INVALID, when it is missing.
+ */
+export class WikiCursorAdvanceDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_000)
+  to?: string;
+
+  @IsOptional()
+  @IsIn(WIKI_CURSOR_OUTCOMES)
+  outcome?: WikiCursorOutcome;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20_000)
+  error?: string;
 }
 
 /** POST /api/wiki/spaces/:id/workspaces — binding a workspace the owner named (§2.1 binding). */
