@@ -34,7 +34,7 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
-import type { WikiArticleDirectory, WikiArticleIndex, WikiArticleView, WikiChangesetView, WikiSearchRow } from '@orbit/shared';
+import type { WikiArticleDirectory, WikiArticleIndex, WikiArticleView, WikiChangesetView, WikiSearchRow, WikiSpaceHealth } from '@orbit/shared';
 import type {
   WikiChangeset,
   WikiEntry,
@@ -866,6 +866,21 @@ export const wikiSpaceQuery = (spaceId: string | null) =>
     queryKey: ['wiki', 'space', spaceId] as const,
     queryFn: () => api<WikiSpaceWithUsage>(`/wiki/spaces/${encodeURIComponent(spaceId!)}?include=usage`),
     enabled: spaceId !== null,
+  });
+
+/**
+ * A space's health (`GET /api/wiki/spaces/:id/health`, contract `maintenance.health`): every active entry
+ * it holds, and where its maintenance run stands — what the status line under the title says.
+ *
+ * Every Wiki view wears the line and the server counts the backlog afresh for each read, so moving from
+ * view to view reuses a read for half a minute; a wiki write (`wiki.changed`) re-reads it at once.
+ */
+export const wikiHealthQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'health'] as const,
+    queryFn: () => api<WikiSpaceHealth>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/health`),
+    enabled: spaceId !== null,
+    staleTime: 30_000,
   });
 
 /** A space's entries, newest record first. The home page and the topic grid are both drawn from it. */

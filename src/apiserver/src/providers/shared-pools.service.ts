@@ -105,6 +105,7 @@ function poolView(
     viewerId,
     pool.ownKeyFirst,
     null,
+    now,
   );
   return {
     id: pool.id,

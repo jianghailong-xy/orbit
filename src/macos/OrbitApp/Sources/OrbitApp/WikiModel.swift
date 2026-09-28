@@ -107,7 +107,7 @@ final class WikiModel {
         }
     }
 
-    /// The spaces, then the three reads the home page is drawn from, side by side — and then each run
+    /// The spaces, then the four reads the home page is drawn from, side by side — and then each run
     /// Recently changed folds, by its own read.
     func loadHome() async {
         homeState.begin()
@@ -120,11 +120,15 @@ final class WikiModel {
         async let documentRead = api.wikiSpace(space.id)
         async let entriesRead = api.wikiEntries(spaceID: space.id)
         async let timelineRead = api.wikiTimeline(spaceID: space.id)
+        async let healthRead = api.wikiHealth(spaceID: space.id)
         do {
             let document = try await documentRead
             let entries = try await entriesRead
             // The timeline is one band of six; the page still draws without it.
             let timeline = try? await timelineRead
+            // The status line's count and maintenance part (criterion 5); without it the line says what
+            // the entries read here count, and nothing of maintenance.
+            let health = try? await healthRead
             // Every item names its changeset: the runs among the rows are read by their ids, whether or
             // not anything of them still waits in Review. A run whose read failed keeps its row.
             let base = WikiHomeContent(space: document, spaces: spaces, entries: entries,
@@ -133,7 +137,8 @@ final class WikiModel {
             // Another space was picked while this one was reading: its own read owns the page.
             guard currentSpace?.id == space.id else { return }
             let content = WikiHomeContent(space: base.space, spaces: base.spaces, entries: base.entries,
-                                          timeline: base.timeline, proposals: base.proposals, runs: runs)
+                                          timeline: base.timeline, proposals: base.proposals, runs: runs,
+                                          health: health)
             if content != home { home = content }
             homeState.succeed()
         } catch {
