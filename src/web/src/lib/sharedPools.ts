@@ -92,8 +92,9 @@ const atCap = (key: SharedPoolKey): boolean =>
   !key.contributor.you && key.shareCap !== null && key.usage.othersCostUsd >= key.shareCap;
 
 /** Whether OpenAI itself has `key` out of budget: the one gate a share cap does not put up, since it
- *  stops its contributor's sessions too. */
-export const outOfBudget = (key: SharedPoolKey): boolean => key.spentUntil !== null;
+ *  stops its contributor's sessions too. A payload that leaves the field out is a key with no mark —
+ *  which is how the server sends one whose mark is behind us. */
+export const outOfBudget = (key: SharedPoolKey): boolean => key.spentUntil != null;
 
 /** Where a key stands for a session the viewer starts now. Refused by OpenAI outranks switched off:
  *  it is the one somebody has to act on. Out of budget outranks the cap: it is OpenAI's own answer,

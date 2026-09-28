@@ -7,6 +7,7 @@ import {
   canRemoveKey,
   formatCapReset,
   keyState,
+  outOfBudget,
   personShare,
   sharedPoolAsProviderPool,
   type SharedPool,
@@ -93,6 +94,12 @@ describe('where a shared pool key stands, for whoever reads it', () => {
     expect(keyState(key(1, MIA, { state: 'INVALID', spentUntil: until }))).toBe('INVALID');
     expect(keyState(key(1, MIA, { state: 'DISABLED', spentUntil: until }))).toBe('DISABLED');
     expect(keyState(key(1, MIA, { enabled: false, spentUntil: until }))).toBe('DISABLED');
+    // A key the payload says nothing about is a key with no mark, not one out of budget: only a mark
+    // still to come is sent, and a field left out reads as none.
+    const silent = { ...key(1, MIA) } as Partial<SharedPoolKey>;
+    delete silent.spentUntil;
+    expect(outOfBudget(silent as SharedPoolKey)).toBe(false);
+    expect(keyState(silent as SharedPoolKey)).toBe('AVAILABLE');
   });
 });
 
