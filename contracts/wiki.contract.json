@@ -862,7 +862,7 @@
     "regeneration": "A topic's articles are rewritten only when its fingerprint differs from the one its part 0 was generated from, and only by a maintenance run after its entries changed (criterion 3): no clock starts one. A write that names the stored fingerprint rewrites nothing (unchanged), and one that names a fingerprint other than the topic's current one is refused WIKI_ARTICLE_STALE.",
     "validation": {
       "input": "Each part is Markdown with footnote markers [n], and notes: the entry each n names, notes[n-1]. A subtopic part names the entries of its group too.",
-      "sentences": "The body is cut into sentences at 。！？!? and at a full stop followed by a space or the end of the line; a heading line starts a block, and a first-level heading is not part of the body.",
+      "sentences": "The body is cut into sentences at 。！？, and at a full stop or an ASCII ? or ! followed by a space or the end of the line — not at an ASCII ? or ! after a space or another ? or !, which is code left outside backticks (a ?? b, a != b), and not inside a code span; a heading line starts a block, and a first-level heading is not part of the body.",
       "markers": "A marker survives only when n is 1 to the number of notes and notes[n-1] is an entry of the topic (a subtopic may cite any entry of its topic). A marker out of range, naming another topic's entry or naming no entry of the space is stripped.",
       "sentencesWithoutNotes": "A sentence left with no marker is deleted.",
       "cap": "When the kept sentences pass rules.maxChars, the last sentence of the longest block with more than one is dropped, again and again, until they do not.",

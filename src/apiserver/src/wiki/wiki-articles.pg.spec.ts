@@ -45,7 +45,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiArticlesController } from '../runner-api/runner-wiki-articles.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
-import { assignTopics, pathClaim, WikiArticles } from './wiki-articles';
+import { assignTopics, pathClaim, splitSentences, WikiArticles } from './wiki-articles';
 import { WikiArticlesController } from './wiki-articles.controller';
 import { appendWikiContext } from './wiki-push';
 import type { WikiRollout } from './wiki-rollout';
@@ -537,6 +537,12 @@ test('a space with no topic is given the default ones, and an entry is filed by 
   assert.equal(topicFor(['scripts/pg-matrix-summary.lib.sh']), 'testing', 'scripts/pg-matrix- is longer than scripts/pg-');
   assert.equal(topicFor(['src/apiserver/Dockerfile']), 'deploy-ops');
   assert.equal(topicFor(['src/apiserver/src/main.ts']), 'sessions', 'no pattern claims the API server as a whole: the slug it names decides');
+
+  // Sentences: code a model left outside backticks (a ?? b, a != b) ends nothing; a full stop, or an
+  // ASCII ? after a word, followed by a space does, and its markers go with it.
+  assert.deepEqual(splitSentences('lastTurnAt ?? createdAt 降序[1]。为什么? 因为[2]。a != b 时成立[3]！'),
+    ['lastTurnAt ?? createdAt 降序[1]。', '为什么?', ' 因为[2]。', 'a != b 时成立[3]！']);
+  assert.deepEqual(splitSentences('It holds. [2] Then `x?.y` stays whole[1].'), ['It holds. [2]', ' Then `x?.y` stays whole[1].']);
 });
 
 // ── 2. validation ───────────────────────────────────────────────────────────────────────────────

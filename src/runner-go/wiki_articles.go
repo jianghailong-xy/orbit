@@ -489,13 +489,15 @@ func (r *wikiArticlesRun) compose(input wikiArticleInput) ([]wikiArticlePart, er
 	groups := groupWikiArticleEntries(entries)
 	fmt.Fprintf(r.progress, "topic %s: %s split into %s by their paths and words.\n", input.Topic.Slug,
 		wikiCount(len(entries), "entry", "entries"), wikiCount(len(groups), "subtopic", "subtopics"))
+	// One group after another, each told the names already taken: named at once, a topic's groups come
+	// back as near-synonyms of each other.
 	names := make([]string, len(groups))
-	if err := parallelWikiCalls(len(groups), func(i int) error {
-		name, err := r.name(topicTitle, pickEntries(entries, groups[i]))
+	for i, group := range groups {
+		name, err := r.name(topicTitle, pickEntries(entries, group), names[:i])
+		if err != nil {
+			return nil, err
+		}
 		names[i] = name
-		return err
-	}); err != nil {
-		return nil, err
 	}
 	subs := make([]wikiArticlePart, len(groups))
 	var overview wikiArticlePart
@@ -602,8 +604,9 @@ func (r *wikiArticlesRun) write(kind, topicTitle, title string, pool []wikiArtic
 	return wikiArticlePart{Kind: kind, Title: wikiArticleTitle(text, title), Markdown: text, Notes: notes}, nil
 }
 
-// name has the model name one group, falling back on the path most of it shares, then on its first title.
-func (r *wikiArticlesRun) name(topicTitle string, members []wikiArticleEntry) (string, error) {
+// name has the model name one group — differently from the names its topic's other groups already
+// have — falling back on the path most of it shares, then on its first title.
+func (r *wikiArticlesRun) name(topicTitle string, members []wikiArticleEntry, taken []string) (string, error) {
 	var titles []string
 	for i, entry := range members {
 		if i == 14 {
@@ -611,8 +614,12 @@ func (r *wikiArticlesRun) name(topicTitle string, members []wikiArticleEntry) (s
 		}
 		titles = append(titles, "- "+cutRunes(entry.Title, 60))
 	}
-	text, err := r.ask(fmt.Sprintf("下面是 wiki 里「%s」主题下归在同一组的条目标题：\n%s\n\n给这组起一个简短的中文小标题（不超过 14 个字，可保留代码名），概括它们共同讲的事。只输出这个小标题。",
-		topicTitle, strings.Join(titles, "\n")))
+	prompt := fmt.Sprintf("下面是 wiki 里「%s」主题下归在同一组的条目标题：\n%s\n\n给这组起一个简短的中文小标题（不超过 14 个字，可保留代码名），概括它们共同讲的事。",
+		topicTitle, strings.Join(titles, "\n"))
+	if len(taken) > 0 {
+		prompt += "\n同一主题的其他组已经叫：" + strings.Join(taken, "、") + "。起一个和它们都不同的名字，说出这组独有的内容，不要只换个说法。"
+	}
+	text, err := r.ask(prompt + "只输出这个小标题。")
 	if err != nil {
 		var auth *wikiArticleAuthError
 		if errors.As(err, &auth) {
@@ -795,8 +802,8 @@ func wikiArticleDraftChars(markdown string, notes int) int {
 	return total
 }
 
-// wikiArticleSentences cuts a line at 。！？!? and at a full stop followed by a space or the line's end,
-// the way the server does, keeping each sentence's markers with it.
+// wikiArticleSentences cuts a line at 。！？, and at a full stop or an ASCII ? or ! followed by a space
+// or the line's end, the way the server does, keeping each sentence's markers with it.
 func wikiArticleSentences(line string) []string {
 	var out []string
 	runes := []rune(line)
@@ -812,7 +819,10 @@ func wikiArticleSentences(line string) []string {
 		if inCode {
 			continue
 		}
-		ends := strings.ContainsRune("。！？!?", ch) || (ch == '.' && (i+1 == len(runes) || unicode.IsSpace(runes[i+1])))
+		atBreak := i+1 == len(runes) || unicode.IsSpace(runes[i+1])
+		// An ASCII ? or ! after a space or another ? or ! is code left outside backticks (a ?? b).
+		ascii := (ch == '?' || ch == '!') && atBreak && i > 0 && !unicode.IsSpace(runes[i-1]) && runes[i-1] != '?' && runes[i-1] != '!'
+		ends := strings.ContainsRune("。！？", ch) || (ch == '.' && atBreak) || ascii
 		if !ends {
 			continue
 		}

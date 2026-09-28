@@ -334,6 +334,16 @@ func TestWikiArticleRunWritesTheChangedTopicsThroughACleanClaudeCode(t *testing.
 	if notes := split.Articles[0].Notes; len(notes) != 4 {
 		t.Errorf("the overview's notes = %v", notes)
 	}
+	// The groups are named one after another, each told the names already taken.
+	var naming []string
+	for _, request := range vllm.Requests() {
+		if strings.Contains(request.Prompt, "起一个简短的中文小标题") {
+			naming = append(naming, request.Prompt)
+		}
+	}
+	if len(naming) != 2 || strings.Contains(naming[0], "已经叫") || !strings.Contains(naming[1], "同一主题的其他组已经叫：迁移与界面") {
+		t.Errorf("the naming prompts do not carry the names already taken: %q", naming)
+	}
 
 	// Every model call: the clean launch with the writer's system prompt, thinking off whatever the
 	// provider declared, and nothing of the session's besides the endpoint, token and window.
@@ -644,6 +654,11 @@ func TestWikiArticleDraftCharsCountsWhatTheServerWouldKeep(t *testing.T) {
 		t.Errorf("draft chars = %d, want %d", got, want)
 	}
 	if got := wikiArticleSentences("一。二[1][2]。三」[3]。four. five"); !reflect.DeepEqual(got, []string{"一。", "二[1][2]。", "三」[3]。", "four.", " five"}) {
+		t.Errorf("sentences = %#v", got)
+	}
+	// Code a model left outside backticks is not a sentence's end; an ASCII question after a word is.
+	if got := wikiArticleSentences("lastTurnAt ?? createdAt 降序[1]。为什么? 因为[2]。a != b 时成立[3]！"); !reflect.DeepEqual(got,
+		[]string{"lastTurnAt ?? createdAt 降序[1]。", "为什么?", " 因为[2]。", "a != b 时成立[3]！"}) {
 		t.Errorf("sentences = %#v", got)
 	}
 	if got := wikiArticleTitle("前言\n# **标题** [3]\n正文", "fallback"); got != "标题" {

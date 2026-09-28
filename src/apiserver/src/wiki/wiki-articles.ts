@@ -357,7 +357,8 @@ export interface ValidatedPart {
 }
 
 const MARKER = /\[(\d{1,3})\]/gu;
-const TERMINALS = new Set(['。', '！', '？', '!', '?']);
+/** Full-width stops end a sentence wherever they stand. */
+const TERMINALS = new Set(['。', '！', '？']);
 const CLOSERS = new Set(['」', '』', '"', '”', '’', '）', ')']);
 
 /**
@@ -377,9 +378,11 @@ function outsideCode(text: string): Array<{ code: boolean; text: string }> {
 }
 
 /**
- * One line of prose cut into sentences (contract `articles.validation.sentences`): at 。！？!? and
- * at a full stop followed by a space or the end of the line, outside code spans. Closing quotes and
- * brackets, and the footnote markers that follow, stay with the sentence they close.
+ * One line of prose cut into sentences (contract `articles.validation.sentences`): at 。！？, and at
+ * a full stop or an ASCII ? or ! followed by a space or the end of the line, outside code spans. An
+ * ASCII ? or ! that follows a space or another ? or ! ends nothing: that is code a model left outside
+ * backticks (`lastTurnAt ?? createdAt`, `a != b`), and cutting there leaves half a sentence. Closing
+ * quotes and brackets, and the footnote markers that follow, stay with the sentence they close.
  */
 export function splitSentences(line: string): string[] {
   const out: string[] = [];
@@ -394,7 +397,10 @@ export function splitSentences(line: string): string[] {
       continue;
     }
     if (inCode) continue;
-    const ends = TERMINALS.has(ch) || (ch === '.' && (i + 1 === chars.length || /\s/u.test(chars[i + 1])));
+    const atBreak = i + 1 === chars.length || /\s/u.test(chars[i + 1]);
+    const ends = TERMINALS.has(ch)
+      || (ch === '.' && atBreak)
+      || ((ch === '?' || ch === '!') && atBreak && i > 0 && !/[\s?!]/u.test(chars[i - 1]));
     if (!ends) continue;
     let j = i + 1;
     for (;;) {
