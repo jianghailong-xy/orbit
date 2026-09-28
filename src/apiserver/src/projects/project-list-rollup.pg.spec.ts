@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
-  CreatorType, PrismaClient, ProjectStatus, RunnerStatus, RunStatus,
+  CreatorType, Prisma, PrismaClient, ProjectStatus, RunnerStatus, RunStatus,
   SessionDispatchOrigin, TaskStatus,
 } from '@prisma/client';
 import { Client } from 'pg';
@@ -11,6 +11,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import { readProjectListRollups } from './project-list-rollup';
 import { ProjectsService } from './projects.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 
@@ -539,6 +540,115 @@ test('a prerequisite replaced by finished work leaves its dependent ready, and t
 
       await t.test('the index and the project page report the same seven numbers', async () => {
         assert.deepEqual((await listed()).buckets, (await projects.panorama(ownerId, projectId)).buckets);
+      });
+    } finally {
+      await db.$disconnect();
+      await identity.end();
+    }
+  });
+
+/**
+ * What the index costs the database, beside what it counts: however many tasks an owner has, the
+ * read writes no temp file.
+ *
+ * It used to. `WITH classified AS MATERIALIZED (...) ... GROUP BY` held every classified task in a
+ * tuplestore, and a tuplestore that outgrows work_mem goes to disk: 4.4 MB per call for the owner
+ * of a 110,247-task project, written and never read, each time the sidebar polled. Production runs
+ * a 4 MB work_mem; here it is PostgreSQL's floor, 64 kB, so two thousand tasks stand in for a
+ * hundred thousand. The paired positive holds the same rows the way the old read did, on the same
+ * fixture and setting, and must spill: otherwise the fixture is too small for zero to mean
+ * anything.
+ */
+test('the index writes no temp file, however many tasks it classifies',
+  { skip: !URL, timeout: 300_000 }, async (t) => {
+    assertCoordinatorPgUrlIsIsolated(URL);
+    const identity = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
+    await identity.connect();
+    await verifyCoordinatorPgIdentity(identity);
+
+    const db = prismaClientFor(URL);
+    const projects = new ProjectsService(db as unknown as PrismaService);
+
+    interface PlanNode {
+      'Node Type': string;
+      'Temp Written Blocks'?: number;
+      Plans?: PlanNode[];
+    }
+    /** Every node of `sql`'s executed plan that wrote temp blocks, at a 64 kB work_mem. */
+    const spillsOf = async (sql: string, values: unknown[]): Promise<string[]> => {
+      await identity.query('BEGIN');
+      try {
+        await identity.query(`SET LOCAL work_mem = '64kB'`);
+        const explained = await identity.query(
+          `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${sql}`, values);
+        const spilled: string[] = [];
+        const walk = (node: PlanNode): void => {
+          const written = node['Temp Written Blocks'] ?? 0;
+          if (written > 0) spilled.push(`${node['Node Type']}: ${written} temp blocks written`);
+          for (const child of node.Plans ?? []) walk(child);
+        };
+        walk(explained.rows[0]['QUERY PLAN'][0].Plan);
+        return spilled;
+      } finally {
+        await identity.query('ROLLBACK');
+      }
+    };
+
+    try {
+      const ownerId = randomUUID();
+      await db.user.create({
+        data: {
+          id: ownerId, email: `spill-${ownerId}@rollup.invalid`, name: 'spill', passwordHash: 'x',
+        },
+      });
+      const projectId = await makeProject(db, ownerId, 'two thousand tasks');
+      // The first through `makeTask`, which binds the owner a workspace on an online runner; one in
+      // fifty of the rest OPEN, so the RUNNING and READY arms and their subplans run at 64 kB too.
+      await makeTask(db, ownerId, projectId, 'first', TaskStatus.DONE);
+      await db.task.createMany({
+        data: Array.from({ length: 2_000 }, (_, i) => ({
+          id: randomUUID(), ownerId, projectId, title: `task ${i}`,
+          creatorType: CreatorType.USER, creatorId: ownerId,
+          assigneeId: workspaceByOwner.get(ownerId)!,
+          status: i % 50 === 0 ? TaskStatus.OPEN : TaskStatus.DONE,
+          completionCriterion: 'EVIDENCE_JUDGMENT' as const,
+        })),
+      });
+
+      await t.test('holding every task at once spills on this fixture', async () => {
+        const held = await spillsOf(
+          `WITH held AS MATERIALIZED (
+             SELECT t."project_id", t."updated_at", t."status"::text AS "status"
+               FROM "task" t WHERE t."owner_id" = $1::uuid
+           )
+           SELECT count(*) FROM held`,
+          [ownerId],
+        );
+        assert.notDeepEqual(held, [], 'a tuplestore of these rows outgrows 64 kB');
+      });
+
+      await t.test('the statement the index sends writes none', async () => {
+        let sent: Prisma.Sql | undefined;
+        const capturing = {
+          $queryRaw: async (query: Prisma.Sql) => {
+            sent = query;
+            return [];
+          },
+        } as unknown as PrismaService;
+        await readProjectListRollups(capturing, ownerId);
+        assert.ok(sent, 'the index read was captured');
+        assert.deepEqual(await spillsOf(sent.text, sent.values), []);
+      });
+
+      await t.test('and still counts all of them, as the project page does', async () => {
+        const rows = (await projects.list(ownerId)) as unknown as Listed[];
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0]._count.tasks, 2_001);
+        assert.deepEqual(rows[0].buckets, {
+          running: 0, ready: 40, blocked: 0, awaitingVerification: 0,
+          done: 1_961, failed: 0, cancelled: 0,
+        });
+        assert.deepEqual(rows[0].buckets, (await projects.panorama(ownerId, projectId)).buckets);
       });
     } finally {
       await db.$disconnect();

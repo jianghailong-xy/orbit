@@ -431,7 +431,7 @@ test('the index asks the cheap prerequisite guard before it walks a dependency c
   });
   await service.list(OWNER_ID);
 
-  const rollup = statements.find((sql) => sql.includes('WITH classified AS MATERIALIZED'));
+  const rollup = statements.find((sql) => sql.includes('AS "workState"'));
   assert.ok(rollup, 'the task rollup was read');
   const end = rollup.indexOf("THEN 'READY'");
   const ready = rollup.slice(rollup.lastIndexOf('WHEN ', end), end);

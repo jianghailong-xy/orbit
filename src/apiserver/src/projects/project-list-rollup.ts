@@ -47,7 +47,7 @@ interface RollupRow {
 /**
  * Every project of one owner, bucketed in one round trip.
  *
- * Every task is classified once with `projectTaskWorkStateSql` and then grouped by project. This
+ * Every task is classified once with `projectTaskWorkStateSql` and then counted per project. This
  * is the exact same expression panorama, task cards and topology read, including the task-start
  * predicate and canonical verification epoch. A faster local reinterpretation of OPEN is not an
  * acceptable optimization: that was how a verification subject became Ready on one surface while
@@ -71,29 +71,48 @@ export async function readProjectListRollups(
     readyCandidates: everyPrerequisiteDoneOrRetiredSql('t'),
   }));
 
+  // Each classified task goes straight into its project's count, and nothing holds all of them at
+  // once. This read used to be `WITH classified AS MATERIALIZED (...) ... GROUP BY`: a CTE read
+  // once is still written to a tuplestore, and for the owner of a 110,247-task project that store
+  // outgrew work_mem, so every call wrote a 4.4 MB temp file that nothing read back
+  // (pg_stat_statements, 2026-09-29: 564 temp blocks written and 0 read per call, every 15s).
+  // The two things the CTE also did are kept on purpose:
+  //   - `OFFSET 0` stops the planner pulling the subquery up. Pulled up, each FILTER below gets its
+  //     own copy of the whole CASE: 18 subplans became 126 when the CTE was simply inlined.
+  //   - one plain aggregate per project, through LATERAL, and no GROUP BY. Grouped, the CASE's
+  //     estimated cost (about 17M) dwarfs the few thousand a Sort adds, the planner calls sorting
+  //     and hashing a tie and keeps the sorted plan for its order: a sort of every task, which
+  //     spills too. A plain aggregate has no strategy to choose.
+  // `taskCount > 0` leaves a project without tasks out of the rows, as the grouped join did; the
+  // caller gives it `emptyProjectListRollup()`.
   const rows = await prisma.$queryRaw<RollupRow[]>(Prisma.sql`
-    WITH classified AS MATERIALIZED (
-      SELECT t."project_id" AS "projectId",
-             t."updated_at" AS "updatedAt",
-             (${workState})::text AS "workState"
-        FROM "project" proj
-        JOIN "task" t ON t."owner_id" = ${ownerId}::uuid
-                     AND t."project_id" = proj."id"
-       WHERE proj."owner_id" = ${ownerId}::uuid ${narrowed}
-    )
-    SELECT "projectId",
-           count(*)::int AS "taskCount",
-           (count(*) FILTER (WHERE "workState" = 'RUNNING'))::int AS "running",
-           (count(*) FILTER (WHERE "workState" = 'READY'))::int AS "ready",
-           (count(*) FILTER (WHERE "workState" = 'BLOCKED'))::int AS "blocked",
-           (count(*) FILTER (WHERE "workState" = 'AWAITING_VERIFICATION'))::int
-             AS "awaitingVerification",
-           (count(*) FILTER (WHERE "workState" = 'DONE'))::int AS "done",
-           (count(*) FILTER (WHERE "workState" = 'FAILED'))::int AS "failed",
-           (count(*) FILTER (WHERE "workState" = 'CANCELLED'))::int AS "cancelled",
-           max("updatedAt") AS "lastActivityAt"
-      FROM classified
-     GROUP BY "projectId"`);
+    SELECT proj."id" AS "projectId",
+           rollup."taskCount", rollup."running", rollup."ready", rollup."blocked",
+           rollup."awaitingVerification", rollup."done", rollup."failed", rollup."cancelled",
+           rollup."lastActivityAt"
+      FROM "project" proj
+     CROSS JOIN LATERAL (
+       SELECT count(*)::int AS "taskCount",
+              (count(*) FILTER (WHERE "workState" = 'RUNNING'))::int AS "running",
+              (count(*) FILTER (WHERE "workState" = 'READY'))::int AS "ready",
+              (count(*) FILTER (WHERE "workState" = 'BLOCKED'))::int AS "blocked",
+              (count(*) FILTER (WHERE "workState" = 'AWAITING_VERIFICATION'))::int
+                AS "awaitingVerification",
+              (count(*) FILTER (WHERE "workState" = 'DONE'))::int AS "done",
+              (count(*) FILTER (WHERE "workState" = 'FAILED'))::int AS "failed",
+              (count(*) FILTER (WHERE "workState" = 'CANCELLED'))::int AS "cancelled",
+              max("updatedAt") AS "lastActivityAt"
+         FROM (
+           SELECT t."updated_at" AS "updatedAt",
+                  (${workState})::text AS "workState"
+             FROM "task" t
+            WHERE t."owner_id" = ${ownerId}::uuid
+              AND t."project_id" = proj."id"
+           OFFSET 0
+         ) classified
+     ) rollup
+     WHERE proj."owner_id" = ${ownerId}::uuid ${narrowed}
+       AND rollup."taskCount" > 0`);
 
   return new Map(rows.map((row) => [
     row.projectId,
