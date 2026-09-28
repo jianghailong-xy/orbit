@@ -1,0 +1,324 @@
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Button, Modal, Typography } from 'antd';
+import {
+  CheckCircleFilled,
+  ExclamationCircleFilled,
+  ExportOutlined,
+  LoadingOutlined,
+  WarningFilled,
+} from '@ant-design/icons';
+import { api, ApiError } from '../api';
+import {
+  codexLoginPath,
+  loginLine,
+  loginName,
+  type CodexLogin,
+  type CodexLoginAttempt,
+  type CodexLoginPoll,
+} from '../lib/codexLogin';
+import { formatResetTime, type ProviderPool } from '../lib/providerPools';
+import { ProviderTile } from './ProviderGallery';
+
+/**
+ * "Sign in with ChatGPT": the account a Codex pool of one's own runs on goes in by the official codex
+ * CLI's device flow, run on the Orbit server (CodexLoginService). First what that means — the account is
+ * theirs alone, its sign-in stays on the server, and it is not to be shared — then the page to open and
+ * the one-time code to enter there, while this polls until the person has approved it; then the account,
+ * by its email and `…AB12`, never a token. The same dialog signs an account OpenAI signed out in again.
+ *
+ * Closing it before the code is approved gives the sign-in up on the server: nothing half-done is left
+ * running there.
+ */
+
+/** How often the dialog asks whether the code has been approved. */
+const POLL_MS = 2000;
+
+type Step =
+  | { kind: 'consent' }
+  | { kind: 'code'; url: string; code: string; expiresAt: string }
+  | { kind: 'done'; account: CodexLogin | null }
+  | { kind: 'expired' }
+  | { kind: 'failed'; reason: string }
+  | { kind: 'dup' }
+  | { kind: 'taken' };
+
+/** A reason in the server's words, as a sentence of its own. */
+const sentence = (reason: string) => {
+  const text = reason.trim();
+  const capital = text.charAt(0).toUpperCase() + text.slice(1);
+  return /[.!?…]$/.test(capital) ? capital : `${capital}.`;
+};
+
+/** The step a poll's answer moves the dialog to, or null while it is still waiting on the person. */
+function pollStep(poll: CodexLoginPoll): Step | null {
+  switch (poll.status) {
+    case 'PENDING':
+      return null;
+    case 'CONFIRMED':
+      return { kind: 'done', account: poll.account };
+    case 'EXPIRED':
+      return { kind: 'expired' };
+    case 'CANCELLED':
+      return { kind: 'failed', reason: 'it was cancelled' };
+    case 'FAILED':
+      return { kind: 'failed', reason: poll.error ?? 'the codex CLI stopped without a sign-in' };
+    default:
+      // Nothing in flight here any more (the server restarted, or another tab finished it): an account
+      // that is in and running is the sign-in done; anything else has to start again.
+      return poll.account?.state === 'ACTIVE'
+        ? { kind: 'done', account: poll.account }
+        : { kind: 'failed', reason: 'the Orbit server has no sign-in in progress for this pool' };
+  }
+}
+
+/** A refusal the dialog has a step of its own for — the same account twice, or another one — or null. */
+function refusalStep(e: unknown): Step | null {
+  if (!(e instanceof ApiError)) return null;
+  if (e.code === 'POOL_CODEX_ACCOUNT_DUPLICATE') return { kind: 'dup' };
+  if (e.code === 'POOL_CODEX_ACCOUNT_TAKEN') return { kind: 'taken' };
+  return null;
+}
+
+export function CodexSignInModal({
+  pool,
+  onClose,
+}: {
+  /** The pool it signs in on; its `login`, when it has one, is the account a sign-in again is for. */
+  pool: ProviderPool;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [step, setStep] = useState<Step>({ kind: 'consent' });
+  const [starting, setStarting] = useState(false);
+  const held = pool.login ?? null;
+  const again = held?.state === 'SIGNED_OUT';
+  const path = codexLoginPath(pool.id);
+  // Whether a sign-in may be running on the server for this dialog: what closing it has to give up.
+  const live = useRef(false);
+
+  const start = async () => {
+    setStarting(true);
+    try {
+      const attempt = await api<CodexLoginAttempt>(path, { method: 'POST' });
+      live.current = true;
+      setStep({ kind: 'code', url: attempt.verificationUrl, code: attempt.userCode, expiresAt: attempt.expiresAt });
+    } catch (e) {
+      setStep({ kind: 'failed', reason: e instanceof Error && e.message ? e.message : 'Failed' });
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  // While the code is out: ask, every couple of seconds, whether the person approved it.
+  const waiting = step.kind === 'code';
+  useEffect(() => {
+    if (!waiting) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      let next: Step | null = null;
+      try {
+        next = pollStep(await api<CodexLoginPoll>(path));
+      } catch (e) {
+        // A refusal is an answer; a dropped request is not — ask again.
+        next = refusalStep(e);
+        if (!next && e instanceof ApiError && e.status === 404) {
+          next = { kind: 'failed', reason: 'this pool no longer exists' };
+        }
+      }
+      if (stopped) return;
+      if (next) {
+        live.current = false;
+        if (next.kind === 'done') void qc.invalidateQueries({ queryKey: ['providers'] });
+        setStep(next);
+        return;
+      }
+      timer = setTimeout(() => void tick(), POLL_MS);
+    };
+    timer = setTimeout(() => void tick(), POLL_MS);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [waiting, path, qc]);
+
+  // Leaving before it was approved gives the sign-in up — the code and the CLI waiting on it with it.
+  const close = () => {
+    if (live.current) {
+      live.current = false;
+      void api(path, { method: 'DELETE' }).catch(() => undefined);
+    }
+    onClose();
+  };
+  useEffect(
+    () => () => {
+      if (live.current) void api(path, { method: 'DELETE' }).catch(() => undefined);
+    },
+    [path],
+  );
+
+  const footer =
+    step.kind === 'consent' ? (
+      <>
+        <Button onClick={close}>Cancel</Button>
+        <Button type="primary" loading={starting} onClick={() => void start()}>
+          Sign in with ChatGPT
+        </Button>
+      </>
+    ) : step.kind === 'code' ? (
+      <Button onClick={close}>Cancel</Button>
+    ) : step.kind === 'done' ? (
+      <Button type="primary" onClick={close}>
+        Done
+      </Button>
+    ) : step.kind === 'dup' ? (
+      <Button onClick={close}>Close</Button>
+    ) : (
+      <>
+        <Button onClick={close}>Close</Button>
+        <Button type="primary" loading={starting} onClick={() => void start()}>
+          {step.kind === 'failed' ? 'Try again' : 'Get a new code'}
+        </Button>
+      </>
+    );
+
+  return (
+    <Modal open width={500} title="Sign in with ChatGPT" footer={footer} onCancel={close}>
+      {step.kind === 'consent' && (
+        <div className="pa-consent">
+          <div className="pa-lead">
+            {again ? (
+              <>
+                OpenAI signed {held?.email ?? 'this account'} out. Sign in with it again to put it back in{' '}
+                <b>{pool.label}</b>.
+              </>
+            ) : (
+              <>
+                Sign in with your own ChatGPT account to run <b>{pool.label}</b> on it.
+              </>
+            )}
+          </div>
+          <ul className="pa-facts">
+            <li>
+              <b>Only you can use it.</b> Sessions on {pool.label} are yours alone — nobody else in Orbit
+              sees this pool or its account.
+            </li>
+            <li>
+              <b>The sign-in stays on the Orbit server.</b> It never goes to a runner — runners get a
+              session token, not your login — and nobody sees its tokens.
+            </li>
+            <li>
+              <b>Sign out any time.</b> Its usage, and when it resets, show on this pool’s page.
+            </li>
+          </ul>
+          <div className="pa-risk">
+            <WarningFilled />
+            <span>
+              <b>Don’t share your account.</b> OpenAI’s terms don’t allow a ChatGPT account to be shared
+              — an account used that way can be suspended.
+            </span>
+          </div>
+        </div>
+      )}
+      {step.kind === 'code' && (
+        <div className="cx-code-step">
+          <div className="cx-open">
+            <Button type="primary" icon={<ExportOutlined />} href={step.url} target="_blank" rel="noopener noreferrer">
+              Open the sign-in page
+            </Button>
+            <a className="cx-url" href={step.url} target="_blank" rel="noopener noreferrer">
+              {step.url}
+            </a>
+          </div>
+          <div className="cx-hint">
+            {again && held?.email ? (
+              <>
+                Sign in there as <b>{held.email}</b>, then enter this one-time code:
+              </>
+            ) : (
+              'Sign in there, then enter this one-time code:'
+            )}
+          </div>
+          <div className="cx-code">
+            <Typography.Text
+              className="cx-code-text"
+              copyable={{ text: step.code, tooltips: ['Copy code', 'Copied'] }}
+            >
+              {step.code}
+            </Typography.Text>
+          </div>
+          <div className="cx-wait">
+            <LoadingOutlined /> Waiting for you to approve it…
+          </div>
+          <div className="cx-expiry">The code works until {formatResetTime(step.expiresAt)}.</div>
+        </div>
+      )}
+      {step.kind === 'done' && (
+        <div className="pa-added">
+          <div className="pa-done">
+            <CheckCircleFilled />
+            <div>
+              <div className="pa-done-t">
+                {step.account ? loginName(step.account) : 'Your ChatGPT account'} is in {pool.label}
+              </div>
+              <div className="pa-done-s">
+                It’s ready for the next session. Only you can sign it out or sign it in again.
+              </div>
+            </div>
+          </div>
+          {step.account && (
+            <div className="pa-acct">
+              <ProviderTile slug="openai" label="ChatGPT" size={28} />
+              <div>
+                <div className="pa-acct-t">{loginName(step.account)}</div>
+                <div className="pa-acct-s">
+                  {loginLine(step.account)} · its sign-in stays on the Orbit server
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {step.kind === 'expired' && (
+        <div className="pa-done pa-dup">
+          <ExclamationCircleFilled />
+          <div>
+            <div className="pa-done-t">The code expired</div>
+            <div className="pa-done-s">It wasn’t approved in time. Get a new code to try again.</div>
+          </div>
+        </div>
+      )}
+      {step.kind === 'failed' && (
+        <div className="pa-done pa-dup">
+          <ExclamationCircleFilled />
+          <div>
+            <div className="pa-done-t">The sign-in didn’t finish</div>
+            <div className="pa-done-s">{sentence(step.reason)}</div>
+          </div>
+        </div>
+      )}
+      {step.kind === 'dup' && (
+        <div className="pa-done pa-dup">
+          <ExclamationCircleFilled />
+          <div>
+            <div className="pa-done-t">This ChatGPT account is already in {pool.label}</div>
+            <div className="pa-done-s">It’s the account this pool runs on — signing it in twice adds nothing.</div>
+          </div>
+        </div>
+      )}
+      {step.kind === 'taken' && (
+        <div className="pa-done pa-dup">
+          <ExclamationCircleFilled />
+          <div>
+            <div className="pa-done-t">{pool.label} runs on another account</div>
+            <div className="pa-done-s">
+              Sign in as {held?.email ?? 'the account it runs on'} instead — or sign it out first to switch
+              accounts.
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}

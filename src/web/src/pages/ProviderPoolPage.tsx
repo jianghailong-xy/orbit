@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Popconfirm, Spin } from 'antd';
 import { api } from '../api';
@@ -10,10 +10,18 @@ import {
   PoolGauge,
   PoolMembers,
 } from '../components/AccountPools';
+import { CodexSignInModal } from '../components/CodexSignIn';
 import { AddKeyModal, PoolPeopleCard, PoolRulesCard, ReplaceKeyModal } from '../components/SharedPool';
+import { codexLoginPath, isLoginPool, loginName } from '../lib/codexLogin';
 import { encodeId, routeId } from '../lib/idCodec';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
-import { poolRefusals, providerPoolsQuery, type PoolMember, type PoolRefusals } from '../lib/providerPools';
+import {
+  poolRefusals,
+  providerPoolsQuery,
+  type PoolMember,
+  type PoolRefusals,
+  type ProviderPool,
+} from '../lib/providerPools';
 import {
   canAddKey,
   SHARED_POOLS_BASE,
@@ -28,12 +36,14 @@ import { useToast } from '../lib/toast';
  * One account pool (/providers/pools/:id), linkable like a provider's own page: its accounts with
  * where each stands, and the ways to change it — add an account, take one out, delete the pool.
  * Taking an account out or deleting the pool leaves the provider itself standing. The same address
- * opens a shared pool the user is in (SharedPoolPage).
+ * opens a shared pool the user is in (SharedPoolPage), and a Codex pool of their own ChatGPT account
+ * (CodexPoolPage).
  */
 export function ProviderPoolPage() {
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const poolId = routeId(useParams().id);
   const pools = useQuery(providerPoolsQuery());
   const shared = useQuery(sharedPoolsQuery());
@@ -70,6 +80,9 @@ export function ProviderPoolPage() {
   const sharedPool = shared.data?.find((row) => routeId(row.id) === poolId);
   if (sharedPool) return <SharedPoolPage pool={sharedPool} />;
   const pool = pools.data?.find((row) => routeId(row.id) === poolId);
+  // "New pool" sends a pool of one's own ChatGPT account here to sign it in straight away.
+  const signInFirst = (location.state as { signIn?: boolean } | null)?.signIn === true;
+  if (pool && isLoginPool(pool)) return <CodexPoolPage pool={pool} signInFirst={signInFirst} />;
   const refusals = poolRefusals(keys.data ?? []);
   if (!pool) {
     return (
@@ -128,8 +141,98 @@ export function ProviderPoolPage() {
   );
 }
 
-/** No key of a shared pool is one of the user's own provider rows, so none is refused as one. */
+/** No key of a shared pool is one of the user's own provider rows, so none is refused as one — and
+ *  neither is the ChatGPT account of a Codex pool of one's own. */
 const NO_REFUSALS: PoolRefusals = new Map();
+
+/**
+ * A Codex pool of the user's own (migration 0323): the one ChatGPT account it runs on — its email, plan,
+ * where it stands and its quota, with when each window resets — and the ways to change that: sign in
+ * with ChatGPT while it has none, sign in again once OpenAI signed it out, sign it out, delete the pool.
+ * Only its owner ever reaches this page (another user's pool is not found), so every press is theirs.
+ */
+function CodexPoolPage({ pool, signInFirst }: { pool: ProviderPool; signInFirst: boolean }) {
+  const message = useToast();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [signingIn, setSigningIn] = useState(signInFirst && !pool.login);
+  const refresh = () => void qc.invalidateQueries({ queryKey: ['providers'] });
+  const failed = (e: Error) => message.error(e.message || 'Failed');
+  const signOut = useMutation({
+    mutationFn: () => api(`${codexLoginPath(pool.id)}/account`, { method: 'DELETE' }),
+    onSuccess: () => {
+      refresh();
+      message.success(`${pool.login ? loginName(pool.login) : 'The account'} is signed out`);
+    },
+    onError: failed,
+  });
+  const removePool = useMutation({
+    mutationFn: () => api(`/providers/pools/${encodeId(pool.id)}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      refresh();
+      message.success('Pool deleted');
+      navigate('/providers');
+    },
+    onError: failed,
+  });
+  const deleteNote = 'Its ChatGPT sign-in is deleted from the Orbit server with it.';
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <Link className="provider-back" to="/providers">
+        ‹ All providers
+      </Link>
+      <div className="pool-page-head">
+        <div style={{ minWidth: 0 }}>
+          <div className="pool-page-title">
+            <PoolEngineMark pool={pool} size={26} />
+            <h1 className="page-title">{pool.label}</h1>
+          </div>
+          <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
+            Codex pool · Just me · sessions run on your own ChatGPT account, and its sign-in stays on the
+            Orbit server.
+          </div>
+        </div>
+        {/* One account a pool: a second sign-in is how a signed-out one comes back, from its row. */}
+        {!pool.login && (
+          <Button type="primary" onClick={() => setSigningIn(true)}>
+            Sign in with ChatGPT
+          </Button>
+        )}
+      </div>
+
+      <div className="re-card pool-card pool-detail" data-pool={pool.id}>
+        <div className="re-head">
+          <span className="re-runner">Account</span>
+          <span className="re-head-sp" />
+          <PoolGauge pool={pool} />
+        </div>
+        <PoolMembers
+          pool={pool}
+          refusals={NO_REFUSALS}
+          loginActions={{ onSignIn: () => setSigningIn(true), onSignOut: () => signOut.mutate() }}
+        />
+      </div>
+
+      <div className="pool-danger pool-danger-row">
+        <Popconfirm
+          title={`Delete ${pool.label}?`}
+          description={deleteNote}
+          okText="Delete"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => removePool.mutate()}
+        >
+          <Button danger loading={removePool.isPending}>
+            Delete pool
+          </Button>
+        </Popconfirm>
+        <span className="pool-danger-note">{deleteNote}</span>
+      </div>
+
+      {signingIn && <CodexSignInModal pool={pool} onClose={() => setSigningIn(false)} />}
+    </div>
+  );
+}
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
