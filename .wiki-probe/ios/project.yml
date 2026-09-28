@@ -1,0 +1,51 @@
+# TEMPORARY evidence probe (see ../README.md).
+name: WikiProbe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  OrbitKit:
+    path: ../../src/macos/OrbitKit
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    # Simulator only: ad-hoc "sign to run locally", no team, no profile.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+targets:
+  WikiProbe:
+    type: application
+    platform: iOS
+    sources: [Sources, Generated]
+    dependencies:
+      - package: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.wikiprobe
+        PRODUCT_NAME: WikiProbe
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+  WikiProbeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: WikiProbe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.wikiprobe.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  WikiProbe:
+    build:
+      targets:
+        WikiProbe: all
+        WikiProbeUITests: [test]
+    test:
+      targets:
+        - WikiProbeUITests
