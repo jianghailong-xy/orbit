@@ -266,8 +266,10 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
         inputTokens: 1_000_000n, outputTokens: 100_000n, costMicros: 10_000_000n,
       },
     });
+    // No key can run for him now: the session stays on the one it had, which the gateway refuses with
+    // the reason, so the claim that later moves it can say which key it left.
     const empty = await claim(max, maxSession);
-    assert.equal(await keyOn(maxSession), null);
+    assert.equal(await keyOn(maxSession), miaKey);
     assert.equal(empty.agent.env?.OPENAI_BASE_URL, GATEWAY, 'with no key for him, the session still goes to the gateway, which answers');
     await claim(mia, miaSession);
     assert.equal(await keyOn(miaSession), miaKey);
@@ -278,7 +280,7 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     assert.equal(await keyOn(maxSession), annKey);
     assert.equal(await pools.markKeyInvalid(annKey), true);
     await claim(max, maxSession);
-    assert.equal(await keyOn(maxSession), null);
+    assert.equal(await keyOn(maxSession), annKey, 'nothing else can run for him: he stays, refused by the gateway');
     await pools.replaceKey(ann.id, pool.id, annKey, { apiKey: openaiKey() });
     await claim(max, maxSession);
     assert.equal(await keyOn(maxSession), annKey);

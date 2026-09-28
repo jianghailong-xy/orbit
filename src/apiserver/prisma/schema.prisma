@@ -5229,6 +5229,10 @@ model PoolApiKey {
   enabled         Boolean            @default(true)
   // Whole US dollars a calendar month everyone but the contributor may spend on it; null = no cap.
   shareCap        Int?               @map("share_cap")
+  // Out of budget until then (migration 0322): OpenAI answered `insufficient_quota` for it, and this is
+  // the reset it named, else the first of the next month. No claim chooses it before; a request that
+  // goes through on it, or a new secret, clears it.
+  spentUntil      DateTime?          @map("spent_until")
   usage           PoolUsage[]
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")

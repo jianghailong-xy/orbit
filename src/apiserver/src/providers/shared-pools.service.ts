@@ -47,6 +47,7 @@ const KEY_VIEW_SELECT = {
   state: true,
   enabled: true,
   shareCap: true,
+  spentUntil: true,
   createdAt: true,
 } satisfies Prisma.PoolApiKeySelect;
 
@@ -106,6 +107,8 @@ function poolView(pool: PoolRow, keys: KeyRow[], usage: UsageRow[], viewerId: st
         state: key.state,
         enabled: key.enabled,
         shareCap: key.shareCap,
+        // Out of budget until then — OpenAI said so (the page's "Out of budget · resets …"); null when not.
+        spentUntil: key.spentUntil && key.spentUntil > now ? key.spentUntil : null,
         contributor: {
           userId: key.contributorId,
           name: names.get(key.contributorId) ?? '',
@@ -330,7 +333,8 @@ export class SharedPoolsService {
   /**
    * A new secret for a key — what one OpenAI refused (INVALID) needs before any session runs on it again —
    * from its contributor or an admin. The key keeps its place, its contributor and its ledger; the new
-   * secret is checked and stored like a new key's, and the key is ACTIVE again.
+   * secret is checked and stored like a new key's, and the key is ACTIVE again, with no out-of-budget mark:
+   * that was OpenAI's word about the secret it replaces.
    */
   async replaceKey(userId: string, poolId: string, keyId: string, dto: ReplacePoolKeyDto) {
     const place = await this.place(userId, poolId);
@@ -349,6 +353,7 @@ export class SharedPoolsService {
         keyHint: next.hint,
         secretEncrypted: encryptSecret(next.secret),
         state: 'ACTIVE',
+        spentUntil: null,
       },
     });
     this.publish(await this.peopleOf(poolId), poolId);
@@ -378,6 +383,33 @@ export class SharedPoolsService {
     const { count } = await this.prisma.poolApiKey.updateMany({
       where: { id: keyId, state: 'ACTIVE' },
       data: { state: 'INVALID' },
+    });
+    if (count > 0) this.publish(await this.peopleOf(key.poolId), key.poolId);
+    return count > 0;
+  }
+
+  /**
+   * OpenAI answered `insufficient_quota` for this key: out of budget until `until` (migration 0322), and
+   * chosen by no claim before then. True when a key was marked. The pool gateway's to call.
+   */
+  async markKeySpent(keyId: string, until: Date): Promise<boolean> {
+    const key = await this.prisma.poolApiKey.findUnique({ where: { id: keyId }, select: { poolId: true } });
+    if (!key) return false;
+    const { count } = await this.prisma.poolApiKey.updateMany({ where: { id: keyId }, data: { spentUntil: until } });
+    if (count > 0) this.publish(await this.peopleOf(key.poolId), key.poolId);
+    return count > 0;
+  }
+
+  /**
+   * OpenAI took a request on a key marked out of budget — its organization has budget again — so the mark
+   * goes. Only a marked key moves; true when it did. The pool gateway's to call.
+   */
+  async clearKeySpent(keyId: string): Promise<boolean> {
+    const key = await this.prisma.poolApiKey.findUnique({ where: { id: keyId }, select: { poolId: true } });
+    if (!key) return false;
+    const { count } = await this.prisma.poolApiKey.updateMany({
+      where: { id: keyId, spentUntil: { not: null } },
+      data: { spentUntil: null },
     });
     if (count > 0) this.publish(await this.peopleOf(key.poolId), key.poolId);
     return count > 0;

@@ -13,7 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
-import { choosePoolKey } from '../providers/pool-key-select';
+import { choosePoolKey, keyCanRun, poolKeysResumeAt, poolKeySwitchNotice } from '../providers/pool-key-select';
 import {
   mintPoolGatewayToken,
   sharedPoolExecRow,
@@ -419,7 +419,7 @@ export class QueueService {
         (maintenance
           ? null
           : ((await this.resolvePoolMember(this.prisma, session, declared!)) ??
-            (await this.resolveSharedPool(this.prisma, session, declared!)))));
+            (await this.resolveSharedPool(this.prisma, session, declared!, true)))));
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
         declaredProvider: declared,
@@ -618,12 +618,53 @@ export class QueueService {
    * `slug` is no pool of `ownerId` or the pool reports nothing to go by (pool-select.ts poolResumesAt).
    * Read from the members and the quota cache the claim below picks from, so a brake does not release
    * work the claim would then send to an account known to be spent.
+   *
+   * A shared pool `ownerId` is in (migration 0320) answers from its keys the same way
+   * (pool-key-select.ts poolKeysResumeAt): `now` while one can run for them, the first reset while all
+   * are out of budget or spent to their caps, and null when none will come back by waiting.
    */
   async accountPoolResumesAt(ownerId: string, slug: string, now: Date): Promise<Date | null> {
-    // A built-in engine is never a pool, and with no quota cache there is nothing to judge one by.
-    if (!this.planUsage || isBuiltinProvider(slug)) return null;
-    const pool = await this.accountPool(ownerId, slug);
-    return pool ? poolResumesAt(pool.candidates, now) : null;
+    // A built-in engine is never a pool.
+    if (isBuiltinProvider(slug)) return null;
+    // With no quota cache there is nothing to judge an account pool by.
+    const pool = this.planUsage ? await this.accountPool(ownerId, slug) : null;
+    if (pool) return poolResumesAt(pool.candidates, now);
+    const shared = await this.sharedPoolOf(this.prisma, ownerId, slug);
+    return shared ? poolKeysResumeAt(await sharedPoolKeyCandidates(this.prisma, shared.id, now), ownerId, now) : null;
+  }
+
+  /**
+   * When a turn of a shared-pool session that failed on its key is to be sent again — the gateway
+   * refused the key (switched off, refused or disabled by OpenAI, its cap spent by the others, gone), or
+   * OpenAI said it is out of budget or refused it — for the arm turn-complete and finalize put on a failed
+   * run (RunnerApiController). `now` while another key can take it, which the next claim then chooses;
+   * the first reset while every key is spent; null when no key will come back by waiting.
+   *
+   * Null too when the key the session is on can still run for it — the failure was not the key's, and the
+   * ordinary rules apply: a rate limit, above all, is waited out on its own key and never moves a session
+   * (docs/codex-shared-pool-design.md §2.3) — and when `session` is on no shared pool of its owner's.
+   * Decided from the keys as the database holds them, not from the words the engine ended with.
+   */
+  async sharedPoolKeyRetryAt(
+    db: Prisma.TransactionClient | PrismaService,
+    session: { ownerId: string; provider: string | null; poolKeyId: string | null },
+    now: Date,
+  ): Promise<Date | null> {
+    if (!session.provider || isBuiltinProvider(session.provider)) return null;
+    const pool = await this.sharedPoolOf(db, session.ownerId, session.provider);
+    if (!pool) return null;
+    const keys = await sharedPoolKeyCandidates(db, pool.id, now);
+    const current = keys.find((key) => key.id === session.poolKeyId);
+    if (current && keyCanRun(current, session.ownerId, now)) return null;
+    return poolKeysResumeAt(keys, session.ownerId, now);
+  }
+
+  /** The shared pool on `slug` that `ownerId` is a person of, or null — nobody else's is theirs to name. */
+  private sharedPoolOf(db: Prisma.TransactionClient | PrismaService, ownerId: string, slug: string) {
+    return db.providerPool.findFirst({
+      where: { slug, shared: true, people: { some: { userId: ownerId } } },
+      select: { id: true, label: true, ownKeyFirst: true },
+    });
   }
 
   /**
@@ -768,32 +809,43 @@ export class QueueService {
    * (shared-pool.ts sharedPoolExecRow) — never a key of the pool, which only the gateway ever reads. The
    * key this session's requests go out on is chosen here, the way pool-key-select.ts chooses (staying on
    * the one it had, the owner's own first when the pool says so, none spent to its share cap), and
-   * recorded as `poolKeyId` for the gateway; null when no key can run for this person, which the gateway
-   * answers. Every door that builds such a session's engine environment resolves it here — this claim,
+   * recorded as `poolKeyId` for the gateway. When no key can run for this person the session stays on
+   * the key it had (null for one that never had any), which the gateway answers with the reason, and
+   * moves at the first claim that finds another one — so a move after a wait still says which key it
+   * left. Every door that builds such a session's engine environment resolves it here — this claim,
    * a restarted runner's reclaim and a provider-switch reload (RunnerApiController) — and each mints its
    * own token, since only a hash is kept and a new process needs the token in its environment.
    * `db` is the caller's client: the reload runs inside the transaction that holds this session's row.
+   *
+   * A move off another key records the line the transcript owes for it (pool-key-select.ts
+   * poolKeySwitchNotice), carried by the next engine start event the runner reports, as an account
+   * pool's is. The gateway moves no session itself, so every move happens here — and a claim may land on
+   * a resident engine, which starts nothing and so reports no such event. `atClaim` says this is the
+   * claim, and a move then also queues a `reload` that changes nothing (queueSwitchNoticeCarrier): the
+   * resident engine answers it with a `resumed`, which carries the line, ahead of the message it runs on
+   * the new key. The reclaim and the reload re-spawn their engine, whose own start carries it.
    */
   async resolveSharedPool(
     db: Prisma.TransactionClient | PrismaService,
     session: { id: string; ownerId: string; poolKeyId: string | null },
     slug: string,
+    atClaim = false,
   ): Promise<ModelProviderRow | null> {
-    const pool = await db.providerPool.findFirst({
-      where: { slug, shared: true, people: { some: { userId: session.ownerId } } },
-      select: { id: true, ownKeyFirst: true },
-    });
+    const pool = await this.sharedPoolOf(db, session.ownerId, slug);
     if (!pool) return null;
     const now = new Date();
-    const chosen = choosePoolKey(
-      await sharedPoolKeyCandidates(db, pool.id, now),
-      session.ownerId,
-      pool.ownKeyFirst,
-      session.poolKeyId,
-    );
-    const keyId = chosen?.id ?? null;
-    if (keyId !== session.poolKeyId) {
-      await db.session.update({ where: { id: session.id }, data: { poolKeyId: keyId } });
+    const keys = await sharedPoolKeyCandidates(db, pool.id, now);
+    const chosen = choosePoolKey(keys, session.ownerId, pool.ownKeyFirst, session.poolKeyId, now);
+    if (chosen && chosen.id !== session.poolKeyId) {
+      // The first key a session runs on is where it starts, not a move.
+      const notice = session.poolKeyId
+        ? poolKeySwitchNotice(chosen, keys.find((key) => key.id === session.poolKeyId) ?? null, session.ownerId, now)
+        : null;
+      await db.session.update({
+        where: { id: session.id },
+        data: { poolKeyId: chosen.id, ...(notice ? { poolSwitchNotice: notice } : {}) },
+      });
+      if (notice && atClaim) await this.queueSwitchNoticeCarrier(session.id);
     }
     const token = await mintPoolGatewayToken(
       db,
@@ -801,6 +853,41 @@ export class QueueService {
       now,
     );
     return sharedPoolExecRow(token);
+  }
+
+  /**
+   * A `reload` that asks nothing of the engine — no model, no mode, no provider, so the inbox hands it
+   * out with no environment (RunnerApiController.reloadProviderEnv) and the runner re-spawns nothing —
+   * for a key-switch line to ride on. A runner answers every reload with a `resumed` event, and the inbox
+   * delivers a reload ahead of the message waiting behind it, so on a resident engine the line lands just
+   * before the turn that runs on the new key. On an engine this claim starts, the start's own event has
+   * taken the line by then, and the `resumed` this earns carries nothing and draws nothing.
+   *
+   * A conversation turn, not a run event: the runner numbers a session's events, and a row written here
+   * would take the seq its next event is about to use (server-must-not-insert-run-event-rows).
+   */
+  private async queueSwitchNoticeCarrier(sessionId: string): Promise<void> {
+    const clientTurnId = `pool-key-switch:${randomUUID()}`;
+    await withTransactionRetry(this.prisma, async (tx) => {
+      // The seq is allocated under the Session's own lock, as every other producer of a turn does.
+      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
+      const last = await tx.conversationTurn.findFirst({
+        where: { sessionId },
+        orderBy: { seq: 'desc' },
+        select: { seq: true },
+      });
+      await tx.conversationTurn.create({
+        data: {
+          sessionId,
+          seq: (last?.seq ?? 0) + 1,
+          kind: 'reload',
+          content: '{}',
+          clientTurnId,
+          status: 'PENDING',
+        },
+      });
+    }, loggedRetry(this.logger, 'queue.queueSwitchNoticeCarrier'));
+    this.realtime.notifyInbox(sessionId);
   }
 
   /**

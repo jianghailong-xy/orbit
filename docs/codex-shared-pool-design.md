@@ -1,7 +1,7 @@
 # Codex 共享池（共享组织/项目 API key + 网关）设计
 
 **状态**：方向由账号所有者于 2026-09-27 定为「共享组织/项目 API key + 网关」，取代原「服务器保管成员个人
-ChatGPT 登录」；本文档、效果图与 4 项产品决策已按新方向改写（2026-09-28）。P1（数据与权限，迁移 0320）已实现，网关与界面还没开始。
+ChatGPT 登录」；本文档、效果图与 4 项产品决策已按新方向改写（2026-09-28）。P1（数据与权限，迁移 0320）与 P2（网关，迁移 0322）已实现，界面还没开始。
 效果图、iOS 复刻和 web 界面 mock 补丁都在 [`docs/mocks/codex-shared-pool/`](./mocks/codex-shared-pool/)。
 
 **改动日期与原因**：2026-09-27，账号所有者把项目方向定为「共享组织/项目 API key + 网关」。
@@ -79,6 +79,22 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
   - 每个 key 的本窗口用量写回它的快照，池页与选择器读的就是这一份；
   - 上游若回组织级用量（`x-ratelimit-*` 一类），一并记进同一快照（P0 核实要读哪几个头）。
 - 负载：流式请求期间**不占 DB 连接**。账本写入攒批或异步完成，见过去的连接池争用事故。
+- P2 落地（`providers/pool-gateway.service.ts`，`/api/gw/codex/*`）：
+  - 白名单只有 `POST /responses`：codex 0.158 经自定义 provider 只发这一个（上下文压缩也走它），
+    录制在 `providers/fixtures/codex-gateway-recording.json`（runner-go `codex_gateway_recording_test.go` 用生产 builder 驱动真 codex 生成，
+    codex 升级时重录），`pool-gateway.pg.spec.ts` 把它经真网关回放；
+  - 令牌：按 hash 查，未撤销、未过期、会话 open、会话仍在这个池上、令牌的人就是会话 owner，否则 401；
+    成员移出、池删除、会话删除靠外键级联删令牌行；白名单外 403；
+  - 转发：codex 发来的请求体一字不改；头只去掉逐跳头和自家边缘（Cloudflare、nginx）加的头（含 `accept-encoding`，
+    codex 本身不发），鉴权换成会话当前那把 key；上游地址写死 `https://api.openai.com/v1`；
+  - key 用不了（没选到、贡献者关了、INVALID/DISABLED、别人把 cap 花完——含账本还没落库的部分）→ 403 并写明原因，不打上游；
+  - 上游 401 → key 置 INVALID，回 403 + 自己的说明（上游 401 的 body 带 OpenAI 打码的 key 前后缀，
+    且 runner 会把 `401 Unauthorized` 画成登录卡片，而成员自己的凭据没问题）；
+  - 上游 `insufficient_quota` → `spent_until` = 上游给的恢复时间，否则下个自然月 1 日（UTC），响应原样转回；
+  - 用量：旁路解析 `response.completed`（及带 usage 的 incomplete / failed），按模型价表（`providers/openai-prices.ts`）
+    算 `cost_micros`，内存攒批每 2 秒一条 upsert（`PoolUsageLedger`）；
+  - API key 没有 5 小时 / 周窗口（codex 的 primary / secondary 来自 ChatGPT 订阅的 `x-codex-*` 头，api.openai.com 不发），
+    `x-ratelimit-*` 是每分钟限流、不是用量，所以 key 的「本窗口」就是账本的自然月，不另存快照。
 
 ### 2.3 选 key 与换 key
 
@@ -105,6 +121,20 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
   - 网关方案换 key 时 runner 的环境不变、引擎不重启；
   - 控制面又**不能自己往 run_event 插行**；
   - 所以提示的投递方式要在 P2 定。
+- P2 定下的做法（`QueueService.resolveSharedPool`、`pool-key-select.ts`）：
+  - 网关从不换 key，只标记；换 key 只在 claim 时发生，提示写进 `session.pool_switch_notice`，
+    由下一个 `init` / `resumed` 带走（与个人池同一机制）；
+  - warm 引擎被 claim 复用时不发 init/resumed，所以 claim 换了 key 就在 inbox 排一个空 `reload`（content `{}`，
+    出队不带 env，runner 不重启，只回一条 `resumed (config_changed)`），inbox 本来就把 reload 排在等待的消息前，
+    提示正好落在用新 key 跑的回合之前；冷启动时提示由引擎自己的 init/resumed 带走，这条 resumed 什么都不带；
+  - key 版句式另加一条：key 已被移出池时 `Switched to X — the previous key is no longer in this pool`；
+    别人把 share cap 花完也说 `is out of budget`；
+  - 没有 key 能跑时会话留在原 key 上（不置 null），网关回 403 说明原因，之后换走时提示能说出从哪把换走；
+  - 撞限后的回合：回合失败时若会话的 key 已不能再跑（按库里状态判，不看 codex 的措辞），
+    turn-complete / finalize 按 `QueueService.sharedPoolKeyRetryAt` 武装自动重试（另一把 key 能跑＝现在，
+    全部用完＝最早恢复时间）；`accountPoolResumesAt` 对共享池给出同一个时间，sweeper 和任务的额度闸都按它；
+  - `rate_limit_exceeded`：codex 0.158 自己不重试 429，网关在同一把 key 上按 retry-after / x-ratelimit-reset-* 退避重发
+    （最多 4 次，单次 ≤20s、合计 ≤40s），仍是 429 就原样转回；不标记 key，下一次 claim 仍粘在它上面。
 - P0 要验证：同一个 codex 线程换 key 后还能否继续（加密 reasoning、prompt cache）。
   不能的话，换 key 时丢弃加密 reasoning，或者新开线程接续。
 
@@ -123,8 +153,9 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
     - `state`：`ACTIVE` | `INVALID`（上游 401 置）| `DISABLED`（上游因组织/项目停用而拒绝）；
     - `enabled`：贡献者自己的开关，界面上的 `Disabled` 就是它关着；claim 只选 `ACTIVE` 且开着的；
     - `share_cap`：别人每个自然月（UTC）最多花多少美元（整数，空＝不限；自己用不受限）。
-  - 本窗口用量不存在 key 行上，从 `pool_usage` 按月汇总；草案里的 `window_usage`（上游报的恢复时间）和 `last_error`
-    留给 P2 按需加列。
+  - 本窗口用量不存在 key 行上，从 `pool_usage` 按月汇总；草案里的 `window_usage`（上游报的恢复时间）由 P2 落成
+    `spent_until`（迁移 0322）：上游 `insufficient_quota` 后到这个时间之前 claim 不选它，经它成功一次或替换 key 即清除；
+    `last_error` 没有加。
   - 复合外键 `(pool_id, contributor_id) → provider_pool_person(pool_id, user_id) ON DELETE CASCADE`：
     「贡献者必须是成员」「成员离开，key 跟着走」都由库保证，和 0265 用外键做租户围栏的做法一致。
 - `pool_gateway_token(id, token_hash, pool_id, user_id, session_id, created_at, expires_at, revoked_at)`：只存 hash。
@@ -142,7 +173,8 @@ claim（P1 已落地，`QueueService.resolveSharedPool`）：
 - 每次构建引擎环境（claim、runner 重启后的 reclaim、换 provider 的 reload）都签发一个新令牌（`orbit-gw-…`），库里只存 SHA-256。
   同一会话的旧令牌继续有效、过期时间跟着新令牌顺延 7 天——warm 引擎会一直用它被拉起时的那个令牌。
 - 选 key 按 `pool-key-select.ts`：粘住当前 key；否则（`own_key_first` 时）先自己的 key；再按剩余额度（无上限 > 有上限且剩得多）；
-  跳过关掉的、INVALID/DISABLED 的、别人已把 share cap 花完的；都不行时 `pool_key_id = null`，由网关回话。
+  跳过关掉的、INVALID/DISABLED 的、别人已把 share cap 花完的、`spent_until` 未到的（P2）；都不行时会话留在原来那把 key 上
+  （从没有过 key 的仍是 null），由网关回话（P2 起；P1 当时是置 null）。
 
 ### 2.5 权限
 
@@ -204,7 +236,7 @@ claim（P1 已落地，`QueueService.resolveSharedPool`）：
   - 撞限三态实测：`insufficient_quota` / 401 / 429 各一次，定各自的处置；
   - 换 key 后线程能否继续。
 - **P1 数据与权限**：表、迁移、成员与角色、各入口按成员放行、会话令牌、claim 注入、加 key 与替换流程。
-- **P2 网关**：转发、选 key（含 Own key first 与上限）、撞限换 key、用量回写与账本、换 key 提示的投递。
+- **P2 网关**（已实现，迁移 0322）：转发、选 key（含 Own key first 与上限）、撞限换 key、用量回写与账本、换 key 提示的投递。
 - **P3 web 界面**：按效果图 01–04，以 `web-mock.patch` 为起点。
 - **P4 iOS / macOS 界面**：按效果图 05。
 - **P5 文案**：`poolSwitchNotice` 增加 D5 的 key 句式；个人池保持现有句式；parity 测试。

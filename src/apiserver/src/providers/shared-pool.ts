@@ -131,7 +131,9 @@ export async function sharedPoolKeyCandidates(
   const keys = await db.poolApiKey.findMany({
     where: { poolId },
     orderBy: { id: 'asc' },
-    select: { id: true, contributorId: true, label: true, enabled: true, state: true, shareCap: true },
+    select: {
+      id: true, contributorId: true, label: true, enabled: true, state: true, shareCap: true, spentUntil: true,
+    },
   });
   const spent = await db.poolUsage.findMany({
     where: { poolId, windowStart: usageWindowStart(now) },

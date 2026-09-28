@@ -1,0 +1,543 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { Request, Response } from 'express';
+import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders } from 'node:http';
+import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
+import { sha256 } from '../common/crypto.util';
+import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { PrismaService } from '../prisma/prisma.service';
+import { responseCostMicros } from './openai-prices';
+import { keyRoom, poolKeysResumeAt } from './pool-key-select';
+import { PoolUsageLedger } from './pool-usage-ledger';
+import { decryptSecret } from './provider-crypto';
+import { readResponsesEvent, ResponsesStreamTap, type ResponsesOutcome } from './responses-stream-tap';
+import { maskedKey, nextUsageWindowStart, sharedPoolKeyCandidates, usageWindowStart } from './shared-pool';
+import { SharedPoolsService } from './shared-pools.service';
+
+/**
+ * Where the pool gateway sends every request it forwards: OpenAI's API. Fixed here — no request, header,
+ * setting or environment variable can point a pool's keys anywhere else (docs/codex-shared-pool-design.md
+ * §2.2). Provided under POOL_GATEWAY_UPSTREAM so a spec can stand a recorder in its place.
+ */
+export const OPENAI_API_BASE = 'https://api.openai.com/v1';
+export const POOL_GATEWAY_UPSTREAM = 'POOL_GATEWAY_UPSTREAM';
+
+/** The gateway's path under the API prefix; codex appends `/responses` to it (shared-pool.ts poolGatewayUrl). */
+export const POOL_GATEWAY_PATH = '/api/gw/codex';
+
+/**
+ * What a session token may call, and nothing else: what codex 0.158 was recorded calling through a
+ * configured provider (providers/fixtures/codex-gateway-recording.json) — one POST of `/responses` per
+ * model request, the context compaction's included.
+ */
+const ALLOWED = [{ method: 'POST', path: '/responses' }] as const;
+
+/** The largest request body forwarded: nginx admits 30m under `/api/`, and a long thread can come near it. */
+const MAX_BODY_BYTES = 30 * 1024 * 1024;
+
+/**
+ * A 429 that is a rate limit, not a spent budget, is waited out and sent again on the SAME key — never
+ * moved to another one (design §2.3): at most RATE_LIMIT_ATTEMPTS sends, no single wait over
+ * RATE_LIMIT_MAX_WAIT_MS and none that would take the waiting past RATE_LIMIT_BUDGET_MS, so the answer
+ * leaves well inside the edge's 100-second limit. Codex 0.158 does not retry a 429 itself.
+ */
+const RATE_LIMIT_ATTEMPTS = 4;
+const RATE_LIMIT_MAX_WAIT_MS = 20_000;
+const RATE_LIMIT_BUDGET_MS = 40_000;
+
+/** An upstream stream that goes this long without a byte is given up on. */
+const UPSTREAM_IDLE_MS = 5 * 60_000;
+
+/**
+ * Headers not passed on: hop-by-hop ones, which describe a connection and not the request, and the ones
+ * this deployment's own edge (Cloudflare, then nginx) adds on the way in — a runner's address, the
+ * gateway's loop guard, the edge's accept-encoding. What reaches OpenAI is what codex sent, with one
+ * header replaced.
+ */
+const NOT_FORWARDED = new Set([
+  'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'trailers',
+  'transfer-encoding', 'upgrade', 'host', 'content-length', 'authorization',
+  'x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host', 'x-forwarded-port', 'x-real-ip', 'forwarded',
+  'via', 'x-orbit-gateway', 'cdn-loop', 'true-client-ip', 'accept-encoding',
+  'cf-connecting-ip', 'cf-connecting-ipv6', 'cf-ipcountry', 'cf-ray', 'cf-visitor', 'cf-worker', 'cf-warp-tag-id',
+]);
+
+/** Headers of OpenAI's answer not passed back: hop-by-hop ones, and its cookies, which are api.openai.com's. */
+const NOT_RETURNED = new Set([
+  'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'trailers',
+  'transfer-encoding', 'upgrade', 'set-cookie',
+]);
+
+/** Who is calling, established from their token, and the key their session runs on. */
+interface Caller {
+  poolId: string;
+  poolLabel: string;
+  userId: string;
+  sessionId: string;
+  keyId: string | null;
+}
+
+/** A key as the gateway uses one. The secret is decrypted only for the request, and never kept. */
+interface GatewayKey {
+  id: string;
+  label: string;
+  contributorId: string;
+  state: string;
+  enabled: boolean;
+  shareCap: number | null;
+  spentUntil: Date | null;
+  keyHint: string;
+  secretEncrypted: string;
+}
+
+/** The upstream's answer as far as it has been read. */
+interface Answer {
+  response: IncomingMessage;
+  /** Read whole, for an error answer, which is small; undefined for one passed on as a stream. */
+  body?: Buffer;
+}
+
+/**
+ * The shared Codex pools' gateway (docs/codex-shared-pool-design.md §2.2–§2.3): a session on a shared
+ * pool runs codex with this as its OpenAI endpoint and a session token as its key; this checks the token,
+ * puts the key the session's claim chose in its place, and passes the request to OpenAI and the answer
+ * back byte for byte.
+ *
+ * What it decides, and nothing more:
+ * - WHO: the token's hash names one (pool, person, session); a token revoked or expired, a session no
+ *   longer open, a session moved to another provider, a person gone from the pool or a pool deleted —
+ *   the last two delete the token row itself — is 401.
+ * - WHAT: only the ALLOWED paths; anything else is 403.
+ * - WHICH KEY: `session.pool_key_id`, as the claim chose it (QueueService.resolveSharedPool). The gateway
+ *   never chooses a key and never moves a session to another one; a key that cannot run for the session
+ *   — none chosen, switched off, refused or disabled by OpenAI, or its share cap spent by the others — is
+ *   refused here with the reason, and the session's next claim moves it.
+ * - WHAT OPENAI SAID: `insufficient_quota` marks the key out of budget until it resets; a 401 marks it
+ *   INVALID. Either way the turn ends, as any quota ends one, and the next claim moves the session. A rate
+ *   limit is waited out on the same key.
+ * - WHAT IT COST: the usage the response ends with, per person and per key, into PoolUsageLedger.
+ *
+ * No database connection is held while a response streams: every read is made before the request goes
+ * out, and every write after it is either awaited before the answer starts (a key marked) or handed to
+ * the ledger's batch.
+ */
+@Injectable()
+export class PoolGatewayService {
+  private readonly log = new Logger('PoolGateway');
+  private readonly agent = new HttpsAgent({ keepAlive: true, maxSockets: 256 });
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pools: SharedPoolsService,
+    private readonly ledger: PoolUsageLedger,
+    @Inject(POOL_GATEWAY_UPSTREAM) private readonly upstream: string,
+  ) {}
+
+  async handle(req: Request, res: Response): Promise<void> {
+    const started = Date.now();
+    const target = gatewayTarget(req.originalUrl ?? req.url);
+    const caller = await this.caller(req.headers.authorization);
+    if (!caller) {
+      refuse(res, 401, 'orbit_gateway_token_invalid',
+        'This Orbit session token is not valid any more — the session ended, it left the shared pool, or the pool is gone');
+      return;
+    }
+    if (!ALLOWED.some((allowed) => allowed.method === req.method && allowed.path === target.path)) {
+      refuse(res, 403, 'orbit_gateway_path_not_allowed', `${req.method} ${target.path} is not something the Orbit pool gateway forwards`);
+      return;
+    }
+    const now = new Date();
+    const key = caller.keyId ? await this.keyOf(caller.poolId, caller.keyId) : null;
+    const why = key ? await this.whyNot(key, caller.userId, now) : null;
+    if (!key || why) {
+      refuse(res, 403, 'orbit_pool_key_unavailable', await this.unavailable(caller, key, why, now));
+      this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: ${key ? `${maskedKey(key.keyHint)} ${why}` : 'no key'} — refused`);
+      return;
+    }
+    let body: Buffer;
+    try {
+      body = await readBody(req);
+    } catch {
+      refuse(res, 413, 'orbit_gateway_request_too_large', 'The request is larger than the Orbit pool gateway forwards');
+      return;
+    }
+    const headers = forwardedHeaders(req.headers, decryptSecret(key.secretEncrypted), body.length);
+    const url = `${this.upstream}${target.path}${target.query}`;
+    let answer: Answer;
+    try {
+      answer = await this.send(req.method, url, headers, body, res);
+    } catch (e) {
+      if (!res.headersSent) {
+        refuse(res, 502, 'orbit_gateway_upstream_unreachable', `The Orbit pool gateway could not reach OpenAI: ${(e as Error).message}`);
+      }
+      this.log.warn(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: OpenAI unreachable: ${(e as Error).message}`);
+      return;
+    }
+    const status = answer.response.statusCode ?? 502;
+    if (answer.body) {
+      const outcome: ResponsesOutcome = {};
+      readResponsesEvent(parseJson(answer.body), outcome);
+      if (status === 401) {
+        // The key is wrong or revoked. Marked before the answer, so the claim that follows cannot choose it.
+        await this.pools.markKeyInvalid(key.id);
+        refuse(res, 403, 'orbit_pool_key_rejected',
+          `${key.label} (${maskedKey(key.keyHint)}) was rejected by OpenAI — it stays out of "${caller.poolLabel}" until ` +
+          'its contributor or an admin replaces it, and your next turn moves to another key');
+        this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: 401 from OpenAI — marked invalid`);
+        return;
+      }
+      if (outcome.errorCode === 'insufficient_quota') {
+        await this.pools.markKeySpent(key.id, spentUntil(answer.response.headers, now));
+        this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: insufficient_quota — marked out of budget`);
+      }
+      this.record(caller, key, outcome, now);
+      relayHead(res, answer.response);
+      res.end(answer.body);
+      this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: ${req.method} ${target.path} → ${status} in ${Date.now() - started}ms`);
+      return;
+    }
+    await this.stream(answer.response, res, caller, key, now);
+    this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: ${req.method} ${target.path} → ${status} in ${Date.now() - started}ms`);
+  }
+
+  /** The token's (pool, person, session), when it may still be used; null for every way it may not. */
+  private async caller(authorization: string | undefined): Promise<Caller | null> {
+    const token = /^Bearer\s+(\S+)\s*$/i.exec(authorization ?? '')?.[1];
+    if (!token || !token.startsWith('orbit-gw-')) return null;
+    const row = await this.prisma.poolGatewayToken.findUnique({
+      where: { tokenHash: sha256(token) },
+      select: {
+        poolId: true,
+        userId: true,
+        sessionId: true,
+        expiresAt: true,
+        revokedAt: true,
+        person: { select: { pool: { select: { slug: true, label: true, shared: true } } } },
+        session: {
+          select: { status: true, ownerId: true, provider: true, poolKeyId: true, completedAt: true, deletedAt: true },
+        },
+      },
+    });
+    if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
+    const { pool } = row.person;
+    const { session } = row;
+    const current =
+      pool.shared &&
+      OPEN_SESSION_STATUSES.includes(session.status) &&
+      !session.completedAt &&
+      !session.deletedAt &&
+      session.ownerId === row.userId &&
+      // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
+      session.provider === pool.slug;
+    return current
+      ? { poolId: row.poolId, poolLabel: pool.label, userId: row.userId, sessionId: row.sessionId, keyId: session.poolKeyId }
+      : null;
+  }
+
+  private keyOf(poolId: string, keyId: string): Promise<GatewayKey | null> {
+    return this.prisma.poolApiKey.findFirst({
+      where: { id: keyId, poolId },
+      select: {
+        id: true, label: true, contributorId: true, state: true, enabled: true, shareCap: true, spentUntil: true,
+        keyHint: true, secretEncrypted: true,
+      },
+    });
+  }
+
+  /**
+   * Why a session of `userId` may not send on `key` now, or null when it may. Out of budget is not a
+   * reason here: OpenAI decides that, and a key its organization has topped up works again the moment it
+   * is asked (and is then cleared). The share cap is the gateway's own to hold, counted with what the
+   * ledger has not written yet.
+   */
+  private async whyNot(key: GatewayKey, userId: string, now: Date): Promise<string | null> {
+    if (key.state === 'INVALID') return 'was rejected by OpenAI';
+    if (!key.enabled || key.state !== 'ACTIVE') return 'is disabled';
+    if (key.contributorId === userId || key.shareCap === null) return null;
+    const window = usageWindowStart(now);
+    const spent = await this.prisma.poolUsage.aggregate({
+      where: { keyId: key.id, windowStart: window, userId: { not: key.contributorId } },
+      _sum: { costMicros: true },
+    });
+    const othersCostMicros =
+      Number(spent._sum.costMicros ?? 0n) + this.ledger.pendingOthersCostMicros(key.id, key.contributorId, window);
+    return keyRoom({ ...key, othersCostMicros }, userId) > 0 ? null : 'is out of budget';
+  }
+
+  /**
+   * The refusal's words: which key, why, and what happens next for this person — another key takes the
+   * next turn, or nothing can until the first reset (this key's own included), or until somebody acts.
+   */
+  private async unavailable(caller: Caller, key: GatewayKey | null, why: string | null, now: Date): Promise<string> {
+    // Counted as whyNot counts a cap: with what the ledger has not written yet.
+    const window = usageWindowStart(now);
+    const keys = (await sharedPoolKeyCandidates(this.prisma, caller.poolId, now)).map((candidate) => ({
+      ...candidate,
+      othersCostMicros:
+        candidate.othersCostMicros + this.ledger.pendingOthersCostMicros(candidate.id, candidate.contributorId, window),
+    }));
+    const another = poolKeysResumeAt(keys.filter((candidate) => candidate.id !== key?.id), caller.userId, now);
+    const resumes = poolKeysResumeAt(keys, caller.userId, now);
+    const next =
+      another && another.getTime() <= now.getTime()
+        ? 'your next turn moves to another key'
+        : resumes
+          ? `no key of "${caller.poolLabel}" can run for you until ${resumes.toISOString().slice(0, 16).replace('T', ' ')} UTC`
+          : `no key of "${caller.poolLabel}" can run for you until one is replaced or switched back on`;
+    return key ? `${key.label} (${maskedKey(key.keyHint)}) ${why} — ${next}` : `There is no key for you in "${caller.poolLabel}" right now — ${next}`;
+  }
+
+  /**
+   * Sends the request, waiting out a rate limit on the same key. An error answer (status 400 and up) is
+   * read whole before anything goes back — it is small, and whether it is a spent budget or a refused key
+   * decides what the gateway does; a success is handed back unread, to be streamed.
+   */
+  private async send(
+    method: string,
+    url: string,
+    headers: OutgoingHttpHeaders,
+    body: Buffer,
+    res: Response,
+  ): Promise<Answer> {
+    let waited = 0;
+    for (let attempt = 1; ; attempt += 1) {
+      const response = await this.exchange(method, url, headers, body, res);
+      if ((response.statusCode ?? 0) < 400) return { response };
+      const answer = { response, body: await readAll(response) };
+      if (response.statusCode !== 429) return answer;
+      const outcome: ResponsesOutcome = {};
+      readResponsesEvent(parseJson(answer.body), outcome);
+      if (outcome.errorCode === 'insufficient_quota') return answer;
+      const wait = rateLimitWait(response.headers, answer.body, attempt);
+      if (attempt >= RATE_LIMIT_ATTEMPTS || wait > RATE_LIMIT_MAX_WAIT_MS || waited + wait > RATE_LIMIT_BUDGET_MS) {
+        return answer;
+      }
+      if (res.destroyed) return answer;
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      waited += wait;
+    }
+  }
+
+  /** One request to the upstream, resolved with its answer's head; aborted if codex goes away first. */
+  private exchange(
+    method: string,
+    url: string,
+    headers: OutgoingHttpHeaders,
+    body: Buffer,
+    res: Response,
+  ): Promise<IncomingMessage> {
+    return new Promise((resolve, reject) => {
+      const target = new URL(url);
+      const send = target.protocol === 'https:' ? httpsRequest : httpRequest;
+      const request = send(
+        target,
+        { method, headers, ...(target.protocol === 'https:' ? { agent: this.agent } : {}) },
+        resolve,
+      );
+      request.on('error', reject);
+      request.setTimeout(UPSTREAM_IDLE_MS, () => request.destroy(new Error('OpenAI went quiet')));
+      // Codex gone (an interrupt, a dead process): stop the answer being generated for nobody.
+      res.once('close', () => {
+        if (!res.writableFinished) request.destroy();
+      });
+      request.end(body);
+    });
+  }
+
+  /** A successful answer, passed back byte for byte as it arrives, read along the way for what it used. */
+  private stream(response: IncomingMessage, res: Response, caller: Caller, key: GatewayKey, now: Date): Promise<void> {
+    return new Promise((resolve) => {
+      const tap = new ResponsesStreamTap();
+      // A response codex asked for unstreamed is one JSON object, read whole at its end.
+      const whole = /application\/json/i.test(String(response.headers['content-type'] ?? '')) ? ([] as Buffer[]) : null;
+      let wholeBytes = 0;
+      relayHead(res, response);
+      res.flushHeaders();
+      let settled = false;
+      const done = (complete: boolean) => {
+        if (settled) return;
+        settled = true;
+        tap.end();
+        const outcome = tap.outcome;
+        if (whole && complete) readResponsesEvent(parseJson(Buffer.concat(whole)), outcome);
+        if (outcome.errorCode === 'insufficient_quota') {
+          // Said inside a stream that had already begun: marked all the same, off the stream's path.
+          void this.pools.markKeySpent(key.id, nextUsageWindowStart(now)).catch((e) =>
+            this.log.warn(`could not mark ${maskedKey(key.keyHint)} out of budget: ${(e as Error).message}`),
+          );
+        } else if (complete && key.spentUntil && (response.statusCode ?? 0) < 300) {
+          // OpenAI took it after all: the organization has budget again.
+          void this.pools.clearKeySpent(key.id).catch((e) =>
+            this.log.warn(`could not clear ${maskedKey(key.keyHint)}'s out-of-budget mark: ${(e as Error).message}`),
+          );
+        }
+        this.record(caller, key, outcome, now);
+        resolve();
+      };
+      response.on('data', (chunk: Buffer) => {
+        if (whole) {
+          wholeBytes += chunk.length;
+          if (wholeBytes <= MAX_BODY_BYTES) whole.push(chunk);
+        } else {
+          tap.push(chunk);
+        }
+        if (!res.write(chunk)) {
+          response.pause();
+          res.once('drain', () => response.resume());
+        }
+      });
+      response.on('end', () => {
+        res.end();
+        done(true);
+      });
+      response.on('error', () => {
+        res.destroy();
+        done(false);
+      });
+      res.once('close', () => {
+        if (!res.writableFinished) response.destroy();
+        done(false);
+      });
+    });
+  }
+
+  /** What the answer used, into the ledger for this person and this key. */
+  private record(caller: Caller, key: GatewayKey, outcome: ResponsesOutcome, now: Date): void {
+    if (!outcome.usage) return;
+    this.ledger.record({
+      poolId: caller.poolId,
+      keyId: key.id,
+      userId: caller.userId,
+      inputTokens: outcome.usage.input_tokens ?? 0,
+      outputTokens: outcome.usage.output_tokens ?? 0,
+      costMicros: responseCostMicros(outcome.model, outcome.serviceTier, outcome.usage),
+      at: now,
+    });
+  }
+}
+
+/** The path under the gateway a request asks for, and its query string, as sent. */
+export function gatewayTarget(url: string): { path: string; query: string } {
+  const at = url.indexOf('?');
+  const path = at >= 0 ? url.slice(0, at) : url;
+  const rest = path.startsWith(POOL_GATEWAY_PATH) ? path.slice(POOL_GATEWAY_PATH.length) : path;
+  return { path: rest === '' ? '/' : rest, query: at >= 0 ? url.slice(at) : '' };
+}
+
+/** What codex sent, minus NOT_FORWARDED, with the pool's key as its credential. */
+export function forwardedHeaders(incoming: IncomingHttpHeaders, secret: string, length: number): OutgoingHttpHeaders {
+  const headers: OutgoingHttpHeaders = {};
+  for (const [name, value] of Object.entries(incoming)) {
+    if (value === undefined || NOT_FORWARDED.has(name.toLowerCase())) continue;
+    headers[name] = value;
+  }
+  headers.authorization = `Bearer ${secret}`;
+  headers['content-length'] = String(length);
+  return headers;
+}
+
+/** The answer's status and headers, minus NOT_RETURNED. */
+function relayHead(res: Response, response: IncomingMessage): void {
+  res.status(response.statusCode ?? 502);
+  for (const [name, value] of Object.entries(response.headers)) {
+    if (value === undefined || NOT_RETURNED.has(name.toLowerCase())) continue;
+    res.setHeader(name, value);
+  }
+}
+
+/** A refusal in the shape OpenAI's own errors take, which is what codex reads a message out of. */
+function refuse(res: Response, status: number, code: string, message: string): void {
+  res.status(status).json({ error: { message, type: 'orbit_gateway', param: null, code } });
+}
+
+function readBody(req: Request): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error('too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+function readAll(response: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    response.on('data', (chunk: Buffer) => chunks.push(chunk));
+    response.on('end', () => resolve(Buffer.concat(chunks)));
+    response.on('error', reject);
+  });
+}
+
+function parseJson(body: Buffer): unknown {
+  try {
+    return JSON.parse(body.toString('utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * How long to wait before sending a rate-limited request again: what OpenAI says — `retry-after-ms`,
+ * `retry-after` (seconds or a date), the later of `x-ratelimit-reset-requests` / `-tokens`, or the
+ * "try again in 2.4s" of its message — else 1s, 2s, 4s. Never under a quarter of a second.
+ */
+export function rateLimitWait(headers: IncomingHttpHeaders, body: Buffer | undefined, attempt: number): number {
+  const header = (name: string) => {
+    const value = headers[name];
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const candidates: number[] = [];
+  const ms = Number(header('retry-after-ms'));
+  if (Number.isFinite(ms) && ms > 0) candidates.push(ms);
+  const after = header('retry-after');
+  if (after !== undefined && candidates.length === 0) {
+    const seconds = Number(after);
+    if (Number.isFinite(seconds)) candidates.push(seconds * 1000);
+    else if (!Number.isNaN(Date.parse(after))) candidates.push(Date.parse(after) - Date.now());
+  }
+  if (candidates.length === 0) {
+    const resets = ['x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens']
+      .map((name) => duration(header(name)))
+      .filter((value): value is number => value !== null);
+    if (resets.length > 0) candidates.push(Math.max(...resets));
+  }
+  if (candidates.length === 0 && body) {
+    const hint = /try again in ([0-9.]+\s*(?:ms|s|m))/i.exec(body.toString('utf8'))?.[1];
+    const parsed = duration(hint?.replace(/\s+/g, ''));
+    if (parsed !== null) candidates.push(parsed);
+  }
+  const wait = candidates.length > 0 ? candidates[0] : 1000 * 2 ** (attempt - 1);
+  return Math.max(250, Math.ceil(wait));
+}
+
+/** OpenAI's reset durations — `20ms`, `2.4s`, `6m0s`, `1h2m3s` — in milliseconds; null when unreadable. */
+export function duration(text: string | undefined): number | null {
+  if (!text) return null;
+  const parts = [...text.matchAll(/([0-9]+(?:\.[0-9]+)?)(ms|h|m|s)/g)];
+  if (parts.length === 0 || parts.map((part) => part[0]).join('') !== text.trim()) return null;
+  const unit: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 };
+  return parts.reduce((sum, part) => sum + Number(part[1]) * unit[part[2]], 0);
+}
+
+/**
+ * Until when a key OpenAI answered `insufficient_quota` for stays out of budget: the reset it names —
+ * `retry-after` as seconds or a date — when it names one, else the first of the next month, when a
+ * monthly budget starts again and the pool's own caps count from zero.
+ */
+export function spentUntil(headers: IncomingHttpHeaders, now: Date): Date {
+  const after = Array.isArray(headers['retry-after']) ? headers['retry-after'][0] : headers['retry-after'];
+  if (after !== undefined) {
+    const seconds = Number(after);
+    const at = Number.isFinite(seconds) ? now.getTime() + seconds * 1000 : Date.parse(after);
+    if (Number.isFinite(at) && at > now.getTime()) return new Date(at);
+  }
+  return nextUsageWindowStart(now);
+}

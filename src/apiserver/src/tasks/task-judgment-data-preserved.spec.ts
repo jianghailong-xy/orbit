@@ -1339,7 +1339,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // of the six preserved triggers/functions, creates no function, trigger, enum or type — so it is
       // not another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP TYPE`. No
       // INSERT, UPDATE or DELETE: every new table starts empty and nothing is backfilled.
-      '0320_shared_provider_pool'],
+      '0320_shared_provider_pool',
+      // When a shared pool's key is out of budget: one nullable `ADD COLUMN` on `pool_api_key`
+      // (`spent_until`, no default, no index, no CHECK), a table 0320 created, so no stored row is
+      // rewritten or constrained. Read against every claim above: no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion row
+      // are out of its reach. No function, trigger or type is created, replaced or dropped — no
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
+      // six preserved objects. No INSERT, UPDATE or DELETE: every key reads NULL, and nothing is
+      // backfilled.
+      '0322_pool_key_spent_until'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
