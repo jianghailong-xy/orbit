@@ -861,7 +861,7 @@ func TestWikiImportCitesTheNotesOwnWords(t *testing.T) {
 }
 
 func TestWikiImportHoldsEachEntryToItsKindsFields(t *testing.T) {
-	note := wikiImportNote{id: "note-9", path: "memory/x.md", date: "2026-09-20", text: "the note's text"}
+	note := wikiImportNote{id: "note-9", path: "memory/x.md", date: "2026-09-20", text: "the note's text: run `make`"}
 	decision := map[string]interface{}{"kind": "decision", "title": strings.Repeat("t", 150), "summary": "s", "context": "c", "decision": "d",
 		"alternatives": map[string]interface{}{"option": "o", "whyRejected": "w"}, "consequences": "q", "decidedAt": "2026-13-45"}
 	op, problems := wikiImportOpFrom(decision, "decision", note, nil)
@@ -930,6 +930,86 @@ func TestWikiImportAsksOnceMoreWithWhatWasWrong(t *testing.T) {
 	}
 	if summary.Failed != 1 || summary.Dropped != 0 || summary.Remaining != 0 {
 		t.Errorf("summary = %+v: a file the model never answered readably is failed, and not read again", summary)
+	}
+}
+
+func TestWikiImportTitlesAChineseNotesEntriesInChinese(t *testing.T) {
+	library := memoryLibrary(t, map[string][2]string{
+		"feedback-zh.md": {"feedback", "发版前先核对 `origin/main`：别直接给会话分支打 tag，否则客户端会倒退。\n"},
+		"feedback-en.md": {"feedback", "Check `origin/main` before tagging a release.\n"},
+	})
+	door := newFakeImportDoor(t, "tiered")
+	vllm := newFakeVLLM(t, func(prompt string) (int, string) {
+		retry := strings.Contains(prompt, "SOME ENTRIES IN YOUR ANSWER WERE REJECTED")
+		switch {
+		case strings.Contains(prompt, "==== NOTE (memory/feedback-zh.md,") && retry:
+			return http.StatusOK, `[{"kind":"convention","title":"发版前先核对 origin/main","summary":"别给会话分支打 tag。","rule":"先核对 origin/main 再打 tag","scope":["发版"]}]`
+		case strings.Contains(prompt, "==== NOTE (memory/feedback-zh.md,"):
+			return http.StatusOK, `[{"kind":"convention","title":"Check origin/main before a release","summary":"别给会话分支打 tag。","rule":"先核对 origin/main 再打 tag","scope":["发版"]}]`
+		default:
+			return http.StatusOK, `[{"kind":"convention","title":"Check origin/main before tagging","summary":"Never tag a session branch.","rule":"Check origin/main first","scope":["releases"]}]`
+		}
+	})
+	fakeVerifyClaude(t)
+	wikiImportSession(t, door, vllm)
+	if _, err := importSummary(t, "--from", library, "--space", "space-1", "--concurrency", "1"); err != nil {
+		t.Fatalf("orbit wiki import: %v", err)
+	}
+	requests := vllm.Requests()
+	if len(requests) != 3 {
+		t.Fatalf("the model was asked %d times: once per note, and once more for the English title", len(requests))
+	}
+	const line = "This note is written in Chinese: write every title, summary and text field in Chinese"
+	for _, request := range requests {
+		chinese := strings.Contains(request.Prompt, "==== NOTE (memory/feedback-zh.md,")
+		if strings.Contains(request.Prompt, line) != chinese {
+			t.Errorf("the language line is %v in the prompt for a note that is Chinese: %v", !chinese, chinese)
+		}
+	}
+	asked := false
+	for _, request := range requests {
+		asked = asked || strings.Contains(request.Prompt, `entry "Check origin/main before a release": title is not in the note's language`)
+	}
+	if !asked {
+		t.Error("no second ask says the Chinese note's title is in the wrong language")
+	}
+	if got := titles(door.proposed()); !reflect.DeepEqual(got, []string{"Check origin/main before tagging", "发版前先核对 origin/main"}) {
+		t.Errorf("proposed %v: the Chinese note's entry in Chinese, the English note's in English", got)
+	}
+}
+
+func TestWikiImportReadsANotesLanguageFromItsProse(t *testing.T) {
+	for text, want := range map[string]string{
+		"发版前先核对 `origin/main`，再跑 `.claude/skills/release/release.sh next`。":                                                          "Chinese",
+		"---\nname: x\ndescription: 中文的描述\n---\nThe body is English prose about the release script, with one word in Chinese: 发版.\n": "",
+		"```\n中文 inside a code block only\n```\nThe rest is English prose about the release script.":                                 "",
+		"Run it twice.": "",
+		"":              "",
+	} {
+		if got := wikiImportNoteLanguage(text); got != want {
+			t.Errorf("wikiImportNoteLanguage(%q) = %q, want %q", text, got, want)
+		}
+	}
+}
+
+func TestWikiImportTakesAVerifyCommandOnlyAsTheNoteWritesIt(t *testing.T) {
+	note := wikiImportNote{id: "note-7", path: "memory/x.md", date: "2026-09-20",
+		text: "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n"}
+	recipe := func(command string) map[string]interface{} {
+		return map[string]interface{}{"kind": "recipe", "title": "取基线", "summary": "s", "steps": []interface{}{"a"},
+			"verify": map[string]interface{}{"command": command, "expectedExit": 0}}
+	}
+	for _, command := range []string{"npm run test:full-api -- --main", "$ npm run test:full-api -- --main", "git status --short"} {
+		if _, problems := wikiImportOpFrom(recipe(command), "recipe", note, nil); len(problems) > 0 {
+			t.Errorf("the note's own command %q was refused: %v", command, problems)
+		}
+	}
+	// A description, a command the note never writes, and two spans of its prose that are no command.
+	for _, command := range []string{"full-api on main", "npm run test:full-api -- --branch", "见 [[full-api-red-on-main]]", "full-api-red-on-main"} {
+		_, problems := wikiImportOpFrom(recipe(command), "recipe", note, nil)
+		if len(problems) != 1 || !strings.Contains(problems[0], "is not a command the note gives") {
+			t.Errorf("verify.command %q was let through (%v): only a command the note writes is one", command, problems)
+		}
 	}
 }
 
