@@ -741,6 +741,7 @@ func (r *wikiMaintainRun) extract(dossier wikiDossier) ([]wikiMaintainOp, error)
 		r.mu.Lock()
 		r.report.OffTopic++
 		r.mu.Unlock()
+		r.say("  %q: not about this repository — nothing taken from it", cutRunes(dossier.Title, 60))
 		return nil, nil
 	}
 	entries, parsed := parseWikiImportAnswer(answer)
@@ -757,9 +758,7 @@ func (r *wikiMaintainRun) extract(dossier wikiDossier) ([]wikiMaintainOp, error)
 				return nil, err
 			}
 		} else if again, ok := parseWikiImportAnswer(retry); ok {
-			corrected := r.build(again, dossier, lines)
-			problems = corrected.problems
-			built.merge(corrected)
+			built.merge(r.build(again, dossier, lines))
 		}
 	}
 	if built.dropped > 0 || !parsed {
