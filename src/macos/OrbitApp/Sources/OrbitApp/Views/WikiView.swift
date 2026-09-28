@@ -187,11 +187,13 @@ struct WikiHomePage: View {
                 if content.recentlyChanged.isEmpty {
                     empty(WikiCopy.noChanges)
                 } else {
-                    // One run is one row, wherever Review ties its ops to it (`wikiRecentRows`).
+                    // One run is one row: every item names the changeset it came in (`wikiRecentRows`).
                     ForEach(content.recentRows) { row in
                         switch row {
-                        case .op(let item):                   changeRow(item)
-                        case .run(let changeset, let at, _):  runRow(changeset, at: at)
+                        case .op(let item):
+                            changeRow(item)
+                        case .run(let changesetId, let origin, let at, let items):
+                            runRow(changesetId, origin: origin, at: at, changes: items.count)
                         }
                     }
                 }
@@ -330,15 +332,16 @@ struct WikiHomePage: View {
     }
 
     /// One run: who it was and when, then what it applied and with which marks (mock 12 ②). The row
-    /// is the way in; Revert run… is on the run's own page.
-    private func runRow(_ changeset: WikiChangeset, at: String?) -> some View {
-        let summary = WikiModeLogic.runSummary(changeset, entries: content.entries)
-        let line = ([WikiModeCopy.appliedChanges(summary.applied)] + WikiModeLogic.runCounts(summary))
+    /// is the way in; Revert run… is on the run's own page. What it counts is the run's own read, which
+    /// the home reads for every run it folds; until that answers, the changes the feed holds of it.
+    private func runRow(_ changesetId: String, origin: WikiChangesetOrigin?, at: String?, changes: Int) -> some View {
+        let summary = content.run(changesetId).map(WikiModeLogic.runSummary)
+        let line = ([WikiModeCopy.appliedChanges(summary?.applied ?? changes)] + (summary.map(WikiModeLogic.runCounts) ?? []))
             .joined(separator: " · ")
         return Button {
-            actions.openRun(changeset.id)
+            actions.openRun(changesetId)
         } label: {
-            WikiRowLabel(title: WikiModeCopy.originWord(changeset.origin),
+            WikiRowLabel(title: WikiModeCopy.originWord(origin),
                          time: at.flatMap { RelativeTime.format($0, now: now) }, detail: line)
         }
         .buttonStyle(.plain)
@@ -467,8 +470,6 @@ struct WikiEntryActions {
 struct WikiEntryPage: View {
     let detail: WikiEntryDetail
     var now: Date = Date()
-    /// The verdict behind what a review mode applied, when the page has the op that carries it.
-    var verification: WikiOpVerification? = nil
     /// A session's title, when this client holds one; the row falls back to the id.
     var sessionTitle: (String) -> String? = { _ in nil }
     /// The title of the task or session a source cites, once its card has been read — the web draws
@@ -602,9 +603,11 @@ struct WikiEntryPage: View {
         .disabled(busy)
     }
 
-    /// The bar under the head: the mark's word and what it means, then who checked it and who applied it.
+    /// The bar under the head: the mark's word and what it means, then who checked it — the verdict the
+    /// current revision was applied on, which the entry's read carries — and who applied it.
     private func markBar(_ banner: WikiModeLogic.Banner) -> some View {
         let current = detail.history.max { ($0.revision ?? 0) < ($1.revision ?? 0) }
+        let verification = detail.verification
         let line = WikiModeLogic.checkedLine(verdict: verification?.verdict, model: verification?.model,
                                              tainted: entry.tainted == true,
                                              who: current.map { Self.historyWord($0.authorKind) },

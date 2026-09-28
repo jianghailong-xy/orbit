@@ -20,9 +20,6 @@ public enum WikiArticleCopy {
     public static let other = "Other"                                    // WIKI_OTHER_TOPICS
     public static let footnotes = "Footnotes"                            // WIKI_FOOTNOTES
     public static let entries = "Entries"                                // WIKI_ARTICLE_ENTRIES
-    /// What the list under an article is: the topic read's entries, not the article's own pool, which
-    /// the article read does not name (see the web's `WIKI_ARTICLE_ENTRIES_HINT`).
-    public static let entriesHint = "filed under this topic, by kind"    // WIKI_ARTICLE_ENTRIES_HINT
     public static let footnoteGone = "This entry is no longer in the wiki."   // WIKI_FOOTNOTE_GONE
     public static let openEntry = "Open entry"                           // WIKI_ACTION_OPEN
     public static let topicOverview = "Topic overview"                   // WIKI_TOPIC_OVERVIEW
@@ -57,6 +54,9 @@ public enum WikiArticleCopy {
     }
 
     public static func entriesCited(_ count: Int) -> String { "\(count) \(count == 1 ? "entry" : "entries") cited" }
+    /// What the list under an article is, in mock 13's words: the entries its read says it was written
+    /// from (`entryIds`), by kind (`wikiArticleEntriesHint`).
+    public static func entriesHint(_ n: Int) -> String { "the \(count(n)) this article is written from, by kind" }
     public static func articleCount(_ n: Int) -> String { "\(count(n)) \(n == 1 ? "article" : "articles")" }
     public static func entryCount(_ n: Int) -> String { "\(count(n)) \(n == 1 ? "entry" : "entries")" }
     public static func topicCount(_ n: Int) -> String { "\(count(n)) \(n == 1 ? "topic" : "topics")" }

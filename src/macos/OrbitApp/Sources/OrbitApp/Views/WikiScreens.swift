@@ -153,7 +153,9 @@ struct WikiArticleScreen: View {
         if let wiki = model.wiki {
             Group {
                 if let article = wiki.articles[address] {
-                    WikiArticlePage(article: article, entries: wiki.topicEntries[address.topic],
+                    // The entries it was written from, as its read carries them; an older server's
+                    // read carries none, and the topic's own entries stand in.
+                    WikiArticlePage(article: article, entries: article.entries ?? wiki.topicEntries[address.topic],
                                     detail: { id in wiki.detail(id) }, actions: actions(wiki))
                 } else if wiki.missingArticles.contains(address) {
                     WikiTopicEntriesPage(title: topicTitle(wiki), entries: wiki.topicEntries[address.topic] ?? [],
@@ -317,7 +319,6 @@ struct WikiEntryView: View {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 if let detail = wiki.detail(entryID) {
                     WikiEntryPage(detail: detail, now: context.date,
-                                  verification: Self.verification(of: detail.entry, in: wiki),
                                   sessionTitle: { id in
                                       Self.card(.session, id).flatMap(title(of:))
                                           ?? model.session(id: PublicID.toPublic(id))?.title
@@ -395,17 +396,6 @@ struct WikiEntryView: View {
             reject: { reason in
                 Task { finish(await wiki.reject(detail.entry.id, reason: reason), done: WikiModeCopy.rejected) }
             })
-    }
-
-    /// The verdict behind what a review mode applied, read where it is kept — on the op — from the
-    /// one read that carries ops: the space's queue, which holds it while it waits as a spot check.
-    @MainActor private static func verification(of entry: WikiEntry, in wiki: WikiModel) -> WikiOpVerification? {
-        let key = PublicID.storageKey(entry.id)
-        let ops = ((wiki.home?.runs ?? []) + wiki.review).flatMap { $0.ops ?? [] }
-        return ops.first { op in
-            op.verification != nil
-                && [op.resultEntryId, op.entryId].compactMap { $0 }.contains { PublicID.storageKey($0) == key }
-        }?.verification
     }
 
     // MARK: the titles a card read gives
