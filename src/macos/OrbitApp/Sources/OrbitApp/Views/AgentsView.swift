@@ -1,5 +1,8 @@
 import SwiftUI
 import OrbitKit
+#if os(iOS)
+import UIKit
+#endif
 
 // Batch D + Agents-in-sidebar refinement: the Workspace list now lives in the sidebar source list
 // (see `SectionSidebar`), folding away the old middle column. iOS renders first-level Workspaces;
@@ -637,16 +640,18 @@ struct AgentPanes: View {
 
     /// One options menu serves both iOS shells. Compact includes lifecycle scope exactly as before;
     /// regular iPad omits that duplicate but retains tag filtering/grouping and Workspace settings.
-    /// Every row has an icon and every choice is a Toggle, so the system draws each tick in its own
-    /// column and all titles start on one edge. A checkmark drawn as a row's icon breaks that: iOS 27
-    /// starts a row without an icon at the margin, even beside rows that have one.
+    /// Ticks and icons share the one leading column: a choice row shows a tick when it is the chosen
+    /// one, an action row its icon. Every row keeps an image there — an unchosen choice a transparent
+    /// tick — because iOS 27 starts a row without an image at the margin, even beside rows that have
+    /// one. (A Toggle's system tick would take a column of its own, beside the icons.)
     private func sessionOptionsMenu(includesScope: Bool) -> some View {
         Menu {
             if includesScope {
                 ForEach(SessionView.pickerCases) { v in
-                    Toggle(isOn: Binding(get: { view == v }, set: { if $0 { view = v } })) {
-                        Label(v.title, systemImage: scopeIcon(v))
+                    Button { view = v } label: {
+                        Label { Text(v.title) } icon: { tick(v == view) }
                     }
+                    .accessibilityAddTraits(v == view ? .isSelected : [])
                 }
             }
             if !app.sessionTags.isEmpty {
@@ -670,9 +675,10 @@ struct AgentPanes: View {
                         Text(active.name)
                     }
                 }
-                Toggle(isOn: $groupByTag) {
-                    Label("Group by Tag", systemImage: "rectangle.3.group")
+                Button { groupByTag.toggle() } label: {
+                    Label { Text("Group by Tag") } icon: { tick(groupByTag) }
                 }
+                .accessibilityAddTraits(groupByTag ? .isSelected : [])
             }
             if includesScope || !app.sessionTags.isEmpty { Divider() }
             Button { showSettings = true } label: {
@@ -689,14 +695,14 @@ struct AgentPanes: View {
                                  : "Session filters and workspace settings"))
     }
 
-    /// Each place's glyph as the rows' own actions draw it: Move to Open's tray, Complete, Delete.
-    private func scopeIcon(_ v: SessionView) -> String {
-        switch v {
-        case .open:      return "tray"
-        case .completed: return "checkmark.circle"
-        case .trash:     return "trash"
-        }
+    /// The options menu's tick: the checkmark on the chosen row, the same glyph fully transparent on
+    /// the others, so an unchosen row still has an image and its title keeps the shared edge.
+    private func tick(_ on: Bool) -> Image {
+        on ? Image(systemName: "checkmark") : Image(uiImage: Self.clearTick)
     }
+
+    private static let clearTick = UIImage(systemName: "checkmark")?
+        .withTintColor(.clear, renderingMode: .alwaysOriginal) ?? UIImage()
     #endif
 
     // The sessions to show: the agent list, narrowed to the tag filter chip when one is active.
