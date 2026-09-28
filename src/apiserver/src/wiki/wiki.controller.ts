@@ -172,7 +172,11 @@ export class WikiController {
     return this.wiki.getTimeline(user.userId, id, Number.isFinite(asked) && asked >= 1 ? asked : undefined);
   }
 
-  /** One entry, with the sources of its current revision, its history, and who was shown it. */
+  /**
+   * One entry, with the sources of its current revision, its history, and who was shown it — and, on
+   * this door always, where its current revision came from: the changeset, the review mode that
+   * applied it and the verdict it was applied on (contract `reviewModes.run.entry`).
+   */
   @Get('entries/:id')
   getEntry(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Query('include') include?: string) {
     const asked = askedFor(include);
@@ -180,6 +184,7 @@ export class WikiController {
       sources: asked.has('sources'),
       history: asked.has('history'),
       exposure: asked.has('exposure'),
+      appliedBy: true,
     });
   }
 
