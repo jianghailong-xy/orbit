@@ -125,6 +125,26 @@ final class SharedPoolAdapterTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.providerName("team-codex", configured: providers), "Team Codex")
     }
 
+    /// The pick a member makes in the new-session picker is what a created session carries: the
+    /// pool's own slug, as the web's selector sends it, with the model resolved in the Codex CLI's
+    /// space rather than Claude's.
+    func testThePickersPoolIsTheSlugASessionIsCreatedWith() throws {
+        let pools = SharedPools.asProviderPools([self.pool([key("orbit-org-1", next: true)])])
+        let providers = ProviderPools.asProviders(pools)
+        let tile = try XCTUnwrap(SessionProviderChoices
+            .choices(configured: providers, catalog: codexCatalog, pools: pools)
+            .first { $0.kind == .pool })
+        XCTAssertEqual(tile.slug, "team-codex")
+        XCTAssertEqual(tile.modelLabel, "GPT-5.6 Sol")
+        let created = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            CreateSessionRequest(prompt: "do it", agentId: "ag1", provider: tile.slug,
+                                 model: AgentDefaults.defaultModel(for: tile.slug,
+                                                                   catalog: codexCatalog,
+                                                                   configured: providers)))) as? [String: Any])
+        XCTAssertEqual(created["provider"] as? String, "team-codex")
+        XCTAssertEqual(created["model"] as? String, "gpt-5.6-sol")
+    }
+
     /// Every key capped, none next: the pool still takes the pick and says when the month turns — in
     /// the words the /providers card heads it with (`PoolGauge`'s "All at cap"), a date rather than a
     /// window's clock.
