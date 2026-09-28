@@ -142,8 +142,9 @@ suite("a shared pool page's next key, running keys and session counts — on rea
   async function next(who: Person): Promise<string[]> {
     const marked = (await view(who)).keys.filter((key) => key.next).map((key) => key.label);
     const { ownKeyFirst } = await db.providerPool.findUniqueOrThrow({ where: { id: poolId } });
-    const candidates = await sharedPoolKeyCandidates(db, poolId, new Date());
-    const chosen = choosePoolKey(candidates, who.id, ownKeyFirst, null);
+    const now = new Date();
+    const candidates = await sharedPoolKeyCandidates(db, poolId, now);
+    const chosen = choosePoolKey(candidates, who.id, ownKeyFirst, null, now);
     assert.deepEqual(marked, chosen ? [chosen.label] : [], `${who.name}'s next is not the claim's choice`);
     return marked;
   }
