@@ -56,7 +56,7 @@ export class CodexAuthError extends Error {}
  * backstop, not a policy: the gateway refreshes on the upstream's own 401 whatever this says, and a token
  * whose lifetime is shorter than this is refreshed a little late rather than never.
  */
-const ACCESS_TOKEN_FALLBACK_MS = 7 * 24 * 60 * 60 * 1000;
+export const ACCESS_TOKEN_FALLBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The claims inside a JWT, or null — a token that is not one, or whose part does not parse. */
 function claimsOf(token: string): Record<string, unknown> | null {
@@ -75,9 +75,10 @@ const stringAt = (value: unknown): string | null => (typeof value === 'string' &
 /**
  * The account id, email and plan inside one token's claims. Codex's tokens carry them under
  * `https://api.openai.com/auth` (the id and the plan) and at the top level (the email); the two spellings
- * are read in that order so a token that names only one is still understood.
+ * are read in that order so a token that names only one is still understood. Also what the pool gateway
+ * reads a refreshed pair's expiry and plan from (pool-login-gateway.service.ts).
  */
-function accountOf(token: string) {
+export function accountOf(token: string) {
   const claims = claimsOf(token) ?? {};
   const auth = (claims['https://api.openai.com/auth'] ?? {}) as Record<string, unknown>;
   return {
@@ -149,6 +150,9 @@ export interface CodexLoginView {
   /** The account's quota as something read it; null when nothing has (not a refusal, and not SPENT). */
   usage: PlanUsageSnapshot | null;
   usageUnavailable: string | null;
+  /** Until when the Codex backend said the account's usage limit is reached (migration 0324), while that
+   *  is ahead of the reading's time; null otherwise. */
+  spentUntil: string | null;
 }
 
 /** Why `usage` is null when it is: nothing has read this account's quota yet. */
@@ -164,8 +168,10 @@ export function codexLoginView(
     lastError: string | null;
     expiresAt: Date;
     createdAt: Date;
+    spentUntil?: Date | null;
   } | null,
   usage: PlanUsageSnapshot | null = null,
+  now: Date = new Date(),
 ): CodexLoginView | null {
   if (!row) return null;
   return {
@@ -178,6 +184,7 @@ export function codexLoginView(
     linkedAt: row.createdAt.toISOString(),
     usage,
     usageUnavailable: usage ? null : CODEX_USAGE_UNREAD,
+    spentUntil: row.spentUntil && row.spentUntil.getTime() > now.getTime() ? row.spentUntil.toISOString() : null,
   };
 }
 
@@ -199,4 +206,18 @@ export function codexLoginUnavailableReason(
     return `the ChatGPT account ${who} on the pool "${label}" was rejected by OpenAI — sign in again on its page, or pick another provider`;
   }
   return null;
+}
+
+/**
+ * When work on a Codex pool of one's own can go again, for the brakes that hold work back rather than send
+ * it (QueueService.accountPoolResumesAt): while the account's usage limit is reached — `spentUntil`, the
+ * reset the Codex backend named, still ahead — at that reset; `now` otherwise. Null while the pool holds no
+ * account or its account is signed out: nothing comes back by waiting, only by its owner signing in.
+ */
+export function loginPoolResumesAt(
+  account: { state: string; spentUntil: Date | null } | null,
+  now: Date,
+): Date | null {
+  if (!account || account.state !== 'ACTIVE') return null;
+  return account.spentUntil && account.spentUntil.getTime() > now.getTime() ? account.spentUntil : now;
 }

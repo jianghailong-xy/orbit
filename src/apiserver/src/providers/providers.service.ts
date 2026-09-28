@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider, providerPreset, RunEventType, type ProviderPreset } from '@orbit/shared';
+import { AgentProvider, providerPreset, RunEventType, type PlanUsageSnapshot, type ProviderPreset } from '@orbit/shared';
 import { CLAUDE_EFFORT_ORDER } from '../common/runtime-provider';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import { PrismaService } from '../prisma/prisma.service';
@@ -99,6 +99,9 @@ const POOL_SELECT = {
       lastError: true,
       expiresAt: true,
       createdAt: true,
+      // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
+      usage: true,
+      spentUntil: true,
     },
   },
   members: {
@@ -119,8 +122,9 @@ function poolView({ members, logins, ...pool }: Prisma.ProviderPoolGetPayload<{ 
  *  (a Codex pool of its owner's own), or null — which is every Claude pool, and a Codex one nobody has
  *  signed into yet. Built by `codexLoginView`, which cannot see a token: none is selected. */
 function loginOf(logins: { accountId: string; email: string | null; plan: string | null; state: string;
-  lastError: string | null; expiresAt: Date; createdAt: Date }[]) {
-  return codexLoginView(logins[0] ?? null);
+  lastError: string | null; expiresAt: Date; createdAt: Date; usage: Prisma.JsonValue; spentUntil: Date | null }[]) {
+  const login = logins[0] ?? null;
+  return codexLoginView(login, (login?.usage as PlanUsageSnapshot | null | undefined) ?? null);
 }
 
 /** The same pools, read with what asking each member's credential for its quota takes (poolViews). The key

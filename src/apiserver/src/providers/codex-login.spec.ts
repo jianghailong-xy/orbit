@@ -139,6 +139,7 @@ test('an account is named by its email and its last four characters — never by
     linkedAt: '2026-09-27T12:00:00.000Z',
     usage: null,
     usageUnavailable: CODEX_USAGE_UNREAD,
+    spentUntil: null,
   });
   const whole = JSON.stringify(view);
   for (const secret of [ACCOUNT_ID, ACCESS_TOKEN, REFRESH_TOKEN]) {

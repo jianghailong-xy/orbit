@@ -9,7 +9,8 @@ import {
   ServiceUnavailableException,
   type OnModuleDestroy,
 } from '@nestjs/common';
-import { RunEventType } from '@orbit/shared';
+import { RunEventType, type PlanUsageSnapshot } from '@orbit/shared';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
@@ -349,14 +350,43 @@ export class CodexLoginService implements OnModuleDestroy {
       where: { poolId, state: 'ACTIVE' },
       data: { state: 'SIGNED_OUT', lastError: reason },
     });
-    if (count > 0) {
-      const pool = await this.prisma.providerPool.findUnique({
-        where: { id: poolId },
-        select: { ownerId: true },
-      });
-      if (pool) this.publish(poolId, pool.ownerId);
-    }
+    if (count > 0) await this.publishPool(poolId);
     return count > 0;
+  }
+
+  /** `publish`, for a write that knows the pool and not its owner. */
+  private async publishPool(poolId: string): Promise<void> {
+    const pool = await this.prisma.providerPool.findUnique({
+      where: { id: poolId },
+      select: { ownerId: true },
+    });
+    if (pool) this.publish(poolId, pool.ownerId);
+  }
+
+  /**
+   * The Codex backend said this account's usage limit is reached, until `until` (the pool gateway, P3-b,
+   * off a 429 `usage_limit_reached`): recorded — with the window reading that came with it — so the
+   * session's retry waits for that reset (QueueService.loginPoolRetryAt) and the page can say when. A
+   * login pool has no other account: nothing moves. No route reaches it.
+   */
+  async markSpent(poolId: string, accountId: string, until: Date, usage: PlanUsageSnapshot | null, at: Date): Promise<void> {
+    const { count } = await this.prisma.poolCodexLogin.updateMany({
+      where: { poolId, accountId },
+      data: {
+        spentUntil: until,
+        ...(usage ? { usage: usage as unknown as Prisma.InputJsonValue, usageReadAt: at } : {}),
+      },
+    });
+    if (count > 0) await this.publishPool(poolId);
+  }
+
+  /** The backend took a request on an account marked spent: its limit has reset. The pool gateway's. */
+  async clearSpent(poolId: string, accountId: string): Promise<void> {
+    const { count } = await this.prisma.poolCodexLogin.updateMany({
+      where: { poolId, accountId, spentUntil: { not: null } },
+      data: { spentUntil: null },
+    });
+    if (count > 0) await this.publishPool(poolId);
   }
 
   /** Each pool's account as a response reads it, by pool id — for the pools' own list (ProvidersService). */
@@ -368,7 +398,9 @@ export class CodexLoginService implements OnModuleDestroy {
       orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
     });
     for (const poolId of poolIds) {
-      views.set(poolId, codexLoginView(rows.find((row) => row.poolId === poolId) ?? null));
+      const row = rows.find((candidate) => candidate.poolId === poolId) ?? null;
+      // The last window reading the gateway took off the backend's own answers (migration 0324).
+      views.set(poolId, codexLoginView(row, (row?.usage as PlanUsageSnapshot | null | undefined) ?? null));
     }
     return views;
   }

@@ -246,6 +246,7 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
       expiresAt: login.expiresAt.toISOString(),
       usage: null,
       usageUnavailable: 'no quota has been read for this account yet',
+      spentUntil: null,
     });
     assert.ok(!Number.isNaN(Date.parse(linkedAt)), `linkedAt is not a time: ${linkedAt}`);
 

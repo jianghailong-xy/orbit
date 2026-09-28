@@ -95,6 +95,36 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
     算 `cost_micros`，内存攒批每 2 秒一条 upsert（`PoolUsageLedger`）；
   - API key 没有 5 小时 / 周窗口（codex 的 primary / secondary 来自 ChatGPT 订阅的 `x-codex-*` 头，api.openai.com 不发），
     `x-ratelimit-*` 是每分钟限流、不是用量，所以 key 的「本窗口」就是账本的自然月，不另存快照。
+- P3-b 落地（2026-09-28 方向：账号所有者**本人的一个** ChatGPT 登录、服务器代管；迁移 0324，
+  `providers/pool-login-gateway.service.ts`）：
+  - 同一个 `/api/gw/codex/*`，按会话令牌前缀分流：`orbit-gw-` 是共享池（上面那套），`orbit-gwl-` 是登录型池
+    （表 `pool_login_token`：人按 `(pool_id, user_id) → provider_pool(id, owner_id)` 钉死为池主，令牌绑定 claim 时池里的账号，
+    账号被移出即级联删令牌）。claim / reclaim / 换 provider 的 reload 都经 `QueueService.resolveLoginPool` 下发网关地址与令牌，
+    并把账号记在 `session.pool_codex_account_id`（会话读接口不返回它）。
+  - 上游写死 `https://chatgpt.com/backend-api/codex`，鉴权换成 `Authorization: Bearer <access token>` + `ChatGPT-Account-ID`，
+    与官方 codex CLI 用 ChatGPT 登录时一致；其余头与请求体原样转发。依据是两份录制：runner 侧 codex 经自定义 provider 发来的
+    （`fixtures/codex-gateway-recording.json`）与官方 CLI 用 ChatGPT 登录直连后端时发出的
+    （`fixtures/codex-chatgpt-backend-recording.json`，runner-go `codex_chatgpt_backend_recording_test.go` 驱动真 codex 0.158、
+    假登录、本机 TLS 录制桩生成）。两者请求体字段集相同、`instructions` 一字不差；CLI 以内置 provider 身份才加的
+    `version`、`x-codex-routing-hint` 与 zstd 压缩，网关不代加（只换鉴权、不做任何伪装）。
+  - 白名单仍只有 `POST /responses`：CLI 以 ChatGPT 登录自己会去后端拿的 models、workspace 路由（`/wham/accounts/check`）、
+    插件、设置、埋点都不经网关，令牌也够不着。
+  - 刷新只在网关一处：access token 离过期 5 分钟内先刷新；上游 401 就按 CLI 同样的请求（JSON：`client_id` / `grant_type` /
+    `refresh_token`，打 `https://auth.openai.com/oauth/token`）刷新一次再重发。刷新在账号行的行锁下做、进程内合并（refresh token
+    只能用一次）；token 端点按 CLI 的分类拒绝（401、`invalid_grant`、`refresh_token_expired|reused|invalidated`）或新 token 仍被 401
+    → 账号置 `SIGNED_OUT`（`last_error` 为原因），回 403 `orbit_pool_login_signed_out`（「only you can sign in again」），
+    只有池主能经设备码重新登录；同一账号重登后原会话令牌照常可用。
+  - 额度：上游 429 `usage_limit_reached`（CLI 据 `error.resets_at` 报 usageLimitExceeded、不重试）→ `pool_codex_login.spent_until`
+    = `resets_at`，答复原样转回；失败回合的重试武装在这个时间（`QueueService.loginPoolRetryAt` / `accountPoolResumesAt`），
+    **不换号**，会话上的账号不变；上游再收下一次请求即清除。`rate_limit_exceeded` 在同一登录上退避（同 P2）。
+  - 提示：额度用完与被登出时给会话挂 `pool_switch_notice`（`The 5-hour window on X is spent — this session waits for its reset at …`
+    / `The ChatGPT account X on "P" was signed out by OpenAI — only you can sign in again, on the pool's page`）；那一回合失败会清空
+    会话的待发队列，所以空 reload 由下一次 claim 排（与 P2 换 key 同一时机），resident 引擎用 `resumed`、冷启动用 `init` 带走，
+    控制面不插 run_event。回合失败当时，codex 自己的报错（`You've hit your usage limit… try again at …` / 网关 403 的原文）已在
+    transcript 里。个人 Claude 池的换号句式不变。
+  - 账本 `pool_login_usage`：按会话、账号、UTC 整点小时记 requests / input（含 cached）/ output token 与按 API 价表折算的
+    `cost_micros`（订阅不按 token 计费，这是可比的等价成本）；`x-codex-*` 窗口读数写回 `pool_codex_login.usage`，池页据此显示用量。
+    两者都内存攒批、每 2 秒各一条语句写入，流式期间不占 DB 连接。
 
 ### 2.3 选 key 与换 key
 

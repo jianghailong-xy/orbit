@@ -1384,7 +1384,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the six
       // preserved objects — and no `ALTER TYPE` or `DROP TYPE`. No INSERT, UPDATE or DELETE: the new table
       // starts empty and nothing is backfilled.
-      '0323_pool_codex_login'],
+      '0323_pool_codex_login',
+      // The gateway of a login pool (0324): three nullable `ADD COLUMN`s with no default on
+      // `pool_codex_login` (catalog-only); one nullable `ADD COLUMN` on `session` (`pool_codex_account_id`,
+      // no default, no index, no CHECK, no foreign key — 0321's `pool_key_id` exactly — so no stored
+      // session row is rewritten or constrained); and two new tables, `pool_login_token` and
+      // `pool_login_usage`, with their indexes and foreign keys, which constrain only their own new rows.
+      // Read against every claim above: `task`, `project` and `project_acceptance_criterion_definition`
+      // are not named, so the 0177 pair and every stored task and criterion row are out of its reach;
+      // `session` is named otherwise only as the table two foreign keys reference, and their `ON DELETE
+      // CASCADE` is a referential action on the new tables' rows. It names no `project_acceptance_*`
+      // object and none of the six preserved triggers/functions, creates no function, trigger, enum or
+      // type — so it is not another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP
+      // TYPE`. No INSERT, UPDATE or DELETE: both new tables start empty and nothing is backfilled.
+      '0324_pool_login_gateway'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -377,6 +377,7 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
       // Nothing has read this account's quota: that is what the null says, and the pool is runnable.
       usage: null,
       usageUnavailable: 'no quota has been read for this account yet',
+      spentUntil: null,
     });
     assert.equal(page.unavailable, null, 'a pool with an account signed in is refused');
     assert.ok(!Number.isNaN(Date.parse(page.login.expiresAt)));
