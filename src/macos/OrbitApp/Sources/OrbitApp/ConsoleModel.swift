@@ -258,18 +258,31 @@ final class ConsoleModel {
     /// (`ProviderPools.asProviders`), where a pool's name, runtime and models resolve from. Loaded
     /// with them; an older server without the route leaves it empty.
     private(set) var providerPools: [ProviderPool] = []
+    /// The shared Codex pools this account is in (GET /providers/shared-pools), read into their own
+    /// model. They ride into the picker and the status bar drawn as account pools whose members are
+    /// their keys (`SharedPools.asProviderPool`) — that adapter is what marks them (`ProviderPool.shared`),
+    /// so this is the one place the difference is kept.
+    private(set) var sharedPools: [SharedPool] = []
+    /// Every pool a picker or a status bar may offer: the shared ones first, then this account's own
+    /// Claude pools — web's order (`WorkspaceView` folds them the same way).
+    var allPools: [ProviderPool] { SharedPools.asProviderPools(sharedPools) + providerPools }
     /// On an account pool: the member this session's last claim dispatched on. Only the session
     /// detail carries it — the list's rows don't — so only a detail read sets it.
     private(set) var poolMemberProviderID: String?
+    /// The same read on a shared pool, whose claim names the key it chose (`session.poolKeyId`)
+    /// rather than one of the viewer's own accounts.
+    private(set) var poolKeyID: String?
 
-    /// The account pool this session or draft runs on, if its provider is one.
-    var currentPool: ProviderPool? { providerPools.first { $0.slug == provider } }
+    /// The pool this session or draft runs on, if its provider is one.
+    var currentPool: ProviderPool? { allPools.first { $0.slug == provider } }
     /// Which of that pool's accounts it is spending (web parity — `sessionPoolAccount`): the member
     /// the last claim recorded, or — for a draft, or a session no claim has reached yet — the one the
     /// next claim picks. Nil once the recorded member has left the pool: nobody is guessed.
     var poolAccount: PoolAccount? {
         guard let pool = currentPool else { return nil }
-        return ProviderPools.sessionAccount(in: pool, memberID: isDraft ? nil : poolMemberProviderID)
+        // A shared pool's session records the key its claim chose; an account pool's the account.
+        let memberID = isDraft ? nil : (pool.shared != nil ? poolKeyID : poolMemberProviderID)
+        return ProviderPools.sessionAccount(in: pool, memberID: memberID)
     }
 
     var providerCapabilitiesResolved: Bool {
@@ -353,6 +366,7 @@ final class ConsoleModel {
          configuredProviders: [ConfiguredProvider] = [],
          configuredProvidersLoaded: Bool = false,
          providerPools: [ProviderPool] = [],
+         sharedPools: [SharedPool] = [],
          modelCatalog: RunnerModelCatalog? = nil, accountDefaultEffort: String? = nil,
          baseURL: URL, tokenStore: TokenStore,
          attachments: AttachmentImageStore) {
@@ -375,7 +389,9 @@ final class ConsoleModel {
         // The parent's pools too, so a workspace that runs on one opens on its tile and badge rather
         // than waiting for this draft's own read.
         self.providerPools = providerPools
-        self.configuredProviders = configuredProviders + ProviderPools.asProviders(providerPools)
+        self.sharedPools = sharedPools
+        self.configuredProviders = configuredProviders
+            + ProviderPools.asProviders(SharedPools.asProviderPools(sharedPools) + providerPools)
         self.configuredProvidersLoaded = configuredProvidersLoaded
         // The parent's cached runner snapshot — the same one `defaultModel` was resolved from. It
         // NAMES that id as well, so seeding it here is what keeps the first frame from rendering a
@@ -917,6 +933,7 @@ final class ConsoleModel {
         if taskID != nil { Task { [weak self] in await self?.refreshOwnerConfirmation() } }
         provider = s.provider ?? "claude"
         poolMemberProviderID = s.poolMemberProviderId
+        poolKeyID = s.poolKeyId
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
         // already touched the picker while the session request was in flight, their explicit value
@@ -970,8 +987,9 @@ final class ConsoleModel {
         // keeps the last good list, and built-in runtimes still resolve from the runner/static data.
         // The account pools ride along; a failed pool read keeps the last good pools.
         let pools = try? await api.providerPools()
+        let shared = try? await api.sharedPools()
         if let providers = try? await api.providers() {
-            adoptProviders(providers, pools: pools ?? providerPools)
+            adoptProviders(providers, pools: pools ?? providerPools, shared: shared ?? sharedPools)
         }
         // A stored model the Runtime has since retired is no longer something this session can
         // run — the server drops it at dispatch too — so re-resolve it exactly like a model-less
@@ -1049,6 +1067,7 @@ final class ConsoleModel {
         guard let s = try? await api.session(sessionID) else { return false }
         adoptServerSnapshot(s)
         poolMemberProviderID = s.poolMemberProviderId
+        poolKeyID = s.poolKeyId
         return true
     }
 
@@ -1158,10 +1177,14 @@ final class ConsoleModel {
                                                 configured: configuredProviders)
     }
 
-    /// Adopt a provider catalogue with the account pools folded in, each resolved like a Claude key.
-    private func adoptProviders(_ providers: [ConfiguredProvider], pools: [ProviderPool]) {
+    /// Adopt a provider catalogue with the pools folded in, each resolved like a key: a shared pool
+    /// as the Codex CLI's model space, an account pool as the Claude CLI's. `shared` is nil from a
+    /// caller whose snapshot carries no shared pools (the parent's), which keeps the last good ones.
+    private func adoptProviders(_ providers: [ConfiguredProvider], pools: [ProviderPool],
+                                shared: [SharedPool]? = nil) {
+        if let shared { sharedPools = shared }
         providerPools = pools
-        configuredProviders = providers + ProviderPools.asProviders(pools)
+        configuredProviders = providers + ProviderPools.asProviders(allPools)
         configuredProvidersLoaded = true
     }
 
@@ -1850,8 +1873,9 @@ final class ConsoleModel {
             }
         }
         let pools = try? await api.providerPools()
+        let shared = try? await api.sharedPools()
         if let providers = try? await api.providers() {
-            adoptProviders(providers, pools: pools ?? providerPools)
+            adoptProviders(providers, pools: pools ?? providerPools, shared: shared ?? sharedPools)
         }
         // AgentsModel resolves the seed from its cached runner snapshot so the composer is correct
         // immediately. Re-resolve only while no explicit picker action has ever occurred.

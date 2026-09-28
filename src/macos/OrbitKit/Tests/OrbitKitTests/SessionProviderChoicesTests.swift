@@ -333,6 +333,99 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertNil(signedOut.first { $0.slug == "claude-accounts" }?.unavailable)
     }
 
+    // MARK: - shared pools (a pool of OpenAI keys, drawn as a pool whose members are its keys)
+
+    private let codexCatalog = RunnerModelCatalog(
+        codex: [RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6 Sol")])
+
+    private func sharedPool(_ keys: [SharedPoolKey],
+                            monthEnds: String = "2026-10-01T00:00:00.000Z") -> ProviderPool {
+        SharedPools.asProviderPool(SharedPool(
+            id: "pool-2", slug: "team-codex", label: "Team Codex",
+            window: SharedPoolWindow(start: "2026-09-01T00:00:00.000Z", end: monthEnds),
+            keys: keys))
+    }
+
+    private func sharedKey(_ id: String, cap: Int? = nil, others: Double = 0,
+                           you: Bool = false, next: Bool = false) -> SharedPoolKey {
+        SharedPoolKey(id: id, label: id, fingerprint: "sk-…0000", shareCap: cap,
+                      contributor: PoolKeyContributor(userId: you ? "me" : "wikova",
+                                                      name: you ? "Me" : "Wikova", you: you),
+                      usage: PoolSpend(costUsd: others, othersCostUsd: others), next: next)
+    }
+
+    /// A shared pool is one choice like an account pool — but its mark is Codex's, its badge counts
+    /// keys, and its models are the Codex CLI's, because that is what it runs on.
+    func testASharedPoolIsOneChoiceWithTheCodexMarkAndItsKeyCount() {
+        let pool = sharedPool([sharedKey("orbit-org-1", next: true), sharedKey("orbit-org-2")])
+        let tile = SessionProviderChoices.choices(
+            configured: withPools([deepseek], [pool]), catalog: codexCatalog, pools: [pool])
+            .first { $0.slug == "team-codex" }
+        XCTAssertEqual(tile?.kind, .pool)
+        XCTAssertEqual(tile?.label, "Team Codex")
+        XCTAssertEqual(tile?.brandKey, "openai")
+        XCTAssertEqual(tile?.poolSize, 2)
+        XCTAssertEqual(tile?.poolUnit, "key")
+        XCTAssertEqual(tile?.modelLabel, "GPT-5.6 Sol")
+        XCTAssertNil(tile?.unavailable)
+        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: tile?.poolSize ?? 0, unit: tile?.poolUnit),
+                       "2 keys")
+        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: 1, unit: tile?.poolUnit), "1 key")
+    }
+
+    /// An account pool counts accounts, and says so.
+    func testAnAccountPoolsBadgeCountsAccounts() {
+        let pool = claudePool()
+        let tile = SessionProviderChoices.choices(configured: withPools([], [pool]), pools: [pool])
+            .first { $0.slug == "claude-accounts" }
+        XCTAssertNil(tile?.poolUnit)
+        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: tile?.poolSize ?? 0, unit: tile?.poolUnit),
+                       "2 accounts")
+    }
+
+    /// Its CLI is Codex, so a runner without that one can't run the pool — while the Claude CLI's
+    /// absence leaves it alone, and the other way round for the account pool beside it.
+    func testASharedPoolNeedsTheCodexCLIAndThatIsFixedOnThatRow() {
+        let shared = sharedPool([sharedKey("orbit-org-1")])
+        let account = claudePool()
+        let choices = SessionProviderChoices.choices(
+            configured: withPools([anthropic], [shared, account]),
+            engines: [health("claude", installed: true, auth: "yes"),
+                      health("codex", installed: false, auth: "unknown")],
+            pools: [shared, account])
+        let tile = choices.first { $0.slug == "team-codex" }
+        XCTAssertEqual(tile?.unavailable, "Not installed")
+        XCTAssertEqual(tile?.fixEngine, "codex")
+        XCTAssertNil(choices.first { $0.slug == "claude-accounts" }?.unavailable,
+                     "an account pool runs on Claude, which this machine has")
+    }
+
+    /// A key OpenAI refused, or one switched off, is why a shared pool goes grey — and it stays
+    /// listed, saying so, rather than disappearing from a picker that exists to answer exactly this.
+    func testASharedPoolWithNoKeyThatCanRunIsGreyedWithThePoolsWords() {
+        let stuck = sharedPool([SharedPoolKey(id: "k", label: "orbit-org-1", fingerprint: "sk-…0000",
+                                              state: .invalid,
+                                              contributor: PoolKeyContributor(userId: "u", name: "Wikova"))])
+        let tile = SessionProviderChoices.choices(configured: withPools([], [stuck]), pools: [stuck])
+            .first { $0.slug == "team-codex" }
+        XCTAssertEqual(tile?.unavailable, "No key can run")
+        XCTAssertNil(tile?.fixEngine, "nothing on a runner gives it a key that can run")
+    }
+
+    /// A Codex session may move onto a shared pool — the same CLI — and a Claude one may not, however
+    /// nearby the pool is listed.
+    func testASharedPoolMovesOnlyOntoACodexSession() {
+        let pool = sharedPool([sharedKey("orbit-org-1")])
+        let configured = withPools([deepseek], [pool])
+        let choices = SessionProviderChoices.choices(configured: configured, pools: [pool])
+        XCTAssertEqual(SessionProviderChoices.sameRuntime("codex", in: choices, configured: configured)
+            .map(\.slug), ["codex", "team-codex"])
+        XCTAssertEqual(SessionProviderChoices.sameRuntime("team-codex", in: choices, configured: configured)
+            .map(\.slug), ["codex", "team-codex"])
+        XCTAssertFalse(SessionProviderChoices.sameRuntime("deepseek", in: choices, configured: configured)
+            .contains { $0.slug == "team-codex" })
+    }
+
     /// A session on the pool may move to one of its accounts, or back, without changing CLI.
     func testSameRuntimeOffersThePoolAndItsAccountsTogether() {
         let pool = claudePool()
