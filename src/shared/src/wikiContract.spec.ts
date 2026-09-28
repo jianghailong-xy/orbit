@@ -49,6 +49,14 @@ import {
   wikiTieredBasis,
   wikiVerdictTrust,
 } from './wiki';
+import {
+  WIKI_ARTICLE_CATEGORIES,
+  WIKI_ARTICLE_CATEGORY_KEYS,
+  WIKI_ARTICLE_KINDS,
+  WIKI_ARTICLE_RULES,
+  WIKI_DEFAULT_TOPICS,
+  wikiArticleChars,
+} from './wikiArticles';
 
 /**
  * Holds `src/shared/src/wiki.ts` to `contracts/wiki.contract.json`, the hand-written authority
@@ -432,6 +440,57 @@ describe('wiki contract', () => {
     // The dossier's text is never stored: the one table that keeps anything of it keeps its sources and hash.
     expect(maintenance.tables).toEqual(['wiki_cursor', 'wiki_dossier']);
     expect(maintenance.dossier.storage).toMatch(/text is never stored/u);
+  });
+
+  it('ships the articles the contract states: six categories, three kinds, the rules, the default topics, and their doors', () => {
+    // Criterion 9: a topic has a display name and a category, and its articles are a view of its entries.
+    const articles = CONTRACT.articles;
+    expect(articles.categories).toEqual(WIKI_ARTICLE_CATEGORIES.map((c) => ({ ...c })));
+    expect(WIKI_ARTICLE_CATEGORY_KEYS).toEqual(['platform', 'runner', 'clients', 'data', 'engineering', 'collaboration']);
+    expect(keysOf(articles.kinds)).toEqual([...WIKI_ARTICLE_KINDS]);
+    expect(articles.rules).toEqual(WIKI_ARTICLE_RULES);
+    // The two problems the demo showed, as numbers: 400-900 characters an article (the demo averaged 1,052).
+    expect(WIKI_ARTICLE_RULES.minChars).toBe(400);
+    expect(WIKI_ARTICLE_RULES.maxChars).toBe(900);
+    expect(wikiArticleChars('数据库与 Prisma')).toBe(11);
+    expect(articles.tables).toEqual(['wiki_topic_summary']);
+    expect(articles.migration).toMatch(/0317_wiki_topic_articles/u);
+    expect(existsSync(path.join(ROOT, articles.migration))).toBe(true);
+    // Paths decide first; the words only when neither the paths nor a named slug do.
+    expect(articles.membership.order.map((step: string) => step.split(':')[0])).toEqual(['paths', 'declared', 'text']);
+
+    // The default topics: the demo's 22, each filed under a category the contract lists, in the directory's order.
+    expect(articles.defaultTopics).toEqual(WIKI_DEFAULT_TOPICS.map((t) => ({ ...t, pathPrefixes: [...t.pathPrefixes] })));
+    expect(WIKI_DEFAULT_TOPICS).toHaveLength(22);
+    const slugs = WIKI_DEFAULT_TOPICS.map((t) => t.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+    for (const topic of WIKI_DEFAULT_TOPICS) {
+      expect(topic.slug).toMatch(new RegExp(WIKI_SLUG_PATTERN, 'u'));
+      expect(WIKI_ARTICLE_CATEGORY_KEYS).toContain(topic.category);
+      expect(topic.title.trim()).not.toBe('');
+      // No catch-all: nothing claims the whole API server, the demo's rule that filed a database write under sessions.
+      expect(topic.pathPrefixes).not.toContain('src/apiserver/');
+      expect(topic.pathPrefixes).not.toContain('src/apiserver/src/');
+    }
+    const order = WIKI_ARTICLE_CATEGORY_KEYS.map((key) => WIKI_DEFAULT_TOPICS.filter((t) => t.category === key).map((t) => t.slug));
+    expect(order.flat()).toEqual(slugs);
+
+    // Its doors: the owner's three reads on the user door, a maintenance run's three routes on the runner door.
+    const routes = articles.routes;
+    const user: string[] = CONTRACT.agentSurface.doors.user.routes;
+    const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
+    for (const read of [routes.directory, routes.article, routes.part, routes.index]) expect(user).toContain(read);
+    for (const write of [routes.plan, routes.input, routes.write]) expect(maintenanceRoutes).toContain(write);
+    expect(user.some((route) => route.startsWith('POST') && route.includes('/articles'))).toBe(false);
+    // A view: never a source, never pushed, never an agent's answer.
+    expect(CONTRACT.sourceRules.firstHand).toMatch(/topic summary or any other view is never a source/u);
+    expect(articles.view.push).toMatch(/Never in <orbit_wiki_context>/u);
+    expect(articles.view.agents).toMatch(/wiki_search or wiki_get/u);
+    expect(articles.who.write).toMatch(/isWikiMaintenanceSession/u);
+    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
+    expect(status('WIKI_ARTICLE_STALE')).toBe(409);
+    expect(CONTRACT.realtime.publishedWhen.some((when: string) => /articles were written/u.test(when))).toBe(true);
+    expect(articles.cli.tool).toMatch(/^none/u);
   });
 
   it('declares every refusal once, with a status and a scope, and names no code it does not declare', () => {

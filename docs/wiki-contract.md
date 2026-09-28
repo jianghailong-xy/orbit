@@ -21,6 +21,11 @@ T4 检索、T5 runner 工具、T6 推送、T7 实时事件、T8–T10 客户端�
 `WIKI_CURSOR_BEHIND` / `WIKI_CURSOR_INVALID`，见新增的 §16；迁移 `0315_wiki_cursor`，JSON 里是 `space.settings.maintenance` 与
 `maintenance` 一节。
 
+**判据 9（阶段 2，2026-09-28）：文档视图 · 生成**：主题有显示名和所属大类（`wiki_topic.category`，六类闭集）；每个主题一篇由
+本地模型从 active 条目写成、句句带脚注的文章，大主题拆成子主题文章加一篇总览，存进可丢弃的缓存 `wiki_topic_summary`；
+归主题先看条目锚到的代码路径；脚注和字数由代码校验；一个新拒绝码 `WIKI_ARTICLE_STALE`，见新增的 §17；迁移
+`0317_wiki_topic_articles`，JSON 里是 `articles` 一节。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -34,6 +39,7 @@ T4 检索、T5 runner 工具、T6 推送、T7 实时事件、T8–T10 客户端�
 | 审阅模式的行为测试 | `src/apiserver/src/wiki/wiki-review-mode.pg.spec.ts`，经 `scripts/run-pg-spec.sh` 跑 |
 | Automatic 核实的行为测试 | `src/apiserver/src/wiki/wiki-verify.pg.spec.ts`（服务端），`src/runner-go/wiki_verify_test.go`（`orbit wiki verify`，假 vLLM 端点） |
 | 案卷与游标的行为测试 | `src/apiserver/src/wiki/wiki-dossier.pg.spec.ts`（服务端），`src/runner-go/wiki_dossier_test.go`（`orbit wiki dossier` / `orbit wiki cursor advance`） |
+| 文章的行为测试 | `src/apiserver/src/wiki/wiki-articles.pg.spec.ts`（服务端），`src/runner-go/wiki_articles_test.go`（`orbit wiki articles`，假 vLLM 端点），`WikiArticlesContractTests.swift`（OrbitKit） |
 
 **本任务不做**：服务、控制器、MCP 工具、推送、实时事件的实现，以及任何 UI。它们各自的任务照本契约写。
 
@@ -649,3 +655,78 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 - CLI：`orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]`、
   `orbit wiki cursor advance --space <id> --to <token> [--outcome …] [--error TEXT] [--json]`，只有 CLI、没有 MCP 工具，三张 family 表都登记。
 
+---
+
+## 17. 文档视图 · 生成：主题、文章与脚注（判据 9）
+
+JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（归主题、指纹、校验、读写），user 门在
+`wiki/wiki-articles.controller.ts`，runner 门在 `runner-api/runner-wiki-articles.controller.ts`，CLI 在
+`src/runner-go/wiki_articles.go`。
+
+### 17.1 主题与大类
+
+- `wiki_topic` 的 `title` 就是显示名，新增 `category`：六类闭集（CHECK），顺序照演示：`platform` 平台核心、`runner` Runner 与引擎、
+  `clients` 客户端与界面、`data` 数据与后端、`engineering` 工程流程、`collaboration` 协作。界面上用英文名（`categories[].title`）。
+- space 还没有任何主题时，第一次向服务端要计划（`POST …/article-plan`）就写入 `articles.defaultTopics`：演示的 22 个主题，各带显示名、
+  大类、描述和路径前缀。已有主题的 space 不动。演示里「`src/apiserver` 一律算会话」的兜底规则去掉了。
+- `GET /api/wiki/spaces/:id/topics/:slug` 从此读得到这一行的显示名（§15 第 9 条说的「阶段 2 写下 wiki_topic 行之后」）。
+
+### 17.2 条目归哪个主题（先路径，后文本）
+
+- 参与的条目：该 space 的 active 条目，去掉 tainted 的；每条恰好归一个主题，或者哪个都不归。
+- 三步，前一步定了就不看后一步：
+  1. **路径**：条目点名的每个 repo 相对路径（path / symbol 锚点、pitfall 的 `trigger.paths`、convention 的 `scope` 截到第一个通配符）
+     各投一票给「前缀最长」的那个主题；票多者得，平票看前缀更长，再平看主题顺序。路径先去掉 `./` 和 checkout 的绝对前缀
+     （`/root/orbit/`、`…/.orbit/worktrees/<id>/`）。
+  2. **自报**：否则取条目 `topics[]` 里第一个是本 space 主题的 slug。
+  3. **文本**：否则按标题、摘要、别名的 tf-idf（英文词 + 中文二字组）余弦，找最近的主题；主题的向量是它自己的名称和描述，
+     加上前两步归给它的条目。一个都不近就不归任何主题。
+- 为什么：演示按字面相似分组，「会话」下出现了「数据库写入与迁移治理」「Nest 运行陷阱与联调」；条目锚在哪段代码上是更可靠的证据。
+
+### 17.3 文章、指纹与重写
+
+- `wiki_topic_summary` 一行一篇：`part = 0` 是主题自己的文章（`article`），或拆分主题的总览（`overview`）；`part ≥ 1` 是子主题文章
+  （`subtopic`），经 `parent_id` 挂在总览上。存标题、正文（`body`：`[{ heading, sentences: [{ text, notes }] }]`）、脚注
+  （`citations`：`[{ n, entryId, revision }]`）、写作所依据的条目（`entry_ids`）、条目集合指纹、生成时的 ref、模型和校验统计。
+- **指纹**：主题条目的 `<id>:<当前修订号>` 按 id 排序、换行拼接后的 sha256。条目加入、离开或被 amend 都会改变它。
+- **不变不重写**：写入带上生成时依据的指纹；它等于已存 part 0 的指纹就什么都不写（`unchanged`）；它既不是已存的、也不是主题
+  当前的，就回 `WIKI_ARTICLE_STALE`（409），什么都不写——条目在写作期间变了，下一次运行按新条目重写。所以已存的文章永远
+  准确说明它是依据哪些条目写的。重写只由维护作业在事实到达后触发，不用时钟。
+- 一个主题的各行在一个事务里整体替换（先 `FOR NO KEY UPDATE` 锁主题行，再核一次指纹）。
+
+### 17.4 代码校验
+
+- 每篇的输入是带 `[n]` 标记的 Markdown 和 `notes`（`[n]` 指 `notes[n-1]` 这条条目）；子主题还要给出自己这一组的条目。
+- 断句：`。！？!?`，以及后面跟空白或行尾的句点；反引号里的代码不断句，其中的 `[0]` 之类也不算脚注。第一个一级标题是整篇的标题，
+  不进正文；其余标题各起一段。
+- 标记只在「n 在 1 到 notes 个数之间，且 notes[n-1] 是本主题（含其子主题）的条目」时保留；越界、指向别的主题、指向不存在的条目，
+  一律剥掉。剥完没有标记的句子删掉。
+- 字数按保留下来的句子的字符数（码点）计，不含标记和标题：写作端目标 400–900（提示里要 450–800、8–11 句，短于 400 且素材够时
+  重写一次）；服务端超过 900 就从「句子最多的那段」末尾一句一句删，直到不超过。演示平均 1,052 字。
+- 脚注按首次出现顺序重排为 1、2、……；子主题剥完一句不剩的整篇丢掉；part 0 一句不剩就整次不写。
+
+### 17.5 视图，不是知识
+
+- 不进 `<orbit_wiki_context>`：推送只读 `wiki_entry`。
+- 不能当出处：没有任何出处种类指向 `wiki_topic_summary`，引用文章一律 `WIKI_SOURCE_UNRESOLVED`（§5「不允许引用 wiki 条目或视图」）。
+- agent 的 `wiki_search` / `wiki_get` 只返回条目；文章 id 不是任何条目的 id。
+
+### 17.6 谁能读写
+
+- **写**：只有该 space 的维护会话（`isWikiMaintenanceSession`）经 runner 门，以及 API 服务器容器里的一次性导入（principal 为
+  `origin: 'import'`、无会话、无用户，给预览 space 用）。其余一律 `WIKI_NOT_MAINTENANCE_SESSION`；headless 400；别的 owner 的 space 404。
+  user 门没有写文章的路由。
+- runner 门三条（都在 `maintenanceRoutes`）：`POST /api/runner/wiki/spaces/:id/article-plan`（计划；空 space 先写默认主题）、
+  `GET …/articles/:slug/input`（主题的条目，按出处数、时间排好，带归组用的路径和指纹）、`POST …/articles/:slug`（写入）。
+- **读**：owner 经 user 门：`GET /api/wiki/spaces/:id/articles`（大类 → 主题 → 文章与子主题）、`GET …/articles/:slug`、
+  `GET …/articles/:slug/:part`（脚注解析成条目的标题、摘要、种类、状态、trust）、`GET …/article-index`（全部文章按标题 A–Z）。
+  跨租户一律 404。
+
+### 17.7 `orbit wiki articles`
+
+- `orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]`，只有 CLI、没有 MCP 工具，三张 family 表都登记。
+- 计划 → 只取条目集合变了的主题 → 读条目 → 超过 45 条的主题在 runner 上用代码分组（锚点路径前缀权重最高，其次是标题/摘要的词；
+  演示的 tf-idf 球面 k-means，每组约 40 条、最多 40 组、少于 8 条的并进最近的组）→ 干净的 Claude Code 调本地模型给每组起名、写每篇 →
+  提交。模型只读条目，不读会话原文；每篇最多用组里出处最多的 30 条。
+- 干净调用照抄 `orbit wiki verify` 的启动参数、环境白名单和 apiKeyHelper，只换系统提示；thinking 默认关：`CLAUDE_CODE_EFFORT_LEVEL=unset`
+  且 `MAX_THINKING_TOKENS=0`（只设前者仍会发 adaptive thinking）。碰到第一个 401 就停；有主题没写成就以非 0 退出。

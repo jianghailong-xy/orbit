@@ -38,6 +38,7 @@ import { WatchesModule } from '../watches/watches.module';
 import { WikiModule } from '../wiki/wiki.module';
 import { RunnerWikiController } from './runner-wiki.controller';
 import { RunnerWikiMaintenanceController } from './runner-wiki-maintenance.controller';
+import { RunnerWikiArticlesController } from './runner-wiki-articles.controller';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -84,6 +85,8 @@ import { RunnerWikiMaintenanceController } from './runner-wiki-maintenance.contr
     // The maintenance run's two routes (contract `maintenance`): its own controller, so the one above
     // injects exactly what it always did.
     RunnerWikiMaintenanceController,
+    // A maintenance run's articles (contract `articles`): the plan, a topic's entries, the write.
+    RunnerWikiArticlesController,
   ],
   providers: [
     RunnerAuthGuard,

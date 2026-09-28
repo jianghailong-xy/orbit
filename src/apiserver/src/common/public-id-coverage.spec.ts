@@ -41,7 +41,9 @@ import { RunnerTaskCompletionEvidenceController } from '../runner-api/runner-tas
 import { RunnerTaskProgressController } from '../runner-api/runner-task-progress.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
+import { RunnerWikiArticlesController } from '../runner-api/runner-wiki-articles.controller';
 import { WikiController } from '../wiki/wiki.controller';
+import { WikiArticlesController } from '../wiki/wiki-articles.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -64,7 +66,9 @@ import { WikiController } from '../wiki/wiki.controller';
 // says otherwise". An allowlist would let a param nobody classified through unchecked. UUID
 // exceptions are route-specific below: a generic `requestId` exemption would also silently exempt
 // future public request-row addresses.
-const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine']);
+const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine', 'part']);
+// `part` is an article's number within its topic (0 the article or overview, 1… its subtopic
+// parts): GET /wiki/spaces/:id/articles/:slug/:part, an integer ParseIntPipe guards.
 // `engine` is a provider name (`claude`, `codex`), the engine whose account store a removal is
 // about: DELETE /runners/:id/accounts/:engine/:account. The service refuses anything that is not a
 // login engine — an id here would be addressed as a name no engine answers to.
@@ -106,6 +110,9 @@ const CONTROLLERS = [
   RunnerWikiController,
   // The maintenance run's routes (migration 0315, contract `maintenance`), on the same runner door.
   RunnerWikiMaintenanceController,
+  // The articles (migration 0317, contract `articles`): the owner's reads and a maintenance run's writes.
+  WikiArticlesController,
+  RunnerWikiArticlesController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed

@@ -13,9 +13,10 @@ import (
 // composition inside a session. Like the MCP tools they act for the session they run in — what a
 // session may read is what its bound workspace shares, and a proposal is recorded against it — so
 // there is no headless form: at a terminal outside a session there is nowhere to read from and
-// nobody to propose as. Three verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go)
-// runs a model, which is a runner's work rather than a tool call's, and `orbit wiki dossier` and
-// `orbit wiki cursor advance` (wiki_dossier.go) are a Wiki maintenance run's, and no other session's.
+// nobody to propose as. Four verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go)
+// runs a model, which is a runner's work rather than a tool call's, and `orbit wiki dossier`,
+// `orbit wiki cursor advance` (wiki_dossier.go) and `orbit wiki articles` (wiki_articles.go) are a Wiki
+// maintenance run's, and no other session's.
 
 const wikiHelp = `orbit wiki — read the Orbit wiki and propose to it
 
@@ -28,15 +29,17 @@ Usage:
   orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]
   orbit wiki cursor advance --space <id> --to <token> [--outcome succeeded|failed|truncated]
                             [--error TEXT] [--json]
+  orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
 fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. An agent's write
 is a proposal that waits for the owner in Review — or, in an automatic space, for its verification,
 which 'orbit wiki verify' runs with the local model — so never report one as saved.
 
-'orbit wiki dossier' and 'orbit wiki cursor advance' are a Wiki maintenance run's, and no other
-session's: the run reads what happened in its space since the cursor, proposes what it learned
-citing the records behind it, and advances the cursor once it has processed a page.
+'orbit wiki dossier', 'orbit wiki cursor advance' and 'orbit wiki articles' are a Wiki maintenance
+run's, and no other session's: the run reads what happened in its space since the cursor, proposes
+what it learned citing the records behind it, advances the cursor once it has processed a page, and
+has the local model write the articles of the topics whose entries changed.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -169,6 +172,32 @@ WIKI_CURSOR_INVALID: both change nothing, and the command exits non-zero. A toke
 stands at is a success that moves nothing. A failed or truncated run moves nothing either: it is
 recorded, one more of the space's consecutive failures, and the command exits 0.
 `,
+	"articles": `orbit wiki articles — have the local model write the articles of a space's changed topics, as its Wiki maintenance run
+
+Usage:
+  orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]
+
+Options:
+  --space ID               The space this maintenance run maintains. Required
+  --topic SLUG             Only this topic, and only if its entries changed. Default: every topic whose
+                           entries changed since its articles were written
+  --model MODEL            The model to write with. Default: ANTHROPIC_MODEL, the model this
+                           session's provider names, at its ANTHROPIC_BASE_URL
+  --json                   Print the run's summary as JSON
+
+` + wikiArticlesPrecondition + `
+
+The server's plan names the topics whose entry set changed; a space with no topic is given the
+default ones first. Each such topic's entries are read, and a topic of more than ` + fmt.Sprint(wikiArticleSplitAbove) + ` entries is
+grouped into subtopics by their anchor paths and words. A clean Claude Code (--bare, no tools, no
+MCP server, an empty HOME and CLAUDE_CONFIG_DIR, the token from ANTHROPIC_AUTH_TOKEN through an
+apiKeyHelper, thinking off) names each group and writes each article — ` + fmt.Sprint(wikiArticleMinChars) + ` to ` + fmt.Sprint(wikiArticleMaxChars) + ` characters,
+every sentence footnoted — from the entries alone. The server keeps a footnote only when it names an
+entry of the topic, deletes a sentence left without one, cuts what passes ` + fmt.Sprint(wikiArticleMaxChars) + ` characters, and
+writes nothing for a topic whose entries did not change. The command stops at the first 401 from
+the model's endpoint, and exits non-zero when any topic it took up was left unwritten. Any session
+but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
+`,
 }
 
 // wikiCLICapabilities are listed inside a session only (SessionOnly): every one of them reads or
@@ -287,6 +316,31 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 		Mutates:     true,
 		SessionOnly: true,
 	},
+	{
+		// The maintenance run's articles (contract `articles.cli`): CLI only, like the two above, and a
+		// model's work like verify.
+		Tool:  "wiki_articles",
+		Argv:  []string{"orbit", "wiki", "articles"},
+		Usage: "orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]",
+		Arguments: []string{
+			"--space <id> (required; the space this maintenance run maintains)",
+			"--topic <slug> (only this topic; default every topic whose entries changed)",
+			"--model <model> (default ANTHROPIC_MODEL, the model this session's provider names)",
+			"--json",
+		},
+		Description: wikiArticlesDescription,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"space": map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
+				"topic": map[string]interface{}{"type": "string", "description": "Only this topic's articles, and only if its entries changed; every changed topic when left out."},
+				"model": map[string]interface{}{"type": "string", "description": "The model to write with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
+			},
+			"required": []string{"space"},
+		},
+		Mutates:     true,
+		SessionOnly: true,
+	},
 }
 
 // wikiCLIContext is the session a wiki command acts for. There is no headless form, and no
@@ -366,6 +420,8 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliWikiDossier(args[1:], out, ctx)
 	case "cursor":
 		return cliWikiCursorAdvance(args[2:], out, ctx)
+	case "articles":
+		return cliWikiArticles(args[1:], out, ctx)
 	default:
 		panic("unreachable wiki command")
 	}
