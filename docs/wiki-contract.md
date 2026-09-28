@@ -234,24 +234,29 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
 
 ```
 proposed ──accept / edit──▶ active ──supersede──▶ superseded
-    │                          ├────retire──────▶ retired
-    │                          └────reject──────▶ rejected   （仅审阅模式直接生效、trust 为 auto / unreviewed 的条目）
+    │  ▲                       ├────retire──────▶ retired
+    │  │                       └────reject──────▶ rejected   （仅审阅模式直接生效、trust 为 auto / unreviewed 的条目）
+    │  └──reopen（§7.5）── rejected
     └──reject / expire / withdraw──▶ rejected
 ```
 
-- 生来就是 `proposed`（等 Review 的 add / supersede，或 Automatic 里等核实的 add）或 `active`（owner 自己的，或审阅模式直接生效的 add）。`superseded`、`retired`、`rejected` 是终态。
+- 生来就是 `proposed`（等 Review 的 add / supersede，或 Automatic 里等核实的 add）或 `active`（owner 自己的，或审阅模式直接生效的 add）。
+  `superseded`、`retired` 是终态。`rejected` 是「已结束」（`states.entry.ended`：不推送、agent 检索不到、客户端显示为结束），
+  但不再是终态：唯一的出路是 §7.5 的重开——当时读不到任何出处原文、被 unsupported 结论拒掉的谱系回到 `proposed`，重新等核实。
 - Automatic 里等核实的 add：核实结论 supported 让它变 `active`（trust `auto`），partial 变 `active`（trust `unreviewed`），
   unsupported 与 duplicate 让它变 `rejected`（§7.4）。
 - 审阅模式直接生效、还没人确认的条目（trust `auto` / `unreviewed`），owner 在抽检卡上或在条目上 Reject 时变 `rejected`，与被拒的提议一样留作反例。
 - 被拒的条目保留，作为反例：以后提议的 `similar[]` 会显示「曾被拒：理由」。
-- 库里的不变量（CHECK）：`superseded` 当且仅当 `superseded_by_id` 非空；`retired_at` 当且仅当状态是终态；
+- 库里的不变量（CHECK）：`superseded` 当且仅当 `superseded_by_id` 非空；`retired_at` 当且仅当状态已结束（superseded、retired 或 rejected）；
   `trust = proposed` 当且仅当状态是 `proposed` 或 `rejected`。
 
 ### 6.2 op 的决定
 
 提交时记为 `pending`（等 owner）、`auto_applied`（立即生效）或 `verifying`（Automatic 收下、等核实结论，§7.4）。
-`auto_applied` 只有一种出路：审阅模式直接生效的 add，owner 在条目上 Reject 时变 `rejected`（§7.3 的逐条 Reject）；其余
-`auto_applied` 不再变。`verifying` 只由事实离开：核实结论让它变 `auto_applied`（supported / partial 生效）、`pending`
+`auto_applied` 只有两种出路：审阅模式直接生效的 add，owner 在条目上 Reject 时变 `rejected`（§7.3 的逐条 Reject）；owner 在条目上
+Confirm 时，模式对它生效过、还没人答的 op 变 `accepted`（§7.5）。其余 `auto_applied` 不再变。`rejected` 只有 §7.5 的重开能让它
+回到 `verifying`（当时读不到原文的 unsupported 结论）；Automatic 的 space 里等 owner 的 tainted add / amend，重开也能把它从 `pending`
+送去 `verifying`。其余被拒的 op 不再变。`verifying` 只由事实离开：核实结论让它变 `auto_applied`（supported / partial 生效）、`pending`
 （生效后被抽成抽检卡）、`rejected`（unsupported 记 `not_true`，duplicate 记 `duplicate`）或 `conflict`（amend 的目标条目在
 结论到来前已变，或已归 owner）；整次撤回或 amend 的目标条目离开 active 时变 `withdrawn`。它不过期，也没有任何时钟会动它。
 `pending` 只会变成：
@@ -268,11 +273,13 @@ proposed ──accept / edit──▶ active ──supersede──▶ superseded
 抽检卡（`spot_check`）也是 `pending` 的 op：效果已经生效，accept 是确认、edit 是 owner 改写后确认、reject 是撤销；条目在 op 生效后又被改过时记为 `conflict`。
 
 库里的不变量：`decided_at` 当且仅当已决定（`pending` 与 `verifying` 都没有）；`decision_reason` 当且仅当被拒；
-`verifying` 的 op 不带结论，只有 add 与 amend 会等核实或带结论。
+`verifying` 的 op 不带结论，只有 add 与 amend 会等核实或带结论；`verification_evidence` 只在有结论时才可能有值（迁移 0314）；
+`verification_history` 是列表，没被重开过的 op 是空列表。
 
 ### 6.3 变更集
 
 `pending`（还有 op 等 owner 或等核实，此时必须有 `expires_at`）→ `settled`（都没有了，此时有 `decided_at`）。
+§7.5 的重开把一个 op 送回等核实时，它所在的 `settled` 变更集回到 `pending`（重新给 `expires_at`），所以 `settled` 不再是终态。
 全部立即生效的变更集一记录就是 `settled`；一个 op 都没通过的请求不留变更集。Review 只列出有 op 在等 owner 的变更集：
 只剩 op 在等核实的变更集不是 owner 的卡片。
 
@@ -285,15 +292,15 @@ proposed ──accept / edit──▶ active ──supersede──▶ superseded
 | trust | 含义 |
 | --- | --- |
 | `owner` | owner 写的：owner 自己的 add / supersede |
-| `confirmed` | agent、维护作业、导入或巡检提议，owner 接受（原样或改过）；或 owner 接受了它的抽检卡 |
+| `confirmed` | agent、维护作业、导入或巡检提议，owner 接受（原样或改过）；或 owner 接受了它的抽检卡；或 owner 在条目上 Confirm（§7.5） |
 | `auto` | 审阅模式直接生效、没人看过：Tiered 下出自 owner 原话或经机器验证的，Automatic 下通过校验的全部。推送，标 Auto |
-| `unreviewed` | Tiered 直接生效但既无 owner 原话也无机器验证的；或被整次撤回、被拒的抽检恢复过的。显示、标 Unreviewed，从不推送 |
+| `unreviewed` | Tiered 直接生效但既无 owner 原话也无机器验证的；Automatic 核实为 partial 的、读不到任何出处原文的、或 tainted 的（§7.5）；或被整次撤回、被拒的抽检恢复过的。显示、标 Unreviewed，从不推送 |
 | `proposed` | 没被接受：所有待审条目和被拒条目 |
 | `external` | 靠网页衍生出处支撑（阶段 3 引用 url 的 assumption），从不推送 |
 
 只推送 `owner`、`confirmed` 与 `auto`。生效时 trust 的变化：owner 的 add / supersede → `owner`；被接受的 add / supersede / amend → `confirmed`
 （被接受的 amend 落在 `auto` / `unreviewed` 条目上时也变 `confirmed`）；审阅模式直接生效的 add / amend → `auto` 或 `unreviewed`；
-抽检被接受 → `confirmed`；被整次撤回或被拒的抽检恢复的条目 → `unreviewed`；其余生效的 op 不改 trust。owner 改过再接受时，
+抽检被接受 → `confirmed`；owner 在条目上 Confirm → `confirmed`；被整次撤回或被拒的抽检恢复的条目 → `unreviewed`；其余生效的 op 不改 trust。owner 改过再接受时，
 修订作者记为 owner，trust 仍是 `confirmed`。
 
 ### 7.2 生效策略（设计 §4.2）
@@ -333,7 +340,8 @@ proposed ──accept / edit──▶ active ──supersede──▶ superseded
     `verified`，且出处覆盖 2 个以上独立会话。新条目的锚点还没复验过，所以 add 在复验之前不会是机器验证；不动锚点的 amend
     沿用条目的复验结果。
   - 其余一律 `unreviewed`。
-- **五条安全底线**（任何模式都生效）：principle 只有 owner 能写（`WIKI_KIND_OWNER_ONLY`）；tainted 一律待审；修改或退役 owner
+- **五条安全底线**（任何模式都生效）：principle 只有 owner 能写（`WIKI_KIND_OWNER_ONLY`）；tainted 绝不靠模式放行——Manual 与
+  Tiered 下待审，Automatic 下先核实但结论最多到 Unreviewed（§7.5）；修改或退役 owner
   写的、owner 确认过的条目（trust 是 owner / confirmed，或有任何一版由 owner 写）一律待审；单个变更集经模式直接改动的条目数
   超过开始时 active 条目的 10% 就熔断，越线的 op 拒 `WIKI_QUOTA`（active 少于 100 条时不熔断，让空 space 能写入第一批）；
   每个变更集最多 30 个 op（`limits.opsPerChangeset`）。
@@ -393,6 +401,43 @@ owner 2026-09-27 定：Automatic 收下的 op 先由本地模型核实，再按�
   unsupported；超过 50 的 30%（即 ≥16 条）就在同一事务里把 space 改成 `tiered`（`reviewModeChangedBy = verification`，
   对模式做 compare-and-set），提交后给 owner 推一次通知（`notifyWikiVerificationTripped`）；已经不是 Automatic 的不再切、不再通知。
 - **`orbit wiki verify`**（runner-go，§11）：读上面的列表，逐条用干净的 Claude Code 调本地模型核实，读到一条结论就回报一条。
+
+### 7.5 核实拿得到证据（判据 7 第 4 版）
+
+owner 2026-09-27 定：核实必须拿得到证据。预览 space 里出处全是工具、thinking、系统事件的 op，核实者一个字原文都看不到，
+95.7% 被判 unsupported；有一条可读出处的 op，unsupported 只有 0.9%。JSON 的 `reviewModes.verification.evidence` 与 `.reopen`、
+`reviewModes.entryConfirm`、`floors.taintedWaits` 是权威，下面是说明。
+
+- **出处原文**：提交时的引文校验和核实列表读的是**同一份**原文（`wiki-verify-evidence.ts` 的 `runEventText`）。run_event：
+  user / assistant / thinking 取 `text`；tool_use 是工具名加输入（每个键一行）；tool_result 是 `content`（字符串，或各文本块按行拼接，
+  图片块没有字），工具报错时前面标一句；error 取 `message`；system 只取它带的文字（`text`、`notice`、`stderr`），`subtype=context`
+  这类统计没有原文。空串或只有空白算**读不到**：claude 的 thinking 大多是空串，那是一条没有内容的记录，不是一条「什么都没说」的证据。
+  交给核实者前先过共享脱敏器（`secret-redaction.ts`，含本 owner `workspace.env` 的真实值），再按 `verificationSourceMaxChars`（8,000 字）截断。
+- **证据标记**：核实列表的每个 item 带 `evidence: readable | unreadable`（至少一条出处有原文 / 一条都没有）。服务端记结论时**自己再读一遍**，
+  不信 runner 报的，并把它存进 op 的 `verification_evidence`（迁移 0314；0314 之前的结论为 NULL），读回来是 `verification.evidence`。
+- **读不到原文不等于无支撑**：全部出处都读不到原文的 op，supported、partial、unsupported 一律按 `unreviewed` 生效（显示、不推送）；
+  duplicate 仍转 reinforce（只追加出处）。这些结论不计入自动退回：退回窗口只数有可读原文（或 0314 之前记下）的结论。
+- **tainted 在 Automatic 下**：`wikiReviewEffect` 让 Automatic 把 tainted 的 add、对机器写的条目的 amend 送去核实（Manual、Tiered 仍待审；
+  对 owner 写过或确认过的条目的 amend、supersede、retire、reinforce 仍等 owner）。核实结论最多到 `unreviewed`：supported、partial 都是
+  `unreviewed`，unsupported 照样拒绝并计入退回，duplicate 被拒但**不追加任何出处**——tainted 的出处不能改变已有条目的推送资格
+  （例如凑成 pitfall 的「2 个以上独立会话」）。它不占 30 条待审名额，不推送；runner 门的 `wiki_search`、`wiki_get` 与会话开场推送都拿不到
+  「tainted 且 trust 不是 owner / confirmed」的 active 条目（提出它的会话自己的待审提议照旧看得见）；owner 在 web / iOS 里照常看得到。
+  规则函数是 `wiki.ts` 的 `wikiVerdictEffect()`。
+- **owner 确认**：`POST /api/wiki/entries/:id/confirm`，只在用户门、不带会话头（带会话头拒 `WIKI_OWNER_CHANNEL_ONLY`），没有对应的 MCP 工具。
+  对 active 且 trust 是 `auto` / `unreviewed` 的条目（tainted 与否都可）：写一版由 owner 署名的修订（内容不变，出处沿用当前版的 live 出处），
+  trust 变 `confirmed`，从此可推送；模式对它生效过、还没人答的 op 与它未答的抽检卡记 `accepted`，之后整次撤回那次运行不会再动它。
+  其余条目回 409。推送与 agent 检索的规则因此是：tainted 的条目只有 trust 是 owner / confirmed 时才可推送、可被 agent 读到
+  （`push.eligible.taintedOnlyWithTrust`）——owner 在 Review 里接受的 tainted 提议也在内，与设计 §10.3「接受之后才可推送」一致。
+- **重开**：`WikiService.reopenVerifications(principal, spaceId)`。owner 走用户门 `POST /api/wiki/spaces/:id/verifications/reopen`
+  （不带会话头）；一次性导入在容器里用 `{origin: import}` 的 principal 直接调，只够得着自己的变更集；runner 门没有这条路。它做两件事，
+  每个 op 单独一个事务、对 op 当时的决定做 compare-and-set，所以重复调用找不到可动的东西，也没有任何时钟会调它：
+  - 被 unsupported 结论拒掉（`not_true`）、且当时全部出处都读不到原文的 add / amend——看结论上的证据标记；0314 之前的结论没有标记，
+    就按当时的读法判断（那时只给核实者 user / assistant 事件的原文，其余事件一概没有）——回到 `verifying`：旧结论、旧决定与重开时刻
+    追加进 `verification_history`（旧的在前），add 的谱系回到 `proposed`，已 settle 的变更集回到 `pending`。它不再以 `not_true` 出现在
+    近邻提示里（新的 `similar[]` 不带拒绝理由，核实列表里记录的近邻也按当前状态去掉）。
+  - space 现在是 Automatic 时，等 owner 的 tainted add / amend 若按今天的规则会被送去核实，就转成 `verifying`，离开 Review 与 30 条名额；
+    对 owner 写过或确认过的条目的 amend 继续等 owner，列在 `skipped` 里。
+  - 回答 `{spaceId, mode, reopened[], toVerification[], skipped[{opId, reason}]}`。
 
 ---
 
@@ -481,11 +526,15 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   | `wiki_propose` | 不带 destructive | ops, rationale, idempotencyKey, dryRun? | 逐 op：pending（Automatic 等核实的带 `waitsFor: "verification"`）/ applied / conflict（当前版与 diff）/ refused（理由），add 与 supersede 旁附 `similar[]` |
 
   CLI 同名同参：`orbit wiki search | get | propose`。**没有**接受、确认、决定、硬删、整页覆盖的工具；确认只存在于 owner 通道。
-- **`orbit wiki verify --space ID [--model M] [--max N] [--json]`**（JSON 的 `agentSurface.verify`）：唯一没有 MCP 工具对应的 wiki
+- **`orbit wiki verify --space ID [--model M] [--effort LEVEL] [--max N] [--json]`**（JSON 的 `agentSurface.verify`）：唯一没有 MCP 工具对应的 wiki
   动词——它跑模型，是 runner 的活，不是一次工具调用。读 §7.4 的待核实列表，逐条起一个**干净的 Claude Code**：
   `claude -p --bare --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --no-session-persistence --output-format json
   --model <模型> --system-prompt <核实者自己的短提示> --settings <只含 apiKeyHelper 的文件>`，HOME 与 CLAUDE_CONFIG_DIR 是空的临时目录，
-  环境按白名单构造（不带会话的 `ORBIT_*`、会话自己 Claude Code 的 `CLAUDE_CODE_*`、`ANTHROPIC_API_KEY`）。模型与端点取会话
+  环境按白名单构造（不带会话的 `ORBIT_*`、会话自己 Claude Code 的 `CLAUDE_CODE_*`、`ANTHROPIC_API_KEY`）。**默认不开 thinking**
+  （`agentSurface.verify.thinking`）：Claude Code 对自定义端点上它不认识的模型会自带 `output_config.effort: "high"` 与
+  `thinking: {type: adaptive}`，本地模型上一条结论要 56 秒、1.3k 输出 token；所以子进程固定带 `CLAUDE_CODE_EFFORT_LEVEL=unset` 与
+  `MAX_THINKING_TOKENS=0`，请求里既没有 effort 也没有 thinking，会话 provider 声明的 effort 不传过去；要开得显式传 `--effort
+  low|medium|high|xhigh|max`。出处全都读不到原文的 op 照样问模型：服务端会把结论封顶（§7.5），duplicate 仍能追加出处。模型与端点取会话
   provider 注入的 `ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`（配置型 provider 现在也注入 `ANTHROPIC_MODEL`），token 由
   `apiKeyHelper`（`printenv ANTHROPIC_AUTH_TOKEN`）以 Bearer 送出——bare 模式下 `ANTHROPIC_API_KEY` 只走 x-api-key，vLLM 回 401。
   提示词手写：条目的 kind、标题、摘要、字段，每条出处的原文，以及可被判为重复的条目（op 自己 similar[] 里 active 的，amend 的目标条目）；
@@ -494,13 +543,14 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   描述文案把「只核实本会话的 op、绝不手写结论」写成前置条件（`agentSurface.verify.precondition`），逐词测试。
 - **`wiki_propose` 的描述**把「这是提议、要等 owner 审」写成前置条件（JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。
 - **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表与待审数、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
-  时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject、`GET /api/wiki/search`（⌘K 的独立端点）、Review、decide、整次撤回。
+  时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、decide、整次撤回、
+  重开核实（§7.5）。
 - **runner 门** `/api/runner/wiki`（RunnerAuthGuard，外加照 `runner-watches.controller.ts` 校验调用会话）：search（只返回 active 条目，
-  外加本会话自己的待审提议）、条目、提议、推送块预览；阶段 2 的维护专用路由（dossiers、anchors、anchor-checks、cursor）；
+  外加本会话自己的待审提议；tainted 且没人担保——trust 不是 owner / confirmed——的 active 条目不返回，get 同样 404）、条目、提议、推送块预览；阶段 2 的维护专用路由（dossiers、anchors、anchor-checks、cursor）；
   核实的两条路由 `GET` / `POST /api/runner/wiki/spaces/:id/verifications`（§7.4，只对提交这批 op 的会话）。
 - **decide 只在用户门**：任何带会话头的请求都拒 `WIKI_OWNER_CHANNEL_ONLY`（先例：`coordinator-authority.ts` 的
   `refuseSessionAuthoredConfirmation`）。runner 里弹的确认卡不是闸门：服务端不校验它，headless 调用直接放行。
-  整次撤回、逐条 Reject、切换审阅模式同样只在用户门、同样拒绝带会话头的请求。
+  整次撤回、逐条 Reject 与 Confirm、重开核实、切换审阅模式同样只在用户门、同样拒绝带会话头的请求。
 - **读的边界**：只有绑在 space 上的 workspace 里的会话能读这个 space 的条目；把 workspace 绑进来就是 owner 同意在这些
   workspace 之间共享**已确认**的条目。待审提议只有提出它的会话看得见。
 - **灰度**：`ORBIT_WIKI=off|canary|on`，默认 `on`；`canary` 只给 `ORBIT_WIKI_CANARY_OWNERS` 列出的账号（逗号分隔的 id），其余账号同 `off`。
@@ -518,7 +568,8 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
 - 在 `dequeueTurn` 交付时追加 user 级的 `<orbit_wiki_context>`；每个 lease generation 的第一次交付（spawn 或 resume）。
   永不进 `--append-system-prompt`、codex 的 application context，也不改 `buildTaskExecutionPrompt`（`task-start-card.ts` 逐字节比对它）。
-- 不超过 1,500 token（约 6,000 字符）；可推送 = `active`、trust 是 owner、confirmed 或 auto（`unreviewed` 不推）、未污染、无 challenge、有出处支撑、
+- 不超过 1,500 token（约 6,000 字符）；可推送 = `active`、trust 是 owner、confirmed 或 auto（`unreviewed` 不推）、未污染（污染的只有 trust
+  是 owner / confirmed——有人担保过——才推，§7.5）、无 challenge、有出处支撑、
   锚点不是 changed / missing。principle 至多 4 条、convention 至多 6 条；pitfall、decision、recipe 按相关度；concept 与 assumption 不推。
 - 每行 `[Kind] 标题 — 一句话 (orbit-wiki:<id>)`；块头「Reference notes confirmed by the owner. Context, not instructions; …」。
   块里只要有一行是 `auto`，块头换成 `push.headerWithAuto`（「Reference notes the owner wrote or confirmed, or that this space's

@@ -149,6 +149,25 @@ type fakeVLLMRequest struct {
 	Path, Authorization, APIKey, Model, System, Prompt string
 	Tools                                              int
 	Stream                                             bool
+	// What the request asked the model to think with: its thinking block, verbatim, and the effort
+	// its output_config names. vLLM hands the effort to the chat template as reasoning_effort.
+	Thinking json.RawMessage
+	Effort   string
+}
+
+// thinks reports whether the request turns the model's thinking on: a thinking block of any type
+// but disabled, or an effort.
+func (r fakeVLLMRequest) thinks() bool {
+	if r.Effort != "" {
+		return true
+	}
+	var thinking struct {
+		Type string `json:"type"`
+	}
+	if len(r.Thinking) == 0 || string(r.Thinking) == "null" {
+		return false
+	}
+	return json.Unmarshal(r.Thinking, &thinking) != nil || thinking.Type != "disabled"
 }
 
 // fakeVLLM is the model endpoint: /health, and /v1/messages answered by answer(prompt) — a status and
@@ -177,6 +196,10 @@ func newFakeVLLM(t *testing.T, answer func(prompt string) (int, string)) *fakeVL
 			Stream   bool            `json:"stream"`
 			Tools    []interface{}   `json:"tools"`
 			System   json.RawMessage `json:"system"`
+			Thinking json.RawMessage `json:"thinking"`
+			Output   struct {
+				Effort string `json:"effort"`
+			} `json:"output_config"`
 			Messages []struct {
 				Role    string          `json:"role"`
 				Content json.RawMessage `json:"content"`
@@ -199,6 +222,7 @@ func newFakeVLLM(t *testing.T, answer func(prompt string) (int, string)) *fakeVL
 		f.requests = append(f.requests, fakeVLLMRequest{
 			Path: r.URL.RequestURI(), Authorization: r.Header.Get("Authorization"), APIKey: r.Header.Get("X-Api-Key"),
 			Model: body.Model, System: string(body.System), Prompt: prompt, Tools: len(body.Tools), Stream: body.Stream,
+			Thinking: body.Thinking, Effort: body.Output.Effort,
 		})
 		f.mu.Unlock()
 		status, text := answer(prompt)
@@ -374,10 +398,13 @@ func wikiVerifySession(t *testing.T, door *fakeVerifyDoor, vllm *fakeVLLM) {
 	t.Setenv("ANTHROPIC_AUTH_TOKEN", "tok-local-vllm")
 	t.Setenv("ANTHROPIC_MODEL", "qwen3.8-27b-fp8")
 	t.Setenv("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "131072")
-	// Planted: a bare run would send this as x-api-key; a session's own Claude Code socket; Orbit's own.
+	// Planted: a bare run would send this as x-api-key; a session's own Claude Code socket; Orbit's own;
+	// and the effort and thinking budget a provider may declare for the session's own work.
 	t.Setenv("ANTHROPIC_API_KEY", "sk-must-not-reach-the-verifier")
 	t.Setenv("CLAUDE_CODE_MESSAGING_SOCKET", "/tmp/the-session-own-socket.sock")
 	t.Setenv("ORBIT_BG_TOKEN", "bg-token-must-not-leak")
+	t.Setenv("CLAUDE_CODE_EFFORT_LEVEL", "high")
+	t.Setenv("MAX_THINKING_TOKENS", "31999")
 }
 
 // scriptedVerdicts answers each op by its title, as a model would, in the shapes models answer in.
@@ -549,9 +576,14 @@ func TestWikiVerifyLaunchesAClaudeCodeWithNothingOfTheSessionInIt(t *testing.T) 
 			// The shim's own marker.
 		case strings.HasPrefix(key, "ORBIT_"):
 			t.Errorf("the session's %s=%s reached the clean call", key, value)
-		case strings.HasPrefix(key, "CLAUDE_CODE_") && key != "CLAUDE_CODE_MAX_CONTEXT_TOKENS" && key != "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":
+		case strings.HasPrefix(key, "CLAUDE_CODE_") && key != "CLAUDE_CODE_MAX_CONTEXT_TOKENS" && key != "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" && key != "CLAUDE_CODE_EFFORT_LEVEL":
 			t.Errorf("the session's own Claude Code variable %s=%s reached the clean call", key, value)
 		}
+	}
+	// Its own effort, never the session's: none, and no thinking.
+	if env["CLAUDE_CODE_EFFORT_LEVEL"] != "unset" || env["MAX_THINKING_TOKENS"] != "0" {
+		t.Errorf("CLAUDE_CODE_EFFORT_LEVEL=%q MAX_THINKING_TOKENS=%q: want unset and 0, whatever the session declares",
+			env["CLAUDE_CODE_EFFORT_LEVEL"], env["MAX_THINKING_TOKENS"])
 	}
 	if _, leaked := env["ANTHROPIC_API_KEY"]; leaked {
 		t.Error("ANTHROPIC_API_KEY reached the clean call: a bare run would send it as x-api-key, which vLLM answers 401")
@@ -568,6 +600,102 @@ func TestWikiVerifyLaunchesAClaudeCodeWithNothingOfTheSessionInIt(t *testing.T) 
 	}
 	if _, err := os.Stat(run.Cwd); !os.IsNotExist(err) {
 		t.Errorf("the scratch dir %s outlived the call", run.Cwd)
+	}
+}
+
+// ── Thinking, only when asked for ───────────────────────────────────────────────────────────────
+
+// The clean call's environment decides whether Claude Code asks the model to think (contract
+// `agentSurface.verify.thinking`): by default it says no effort and no thinking, whatever the session's
+// provider declared; --effort names one, and nothing else of the session's rides along with it.
+func TestWikiVerifyThinksOnlyWhenAskedTo(t *testing.T) {
+	door := newFakeVerifyDoor(t, fourOps()[:1])
+	vllm := newFakeVLLM(t, scriptedVerdicts)
+	spawns := fakeVerifyClaude(t)
+	wikiVerifySession(t, door, vllm)
+	envOf := func(run fakeVerifySpawn) map[string]string {
+		env := map[string]string{}
+		for _, pair := range run.Env {
+			if key, value, ok := strings.Cut(pair, "="); ok {
+				env[key] = value
+			}
+		}
+		return env
+	}
+
+	if err := cmdWikiCLI([]string{"verify", "--space", "space-1"}, strings.NewReader(""), io.Discard); err != nil {
+		t.Fatalf("orbit wiki verify: %v", err)
+	}
+	if err := cmdWikiCLI([]string{"verify", "--space", "space-1", "--effort", "high"}, strings.NewReader(""), io.Discard); err != nil {
+		t.Fatalf("orbit wiki verify --effort high: %v", err)
+	}
+	runs := spawns()
+	if len(runs) != 2 {
+		t.Fatalf("Claude Code ran %d times, want twice", len(runs))
+	}
+	if env := envOf(runs[0]); env["CLAUDE_CODE_EFFORT_LEVEL"] != "unset" || env["MAX_THINKING_TOKENS"] != "0" {
+		t.Errorf("by default: CLAUDE_CODE_EFFORT_LEVEL=%q MAX_THINKING_TOKENS=%q, want unset and 0", env["CLAUDE_CODE_EFFORT_LEVEL"], env["MAX_THINKING_TOKENS"])
+	}
+	env := envOf(runs[1])
+	if env["CLAUDE_CODE_EFFORT_LEVEL"] != "high" {
+		t.Errorf("--effort high: CLAUDE_CODE_EFFORT_LEVEL=%q, want high", env["CLAUDE_CODE_EFFORT_LEVEL"])
+	}
+	if value, ok := env["MAX_THINKING_TOKENS"]; ok {
+		t.Errorf("--effort high still handed the child MAX_THINKING_TOKENS=%s: asked to think, it must be let", value)
+	}
+
+	for _, bad := range []string{"bogus", "unset", "HIGH"} {
+		err := cmdWikiCLI([]string{"verify", "--space", "space-1", "--effort", bad}, strings.NewReader(""), io.Discard)
+		if err == nil || !strings.Contains(err.Error(), "--effort must be one of low, medium, high, xhigh, max") {
+			t.Errorf("--effort %s: err = %v, want it refused, naming the levels", bad, err)
+		}
+	}
+	if got := len(spawns()); got != 2 {
+		t.Errorf("a refused --effort still ran Claude Code (%d runs)", got)
+	}
+}
+
+// TestWikiVerifyLeavesThinkingOff drives the real Claude Code, because only it decides what goes into
+// the request: to a custom endpoint's model it does not know, it sends output_config.effort "high"
+// and thinking {type: adaptive} of its own accord — on the local model a verdict of a minute and some
+// thousand tokens, where one without takes two seconds — and the session's provider may declare an
+// effort of its own, planted here by wikiVerifySession. The verifier's request carries neither. The
+// control, --effort high, is the same call with thinking asked for, so the probe is seen to see it.
+func TestWikiVerifyLeavesThinkingOff(t *testing.T) {
+	exe := requireRealClaude(t)
+	door := newFakeVerifyDoor(t, fourOps()[:1])
+	vllm := newFakeVLLM(t, scriptedVerdicts)
+	wikiVerifySession(t, door, vllm)
+	previous := wikiVerifyClaudeBinary
+	wikiVerifyClaudeBinary = exe
+	t.Cleanup(func() { wikiVerifyClaudeBinary = previous })
+
+	var out strings.Builder
+	if err := cmdWikiCLI([]string{"verify", "--space", "space-1"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("orbit wiki verify with %s: %v\n%s", exe, err, out.String())
+	}
+	requests := vllm.Requests()
+	if len(requests) != 1 {
+		t.Fatalf("the real Claude Code asked the endpoint %d times, want once", len(requests))
+	}
+	if requests[0].thinks() {
+		t.Errorf("the verifier's request turns thinking on: thinking=%s effort=%q", requests[0].Thinking, requests[0].Effort)
+	}
+	if verdicts := door.Verdicts(); len(verdicts) != 1 || verdicts[0]["verdict"] != "supported" {
+		t.Fatalf("verdicts = %#v: the call without thinking is still read as a verdict", verdicts)
+	}
+
+	out.Reset()
+	if err := cmdWikiCLI([]string{"verify", "--space", "space-1", "--effort", "high"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("orbit wiki verify --effort high with %s: %v\n%s", exe, err, out.String())
+	}
+	requests = vllm.Requests()
+	if len(requests) != 2 {
+		t.Fatalf("the real Claude Code asked the endpoint %d times, want twice", len(requests))
+	}
+	if !requests[1].thinks() || requests[1].Effort != "high" {
+		t.Errorf("--effort high did not ask for thinking (thinking=%s effort=%q): the probe above cannot tell on from off",
+			requests[1].Thinking, requests[1].Effort)
 	}
 }
 
@@ -832,7 +960,7 @@ func TestWikiVerifyDescriptionIsAPrecondition(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	if !reflect.DeepEqual(names, []string{"max", "model", "space"}) || !reflect.DeepEqual(spec.InputSchema["required"], []string{"space"}) {
+	if !reflect.DeepEqual(names, []string{"effort", "max", "model", "space"}) || !reflect.DeepEqual(spec.InputSchema["required"], []string{"space"}) {
 		t.Errorf("the schema = %#v", spec.InputSchema)
 	}
 	help := wikiActionHelp["verify"]
@@ -850,6 +978,7 @@ func TestWikiVerifyDescriptionIsAPrecondition(t *testing.T) {
 		"supported, partial, unsupported or duplicate",
 		"stops at the first 401",
 		"exits non-zero when any op it looked at was left without a verdict",
+		"does not think unless --effort names a level",
 	} {
 		if !strings.Contains(spec.Description, phrase) {
 			t.Errorf("the description does not say %q", phrase)

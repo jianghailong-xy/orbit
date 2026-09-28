@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   WIKI_LIMITS,
+  WIKI_VOUCHED_TRUST,
   type WikiAnchorState,
   type WikiSearchHit,
   type WikiSearchMatch,
@@ -259,14 +260,17 @@ function matchSql(norm: NormalizedSearchQuery, col: Prisma.Sql): Prisma.Sql {
  * A session's set is `active` plus what IT proposed and that still waits — the op row it wrote,
  * still `pending`, pointing at the entry it created. That is a session reading its own unaccepted
  * claim back, which is what `readBoundary` allows; another session's proposal is invisible here, and
- * the owner reads those in Review.
+ * the owner reads those in Review. And a live entry that rests on a web-derived record reaches a
+ * session only once a person has vouched for it (`reviewModes.floors.taintedWaits`): tainted, with a
+ * trust that is not the owner's or confirmed, it is the owner's to read and never an agent's.
  */
 function visibilitySql(request: WikiSearchRequest): Prisma.Sql {
   const sessionId = request.sessionId ?? null;
   const statuses = sessionId ? ['active'] : [...(request.statuses?.length ? request.statuses : ['active'])];
   const live = Prisma.sql`e."status" = ANY(${textArray(statuses)})`;
   if (!sessionId) return live;
-  return Prisma.sql`(${live} OR (e."status" = 'proposed' AND EXISTS (
+  const vouched = Prisma.sql`(NOT e."tainted" OR e."trust" = ANY(${textArray(WIKI_VOUCHED_TRUST)}))`;
+  return Prisma.sql`((${live} AND ${vouched}) OR (e."status" = 'proposed' AND EXISTS (
       SELECT 1
         FROM "wiki_changeset_op" o
         JOIN "wiki_changeset" c ON c."id" = o."changeset_id" AND c."owner_id" = o."owner_id"

@@ -104,12 +104,14 @@ ready. What this writes waits for the owner — do not tell the user it is saved
 	"verify": `orbit wiki verify — have the local model verify what this session proposed into an automatic space
 
 Usage:
-  orbit wiki verify --space ID [--model MODEL] [--max N] [--json]
+  orbit wiki verify --space ID [--model MODEL] [--effort LEVEL] [--max N] [--json]
 
 Options:
   --space ID               The automatic space this session proposed into. Required
   --model MODEL            The model to verify with. Default: ANTHROPIC_MODEL, the model this
                            session's provider names, at its ANTHROPIC_BASE_URL
+  --effort LEVEL           Have the model think, with this effort: low, medium, high, xhigh or max.
+                           Default: it does not think, whatever effort the provider declares
   --max N                  Verify at most N ops in this run; the rest keep waiting for the next
   --json                   Print the run's summary as JSON
 
@@ -247,10 +249,11 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 		// which is a runner's work, so its description is its own rather than a descriptor's.
 		Tool:  "wiki_verify",
 		Argv:  []string{"orbit", "wiki", "verify"},
-		Usage: "orbit wiki verify --space ID [--model MODEL] [--max N] [--json]",
+		Usage: "orbit wiki verify --space ID [--model MODEL] [--effort LEVEL] [--max N] [--json]",
 		Arguments: []string{
 			"--space <id> (required; the automatic space this session proposed into)",
 			"--model <model> (default ANTHROPIC_MODEL, the model this session's provider names)",
+			"--effort <" + strings.Join(wikiVerifyEfforts, "|") + "> (default: the model does not think)",
 			"--max <n> (verify at most n ops this run)",
 			"--json",
 		},
@@ -258,9 +261,10 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"space": map[string]interface{}{"type": "string", "description": "The automatic space this session proposed into."},
-				"model": map[string]interface{}{"type": "string", "description": "The model to verify with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
-				"max":   map[string]interface{}{"type": "integer", "minimum": 1, "description": "Verify at most this many ops in this run; the rest keep waiting."},
+				"space":  map[string]interface{}{"type": "string", "description": "The automatic space this session proposed into."},
+				"model":  map[string]interface{}{"type": "string", "description": "The model to verify with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
+				"effort": map[string]interface{}{"type": "string", "enum": wikiVerifyEfforts, "description": "Have the model think, with this effort. Left out, it does not think, whatever effort the session's provider declares."},
+				"max":    map[string]interface{}{"type": "integer", "minimum": 1, "description": "Verify at most this many ops in this run; the rest keep waiting."},
 			},
 			"required": []string{"space"},
 		},
