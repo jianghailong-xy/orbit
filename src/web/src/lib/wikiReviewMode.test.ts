@@ -10,7 +10,7 @@ import {
   WIKI_DEFAULT_MAINTENANCE_SETTINGS,
   WIKI_DEFAULT_SPACE_SETTINGS,
   type WikiAnchor,
-  type WikiChangeset,
+  type WikiChangesetView,
   type WikiEntry,
   type WikiReviewMode,
   type WikiSpaceSettings,
@@ -152,8 +152,7 @@ interface Fixture {
   }>;
   runs: Array<{
     name: string;
-    changeset: WikiChangeset;
-    entries: WikiEntry[];
+    view: WikiChangesetView;
     isRun: boolean;
     kicker: string;
     title: string;
@@ -163,7 +162,8 @@ interface Fixture {
     amended: string[];
     reinforced: string[];
     marks: Record<string, string | null>;
-    revert: string;
+    revertOffered: boolean;
+    revert: string | null;
   }>;
   revertDialog: {
     title: string;
@@ -178,9 +178,8 @@ interface Fixture {
   };
   recent: Array<{
     name: string;
-    items: Array<{ opId: string; at: string }>;
-    runs: string[];
-    rows: Array<{ run?: string; at?: string; items?: string[]; op?: string }>;
+    items: Array<{ opId: string; at: string; origin: string; changesetId?: string | null; changesetAppliedByMode?: string | null }>;
+    rows: Array<{ run?: string; origin?: string; at?: string; items?: string[]; op?: string }>;
   }>;
   challenge: { answers: string[]; waits: string; challenged: string; amendNote: string };
   challenges: Array<{
@@ -327,15 +326,14 @@ describe('an entry’s marks and the owner’s answers', () => {
 });
 
 describe('one run', () => {
-  it('counts what it applied, what the check turned away and what waits — and groups its entries', () => {
+  it('says what its read counts, groups its entries, and offers Revert exactly when the server says it can', () => {
     inTimeZone('UTC', () => {
       for (const run of shared.runs) {
-        const entries = new Map(run.entries.map((entry) => [entry.id, entry]));
-        const summary = wikiRunSummary(run.changeset, entries);
-        expect(wikiIsRun(run.changeset), run.name).toBe(run.isRun);
-        expect(wikiRunKicker(run.changeset.origin), run.name).toBe(run.kicker);
+        const summary = wikiRunSummary(run.view);
+        expect(wikiIsRun(run.view), run.name).toBe(run.isRun);
+        expect(wikiRunKicker(run.view.origin), run.name).toBe(run.kicker);
         expect(wikiAppliedChanges(summary.applied), run.name).toBe(run.title);
-        expect(wikiRunWhen(run.changeset.createdAt), run.name).toBe(run.when);
+        expect(wikiRunWhen(run.view.createdAt), run.name).toBe(run.when);
         expect(wikiRunCounts(summary), run.name).toEqual(run.counts);
         expect(summary.added.map((row) => row.title), run.name).toEqual(run.added);
         expect(summary.amended.map((row) => row.title), run.name).toEqual(run.amended);
@@ -344,9 +342,13 @@ describe('one run', () => {
           [...summary.added, ...summary.amended, ...summary.reinforced].map((row) => [row.title, row.trust]),
         );
         expect(marks, run.name).toEqual(run.marks);
-        expect(wikiRevertBody(summary), run.name).toBe(run.revert);
+        expect(summary.revertible, run.name).toBe(run.revertOffered);
+        expect(summary.revertible ? wikiRevertBody(summary) : null, run.name).toBe(run.revert);
       }
     });
+    // The case criterion 8 was missing: a run nothing of which waits in Review is read, and revertible.
+    const settled = shared.runs.filter((run) => run.view.ops.every((op) => op.decision !== 'pending') && run.revertOffered);
+    expect(settled.length).toBeGreaterThan(0);
   });
 
   it('asks before it reverts, in the confirmed words', () => {
@@ -366,14 +368,13 @@ describe('one run', () => {
     expect([WIKI_RUN_ADDED, WIKI_RUN_AMENDED, WIKI_RUN_REINFORCED]).toEqual(dialog.groups);
   });
 
-  it('folds a run into one row of Recently changed, at its newest change', () => {
-    const byId = new Map(shared.runs.map((run) => [run.changeset.id, run.changeset]));
+  it('folds every run into one row of Recently changed, at its newest change, by the changeset its items name', () => {
     for (const recent of shared.recent) {
-      const rows = wikiRecentRows(recent.items, recent.runs.map((id) => byId.get(id)!));
+      const rows = wikiRecentRows(recent.items);
       expect(
         rows.map((row) =>
           row.kind === 'run'
-            ? { run: row.changeset.id, at: row.at, items: row.items.map((item) => item.opId) }
+            ? { run: row.changesetId, origin: row.origin, at: row.at, items: row.items.map((item) => item.opId) }
             : { op: row.item.opId },
         ),
         recent.name,

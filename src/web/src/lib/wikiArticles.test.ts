@@ -5,7 +5,6 @@ import type { WikiArticleDirectory, WikiArticleIndex, WikiEntry } from '@orbit/s
 import { WIKI_ACTION_OPEN, WIKI_AGENTS_USED, WIKI_PRINCIPLES, WIKI_RECENT_DECISIONS, WIKI_RECENTLY_CHANGED } from './wiki';
 import {
   WIKI_ARTICLE_ENTRIES,
-  WIKI_ARTICLE_ENTRIES_HINT,
   WIKI_ARTICLE_SECTIONS,
   WIKI_AZ_INDEX,
   WIKI_BROWSE,
@@ -20,6 +19,7 @@ import {
   WIKI_NO_ARTICLE_YET,
   WIKI_OTHER_TOPICS,
   WIKI_TOPIC_OVERVIEW,
+  wikiArticleEntriesHint,
   wikiArticleGroups,
   wikiArticleKindTags,
   wikiArticlePath,
@@ -62,7 +62,6 @@ interface Fixture {
     other: string;
     footnotes: string;
     entries: string;
-    entriesHint: string;
     footnoteGone: string;
     openEntry: string;
     topicOverview: string;
@@ -102,6 +101,7 @@ interface Fixture {
   counts: Array<{ n: number; says: string }>;
   updated: Array<{ article: { generatedAt: string; ref: string | null; entryCount: number }; says: string }>;
   entriesCited: Array<{ n: number; says: string }>;
+  entriesHints: Array<{ n: number; says: string }>;
   sourcesLines: Array<{ sources: number; sessions: number; says: string }>;
   segments: Array<{ text: string; says: WikiSentenceSegment[] }>;
   noteLabels: Array<{ n: number; says: string }>;
@@ -147,7 +147,6 @@ describe("the articles' words", () => {
     expect(WIKI_OTHER_TOPICS).toBe(words.other);
     expect(WIKI_FOOTNOTES).toBe(words.footnotes);
     expect(WIKI_ARTICLE_ENTRIES).toBe(words.entries);
-    expect(WIKI_ARTICLE_ENTRIES_HINT).toBe(words.entriesHint);
     expect(WIKI_FOOTNOTE_GONE).toBe(words.footnoteGone);
     expect(WIKI_ACTION_OPEN).toBe(words.openEntry);
     expect(WIKI_TOPIC_OVERVIEW).toBe(words.topicOverview);
@@ -160,6 +159,7 @@ describe("the articles' words", () => {
     const shared = fixture();
     for (const row of shared.counts) expect(wikiCount(row.n)).toBe(row.says);
     for (const row of shared.entriesCited) expect(wikiEntriesCited(row.n)).toBe(row.says);
+    for (const row of shared.entriesHints) expect(wikiArticleEntriesHint(row.n)).toBe(row.says);
     for (const row of shared.sourcesLines) expect(wikiSourcesLine(row.sources, row.sessions)).toBe(row.says);
     for (const row of shared.noteLabels) expect(wikiNoteLabel(row.n)).toBe(row.says);
   });
