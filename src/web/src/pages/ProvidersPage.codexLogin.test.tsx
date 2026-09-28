@@ -385,6 +385,35 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     ]);
   });
 
+  it('gives up a sign-in whose code was still on its way when the dialog closed', async () => {
+    pools = [codexPool(null)];
+    await mount(AT);
+    // The server takes its time printing the code: the start is still out when the person gives up.
+    let answer: (value: unknown) => void = () => {};
+    const base = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation((async (p: string, init?: { method?: string; body?: unknown }) => {
+      if (init?.method === 'POST' && p === LOGIN) {
+        sent.push({ method: 'POST', path: p, body: init?.body });
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      }
+      return base(p, init as never);
+    }) as typeof api);
+    await click(button('Sign in with ChatGPT'));
+    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Cancel', dialog()!));
+    expect(sent).toEqual([{ method: 'POST', path: LOGIN, body: undefined }]);
+    await act(async () => {
+      answer({ status: 'PENDING', verificationUrl: DEVICE_URL, userCode: CODE, expiresAt: CODE_EXPIRES });
+    });
+    await settle();
+    expect(sent).toEqual([
+      { method: 'POST', path: LOGIN, body: undefined },
+      { method: 'DELETE', path: LOGIN, body: undefined },
+    ]);
+  });
+
   it('offers a new code once the old one expired', async () => {
     pools = [codexPool(null)];
     polls = [{ status: 'EXPIRED', account: null }];
