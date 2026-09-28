@@ -3680,6 +3680,9 @@ export class RunnerApiController {
           // How much of that budget is spent, for the one failure class whose wait is decided
           // here rather than by a reply's text — see `retryArmAt` below.
           retryAttempts: true,
+          // Which shared pool's key a failed turn may have ended on — see `keyRetryAt` below.
+          provider: true,
+          poolKeyId: true,
           // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
           // work that will report back and wake this session again, which is what makes a turn the
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
@@ -3986,8 +3989,24 @@ export class RunnerApiController {
       // Never over an arm already standing: one is set by the failure this turn is repeating, it
       // is closer to firing than anything computed now, and re-deciding it here would restart the
       // countdown on every attempt — the one shape that makes a bounded ladder unbounded.
-      const retryArmAt =
-        unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
+      //
+      // A model turn a shared pool's key ended is armed ahead of that ladder: the gateway refused the key,
+      // or OpenAI said it is out of budget or refused it, and the next claim moves the session to another
+      // key. That is re-sent the moment another key can take it, or at the first reset when none can
+      // (QueueService.sharedPoolKeyRetryAt) — the account pool's "room on another member re-sends now",
+      // for keys. Decided from the keys, not from the engine's words, and never for a turn whose key can
+      // still run: that failure was not the key's.
+      const keyRetryAt =
+        dto.status === RunStatus.FAILED
+        && completedTurn?.kind === 'message'
+        && current.retryAt == null
+        // Only a configured provider's slug can name a pool, as in quotaRetryAt.
+        && !isBuiltinProvider(current.provider)
+          ? await this.queue.sharedPoolKeyRetryAt(tx, current, new Date())
+          : null;
+      const retryArmAt = keyRetryAt
+        ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
+        : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
           ? nextAutoRetryAt(current.retryAttempts, new Date())
           : null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
@@ -5337,9 +5356,20 @@ export class RunnerApiController {
               select: { env: true, codexAccount: true },
             })
           : null;
+      // A shared pool's key that ended the run is waited out the same way, from the keys rather than the
+      // words (QueueService.sharedPoolKeyRetryAt): now while another key can take the work.
+      const keyRetryAt =
+        effectiveStatus === RunStatus.FAILED
+        && current.retryAt == null
+        && !quotaSpent
+        && !isBuiltinProvider(current.provider)
+          ? await this.queue.sharedPoolKeyRetryAt(tx, current, new Date())
+          : null;
       const quotaRetryAt = quotaSpent
         ? await this.quotaRetryAt(tx, runner.id, current, dto.error!, workspace)
-        : null;
+        : keyRetryAt
+          ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
+          : null;
 
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.

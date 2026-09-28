@@ -8,7 +8,7 @@ import { sha256 } from '../common/crypto.util';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 
 /**
- * Shared Codex pools' tables (migration 0320) against a real PostgreSQL.
+ * Shared Codex pools' tables (migration 0321) against a real PostgreSQL.
  *
  * What makes a shared pool safe to hand keys to is largely held by the database, so only a database can
  * show it: the composite foreign key that keeps a key's contributor inside the key's own pool, the unique
@@ -32,7 +32,7 @@ const pgError = (code: string, constraint?: string) => (e: unknown) => {
   return true;
 };
 
-test('shared pools (migration 0320) against PostgreSQL', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
+test('shared pools (migration 0321) against PostgreSQL', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
   const url = PG_URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
@@ -86,10 +86,10 @@ test('shared pools (migration 0320) against PostgreSQL', { skip, concurrency: 1,
   const count = async (table: string, where: string, params: unknown[]) =>
     (await sql.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${table} WHERE ${where}`, params)).rows[0].n;
 
-  await t.test('0320 replayed onto this server: the provider_pool columns, the four tables, and session.pool_key_id', async () => {
+  await t.test('0321 replayed onto this server: the provider_pool columns, the four tables, and session.pool_key_id', async () => {
     const applied = await sql.query(
       `SELECT finished_at IS NOT NULL AS finished, rolled_back_at IS NOT NULL AS rolled_back
-         FROM _prisma_migrations WHERE migration_name = '0320_shared_provider_pool'`,
+         FROM _prisma_migrations WHERE migration_name = '0321_shared_provider_pool'`,
     );
     assert.deepEqual(applied.rows, [{ finished: true, rolled_back: false }]);
     const columns = await sql.query<{ table_name: string; column_name: string; column_default: string | null; is_nullable: string }>(

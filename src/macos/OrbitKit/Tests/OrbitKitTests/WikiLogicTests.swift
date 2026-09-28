@@ -149,16 +149,6 @@ final class WikiLogicTests: XCTestCase {
 
     // MARK: the home page
 
-    func testTopicsAreTheSlugsInUseMostEntriesFirst() throws {
-        let entries = try WikiFixtures.decode([WikiEntry].self, WikiFixtures.entries)
-        let topics = WikiLogic.topicSummaries(entries)
-        XCTAssertEqual(topics.map(\.slug), ["runner-engines", "tasks-dispatch", "projects-criteria",
-                                            "deploy-ops", "testing-ci"])
-        XCTAssertEqual(topics.map(\.count), [3, 3, 2, 1, 1])
-        XCTAssertEqual(topics[1].latest?.title, "Task priority is a field on the task, not a dispatcher session",
-                       "the most recently changed entry is the line a topic shows")
-    }
-
     func testTheBandsReadTheirEntriesNewestFirst() throws {
         let entries = try WikiFixtures.decode([WikiEntry].self, WikiFixtures.entries)
         XCTAssertEqual(WikiLogic.entries(entries, ofKind: .decision).map(\.title), [
@@ -170,12 +160,12 @@ final class WikiLogicTests: XCTestCase {
     }
 
     /// The home page's bands, top to bottom: the search under the title, then the one band that asks
-    /// for anything, then the rest in the web phone's order.
+    /// for anything, then the rest in the web phone's order. The topics are the Contents sheet now.
     func testTheHomeBandsOrder() {
-        XCTAssertEqual(WikiLogic.HomeBand.allCases, [.search, .reviewBanner, .principles, .topics,
+        XCTAssertEqual(WikiLogic.HomeBand.allCases, [.search, .reviewBanner, .principles,
                                                      .recentDecisions, .recentlyChanged, .agentsUsed])
         XCTAssertEqual(WikiLogic.HomeBand.allCases.compactMap(\.title),
-                       ["Principles", "Topics", "Recent decisions", "Recently changed", "Agents used the wiki"])
+                       ["Principles", "Recent decisions", "Recently changed", "Agents used the wiki"])
         XCTAssertEqual(WikiLogic.entrySections, ["Details", "Sources", "Anchors", "Where it's used", "History"])
     }
 
@@ -200,13 +190,6 @@ final class WikiLogicTests: XCTestCase {
         XCTAssertTrue(home.usedThisWeek)
         XCTAssertEqual(home.statusLine, "9 entries · Anchors verified at 4db4f9f")
         XCTAssertEqual(home.proposals, 3)
-        XCTAssertEqual(WikiLogic.topicTitle("tasks-dispatch"), "Tasks dispatch")
-        XCTAssertEqual(WikiLogic.topicTitle("ci"), "Ci")
-        let latest = try XCTUnwrap(home.topics.first?.latest)
-        XCTAssertEqual(WikiLogic.entryVerb(latest, loaded: home.loadedIDs), "Confirmed")
-        XCTAssertEqual(WikiLogic.entryVerb(WikiEntry(id: "e", status: .retired), loaded: []), "Retired")
-        XCTAssertEqual(WikiLogic.entryVerb(WikiEntry(id: "e", status: .active, trust: .owner), loaded: []),
-                       "Added by you")
     }
 
     func testASourcesWordAndRef() {

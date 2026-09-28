@@ -374,7 +374,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'providerIds',
   // The pool member a session last ran on (migration 0268): the same provider address as above.
   'poolMemberProviderId',
-  // Shared pools (migration 0320): the person who put a key in, a ledger row's key, and the key a
+  // Shared pools (migration 0321): the person who put a key in, a ledger row's key, and the key a
   // session's last claim chose. Addresses of a key and a person the pool page hands out and takes back.
   'contributorId',
   'keyId',
@@ -479,6 +479,13 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // with no foreign key on purpose (the trail outlives the entry), so it may 404 — never a fence.
   'verificationDuplicateOf',
   'duplicateOf',
+  // The articles (migration 0317): the topic an article belongs to, the overview a subtopic article
+  // hangs on, and the entries it was written from. Addresses a reader follows; the entry ids carry
+  // no foreign key (a snapshot the next generation replaces), so they may name a lineage that has
+  // since left the topic — never a fence.
+  'topicId',
+  'parentId',
+  'entryIds',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

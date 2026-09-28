@@ -76,6 +76,31 @@ const POOL = {
   ],
 };
 
+/** A shared pool of OpenAI keys (lib/sharedPools.ts) the user is in: orbit-org-1 is the next key for
+ *  them, orbit-org-2 is where the shared-pool session below runs. The cap bars are what the others
+ *  spent of each key's cap this month. */
+const SHARED_SLUG = 'team-codex';
+const ORG1 = encodeId('0195c0de-0000-7000-8000-0000000000d1');
+const ORG2 = encodeId('0195c0de-0000-7000-8000-0000000000d2');
+const sharedKey = (id: string, label: string, othersCostUsd: number, next: boolean) => ({
+  id, label, fingerprint: 'sk-…AB12', state: 'ACTIVE', enabled: true, shareCap: 50,
+  contributor: { userId: 'user-1', name: 'R', you: false },
+  usage: { inputTokens: 0, outputTokens: 0, costUsd: othersCostUsd, othersCostUsd },
+  running: false, next,
+});
+const SHARED = {
+  id: encodeId('0195c0de-0000-7000-8000-0000000000d3'),
+  slug: SHARED_SLUG,
+  label: 'Team Codex',
+  engine: 'codex',
+  membersCanAdd: true,
+  ownKeyFirst: true,
+  viewerRole: 'MEMBER',
+  window: { start: '2026-09-01T00:00:00.000Z', end: '2026-10-01T00:00:00.000Z' },
+  people: [],
+  keys: [sharedKey(ORG1, 'orbit-org-1', 12.5, true), sharedKey(ORG2, 'orbit-org-2', 31, false)],
+};
+
 const session = (poolMemberProviderId: string | null) => ({
   id: SESSION,
   workspaceId: WORKSPACE,
@@ -103,7 +128,8 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
   let container: HTMLDivElement | null = null;
   let root: Root | null = null;
   let client: QueryClient | null = null;
-  let detail = session(HOME);
+  let detail: Record<string, unknown> = session(HOME);
+  let workspaceProvider = POOL_SLUG;
 
   const mounted = (): HTMLDivElement => {
     if (!container) throw new Error('WorkspaceView is not mounted');
@@ -147,6 +173,7 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     detail = session(HOME);
+    workspaceProvider = POOL_SLUG;
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
     vi.stubGlobal('EventSource', FakeEventSource);
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: [], hasMore: false } as never);
@@ -168,8 +195,11 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
         ]);
       }
       if (p === '/providers/pools') return reply([POOL]);
+      if (p === '/providers/shared-pools') return reply([SHARED]);
       if (p === '/workspaces') {
-        return reply([{ id: WORKSPACE, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z', lastProvider: POOL_SLUG }]);
+        return reply([
+          { id: WORKSPACE, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z', lastProvider: workspaceProvider },
+        ]);
       }
       if (p.startsWith(`/sessions/${SESSION}`)) {
         if (p.includes('/events/page')) return reply({ events: [], hasMore: false });
@@ -259,5 +289,23 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
     const card = mounted().querySelector<HTMLElement>('.np-card')!;
     expect(card.getAttribute('aria-label')).toBe('Provider: Claude accounts');
     expect(card.querySelector('.np-pool-badge')?.textContent).toBe('2');
+  });
+
+  it("on a shared pool, names the key the session's claim chose and what the others spent of its cap", async () => {
+    detail = { ...session(null), provider: SHARED_SLUG, poolKeyId: ORG2 };
+    await mount(`/sessions/${SESSION}`, '.composer-account');
+    expect(account()?.textContent).toBe('orbit-org-2');
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 62%');
+    expect(account()?.textContent).not.toContain('Team Codex');
+  });
+
+  it('on a new session on a shared pool, names the key it will start on, and counts the pool in keys', async () => {
+    workspaceProvider = SHARED_SLUG;
+    await mount(`/workspaces/${WORKSPACE}/new`, '.composer-account');
+    expect(account()?.textContent).toBe('orbit-org-1');
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 25%');
+    const card = mounted().querySelector<HTMLElement>('.np-card')!;
+    expect(card.getAttribute('aria-label')).toBe('Provider: Team Codex');
+    expect(card.querySelector('.np-pool-badge')?.getAttribute('aria-label')).toBe('2 keys');
   });
 });

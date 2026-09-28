@@ -146,6 +146,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_IDEMPOTENCY_KEY_REUSED',
   'WIKI_CURSOR_BEHIND',
   'WIKI_CURSOR_INVALID',
+  'WIKI_ARTICLE_STALE',
 ] as const;
 export type WikiRefusalCode = (typeof WIKI_REFUSAL_CODES)[number];
 
@@ -942,8 +943,10 @@ export const WIKI_MAINTENANCE_RULES = {
   batchTemplateMinTasks: 20,
   /** A settled task's agent comments, the newest this many, are what its dossier carries. */
   commentTail: 3,
-  /** The two conditions a maintenance task is due on (criterion 3 reads them). */
+  /** The two conditions a maintenance task is due on (criterion 3 reads them): this many sessions
+   *  with a fact after the watermark… */
   backlogThreshold: 20,
+  /** …or a fact after it older than this, when a new fact arrives. */
   maxPendingAgeHours: 24,
 } as const;
 
@@ -1039,8 +1042,13 @@ export interface WikiCursorState {
   lastOutcome: WikiCursorOutcome | null;
   consecutiveFailures: number;
   lastError: string | null;
-  /** The two due conditions (rules.backlogThreshold, rules.maxPendingAgeHours). */
+  /** The two due conditions: rules.backlogThreshold sessions pending, or the oldest fact past rules.maxPendingAgeHours. */
   due: { backlog: boolean; age: boolean };
+  /**
+   * Why the last fact that found the space due made no task, and when (contract `maintenance.job.held`):
+   * null once a task is made.
+   */
+  held: { reason: 'daily_limit_reached' | 'review_queue_full'; at: string } | null;
 }
 
 /** `GET /api/runner/wiki/spaces/:id/dossiers`. */

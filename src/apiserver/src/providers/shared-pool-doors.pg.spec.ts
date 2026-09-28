@@ -1,6 +1,6 @@
 /**
  * docs/codex-shared-pool-design.md §2.5 on real PostgreSQL, one case per row and every cell in it — with
- * "account" read as "key" throughout (migration 0320):
+ * "account" read as "key" throughout (migration 0321):
  *
  *   action                                                      admin           member            not in it
  *   (1) see the pool, pick it, open a session on it             yes             yes               as if it did not exist

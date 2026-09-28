@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { App, Button, Input, Modal, Select } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { KIND_SPECS, WIKI_LIMITS, type WikiFieldSchema, type WikiKind } from '@orbit/shared';
 import { WIKI_KIND_LABELS, WIKI_NEW_ENTRY, wikiKindWord } from '../lib/wiki';
+import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { proposeToWiki, useWikiWrite, wikiIdempotencyKey } from '../lib/wikiWrites';
 
 /**
@@ -20,10 +22,13 @@ import { proposeToWiki, useWikiWrite, wikiIdempotencyKey } from '../lib/wikiWrit
  */
 export function WikiNewEntryButton({ spaceId }: { spaceId: string }) {
   const [open, setOpen] = useState(false);
+  // `+ New entry` on a desktop, the `+` alone on a phone, where the head keeps its buttons to their
+  // icons (mocks 11 ①, 12 ①); its name stays New entry either way.
+  const phone = useMediaQuery(PHONE_QUERY);
   return (
     <>
-      <Button type="primary" onClick={() => setOpen(true)}>
-        {WIKI_NEW_ENTRY}
+      <Button type="primary" icon={<PlusOutlined />} aria-label={WIKI_NEW_ENTRY} onClick={() => setOpen(true)}>
+        {phone ? null : WIKI_NEW_ENTRY}
       </Button>
       {open && <NewEntryModal spaceId={spaceId} onClose={() => setOpen(false)} />}
     </>

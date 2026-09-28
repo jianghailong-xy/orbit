@@ -280,7 +280,7 @@ model User {
   deviceTokens     DeviceToken[] // registered iOS devices for APNs push
   modelProviders   ModelProvider[] // personal (BYOK) model providers
   providerPools    ProviderPool[] // account pools of those providers, each dispatchable by its own slug
-  poolPlaces       ProviderPoolPerson[] // the shared pools this user is in (migration 0320)
+  poolPlaces       ProviderPoolPerson[] // the shared pools this user is in (migration 0321)
   poolUsage        PoolUsage[] // what this user spent on shared-pool keys, by key and month
   sessionTags      SessionTag[] // personal colored session labels (tenant scope)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
@@ -997,7 +997,7 @@ model Session {
   // start event carries it (RunnerApiController.events). Not a run_event of its own: the runner
   // numbers those, and a row inserted here would take the seq its next event is about to use.
   poolSwitchNotice     String?   @map("pool_switch_notice")
-  // Only for a session whose provider is a shared pool (migration 0320): the PoolApiKey its last claim
+  // Only for a session whose provider is a shared pool (migration 0321): the PoolApiKey its last claim
   // chose, which the next claim stays on while that key can run (QueueService.resolveSharedPool). No
   // relation, for the reason poolMemberProviderId has none.
   poolKeyId            String?   @map("pool_key_id") @db.Uuid
@@ -5156,7 +5156,7 @@ model ProviderPool {
   ownerId   String               @map("owner_id") @db.Uuid
   owner     User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   members   ProviderPoolMember[]
-  // Migration 0320. A personal pool is `claude` and not shared — every pool 0265 made; a shared pool is
+  // Migration 0321. A personal pool is `claude` and not shared — every pool 0265 made; a shared pool is
   // `codex`, runs on the organization/project OpenAI keys its people put in (PoolApiKey), and is reached
   // by its people only. `provider_pool_engine_check` holds the pair together.
   engine        String               @default("claude")
@@ -5189,7 +5189,7 @@ model ProviderPoolMember {
   @@map("provider_pool_member")
 }
 
-/// One person in a shared pool (migration 0320), and whether they run it (ADMIN) or use it (MEMBER).
+/// One person in a shared pool (migration 0321), and whether they run it (ADMIN) or use it (MEMBER).
 /// Their keys and their session tokens hang off this row, so removing it takes both with it.
 model ProviderPoolPerson {
   poolId    String             @map("pool_id") @db.Uuid
@@ -5207,7 +5207,7 @@ model ProviderPoolPerson {
   @@map("provider_pool_person")
 }
 
-/// An organization/project OpenAI API key in a shared pool (migration 0320). The key is held only as
+/// An organization/project OpenAI API key in a shared pool (migration 0321). The key is held only as
 /// `secretEncrypted` and leaves this server only through the pool gateway; nothing a client or a
 /// runner is handed carries it. `keyFingerprint` (its SHA-256) is what a second add of the same key
 /// collides on, and `keyHint` (its last four characters) is all any response shows of it.
@@ -5229,6 +5229,10 @@ model PoolApiKey {
   enabled         Boolean            @default(true)
   // Whole US dollars a calendar month everyone but the contributor may spend on it; null = no cap.
   shareCap        Int?               @map("share_cap")
+  // Out of budget until then (migration 0322): OpenAI answered `insufficient_quota` for it, and this is
+  // the reset it named, else the first of the next month. No claim chooses it before; a request that
+  // goes through on it, or a new secret, clears it.
+  spentUntil      DateTime?          @map("spent_until")
   usage           PoolUsage[]
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
@@ -5240,7 +5244,7 @@ model PoolApiKey {
   @@map("pool_api_key")
 }
 
-/// The credential a shared-pool session runs with in place of a key (migration 0320): minted by each
+/// The credential a shared-pool session runs with in place of a key (migration 0321): minted by each
 /// build of the session's engine environment — the claim, a reclaim, a provider-switch reload — and
 /// stored only as its SHA-256. Bound to the pool, the person and the session; removing the person or
 /// deleting the pool deletes it through the person's row.
@@ -5261,7 +5265,7 @@ model PoolGatewayToken {
   @@map("pool_gateway_token")
 }
 
-/// What one person spent on one key of a shared pool in one calendar month, UTC (migration 0320):
+/// What one person spent on one key of a shared pool in one calendar month, UTC (migration 0321):
 /// `windowStart` is the month's first day. Written by the pool gateway; read by the pool page and by the
 /// claim, which passes over a key whose share cap the others have spent.
 model PoolUsage {
@@ -5558,6 +5562,8 @@ model WikiSpace {
   changesets WikiChangeset[]
   cursors    WikiCursor[]
   dossiers   WikiDossier[]
+  /// The maintenance runs its trigger made (0320).
+  maintenanceRuns WikiMaintenanceRun[]
 
   /// The key every child's composite foreign key names.
   @@unique([id, ownerId], map: "wiki_space_id_owner_id_key")
@@ -5583,7 +5589,9 @@ model WikiSpaceWorkspace {
 }
 
 /// A named group of a space's entries. An entry belongs to a topic when it names the topic's slug in
-/// `topics`, or when one of its anchors sits under one of `pathPrefixes`.
+/// `topics`, or when one of its anchors sits under one of `pathPrefixes`. For the articles (migration
+/// 0317, contract `articles.membership`) an entry is in exactly one topic: its anchors' paths decide
+/// first, the slug it names second, and the words of its title and summary last.
 model WikiTopic {
   id           String    @id @default(uuid(7)) @db.Uuid
   spaceId      String    @map("space_id") @db.Uuid
@@ -5591,13 +5599,64 @@ model WikiTopic {
   space        WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_topic_space_fkey")
   /// Same shape as a space's slug; unique within the space.
   slug         String
+  /// The topic's display name.
   title        String
   description  String?
   pathPrefixes String[]  @default([]) @map("path_prefixes")
+  /// One of the contract's six categories (`articles.categories`), or NULL for a topic nothing has
+  /// filed yet (0317).
+  category     String?
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
+  summaries WikiTopicSummary[]
+
+  /// The key a summary's composite foreign key names (0317).
+  @@unique([id, ownerId], map: "wiki_topic_id_owner_id_key")
   @@unique([spaceId, slug], map: "wiki_topic_space_id_slug_key")
   @@map("wiki_topic")
+}
+
+/// One article of a topic (migration 0317, design §3 `wiki_topic_summary`, contract `articles`): a
+/// disposable cache the local model writes from the topic's active entries, every sentence
+/// footnoted to one of them. Part 0 is the topic's own article, or the overview of a topic split
+/// into subtopics; parts 1… are those subtopic articles, each hanging on its overview. It is a view:
+/// never pushed, never a source, and nothing points at it.
+model WikiTopicSummary {
+  id       String    @id @default(uuid(7)) @db.Uuid
+  topicId  String    @map("topic_id") @db.Uuid
+  ownerId  String    @map("owner_id") @db.Uuid
+  topic    WikiTopic @relation(fields: [topicId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_topic_summary_topic_fkey")
+  /// 0 for the article or overview, 1… for the subtopic articles.
+  part     Int
+  /// `article` | `overview` | `subtopic`.
+  kind     String
+  /// The overview a subtopic article hangs on; set exactly for a subtopic.
+  parentId String?           @map("parent_id") @db.Uuid
+  parent   WikiTopicSummary? @relation("WikiTopicSummaryParts", fields: [parentId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_topic_summary_parent_fkey")
+  parts    WikiTopicSummary[] @relation("WikiTopicSummaryParts")
+  /// At most 120 characters.
+  title    String
+  /// `[{ heading, sentences: [{ text, notes }] }, …]`: the validated body, every sentence with its
+  /// footnote numbers.
+  body      Json
+  /// `[{ n, entryId, revision }, …]`: what each footnote number names.
+  citations Json
+  /// The entries it was written from. No foreign key: a snapshot the next generation replaces.
+  entryIds       String[] @default([]) @map("entry_ids") @db.Uuid
+  /// The fingerprint of the entry set it was generated from (contract `articles.fingerprint`).
+  entrySetSha256 String   @map("entry_set_sha256") @db.Char(64)
+  /// The git ref it was generated at, when the run knew one.
+  ref            String?
+  /// The model that wrote it.
+  model          String?
+  /// What the validation did: sentences kept and deleted, footnotes kept and stripped, characters.
+  stats          Json     @default("{}")
+  generatedAt    DateTime @default(now()) @map("generated_at") @db.Timestamptz(3)
+
+  @@unique([id, ownerId], map: "wiki_topic_summary_id_owner_id_key")
+  @@unique([topicId, part], map: "wiki_topic_summary_topic_id_part_key")
+  @@index([parentId], map: "wiki_topic_summary_parent_id_idx")
+  @@map("wiki_topic_summary")
 }
 
 /// One lineage: its id never changes across revisions, and it is what `orbit-wiki:<id>` names. The
@@ -5899,11 +5958,51 @@ model WikiCursor {
   lastOutcome         String?   @map("last_outcome")
   consecutiveFailures Int       @default(0) @map("consecutive_failures")
   lastError           String?   @map("last_error")
+  /// Why the last fact that found a run due made no task (0320): `daily_limit_reached` or
+  /// `review_queue_full`, and when. Cleared when a task is made.
+  heldReason          String?   @map("held_reason")
+  heldAt              DateTime? @map("held_at") @db.Timestamptz(3)
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@unique([spaceId, source], map: "wiki_cursor_space_id_source_key")
   @@map("wiki_cursor")
+}
+
+/// One Wiki maintenance run (contracts/wiki.contract.json `maintenance.job`, migration 0320): the task a
+/// fact made for the space, the position that task's check expects the cursor to reach, and how the run
+/// went as it reported it. `task_id` and `session_id` are history references with no foreign key, as
+/// `wiki_dossier.session_id` is: a row outlives a task or session deleted since, and names nothing live.
+model WikiMaintenanceRun {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  spaceId         String    @map("space_id") @db.Uuid
+  ownerId         String    @map("owner_id") @db.Uuid
+  space           WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_maintenance_run_space_fkey")
+  taskId          String    @unique(map: "wiki_maintenance_run_task_id_key") @map("task_id") @db.Uuid
+  /// `backlog` | `age` for a task the trigger made; NULL for a run of a task somebody else put in the list.
+  due             String?
+  backlog         Int       @default(0)
+  pendingSessions Int       @default(0) @map("pending_sessions")
+  oldestPendingAt DateTime? @map("oldest_pending_at") @db.Timestamptz(3)
+  /// The position the task's check expects the cursor to reach (a cursor position: set together or not at all).
+  expectAt        DateTime? @map("expect_at") @db.Timestamptz(3)
+  expectKind      String?   @map("expect_kind")
+  expectRef       String?   @map("expect_ref")
+  sessionId       String?   @map("session_id") @db.Uuid
+  startedAt       DateTime? @map("started_at") @db.Timestamptz(3)
+  endedAt         DateTime? @map("ended_at") @db.Timestamptz(3)
+  /// `succeeded` | `failed` | `truncated`, as the run reported it.
+  outcome         String?
+  /// The ops of the run the server refused: what `orbit wiki check` reads beside the cursor.
+  opsRefused      Int?      @map("ops_refused")
+  report          Json?
+  error           String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([spaceId, expectAt, expectKind, expectRef], map: "wiki_maintenance_run_expect_idx")
+  @@index([sessionId], map: "wiki_maintenance_run_session_id_idx")
+  @@map("wiki_maintenance_run")
 }
 
 /// What is kept of a dossier once it is handed out: its sources and its hash, never its text

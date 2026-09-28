@@ -105,11 +105,18 @@ func runFakeVerifyClaude(dir string) int {
 		Content []struct {
 			Text string `json:"text"`
 		} `json:"content"`
+		Usage map[string]int `json:"usage"`
 	}
 	if json.Unmarshal(answer, &message) != nil || len(message.Content) == 0 {
 		return result(true, nil, "an answer with no text")
 	}
-	return result(false, nil, message.Content[0].Text)
+	// What the real one reports of a call it made: the endpoint's usage, on the result line.
+	out, _ := json.Marshal(map[string]interface{}{
+		"type": "result", "subtype": "success", "is_error": false, "api_error_status": nil, "result": message.Content[0].Text,
+		"usage": message.Usage,
+	})
+	fmt.Println(string(out))
+	return 0
 }
 
 // fakeVerifyClaude writes the shim and points the command at it; the spawns are read back after.

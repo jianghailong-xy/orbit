@@ -192,7 +192,7 @@ export class ProvidersService {
    * The caller's own account pools are listed too, by name alone: which members a pool holds, and
    * their keys, are nothing a caller needs to dispatch with it. A pool none of whose accounts can run
    * is still listed, and the doors refuse it with the reason (QueueService.accountPoolRefusal). So are
-   * the shared pools the caller is in (migration 0320), on Codex; one they are not in is not named.
+   * the shared pools the caller is in (migration 0321), on Codex; one they are not in is not named.
    */
   async listUsable(ownerId: string): Promise<UsableProvider[]> {
     const rows = await this.prisma.modelProvider.findMany({

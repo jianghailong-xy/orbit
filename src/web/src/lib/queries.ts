@@ -10,6 +10,7 @@ import type {
   WatchView,
 } from '@orbit/shared';
 import {
+  ApiError,
   api,
   getSession,
   getSessionDiff,
@@ -33,7 +34,7 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
-import type { WikiSearchRow } from '@orbit/shared';
+import type { WikiArticleDirectory, WikiArticleIndex, WikiArticleView, WikiSearchRow } from '@orbit/shared';
 import type {
   WikiChangeset,
   WikiEntry,
@@ -884,6 +885,49 @@ export const wikiTopicQuery = (spaceId: string | null, slug: string | null) =>
         `/wiki/spaces/${encodeURIComponent(spaceId!)}/topics/${encodeURIComponent(slug!)}`,
       ),
     enabled: spaceId !== null && slug !== null,
+  });
+
+/**
+ * A space's category directory (contract `articles.reads.directory`): categories → topics → each
+ * topic's article and its subtopic parts. The column left of every reading page, and the phone's
+ * Contents drawer.
+ */
+export const wikiArticlesQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'articles'] as const,
+    queryFn: () => api<WikiArticleDirectory>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/articles`),
+    enabled: spaceId !== null,
+    staleTime: 30_000,
+  });
+
+/**
+ * One of a topic's articles, its footnotes resolved to the entries they name — part 0, or a subtopic.
+ *
+ * `null` is the server saying the topic has no such article (404): a topic before its first article,
+ * or one no maintenance run has filed anything under. That is an answer, not a failure — the topic's
+ * page then draws its entries alone — so it is kept as data rather than retried.
+ */
+export const wikiArticleQuery = (spaceId: string | null, slug: string | null, part: number) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'article', slug, part] as const,
+    queryFn: async (): Promise<WikiArticleView | null> => {
+      const path = `/wiki/spaces/${encodeURIComponent(spaceId!)}/articles/${encodeURIComponent(slug!)}`;
+      try {
+        return await api<WikiArticleView>(part > 0 ? `${path}/${part}` : path);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null && slug !== null,
+  });
+
+/** Every article of a space, A to Z by title (contract `articles.reads.index`). */
+export const wikiArticleIndexQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'article-index'] as const,
+    queryFn: () => api<WikiArticleIndex>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/article-index`),
+    enabled: spaceId !== null,
   });
 
 /** What changed in this space lately — the home page's timeline. */

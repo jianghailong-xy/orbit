@@ -1,5 +1,5 @@
 /**
- * A shared pool's keys on real PostgreSQL (migration 0320) — what putting an organization/project OpenAI
+ * A shared pool's keys on real PostgreSQL (migration 0321) — what putting an organization/project OpenAI
  * key in does with it, and who may touch it after:
  *
  *  (a) A key is checked for its shape — an OpenAI key, not an Anthropic one and not an admin key — and a

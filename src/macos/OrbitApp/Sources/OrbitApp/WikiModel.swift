@@ -28,6 +28,17 @@ final class WikiModel {
     private(set) var failed: Set<String> = []
     /// A write in flight, so its controls do not take a second press.
     private(set) var busy = false
+    /// The space on screen's articles (criterion 10): its category directory, its A–Z index, the
+    /// articles read so far and the ones it has none of yet, and each read topic's entries — all of
+    /// the space `articlesSpaceID` names, and dropped when another space is picked.
+    private(set) var directory: WikiArticleDirectory?
+    private(set) var directoryState = ListLoadState()
+    private(set) var articleIndex: WikiArticleIndex?
+    private(set) var articleIndexState = ListLoadState()
+    private(set) var articles: [WikiArticleAddress: WikiArticle] = [:]
+    private(set) var missingArticles: Set<WikiArticleAddress> = []
+    private(set) var failedArticles: Set<WikiArticleAddress> = []
+    private(set) var topicEntries: [String: [WikiEntry]] = [:]
 
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
@@ -59,6 +70,8 @@ final class WikiModel {
 
     /// The pending ops Review pages through.
     var reviewCards: [WikiLogic.ReviewCard] { WikiLogic.reviewCards(review) }
+
+    @ObservationIgnored private var articlesSpaceID: String?
 
     /// An entry page by either spelling of its id.
     func detail(_ id: String) -> WikiEntryDetail? {
@@ -102,15 +115,20 @@ final class WikiModel {
         async let documentRead = api.wikiSpace(space.id)
         async let entriesRead = api.wikiEntries(spaceID: space.id)
         async let timelineRead = api.wikiTimeline(spaceID: space.id)
+        // This space's queue: the one read that ties a timeline op to the run it came in, so Recently
+        // changed can fold a run into one row and open its page.
+        async let runsRead = api.wikiReview(spaceID: space.id)
         do {
             let document = try await documentRead
             let entries = try await entriesRead
             // The timeline is one band of six; the page still draws without it.
             let timeline = try? await timelineRead
+            let runs = (try? await runsRead) ?? []
             // Another space was picked while this one was reading: its own read owns the page.
             guard currentSpace?.id == space.id else { return }
             let content = WikiHomeContent(space: document, spaces: spaces, entries: entries,
-                                          timeline: timeline?.items ?? [], proposals: space.pendingOps ?? 0)
+                                          timeline: timeline?.items ?? [], proposals: space.pendingOps ?? 0,
+                                          runs: runs)
             if content != home { home = content }
             homeState.succeed()
         } catch {
@@ -147,6 +165,80 @@ final class WikiModel {
         }
     }
 
+    // MARK: the articles
+
+    /// The space the article reads are of, forgetting what another space's pages read.
+    private func articlesSpace() -> WikiSpace? {
+        guard let space = currentSpace else { return nil }
+        if articlesSpaceID != space.id {
+            articlesSpaceID = space.id
+            directory = nil
+            directoryState = ListLoadState()
+            articleIndex = nil
+            articleIndexState = ListLoadState()
+            articles = [:]
+            missingArticles = []
+            failedArticles = []
+            topicEntries = [:]
+        }
+        return space
+    }
+
+    /// The category directory — the Contents sheet and Browse by category.
+    func loadDirectory() async {
+        if spaces.isEmpty { await loadSpaces() }
+        guard let space = articlesSpace() else { return }
+        directoryState.begin()
+        do {
+            let read = try await api.wikiArticleDirectory(spaceID: space.id)
+            guard articlesSpaceID == space.id else { return }
+            if read != directory { directory = read }
+            directoryState.succeed()
+        } catch {
+            directoryState.fail()
+        }
+    }
+
+    /// Every article A to Z.
+    func loadArticleIndex() async {
+        if spaces.isEmpty { await loadSpaces() }
+        guard let space = articlesSpace() else { return }
+        articleIndexState.begin()
+        do {
+            let read = try await api.wikiArticleIndex(spaceID: space.id)
+            guard articlesSpaceID == space.id else { return }
+            if read != articleIndex { articleIndex = read }
+            articleIndexState.succeed()
+        } catch {
+            articleIndexState.fail()
+        }
+    }
+
+    /// One article, and the entries of its topic. A 404 is a topic with no such article yet — its
+    /// page is then the topic's entries alone.
+    func loadArticle(_ address: WikiArticleAddress) async {
+        if spaces.isEmpty { await loadSpaces() }
+        guard let space = articlesSpace() else { return }
+        await loadTopicEntries(address.topic, space: space)
+        do {
+            let read = try await api.wikiArticle(spaceID: space.id, slug: address.topic, part: address.part)
+            guard articlesSpaceID == space.id else { return }
+            missingArticles.remove(address)
+            failedArticles.remove(address)
+            if articles[address] != read { articles[address] = read }
+        } catch APIError.http(let status, _) where status == 404 {
+            missingArticles.insert(address)
+        } catch {
+            failedArticles.insert(address)
+        }
+    }
+
+    private func loadTopicEntries(_ slug: String, space: WikiSpace) async {
+        guard let read = try? await api.wikiTopic(spaceID: space.id, slug: slug), articlesSpaceID == space.id else { return }
+        let entries = read.entries ?? []
+        if topicEntries[slug] != entries { topicEntries[slug] = entries }
+    }
+
     /// The entries a query finds in the space on screen.
     func search(_ query: String) async -> [WikiSearchHit] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -173,6 +265,9 @@ final class WikiModel {
         } else {
             await loadSpaces()
         }
+        if directory != nil { await loadDirectory() }
+        if articleIndex != nil { await loadArticleIndex() }
+        for address in Array(articles.keys) { await loadArticle(address) }
         if reviewState.hasLoaded { await loadReview() }
         for key in Array(onScreen.keys) { await loadEntry(key) }
     }
@@ -202,6 +297,71 @@ final class WikiModel {
         for card in cards {
             guard let id = card.op.entryId, detail(id) == nil, !isMissing(id) else { continue }
             await loadEntry(id)
+        }
+    }
+
+    // MARK: Wiki settings
+
+    /// The owner's settings for one space — its review mode, Automatic's spot checks, maintenance —
+    /// written at once. Nil on success, else the sentence to show.
+    func updateSpace(_ space: WikiSpace, _ update: WikiSpaceUpdate) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            _ = try await api.updateWikiSpace(space.id, update)
+            await reloadAfterWrite()
+            return nil
+        } catch {
+            await loadSpaces()
+            return Self.refusal(error)
+        }
+    }
+
+    // MARK: an entry a review mode applied
+
+    /// Confirm: the entry becomes Confirmed and is pushed from then on.
+    func confirm(_ entry: WikiEntry) async -> String? {
+        await answer(entry.id) { try await self.api.confirmWikiEntry(entry.id) }
+    }
+
+    /// Reject, with one of Review's four reasons: the entry ends as rejected.
+    func reject(_ entryID: String, reason: WikiRejectReason) async -> String? {
+        await answer(entryID) { try await self.api.rejectWikiEntry(entryID, reason: reason) }
+    }
+
+    private func answer(_ entryID: String, _ write: () async throws -> Void) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            try await write()
+            await reloadAfterWrite()
+            await loadEntry(entryID)
+            return nil
+        } catch {
+            await loadEntry(entryID)
+            return Self.refusal(error)
+        }
+    }
+
+    // MARK: one run
+
+    /// A run by either spelling of its id: this space's, read with the home, else any space's queue.
+    func run(_ id: String) -> WikiChangeset? {
+        let key = PublicID.storageKey(id)
+        return (home?.runs ?? []).first { PublicID.storageKey($0.id) == key }
+            ?? review.first { PublicID.storageKey($0.id) == key }
+    }
+
+    /// Revert run: every op its review mode applied that nobody has answered, taken back at once.
+    func revert(_ changeset: WikiChangeset) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            _ = try await api.revertWikiChangeset(changeset.id)
+            await reloadAfterWrite()
+            return nil
+        } catch {
+            return Self.refusal(error)
         }
     }
 

@@ -239,7 +239,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// not check. The cursor is named with its one command, `advance`, as the capability's argv is:
 		// a cursor command added later is a decision made here, not one it inherits. `anchors verify` is
 		// the same run's re-verification, refused to every other session the same way.
-		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify"} {
+		// articles is the same run's too, refused to every other session the same way, and so is maintain,
+		// the whole run in one command. check only reads whether a run did what its task expected.
+		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "maintain", "check"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// import proposes, into a space its owner named, what the session's own provider's model read in

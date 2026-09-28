@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { WikiHome } from '../components/WikiHome';
+import type { WikiArticleDirectory } from '@orbit/shared';
 import type { WikiChangeset, WikiEntry, WikiSpaceWithUsage, WikiTimeline } from '../lib/wiki';
 import { WIKI_DISABLED_NOTE, WIKI_NO_SPACES } from '../lib/wiki';
 import { WikiPage } from './WikiPage';
@@ -22,9 +23,9 @@ vi.mock('../api', async (importOriginal) => ({
  * carrying the three trailing facts.
  *
  * WHAT THE ORDER IS FOR: the home page is read top-down, and the design puts the principles first
- * because they are what the rest is judged against — then the topics, then the decision log, with the
- * owner's own queue leading the right rail. Both clients draw that order and iOS mirrors it block for
- * block, so it is asserted here rather than left to a screenshot.
+ * because they are what the rest is judged against — then the decision log, with the owner's own
+ * queue leading the right rail and the category directory beside it all. Both clients draw that order
+ * and iOS mirrors it block for block, so it is asserted here rather than left to a screenshot.
  */
 
 const SPACE_ID = '0196e000-0000-7000-8000-000000000001';
@@ -142,6 +143,27 @@ const REVIEW = [
   },
 ] as unknown as WikiChangeset[];
 
+const DIRECTORY: WikiArticleDirectory = {
+  spaceId: SPACE_ID,
+  categories: [
+    {
+      key: 'platform',
+      title: 'Platform core',
+      topics: [
+        {
+          slug: 'tasks-dispatch',
+          title: '任务与派发',
+          description: null,
+          category: 'platform',
+          article: { part: 0, kind: 'article', title: '任务派发与验收', entryCount: 795, generatedAt: '2026-09-27T00:00:00.000Z' },
+          parts: [],
+        },
+      ],
+    },
+  ],
+  uncategorized: [],
+};
+
 function paint(
   route: 'home' | 'topic',
   path: string,
@@ -154,6 +176,9 @@ function paint(
   client.setQueryData(['wiki', 'space', SPACE_ID, 'timeline'], TIMELINE);
   client.setQueryData(['wiki', 'review', SPACE_ID], REVIEW);
   const topic = (seeds.entries ?? ENTRIES).filter((row) => row.topics.includes('tasks-dispatch'));
+  // No article yet for the topic: its page is its entries alone (`WikiArticleRoute`).
+  client.setQueryData(['wiki', 'space', SPACE_ID, 'article', 'tasks-dispatch', 0], null);
+  client.setQueryData(['wiki', 'space', SPACE_ID, 'articles'], DIRECTORY);
   client.setQueryData(['wiki', 'space', SPACE_ID, 'topic', 'tasks-dispatch'], {
     slug: 'tasks-dispatch',
     title: 'Tasks dispatch',
@@ -172,6 +197,7 @@ function paint(
           <Route path="/wiki/review" element={<WikiPage route="review" />} />
           <Route path="/wiki/:space" element={<WikiPage route="home" />} />
           <Route path="/wiki/:space/t/:topic" element={<WikiPage route={route} />} />
+          <Route path="/wiki/:space/t/:topic/:part" element={<WikiPage route={route} />} />
           <Route path="/wiki/:space/e/:entry" element={<WikiPage route="entry" />} />
         </Routes>
       </MemoryRouter>
@@ -183,12 +209,14 @@ describe('the Wiki home', () => {
   it('draws the design’s blocks in the design’s order', () => {
     const html = paint('home', '/wiki/orbit');
     const at = (needle: string) => html.indexOf(needle);
-    expect(at('>Principles<')).toBeGreaterThan(-1);
-    expect(at('>Topics<')).toBeGreaterThan(at('>Principles<'));
-    expect(at('>Recent decisions<')).toBeGreaterThan(at('>Topics<'));
+    expect(at('class="wk-dir-col"')).toBeGreaterThan(-1);
+    expect(at('>Principles<')).toBeGreaterThan(at('class="wk-dir-col"'));
+    expect(at('>Recent decisions<')).toBeGreaterThan(at('>Principles<'));
     expect(at('>Review<')).toBeGreaterThan(at('>Recent decisions<'));
     expect(at('>Recently changed<')).toBeGreaterThan(at('>Review<'));
     expect(at('>Agents used the wiki<')).toBeGreaterThan(at('>Recently changed<'));
+    // The topics are the directory beside the page now, not a grid of their own (mock 11 ③).
+    expect(html).not.toContain('>Topics<');
   });
 
   it('opens with the space’s own numbers and closes the decision log with a way into it', () => {
@@ -199,13 +227,11 @@ describe('the Wiki home', () => {
     expect(html).toContain('All decisions ›');
   });
 
-  it('counts each topic from the entries that carry it, and links to it', () => {
+  it('lists each topic in the directory with the entries its article was written from, and links to it', () => {
     const html = paint('home', '/wiki/orbit');
-    expect(html).toContain('/wiki/orbit/t/tasks-dispatch');
-    expect(html).toContain('/wiki/orbit/t/testing-ci');
-    // The two principles and the decision are filed under one topic, the pitfall under the other.
-    expect(html).toContain('>Tasks dispatch</span><span class="wk-topic-c">3</span>');
-    expect(html).toContain('>Testing ci</span><span class="wk-topic-c">1</span>');
+    expect(html).toContain('href="/wiki/orbit/t/tasks-dispatch"');
+    expect(html).toContain('<div class="wk-toc-cat">Platform core</div>');
+    expect(html).toContain('<span class="lb">任务与派发</span><span class="n">795</span>');
   });
 
   it('leads the rail with what is waiting, and says how old it is', () => {

@@ -7,7 +7,7 @@ import type { ModelProviderRow } from './custom-provider';
 import type { PoolKeyCandidate } from './pool-key-select';
 
 /**
- * Shared Codex pools (migration 0320, docs/codex-shared-pool-design.md §2.2–§2.5): several Orbit users
+ * Shared Codex pools (migration 0321, docs/codex-shared-pool-design.md §2.2–§2.5): several Orbit users
  * run Codex on organization/project OpenAI API keys that only this server holds. What the claim and the
  * pool page share lives here; the pool's own doors are SharedPoolsService.
  */
@@ -131,7 +131,9 @@ export async function sharedPoolKeyCandidates(
   const keys = await db.poolApiKey.findMany({
     where: { poolId },
     orderBy: { id: 'asc' },
-    select: { id: true, contributorId: true, label: true, enabled: true, state: true, shareCap: true },
+    select: {
+      id: true, contributorId: true, label: true, enabled: true, state: true, shareCap: true, spentUntil: true,
+    },
   });
   const spent = await db.poolUsage.findMany({
     where: { poolId, windowStart: usageWindowStart(now) },

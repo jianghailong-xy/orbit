@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
+  AimOutlined,
   CheckOutlined,
   DownOutlined,
   GlobalOutlined,
@@ -59,10 +60,22 @@ import {
   wikiWebDerivedWarning,
   wikiChangesDiff,
   type WikiChangeset,
+  type WikiAnchor,
   type WikiChangesetOp,
   type WikiSource,
 } from '../lib/wiki';
 import { decideWikiChangeset, useWikiWrite, wikiEditedChanges, type WikiDecision } from '../lib/wikiWrites';
+import {
+  WIKI_AMEND,
+  WIKI_AMEND_NOTE,
+  WIKI_CHALLENGED,
+  WIKI_CHALLENGE_WAITS,
+  WIKI_RECONFIRM,
+  WIKI_RETIRE,
+  wikiBrokenAnchors,
+  wikiChallengeRef,
+  wikiCheckedOnMain,
+} from '../lib/wikiReviewMode';
 
 /**
  * Review: the one place an agent's proposal becomes knowledge.
@@ -243,6 +256,9 @@ function ReviewCard({
   const draft = (payload.entry ?? {}) as Record<string, unknown>;
   const changes = (payload.changes ?? {}) as Record<string, unknown>;
   const retire = op.op === 'retire';
+  // A challenge is answered about the entry it names (contract `anchorRules.verify.answers`):
+  // Re-confirm it as it is on main, Amend it, or Retire it.
+  const challenge = op.op === 'challenge';
   const diffed = !retire && Object.keys(changes).length > 0;
   // The entry this op is about, read for two reasons: what a proposal would REMOVE is a fact about
   // the entry rather than about the proposal (which is what makes the red lines real rather than
@@ -267,6 +283,7 @@ function ReviewCard({
   };
 
   const [editing, setEditing] = useState(false);
+  const [amending, setAmending] = useState(false);
   // What Edit opens on. An amend's form waits for the entry it amends, because its title and one line
   // are that entry's with the amend's changes over them.
   const proposed = payload.entry || target.data || target.isError ? proposedText(payload, target.data) : null;
@@ -300,6 +317,7 @@ function ReviewCard({
         <span className="age">{relTime(changeset.createdAt)}</span>
       </div>
       <div className="approval-body">
+        {challenge && <ChallengeLine reason={payload.reason} anchors={target.data?.anchors} />}
         {op.tainted && (
           <div className="wk-warn">
             <GlobalOutlined className="ic" />
@@ -419,6 +437,33 @@ function ReviewCard({
               {WIKI_REVIEW_KEEP}
             </button>
           </>
+        ) : challenge ? (
+          <>
+            <button
+              type="button"
+              className="card-action card-action--primary"
+              onClick={() => decide({ opId: op.id, action: 'reconfirm' })}
+            >
+              {WIKI_RECONFIRM}
+            </button>
+            <button
+              type="button"
+              className="card-action card-action--secondary"
+              onClick={() => setAmending(true)}
+              disabled={!target.data}
+            >
+              {WIKI_AMEND}
+            </button>
+            <button
+              type="button"
+              className="card-action card-action--secondary"
+              onClick={() => decide({ opId: op.id, action: 'retire' })}
+            >
+              {WIKI_RETIRE}
+            </button>
+            <span className="grow" />
+            <span className="note wk-challenge-note">{WIKI_CHALLENGE_WAITS}</span>
+          </>
         ) : (
           <>
             <button
@@ -456,6 +501,18 @@ function ReviewCard({
       {editing && proposed && (
         <ProposalEditor proposed={proposed} onAccept={acceptEdited} onClose={() => setEditing(false)} />
       )}
+      {amending && target.data && (
+        <ProposalEditor
+          proposed={{ title: target.data.title, summary: target.data.summary }}
+          onAccept={async (edited) => {
+            await write.mutateAsync([{ opId: op.id, action: 'amend', edited }]);
+            message.success('Decided');
+          }}
+          onClose={() => setAmending(false)}
+          okText={WIKI_AMEND}
+          note={WIKI_AMEND_NOTE}
+        />
+      )}
     </div>
   );
 }
@@ -475,11 +532,16 @@ function ProposalEditor({
   proposed,
   onAccept,
   onClose,
+  okText = WIKI_REVIEW_ACCEPT,
+  note = WIKI_ACCEPT_NOTE,
 }: {
   proposed: { title: string; summary: string };
   /** The decide request; it throws what the server refused it with. */
   onAccept: (edited: WikiEntryChanges) => Promise<void>;
   onClose: () => void;
+  /** A challenge's Amend says Amend, and what it does, instead of Accept's words. */
+  okText?: string;
+  note?: string;
 }) {
   // What the form opened on is what "changed" is measured against, held as it was: a re-read of the
   // entry while the owner types must not turn a field they never touched into an edit.
@@ -506,18 +568,50 @@ function ProposalEditor({
   return (
     <Modal
       open
-      title={WIKI_REVIEW_EDIT}
+      title={okText === WIKI_REVIEW_ACCEPT ? WIKI_REVIEW_EDIT : okText}
       onCancel={onClose}
       onOk={submit}
-      okText={WIKI_REVIEW_ACCEPT}
+      okText={okText}
       okButtonProps={{ disabled: Object.keys(edited).length === 0 || title.trim().length === 0 }}
       confirmLoading={saving}
       destroyOnHidden
     >
-      <p className="wk-modal-note">{WIKI_ACCEPT_NOTE}</p>
+      <p className="wk-modal-note">{note}</p>
       <WikiTitleSummaryFields title={title} summary={summary} onTitle={setTitle} onSummary={setSummary} />
       {refusal && <Alert type="error" showIcon title={refusal} style={{ marginTop: 8 }} />}
     </Modal>
+  );
+}
+
+/**
+ * What a challenge is about, in the amber line a Web-derived card wears: each anchor whose last check
+ * found it changed or missing — `symbol foo in src/a.ts`, `path …`, `commit …` — and the commit it was
+ * checked on. A challenge a session filed about something else is said with its own reason.
+ */
+function ChallengeLine({ reason, anchors }: { reason: unknown; anchors: WikiAnchor[] | undefined }) {
+  const broken = wikiBrokenAnchors(anchors);
+  const ref = wikiChallengeRef(anchors);
+  return (
+    <div className="wk-warn wk-challenge-line">
+      <AimOutlined className="ic" />
+      <span>
+        {broken.length > 0 ? (
+          <>
+            {broken.map((anchor, index) => (
+              <span key={`${anchor.label}-${index}`}>
+                {index > 0 && '; '}
+                <b>{anchor.state === 'changed' ? 'Changed' : 'Missing'}</b> · {anchor.label}
+              </span>
+            ))}
+            {ref && <span className="dim"> · {wikiCheckedOnMain(ref)}</span>}
+          </>
+        ) : (
+          <>
+            <b>{WIKI_CHALLENGED}</b> · {typeof reason === 'string' ? reason : WIKI_CHALLENGE_WAITS}
+          </>
+        )}
+      </span>
+    </div>
   );
 }
 

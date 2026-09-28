@@ -231,7 +231,7 @@ export function App() {
                 </DocView>
               }
             />
-            {/* The Wiki: one page component, five routes. `/wiki/review` is declared before
+            {/* The Wiki: one page component, ten routes. `/wiki/review` is declared before
                 `/wiki/:space` for the reader's sake rather than the router's — a static segment
                 already outranks a dynamic one, but the two together are what the design's URL
                 scheme means (a space is a codebase; Review is the account's queue). */}
@@ -276,10 +276,50 @@ export function App() {
               }
             />
             <Route
+              path="wiki/:space/t/:topic/:part"
+              element={
+                <DocView>
+                  <WikiPage route="topic" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/browse"
+              element={
+                <DocView>
+                  <WikiPage route="browse" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/az"
+              element={
+                <DocView>
+                  <WikiPage route="index" />
+                </DocView>
+              }
+            />
+            <Route
               path="wiki/:space/e/:entry"
               element={
                 <DocView>
                   <WikiPage route="entry" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/settings"
+              element={
+                <DocView>
+                  <WikiPage route="settings" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/run/:run"
+              element={
+                <DocView>
+                  <WikiPage route="run" />
                 </DocView>
               }
             />
