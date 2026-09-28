@@ -49,7 +49,11 @@ struct ProvidersOverviewForm: View {
                     }
                     ForEach(pools) { pool in
                         NavigationLink(value: NavNode.accountPool(poolID: pool.id)) {
-                            PoolRowLabel(engine: "claude", title: pool.label, line: nil,
+                            // A Codex pool of one's own runs on a ChatGPT account: "Just me · the
+                            // account" under its name, and where that account stands.
+                            PoolRowLabel(engine: ProviderPools.runsCodex(pool) ? "codex" : "claude",
+                                         title: pool.label,
+                                         line: CodexLoginPool.isLoginPool(pool) ? CodexLoginPool.overviewLine(pool) : nil,
                                          value: ProvidersOverview.poolSummary(pool))
                         }
                     }
@@ -821,6 +825,586 @@ struct AddPoolKeySheet: View {
 /// One thing putting a key in means: its claim in bold, then what follows from it.
 private struct FactText: View {
     let fact: AddPoolKey.Fact
+
+    var body: some View {
+        (Text(fact.lead).bold().foregroundStyle(Color.primary) + Text(fact.rest))
+            .font(.orbitListSubtitle)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - A Codex pool of one's own
+
+/// What a Codex pool of one's own asks the account to do: the device sign-in's three calls, and the
+/// pool's two ways out. A press that answers a String? answers why it didn't happen, or nil; the pool on
+/// screen is whatever the list last read, so a press that worked shows itself.
+struct CodexPoolActions {
+    var start: () async throws -> CodexLoginAttempt
+    var poll: () async throws -> CodexLoginPoll
+    /// Give a sign-in still waiting on its code up, on the server.
+    var cancel: () async -> Void
+    var signOut: () async -> String?
+    var deletePool: () async -> String?
+    /// The pools read again: an account just went in.
+    var refresh: () async -> Void
+}
+
+/// A Codex pool of one's own ChatGPT account (migration 0323), in the web page's blocks: what the pool
+/// is and — while it has no account — "Sign in with ChatGPT"; the Account section, its one row the
+/// account with its windows and when each resets (signed out: why, and "Sign in again"; a swipe signs
+/// it out); and deleting the pool. Only its owner ever sees the pool, so every press is theirs.
+struct CodexPoolPageView: View {
+    let pool: ProviderPool
+    let actions: CodexPoolActions
+    var now: Date = Date()
+
+    @State private var signingIn = false
+    @State private var signingOut = false
+    @State private var confirmingDelete = false
+    @State private var notice: String?
+
+    var body: some View {
+        Form {
+            head
+            accountSection
+            deleteSection
+        }
+        .navigationTitle(pool.label)
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $signingIn) {
+            CodexSignInSheet(pool: pool, actions: actions)
+        }
+        .confirmationDialog(pool.login.map(CodexLoginPool.signOutTitle) ?? CodexLoginPool.signOut,
+                            isPresented: $signingOut, titleVisibility: .visible) {
+            Button(CodexLoginPool.signOut, role: .destructive) {
+                let login = pool.login
+                run(done: CodexLoginPool.signedOut(login)) { await actions.signOut() }
+            }
+            Button(CodexSignIn.cancel, role: .cancel) {}
+        } message: {
+            Text(CodexLoginPool.signOutNote)
+        }
+        .confirmationDialog(CodexLoginPool.deleteTitle(pool), isPresented: $confirmingDelete,
+                            titleVisibility: .visible) {
+            Button(CodexLoginPool.delete, role: .destructive) {
+                run { await actions.deletePool() }
+            }
+            Button(CodexSignIn.cancel, role: .cancel) {}
+        } message: {
+            Text(CodexLoginPool.deleteNote)
+        }
+        .overlay(alignment: .bottom) {
+            if let notice {
+                Text(notice)
+                    .font(.orbitListSubtitle.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.default, value: notice)
+    }
+
+    /// What the pool is — Codex's mark, "Codex pool", "Just me" — and, while it has no account, the one
+    /// press that puts one in.
+    private var head: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    ProviderMark(provider: "codex", size: 30)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(CodexLoginPool.pageTitle)
+                            .font(.headline)
+                        Text(CodexLoginPool.justMe)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 4)
+                if pool.login == nil {
+                    WideButton(title: CodexLoginPool.signIn) { signingIn = true }
+                }
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        }
+    }
+
+    private var accountSection: some View {
+        Section {
+            if let member = pool.members.first, let login = member.login {
+                CodexAccountRow(member: member, login: login, now: now) { signingIn = true }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { signingOut = true } label: {
+                            Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    }
+            } else {
+                Text(CodexLoginPool.noAccount)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            PoolSectionHeader(title: CodexLoginPool.accountHeader, trailing: headerNote)
+        } footer: {
+            Text(CodexLoginPool.accountFooter)
+        }
+    }
+
+    /// Why nothing can run, or until when — the account's own row says the rest.
+    private var headerNote: String? {
+        pool.members.contains(where: \.next) ? nil : CodexLoginPool.headline(pool, now: now)
+    }
+
+    private var deleteSection: some View {
+        Section {
+            Button(role: .destructive) { confirmingDelete = true } label: {
+                Text(CodexLoginPool.deletePool)
+                    .frame(maxWidth: .infinity)
+            }
+        } footer: {
+            Text(CodexLoginPool.deleteNote)
+        }
+    }
+
+    /// A press, and a line over the page's foot saying how it went: why it didn't go through, or — for a
+    /// press whose effect isn't on screen by itself — `done`.
+    private func run(done: String? = nil, _ press: @escaping () async -> String?) {
+        Task {
+            if let failure = await press() {
+                show(failure)
+            } else if let done {
+                show(done)
+            }
+        }
+    }
+
+    private func show(_ text: String) {
+        notice = text
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            if notice == text { notice = nil }
+        }
+    }
+}
+
+/// The ChatGPT account: its email and plan, where it stands, each of its windows with when it resets —
+/// and, once OpenAI signed it out, why and the press that signs it in again.
+private struct CodexAccountRow: View {
+    let member: PoolMember
+    let login: CodexLogin
+    let now: Date
+    let signInAgain: () -> Void
+
+    var body: some View {
+        let status = ProviderPools.memberStatus(member, now: now)
+        let windows = CodexLoginPool.windows(login)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                ProviderMark(provider: "codex", size: 28)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(member.label)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(CodexLoginPool.line(login))
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                    Text(status.label)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(PoolTone.color(status.tone))
+                    if member.state == .signedOut {
+                        Text(CodexLoginPool.signedOutReason)
+                            .font(.orbitLabel)
+                            .foregroundStyle(PoolTone.color(.danger))
+                            .padding(.top, 2)
+                        Button(CodexLoginPool.signInAgain, action: signInAgain)
+                            .buttonStyle(.borderedProminent)
+                            .buttonBorderShape(.capsule)
+                            .controlSize(.small)
+                            .padding(.top, 7)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            if windows.isEmpty {
+                Text(CodexLoginPool.noQuota)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 40)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(windows) { row in
+                        CodexWindowRow(row: row, resets: CodexLoginPool.resets(row, now: now))
+                    }
+                }
+                .padding(.leading, 40)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// One window of the account's quota: its name and how much of it is used, the gauge across the row,
+/// and when it resets.
+private struct CodexWindowRow: View {
+    let row: PlanUsageRow
+    let resets: String?
+
+    var body: some View {
+        let tint = row.percent >= 90 ? PoolTone.color(.warning) : Color.accentColor
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(row.label)
+                    .font(.orbitLabel.weight(.semibold))
+                Spacer(minLength: 8)
+                Text(verbatim: "\(row.percent)%")
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Capsule()
+                .fill(Color.primary.opacity(0.08))
+                .frame(height: 5)
+                .overlay(alignment: .leading) {
+                    GeometryReader { geo in
+                        Capsule()
+                            .fill(tint)
+                            .frame(width: geo.size.width * CGFloat(row.percent) / 100, height: 5)
+                    }
+                }
+            if let resets {
+                Text(resets)
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// "Sign in with ChatGPT": what signing in means (and the warning that stays: an account is one
+/// person's), then the page to open and the one-time code — copied with a tap — while the sheet asks the
+/// server every couple of seconds whether it was approved, then the account. Closing it before the code
+/// was approved gives the sign-in up on the server.
+struct CodexSignInSheet: View {
+    let pool: ProviderPool
+    let actions: CodexPoolActions
+
+    @State private var step: CodexSignIn.Step
+    @State private var starting = false
+    /// A sign-in the server is running for this sheet: what closing it has to give up.
+    @State private var live = false
+    @State private var copied = false
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    init(pool: ProviderPool, actions: CodexPoolActions, step: CodexSignIn.Step = .consent) {
+        self.pool = pool
+        self.actions = actions
+        _step = State(initialValue: step)
+    }
+
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationTitle(CodexSignIn.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button { close() } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel(CodexSignIn.cancel)
+                    }
+                }
+        }
+        .presentationDragIndicator(.visible)
+        .task(id: waitingOn) {
+            guard waitingOn != nil else { return }
+            await waitForApproval()
+        }
+        .onDisappear { giveUp() }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch step {
+        case .consent:
+            consent
+        case .code(let url, let code, let expiresAt):
+            codeStep(url: url, code: code, expiresAt: expiresAt)
+        case .done(let account):
+            done(account)
+        case .expired:
+            ending(icon: "exclamationmark.circle.fill", title: CodexSignIn.expiredTitle,
+                   detail: CodexSignIn.expiredDetail, retry: CodexSignIn.newCode)
+        case .failed(let reason):
+            ending(icon: "exclamationmark.circle.fill", title: CodexSignIn.failedTitle,
+                   detail: CodexSignIn.sentence(reason), retry: CodexSignIn.tryAgain)
+        case .duplicate:
+            ending(icon: "exclamationmark.circle.fill", title: CodexSignIn.duplicateTitle(pool),
+                   detail: CodexSignIn.duplicateDetail, retry: nil)
+        case .taken:
+            ending(icon: "exclamationmark.circle.fill", title: CodexSignIn.takenTitle(pool),
+                   detail: CodexSignIn.takenDetail(pool.login), retry: CodexSignIn.newCode)
+        }
+    }
+
+    // MARK: steps
+
+    /// What signing in means: whose it is, where the sign-in stays, that it can be signed out — and that
+    /// an account is not to be shared.
+    private var consent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                lead
+                    .padding(.horizontal, 24)
+                    .padding(.top, 6)
+                    .padding(.bottom, 12)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(CodexSignIn.facts(pool).enumerated()), id: \.offset) { index, fact in
+                        if index > 0 {
+                            Divider().padding(.leading, 16)
+                        }
+                        CodexFactText(fact: fact)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                    }
+                }
+                .background(Color(uiColor: .secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .padding(.horizontal, 16)
+                (Text("⚠︎ ") + Text(CodexSignIn.risk.lead).bold() + Text(CodexSignIn.risk.rest))
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(PoolTone.color(.warning))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
+                    .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                WideButton(title: CodexSignIn.start, busy: starting) { start() }
+                    .disabled(starting)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+            }
+            .padding(.bottom, 24)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    /// The lead: signing in for the first time, or — the pool's account signed out — as that account.
+    private var lead: Text {
+        if CodexSignIn.isAgain(pool) {
+            return Text(CodexSignIn.againLeadPrefix(pool.login)) + Text(pool.label).bold()
+                + Text(CodexSignIn.againLeadSuffix)
+        }
+        return Text(CodexSignIn.leadPrefix) + Text(pool.label).bold() + Text(CodexSignIn.leadSuffix)
+    }
+
+    /// The page to open (and its address), what to do there, the code, and the wait.
+    private func codeStep(url: String, code: String, expiresAt: String) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Button {
+                        if let link = URL(string: url) { openURL(link) }
+                    } label: {
+                        Label(CodexSignIn.openPage, systemImage: "arrow.up.forward.square")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.roundedRectangle(radius: 14))
+                    Text(url)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity)
+                }
+                instruction
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(.secondary)
+                Button {
+                    PlatformPasteboard.copyString(code)
+                    PlatformHaptics.success()
+                    copied = true
+                } label: {
+                    VStack(spacing: 8) {
+                        Text(code)
+                            .font(.orbitCode)
+                            .tracking(2)
+                            .foregroundStyle(Color.primary)
+                        Label(copied ? CodexSignIn.copied : CodexSignIn.copyCode,
+                              systemImage: copied ? "checkmark" : "doc.on.doc")
+                            .font(.orbitLabel)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(CodexSignIn.copyCode)
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(CodexSignIn.waiting)
+                        .font(.orbitListSubtitle)
+                }
+                if let expiry = CodexSignIn.expiry(expiresAt) {
+                    Text(expiry)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                }
+                Button(CodexSignIn.cancel) { close() }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 4)
+            }
+            .padding(16)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    /// What to do on the page: sign in — as the account signed out, when signing it in again — and
+    /// enter the code.
+    private var instruction: Text {
+        if CodexSignIn.isAgain(pool), let email = pool.login?.email {
+            return Text(CodexSignIn.enterCodeAsPrefix) + Text(email).bold() + Text(CodexSignIn.enterCodeAsSuffix)
+        }
+        return Text(CodexSignIn.enterCode)
+    }
+
+    /// It went in: the account, as the pool now holds it.
+    private func done(_ account: CodexLogin?) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(PoolTone.color(.success))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(CodexSignIn.doneTitle(account, pool: pool))
+                            .font(.headline)
+                        Text(CodexSignIn.doneDetail)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let account {
+                    HStack(spacing: 12) {
+                        ProviderMark(provider: "codex", size: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(CodexLoginPool.name(account))
+                                .font(.headline)
+                            Text(CodexSignIn.doneRow(account))
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                }
+                WideButton(title: CodexSignIn.done) { dismiss() }
+            }
+            .padding(16)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    /// Any other way it ended: why, and — unless the pool already runs on that account — a new code.
+    private func ending(icon: String, title: String, detail: String, retry: String?) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.title2)
+                        .foregroundStyle(PoolTone.color(.warning))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.headline)
+                        Text(detail)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let retry {
+                    WideButton(title: retry, busy: starting) { start() }
+                        .disabled(starting)
+                }
+                Button(CodexSignIn.close) { close() }
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(16)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+
+    // MARK: talking to the server
+
+    /// The code being waited on, if any: what the approval poll is keyed by.
+    private var waitingOn: String? {
+        if case .code(_, let code, _) = step { return code }
+        return nil
+    }
+
+    private func start() {
+        starting = true
+        copied = false
+        Task {
+            do {
+                let attempt = try await actions.start()
+                live = true
+                step = .code(url: attempt.verificationUrl, code: attempt.userCode, expiresAt: attempt.expiresAt)
+            } catch {
+                step = CodexSignIn.step(afterStartFailure: error)
+            }
+            starting = false
+        }
+    }
+
+    /// Ask every couple of seconds until the answer is one the sheet moves on for.
+    private func waitForApproval() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: CodexSignIn.pollInterval)
+            if Task.isCancelled { return }
+            var next: CodexSignIn.Step?
+            do {
+                next = CodexSignIn.step(after: try await actions.poll())
+            } catch {
+                next = CodexSignIn.step(afterPollFailure: error)
+            }
+            if Task.isCancelled { return }
+            guard let next else { continue }
+            live = false
+            if case .done = next { await actions.refresh() }
+            step = next
+            return
+        }
+    }
+
+    private func close() {
+        giveUp()
+        dismiss()
+    }
+
+    /// Leaving before the code was approved gives the sign-in up on the server.
+    private func giveUp() {
+        guard live else { return }
+        live = false
+        Task { await actions.cancel() }
+    }
+}
+
+/// One thing signing in means: its claim in bold, then what follows from it.
+private struct CodexFactText: View {
+    let fact: CodexSignIn.Fact
 
     var body: some View {
         (Text(fact.lead).bold().foregroundStyle(Color.primary) + Text(fact.rest))

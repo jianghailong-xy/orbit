@@ -101,23 +101,30 @@ final class ProviderPoolsParityTests: XCTestCase {
 
     // MARK: - the payload
 
-    /// What web's pool types declare for its shared-pool adapter alone (see the type's comment).
-    private static let webSharedMember: Set<String> = ["key"]
+    /// What web's pool types declare for its adapters alone (see the types' comments): a shared pool's
+    /// key and a Codex pool's ChatGPT account on a member, the whole shared pool on a pool, and the two
+    /// states only an adapter reads — a refused key's, and a signed-out account's.
+    private static let webSharedMember: Set<String> = ["key", "login"]
     private static let webSharedPool: Set<String> = ["shared"]
     private static let webSharedState: Set<String> = ["INVALID"]
+    /// The state the server never sends as a member's: a Codex pool's account carries its own (`login`),
+    /// and the member drawn for it is read off that (`CodexLoginPool.drawn`, web's `withLogin`).
+    private static let accountState: Set<String> = ["SIGNED_OUT"]
 
     func testTheMemberDecodesExactlyTheFieldsWebDeclares() throws {
         let web = try declaredFields(interfaceBody("PoolMember", in: source(Self.anchor), file: Self.anchor))
         XCTAssertEqual(try encodedKeys(fullMember), web.subtracting(Self.webSharedMember))
         XCTAssertTrue(Self.webSharedMember.isSubset(of: web),
-                      "\(Self.anchor)'s PoolMember no longer carries a shared pool's key — drop it from this check")
+                      "\(Self.anchor)'s PoolMember no longer carries a shared pool's key or a Codex pool's account — drop it from this check")
     }
 
     func testThePoolDecodesExactlyTheFieldsWebDeclares() throws {
         let web = try declaredFields(interfaceBody("ProviderPool", in: source(Self.anchor), file: Self.anchor))
+        // Every field filled in — a Codex pool's account among them — so none is left out for being nil.
         let pool = ProviderPool(id: "p", slug: "claude-accounts", label: "Claude accounts",
                                 resetsAt: "2026-09-25T10:00:00.000Z", unavailable: "No account can run",
-                                members: [fullMember])
+                                members: [fullMember], engine: "claude",
+                                login: CodexLogin(email: "e", fingerprint: "…AB12"))
         XCTAssertEqual(try encodedKeys(pool), web.subtracting(Self.webSharedPool))
         XCTAssertTrue(Self.webSharedPool.isSubset(of: web),
                       "\(Self.anchor)'s ProviderPool no longer carries the shared pool — drop it from this check")
@@ -127,7 +134,8 @@ final class ProviderPoolsParityTests: XCTestCase {
     func testTheMemberStatesAreTheServersAndTheWebs() throws {
         let mine = Set(PoolMemberState.allCases.map(\.rawValue)).subtracting(["UNKNOWN"])
         let server = "src/apiserver/src/providers/providers.service.ts"
-        XCTAssertEqual(try unionMembers("PoolMemberState", in: source(server), file: server), mine)
+        XCTAssertEqual(try unionMembers("PoolMemberState", in: source(server), file: server),
+                       mine.subtracting(Self.accountState))
         let web = try unionMembers("PoolMemberState", in: source(Self.anchor), file: Self.anchor)
         XCTAssertEqual(web.subtracting(Self.webSharedState), mine)
         XCTAssertTrue(Self.webSharedState.isSubset(of: web),

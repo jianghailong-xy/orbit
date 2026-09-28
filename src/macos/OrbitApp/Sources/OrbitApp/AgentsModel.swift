@@ -107,6 +107,50 @@ final class AgentsModel {
 
     func agent(_ id: String) -> Agent? { items.first { $0.id == id } }
 
+    // MARK: a Codex pool of one's own — its ChatGPT account (migration 0323)
+
+    /// The pools read again: an account went in or out, or a pool went.
+    func reloadPools() async {
+        if let pools = try? await api.providerPools() { providerPools = pools }
+    }
+
+    /// "Sign in with ChatGPT": the page to open and the one-time code, from the server's device sign-in.
+    func startCodexLogin(_ pool: ProviderPool) async throws -> CodexLoginAttempt {
+        try await api.startCodexLogin(poolID: pool.id)
+    }
+
+    func pollCodexLogin(_ pool: ProviderPool) async throws -> CodexLoginPoll {
+        try await api.pollCodexLogin(poolID: pool.id)
+    }
+
+    /// Best-effort: a sign-in nobody finishes also runs out on the server by itself.
+    func cancelCodexLogin(_ pool: ProviderPool) async {
+        _ = try? await api.cancelCodexLogin(poolID: pool.id)
+    }
+
+    /// Sign the pool's account out: the server deletes the sign-in it held. Why it didn't, or nil.
+    func signOutCodexLogin(_ pool: ProviderPool) async -> String? {
+        do {
+            try await api.signOutCodexLogin(poolID: pool.id)
+            await reloadPools()
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
+    /// Delete one of the account's own pools: it is gone from the list. Why it didn't, or nil.
+    func deletePool(_ pool: ProviderPool) async -> String? {
+        do {
+            try await api.deleteProviderPool(pool.id)
+            let key = PublicID.storageKey(pool.id)
+            providerPools.removeAll { PublicID.storageKey($0.id) == key }
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
     func load() async {
         loadState.begin()
         do {
