@@ -1,0 +1,8 @@
+# TEMPORARY evidence probe: everything gen.py writes out of the commit under test, and everything a
+# run produces. Nothing here is committed.
+ios/Generated/
+ios/shots/
+ios/results/
+ios/.dd/
+ios/build.log
+ios/PoolProbe.xcodeproj/
