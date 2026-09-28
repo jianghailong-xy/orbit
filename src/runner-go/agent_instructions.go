@@ -237,8 +237,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// dossier and cursor advance are a Wiki maintenance run's, and the server refuses them to every
 		// other session (WIKI_NOT_MAINTENANCE_SESSION), so the rule lets through nothing the door does
 		// not check. The cursor is named with its one command, `advance`, as the capability's argv is:
-		// a cursor command added later is a decision made here, not one it inherits.
-		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance"} {
+		// a cursor command added later is a decision made here, not one it inherits. `anchors verify` is
+		// the same run's re-verification, refused to every other session the same way.
+		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// `orbit notify` is how a session reaches the human the runner works for — the reader most

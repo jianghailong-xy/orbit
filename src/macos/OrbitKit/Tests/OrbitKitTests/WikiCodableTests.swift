@@ -175,6 +175,35 @@ final class WikiCodableTests: XCTestCase {
                        ["not_true", "not_useful", "duplicate", "too_specific"])
     }
 
+    /// A challenge's three answers (`anchorRules.verify.answers`) ride the same body: Re-confirm alone,
+    /// Amend with the owner's changes, Retire with the reason the entry goes.
+    func testTheChallengeAnswersAreDecideBodies() throws {
+        let body = try json(WikiDecideRequest(decisions: [
+            WikiDecision(opId: "c1", action: .reconfirm),
+            WikiDecision(opId: "c2", action: .amend, edited: WikiEntryChanges(summary: "Moved to docs/new.md.")),
+            WikiDecision(opId: "c3", action: .retire, note: "The branch was abandoned."),
+        ]))
+        let decisions = try XCTUnwrap(body["decisions"] as? [[String: Any]])
+        XCTAssertEqual(decisions[0] as NSDictionary, ["opId": "c1", "action": "reconfirm"])
+        XCTAssertEqual(decisions[1] as NSDictionary,
+                       ["opId": "c2", "action": "amend", "edited": ["summary": "Moved to docs/new.md."]])
+        XCTAssertEqual(decisions[2] as NSDictionary, ["opId": "c3", "action": "retire", "note": "The branch was abandoned."])
+    }
+
+    /// What a re-verification keeps beside an anchor decodes, the symbol's hashes included, and an
+    /// anchor it found missing reads so.
+    func testAnAnchorsLastCheckDecodes() throws {
+        let entry = try WikiFixtures.decode(WikiEntry.self, """
+        {"id":"e1","kind":"pitfall","anchorState":"changed","anchorCheckedRef":"\(WikiFixtures.sha)",
+         "anchors":[{"type":"symbol","path":"src/a.ts","symbol":"foo","check":{"state":"changed","ref":"\(WikiFixtures.sha)",
+           "at":"2026-09-28T02:00:00.000Z","regionSha256":"\(String(repeating: "b", count: 64))","baselineSha256":"\(String(repeating: "a", count: 64))"}},
+           {"type":"commit","sha":"\(WikiFixtures.sha)","check":{"state":"missing","ref":"\(WikiFixtures.sha)","at":"2026-09-28T02:00:00.000Z"}}]}
+        """)
+        XCTAssertEqual(entry.anchorState, .changed)
+        XCTAssertEqual(entry.anchors?.map { $0.check?.state }, [.changed, .missing])
+        XCTAssertEqual(entry.anchors?.first?.check?.ref, WikiFixtures.sha)
+    }
+
     /// The owner's own write: the three ops the entry page offers, each with the keys its op takes
     /// (contract `ops.<op>.keys`), and nothing else — the door refuses a key no op names.
     func testTheOwnerWriteBodyIsWhatTheDoorReads() throws {

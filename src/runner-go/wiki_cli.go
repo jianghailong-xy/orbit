@@ -14,8 +14,9 @@ import (
 // session may read is what its bound workspace shares, and a proposal is recorded against it — so
 // there is no headless form: at a terminal outside a session there is nowhere to read from and
 // nobody to propose as. Three verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go)
-// runs a model, which is a runner's work rather than a tool call's, and `orbit wiki dossier` and
-// `orbit wiki cursor advance` (wiki_dossier.go) are a Wiki maintenance run's, and no other session's.
+// runs a model, which is a runner's work rather than a tool call's, and `orbit wiki dossier`,
+// `orbit wiki cursor advance` (wiki_dossier.go) and `orbit wiki anchors verify` (wiki_anchors.go) are a
+// Wiki maintenance run's, and no other session's.
 
 const wikiHelp = `orbit wiki — read the Orbit wiki and propose to it
 
@@ -28,15 +29,17 @@ Usage:
   orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]
   orbit wiki cursor advance --space <id> --to <token> [--outcome succeeded|failed|truncated]
                             [--error TEXT] [--json]
+  orbit wiki anchors verify --space <id> [--repo <path>] [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
 fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. An agent's write
 is a proposal that waits for the owner in Review — or, in an automatic space, for its verification,
 which 'orbit wiki verify' runs with the local model — so never report one as saved.
 
-'orbit wiki dossier' and 'orbit wiki cursor advance' are a Wiki maintenance run's, and no other
-session's: the run reads what happened in its space since the cursor, proposes what it learned
-citing the records behind it, and advances the cursor once it has processed a page.
+'orbit wiki dossier', 'orbit wiki cursor advance' and 'orbit wiki anchors verify' are a Wiki
+maintenance run's, and no other session's: the run reads what happened in its space since the cursor,
+proposes what it learned citing the records behind it, re-verifies the anchors of its space's entries
+on origin/main, and advances the cursor once it has processed a page.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -169,6 +172,32 @@ WIKI_CURSOR_INVALID: both change nothing, and the command exits non-zero. A toke
 stands at is a success that moves nothing. A failed or truncated run moves nothing either: it is
 recorded, one more of the space's consecutive failures, and the command exits 0.
 `,
+	"anchors": `orbit wiki anchors — re-verify the anchors of a space's entries on origin/main, as its Wiki maintenance run
+
+Usage:
+  orbit wiki anchors verify --space <id> [--repo <path>] [--json]
+
+Commands:
+  verify                   Fetch origin's main, check every path, symbol and commit anchor, and report
+
+Options:
+  --space ID               The space this maintenance run maintains. Required
+  --repo PATH              The checkout of the space's repository to re-verify in. Default: the work
+                           directory of the space's workspace on this runner (a leading ~ is this
+                           runner's home)
+  --json                   Print the run's summary as JSON
+
+` + wikiAnchorsVerifyPrecondition + `
+
+It fetches origin's main into origin/main and checks each anchor of the space's live entries on the
+commit origin/main then names: a path with git cat-file -e, a symbol by hashing the ` + fmt.Sprint(wikiAnchorSymbolRegionLines) + ` lines from
+the first line git grep -w finds it on, a commit with git merge-base --is-ancestor (a sha that is not
+an ancestor of origin/main is missing). Each page of entries is reported as it is checked. An entry
+whose anchor changed or went missing is out of the push at once, with one system challenge in the
+owner's Review. It exits non-zero when the fetch failed, when git could not check an anchor, or when
+the server refused an entry; an entry that moved since the list was read is stale, and read again by
+the next run. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
+`,
 }
 
 // wikiCLICapabilities are listed inside a session only (SessionOnly): every one of them reads or
@@ -287,6 +316,29 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 		Mutates:     true,
 		SessionOnly: true,
 	},
+	{
+		// The anchor re-verification (contract `anchorRules.verify`): a maintenance run's verb like the two
+		// above, and one that runs git in a checkout, which is a runner's work rather than a tool call's.
+		Tool:  "wiki_anchors_verify",
+		Argv:  []string{"orbit", "wiki", "anchors", "verify"},
+		Usage: "orbit wiki anchors verify --space <id> [--repo <path>] [--json]",
+		Arguments: []string{
+			"--space <id> (required; the space this maintenance run maintains)",
+			"--repo <path> (the checkout to re-verify in; default the work directory of the space's workspace on this runner)",
+			"--json",
+		},
+		Description: wikiAnchorsVerifyDescription,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"space": map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
+				"repo":  map[string]interface{}{"type": "string", "description": "The checkout of the space's repository to re-verify in; the work directory of the space's workspace on this runner when left out."},
+			},
+			"required": []string{"space"},
+		},
+		Mutates:     true,
+		SessionOnly: true,
+	},
 }
 
 // wikiCLIContext is the session a wiki command acts for. There is no headless form, and no
@@ -349,6 +401,18 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		}
 		command += " advance"
 	}
+	if action == "anchors" {
+		// Like the cursor, a verb named rather than implied: its one command is verify.
+		if len(args) == 1 {
+			_, err := fmt.Fprint(out, h)
+			return err
+		}
+		if args[1] != "verify" {
+			return fmt.Errorf("unknown anchors command %q: its one command is verify, as in "+
+				"'orbit wiki anchors verify --space <id>'\n\n%s", args[1], h)
+		}
+		command += " verify"
+	}
 	ctx, err := wikiCLIContext(command)
 	if err != nil {
 		return err
@@ -366,6 +430,8 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliWikiDossier(args[1:], out, ctx)
 	case "cursor":
 		return cliWikiCursorAdvance(args[2:], out, ctx)
+	case "anchors":
+		return cliWikiAnchorsVerify(args[2:], out, ctx)
 	default:
 		panic("unreachable wiki command")
 	}
