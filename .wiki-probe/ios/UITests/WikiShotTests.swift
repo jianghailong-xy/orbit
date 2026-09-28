@@ -72,7 +72,7 @@ final class WikiShotTests: XCTestCase {
         shoot("14-1-article")
         let list = app.collectionViews.firstMatch
         if list.waitForExistence(timeout: 10) {
-            for step in 2...6 {
+            for step in 2...10 {
                 scroll(list)
                 shoot("14-\(step)-article")
             }
@@ -82,12 +82,12 @@ final class WikiShotTests: XCTestCase {
         let marker = fresh.links["[7]"].firstMatch
         if marker.waitForExistence(timeout: 5) {
             marker.tap()
-            shoot("14-7-footnote-pressed")
+            shoot("14-11-footnote-pressed")
         } else {
             missing("footnote-link", fresh)
         }
         _ = launch("article-card")
-        shoot("14-8-footnote-card")
+        shoot("14-12-footnote-card")
     }
 
     // MARK: 16 — Browse by category and the A–Z index
