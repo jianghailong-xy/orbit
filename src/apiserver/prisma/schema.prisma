@@ -5440,6 +5440,7 @@ model WikiSpace {
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   workspaces WikiSpaceWorkspace[]
+  notes      WikiNote[]
   topics     WikiTopic[]
   entries    WikiEntry[]
   changesets WikiChangeset[]
@@ -5679,6 +5680,28 @@ model WikiSource {
   @@index([revisionId], map: "wiki_source_revision_id_idx")
   @@index([ownerId, kind, ref], map: "wiki_source_ref_idx")
   @@map("wiki_source")
+}
+
+/// A file `orbit wiki import` read (migration 0316, contracts/wiki.contract.json `import`): the `note`
+/// source an imported entry cites. Only its REDACTED text is kept, with the sha256 of that text, and one
+/// content is one note in a space — the same file imported again is the note already there.
+model WikiNote {
+  id      String    @id @default(uuid(7)) @db.Uuid
+  spaceId String    @map("space_id") @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_note_space_fkey")
+
+  /// Where the file was read from, relative to the directory the import named (redacted).
+  path          String
+  /// The file's text after the shared redactor: never the text as it was read.
+  text          String
+  contentSha256 String   @map("content_sha256") @db.Char(64)
+  /// Whether the redactor took anything out.
+  redacted      Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([spaceId, contentSha256], map: "wiki_note_space_id_content_sha256_key")
+  @@map("wiki_note")
 }
 
 /// One submission to WikiService.submitChangeset, the only door anything is written through: an

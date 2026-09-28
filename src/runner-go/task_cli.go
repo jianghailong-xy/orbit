@@ -2875,6 +2875,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// for. Neither is it listed in a session spawned with the wiki off (wiki_tools.go).
 	if wikiEnabledFromEnv() {
 		specs = append(specs, wikiCLICapabilities...)
+		specs = append(specs, wikiImportCLICapabilities...)
 	}
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)

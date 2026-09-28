@@ -242,6 +242,10 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "articles"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
+		// import proposes, into a space its owner named, what the session's own provider's model read in
+		// files the owner asked for: no more of a power than propose, and the server holds it to the same
+		// review mode and floors.
+		rules = append(rules, "Bash("+command+" wiki import *)")
 		// `orbit notify` is how a session reaches the human the runner works for — the reader most
 		// likely to be stuck without one is the plain single-session agent — and `orbit provider list`
 		// answers for the `--provider` field the task commands above take, which need no orchestration

@@ -170,6 +170,22 @@ export const WIKI_LIMITS = {
   getIdsMax: 10,
 } as const;
 
+/**
+ * `orbit wiki import` (contract `import`, criterion 1): each file it reads is one `note` source, and a
+ * local model's entries from it are proposed with origin `import`, taking effect as the space's review
+ * mode says. The note's CHECKs in migration 0316 are the first two numbers.
+ */
+export const WIKI_IMPORT_RULES = {
+  /** A note's text, redacted, is at most this many characters: a longer file is not imported. */
+  noteMaxChars: 100_000,
+  /** The path a note was read from, at most this many characters. */
+  notePathMaxChars: 500,
+  /** The entries the model is asked for, at most, from one file. */
+  entriesPerNote: 6,
+  /** The ops one run of the import proposes at most. */
+  opsPerRun: 30,
+} as const;
+
 /** A space's and a topic's slug. */
 export const WIKI_SLUG_PATTERN = '^[a-z0-9]+(?:-[a-z0-9]+)*$';
 

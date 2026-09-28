@@ -1317,6 +1317,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // the six preserved objects. No INSERT, UPDATE or DELETE: every existing list reads false, and
       // nothing is backfilled.
       '0315_wiki_cursor',
+      // Orbit Wiki import's notes: one new table, `wiki_note` (the redacted text of an imported file
+      // and its hash), reaching `wiki_space` through (space_id, owner_id) with its own CHECKs, and one
+      // unique index over it. Read against every claim above: no existing table is named but
+      // `wiki_space`, as the parent its foreign key references, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach. No function, trigger or type is created, replaced or dropped — no
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE: the table starts empty.
+      '0316_wiki_note',
       // The wiki's articles: `wiki_topic` gains one nullable TEXT column, `category`, with its CHECK
       // (catalog-only, and every existing row satisfies it), and a unique index over (id, owner_id)
       // that its primary key already makes unique; and one new table, `wiki_topic_summary`, reaching

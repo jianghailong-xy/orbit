@@ -13,10 +13,10 @@ import (
 // composition inside a session. Like the MCP tools they act for the session they run in — what a
 // session may read is what its bound workspace shares, and a proposal is recorded against it — so
 // there is no headless form: at a terminal outside a session there is nowhere to read from and
-// nobody to propose as. Four verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go)
-// runs a model, which is a runner's work rather than a tool call's, and `orbit wiki dossier`,
-// `orbit wiki cursor advance` (wiki_dossier.go) and `orbit wiki articles` (wiki_articles.go) are a Wiki
-// maintenance run's, and no other session's.
+// nobody to propose as. Five verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go) and
+// `orbit wiki import` (wiki_import.go) run a model, which is a runner's work rather than a tool call's,
+// and `orbit wiki dossier`, `orbit wiki cursor advance` (wiki_dossier.go) and `orbit wiki articles`
+// (wiki_articles.go) are a Wiki maintenance run's, and no other session's.
 
 const wikiHelp = `orbit wiki — read the Orbit wiki and propose to it
 
@@ -25,6 +25,7 @@ Usage:
   orbit wiki get <id>[,<id>...] [--include WHAT]... [--json]
   orbit wiki propose (--ops JSON | --ops-file -) [--rationale TEXT | --rationale-file -]
                      [--idempotency-key KEY] [--dry-run] [--json]
+  orbit wiki import --from <dir|file> --space ID [--max-ops N] [--concurrency N] [--json]
   orbit wiki verify --space ID [--model MODEL] [--max N] [--json]
   orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]
   orbit wiki cursor advance --space <id> --to <token> [--outcome succeeded|failed|truncated]
@@ -47,6 +48,8 @@ Run 'orbit wiki <command> --help' for options.
 `
 
 var wikiActionHelp = map[string]string{
+	// Written beside the command it documents (wiki_import.go), as its capability is.
+	"import": wikiImportHelp,
 	"search": `orbit wiki search — what the wiki already knows about this codebase
 
 Usage:
@@ -412,6 +415,8 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		return err
 	}
 	switch action {
+	case "import":
+		return cliWikiImport(args[1:], out, ctx)
 	case "search":
 		return cliWikiSearch(args[1:], out, ctx)
 	case "get":
