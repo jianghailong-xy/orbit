@@ -76,6 +76,10 @@ export interface WikiTimelineItem {
   supersededById: string | null;
   supersededByTitle: string | null;
   reason: string | null;
+  /** The review mode that applied the op at once, or null when the owner or the effect policy did. */
+  appliedByMode?: 'tiered' | 'automatic' | null;
+  /** An op the mode applied that is also waiting in Review as a spot check. */
+  spotCheck?: boolean;
 }
 
 export interface WikiTimeline {
@@ -523,7 +527,7 @@ export function wikiDecisionWord(entry: WikiEntry): string {
  * `Added` / `Confirmed` / `Amended` / `Retired` as one vocabulary across the timeline, the topic
  * grid and the Review cards, and `Change` stays the anchor's word alone.
  */
-export function wikiChangeVerb(item: Pick<WikiTimelineItem, 'op' | 'decision' | 'origin'>): string {
+export function wikiChangeVerb(item: Pick<WikiTimelineItem, 'op' | 'decision' | 'origin' | 'appliedByMode'>): string {
   if (item.decision === 'accepted') return WIKI_HISTORY_CONFIRMED_BY;
   if (item.decision === 'edited') return 'Edited by you';
   switch (item.op) {
@@ -536,7 +540,8 @@ export function wikiChangeVerb(item: Pick<WikiTimelineItem, 'op' | 'decision' | 
     case 'challenge':
       return 'Challenged';
     case 'add':
-      return item.origin === 'owner' ? 'Added by you' : 'Proposed';
+      // What a review mode applied is in the wiki already — `Added`, and its mark says by whom.
+      return item.origin === 'owner' ? 'Added by you' : item.appliedByMode ? 'Added' : 'Proposed';
     default:
       return item.origin === 'owner' ? 'Amended by you' : 'Amended';
   }

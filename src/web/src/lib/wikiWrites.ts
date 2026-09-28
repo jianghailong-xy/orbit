@@ -5,9 +5,11 @@ import type {
   WikiEntryChanges,
   WikiEntryDraft,
   WikiKind,
+  WikiMaintenanceSettings,
   WikiOpInput,
   WikiOpOutcome,
   WikiRejectReason,
+  WikiReviewMode,
 } from '@orbit/shared';
 import { api } from '../api';
 import type { WikiEntry } from './wiki';
@@ -119,6 +121,51 @@ export function decideWikiChangeset(changesetId: string, decisions: WikiDecision
     method: 'POST',
     body: { decisions },
   });
+}
+
+/**
+ * `POST /api/wiki/entries/:id/confirm` — the owner vouching for what a review mode applied: the entry
+ * becomes Confirmed and is pushed from then on. Refused to every session, like a decide.
+ */
+export function confirmWikiEntry(entryId: string): Promise<unknown> {
+  return api(`/wiki/entries/${encodeURIComponent(entryId)}/confirm`, { method: 'POST', body: {} });
+}
+
+/**
+ * `POST /api/wiki/entries/:id/reject` — the owner taking back what a review mode applied, with one of
+ * the four reasons Review's menu offers. The entry ends as rejected, a counter-example like a
+ * rejected proposal.
+ */
+export function rejectWikiEntry(entryId: string, reason: WikiRejectReason): Promise<unknown> {
+  return api(`/wiki/entries/${encodeURIComponent(entryId)}/reject`, { method: 'POST', body: { reason } });
+}
+
+/** What a revert answers: the changeset it wrote (none when nothing was left to undo), and what it left. */
+export interface WikiRevertAnswer {
+  revertedChangesetId: string;
+  changesetId: string | null;
+  replayed?: boolean;
+  skipped: Array<{ entryId: string; reason: string }>;
+}
+
+/**
+ * `POST /api/wiki/changesets/:id/revert` — every op of one run its review mode applied that nobody
+ * has answered, taken back at once. Keyed by the run, so a second press answers with the first.
+ */
+export function revertWikiChangeset(changesetId: string): Promise<WikiRevertAnswer> {
+  return api(`/wiki/changesets/${encodeURIComponent(changesetId)}/revert`, { method: 'POST', body: {} });
+}
+
+/** What the settings page changes: the review mode, Automatic's spot checks, and maintenance. */
+export interface WikiSpaceUpdate {
+  reviewMode?: WikiReviewMode;
+  automaticSpotChecks?: boolean;
+  maintenance?: Partial<Pick<WikiMaintenanceSettings, 'enabled' | 'workspaceId' | 'provider' | 'dailyRunLimit'>>;
+}
+
+/** `PATCH /api/wiki/spaces/:id` — the owner's settings; refused to every session. */
+export function updateWikiSpace(spaceId: string, body: WikiSpaceUpdate): Promise<unknown> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}`, { method: 'PATCH', body });
 }
 
 /**

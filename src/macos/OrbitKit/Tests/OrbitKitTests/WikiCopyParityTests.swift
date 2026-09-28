@@ -303,7 +303,9 @@ final class WikiCopyParityTests: XCTestCase {
     /// decisions, the five newest changes, the three most used, topics by count — and the verbs.
     func testTheHomeRowsAreTheWebsRows() throws {
         let home = try source(Self.home)
-        assertSays(home, ".slice(0, 5).map((item) => (", in: Self.home)
+        // One run is one row: the five newest rows once Review's runs are folded in (`wikiRecentRows`).
+        assertSays(home, "wikiRecentRows(timeline.data?.items ?? [], review.data ?? []).slice(0, 5).map((row) =>",
+                   in: Self.home)
         assertSays(home, "return [words[0].charAt(0).toUpperCase() + words[0].slice(1), ...words.slice(1)].join(' ');",
                    in: Self.home)
         for verb in ["if (entry.status === 'superseded') return 'Superseded';",
@@ -316,7 +318,7 @@ final class WikiCopyParityTests: XCTestCase {
         for verb in ["if (item.decision === 'accepted') return WIKI_HISTORY_CONFIRMED_BY;",
                      "if (item.decision === 'edited') return 'Edited by you';",
                      "return 'Retired';", "return 'Superseded';", "return 'Reinforced';", "return 'Challenged';",
-                     "return item.origin === 'owner' ? 'Added by you' : 'Proposed';",
+                     "return item.origin === 'owner' ? 'Added by you' : item.appliedByMode ? 'Added' : 'Proposed';",
                      "return item.origin === 'owner' ? 'Amended by you' : 'Amended';",
                      "`replaced by “${item.supersededByTitle}”`", "`replaces “${item.supersededByTitle}”`"] {
             assertSays(lib, verb, in: Self.lib)

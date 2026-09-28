@@ -190,6 +190,32 @@ public enum WikiRejectReason: String, Codable, Sendable, CaseIterable {
     case tooSpecific = "too_specific"
 }
 
+/// Which of what waits for the owner a space lets apply at once (contract `reviewModes.values`). The
+/// owner's alone to switch; a space that names none reads as `manual` (contract `space.settings`).
+public enum WikiReviewMode: String, Codable, Sendable, CaseIterable {
+    case manual, tiered, automatic
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiReviewMode(rawValue: raw) ?? .unknown
+    }
+}
+
+/// Who last changed a space's review mode (contract `space.settings.reviewModeChangedBy`): the owner,
+/// the spot checks sending it back to Manual, or Automatic's verification sending it back to Tiered.
+public enum WikiReviewModeChangedBy: String, Codable, Sendable, CaseIterable {
+    case owner
+    case spotChecks = "spot_checks"
+    case verification
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiReviewModeChangedBy(rawValue: raw) ?? .unknown
+    }
+}
+
 // MARK: - an anchor
 
 /// An anchor as the server keeps it: what was proposed, and its last check. One flat record rather
@@ -250,6 +276,26 @@ public struct WikiSpaceSettings: Codable, Equatable, Sendable {
     /// The space's Wiki maintenance run (contract `space.settings.maintenance`). Nil from a server
     /// that predates it, which reads as `WikiMaintenanceSettings.default`: off.
     public let maintenance: WikiMaintenanceSettings?
+    /// The owner's, on the owner channel only (contract `space.settings.reviewMode`). Nil reads as
+    /// `manual`: a space made before review modes existed.
+    public let reviewMode: WikiReviewMode?
+    /// Whether Automatic sends the owner spot checks, one in 200 (contract `automaticSpotChecks`). Off by default.
+    public let automaticSpotChecks: Bool?
+    /// Server-written: when the mode last changed, and who changed it.
+    public let reviewModeChangedAt: String?
+    public let reviewModeChangedBy: WikiReviewModeChangedBy?
+
+    public init(push: Bool? = nil, autoAcceptReinforce: Bool? = nil, maintenance: WikiMaintenanceSettings? = nil,
+                reviewMode: WikiReviewMode? = nil, automaticSpotChecks: Bool? = nil,
+                reviewModeChangedAt: String? = nil, reviewModeChangedBy: WikiReviewModeChangedBy? = nil) {
+        self.push = push
+        self.autoAcceptReinforce = autoAcceptReinforce
+        self.maintenance = maintenance
+        self.reviewMode = reviewMode
+        self.automaticSpotChecks = automaticSpotChecks
+        self.reviewModeChangedAt = reviewModeChangedAt
+        self.reviewModeChangedBy = reviewModeChangedBy
+    }
 }
 
 /// A space's Wiki maintenance run (contract `space.settings.maintenance`): whether facts start
@@ -593,13 +639,19 @@ public struct WikiChangesetOp: Codable, Equatable, Sendable, Identifiable {
     /// The verdict an Automatic space's verification gave it; nil until one arrives, and for every op
     /// no verification decides.
     public let verification: WikiOpVerification?
+    /// The review mode that applied it at once — nil when the owner or the effect policy did, and for
+    /// an Automatic op until its verdict applies it.
+    public let appliedByMode: WikiReviewMode?
+    /// An op the mode applied, drawn into Review for the owner to check after the fact.
+    public let spotCheck: Bool?
 
     public init(id: String, changesetId: String? = nil, seq: Int? = nil, op: WikiOpKind? = nil,
                 entryId: String? = nil, baseRevision: Int? = nil, payload: JSONValue? = nil,
                 similar: [WikiSimilar]? = nil, tainted: Bool? = nil, decision: WikiOpDecision? = nil,
                 decisionReason: String? = nil, decisionNote: String? = nil,
                 resultEntryId: String? = nil, resultRevision: Int? = nil, decidedAt: String? = nil,
-                verification: WikiOpVerification? = nil) {
+                verification: WikiOpVerification? = nil, appliedByMode: WikiReviewMode? = nil,
+                spotCheck: Bool? = nil) {
         self.id = id
         self.changesetId = changesetId
         self.seq = seq
@@ -616,6 +668,8 @@ public struct WikiChangesetOp: Codable, Equatable, Sendable, Identifiable {
         self.resultRevision = resultRevision
         self.decidedAt = decidedAt
         self.verification = verification
+        self.appliedByMode = appliedByMode
+        self.spotCheck = spotCheck
     }
 }
 
@@ -672,6 +726,10 @@ public struct WikiTimelineItem: Codable, Equatable, Sendable, Identifiable {
     public let supersededById: String?
     public let supersededByTitle: String?
     public let reason: String?
+    /// The review mode that applied the op at once, or nil when the owner or the effect policy did.
+    public let appliedByMode: WikiReviewMode?
+    /// An op the mode applied that is also waiting in Review as a spot check.
+    public let spotCheck: Bool?
 
     public var id: String { opId }
 
@@ -679,7 +737,8 @@ public struct WikiTimelineItem: Codable, Equatable, Sendable, Identifiable {
                 origin: WikiChangesetOrigin? = nil, at: String? = nil, entryId: String? = nil,
                 title: String? = nil, kind: WikiEntryKind? = nil, status: WikiEntryStatus? = nil,
                 trust: WikiTrust? = nil, supersededById: String? = nil,
-                supersededByTitle: String? = nil, reason: String? = nil) {
+                supersededByTitle: String? = nil, reason: String? = nil,
+                appliedByMode: WikiReviewMode? = nil, spotCheck: Bool? = nil) {
         self.opId = opId
         self.op = op
         self.decision = decision
@@ -693,6 +752,8 @@ public struct WikiTimelineItem: Codable, Equatable, Sendable, Identifiable {
         self.supersededById = supersededById
         self.supersededByTitle = supersededByTitle
         self.reason = reason
+        self.appliedByMode = appliedByMode
+        self.spotCheck = spotCheck
     }
 }
 
@@ -762,6 +823,56 @@ public struct WikiDecideRequest: Encodable, Equatable, Sendable {
     public let decisions: [WikiDecision]
 
     public init(decisions: [WikiDecision]) { self.decisions = decisions }
+}
+
+/// What the settings page changes (`PATCH /wiki/spaces/:id`): the review mode, Automatic's spot
+/// checks, and maintenance. A key left nil is not sent, so it is left as it is.
+public struct WikiSpaceUpdate: Encodable, Equatable, Sendable {
+    public var reviewMode: WikiReviewMode?
+    public var automaticSpotChecks: Bool?
+    public var maintenance: WikiMaintenanceUpdate?
+
+    public init(reviewMode: WikiReviewMode? = nil, automaticSpotChecks: Bool? = nil,
+                maintenance: WikiMaintenanceUpdate? = nil) {
+        self.reviewMode = reviewMode
+        self.automaticSpotChecks = automaticSpotChecks
+        self.maintenance = maintenance
+    }
+}
+
+/// The part of a space's maintenance the owner sets. `listId` is the server's and never sent.
+public struct WikiMaintenanceUpdate: Encodable, Equatable, Sendable {
+    public var enabled: Bool?
+    public var workspaceId: String?
+    public var provider: String?
+    public var dailyRunLimit: Int?
+
+    public init(enabled: Bool? = nil, workspaceId: String? = nil, provider: String? = nil, dailyRunLimit: Int? = nil) {
+        self.enabled = enabled
+        self.workspaceId = workspaceId
+        self.provider = provider
+        self.dailyRunLimit = dailyRunLimit
+    }
+}
+
+/// The owner's Reject of an entry a review mode applied (`POST /wiki/entries/:id/reject`).
+public struct WikiEntryRejectRequest: Encodable, Equatable, Sendable {
+    public let reason: WikiRejectReason
+
+    public init(reason: WikiRejectReason) { self.reason = reason }
+}
+
+/// What a run's revert answers (`POST /wiki/changesets/:id/revert`): the changeset it wrote, none
+/// when nothing was left to undo, and the entries it left as they were.
+public struct WikiRevertResult: Decodable, Equatable, Sendable {
+    public struct Skipped: Decodable, Equatable, Sendable {
+        public let entryId: String?
+        public let reason: String?
+    }
+    public let revertedChangesetId: String?
+    public let changesetId: String?
+    public let replayed: Bool?
+    public let skipped: [Skipped]?
 }
 
 /// One op of the owner's own write (`POST /wiki/spaces/:id/changesets`), which applies at once. The

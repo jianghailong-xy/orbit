@@ -66,6 +66,11 @@ public enum NavNode: Hashable, Sendable {
     /// Review: the proposals waiting for the owner, one card at a time. Pushed from the Wiki home's
     /// amber banner.
     case wikiReview
+    /// The space's Wiki settings — its review mode and maintenance — pushed from the home's gear.
+    case wikiSettings
+    /// One run: what a maintenance run, an import or a session's proposal applied at once, pushed
+    /// from its row in Recently changed.
+    case wikiRun(changesetID: String)
 }
 
 /// Which section is showing, and every section's stack.
@@ -177,6 +182,18 @@ public struct NavState: Equatable, Sendable {
     public var wikiReviewOnTop: Bool {
         if case .wikiReview = path.last { return true }
         return false
+    }
+
+    /// Whether the Wiki settings are the page on top of the Wiki section's stack.
+    public var wikiSettingsOnTop: Bool {
+        if case .wikiSettings = path.last { return true }
+        return false
+    }
+
+    /// The run the Wiki pane shows, when a run's page is on top.
+    public var selectedWikiRunID: String? {
+        guard case .wikiRun(let id) = path.last else { return nil }
+        return id
     }
 
     /// `AppModel.selectedUserID` — the account the Admin pane shows.
