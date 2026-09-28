@@ -30,7 +30,7 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 	for _, list := range [][]cliCapabilitySpec{
 		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities,
 		notifyCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
-		watchCLICapabilities, wikiCLICapabilities,
+		watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities,
 	} {
 		for _, spec := range list {
 			// Single-command families (`orbit notify`) have one help text, not a per-action map.

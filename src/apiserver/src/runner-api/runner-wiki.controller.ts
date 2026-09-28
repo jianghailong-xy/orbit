@@ -5,6 +5,7 @@ import { toUuid } from '@orbit/shared';
 import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiProposeDto, WikiVerificationReportDto } from '../wiki/dto';
+import { registerWikiNote, wikiImportPrincipal, WikiNoteDto } from '../wiki/wiki-import';
 import { flagParam, listParam, WikiRetrieval } from '../wiki/wiki-retrieval';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
 import { answerFor, answerForVerifications, WikiService, WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
@@ -161,6 +162,40 @@ export class RunnerWikiController {
     return answerForVerifications(await this.wiki.recordVerifications(principal, id, dto.verdicts));
   }
 
+  /**
+   * `orbit wiki import`, first step (contract `import.note`): one file registered as the `note` its
+   * entries will cite — redacted before it is hashed or kept, and the note the space already holds when
+   * the text is one it has. The answer carries the stored text, which is what the importer's model reads.
+   */
+  @Post('spaces/:id/notes')
+  @HttpCode(HttpStatus.OK)
+  async registerNote(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: WikiNoteDto,
+  ) {
+    await this.importer(runner, callingSessionId);
+    return registerWikiNote(this.prisma, this.wiki, runner.ownerId, id, dto);
+  }
+
+  /**
+   * `orbit wiki import`, second step (contract `import.propose`): wiki_propose's body, recorded with
+   * origin `import` into the space the path names — and taking effect exactly as that space's review
+   * mode takes an agent's proposal, floors and all.
+   */
+  @Post('spaces/:id/imports')
+  @HttpCode(HttpStatus.OK)
+  async proposeImport(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: WikiProposeDto,
+  ) {
+    const principal = await this.importer(runner, callingSessionId);
+    return answerFor(await this.wiki.submitChangeset(principal, id, dto));
+  }
+
   /** One entry, as the calling session's space shares it. */
   @Get('entries/:id')
   async getEntry(
@@ -224,6 +259,22 @@ export class RunnerWikiController {
     }
     await this.assertNotExcluded(sessionId);
     return { origin: 'agent', ownerId: runner.ownerId, userId: null, sessionId, toolCallId: null };
+  }
+
+  /**
+   * The caller of an import route: a session this runner hosts (contract `import.note.who`), whose
+   * changesets the import's ops are recorded on — so the ones an automatic space holds back are that
+   * session's to verify.
+   */
+  private async importer(runner: Pick<Runner, 'id' | 'ownerId'>, header: string | undefined): Promise<WikiPrincipal> {
+    const sessionId = await this.callingSession(runner, header);
+    if (!sessionId) {
+      throw new BadRequestException(
+        'missing session context: an import is recorded against the session that runs it, so this door needs X-Orbit-Session-Id',
+      );
+    }
+    await this.assertNotExcluded(sessionId);
+    return wikiImportPrincipal(runner.ownerId, sessionId);
   }
 
   /**

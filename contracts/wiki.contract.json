@@ -355,6 +355,48 @@
     "deleted": "Delete means forget: in the transaction that deletes the record, quote and quote_sha256 become NULL, and a confirmed entry that no live source supports any more is marked unsupported and leaves the push. The owner's own entries are not touched."
   },
 
+  "import": {
+    "phase": 2,
+    "doc": "docs/wiki-contract.md section 5.1; design section 8.3",
+    "migration": "src/apiserver/prisma/migrations/0316_wiki_note/migration.sql",
+    "tables": ["wiki_note"],
+    "rules": {
+      "noteMaxChars": 100000,
+      "notePathMaxChars": 500,
+      "entriesPerNote": 6,
+      "opsPerRun": 30
+    },
+    "note": {
+      "route": "POST /api/runner/wiki/spaces/:id/notes",
+      "body": {
+        "path": "required: where the file was read, relative to the directory the import named; at most rules.notePathMaxChars characters",
+        "text": "required: the file's text; at most rules.noteMaxChars characters"
+      },
+      "redaction": "The text and the path go through src/apiserver/src/common/secret-redaction.ts, with the owner's workspace.env values as literals, BEFORE anything is stored or hashed. Only the redacted text, its sha256 and the redacted path are kept: never the text as it was sent.",
+      "dedup": "One content is one note in a space: UNIQUE (space_id, content_sha256), the sha256 of the redacted text. Registering a text the space already holds — the same file imported again, or the same text under another name — answers the note already there with created false, and makes no row.",
+      "answer": "{ id, spaceId, path, contentSha256, chars, redacted, created, text }. text is the stored, redacted text, which is what the importing runner hands its model, so a quote the model copies is checked against the very text it read.",
+      "who": "A session this runner hosts for its owner (X-Orbit-Session-Id; a headless call is refused 400), into one of that owner's spaces (another owner's is a plain 404). A verifier, foreman or judgment session is refused WIKI_SESSION_EXCLUDED."
+    },
+    "source": "A note is cited as { kind: note, ref: <the note's id>, quote? }. It resolves only among its owner's notes — another owner's note is WIKI_SOURCE_UNRESOLVED, as their turn or task is — and its text is the stored, redacted text: what a quote is checked against (sourceRules.quote) and what an automatic space's verifier reads. Its locator is { path }, the file it came from. A note is second-hand content an agent wrote, never the owner's own words (reviewModes.tiered).",
+    "propose": {
+      "route": "POST /api/runner/wiki/spaces/:id/imports",
+      "body": "wiki_propose's: ops, rationale, idempotencyKey and dryRun, into the space the path names",
+      "origin": "import, decided by the route and never by a body field. What it records is treated as an agent's is (effectPolicy.origins.import): Manual keeps every add for Review, Tiered applies it as unreviewed, Automatic sends it to its verification, which orbit wiki verify runs in the same session — and every floor holds (reviewModes.floors): a principle is refused WIKI_KIND_OWNER_ONLY, a tainted op waits, the circuit breaker counts, and no changeset holds more than limits.opsPerChangeset ops.",
+      "who": "As the note route. The calling session is recorded on the changeset: the ops that wait for their verification are that session's to verify, and limits.opsPerTurn and limits.opsPerSession count what of them waits for review."
+    },
+    "cli": {
+      "command": "orbit wiki import --from <dir|file> --space <id> [--max-ops N] [--concurrency N] [--model MODEL] [--state FILE] [--json]",
+      "tool": "none: a CLI verb with no MCP tool beside it. It runs a model, which is a runner's work rather than a tool call's.",
+      "precondition": "Import only the files the owner asked for, into the space they named, and never write an entry yourself: each entry is the local model's, read from a separate clean call over the file's redacted text, and it takes effect only as the space's review mode says.",
+      "does": "Registers each file as a note (import.note), asks a clean Claude Code for at most rules.entriesPerNote entries from it, checks the run's ops with a dry run, and proposes the ones that passed (import.propose): at most rules.opsPerRun ops a run.",
+      "files": "A file is imported as it is. A directory is its *.md files directly inside it, the ones whose frontmatter says they are the owner's own guidance first (type feedback, then user, reference, project, then the rest), each group by name; MEMORY.md, a memory library's index, is left out. A file already imported, or holding a text the space already has, is not proposed from again.",
+      "model": "As agentSurface.verify.model: the endpoint, token and model the session's provider injected — ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN read by an apiKeyHelper, and ANTHROPIC_MODEL, which --model overrides — called the way agentSurface.verify.cleanClaudeCode calls it, with the importer's own system prompt and no thinking (CLAUDE_CODE_EFFORT_LEVEL=unset, MAX_THINKING_TOKENS=0). It waits for the endpoint's GET /health to answer 200 before its first call, and stops at the first 401.",
+      "principles": "A principle is the owner's alone (reviewModes.floors.principleOwnerOnly): the model is asked for none, and one it writes anyway is not proposed, only counted.",
+      "batches": "A dry run checks the run's ops first. An op refused for what it says is dropped and counted; from the first one refused for room — WIKI_QUOTA, or WIKI_REVIEW_QUEUE_FULL — the rest wait for a later run. What needs review therefore reaches Review a batch at a time, as limits.opsPerTurn, limits.opsPerSession and limits.pendingOpsPerSpace allow, never hundreds at once.",
+      "resume": "It remembers on the machine it runs on ($ORBIT_HOME/wiki-import, or --state) which files it registered, what the model found in each and which ops it proposed: a run picks up where the last one stopped, a file already imported is not sent to the model again, and one whose text changed is imported as the new note it is. A batch is proposed under an idempotency key made of its space and its ops, so one sent again after a lost answer writes nothing twice."
+    }
+  },
+
   "states": {
     "entry": {
       "values": ["proposed", "active", "superseded", "retired", "rejected"],
@@ -918,7 +960,12 @@
           "GET /api/runner/wiki/spaces/:id/verifications",
           "POST /api/runner/wiki/spaces/:id/verifications"
         ],
-        "verificationNote": "The session that proposed the ops, and no other (reviewModes.verification.who.runner): X-Orbit-Session-Id is required, and another session's op or another owner's anything is a 404."
+        "verificationNote": "The session that proposed the ops, and no other (reviewModes.verification.who.runner): X-Orbit-Session-Id is required, and another session's op or another owner's anything is a 404.",
+        "importRoutes": [
+          "POST /api/runner/wiki/spaces/:id/notes",
+          "POST /api/runner/wiki/spaces/:id/imports"
+        ],
+        "importNote": "phase 2 (import): orbit wiki import's two routes, for a session of the space's owner — X-Orbit-Session-Id is required, and another owner's space is a 404."
       }
     },
     "verify": {
