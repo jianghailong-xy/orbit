@@ -12,6 +12,7 @@
     "migration": "src/apiserver/prisma/migrations/0307_wiki/migration.sql",
     "reviewModeMigration": "src/apiserver/prisma/migrations/0311_wiki_review_modes/migration.sql",
     "verificationMigration": "src/apiserver/prisma/migrations/0312_wiki_verification/migration.sql",
+    "evidenceMigration": "src/apiserver/prisma/migrations/0314_wiki_verification_evidence/migration.sql",
     "tables": [
       "wiki_space",
       "wiki_space_workspace",
@@ -363,24 +364,27 @@
         "proposed": "an add or supersede that waits for review, or an add that waits for its verification (reviewModes.verification)",
         "active": "an add or supersede that applied at once: the owner's own, or an add the space's review mode applied (trust auto or unreviewed)"
       },
-      "terminal": ["superseded", "retired", "rejected"],
+      "terminal": ["superseded", "retired"],
+      "ended": ["superseded", "retired", "rejected"],
+      "endedMeans": "No longer live: never pushed, never searched by an agent, and what a client shows as ended. A rejected lineage is ended without being terminal, because the one reopening a verification allows (reviewModes.verification.reopen) proposes it again.",
       "transitions": [
         { "from": "proposed", "to": "active", "trigger": "the owner accepted the op that proposed it, as written or edited; or its verification found it supported (trust auto) or partly supported (trust unreviewed)" },
         { "from": "proposed", "to": "rejected", "trigger": "the owner rejected that op, or it expired or was withdrawn; or its verification found it unsupported or a duplicate. The row stays, as a counter-example the next similar[] shows with its reason" },
         { "from": "active", "to": "superseded", "trigger": "a supersede naming it applied; superseded_by_id names the successor, whose supersedes_id names it" },
         { "from": "active", "to": "retired", "trigger": "a retire naming it applied" },
-        { "from": "active", "to": "rejected", "trigger": "the owner rejected an entry the review mode applied at once and nobody has confirmed (trust auto or unreviewed): on its spot check, or from the entry itself. It stays as a counter-example, like a rejected proposal" }
+        { "from": "active", "to": "rejected", "trigger": "the owner rejected an entry the review mode applied at once and nobody has confirmed (trust auto or unreviewed): on its spot check, or from the entry itself. It stays as a counter-example, like a rejected proposal" },
+        { "from": "rejected", "to": "proposed", "trigger": "the verdict that rejected it was reopened (reviewModes.verification.reopen): an unsupported verdict given when none of its sources could be read. It waits for its verification again. Every other rejection is final" }
       ],
       "invariants": [
         "superseded exactly when superseded_by_id is set",
-        "retired_at is set exactly when the status is terminal",
+        "retired_at is set exactly when the status is ended (superseded, retired or rejected)",
         "trust is proposed exactly when the status is proposed or rejected"
       ]
     },
     "op": {
       "values": ["pending", "accepted", "edited", "rejected", "auto_applied", "conflict", "expired", "withdrawn", "verifying"],
       "initial": ["pending", "auto_applied", "verifying"],
-      "terminal": ["accepted", "edited", "rejected", "conflict", "expired", "withdrawn"],
+      "terminal": ["accepted", "edited", "conflict", "expired", "withdrawn"],
       "transitions": [
         { "from": "verifying", "to": "auto_applied", "trigger": "its verification found it supported or partly supported, and the verdict applied it (reviewModes.verification.verdicts)" },
         { "from": "verifying", "to": "pending", "trigger": "the verdict applied it and the draw made it a spot check (reviewModes.spotChecks.automatic): its effect stands, and the owner is asked to check it" },
@@ -393,20 +397,25 @@
         { "from": "pending", "to": "conflict", "trigger": "the owner accepted it, but its baseRevision was no longer the entry's current revision, so nothing applied; on a spot check, the entry had changed since the op applied" },
         { "from": "pending", "to": "expired", "trigger": "it waited limits.pendingExpiryDays days" },
         { "from": "pending", "to": "withdrawn", "trigger": "its entry left active before the owner decided it (another op superseded or retired it, or a revert undid it), so it can no longer apply" },
-        { "from": "auto_applied", "to": "rejected", "trigger": "the owner rejected, from the entry itself, the add the review mode applied at once (reviewModes.entryReject). Every other auto_applied op stays as it is" }
+        { "from": "auto_applied", "to": "rejected", "trigger": "the owner rejected, from the entry itself, the add the review mode applied at once (reviewModes.entryReject)" },
+        { "from": "auto_applied", "to": "accepted", "trigger": "the owner confirmed, from the entry itself, the entry the review mode applied it to (reviewModes.entryConfirm). Every other auto_applied op stays as it is" },
+        { "from": "pending", "to": "verifying", "trigger": "a tainted add or amend that waited for the owner was sent to its verification, in a space that is automatic now (reviewModes.verification.reopen)" },
+        { "from": "rejected", "to": "verifying", "trigger": "its verdict was reopened (reviewModes.verification.reopen): an unsupported verdict given when none of its sources could be read, which moves into its verification_history. Every other rejection is final" }
       ],
       "invariants": [
         "decided_at is set exactly when the decision is neither pending nor verifying",
         "decision_reason is set exactly when the decision is rejected, and is one of rejectReasons",
-        "an op waiting for its verification carries no verdict, and only an add or an amend ever waits for one or carries one"
+        "an op waiting for its verification carries no verdict, and only an add or an amend ever waits for one or carries one",
+        "verification_history is a list, empty for every op never reopened, and holds each earlier verdict of one that was, oldest first"
       ]
     },
     "changeset": {
       "values": ["pending", "settled"],
       "initial": ["pending", "settled"],
-      "terminal": ["settled"],
+      "terminal": [],
       "transitions": [
-        { "from": "pending", "to": "settled", "trigger": "the last of its pending or verifying ops was decided, verified, expired or withdrawn" }
+        { "from": "pending", "to": "settled", "trigger": "the last of its pending or verifying ops was decided, verified, expired or withdrawn" },
+        { "from": "settled", "to": "pending", "trigger": "one of its ops was sent back to its verification (reviewModes.verification.reopen): it waits again, with a fresh expires_at, until nothing of it does" }
       ],
       "invariants": [
         "decided_at is set exactly when the changeset is settled",
@@ -420,9 +429,9 @@
     "values": ["owner", "confirmed", "auto", "unreviewed", "proposed", "external"],
     "meaning": {
       "owner": "the owner wrote it: an owner's own add or supersede",
-      "confirmed": "an agent, a maintenance run, an import or a watch proposed it and the owner accepted it, as written or edited — or accepted its spot check",
+      "confirmed": "an agent, a maintenance run, an import or a watch proposed it and the owner accepted it, as written or edited — or accepted its spot check, or confirmed it from the entry itself (reviewModes.entryConfirm)",
       "auto": "the space's review mode applied it and no person has looked: Tiered for the owner's own words or a machine-verified entry, Automatic for what its verification found supported by the sources. Pushed; labelled Auto",
-      "unreviewed": "Tiered applied it at once without the owner's words or a machine verification behind it; Automatic's verification found its sources support it only in part; or a revert or a rejected spot check restored it. Shown, labelled Unreviewed, and never pushed",
+      "unreviewed": "Tiered applied it at once without the owner's words or a machine verification behind it; Automatic's verification found its sources support it only in part, could read none of them, or verified what a session that read the web proposed (reviewModes.verification.evidence); or a revert or a rejected spot check restored it. Shown, labelled Unreviewed, and never pushed",
       "proposed": "not accepted: every proposed entry and every rejected one",
       "external": "it rests on web-derived sources (a phase-3 assumption citing a url). Never pushed"
     },
@@ -433,6 +442,7 @@
       "reviewModeAddOrAmend": "auto or unreviewed (reviewModes.effect); in Automatic, what the verdict says (reviewModes.verification.verdicts): supported auto, partial unreviewed",
       "spotCheckAccepted": "confirmed",
       "undoneByRevertOrSpotCheck": "unreviewed",
+      "entryConfirmed": "confirmed",
       "everyOtherAppliedOp": "unchanged"
     },
     "edited": "An owner who edits a proposal before accepting it is recorded as the author of the revision that results, and the entry's trust is still confirmed."
@@ -491,7 +501,7 @@
       "watch": { "add": "pending", "reinforce": "appliedUnlessOff", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" }
     },
     "tainted": { "add": "pending", "reinforce": "pending", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" },
-    "taintedRule": "An op is tainted when the calling session used WebFetch or WebSearch (codex's webSearch too) before it, or when a turn it cites comes from a tainted stretch. A tainted op of any origin but owner follows the tainted row instead of its origin's row, and its Review card carries the Web-derived warning.",
+    "taintedRule": "An op is tainted when the calling session used WebFetch or WebSearch (codex's webSearch too) before it, or when a turn it cites comes from a tainted stretch. A tainted op of any origin but owner follows the tainted row instead of its origin's row, and its Review card carries the Web-derived warning. In an automatic space the review mode sends a tainted add or amend to its verification instead of to Review (reviewModes.floors.taintedWaits).",
     "challengeRule": "A challenge applies at once from every origin, tainted or not: it only raises a flag, and the flag's whole effect is to take the entry out of the push until the owner answers it.",
     "decide": {
       "route": "POST /api/wiki/changesets/:id/decide",
@@ -503,12 +513,12 @@
   },
 
   "reviewModes": {
-    "why": "Owner, 2026-09-26: not every entry needs a person, and a space can run as Wikova's does, in an Automatic mode. What the effect policy holds back, a space's review mode may apply; everything it applies is written through submitChangeset and applyOp like any other write, keeps its revision history, and can be rejected one entry at a time or undone a run at a time. Owner, 2026-09-27 (criterion 7, revision 3): Automatic verifies before it applies — the local model, called through a clean Claude Code apart from the call that proposed the op, checks each op against its own sources, and nothing an Automatic space takes in is live until a verdict says so (verification).",
+    "why": "Owner, 2026-09-26: not every entry needs a person, and a space can run as Wikova's does, in an Automatic mode. What the effect policy holds back, a space's review mode may apply; everything it applies is written through submitChangeset and applyOp like any other write, keeps its revision history, and can be rejected one entry at a time or undone a run at a time. Owner, 2026-09-27 (criterion 7, revision 3): Automatic verifies before it applies — the local model, called through a clean Claude Code apart from the call that proposed the op, checks each op against its own sources, and nothing an Automatic space takes in is live until a verdict says so (verification). Owner, 2026-09-27 (criterion 7, revision 4): a verification has to be able to read its evidence (verification.evidence), and what a session that read the web proposed is verified too, but never past unreviewed (floors.taintedWaits).",
     "values": ["manual", "tiered", "automatic"],
     "meaning": {
       "manual": "The effect policy and nothing else: an agent's, a maintenance run's and an import's add, amend, supersede and retire wait for the owner, as in phase 1.",
       "tiered": "An add or an amend applies at once. It is auto, and pushed, when it is the owner's own words or machine-verified (tiered); anything else it applies is unreviewed: shown, never pushed, and the owner may Reject it later.",
-      "automatic": "An add or an amend that passed every check waits for its verification, and its verdict decides it (verification.verdicts): supported applies as auto and is pushed, partial applies as unreviewed, unsupported is rejected with its reason, and a duplicate becomes a reinforce of the entry it duplicates. Without a verdict nothing applies, and nothing of it waits in Review."
+      "automatic": "An add or an amend that passed every check waits for its verification, and its verdict decides it (verification.verdicts): supported applies as auto and is pushed, partial applies as unreviewed, unsupported is rejected with its reason, and a duplicate becomes a reinforce of the entry it duplicates. A verdict about an op none of whose sources could be read, or about a tainted op, applies nothing past unreviewed (verification.evidence). Without a verdict nothing applies, and nothing of it waits in Review."
     },
     "setting": "space.settings.reviewMode",
     "effect": {
@@ -530,7 +540,7 @@
     "floors": {
       "why": "None of these is loosened by any mode.",
       "principleOwnerOnly": "A principle is the owner's to write: an add, amend or supersede of one from anyone else is refused WIKI_KIND_OWNER_ONLY.",
-      "taintedWaits": "A tainted op waits for the owner (effectPolicy.tainted).",
+      "taintedWaits": "A tainted op is never applied past unreviewed on anybody's say-so but the owner's. In manual and tiered it waits for the owner (effectPolicy.tainted). In automatic an add or an amend no other floor holds waits for its verification like any other op, and its verdict leaves it no more than unreviewed (verification.evidence.tainted): never pushed, never read by an agent — the runner door's wiki_search and wiki_get do not return a live tainted entry whose trust is not owner or confirmed — and no place in pendingOpsPerSpace; an unsupported verdict still rejects it. What rests on a web-derived record reaches an agent only once a person has vouched for it: the owner's Confirm (entryConfirm), or their acceptance in Review (push.eligible.taintedOnlyWithTrust). The owner reads it in the app as any other entry.",
       "ownerVouchedWaits": "An amend, supersede or retire of an entry the owner wrote or confirmed — trust owner or confirmed, or any revision of it the owner authored — waits for the owner.",
       "circuitBreaker": "A changeset may change, through ops the review mode applies, at most rules.breakerMaxChangedPercent percent of the entries the space held active when it began; the op that would pass that is refused WIKI_QUOTA and applies nothing. A space holding fewer than rules.breakerMinActiveEntries active entries has no breaker, so an empty space can take its first batch. What is counted is the distinct entries such ops add or amend.",
       "opsPerChangeset": "No request holds more than limits.opsPerChangeset ops: the one past it is refused WIKI_QUOTA."
@@ -549,7 +559,17 @@
       "applies": "A verdict applies through applyOp and recomputeFlags like every other write (storage.singleWriter): a promote for an add, an amend for an amend, a reject, a reinforce. An op a verdict applied is recorded auto_applied with applied_by_mode automatic, so revert, entryReject and the spot checks treat it as one the mode applied.",
       "trail": {
         "columns": ["verification_verdict", "verification_reason", "verification_model", "verified_at", "verification_duplicate_of"],
-        "rule": "Every verdict leaves its trail on its op, the four together or none of them: which of verdicts, the verifier's reason in one sentence (redacted as every stored text is, at most rules.verificationReasonMaxChars), the model that gave it (at most rules.verificationModelMaxChars), and when the server recorded it; verification_duplicate_of exactly when the verdict is duplicate. An op reads it back as verification: {verdict, reason, model, at, duplicateOf}, null until a verdict arrives."
+        "rule": "Every verdict leaves its trail on its op, the four together or none of them: which of verdicts, the verifier's reason in one sentence (redacted as every stored text is, at most rules.verificationReasonMaxChars), the model that gave it (at most rules.verificationModelMaxChars), and when the server recorded it; verification_duplicate_of exactly when the verdict is duplicate. An op reads it back as verification: {verdict, reason, model, at, duplicateOf, evidence}, null until a verdict arrives."
+      },
+      "evidence": {
+        "why": "Owner, 2026-09-27 (criterion 7, revision 4): a verification has to be able to read its evidence. A verifier handed no text judges the claim alone, and its verdict is no verdict about the records: in the preview space 95.7% of the ops whose sources were all tool, thinking and system events were found unsupported, against 0.9% of the ops with one source whose text it could read.",
+        "text": "Every source is read as its record's text, and it is the same text a submission's quote is checked against. A run event: user, assistant and thinking, its text; tool_use, its tool's name and its input; tool_result, its content — a string, or the text of its blocks — marked when the tool reported an error; error, its message; system, only the words it carries (text, notice, stderr), so a system event that is counts has none. Empty or blank text is none: an empty thinking is a record with nothing in it to read, not evidence that says nothing. A verifier is handed the text redacted by the shared redactor, then cut at rules.verificationSourceMaxChars.",
+        "column": "verification_evidence",
+        "values": ["readable", "unreadable"],
+        "mark": "readable when at least one of the op's sources has text, unreadable when none has. Each op of the list carries it (evidence), so a verifier knows before it asks a model; and the server reads it again when it records a verdict, never taking the verifier's word for it, and stores it with the verdict. NULL for a verdict recorded before migration 0314, and while there is no verdict.",
+        "unreadable": "A verdict about an op none of whose sources could be read is capped at unreviewed: supported, partial and unsupported all apply the op as unreviewed — shown, labelled Unreviewed, never pushed — and a duplicate is still a reinforce of the entry it names (verdicts.duplicate). None of them counts toward the fallback.",
+        "tainted": "A verdict about a tainted op is capped at unreviewed too: supported and partial apply it as unreviewed; unsupported rejects it, and counts; and a duplicate is rejected with nothing added to the entry it names, so what a session that read the web cites never changes whether an entry the space already holds is pushed (a pitfall's independent sessions, a source that keeps it supported).",
+        "function": "wikiVerdictEffect in src/shared/src/wiki.ts"
       },
       "who": {
         "runner": "Only the session that proposed the ops. The runner door requires X-Orbit-Session-Id (a headless call is refused) and lists and accepts verdicts for that session's own ops alone: another session's op, and anything of another owner's, is the same 404 as one that does not exist.",
@@ -561,8 +581,16 @@
       },
       "list": "The calling session's ops that wait for their verification in the space, oldest first, after the op ?after= names and at most ?limit= of them (rules.verificationListMax): each with its op, its kind, the entry as it would read once applied (an add's draft, an amend's changes laid over its entry), its sources each with the text of its record read now and redacted (at most rules.verificationSourceMaxChars of it, marked when cut), and its similar[] as recorded, each neighbour's title, status and trust read now. The answer names the space's mode, so a verifier can stop before it asks a model anything.",
       "report": "verdicts[], at most limits.opsPerChangeset of them, each {opId, verdict, reason, model} and duplicateOf for a duplicate. Each is judged on its own and in a transaction of its own; its outcome is applied, rejected, reinforced, conflict or refused, and a request none of whose verdicts was recorded answers with the status of its first refusal. A verdict for an op already verified the same way answers with what was recorded, replayed, and writes nothing.",
-      "fallback": "Facts, never a clock: when a verdict recorded in an automatic space is unsupported, the unsupported ones among the rules.verificationWindow latest verdicts recorded in the space since settings.reviewModeChangedAt are counted, and more than rules.verificationMaxUnsupportedPercent percent of rules.verificationWindow sends the space back to tiered in the same transaction (reviewModeChangedBy verification). The owner is sent one notification after it commits. The switch is a compare-and-set on the mode, so a space already out of automatic trips no second time, whatever is verified after.",
-      "cli": "orbit wiki verify (agentSurface.verify) is the runner's verifier: it reads the list, asks a clean Claude Code for one verdict per op, and reports each verdict as soon as it has it."
+      "fallback": "Facts, never a clock: when a verdict recorded in an automatic space is unsupported, the unsupported ones among the rules.verificationWindow latest verdicts recorded in the space since settings.reviewModeChangedAt are counted, and more than rules.verificationMaxUnsupportedPercent percent of rules.verificationWindow sends the space back to tiered in the same transaction (reviewModeChangedBy verification). A verdict about an op none of whose sources could be read (evidence.unreadable) is out of the window altogether: not counted, and not counted against. The owner is sent one notification after it commits. The switch is a compare-and-set on the mode, so a space already out of automatic trips no second time, whatever is verified after.",
+      "cli": "orbit wiki verify (agentSurface.verify) is the runner's verifier: it reads the list, asks a clean Claude Code for one verdict per op, and reports each verdict as soon as it has it.",
+      "reopen": {
+        "why": "A verdict given before the evidence rule could read no tool, thinking or system event: an op citing nothing else was found unsupported for want of text, and stood as a not_true counter-example in the next similar[].",
+        "route": "POST /api/wiki/spaces/:id/verifications/reopen",
+        "door": "user, with no session header (WIKI_OWNER_CHANNEL_ONLY); and the one-off import in the API server's container, {origin: import}, calling WikiService.reopenVerifications directly for the ops of its own changesets (who.import). Never the runner door.",
+        "rejected": "An add or an amend an unsupported verdict rejected (not_true) while none of its sources could be read — by the verdict's evidence mark, or for a verdict recorded before there was one, by what the list handed a verifier then: the text of a user's or an assistant's event, and of no other event — waits for its verification again. Its verdict, decision and when they were given move into verification_history, oldest first, with when it was reopened; an add's lineage is proposed again, and a settled changeset pending again. The next similar[] names no rejection for it.",
+        "tainted": "In a space that is automatic now, a tainted add or amend that waits for the owner goes to its verification when automatic would take it today (effect.function): it leaves Review and pendingOpsPerSpace. An amend of what the owner wrote or confirmed keeps waiting for them.",
+        "answer": "{spaceId, mode, reopened[], toVerification[], skipped[{opId, reason}]}: each op moves in a transaction of its own, by a compare-and-set on the decision it stood at, so a second call finds nothing left to move. Nothing but a call moves anything."
+      }
     },
     "spotChecks": {
       "trigger": "Facts, never a clock: tiered draws one of every rules.spotCheckEvery ops it applies at once into Review; automatic draws none unless settings.automaticSpotChecks is on (automatic). Which one is read off a hash of the space and the block's number, so a replay draws the same one and nothing decides it by the time of day.",
@@ -588,6 +616,11 @@
       "route": "POST /api/wiki/entries/:id/reject",
       "door": "user, with no session header (WIKI_OWNER_CHANNEL_ONLY)",
       "does": "The owner's Reject of an active entry whose trust is auto or unreviewed: the entry becomes rejected, and the add the review mode applied to create it records the rejection and its reason (rejectReasons), exactly as a rejected proposal does. Any other entry answers 409: a proposal is rejected in Review, and what the owner wrote or confirmed is retired."
+    },
+    "entryConfirm": {
+      "route": "POST /api/wiki/entries/:id/confirm",
+      "door": "user, with no session header (WIKI_OWNER_CHANNEL_ONLY). No tool confirms anything (agentSurface.notTools).",
+      "does": "The owner's Confirm of an active entry whose trust is auto or unreviewed, tainted or not: a revision the owner authored — the same content, resting on the current revision's live sources — makes its trust confirmed, and it is pushed from then on. The ops the review mode applied to it that nobody had answered, and a spot check still open on it, are answered accepted, so a later revert of their run leaves it as the owner kept it. Any other entry answers 409: a proposal is accepted in Review, and what the owner wrote or confirmed is theirs already."
     },
     "import": "An import, a maintenance run, an agent and a watch are treated alike: an origin-import changeset submitted in an automatic space waits for its verification like any other, and the import's own verdicts reach it through verification.who.import. A source may be a bare record id with no quote. The idempotency key is what keeps a replayed batch from writing twice.",
     "rules": {
@@ -680,7 +713,7 @@
     "eligible": {
       "status": ["active"],
       "trust": ["owner", "confirmed", "auto"],
-      "tainted": false,
+      "taintedOnlyWithTrust": ["owner", "confirmed"],
       "challenged": false,
       "unsupported": false,
       "anchorStateNot": ["changed", "missing"]
@@ -817,7 +850,7 @@
     { "code": "WIKI_QUOTA", "httpStatus": 429, "scope": "op", "when": "The op is past limits.opsPerChangeset in its request; or it would wait for the owner and pass limits.opsPerTurn for the request or limits.opsPerSession for the calling session (limitNotes.quota); or the review mode would apply it and the changeset would pass the circuit breaker (reviewModes.floors)." },
     { "code": "WIKI_REVIEW_QUEUE_FULL", "httpStatus": 429, "scope": "op", "when": "The op would wait for review and the space already has limits.pendingOpsPerSpace pending ops that wait on the owner's decision (spot checks and ops waiting for their verification not counted)." },
     { "code": "WIKI_PROBE_REFUSED", "httpStatus": 422, "scope": "op", "when": "The title or text reads as a tool probe (test, probe, TEST_WRITE_CHECK). The message says the tool works and not to retry." },
-    { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide, a revert, an entry's Reject, a change of the review mode or of automaticSpotChecks arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session." },
+    { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide, a revert, an entry's Reject or Confirm, a reopening of verifications, a change of the review mode or of automaticSpotChecks arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session." },
     { "code": "WIKI_NOT_MAINTENANCE_SESSION", "httpStatus": 403, "scope": "request", "phase": 2, "when": "A maintenance-only route was called by a session that is not a maintenance run of that space." },
     { "code": "WIKI_SESSION_EXCLUDED", "httpStatus": 403, "scope": "request", "addedByThisContract": true, "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes." },
     { "code": "WIKI_IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer." },
@@ -877,10 +910,12 @@
           "GET /api/wiki/spaces/:id/topics/:slug",
           "GET /api/wiki/spaces/:id/timeline",
           "POST /api/wiki/spaces/:id/changesets",
+          "POST /api/wiki/spaces/:id/verifications/reopen",
           "GET /api/wiki/entries/:id",
           "POST /api/wiki/entries/:id/pin",
           "POST /api/wiki/entries/:id/unpin",
           "POST /api/wiki/entries/:id/reject",
+          "POST /api/wiki/entries/:id/confirm",
           "GET /api/wiki/search",
           "GET /api/wiki/review",
           "POST /api/wiki/changesets/:id/decide",
@@ -914,8 +949,9 @@
       "cli": "orbit wiki verify",
       "tool": "none: a CLI verb with no MCP tool beside it. It runs a model, which is a runner's work rather than a tool call's, and it reports only what that model said.",
       "precondition": "Verify only the ops this session proposed into an automatic space, and never write a verdict yourself: each verdict is the local model's, read from a separate clean call against the op's own sources, and a verdict that cannot be read is reported as nothing.",
-      "does": "Reads reviewModes.verification.list for --space, asks a clean Claude Code for one verdict per op, and reports each (reviewModes.verification.report) as soon as it has it, so what one run verified survives a run that stops half way. It stops at once on a 401 from the model's endpoint, and on a space that is no longer automatic.",
-      "cleanClaudeCode": "claude -p --bare --tools \"\" --strict-mcp-config --mcp-config '{\"mcpServers\":{}}' --no-session-persistence --output-format json --model <model> --system-prompt <the verifier's own, short> --settings <file naming an apiKeyHelper>, run with an empty HOME and CLAUDE_CONFIG_DIR and an environment built from an allowlist: none of the session's ORBIT_* variables, none of its own Claude Code's (of CLAUDE_CODE_* only the provider's CLAUDE_CODE_MAX_CONTEXT_TOKENS and CLAUDE_CODE_EFFORT_LEVEL pass), and no ANTHROPIC_API_KEY.",
+      "does": "Reads reviewModes.verification.list for --space, asks a clean Claude Code for one verdict per op, and reports each (reviewModes.verification.report) as soon as it has it, so what one run verified survives a run that stops half way. An op whose sources the list says are unreadable is asked about all the same: the server caps what its verdict can do (reviewModes.verification.evidence), and a duplicate still adds its sources. It stops at once on a 401 from the model's endpoint, and on a space that is no longer automatic.",
+      "cleanClaudeCode": "claude -p --bare --tools \"\" --strict-mcp-config --mcp-config '{\"mcpServers\":{}}' --no-session-persistence --output-format json --model <model> --system-prompt <the verifier's own, short> --settings <file naming an apiKeyHelper>, run with an empty HOME and CLAUDE_CONFIG_DIR and an environment built from an allowlist: none of the session's ORBIT_* variables, none of its own Claude Code's (of CLAUDE_CODE_* only the provider's CLAUDE_CODE_MAX_CONTEXT_TOKENS passes), and no ANTHROPIC_API_KEY.",
+      "thinking": "Off unless asked for: the clean call runs with CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0, so its request names no effort and no thinking, whatever effort the session's provider declares. --effort <low|medium|high|xhigh|max> asks for that effort instead (CLAUDE_CODE_EFFORT_LEVEL=<level>), and for thinking with it.",
       "model": "The model and the endpoint are the ones the session's provider injected: ANTHROPIC_MODEL and ANTHROPIC_BASE_URL (--model names another model). The token is ANTHROPIC_AUTH_TOKEN, read by the apiKeyHelper, because a bare run sends ANTHROPIC_API_KEY as x-api-key, which the local vLLM refuses 401, and ignores ANTHROPIC_AUTH_TOKEN.",
       "prompt": "Hand-written, one op at a time: the entry's kind, title, summary and fields, the text of each source, and the neighbours a duplicate may name. The answer is one JSON object: {\"verdict\": one of reviewModes.verification.verdicts, \"reason\": one sentence, \"duplicateOf\": the id of the neighbour it duplicates, for a duplicate}.",
       "unreadable": "An answer that is not that object — no JSON, another verdict, no reason, a duplicate naming no listed neighbour — is not a verdict: nothing is reported for its op, which keeps waiting, and it counts as a failure. The command exits non-zero when any op failed."
