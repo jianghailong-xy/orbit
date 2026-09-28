@@ -10,10 +10,12 @@
     "default one tagged), the Automatic spot check, the floors, and maintenance off / its Set up form /",
     "on. `fallbacks`: a space's settings → the sentence the page leads Review mode with, or null.",
     "`marks`: one entry → the answers it offers, the bar under its head, and the line Where it's used",
-    "adds. `checkedLines`: the bar's second line. `runs`: one changeset, with the entries the page",
-    "holds → what its page and its Recently changed row count and say. `recent`: the feed's op ids",
-    "with the runs Review holds → the rows. `challenges`: an entry's anchors → the ones a challenge is",
-    "about, in the server's own words, and the commit they were checked on."
+    "adds. `checkedLines`: the bar's second line. `runs`: one run as its read answers it (`GET",
+    "/api/wiki/changesets/:id`: the changeset, the entries its ops name, the server's counts, and what Revert",
+    "would undo) → what its page and its Recently changed row say, and whether Revert run… is offered.",
+    "`recent`: the timeline's items, each naming its changeset and the mode that applied it → the rows.",
+    "`challenges`: an entry's anchors → the ones a challenge is about, in the server's own words, and the",
+    "commit they were checked on."
   ],
   "settings": {
     "title": "Wiki settings",
@@ -337,7 +339,7 @@
   "runs": [
     {
       "name": "a maintenance run in an Automatic space",
-      "changeset": {
+      "view": {
         "id": "0196b500-0000-7000-8000-000000000001",
         "spaceId": "space-1",
         "origin": "maintenance",
@@ -466,7 +468,7 @@
             "decisionReason": null,
             "decisionNote": null,
             "resultEntryId": null,
-            "resultRevision": null,
+            "resultRevision": 2,
             "decidedAt": null,
             "appliedByMode": "automatic",
             "spotCheck": false,
@@ -558,145 +560,212 @@
             "spotCheck": false,
             "verification": null
           }
-        ]
-      },
-      "entries": [
-        {
-          "id": "e1",
-          "spaceId": "space-1",
-          "kind": "pitfall",
-          "status": "active",
-          "trust": "auto",
-          "currentRevision": 1,
-          "title": "Chromium renders the mock HTML to PNG",
-          "summary": "Headless chromium with a fixed window size.",
-          "fields": {},
-          "topics": [],
-          "aliases": [],
-          "anchors": [],
-          "anchorState": "unchecked",
-          "anchorCheckedRef": null,
-          "anchorCheckedAt": null,
-          "tainted": false,
-          "challenged": false,
-          "unsupported": false,
-          "pinned": false,
-          "supersedesId": null,
-          "supersededById": null,
-          "validFrom": "2026-09-28T07:41:00.000Z",
-          "validTo": null,
-          "recordedAt": "2026-09-28T07:41:00.000Z",
-          "retiredAt": null
+        ],
+        "appliedByMode": "automatic",
+        "entries": [
+          {
+            "id": "e1",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "auto",
+            "currentRevision": 1,
+            "title": "Chromium renders the mock HTML to PNG",
+            "summary": "Headless chromium with a fixed window size.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T07:41:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T07:41:00.000Z",
+            "retiredAt": null
+          },
+          {
+            "id": "e2",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "unreviewed",
+            "currentRevision": 1,
+            "title": "captureBeyondViewport shifts the screenshot",
+            "summary": "Set it false and clip by the element's rect.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T07:41:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T07:41:00.000Z",
+            "retiredAt": null
+          },
+          {
+            "id": "e3",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "auto",
+            "currentRevision": 1,
+            "title": "Mocks live in docs/mocks",
+            "summary": "Approved mocks go in docs/mocks/.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T07:41:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T07:41:00.000Z",
+            "retiredAt": null
+          },
+          {
+            "id": "e4",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "auto",
+            "currentRevision": 2,
+            "title": "Hover never moves the layout",
+            "summary": "Hover changes visibility, never layout.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T07:41:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T07:41:00.000Z",
+            "retiredAt": null
+          },
+          {
+            "id": "e5",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "confirmed",
+            "currentRevision": 1,
+            "title": "Worktree index.lock breaks git add",
+            "summary": "Remove the stale lock first.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T07:41:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T07:41:00.000Z",
+            "retiredAt": null
+          },
+          {
+            "id": "e6",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "rejected",
+            "trust": "proposed",
+            "currentRevision": 1,
+            "title": "A claim no source backs",
+            "summary": "Rejected by the check.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T07:41:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T07:41:00.000Z",
+            "retiredAt": "2026-09-28T07:41:00.000Z"
+          },
+          {
+            "id": "e7",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "proposed",
+            "trust": "proposed",
+            "currentRevision": 1,
+            "title": "A principle only the owner writes",
+            "summary": "Waits for the owner.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T07:41:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T07:41:00.000Z",
+            "retiredAt": null
+          }
+        ],
+        "counts": {
+          "applied": 5,
+          "auto": 3,
+          "unreviewed": 1,
+          "rejectedByCheck": 1,
+          "toReview": 2
         },
-        {
-          "id": "e2",
-          "spaceId": "space-1",
-          "kind": "pitfall",
-          "status": "active",
-          "trust": "unreviewed",
-          "currentRevision": 1,
-          "title": "captureBeyondViewport shifts the screenshot",
-          "summary": "Set it false and clip by the element's rect.",
-          "fields": {},
-          "topics": [],
-          "aliases": [],
-          "anchors": [],
-          "anchorState": "unchecked",
-          "anchorCheckedRef": null,
-          "anchorCheckedAt": null,
-          "tainted": false,
-          "challenged": false,
-          "unsupported": false,
-          "pinned": false,
-          "supersedesId": null,
-          "supersededById": null,
-          "validFrom": "2026-09-28T07:41:00.000Z",
-          "validTo": null,
-          "recordedAt": "2026-09-28T07:41:00.000Z",
-          "retiredAt": null
-        },
-        {
-          "id": "e3",
-          "spaceId": "space-1",
-          "kind": "pitfall",
-          "status": "active",
-          "trust": "auto",
-          "currentRevision": 1,
-          "title": "Mocks live in docs/mocks",
-          "summary": "Approved mocks go in docs/mocks/.",
-          "fields": {},
-          "topics": [],
-          "aliases": [],
-          "anchors": [],
-          "anchorState": "unchecked",
-          "anchorCheckedRef": null,
-          "anchorCheckedAt": null,
-          "tainted": false,
-          "challenged": false,
-          "unsupported": false,
-          "pinned": false,
-          "supersedesId": null,
-          "supersededById": null,
-          "validFrom": "2026-09-28T07:41:00.000Z",
-          "validTo": null,
-          "recordedAt": "2026-09-28T07:41:00.000Z",
-          "retiredAt": null
-        },
-        {
-          "id": "e4",
-          "spaceId": "space-1",
-          "kind": "pitfall",
-          "status": "active",
-          "trust": "auto",
-          "currentRevision": 1,
-          "title": "Hover never moves the layout",
-          "summary": "Hover changes visibility, never layout.",
-          "fields": {},
-          "topics": [],
-          "aliases": [],
-          "anchors": [],
-          "anchorState": "unchecked",
-          "anchorCheckedRef": null,
-          "anchorCheckedAt": null,
-          "tainted": false,
-          "challenged": false,
-          "unsupported": false,
-          "pinned": false,
-          "supersedesId": null,
-          "supersededById": null,
-          "validFrom": "2026-09-28T07:41:00.000Z",
-          "validTo": null,
-          "recordedAt": "2026-09-28T07:41:00.000Z",
-          "retiredAt": null
-        },
-        {
-          "id": "e5",
-          "spaceId": "space-1",
-          "kind": "pitfall",
-          "status": "active",
-          "trust": "confirmed",
-          "currentRevision": 1,
-          "title": "Worktree index.lock breaks git add",
-          "summary": "Remove the stale lock first.",
-          "fields": {},
-          "topics": [],
-          "aliases": [],
-          "anchors": [],
-          "anchorState": "unchecked",
-          "anchorCheckedRef": null,
-          "anchorCheckedAt": null,
-          "tainted": false,
-          "challenged": false,
-          "unsupported": false,
-          "pinned": false,
-          "supersedesId": null,
-          "supersededById": null,
-          "validFrom": "2026-09-28T07:41:00.000Z",
-          "validTo": null,
-          "recordedAt": "2026-09-28T07:41:00.000Z",
-          "retiredAt": null
+        "revertible": true,
+        "revert": {
+          "adds": 3,
+          "amends": 1
         }
-      ],
+      },
       "isRun": true,
       "kicker": "Wiki maintenance · run",
       "title": "Applied 5 changes",
@@ -725,11 +794,12 @@
         "Hover never moves the layout": "auto",
         "Worktree index.lock breaks git add": "confirmed"
       },
+      "revertOffered": true,
       "revert": "The 4 changes it applied are undone: 3 added entries are withdrawn and 1 amended one goes back to its previous revision. Agents stop getting them."
     },
     {
-      "name": "a Tiered import, one of whose entries the page does not hold",
-      "changeset": {
+      "name": "a Tiered import, one of whose entries the owner has confirmed since",
+      "view": {
         "id": "0196b500-0000-7000-8000-000000000002",
         "spaceId": "space-1",
         "origin": "import",
@@ -793,42 +863,84 @@
             "spotCheck": false,
             "verification": null
           }
-        ]
-      },
-      "entries": [
-        {
-          "id": "f2",
-          "spaceId": "space-1",
-          "kind": "pitfall",
-          "status": "active",
-          "trust": "confirmed",
-          "currentRevision": 1,
-          "title": "Import two",
-          "summary": "From memory.",
-          "fields": {},
-          "topics": [],
-          "aliases": [],
-          "anchors": [],
-          "anchorState": "unchecked",
-          "anchorCheckedRef": null,
-          "anchorCheckedAt": null,
-          "tainted": false,
-          "challenged": false,
-          "unsupported": false,
-          "pinned": false,
-          "supersedesId": null,
-          "supersededById": null,
-          "validFrom": "2026-09-28T07:41:00.000Z",
-          "validTo": null,
-          "recordedAt": "2026-09-28T07:41:00.000Z",
-          "retiredAt": null
+        ],
+        "appliedByMode": "tiered",
+        "entries": [
+          {
+            "id": "f1",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "auto",
+            "currentRevision": 1,
+            "title": "Import one",
+            "summary": "From CLAUDE.md.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T07:41:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T07:41:00.000Z",
+            "retiredAt": null
+          },
+          {
+            "id": "f2",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "confirmed",
+            "currentRevision": 1,
+            "title": "Import two",
+            "summary": "From memory.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T07:41:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T07:41:00.000Z",
+            "retiredAt": null
+          }
+        ],
+        "counts": {
+          "applied": 2,
+          "auto": 1,
+          "unreviewed": 0,
+          "rejectedByCheck": 0,
+          "toReview": 0
+        },
+        "revertible": true,
+        "revert": {
+          "adds": 1,
+          "amends": 0
         }
-      ],
+      },
       "isRun": true,
       "kicker": "Import · run",
       "title": "Applied 2 changes",
       "when": "Sep 27, 09:05",
-      "counts": [],
+      "counts": [
+        "1 Auto"
+      ],
       "added": [
         "Import one",
         "Import two"
@@ -836,14 +948,15 @@
       "amended": [],
       "reinforced": [],
       "marks": {
-        "Import one": null,
+        "Import one": "auto",
         "Import two": "confirmed"
       },
+      "revertOffered": true,
       "revert": "The 1 change it applied is undone: 1 added entry is withdrawn. Agents stop getting it."
     },
     {
       "name": "a session's proposal nothing applied",
-      "changeset": {
+      "view": {
         "id": "0196b500-0000-7000-8000-000000000003",
         "spaceId": "space-1",
         "origin": "agent",
@@ -881,9 +994,47 @@
             "spotCheck": false,
             "verification": null
           }
-        ]
+        ],
+        "appliedByMode": null,
+        "entries": [
+          {
+            "id": "g1",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "proposed",
+            "trust": "proposed",
+            "currentRevision": 1,
+            "title": "A proposal",
+            "summary": "Waits in Review.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T06:00:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T06:00:00.000Z",
+            "retiredAt": null
+          }
+        ],
+        "counts": {
+          "applied": 0,
+          "auto": 0,
+          "unreviewed": 0,
+          "rejectedByCheck": 0,
+          "toReview": 1
+        },
+        "revertible": false,
+        "revert": null
       },
-      "entries": [],
       "isRun": false,
       "kicker": "A session · run",
       "title": "Applied 0 changes",
@@ -895,7 +1046,392 @@
       "amended": [],
       "reinforced": [],
       "marks": {},
-      "revert": "The 0 changes it applied are undone. Agents stop getting them."
+      "revertOffered": false,
+      "revert": null
+    },
+    {
+      "name": "an Automatic run nothing of which waits in Review",
+      "view": {
+        "id": "0196b500-0000-7000-8000-000000000004",
+        "spaceId": "space-1",
+        "origin": "maintenance",
+        "sessionId": "session-4",
+        "toolCallId": null,
+        "rationale": "Wiki maintenance",
+        "status": "settled",
+        "createdAt": "2026-09-28T09:12:00.000Z",
+        "decidedAt": null,
+        "expiresAt": null,
+        "ops": [
+          {
+            "id": "run4-op1",
+            "changesetId": "0196b500-0000-7000-8000-000000000004",
+            "seq": 0,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "Revert a run from its page",
+                "summary": "Every run opens by its own id."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "h1",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "supported",
+              "reason": "the sources say so",
+              "model": "local-vllm",
+              "at": "2026-09-28T09:13:00.000Z",
+              "duplicateOf": null,
+              "evidence": "readable"
+            }
+          },
+          {
+            "id": "run4-op2",
+            "changesetId": "0196b500-0000-7000-8000-000000000004",
+            "seq": 1,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "Automatic draws no spot check",
+                "summary": "Nothing of its runs waits in Review."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "h2",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "partial",
+              "reason": "the sources say part of it",
+              "model": "local-vllm",
+              "at": "2026-09-28T09:13:00.000Z",
+              "duplicateOf": null,
+              "evidence": "readable"
+            }
+          },
+          {
+            "id": "run4-op3",
+            "changesetId": "0196b500-0000-7000-8000-000000000004",
+            "seq": 2,
+            "op": "amend",
+            "entryId": "h3",
+            "baseRevision": 1,
+            "payload": {
+              "changes": {
+                "summary": "The timeline names each op's changeset."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": null,
+            "resultRevision": 2,
+            "decidedAt": null,
+            "appliedByMode": "automatic",
+            "spotCheck": false,
+            "verification": {
+              "verdict": "supported",
+              "reason": "the sources say so",
+              "model": "local-vllm",
+              "at": "2026-09-28T09:13:00.000Z",
+              "duplicateOf": null,
+              "evidence": "readable"
+            }
+          }
+        ],
+        "appliedByMode": "automatic",
+        "entries": [
+          {
+            "id": "h1",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "auto",
+            "currentRevision": 1,
+            "title": "Revert a run from its page",
+            "summary": "Every run opens by its own id.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T09:13:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T09:13:00.000Z",
+            "retiredAt": null
+          },
+          {
+            "id": "h2",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "unreviewed",
+            "currentRevision": 1,
+            "title": "Automatic draws no spot check",
+            "summary": "Nothing of its runs waits in Review.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-28T09:13:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-28T09:13:00.000Z",
+            "retiredAt": null
+          },
+          {
+            "id": "h3",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "auto",
+            "currentRevision": 2,
+            "title": "Recently changed folds a run",
+            "summary": "The timeline names each op's changeset.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-27T09:00:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-27T09:00:00.000Z",
+            "retiredAt": null
+          }
+        ],
+        "counts": {
+          "applied": 3,
+          "auto": 2,
+          "unreviewed": 1,
+          "rejectedByCheck": 0,
+          "toReview": 0
+        },
+        "revertible": true,
+        "revert": {
+          "adds": 2,
+          "amends": 1
+        }
+      },
+      "isRun": true,
+      "kicker": "Wiki maintenance · run",
+      "title": "Applied 3 changes",
+      "when": "Sep 28, 09:12",
+      "counts": [
+        "2 Auto",
+        "1 Unreviewed"
+      ],
+      "added": [
+        "Revert a run from its page",
+        "Automatic draws no spot check"
+      ],
+      "amended": [
+        "Recently changed folds a run"
+      ],
+      "reinforced": [],
+      "marks": {
+        "Revert a run from its page": "auto",
+        "Automatic draws no spot check": "unreviewed",
+        "Recently changed folds a run": "auto"
+      },
+      "revertOffered": true,
+      "revert": "The 3 changes it applied are undone: 2 added entries are withdrawn and 1 amended one goes back to its previous revision. Agents stop getting them."
+    },
+    {
+      "name": "a run reverted already",
+      "view": {
+        "id": "0196b500-0000-7000-8000-000000000005",
+        "spaceId": "space-1",
+        "origin": "import",
+        "sessionId": null,
+        "toolCallId": null,
+        "rationale": "Import",
+        "status": "settled",
+        "createdAt": "2026-09-26T18:30:00.000Z",
+        "decidedAt": null,
+        "expiresAt": null,
+        "ops": [
+          {
+            "id": "run5-op1",
+            "changesetId": "0196b500-0000-7000-8000-000000000005",
+            "seq": 0,
+            "op": "add",
+            "entryId": null,
+            "baseRevision": null,
+            "payload": {
+              "entry": {
+                "kind": "pitfall",
+                "title": "An import taken back",
+                "summary": "Retired with its run."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": "i1",
+            "resultRevision": 1,
+            "decidedAt": null,
+            "appliedByMode": "tiered",
+            "spotCheck": false,
+            "verification": null
+          },
+          {
+            "id": "run5-op2",
+            "changesetId": "0196b500-0000-7000-8000-000000000005",
+            "seq": 1,
+            "op": "amend",
+            "entryId": "i2",
+            "baseRevision": 1,
+            "payload": {
+              "changes": {
+                "summary": "What the import said."
+              }
+            },
+            "similar": [],
+            "tainted": false,
+            "decision": "auto_applied",
+            "decisionReason": null,
+            "decisionNote": null,
+            "resultEntryId": null,
+            "resultRevision": 2,
+            "decidedAt": null,
+            "appliedByMode": "tiered",
+            "spotCheck": false,
+            "verification": null
+          }
+        ],
+        "appliedByMode": "tiered",
+        "entries": [
+          {
+            "id": "i1",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "retired",
+            "trust": "auto",
+            "currentRevision": 1,
+            "title": "An import taken back",
+            "summary": "Retired with its run.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-26T18:30:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-26T18:30:00.000Z",
+            "retiredAt": "2026-09-26T18:30:00.000Z"
+          },
+          {
+            "id": "i2",
+            "spaceId": "space-1",
+            "kind": "pitfall",
+            "status": "active",
+            "trust": "unreviewed",
+            "currentRevision": 3,
+            "title": "An entry put back",
+            "summary": "What it said before the import.",
+            "fields": {},
+            "topics": [],
+            "aliases": [],
+            "anchors": [],
+            "anchorState": "unchecked",
+            "anchorCheckedRef": null,
+            "anchorCheckedAt": null,
+            "tainted": false,
+            "challenged": false,
+            "unsupported": false,
+            "pinned": false,
+            "supersedesId": null,
+            "supersededById": null,
+            "validFrom": "2026-09-25T10:00:00.000Z",
+            "validTo": null,
+            "recordedAt": "2026-09-25T10:00:00.000Z",
+            "retiredAt": null
+          }
+        ],
+        "counts": {
+          "applied": 2,
+          "auto": 0,
+          "unreviewed": 0,
+          "rejectedByCheck": 0,
+          "toReview": 0
+        },
+        "revertible": false,
+        "revert": null
+      },
+      "isRun": true,
+      "kicker": "Import · run",
+      "title": "Applied 2 changes",
+      "when": "Sep 26, 18:30",
+      "counts": [],
+      "added": [
+        "An import taken back"
+      ],
+      "amended": [
+        "An entry put back"
+      ],
+      "reinforced": [],
+      "marks": {
+        "An import taken back": null,
+        "An entry put back": "unreviewed"
+      },
+      "revertOffered": false,
+      "revert": null
     }
   ],
   "revertDialog": {
@@ -919,33 +1455,44 @@
       "items": [
         {
           "opId": "run1-op1",
-          "at": "2026-09-28T07:41:00.000Z"
+          "at": "2026-09-28T07:41:00.000Z",
+          "origin": "maintenance",
+          "changesetId": "0196b500-0000-7000-8000-000000000001",
+          "changesetAppliedByMode": "automatic"
         },
         {
           "opId": "prop-op1",
-          "at": "2026-09-28T07:00:00.000Z"
+          "at": "2026-09-28T07:00:00.000Z",
+          "origin": "agent",
+          "changesetId": "0196b500-0000-7000-8000-000000000003",
+          "changesetAppliedByMode": null
         },
         {
           "opId": "run1-op2",
-          "at": "2026-09-28T06:59:00.000Z"
+          "at": "2026-09-28T06:59:00.000Z",
+          "origin": "maintenance",
+          "changesetId": "0196b500-0000-7000-8000-000000000001",
+          "changesetAppliedByMode": "automatic"
         },
         {
           "opId": "lone-op",
-          "at": "2026-09-28T06:00:00.000Z"
+          "at": "2026-09-28T06:00:00.000Z",
+          "origin": "owner",
+          "changesetId": "0196b500-0000-7000-8000-000000000006",
+          "changesetAppliedByMode": null
         },
         {
           "opId": "run2-op1",
-          "at": "2026-09-27T09:05:00.000Z"
+          "at": "2026-09-27T09:05:00.000Z",
+          "origin": "import",
+          "changesetId": "0196b500-0000-7000-8000-000000000002",
+          "changesetAppliedByMode": "tiered"
         }
-      ],
-      "runs": [
-        "0196b500-0000-7000-8000-000000000001",
-        "0196b500-0000-7000-8000-000000000003",
-        "0196b500-0000-7000-8000-000000000002"
       ],
       "rows": [
         {
           "run": "0196b500-0000-7000-8000-000000000001",
+          "origin": "maintenance",
           "at": "2026-09-28T07:41:00.000Z",
           "items": [
             "run1-op1",
@@ -960,10 +1507,77 @@
         },
         {
           "run": "0196b500-0000-7000-8000-000000000002",
+          "origin": "import",
           "at": "2026-09-27T09:05:00.000Z",
           "items": [
             "run2-op1"
           ]
+        }
+      ]
+    },
+    {
+      "name": "a run nothing of which waits in Review folds all the same; the owner's own changeset stays one row per op",
+      "items": [
+        {
+          "opId": "run4-op1",
+          "at": "2026-09-28T09:13:00.000Z",
+          "origin": "maintenance",
+          "changesetId": "0196b500-0000-7000-8000-000000000004",
+          "changesetAppliedByMode": "automatic"
+        },
+        {
+          "opId": "own-op1",
+          "at": "2026-09-28T09:05:00.000Z",
+          "origin": "owner",
+          "changesetId": "0196b500-0000-7000-8000-000000000007",
+          "changesetAppliedByMode": null
+        },
+        {
+          "opId": "own-op2",
+          "at": "2026-09-28T09:05:00.000Z",
+          "origin": "owner",
+          "changesetId": "0196b500-0000-7000-8000-000000000007",
+          "changesetAppliedByMode": null
+        },
+        {
+          "opId": "run4-op2",
+          "at": "2026-09-28T09:13:00.000Z",
+          "origin": "maintenance",
+          "changesetId": "0196b500-0000-7000-8000-000000000004",
+          "changesetAppliedByMode": "automatic"
+        },
+        {
+          "opId": "run4-op3",
+          "at": "2026-09-28T09:13:00.000Z",
+          "origin": "maintenance",
+          "changesetId": "0196b500-0000-7000-8000-000000000004",
+          "changesetAppliedByMode": "automatic"
+        },
+        {
+          "opId": "older-op",
+          "at": "2026-09-28T08:00:00.000Z",
+          "origin": "agent"
+        }
+      ],
+      "rows": [
+        {
+          "run": "0196b500-0000-7000-8000-000000000004",
+          "origin": "maintenance",
+          "at": "2026-09-28T09:13:00.000Z",
+          "items": [
+            "run4-op1",
+            "run4-op2",
+            "run4-op3"
+          ]
+        },
+        {
+          "op": "own-op1"
+        },
+        {
+          "op": "own-op2"
+        },
+        {
+          "op": "older-op"
         }
       ]
     }

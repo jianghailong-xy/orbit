@@ -34,7 +34,7 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
-import type { WikiArticleDirectory, WikiArticleIndex, WikiArticleView, WikiSearchRow } from '@orbit/shared';
+import type { WikiArticleDirectory, WikiArticleIndex, WikiArticleView, WikiChangesetView, WikiSearchRow } from '@orbit/shared';
 import type {
   WikiChangeset,
   WikiEntry,
@@ -936,6 +936,18 @@ export const wikiTimelineQuery = (spaceId: string | null) =>
     queryKey: ['wiki', 'space', spaceId, 'timeline'] as const,
     queryFn: () => api<WikiTimeline>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/timeline`),
     enabled: spaceId !== null,
+  });
+
+/**
+ * One run as its page reads it (`GET /api/wiki/changesets/:id`, contract `reviewModes.run`): its ops,
+ * the entries they name, what it did counted, and whether Revert run… would take anything back —
+ * whether or not anything of it still waits in Review. Recently changed reads it for each run it folds.
+ */
+export const wikiChangesetQuery = (changesetId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'changeset', changesetId] as const,
+    queryFn: () => api<WikiChangesetView>(`/wiki/changesets/${encodeURIComponent(changesetId!)}`),
+    enabled: changesetId !== null,
   });
 
 /** One entry with everything the drawer draws: its sources, its history and who was shown it. */

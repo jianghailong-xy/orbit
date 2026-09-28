@@ -77,6 +77,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { evidenceOf, readBeforeRevision4, runEventText, verifierText } from './wiki-verify-evidence';
+import { entryAppliedBy } from './wiki-run-reads';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
 type Tx = Prisma.TransactionClient;
@@ -552,7 +553,7 @@ function draftTexts(draft: { title?: unknown; summary?: unknown; fields?: unknow
 
 // ── Views ───────────────────────────────────────────────────────────────────────────────────────
 
-const ENTRY_SELECT = {
+export const ENTRY_SELECT = {
   id: true,
   spaceId: true,
   kind: true,
@@ -580,9 +581,9 @@ const ENTRY_SELECT = {
   retiredAt: true,
 } satisfies Prisma.WikiEntrySelect;
 
-type EntryRow = Prisma.WikiEntryGetPayload<{ select: typeof ENTRY_SELECT }>;
+export type EntryRow = Prisma.WikiEntryGetPayload<{ select: typeof ENTRY_SELECT }>;
 
-const CHANGESET_SELECT = {
+export const CHANGESET_SELECT = {
   id: true,
   spaceId: true,
   origin: true,
@@ -624,7 +625,7 @@ const CHANGESET_SELECT = {
   },
 } satisfies Prisma.WikiChangesetSelect;
 
-type ChangesetRow = Prisma.WikiChangesetGetPayload<{ select: typeof CHANGESET_SELECT }>;
+export type ChangesetRow = Prisma.WikiChangesetGetPayload<{ select: typeof CHANGESET_SELECT }>;
 
 /** An entry as the wire describes it (`WikiEntry` in `src/shared/src/wiki.ts`). */
 export function entryView(row: EntryRow): Record<string, unknown> {
@@ -695,7 +696,7 @@ export function changesetView(row: ChangesetRow): Record<string, unknown> {
 }
 
 /** An op's verification trail as the wire reads it (`WikiOpVerification`), or null before a verdict. */
-function verificationView(op: {
+export function verificationView(op: {
   verificationVerdict: string | null;
   verificationReason: string | null;
   verificationModel: string | null;
@@ -4001,7 +4002,7 @@ export class WikiService {
   async getEntry(
     ownerId: string,
     entryId: string,
-    include: { sources: boolean; history: boolean; exposure: boolean },
+    include: { sources: boolean; history: boolean; exposure: boolean; appliedBy?: boolean },
     spaceId?: string,
   ): Promise<Record<string, unknown>> {
     const entry = await this.prisma.wikiEntry.findFirst({
@@ -4016,6 +4017,8 @@ export class WikiService {
     });
     if (!entry) throw new NotFoundException('no such wiki entry');
     const view: Record<string, unknown> = entryView(entry);
+    // The owner's read says where the current revision came from (contract `reviewModes.run.entry`).
+    if (include.appliedBy) Object.assign(view, await entryAppliedBy(this.prisma, ownerId, entry));
     if (include.sources) {
       const revision = await this.prisma.wikiEntryRevision.findFirst({
         where: { entryId, ownerId, revision: entry.currentRevision },
@@ -4172,12 +4175,18 @@ export class WikiService {
    * spot check too: its effect already stands, and a timeline that dropped every tenth such change
    * until the owner answered its card would be wrong about what the wiki holds. An op still waiting
    * for its verdict changed nothing yet, and is left out like any other pending one.
+   *
+   * EACH ROW NAMES ITS CHANGESET (contract `reviewModes.run.timeline`): `changesetId`, and the review
+   * mode that applied any op of it — so a client folds every run into one row and opens its page by the
+   * run's own read (`GET /api/wiki/changesets/:id`), not only a run Review still holds.
    */
   async getTimeline(ownerId: string, spaceId: string, limit = 20): Promise<Record<string, unknown>> {
     await this.requireSpace(ownerId, spaceId);
     const rows = await this.prisma.$queryRaw<
       Array<{
         opId: string;
+        changesetId: string;
+        changesetAppliedByMode: string | null;
         op: string;
         decision: string;
         origin: string;
@@ -4195,6 +4204,11 @@ export class WikiService {
       }>
     >(Prisma.sql`
       SELECT o."id" AS "opId",
+             o."changeset_id" AS "changesetId",
+             (SELECT CASE WHEN bool_or(x."applied_by_mode" = 'automatic') THEN 'automatic'
+                          WHEN bool_or(x."applied_by_mode" = 'tiered') THEN 'tiered' END
+                FROM "wiki_changeset_op" x
+               WHERE x."changeset_id" = o."changeset_id" AND x."owner_id" = o."owner_id") AS "changesetAppliedByMode",
              o."op" AS "op",
              o."decision" AS "decision",
              c."origin" AS "origin",
@@ -4227,6 +4241,8 @@ export class WikiService {
     return {
       items: rows.map((row) => ({
         opId: row.opId,
+        changesetId: row.changesetId,
+        changesetAppliedByMode: row.changesetAppliedByMode,
         op: row.op,
         decision: row.decision,
         origin: row.origin,

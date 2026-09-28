@@ -6,19 +6,17 @@ import { App, Button, Dropdown } from 'antd';
 import type { WikiRejectReason } from '@orbit/shared';
 import { relTime } from './Transcript';
 import { WikiDot, WikiTrustBadge } from './WikiMarks';
-import { wikiEntriesQuery, wikiReviewQuery } from '../lib/queries';
+import { wikiChangesetQuery } from '../lib/queries';
 import {
   WIKI_REJECT_MENU,
   WIKI_REVIEW_REJECT,
   wikiEntryPath,
   wikiShowMore,
   WIKI_SHOW_LESS,
-  type WikiChangeset,
   type WikiEntry,
 } from '../lib/wiki';
 import {
   WIKI_CANCEL,
-  WIKI_NO_SUCH_RUN,
   WIKI_OPEN_SESSION,
   WIKI_ORIGIN_WORDS,
   WIKI_REJECTED,
@@ -50,37 +48,31 @@ import { rejectWikiEntry, revertWikiChangeset, useWikiWrite } from '../lib/wikiW
  * once, as a drawer over the Wiki home — who it was and when, Revert run… and the session behind it,
  * what it counted, and its entries grouped Added / Amended / Reinforced.
  *
- * READ FROM REVIEW, because that is the one read that names a run by its changeset: the timeline
- * lists ops and not the runs they came in. So a run this page can open is one that still has
- * something waiting in Review — a spot check, or an op the floors kept for the owner — and one that
- * has settled says so rather than drawing an empty page.
+ * READ BY ITS OWN ID (`GET /api/wiki/changesets/:id`), whether or not anything of it still waits in
+ * Review: the read carries the entries its ops name, what it did counted, and whether Revert run…
+ * would take anything back — which the server works out by the revert's own rules.
  */
 export function WikiRunDrawer({
-  spaceId,
   spaceSlug,
   changesetId,
   onClose,
 }: {
-  spaceId: string;
   spaceSlug: string;
   changesetId: string;
   onClose: () => void;
 }) {
-  const review = useQuery(wikiReviewQuery(spaceId));
-  const entries = useQuery(wikiEntriesQuery(spaceId));
-  const changeset = (review.data ?? []).find((row) => row.id === changesetId) ?? null;
-  const byId = useMemo(() => new Map((entries.data ?? []).map((entry) => [entry.id, entry])), [entries.data]);
-  const summary = useMemo(() => (changeset ? wikiRunSummary(changeset, byId) : null), [changeset, byId]);
+  const read = useQuery(wikiChangesetQuery(changesetId));
+  const changeset = read.data ?? null;
+  const byId = useMemo(() => new Map((changeset?.entries ?? []).map((entry) => [entry.id, entry])), [changeset]);
+  const summary = useMemo(() => (changeset ? wikiRunSummary(changeset) : null), [changeset]);
   const navigate = useNavigate();
   const revert = useRevertRun(spaceSlug);
 
   if (!changeset || !summary) {
     return (
-      <aside className="wk-drawer" aria-label={WIKI_VIEW_RUN}>
+      <aside className="wk-drawer" aria-label={WIKI_VIEW_RUN} aria-busy={read.isPending}>
         <div className="tdp-head">
-          <div className="tdp-head-main">
-            <div className="tdp-title">{review.isLoading ? '' : WIKI_NO_SUCH_RUN}</div>
-          </div>
+          <div className="tdp-head-main" />
           <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
         </div>
       </aside>
@@ -104,8 +96,8 @@ export function WikiRunDrawer({
         <Button
           danger
           icon={<RollbackOutlined />}
-          disabled={summary.revertAdds + summary.revertAmends === 0}
-          onClick={() => revert(changeset, summary)}
+          disabled={!summary.revertible}
+          onClick={() => revert(changeset.id, summary)}
         >
           {WIKI_REVERT_RUN}
         </Button>
@@ -239,14 +231,14 @@ export function useRejectEntry() {
 }
 
 /**
- * Revert run…: the confirm that says what will happen, then the revert. Once it lands the run has
- * nothing left waiting and leaves Review, so the page goes back to the space it was opened from.
+ * Revert run…: the confirm that says what will happen — the server's own count of what the revert
+ * undoes — then the revert, and back to the space the run was opened from.
  */
 export function useRevertRun(spaceSlug: string) {
   const { modal, message } = App.useApp();
   const navigate = useNavigate();
   const write = useWikiWrite((changesetId: string) => revertWikiChangeset(changesetId));
-  return (changeset: WikiChangeset, summary: Pick<WikiRunSummary, 'revertAdds' | 'revertAmends'>) => {
+  return (changesetId: string, summary: Pick<WikiRunSummary, 'revertAdds' | 'revertAmends'>) => {
     modal.confirm({
       title: WIKI_REVERT_TITLE,
       content: (
@@ -260,7 +252,7 @@ export function useRevertRun(spaceSlug: string) {
       cancelText: WIKI_CANCEL,
       onOk: async () => {
         try {
-          await write.mutateAsync(changeset.id);
+          await write.mutateAsync(changesetId);
           message.success(WIKI_REVERTED);
           navigate(`/wiki/${spaceSlug}`);
         } catch (error) {
@@ -274,37 +266,44 @@ export function useRevertRun(spaceSlug: string) {
 /**
  * A run in Recently changed: who it was, then what it applied and with which marks, then — with a
  * pointer — View run and Revert run… under it. On a phone the row itself is the way in (mock 12 ②).
+ *
+ * The row names the run by the changeset its items came in and reads it by that id, the read its page
+ * shares; until the read answers, the title counts the changes the feed holds of it.
  */
 export function WikiRunTimelineRow({
-  changeset,
+  changesetId,
+  origin,
   at,
+  changes,
   spaceSlug,
-  entries,
 }: {
-  changeset: WikiChangeset;
+  changesetId: string;
+  origin: string;
   at: string;
+  /** How many of the run's changes the feed holds, for the title before the run's read answers. */
+  changes: number;
   spaceSlug: string;
-  entries: ReadonlyMap<string, WikiEntry>;
 }) {
-  const summary = useMemo(() => wikiRunSummary(changeset, entries), [changeset, entries]);
+  const read = useQuery(wikiChangesetQuery(changesetId));
+  const summary = useMemo(() => (read.data ? wikiRunSummary(read.data) : null), [read.data]);
   const revert = useRevertRun(spaceSlug);
-  const counts = wikiRunCounts(summary);
+  const counts = summary ? wikiRunCounts(summary) : [];
   return (
     <li className="wk-tl-run">
       <WikiDot tone="green" />
       <div>
         <div className="wk-tl-h">
-          <b>{WIKI_ORIGIN_WORDS[changeset.origin] ?? changeset.origin}</b>
+          <b>{WIKI_ORIGIN_WORDS[origin] ?? origin}</b>
           <span className="when">{relTime(at)}</span>
         </div>
         <div className="wk-tl-t">
-          <Link to={wikiRunPath(spaceSlug, changeset.id)}>{wikiAppliedChanges(summary.applied)}</Link>
+          <Link to={wikiRunPath(spaceSlug, changesetId)}>{wikiAppliedChanges(summary?.applied ?? changes)}</Link>
         </div>
         {counts.length > 0 && <div className="wk-tl-n">{counts.join(' · ')}</div>}
         <div className="wk-tl-acts">
-          <Link to={wikiRunPath(spaceSlug, changeset.id)}>{WIKI_VIEW_RUN}</Link>
-          {summary.revertAdds + summary.revertAmends > 0 && (
-            <button type="button" className="danger" onClick={() => revert(changeset, summary)}>
+          <Link to={wikiRunPath(spaceSlug, changesetId)}>{WIKI_VIEW_RUN}</Link>
+          {summary?.revertible && (
+            <button type="button" className="danger" onClick={() => revert(changesetId, summary)}>
               {WIKI_REVERT_RUN}
             </button>
           )}

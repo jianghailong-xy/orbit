@@ -158,15 +158,16 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
             <WikiEmpty>{WIKI_NO_CHANGES}</WikiEmpty>
           ) : (
             <ol className="wk-tl">
-              {/* One run is one row (mock 11 ⑦), wherever the page can tell which run an op came in. */}
-              {wikiRecentRows(timeline.data?.items ?? [], review.data ?? []).slice(0, 5).map((row) =>
+              {/* One run is one row (mock 11 ⑦): every item names the changeset it came in. */}
+              {wikiRecentRows(timeline.data?.items ?? []).slice(0, 5).map((row) =>
                 row.kind === 'run' ? (
                   <WikiRunTimelineRow
-                    key={row.changeset.id}
-                    changeset={row.changeset}
+                    key={row.changesetId}
+                    changesetId={row.changesetId}
+                    origin={row.origin}
                     at={row.at}
+                    changes={row.items.length}
                     spaceSlug={space.slug}
-                    entries={entryById}
                   />
                 ) : (
                   <TimelineRow key={row.item.opId} item={row.item} spaceSlug={space.slug} />
