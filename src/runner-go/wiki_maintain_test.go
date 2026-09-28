@@ -138,34 +138,50 @@ func maintainPage(cursor string, more bool, dossiers ...map[string]interface{}) 
 	return string(raw)
 }
 
-// maintainDossier is one session's dossier, its lines L1… mapped to the records given.
-func maintainDossier(session, title string, lines []string, records []string, unchanged bool) map[string]interface{} {
+// maintainDossier is one session's dossier, its lines L1… mapped to the records given, each with where in its
+// record's text its words are: the spans given for it, or — for a line given none — the words after its
+// speaker, whole, as a line the dossier copied from its record is.
+func maintainDossier(session, title string, lines []string, records []string, spans map[int][]wikiDossierSpan, unchanged bool) map[string]interface{} {
 	text := "SESSION: " + title + "\nanthropic/claude-opus-5 · started 2026-09-20 · status SUCCEEDED\n\n"
 	sources := []interface{}{}
 	for i, line := range lines {
 		ref := "L" + strconv.Itoa(i+1)
 		text += ref + " " + line + "\n"
 		kind, id, _ := strings.Cut(records[i], ":")
-		sources = append(sources, map[string]interface{}{"ref": ref, "kind": kind, "id": id})
+		placed, given := spans[i]
+		if !given {
+			_, words, _ := strings.Cut(line, ": ")
+			placed = []wikiDossierSpan{maintainSpan(0, words)}
+		}
+		sources = append(sources, map[string]interface{}{"ref": ref, "kind": kind, "id": id, "spans": placed})
 	}
 	return map[string]interface{}{"sessionId": session, "taskId": "", "title": title, "text": text, "tokens": 200,
 		"truncated": false, "tainted": false, "sources": sources, "hash": strings.Repeat("c", 64), "unchanged": unchanged}
 }
 
-// portDossier is a session about the repository: the owner's rule, a failure and its cause.
+// maintainSpan is `words` at `start` of a record's text, counted as the server counts: in code points.
+func maintainSpan(start int, words string) wikiDossierSpan {
+	return wikiDossierSpan{Start: start, End: start + len([]rune(words)), Text: words}
+}
+
+// portDossier is a session about the repository: the owner's rule, a failure and its cause. The failure is a
+// tool call, whose line is the dossier's writing — `$ command → ERR: first line` — and whose record is
+// "Bash\ncommand: go test ./...\nconnect ECONNREFUSED 127.0.0.1:9000": its spans are the command and the output.
 func portDossier(session string) map[string]interface{} {
 	return maintainDossier(session, "修 fixture 的端口", []string{
 		"owner: 以后 fixture 里不要写死端口，一律从 fixture 的返回值里取。",
 		"tool: $ go test ./... → ERR: connect ECONNREFUSED 127.0.0.1:9000",
 		"agent: 根因：src/app.go 在导入时读取 PORT，fixture 之后才设置。",
-	}, []string{"turn:turn-1", "tool_call:call-2", "event:event-3"}, false)
+	}, []string{"turn:turn-1", "tool_call:call-2", "event:event-3"}, map[int][]wikiDossierSpan{
+		1: {maintainSpan(14, "go test ./..."), maintainSpan(28, "connect ECONNREFUSED 127.0.0.1:9000")},
+	}, false)
 }
 
 // werewolfDossier is a session of the same workspace about something else altogether.
 func werewolfDossier(session string) map[string]interface{} {
 	return maintainDossier(session, "设计狼人杀软件界面", []string{
 		"owner: 12 人预女猎白，金神职红狼人绿村民，联网手机网页打字发言。",
-	}, []string{"turn:turn-9"}, false)
+	}, []string{"turn:turn-9"}, nil, false)
 }
 
 // maintainFixture is a bare origin and a checkout of it — what the maintenance workspace's work directory
@@ -386,12 +402,16 @@ func TestWikiMaintainRunsThePipelineAndAdvancesTheCursor(t *testing.T) {
 		!reflect.DeepEqual(entry["anchors"], []interface{}{map[string]interface{}{"type": "path", "path": "src/app.go"}}) {
 		t.Errorf("the first add = %v", first)
 	}
-	if !reflect.DeepEqual(first["sources"], []interface{}{map[string]interface{}{"kind": "turn", "ref": "turn-1", "quote": "以后 fixture 里不要写死端口"}}) {
-		t.Errorf("the source is not the record behind line L1: %v", first["sources"])
+	if !reflect.DeepEqual(first["sources"], []interface{}{map[string]interface{}{"kind": "turn", "ref": "turn-1", "quote": "以后 fixture 里不要写死端口",
+		"locator": map[string]interface{}{"start": float64(0), "end": float64(18)}}}) {
+		t.Errorf("the source is not the record behind line L1, quoted where its words are: %v", first["sources"])
 	}
+	// The pitfall quotes the tool call's own output at the place its span names — not the line `$ go test ./...
+	// → ERR: …` the dossier wrote for it.
 	second := ops[1].(map[string]interface{})["sources"].([]interface{})[0].(map[string]interface{})
-	if second["kind"] != "tool_call" || second["ref"] != "call-2" {
-		t.Errorf("the corrected pitfall cites %v, want the tool call behind L2", second)
+	if !reflect.DeepEqual(second, map[string]interface{}{"kind": "tool_call", "ref": "call-2", "quote": "connect ECONNREFUSED 127.0.0.1:9000",
+		"locator": map[string]interface{}{"start": float64(28), "end": float64(63)}}) {
+		t.Errorf("the corrected pitfall cites %v, want the tool call behind L2 quoted from its output's span", second)
 	}
 
 	// The end: succeeded, to the last page's token, with the report and its spend.
@@ -668,6 +688,83 @@ func TestWikiMaintainCitesTheRecordWithoutTheQuoteTheServerDoesNotFind(t *testin
 	source := last["sources"].([]interface{})[0].(map[string]interface{})
 	if _, quoted := source["quote"]; quoted || source["ref"] != "turn-1" {
 		t.Errorf("the proposal cites %v, want the record with no quote", source)
+	}
+	if _, placed := source["locator"]; placed {
+		t.Errorf("the proposal cites %v: the place of a quote it no longer carries", source)
+	}
+}
+
+// A quote is the record's own words at the place the line's spans name. Found as a quote is compared —
+// markdown marks, curly quotes and spacing aside — it is proposed as the record has it, with where it is; the
+// dossier's own writing for the record, words across a gap the dossier cut, and words the redactor took out
+// cite the record with neither. A quote not copied from its line at all is still a problem to ask about again.
+func TestWikiMaintainQuotesTheRecordsOwnWordsWhereTheLineSaysTheyAre(t *testing.T) {
+	long := strings.Repeat("端口从 fixture 的返回值里取，", 30)
+	thought := []wikiDossierSpan{maintainSpan(0, "It turns out the port is read at import."), maintainSpan(58, "Actually the “fixture” sets it too late.")}
+	dossier := wikiDossier{
+		Text: "SESSION: 修端口\nclaude · started 2026-09-28 · status SUCCEEDED\n\n" +
+			"L1 tool: $ go test ./... → ERR: exit status 1 … --- FAIL: TestPort (0.00s)\n" +
+			"L2 agent: 根因：`src/app.go` 在导入时读取 **PORT**，fixture 之后才设置。\n" +
+			"L3 think: It turns out the port is read at import. … Actually the “fixture” sets it too late.\n" +
+			"L4 owner: 以后 fixture 里不要写死端口 token: [redacted] 🎯 always\n" +
+			"L5 owner: " + long + "…[cut]\n",
+		Sources: []wikiDossierSource{
+			{Ref: "L1", Kind: "tool_call", ID: "call-1", Spans: []wikiDossierSpan{
+				maintainSpan(14, "go test ./..."), maintainSpan(28, "exit status 1"), maintainSpan(1800, "--- FAIL: TestPort (0.00s)")}},
+			{Ref: "L2", Kind: "event", ID: "event-2", Spans: []wikiDossierSpan{maintainSpan(0, "根因：`src/app.go` 在导入时读取 **PORT**，fixture 之后才设置。")}},
+			{Ref: "L3", Kind: "event", ID: "event-3", Spans: thought},
+			{Ref: "L4", Kind: "turn", ID: "turn-4", Spans: []wikiDossierSpan{maintainSpan(7, "以后 fixture 里不要写死端口 token: [redacted] 🎯 always")}},
+			{Ref: "L5", Kind: "turn", ID: "turn-5", Spans: []wikiDossierSpan{maintainSpan(0, long)}},
+		},
+	}
+	lines := wikiMaintainLines(dossier)
+	cite := func(ref, quote string) (map[string]interface{}, []string) {
+		t.Helper()
+		sources, problems := wikiMaintainSources([]interface{}{map[string]interface{}{"ref": ref, "quote": quote}}, lines)
+		if len(sources) == 0 {
+			return nil, problems
+		}
+		return sources[0].(map[string]interface{}), problems
+	}
+	at := func(start, end int) map[string]interface{} { return map[string]interface{}{"start": start, "end": end} }
+	for _, c := range []struct {
+		why, ref, quote string
+		want            map[string]interface{}
+	}{
+		{"a piece of the output, as the record has it", "L1", "exit status 1",
+			map[string]interface{}{"kind": "tool_call", "ref": "call-1", "quote": "exit status 1", "locator": at(28, 41)}},
+		{"the result's last line, far into the output", "L1", "FAIL: TestPort",
+			map[string]interface{}{"kind": "tool_call", "ref": "call-1", "quote": "FAIL: TestPort", "locator": at(1804, 1818)}},
+		{"the dossier's writing for the call: cited with no quote", "L1", "go test ./... → ERR: exit status 1",
+			map[string]interface{}{"kind": "tool_call", "ref": "call-1"}},
+		{"markdown the model left out: the record's words, marks and all", "L2", "根因：src/app.go 在导入时读取 PORT",
+			map[string]interface{}{"kind": "event", "ref": "event-2", "quote": "根因：`src/app.go` 在导入时读取 **PORT", "locator": at(0, 29)}},
+		{"a curly quote the model straightened, in the second sentence of a thought", "L3", `Actually the "fixture" sets it`,
+			map[string]interface{}{"kind": "event", "ref": "event-3", "quote": "Actually the “fixture” sets it", "locator": at(58, 88)}},
+		{"words across the gap the dossier cut between two sentences: no quote", "L3", "at import. … Actually",
+			map[string]interface{}{"kind": "event", "ref": "event-3"}},
+		{"words the redactor took out: no quote", "L4", "端口 token: [redacted]",
+			map[string]interface{}{"kind": "turn", "ref": "turn-4"}},
+		{"a character past the plane is one code point", "L4", "🎯 always",
+			map[string]interface{}{"kind": "turn", "ref": "turn-4", "quote": "🎯 always", "locator": at(44, 52)}},
+		{"a long quote, cut to the limit at the record's words", "L5", long,
+			map[string]interface{}{"kind": "turn", "ref": "turn-5", "quote": string([]rune(long)[:wikiMaintainQuoteMaxChars]),
+				"locator": at(0, wikiMaintainQuoteMaxChars)}},
+	} {
+		got, problems := cite(c.ref, c.quote)
+		if len(problems) != 0 || !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: cites %v (problems %v)\nwant %v", c.why, got, problems, c.want)
+		}
+	}
+	// A quote the line does not say is the model's own, and asked about again, as before.
+	if got, problems := cite("L1", "connection refused"); got != nil || len(problems) != 1 || !strings.Contains(problems[0], "not copied exactly") {
+		t.Errorf("a quote that is not in its line: %v, problems %v", got, problems)
+	}
+	// A dossier from a server whose lines say nothing of where their words are: the line's words, as before.
+	bare := wikiDossier{Text: "L1 owner: 以后 fixture 里不要写死端口\n", Sources: []wikiDossierSource{{Ref: "L1", Kind: "turn", ID: "turn-1"}}}
+	sources, problems := wikiMaintainSources([]interface{}{map[string]interface{}{"ref": "L1", "quote": "不要写死端口"}}, wikiMaintainLines(bare))
+	if len(problems) != 0 || !reflect.DeepEqual(sources, []interface{}{map[string]interface{}{"kind": "turn", "ref": "turn-1", "quote": "不要写死端口"}}) {
+		t.Errorf("a line with no spans: %v, problems %v", sources, problems)
 	}
 }
 

@@ -82,10 +82,11 @@ const wikiDossierPageReply = `{"spaceId":"space-1","cursor":"wc1.page-end","more
 	`"dossiers":[` +
 	`{"sessionId":"s-alpha","taskId":"t-alpha","title":"Fix the trigram index",` +
 	`"text":"SESSION: Fix the trigram index\nL1 owner: use pg_trgm, not ILIKE\nL2 $ npm test -> 3 failed","tokens":812,` +
-	`"truncated":true,"tainted":true,"sources":[{"ref":"L1","kind":"turn","id":"turn-1"},{"ref":"L2","kind":"tool_call","id":"tc-2"}],` +
+	`"truncated":true,"tainted":true,"sources":[{"ref":"L1","kind":"turn","id":"turn-1","spans":[{"start":0,"end":22,"text":"use pg_trgm, not ILIKE"}]},` +
+	`{"ref":"L2","kind":"tool_call","id":"tc-2","spans":[{"start":14,"end":22,"text":"npm test"},{"start":23,"end":31,"text":"3 failed"}]}],` +
 	`"hash":"3f2a9c1d04be77aa01","unchanged":false},` +
 	`{"sessionId":"s-beta","taskId":null,"title":"Tidy","text":"SESSION: Tidy\nL1 done\n","tokens":40,"truncated":false,"tainted":false,` +
-	`"sources":[{"ref":"L1","kind":"event","id":"ev-9"}],"hash":"0badc0ffee00","unchanged":true}],` +
+	`"sources":[{"ref":"L1","kind":"event","id":"ev-9","spans":[{"start":0,"end":4,"text":"done"}]}],"hash":"0badc0ffee00","unchanged":true}],` +
 	`"batches":[{"projectId":"p-fine","listId":null,"template":"Process shard #","tasks":120,"byStatus":{"FAILED":20,"DONE":100},` +
 	`"sessions":3,"errors":[{"tool":"Bash","signature":"curl: (#) Could not resolve host","count":4}]}],` +
 	`"errorClusters":[{"tool":"Bash","signature":"npm ERR! code E#","sessions":5,"occurrences":9,` +
@@ -176,9 +177,9 @@ func TestWikiDossierReadsAPageAsTheCallingSession(t *testing.T) {
 		"More facts remain past this page: orbit wiki dossier --space space-1 --after wc1.page-end reads the next.\n",
 		"\n── Dossier 1 of 2 · session s-alpha · task t-alpha · 812 tokens · truncated (cut to the budget) · tainted (it read the web) · hash 3f2a9c1d04be\n"+
 			"SESSION: Fix the trigram index\nL1 owner: use pg_trgm, not ILIKE\nL2 $ npm test -> 3 failed\n"+
-			"sources: L1=turn:turn-1 L2=tool_call:tc-2\n",
+			"sources: L1=turn:turn-1@0-22 L2=tool_call:tc-2@14-22,23-31\n",
 		"\n── Dossier 2 of 2 · session s-beta · 40 tokens · unchanged (already processed) · hash 0badc0ffee00\n"+
-			"SESSION: Tidy\nL1 done\nsources: L1=event:ev-9\n",
+			"SESSION: Tidy\nL1 done\nsources: L1=event:ev-9@0-4\n",
 		"\n── Batch · project p-fine · \"Process shard #\" · 120 tasks (DONE 100, FAILED 20) · 3 sessions on this page\n",
 		"   errors: Bash \"curl: (#) Could not resolve host\" ×4\n",
 		"\n── Error cluster · Bash \"npm ERR! code E#\" · 5 sessions, 9 occurrences\n",
@@ -197,6 +198,41 @@ func TestWikiDossierReadsAPageAsTheCallingSession(t *testing.T) {
 	}
 	if sent := requests(); len(sent) != 2 || sent[1].uri != "/api/runner/wiki/spaces/space-1/dossiers" {
 		t.Errorf("a page with no flags was asked for as %#v, want no query at all", sent)
+	}
+}
+
+// Each line's source is the record and where in its text the line's words are, in the fields the contract
+// names (`maintenance.dossier.sourceFields`, `spans.fields`): what the run reads a page with is what the
+// server hands it.
+func TestWikiDossierSourcesAreTheContracts(t *testing.T) {
+	dossier := wikiMaintenanceContract(t)["dossier"].(map[string]interface{})
+	jsonFields := func(value interface{}) []interface{} {
+		kind := reflect.TypeOf(value)
+		var fields []interface{}
+		for i := 0; i < kind.NumField(); i++ {
+			fields = append(fields, strings.Split(kind.Field(i).Tag.Get("json"), ",")[0])
+		}
+		return fields
+	}
+	if got, want := jsonFields(wikiDossierSource{}), dossier["sourceFields"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("a dossier source here has %v, the contract %v", got, want)
+	}
+	spans := dossier["spans"].(map[string]interface{})
+	if got, want := jsonFields(wikiDossierSpan{}), spans["fields"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("a span here has %v, the contract %v", got, want)
+	}
+	for _, phrase := range []string{"code points", "redacted"} {
+		if !strings.Contains(spans["unit"].(string), phrase) {
+			t.Errorf("the contract's unit does not say %q: %v", phrase, spans["unit"])
+		}
+	}
+	// The page is read into them whole: every span of every line, with the words at it.
+	var page wikiDossierPage
+	if err := json.Unmarshal([]byte(wikiDossierPageReply), &page); err != nil {
+		t.Fatal(err)
+	}
+	if got := page.Dossiers[0].Sources[1].Spans; !reflect.DeepEqual(got, []wikiDossierSpan{{14, 22, "npm test"}, {23, 31, "3 failed"}}) {
+		t.Errorf("the tool line's spans read as %+v", got)
 	}
 }
 
