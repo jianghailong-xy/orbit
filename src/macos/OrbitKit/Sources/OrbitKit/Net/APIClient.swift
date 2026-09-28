@@ -906,6 +906,32 @@ public final class APIClient: @unchecked Sendable {
         return pools.compactMap(\.value)
     }
 
+    /// Delete one of the caller's own pools: its members stay as they are, and a Codex pool's ChatGPT
+    /// sign-in goes from the server with it.
+    public func deleteProviderPool(_ id: String) async throws { try await deleteRaw("providers/pools/\(id)") }
+
+    // MARK: a Codex pool of one's own — its ChatGPT account (migration 0323)
+
+    /// Start "Sign in with ChatGPT": the server runs the official codex CLI's device flow and answers
+    /// with the page to open and the one-time code to enter there. A second start replaces the first.
+    public func startCodexLogin(poolID: String) async throws -> CodexLoginAttempt {
+        try await postEmpty("providers/pools/\(poolID)/codex-login")
+    }
+    /// Where the sign-in stands; the first poll after the code was approved stores the account.
+    public func pollCodexLogin(poolID: String) async throws -> CodexLoginPoll {
+        try await get("providers/pools/\(poolID)/codex-login")
+    }
+    /// Give the sign-in up: the CLI waiting on the code is stopped, and nothing is stored.
+    @discardableResult
+    public func cancelCodexLogin(poolID: String) async throws -> CodexLoginPoll {
+        try await delete("providers/pools/\(poolID)/codex-login")
+    }
+    /// Sign the pool's account out: the server deletes the sign-in it held.
+    @discardableResult
+    public func signOutCodexLogin(poolID: String) async throws -> CodexLoginSignOut {
+        try await delete("providers/pools/\(poolID)/codex-login/account")
+    }
+
     // MARK: shared pools (GET/POST/PATCH/DELETE /api/providers/shared-pools)
 
     /// The shared pools the caller is in, each as they read it. A pool they are not in is not listed,
