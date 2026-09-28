@@ -45,7 +45,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiArticlesController } from '../runner-api/runner-wiki-articles.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
-import { assignTopics, WikiArticles } from './wiki-articles';
+import { assignTopics, pathClaim, WikiArticles } from './wiki-articles';
 import { WikiArticlesController } from './wiki-articles.controller';
 import { appendWikiContext } from './wiki-push';
 import type { WikiRollout } from './wiki-rollout';
@@ -515,6 +515,28 @@ test('a space with no topic is given the default ones, and an entry is filed by 
   assert.equal(members.how.get('c'), 'text');
   assert.equal(members.topicOf.has('d'), false, 'close to nothing: in no topic');
   assert.equal(members.unassigned, 1);
+
+  // A pattern's claim: a prefix, which ending in / names the directory too; a * pattern, a suffix.
+  assert.equal(pathClaim('src/web/src/lib/api.ts', 'src/web/'), 8);
+  assert.equal(pathClaim('src/web', 'src/web/'), 8, 'an anchor at the directory itself');
+  assert.equal(pathClaim('src/webhooks/x.ts', 'src/web/'), 0);
+  assert.equal(pathClaim('ConsoleModel.swift', '*.swift'), 6, 'a bare file name, by its suffix');
+  assert.equal(pathClaim('src/macos/OrbitApp/X.swift', '*.swift'), 6);
+  assert.equal(pathClaim('anything', '*'), 0);
+  // With the default topics: the longest claim wins, so a directory's prefix outranks a suffix, and
+  // what the demo misfiled under sessions by its words goes where its code is.
+  const defaults = WIKI_DEFAULT_TOPICS.map((topic) => ({ ...topic, description: topic.description, pathPrefixes: [...topic.pathPrefixes] }));
+  const topicFor = (paths: string[]) => assignTopics([{ id: 'x', revision: 1, title: 'x', summary: 'x', aliases: [], topics: ['sessions'], paths }], defaults).topicOf.get('x');
+  assert.equal(topicFor(['ConsoleModel.swift']), 'apple-clients');
+  assert.equal(topicFor(['src/runner-go']), 'runner', 'the runner directory itself');
+  assert.equal(topicFor(['src/runner-go/session_pool.go']), 'runner', 'the runner\'s own session code is the runner\'s, as the demo filed it');
+  assert.equal(topicFor(['src/runner-go/wiki_verify_test.go']), 'wiki', 'src/runner-go/wiki is longer than *_test.go and src/runner-go/');
+  assert.equal(topicFor(['src/runner-go/task_cli.go']), 'agent-tooling');
+  assert.equal(topicFor(['src/apiserver/src/common/db-write-inventory.ts']), 'database');
+  assert.equal(topicFor(['prisma/schema.prisma']), 'database', 'a path written from src/apiserver');
+  assert.equal(topicFor(['scripts/pg-matrix-summary.lib.sh']), 'testing', 'scripts/pg-matrix- is longer than scripts/pg-');
+  assert.equal(topicFor(['src/apiserver/Dockerfile']), 'deploy-ops');
+  assert.equal(topicFor(['src/apiserver/src/main.ts']), 'sessions', 'no pattern claims the API server as a whole: the slug it names decides');
 });
 
 // ── 2. validation ───────────────────────────────────────────────────────────────────────────────

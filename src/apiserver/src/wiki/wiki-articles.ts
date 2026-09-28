@@ -141,43 +141,51 @@ export interface Membership {
   unassigned: number;
 }
 
-/** Words and CJK bigrams: the demo's tokens for title and summary text. */
-function wordsOf(text: string): Map<string, number> {
-  const counts = new Map<string, number>();
+/**
+ * The words and CJK bigrams of a text — the demo's tokens for title and summary text — counted by
+ * their number in `vocabulary`, which numbers each token the first time any text meets it (`df` grows
+ * beside it). A word is ASCII and a bigram is two Han characters, so the two never share a token.
+ */
+function tokenCounts(text: string, vocabulary: Map<string, number>, df: number[]): Map<number, number> {
+  const counts = new Map<number, number>();
   const add = (token: string): void => {
-    counts.set(token, (counts.get(token) ?? 0) + 1);
+    let id = vocabulary.get(token);
+    if (id === undefined) {
+      id = vocabulary.size;
+      vocabulary.set(token, id);
+      df.push(0);
+    }
+    counts.set(id, (counts.get(id) ?? 0) + 1);
   };
   const lower = text.toLowerCase();
-  for (const match of lower.matchAll(/[a-z_][a-z0-9_.-]{2,}/gu)) add(`w:${match[0].replace(/[.-]+$/u, '')}`);
-  for (const match of lower.matchAll(/[一-鿿]+/gu)) {
+  for (const match of lower.matchAll(/[a-z_][a-z0-9_.-]{2,}/gu)) add(match[0].replace(/[.-]+$/u, ''));
+  for (const match of lower.matchAll(/[\u4e00-\u9fff]+/gu)) {
     const run = match[0];
-    for (let i = 0; i + 1 < run.length; i += 1) add(`c:${run.slice(i, i + 2)}`);
+    for (let i = 0; i + 1 < run.length; i += 1) add(run.slice(i, i + 2));
   }
   return counts;
 }
 
-function normalized(vector: Map<string, number>): Map<string, number> {
-  let sum = 0;
-  for (const value of vector.values()) sum += value * value;
-  const norm = Math.sqrt(sum);
-  if (norm === 0) return vector;
-  const out = new Map<string, number>();
-  for (const [key, value] of vector) out.set(key, value / norm);
-  return out;
-}
-
-function dot(a: Map<string, number>, b: Map<string, number>): number {
-  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
-  let sum = 0;
-  for (const [key, value] of small) sum += value * (large.get(key) ?? 0);
-  return sum;
+/**
+ * How much of `path` one of a topic's patterns claims (contract `articles.membership.paths`): the
+ * prefix's length when the path starts with it — a prefix that ends in `/` also names the directory
+ * itself, as an anchor at `src/web` names what `src/web/` does — and, for a pattern that starts with
+ * `*`, the length of the rest when the path ends with it (`*.swift` claims a bare `ConsoleModel.swift`).
+ * 0 when it claims nothing. The longest claim wins, so a directory's prefix outranks a suffix.
+ */
+export function pathClaim(path: string, pattern: string): number {
+  if (pattern === '' || pattern === '*') return 0;
+  if (pattern.startsWith('*')) return path.endsWith(pattern.slice(1)) ? pattern.length - 1 : 0;
+  if (path.startsWith(pattern)) return pattern.length;
+  if (pattern.endsWith('/') && path === pattern.slice(0, -1)) return pattern.length;
+  return 0;
 }
 
 /**
  * Put each entry in exactly one topic (contract `articles.membership.order`):
  *
- *   1. PATHS. Each path the entry names votes for the topic with the longest prefix it starts with;
- *      the most votes win, then the longer prefix, then the earlier topic. Where an entry is anchored
+ *   1. PATHS. Each path the entry names votes for the topic with the longest claim on it
+ *      (`pathClaim`); the most votes win, then the longer claim, then the earlier topic. Where an entry is anchored
  *      in the code is the better witness of what it is about than its wording — the demo's topics,
  *      filed by words, collected articles on database writes under "sessions".
  *   2. DECLARED. Failing that, the first slug the entry names that is a topic of the space.
@@ -193,24 +201,37 @@ export function assignTopics(entries: readonly MemberEntry[], topics: readonly M
   const index = new Map(topics.map((topic, i) => [topic.slug, i]));
   const pending: MemberEntry[] = [];
 
+  // Every topic's patterns, longest first: the first that claims a path claims the most of it. A path
+  // several entries name is claimed once.
+  const patterns = topics
+    .flatMap((topic, i) => topic.pathPrefixes.map((pattern) => ({ i, pattern, length: pattern.startsWith('*') ? pattern.length - 1 : pattern.length })))
+    .filter((p) => p.length > 0)
+    .sort((a, b) => b.length - a.length || a.i - b.i);
+  const claimed = new Map<string, { i: number; length: number } | null>();
+  const claimOf = (path: string): { i: number; length: number } | null => {
+    let known = claimed.get(path);
+    if (known === undefined) {
+      known = null;
+      for (const p of patterns) {
+        if (pathClaim(path, p.pattern) > 0) {
+          known = { i: p.i, length: p.length };
+          break;
+        }
+      }
+      claimed.set(path, known);
+    }
+    return known;
+  };
+
   for (const entry of entries) {
     const votes = new Map<number, { count: number; longest: number }>();
     for (const path of entry.paths) {
-      let best = -1;
-      let bestLength = 0;
-      topics.forEach((topic, i) => {
-        for (const prefix of topic.pathPrefixes) {
-          if (prefix && prefix.length > bestLength && path.startsWith(prefix)) {
-            best = i;
-            bestLength = prefix.length;
-          }
-        }
-      });
-      if (best < 0) continue;
-      const vote = votes.get(best) ?? { count: 0, longest: 0 };
+      const claim = claimOf(path);
+      if (!claim) continue;
+      const vote = votes.get(claim.i) ?? { count: 0, longest: 0 };
       vote.count += 1;
-      vote.longest = Math.max(vote.longest, bestLength);
-      votes.set(best, vote);
+      vote.longest = Math.max(vote.longest, claim.length);
+      votes.set(claim.i, vote);
     }
     let winner = -1;
     let won = { count: 0, longest: 0 };
@@ -238,37 +259,65 @@ export function assignTopics(entries: readonly MemberEntry[], topics: readonly M
   }
 
   if (pending.length > 0) {
-    // Inverse document frequency over every entry and every topic's own text.
+    // Tokens numbered as they are first met, so a vector is two typed arrays and a topic's centroid
+    // one dense array: an 11,000-entry space is scored in a fraction of a second instead of seconds
+    // of string-keyed maps on the request's thread.
+    const vocabulary = new Map<string, number>();
+    const df: number[] = [];
+    const tokenize = (text: string): Map<number, number> => tokenCounts(text, vocabulary, df);
     const entryText = (entry: MemberEntry): string => `${entry.title} ${entry.summary} ${entry.aliases.join(' ')}`;
     const topicText = (topic: MemberTopic): string =>
       `${topic.title} ${topic.description ?? ''} ${topic.slug.replace(/-/gu, ' ')}`;
-    const entryCounts = new Map(entries.map((entry) => [entry.id, wordsOf(entryText(entry))]));
-    const topicCounts = topics.map((topic) => wordsOf(topicText(topic)));
+    const entryCounts = entries.map((entry) => tokenize(entryText(entry)));
+    const topicCounts = topics.map((topic) => tokenize(topicText(topic)));
+    for (const counts of [...entryCounts, ...topicCounts]) for (const id of counts.keys()) df[id] += 1;
+    // Inverse document frequency over every entry and every topic's own text.
     const documents = entries.length + topics.length;
-    const df = new Map<string, number>();
-    for (const counts of [...entryCounts.values(), ...topicCounts]) {
-      for (const token of counts.keys()) df.set(token, (df.get(token) ?? 0) + 1);
-    }
-    const weigh = (counts: Map<string, number>): Map<string, number> => {
-      const vector = new Map<string, number>();
-      for (const [token, count] of counts) vector.set(token, count * Math.log(1 + documents / (df.get(token) ?? 1)));
-      return normalized(vector);
+    const idf = Float64Array.from(df, (n) => Math.log(1 + documents / n));
+    const weigh = (counts: Map<number, number>): { ids: Int32Array; weights: Float64Array } => {
+      const ids = new Int32Array(counts.size);
+      const weights = new Float64Array(counts.size);
+      let at = 0;
+      let norm = 0;
+      for (const [id, count] of counts) {
+        const weight = count * idf[id];
+        ids[at] = id;
+        weights[at] = weight;
+        norm += weight * weight;
+        at += 1;
+      }
+      norm = Math.sqrt(norm);
+      if (norm > 0) for (let j = 0; j < weights.length; j += 1) weights[j] /= norm;
+      return { ids, weights };
     };
-    const centroids = topics.map((_topic, i) => weigh(topicCounts[i]));
-    const sums = centroids.map((vector) => new Map(vector));
-    for (const entry of entries) {
+    const size = vocabulary.size;
+    const centroids = topics.map((_topic, i) => {
+      const centroid = new Float64Array(size);
+      const own = weigh(topicCounts[i]);
+      for (let j = 0; j < own.ids.length; j += 1) centroid[own.ids[j]] += own.weights[j];
+      return centroid;
+    });
+    entries.forEach((entry, at) => {
       const slug = topicOf.get(entry.id);
-      if (slug === undefined) continue;
-      const sum = sums[index.get(slug)!];
-      for (const [token, value] of weigh(entryCounts.get(entry.id)!)) sum.set(token, (sum.get(token) ?? 0) + value);
+      if (slug === undefined) return;
+      const centroid = centroids[index.get(slug)!];
+      const vector = weigh(entryCounts[at]);
+      for (let j = 0; j < vector.ids.length; j += 1) centroid[vector.ids[j]] += vector.weights[j];
+    });
+    for (const centroid of centroids) {
+      let norm = 0;
+      for (let j = 0; j < size; j += 1) norm += centroid[j] * centroid[j];
+      norm = Math.sqrt(norm);
+      if (norm > 0) for (let j = 0; j < size; j += 1) centroid[j] /= norm;
     }
-    const unit = sums.map(normalized);
+    const position = new Map(entries.map((entry, at) => [entry.id, at]));
     for (const entry of pending) {
-      const vector = weigh(entryCounts.get(entry.id)!);
+      const vector = weigh(entryCounts[position.get(entry.id)!]);
       let best = -1;
       let bestScore = 0;
-      unit.forEach((centroid, i) => {
-        const score = dot(vector, centroid);
+      centroids.forEach((centroid, i) => {
+        let score = 0;
+        for (let j = 0; j < vector.ids.length; j += 1) score += centroid[vector.ids[j]] * vector.weights[j];
         if (score > bestScore) {
           best = i;
           bestScore = score;
@@ -673,9 +722,15 @@ function asCategory(value: string | null): WikiArticleCategory | null {
   return value !== null && CATEGORY_TITLE.has(value) ? (value as WikiArticleCategory) : null;
 }
 
+/** The spaces whose membership is kept at once: a maintenance run works one space at a time. */
+const WIKI_MEMBERSHIPS_KEPT = 8;
+
 @Injectable()
 export class WikiArticles {
   private readonly logger = new Logger(WikiArticles.name);
+
+  /** Each space's last membership, by what it was computed from (`membership`). */
+  private readonly memberships = new Map<string, { signature: string; members: Membership }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -767,9 +822,28 @@ export class WikiArticles {
     }));
   }
 
+  /**
+   * Which topic each of the space's entries is in. A run asks for its plan, then each topic's input,
+   * then writes each topic, and every one of those needs the whole space's membership: it is
+   * computed once and kept against what it was computed from — the topics as defined and every
+   * entry's id and revision, which is all `assignTopics` reads (an entry's words and paths change
+   * only with a new revision) — so the next ask of an unchanged space reuses it.
+   */
   private async membership(ownerId: string, spaceId: string): Promise<{ topics: TopicRow[]; entries: MemberEntry[]; members: Membership }> {
     const [topics, entries] = await Promise.all([this.topicsOf(ownerId, spaceId), this.memberEntries(ownerId, spaceId)]);
-    return { topics, entries, members: assignTopics(entries, topics) };
+    const hash = createHash('sha256');
+    for (const topic of topics) hash.update(`${JSON.stringify([topic.slug, topic.title, topic.description, topic.pathPrefixes])}\n`);
+    hash.update('--\n');
+    for (const entry of entries) hash.update(`${entry.id}:${entry.revision}\n`);
+    const signature = hash.digest('hex');
+    const key = `${ownerId}:${spaceId}`;
+    const kept = this.memberships.get(key);
+    if (kept?.signature === signature) return { topics, entries, members: kept.members };
+    const members = assignTopics(entries, topics);
+    this.memberships.delete(key);
+    this.memberships.set(key, { signature, members });
+    while (this.memberships.size > WIKI_MEMBERSHIPS_KEPT) this.memberships.delete(this.memberships.keys().next().value!);
+    return { topics, entries, members };
   }
 
   /** Each topic's part 0: the fingerprint it was written from, and when. */

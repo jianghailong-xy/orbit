@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -450,6 +451,74 @@ func TestWikiArticleStopsAtTheFirst401(t *testing.T) {
 		if strings.Contains(call, "testing") || (strings.HasPrefix(call, "POST") && strings.Contains(call, "/articles/")) {
 			t.Errorf("after the 401 the run went on: %s", call)
 		}
+	}
+}
+
+// flakyModel is an endpoint that fails the first `failures` messages with a 500 an overloaded server
+// sends — not a 401 — and answers every later one with a long article.
+func flakyModel(t *testing.T, failures int) (url string, asked func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		mu.Lock()
+		n++
+		fail := n <= failures
+		mu.Unlock()
+		w.Header().Set("content-type", "application/json")
+		if fail {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"type":"error","error":{"type":"api_error","message":"the engine is overloaded"}}`))
+			return
+		}
+		out, _ := json.Marshal(map[string]interface{}{"type": "message", "role": "assistant",
+			"content": []map[string]interface{}{{"type": "text", "text": longArticle("重试之后", 3)}}})
+		_, _ = w.Write(out)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return n
+	}
+}
+
+func TestWikiArticleTriesAFailedCallAgainButNeverA401(t *testing.T) {
+	previous := wikiArticleRetryWaits
+	wikiArticleRetryWaits = []time.Duration{0, 0, 0}
+	t.Cleanup(func() { wikiArticleRetryWaits = previous })
+	fakeVerifyClaude(t)
+
+	// One 500, then an answer: the article is written, and both calls are counted.
+	door := newFakeArticlesDoor(t, []map[string]interface{}{planTopic("database", 3, true)},
+		map[string]map[string]interface{}{"database": topicInput("database", smallTopic("database", 3))})
+	url, asked := flakyModel(t, 1)
+	wikiArticlesSession(t, door.URL, &fakeVLLM{URL: url})
+	var out strings.Builder
+	if err := cmdWikiCLI([]string{"articles", "--space", "space-1", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("a call that failed once: %v\n%s", err, out.String())
+	}
+	var summary wikiArticlesSummary
+	_ = json.Unmarshal([]byte(out.String()), &summary)
+	if written, _ := door.Write("database"); len(written.Articles) != 1 || written.Articles[0].Title != "重试之后" || asked() != 2 || summary.Calls != 2 {
+		t.Errorf("after one failure: write %+v, endpoint asked %d times, %d calls counted", written.Articles, asked(), summary.Calls)
+	}
+
+	// Failing every time: the topic is left unwritten, after the three tries.
+	door = newFakeArticlesDoor(t, []map[string]interface{}{planTopic("database", 3, true)},
+		map[string]map[string]interface{}{"database": topicInput("database", smallTopic("database", 3))})
+	url, asked = flakyModel(t, 100)
+	wikiArticlesSession(t, door.URL, &fakeVLLM{URL: url})
+	err := cmdWikiCLI([]string{"articles", "--space", "space-1"}, strings.NewReader(""), io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "1 topic was left unwritten") || asked() != len(wikiArticleRetryWaits) {
+		t.Errorf("failing every time = %v after %d calls", err, asked())
+	}
+	if _, wrote := door.Write("database"); wrote {
+		t.Error("a topic whose article never came back was written")
 	}
 }
 

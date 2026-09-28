@@ -48,14 +48,17 @@ export interface WikiDefaultTopic {
   title: string;
   category: WikiArticleCategory;
   description: string;
-  /** An entry whose paths start with one of these votes for the topic; the longest prefix wins. */
+  /** An entry's paths vote for the topic whose pattern claims the most of them (contract
+   *  `articles.membership.patterns`): a prefix, which ending in `/` names the directory itself too, or a
+   *  suffix written `*.swift`. */
   pathPrefixes: readonly string[];
 }
 
 /**
- * The demo's 22 topics, in the directory's order, with the path prefixes that file an entry under
- * each. The demo's catch-all — anything under `src/apiserver` read as a session — is gone: an entry
- * whose paths no prefix claims is filed by the slug it names, then by its words.
+ * The demo's 22 topics, in the directory's order, with the patterns that file an entry under each:
+ * the demo's own path rules as prefixes, and its suffix rules (`*.swift`, `*.sql`, `*_test.go`, …).
+ * The demo's catch-all — anything under `src/apiserver` read as a session — is gone: an entry whose
+ * paths no pattern claims is filed by the slug it names, then by its words.
  */
 export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   {
@@ -68,8 +71,6 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
       'src/apiserver/src/attachments/',
       'src/apiserver/src/link-previews/',
       'src/apiserver/src/session-tags/',
-      'src/runner-go/session',
-      'src/runner-go/transcript',
       'docs/session-',
     ],
   },
@@ -78,19 +79,21 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
     title: '任务与派发',
     category: 'platform',
     description: 'Tasks and task lists: completion criteria, acceptance, dependencies, dispatch, retries, evidence.',
-    pathPrefixes: ['src/apiserver/src/tasks/', 'src/apiserver/src/task-lists/', 'src/runner-go/task', 'docs/task-'],
+    pathPrefixes: [
+      'src/apiserver/src/tasks/',
+      'src/apiserver/src/task-lists/',
+      'docs/task-',
+    ],
   },
   {
     slug: 'projects',
     title: '项目与落地',
     category: 'platform',
-    description:
-      'Projects and coordinators: the integration line, landing and promotion to main, blockers, open items, the outcome reconciler.',
+    description: 'Projects and coordinators: the integration line, landing and promotion to main, blockers, open items, the outcome reconciler.',
     pathPrefixes: [
       'src/apiserver/src/projects/',
       'src/apiserver/src/outcome-reconciler/',
       'src/apiserver/src/deadlock/',
-      'src/runner-go/project',
       'scripts/outcome-reconciler',
       'scripts/project-',
       'docs/project-',
@@ -101,7 +104,11 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
     title: 'Watch 与唤醒',
     category: 'platform',
     description: 'Watches, scheduled wakeups, awaits and the notifications they send to sessions.',
-    pathPrefixes: ['src/apiserver/src/watches/', 'src/runner-go/watch', 'contracts/watch', 'docs/watch-'],
+    pathPrefixes: [
+      'src/apiserver/src/watches/',
+      'contracts/watch',
+      'docs/watch-',
+    ],
   },
   {
     slug: 'wiki',
@@ -131,14 +138,17 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
     title: 'Runner',
     category: 'runner',
     description: 'The Go runner daemon: claim and lease, background jobs, self-update, process management, and the runner door.',
-    pathPrefixes: ['src/runner-go/', 'src/apiserver/src/runner-api/', 'src/apiserver/src/runners/'],
+    pathPrefixes: [
+      'src/runner-go/',
+      'src/apiserver/src/runner-api/',
+      'src/apiserver/src/runners/',
+    ],
   },
   {
     slug: 'engines-providers',
     title: '引擎与模型提供方',
     category: 'runner',
-    description:
-      'Coding engines and model providers: Claude Code, Codex, Kimi, OpenCode, vLLM, models, effort, quotas and rate limits.',
+    description: 'Coding engines and model providers: Claude Code, Codex, Kimi, OpenCode, vLLM, models, effort, quotas and rate limits.',
     pathPrefixes: [
       'src/apiserver/src/providers/',
       'src/apiserver/src/agents/',
@@ -148,6 +158,8 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
       'src/runner-go/opencode',
       'src/runner-go/provider',
       'src/runner-go/model',
+      'src/runner-go/effort',
+      'src/runner-go/deepseek',
       'src/runner-go/engine',
       'src/runner-go/planusage',
     ],
@@ -156,14 +168,18 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
     slug: 'agent-tooling',
     title: 'Agent 工具与环境',
     category: 'runner',
-    description: "How agents work here: Bash tool quirks, MCP tools and the orbit CLI, subagents, context and the agents' memory.",
+    description: 'How agents work here: Bash tool quirks, MCP tools and the orbit CLI, subagents, context and the agents\' memory.',
     pathPrefixes: [
       'src/runner-go/mcp',
       'src/runner-go/agent_instructions',
-      'src/runner-go/background',
-      'src/runner-go/orchestration',
-      'src/runner-go/notify',
       'src/runner-go/cli_',
+      'src/runner-go/agent_cli',
+      'src/runner-go/notify_cli',
+      'src/runner-go/project_cli',
+      'src/runner-go/session_cli',
+      'src/runner-go/task_cli',
+      'src/runner-go/token_cli',
+      'src/runner-go/watch_cli',
     ],
   },
   {
@@ -171,28 +187,44 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
     title: 'Web 客户端',
     category: 'clients',
     description: 'The web client: React, antd, vitest, layout.',
-    pathPrefixes: ['src/web/'],
+    pathPrefixes: [
+      'src/web/',
+    ],
   },
   {
     slug: 'apple-clients',
     title: 'iOS 与 macOS 客户端',
     category: 'clients',
     description: 'The iOS and macOS clients and OrbitKit: SwiftUI, Xcode, TestFlight builds.',
-    pathPrefixes: ['src/macos/', 'src/ios/'],
+    pathPrefixes: [
+      'src/macos/',
+      'src/ios/',
+      'OrbitKit/',
+      'OrbitApp/',
+      '*.swift',
+    ],
   },
   {
     slug: 'realtime-push',
     title: '实时流与推送',
     category: 'clients',
     description: 'Realtime streams, server-sent events and push notifications.',
-    pathPrefixes: ['src/apiserver/src/realtime/', 'src/apiserver/src/push/', 'src/apiserver/src/events/', 'docs/realtime-'],
+    pathPrefixes: [
+      'src/apiserver/src/realtime/',
+      'src/apiserver/src/push/',
+      'src/apiserver/src/events/',
+      'docs/realtime-',
+    ],
   },
   {
     slug: 'ui-design',
     title: 'UI 设计',
     category: 'clients',
     description: 'UI and UX design: mockups, screenshots, layout rules, the copy in the UI.',
-    pathPrefixes: ['docs/mocks/', 'docs/ux/'],
+    pathPrefixes: [
+      'docs/mocks/',
+      'docs/ux/',
+    ],
   },
   {
     slug: 'database',
@@ -201,6 +233,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
     description: 'PostgreSQL and Prisma: schema, migrations, queries, performance, locks, backups, the write inventory.',
     pathPrefixes: [
       'src/apiserver/prisma/',
+      'prisma/',
       'src/apiserver/src/prisma/',
       'src/apiserver/src/common/db-write-inventory',
       'src/apiserver/src/common/transaction-retry',
@@ -209,6 +242,8 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
       'docs/db-write-audit',
       'scripts/pg-',
       'scripts/sync-db-trigger-inventory',
+      '*.sql',
+      '*.prisma',
     ],
   },
   {
@@ -229,14 +264,21 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
     title: '共享包与契约',
     category: 'data',
     description: 'The shared package and the contracts: codecs, ids, protocol definitions.',
-    pathPrefixes: ['src/shared/', 'contracts/', 'src/apiserver/src/common/public-id'],
+    pathPrefixes: [
+      'src/shared/',
+      'contracts/',
+      'src/apiserver/src/common/public-id',
+    ],
   },
   {
     slug: 'security',
     title: '安全与密钥',
     category: 'data',
     description: 'Secrets, keys, redaction and the handling of credentials.',
-    pathPrefixes: ['src/apiserver/src/common/secret', 'docs/dependency-security'],
+    pathPrefixes: [
+      'src/apiserver/src/common/secret',
+      'docs/dependency-security',
+    ],
   },
   {
     slug: 'git-worktrees',
@@ -263,6 +305,11 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
       'scripts/pg-matrix-',
       'scripts/executable-acceptance-',
       'src/apiserver/src/test-support/',
+      'test/',
+      '*_test.go',
+      '*.spec.ts',
+      '*.test.ts',
+      '*.test.tsx',
     ],
   },
   {
@@ -292,9 +339,8 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
       '.claude/skills/upgrade/',
       'scripts/image-boot',
       'docs/self-hosting',
-      'src/apiserver/Dockerfile',
-      'src/web/Dockerfile',
       'src/runner-go/hostd',
+      '*Dockerfile',
     ],
   },
   {
@@ -302,14 +348,21 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
     title: '可观测性',
     category: 'engineering',
     description: 'Metrics, logs, dashboards and diagnosing production incidents.',
-    pathPrefixes: ['src/apiserver/src/metrics/', 'src/apiserver/src/health/'],
+    pathPrefixes: [
+      'src/apiserver/src/metrics/',
+      'src/apiserver/src/health/',
+    ],
   },
   {
     slug: 'workflow-owner',
     title: '与 owner 协作',
     category: 'collaboration',
     description: 'How the owner wants work done: communication, language, confirmations, scope, reporting.',
-    pathPrefixes: ['docs/human-only-authority', 'CLAUDE.md', 'AGENTS.md'],
+    pathPrefixes: [
+      'docs/human-only-authority',
+      'CLAUDE.md',
+      'AGENTS.md',
+    ],
   },
 ];
 

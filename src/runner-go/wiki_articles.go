@@ -626,17 +626,34 @@ func (r *wikiArticlesRun) name(topicTitle string, members []wikiArticleEntry) (s
 	return wikiArticleFallbackName(members), nil
 }
 
-// ask is one clean call, counted.
+// wikiArticleRetryWaits are the pauses before each try of one call: the local model sits behind a
+// tunnel that drops, and one lost call would otherwise cost a whole topic's other calls. A 401 is
+// never tried again.
+var wikiArticleRetryWaits = []time.Duration{0, 10 * time.Second, 30 * time.Second}
+
+// ask is one clean call, counted, tried again after a failure that is not a 401.
 func (r *wikiArticlesRun) ask(prompt string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), wikiArticleCallTimeout)
-	defer cancel()
-	text, usage, err := askWikiModel(ctx, r.claude, r.cfg, wikiArticleSystemPrompt, prompt)
-	r.mu.Lock()
-	r.calls++
-	r.usage.InputTokens += usage.InputTokens
-	r.usage.OutputTokens += usage.OutputTokens
-	r.mu.Unlock()
-	return text, err
+	var last error
+	for _, wait := range wikiArticleRetryWaits {
+		time.Sleep(wait)
+		ctx, cancel := context.WithTimeout(context.Background(), wikiArticleCallTimeout)
+		text, usage, err := askWikiModel(ctx, r.claude, r.cfg, wikiArticleSystemPrompt, prompt)
+		cancel()
+		r.mu.Lock()
+		r.calls++
+		r.usage.InputTokens += usage.InputTokens
+		r.usage.OutputTokens += usage.OutputTokens
+		r.mu.Unlock()
+		if err == nil {
+			return text, nil
+		}
+		var auth *wikiArticleAuthError
+		if errors.As(err, &auth) {
+			return "", err
+		}
+		last = err
+	}
+	return "", last
 }
 
 // ── The prompts, and reading what comes back ────────────────────────────────────────────────────
