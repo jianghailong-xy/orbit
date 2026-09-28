@@ -38,7 +38,7 @@ import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider } from '@prisma/client';
-import { uuidToBase62, type ClaimedSession } from '@orbit/shared';
+import { toUuid, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -284,15 +284,20 @@ async function tablesHoldingAKey(client: Client): Promise<string[]> {
 }
 
 /** What the providers doors are built around; set before Nest builds them. */
-const doorsOver: { providers: ProvidersService | null; prisma: unknown } = { providers: null, prisma: null };
+const doorsOver: { providers: ProvidersService | null; login: CodexLoginService | null; prisma: unknown } = {
+  providers: null,
+  login: null,
+  prisma: null,
+};
 
 @Module({
   controllers: [ProvidersController, AdminProvidersController, RunnerProvidersController],
   providers: [
     { provide: ProvidersService, useFactory: () => doorsOver.providers },
-    // The ChatGPT sign-in's own controller dependency (migration 0323): no route this spec reads
-    // reaches it, and a module that omitted it would fail to build the controller.
-    { provide: CodexLoginService, useValue: {} },
+    // The ChatGPT sign-in's own controller dependency (migration 0323). The REAL service: (C) sweeps
+    // every route the controller declares, these five included, and a stub answering 500 would be a
+    // route whose body nobody checked.
+    { provide: CodexLoginService, useFactory: () => doorsOver.login },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
     JwtAuthGuard,
     AdminRoleGuard,
@@ -349,6 +354,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     db as never, queue as never, realtime as never, {} as never, {} as never, {} as never,
   );
   doorsOver.providers = providers;
+  doorsOver.login = new CodexLoginService(prisma, realtime);
   doorsOver.prisma = db;
   const doors = await openDoors();
   t.after(async () => {
@@ -358,10 +364,15 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await client.end();
   });
 
-  /** Every ciphertext a provider row has held while this spec ran, rotated and deleted ones included. */
+  /** Every ciphertext a provider row — or a pool's ChatGPT login (migration 0323) — has held while this
+   *  spec ran, rotated and deleted ones included. */
   const ciphertexts = new Set<string>();
   const track = async () => {
     for (const row of await db.modelProvider.findMany({ select: { apiKeyEnc: true } })) ciphertexts.add(row.apiKeyEnc);
+    for (const row of await db.poolCodexLogin.findMany({ select: { accessTokenEnc: true, refreshTokenEnc: true } })) {
+      ciphertexts.add(row.accessTokenEnc);
+      ciphertexts.add(row.refreshTokenEnc);
+    }
   };
   const names = new Map<string, string>();
   const answers: Answer[] = [];
@@ -694,6 +705,49 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(bob, 'POST', 'providers/pools/:id/members', { id: scratchId }, { providerId: pub(theirs) }, 404);
     await ask(alice, 'DELETE', 'providers/pools/:id/members/:providerId', { id: scratchId, providerId: pub(work) }, undefined, 200);
     await ask(alice, 'DELETE', 'providers/pools/:id', { id: scratchId }, undefined, 200);
+    // A pool of hers on Codex, which runs on one ChatGPT login this server holds and signs in itself
+    // (migration 0323), with that login written straight into the table: the four routes that read or
+    // change the account answer her, another owner gets the 404 a pool that does not exist gets, and no
+    // body among them repeats either token — both ciphertexts are in `ciphertexts` from here on.
+    const codexPool = await ask(alice, 'POST', 'providers/pools', {}, { label: 'My ChatGPT', engine: 'codex' }, 201);
+    const codexPoolId = String(codexPool.json.id);
+    const codexTokens = { access: `codex-access-${randomUUID()}`, refresh: `codex-refresh-${randomUUID()}` };
+    await db.poolCodexLogin.create({
+      data: {
+        poolId: toUuid(codexPoolId),
+        userId: alice,
+        accountId: randomUUID(),
+        email: 'owner@codex-login.invalid',
+        plan: 'plus',
+        accessTokenEnc: encryptSecret(codexTokens.access),
+        refreshTokenEnc: encryptSecret(codexTokens.refresh),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    await track();
+    const loginPage = await ask(alice, 'GET', 'providers/pools/:id', { id: codexPoolId }, undefined, 200);
+    await ask(bob, 'GET', 'providers/pools/:id', { id: codexPoolId }, undefined, 404);
+    await ask(alice, 'GET', 'providers/pools/:id/codex-login', { id: codexPoolId }, undefined, 200);
+    await ask(bob, 'GET', 'providers/pools/:id/codex-login', { id: codexPoolId }, undefined, 404);
+    await ask(alice, 'DELETE', 'providers/pools/:id/codex-login', { id: codexPoolId }, undefined, 200);
+    // The sign-in door on a pool that holds no login of that kind: a Claude pool of hers is not a login
+    // pool, so it answers as no pool at all — and nothing is spawned for a request it refuses.
+    await ask(alice, 'POST', 'providers/pools/:id/codex-login', { id: uuidToBase62(alicePool.id) }, undefined, 404);
+    await ask(alice, 'DELETE', 'providers/pools/:id/codex-login/account', { id: codexPoolId }, undefined, 200);
+    // The positive half: the page really does name that account, so the sweep above is checking bodies
+    // that carry something rather than four 404s — and what it names it by is the email and the masked
+    // account id, never the pair the tokens are in.
+    assert.deepEqual(
+      { email: loginPage.json.login?.email, state: loginPage.json.login?.state, plan: loginPage.json.login?.plan },
+      { email: 'owner@codex-login.invalid', state: 'ACTIVE', plan: 'plus' },
+      'the pool page reads the account it runs on',
+    );
+    assert.equal(loginPage.json.login?.fingerprint.length, 5, 'an account is named by its last four characters');
+    assert.deepEqual(
+      [codexTokens.access, codexTokens.refresh].filter((token) => loginPage.text.includes(token)),
+      [],
+      'the pool page carried a token in the clear',
+    );
     await ask(alice, 'DELETE', 'providers/mine/:id', { id: spareId }, undefined, 200);
     // The runner's doors onto the same rows (`orbit provider create|update|delete`): one of hers
     // connected from her machine, its key rotated and the row deleted by the slug the list shows —

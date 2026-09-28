@@ -96,11 +96,13 @@ const CHALLENGE_TIMEOUT_MS = 10_000;
 /** How much of the CLI's output this keeps. It is the banner and the code; nothing else is ever read. */
 const OUTPUT_CAP = 16 * 1024;
 
-/** What `start` answers with, and what a poll repeats until the login settles. */
+/** What `start` answers with: the page to open, the code to type there, and when the code dies. Both
+ *  halves are always here — an attempt that never printed them is refused at the start, not answered
+ *  with nulls — while a poll of one still waiting may repeat them or not have them yet. */
 export interface CodexLoginAttemptView {
   status: 'PENDING';
-  verificationUrl: string | null;
-  userCode: string | null;
+  verificationUrl: string;
+  userCode: string;
   expiresAt: string;
 }
 
@@ -178,7 +180,7 @@ export class CodexLoginService implements OnModuleDestroy {
 
   /** Nothing outlives the process: a sign-in still waiting is killed and its directory removed. */
   onModuleDestroy(): void {
-    for (const attempt of this.attempts.values()) void this.release(attempt);
+    for (const attempt of this.attempts.values()) void this.abandon(attempt, 'CANCELLED', null);
     this.attempts.clear();
   }
 
@@ -190,7 +192,7 @@ export class CodexLoginService implements OnModuleDestroy {
   async start(userId: string, poolId: string): Promise<CodexLoginAttemptView> {
     const pool = await this.ownPool(userId, poolId);
     const previous = this.attempts.get(pool.id);
-    if (previous) await this.release(previous);
+    if (previous) await this.abandon(previous, 'CANCELLED', null);
 
     const dir = await mkdtemp(join(tmpdir(), 'orbit-codex-login-'));
     const attempt: Attempt = {
@@ -208,8 +210,7 @@ export class CodexLoginService implements OnModuleDestroy {
     };
     this.attempts.set(pool.id, attempt);
     attempt.timer = setTimeout(() => {
-      attempt.status = 'EXPIRED';
-      void this.release(attempt);
+      void this.expire(attempt);
     }, codexLoginTtlMs());
     // The deadline is this pool's business, not the process's: an idle server must still exit.
     attempt.timer.unref();
@@ -228,9 +229,7 @@ export class CodexLoginService implements OnModuleDestroy {
       });
     }
     child.on('error', () => {
-      attempt.error = `the codex CLI (${codexBin()}) could not be started on this server`;
-      attempt.status = 'FAILED';
-      void this.release(attempt);
+      void this.abandon(attempt, 'FAILED', `the codex CLI (${codexBin()}) could not be started on this server`);
     });
     child.on('exit', (code) => {
       void this.settle(attempt, code);
@@ -240,13 +239,11 @@ export class CodexLoginService implements OnModuleDestroy {
     // than answer with half of what the page needs. A CLI that died first is answered with why.
     const challenge = await this.awaitChallenge(attempt);
     if (!challenge) {
-      const { error } = attempt;
-      attempt.status = 'FAILED';
-      await this.release(attempt);
+      await this.abandon(attempt, 'FAILED', attempt.error ?? 'the codex CLI offered no device code');
       this.attempts.delete(pool.id);
       throw new ServiceUnavailableException({
         code: 'CODEX_LOGIN_NO_CHALLENGE',
-        message: error ?? 'the codex CLI offered no device code',
+        message: attempt.error ?? 'the codex CLI offered no device code',
       });
     }
     return {
@@ -317,8 +314,9 @@ export class CodexLoginService implements OnModuleDestroy {
     const pool = await this.ownPool(userId, poolId);
     const attempt = this.attempts.get(pool.id);
     if (!attempt) return { status: 'NONE', account: await this.account(pool.id) };
-    attempt.status = 'CANCELLED';
-    await this.release(attempt);
+    // Killed and cleaned up BEFORE this answers: once it says CANCELLED, the child is gone and so is the
+    // directory it was writing in.
+    await this.abandon(attempt, 'CANCELLED', null);
     this.attempts.delete(pool.id);
     return { status: 'CANCELLED', account: await this.account(pool.id) };
   }
@@ -332,8 +330,7 @@ export class CodexLoginService implements OnModuleDestroy {
     const pool = await this.ownPool(userId, poolId);
     const attempt = this.attempts.get(pool.id);
     if (attempt) {
-      attempt.status = 'CANCELLED';
-      await this.release(attempt);
+      await this.abandon(attempt, 'CANCELLED', null);
       this.attempts.delete(pool.id);
     }
     const { count } = await this.prisma.poolCodexLogin.deleteMany({ where: { poolId: pool.id } });
@@ -405,26 +402,55 @@ export class CodexLoginService implements OnModuleDestroy {
     if (attempt.timer) clearTimeout(attempt.timer);
     attempt.timer = null;
     const raw = await readFile(join(attempt.dir, 'auth.json'), 'utf8').catch(() => null);
+    let status: 'CONFIRMED' | 'FAILED' = 'FAILED';
+    let tokens: CodexLoginTokens | null = null;
+    let error: string | null = null;
     if (raw !== null) {
       try {
-        attempt.tokens = parseCodexAuthJson(raw);
-        attempt.status = 'CONFIRMED';
+        tokens = parseCodexAuthJson(raw);
+        status = 'CONFIRMED';
       } catch (e) {
-        attempt.status = 'FAILED';
-        attempt.error = e instanceof CodexAuthError ? e.message : 'the codex CLI left a login this server cannot read';
+        error = e instanceof CodexAuthError ? e.message : 'the codex CLI left a login this server cannot read';
       }
     } else if (code === 0) {
-      attempt.status = 'FAILED';
-      attempt.error = 'the codex CLI finished without a login';
+      error = 'the codex CLI finished without a login';
     } else {
-      attempt.status = 'FAILED';
-      attempt.error = `the codex CLI gave up (exit ${code ?? 'signal'})`;
+      error = `the codex CLI gave up (exit ${code ?? 'signal'})`;
     }
-    // The credential file is gone the moment it has been read: nothing of it stays on disk.
+    // The credential file goes first — the moment it has been read, nothing of it is on disk — and only
+    // then is the status set: a poll that reads CONFIRMED is one whose directory is already gone, and
+    // whose tokens are the ones read here.
     await this.release(attempt);
+    attempt.tokens = tokens;
+    attempt.error = error;
+    attempt.status = status;
   }
 
-  /** Kill the child, forget the directory, drop anything read from it. Safe to call more than once. */
+  /**
+   * Give an attempt up: kill the child, remove the directory it was writing in, and only then take the
+   * status — so that whatever a caller reads the status from (a poll, a cancel's answer) is reading one
+   * whose process and files are already gone. The tokens it may have read go too: this is the ending for
+   * every attempt that is NOT being stored.
+   */
+  private async abandon(attempt: Attempt, status: 'CANCELLED' | 'EXPIRED' | 'FAILED', error: string | null) {
+    await this.release(attempt);
+    attempt.tokens = null;
+    attempt.error = error;
+    attempt.status = status;
+  }
+
+  /** The deadline: an attempt nobody finished is given up, and told so only once it is over. */
+  private async expire(attempt: Attempt): Promise<void> {
+    // A sign-in the CLI already finished is not this: its tokens are the poll's to store.
+    if (attempt.status !== 'PENDING') return;
+    await this.abandon(attempt, 'EXPIRED', null);
+  }
+
+  /**
+   * Kill the child and forget the directory. What was READ out of it is the caller's to keep or drop: a
+   * finished sign-in's tokens outlive this call until the poll that stores them (see `store`), and every
+   * other ending drops them through `abandon`. Safe to call more than once.
+   */
   private async release(attempt: Attempt): Promise<void> {
     if (attempt.timer) clearTimeout(attempt.timer);
     attempt.timer = null;
@@ -432,10 +458,6 @@ export class CodexLoginService implements OnModuleDestroy {
     attempt.child = null;
     attempt.output = '';
     attempt.challenge = null;
-    // What a finished sign-in is holding is the one thing that survives: the poll that stores it may not
-    // have come yet. Every other ending — cancelled, expired, failed, signed out, shut down — forgets it,
-    // and so does the poll that refuses it (the catch below).
-    if (attempt.status !== 'CONFIRMED') attempt.tokens = null;
     const dir = attempt.dir;
     attempt.dir = null;
     if (dir) await rm(dir, { recursive: true, force: true }).catch(() => undefined);

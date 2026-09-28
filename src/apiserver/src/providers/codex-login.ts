@@ -96,6 +96,11 @@ function accountOf(token: string) {
  * The account is read off the id token and falls back to the access token — both carry the same claim
  * block, and the id token is the one that is the account's identity. An account id is required: a file
  * without one is not a completed login, whatever else it holds.
+ *
+ * No signature is verified here, and none needs to be: the file was written by the official CLI in a
+ * directory this server made for that one sign-in and removes the moment it has read it, and what the
+ * claims say is naming — the email and plan a page shows. The token that is actually trusted is the
+ * access token, and it is the upstream that judges it on every request the gateway forwards.
  */
 export function parseCodexAuthJson(raw: string, now = new Date()): CodexLoginTokens {
   let parsed: { tokens?: Record<string, unknown> };
