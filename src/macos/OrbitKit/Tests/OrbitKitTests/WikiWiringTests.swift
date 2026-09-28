@@ -124,16 +124,17 @@ final class WikiWiringTests: XCTestCase {
     // MARK: the home page
 
     /// The home page draws `WikiLogic.HomeBand` in its own order — the search under the title, the
-    /// banner, then the five bands — and the header carries the large title with the space beside it.
+    /// banner, then the four bands — and the header carries the large title with the space beside it.
     func testTheHomePageDrawsTheBandsInOrder() throws {
         let page = code(try slice(try source("Views/WikiView.swift"),
                                   from: "struct WikiHomePage: View {", to: "private struct WikiRowLabel: View {"))
         XCTAssertTrue(page.contains("ForEach(WikiLogic.HomeBand.allCases, id: \\.self) { band in"))
         let bands = try slice(page, from: "private func band(_ band: WikiLogic.HomeBand) -> some View {",
                               to: "private var searchField: some View {")
-        assertOrder(bands, ["case .search:", "case .reviewBanner:", "case .principles:", "case .topics:",
+        assertOrder(bands, ["case .search:", "case .reviewBanner:", "case .principles:",
                             "case .recentDecisions:", "case .recentlyChanged:", "case .agentsUsed:"],
                     "the bands' arms")
+        XCTAssertFalse(bands.contains("case .topics:"), "the topics are the Contents sheet, not a band")
         XCTAssertTrue(bands.contains("if content.proposals > 0 {\n                reviewBanner"),
                       "the banner shows only while something is waiting")
         let header = try slice(page, from: "private var header: some View {", to: "private var spacePicker: some View {")

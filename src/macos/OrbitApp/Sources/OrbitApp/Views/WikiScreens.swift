@@ -11,6 +11,8 @@ struct WikiHomeView: View {
     /// How rows navigate: the three-column shells select, the compact stack pushes.
     var rowNavigation: SessionRowNavigation = .selection
 
+    @State private var contentsShown = false
+
     var body: some View {
         if let wiki = model.wiki {
             TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -22,8 +24,21 @@ struct WikiHomeView: View {
             }
             .task { await wiki.loadHome() }
             .refreshable { await wiki.loadHome() }
+            .sheet(isPresented: $contentsShown) {
+                WikiContentsScreen(at: .home) { pick in go(pick) }
+            }
         } else {
             ProgressView()
+        }
+    }
+
+    /// Where a Contents row goes: the home is where the reader already is; the rest open as pages.
+    private func go(_ pick: WikiContentsPick) {
+        switch pick {
+        case .home:                         break
+        case .browse:                       open(.wikiBrowse)
+        case .index:                        open(.wikiIndex)
+        case .article(let topic, let part): open(.wikiArticle(topic: topic, part: part))
         }
     }
 
@@ -37,7 +52,8 @@ struct WikiHomeView: View {
             },
             search: { query in await wiki.search(query) },
             openSettings: { open(.wikiSettings) },
-            openRun: { id in open(.wikiRun(changesetID: id)) })
+            openRun: { id in open(.wikiRun(changesetID: id)) },
+            openContents: { contentsShown = true })
     }
 
     /// A phone pushes the page; the three-column shells put it in the detail pane beside the list.
@@ -85,9 +101,196 @@ struct WikiDetailPane: View {
             WikiSettingsView()
         } else if let run = model.nav.selectedWikiRunID {
             WikiRunView(changesetID: run).id(run)
+        } else if let article = model.nav.selectedWikiArticle {
+            WikiArticleScreen(address: article).id(article)
+        } else if model.nav.wikiBrowseOnTop {
+            WikiBrowseScreen()
+        } else if model.nav.wikiIndexOnTop {
+            WikiIndexScreen()
         } else {
             ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
                                    description: Text("Pick an entry, or open Review."))
+        }
+    }
+}
+
+// MARK: - the articles
+
+/// The Contents sheet over the model's directory, read when it opens.
+struct WikiContentsScreen: View {
+    @Environment(AppModel.self) private var model
+    let at: WikiContentsAt
+    let pick: (WikiContentsPick) -> Void
+
+    var body: some View {
+        if let wiki = model.wiki {
+            WikiContentsSheet(groups: wiki.directory.map(WikiArticleLogic.directoryGroups) ?? [], at: at, pick: pick)
+                .task { await wiki.loadDirectory() }
+        } else {
+            ProgressView()
+        }
+    }
+}
+
+/// The article pages push what they open onto the section's stack; Contents' Home goes back to the root.
+@MainActor private func wikiGo(_ model: AppModel, _ pick: WikiContentsPick) {
+    switch pick {
+    case .home:                         model.nav.popToRoot()
+    case .browse:                       model.push(.wikiBrowse)
+    case .index:                        model.push(.wikiIndex)
+    case .article(let topic, let part): model.push(.wikiArticle(topic: topic, part: part))
+    }
+}
+
+/// One of a topic's articles, or — while the topic has none — its entries alone.
+struct WikiArticleScreen: View {
+    @Environment(AppModel.self) private var model
+    let address: WikiArticleAddress
+
+    @State private var contentsShown = false
+
+    var body: some View {
+        if let wiki = model.wiki {
+            Group {
+                if let article = wiki.articles[address] {
+                    WikiArticlePage(article: article, entries: wiki.topicEntries[address.topic],
+                                    detail: { id in wiki.detail(id) }, actions: actions(wiki))
+                } else if wiki.missingArticles.contains(address) {
+                    WikiTopicEntriesPage(title: topicTitle(wiki), entries: wiki.topicEntries[address.topic] ?? [],
+                                         actions: actions(wiki))
+                } else if wiki.failedArticles.contains(address) {
+                    ContentUnavailableView {
+                        Label("The article couldn't be loaded", systemImage: AppSection.wiki.systemImage)
+                    } description: {
+                        Text("Check the connection, then try again.")
+                    } actions: {
+                        Button("Retry") { Task { await wiki.loadArticle(address) } }
+                    }
+                } else {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .task {
+                await wiki.loadArticle(address)
+                if wiki.missingArticles.contains(address) && wiki.directory == nil { await wiki.loadDirectory() }
+            }
+            .refreshable { await wiki.loadArticle(address) }
+            .sheet(isPresented: $contentsShown) {
+                WikiContentsScreen(at: .article(topic: address.topic, part: address.part)) { pick in wikiGo(model, pick) }
+            }
+        } else {
+            ProgressView()
+        }
+    }
+
+    /// The topic's name, as the directory has it; its slug before the directory is read.
+    private func topicTitle(_ wiki: WikiModel) -> String {
+        let groups = wiki.directory.map(WikiArticleLogic.directoryGroups) ?? []
+        for group in groups {
+            if let topic = group.topics.first(where: { $0.slug == address.topic }) { return topic.title }
+        }
+        return address.topic
+    }
+
+    private func actions(_ wiki: WikiModel) -> WikiArticleActions {
+        WikiArticleActions(
+            openEntry: { id in model.push(.wikiEntry(entryID: id)) },
+            openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
+            openBrowse: { model.push(.wikiBrowse) },
+            openContents: { contentsShown = true },
+            readEntry: { id in Task { await wiki.loadEntry(id) } })
+    }
+}
+
+/// A topic with no article yet: its entries by kind, and why there is no text over them.
+struct WikiTopicEntriesPage: View {
+    let title: String
+    let entries: [WikiEntry]
+    var actions = WikiArticleActions()
+
+    var body: some View {
+        List {
+            Section {
+                Text(title)
+                    .font(.title.bold())
+                    .listRowSeparator(.hidden)
+                Text(WikiArticleCopy.noArticleYet)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .listRowSeparator(.hidden)
+            }
+            ForEach(WikiArticleLogic.entryGroups(entries, cited: [])) { group in
+                Section(group.title) {
+                    ForEach(group.entries) { entry in
+                        Button { actions.openEntry(entry.id) } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(entry.displayTitle)
+                                    .font(.orbitProse)
+                                    .foregroundStyle(Color.primary)
+                                    .lineLimit(1)
+                                Spacer(minLength: 8)
+                                if let trust = entry.trust, trust != .unknown {
+                                    WikiBadge(text: WikiCopy.trustLabel(trust), tone: WikiLogic.trustTone(trust))
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: actions.openContents) { Image(systemName: "list.bullet") }
+                    .accessibilityLabel(WikiArticleCopy.contents)
+            }
+        }
+    }
+}
+
+/// Browse by category over the model's directory.
+struct WikiBrowseScreen: View {
+    @Environment(AppModel.self) private var model
+    @State private var contentsShown = false
+
+    var body: some View {
+        if let wiki = model.wiki {
+            WikiBrowsePage(categories: wiki.directory.map(WikiArticleLogic.browseCategories) ?? [],
+                           actions: WikiArticleActions(
+                               openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
+                               openContents: { contentsShown = true }))
+                .task { await wiki.loadDirectory() }
+                .refreshable { await wiki.loadDirectory() }
+                .sheet(isPresented: $contentsShown) {
+                    WikiContentsScreen(at: .browse) { pick in wikiGo(model, pick) }
+                }
+        } else {
+            ProgressView()
+        }
+    }
+}
+
+/// The A–Z index over the model's index read.
+struct WikiIndexScreen: View {
+    @Environment(AppModel.self) private var model
+    @State private var contentsShown = false
+
+    var body: some View {
+        if let wiki = model.wiki {
+            let items = wiki.articleIndex?.items ?? []
+            WikiIndexPage(groups: WikiArticleLogic.indexGroups(items), count: items.count,
+                          actions: WikiArticleActions(
+                              openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
+                              openContents: { contentsShown = true }))
+                .task { await wiki.loadArticleIndex() }
+                .refreshable { await wiki.loadArticleIndex() }
+                .sheet(isPresented: $contentsShown) {
+                    WikiContentsScreen(at: .index) { pick in wikiGo(model, pick) }
+                }
+        } else {
+            ProgressView()
         }
     }
 }
