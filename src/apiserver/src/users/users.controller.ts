@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdatePreferencesDto } from './dto';
+import { UpdatePreferencesDto, UpdateProfileDto } from './dto';
 
 @Controller('users')
 export class UsersController {
@@ -14,6 +14,24 @@ export class UsersController {
   me(@CurrentUser() user: AuthUser) {
     return this.prisma.user.findUnique({
       where: { id: user.userId },
+      select: { id: true, email: true, name: true, createdAt: true, preferences: true, role: true },
+    });
+  }
+
+  /**
+   * Rename the current user: the name every client shows over the account, and the one the people
+   * in their shared pools see them by. Trimmed; a name that is blank once trimmed is refused rather
+   * than stored, since it would leave the account nameless wherever it is shown. Returns the same
+   * shape as `me`.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('name must not be empty');
+    return this.prisma.user.update({
+      where: { id: user.userId },
+      data: { name },
       select: { id: true, email: true, name: true, createdAt: true, preferences: true, role: true },
     });
   }
