@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined } from '@ant-design/icons';
-import { Button, Checkbox, Input, Modal, Tag, Tooltip } from 'antd';
+import { DeleteOutlined, PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { Button, Checkbox, Input, Modal, Popconfirm, Radio, Segmented, Select, Tag, Tooltip } from 'antd';
 import { api } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import {
@@ -17,9 +17,18 @@ import {
   type ProviderPool,
 } from '../lib/providerPools';
 import type { ProviderRow } from '../lib/providerAdmin';
+import {
+  canRemoveKey,
+  canReplaceKey,
+  formatCapReset,
+  SHARED_POOLS_BASE,
+  type SharedPool,
+  type SharedPoolKey,
+} from '../lib/sharedPools';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
+import { PeopleStack, PersonMark, ReplaceKeyModal } from './SharedPool';
 
 // Which pool cards the user folded or unfolded, by pool id. A card nobody has touched follows the
 // window: open on a desktop, where its rows fit, and folded to its head line on a phone.
@@ -35,11 +44,13 @@ function readFold(): Record<string, boolean> {
   }
 }
 
-const accounts = (n: number) => `${n} account${n === 1 ? '' : 's'}`;
+/** What a pool's members are: a shared pool holds keys, an account pool of one's own accounts. */
+const memberNoun = (pool: ProviderPool, n: number) => `${pool.shared ? 'key' : 'account'}${n === 1 ? '' : 's'}`;
 
-/** "2 of 3 accounts available": the members a session could start on right now. */
+/** "2 of 3 accounts available" — "2 of 5 keys available" on a shared pool: the members a session could
+ *  start on right now. */
 export const availabilityOf = (pool: ProviderPool, refusals: PoolRefusals): string =>
-  `${availableCount(pool, refusals)} of ${accounts(pool.members.length)} available`;
+  `${availableCount(pool, refusals)} of ${pool.members.length} ${memberNoun(pool, pool.members.length)} available`;
 
 /** The same words for a head line, where a phone drops "accounts" to keep the pool's name. */
 function Availability({ pool, refusals }: { pool: ProviderPool; refusals: PoolRefusals }) {
@@ -47,8 +58,18 @@ function Availability({ pool, refusals }: { pool: ProviderPool; refusals: PoolRe
   return (
     <span className="re-summary">
       {availableCount(pool, refusals)} of {total}
-      <span className="pool-wide"> account{total === 1 ? '' : 's'}</span> available
+      <span className="pool-wide"> {memberNoun(pool, total)}</span> available
     </span>
+  );
+}
+
+/** The engine a pool runs on, as the session picker draws it: Codex for a shared pool of OpenAI keys,
+ *  Claude for an account pool. */
+export function PoolEngineMark({ pool, size = 18 }: { pool: ProviderPool; size?: number }) {
+  return pool.shared ? (
+    <ProviderTile slug="openai" label="Codex" size={size} />
+  ) : (
+    <ProviderTile slug="anthropic" label="Claude" size={size} />
   );
 }
 
@@ -61,15 +82,18 @@ function Availability({ pool, refusals }: { pool: ProviderPool; refusals: PoolRe
 export function PoolGauge({ pool }: { pool: ProviderPool }) {
   const head = poolHeadline(pool);
   if (head.kind === 'spent') {
+    // A shared pool's keys are capped rather than spent, and come back with the month.
+    const spent = pool.shared ? 'All at cap' : 'All spent';
     return (
       <span className="pool-gauge spent">
         {head.resetsAt ? (
           // One inline run, so the gauge's flex gap doesn't open up inside the sentence.
           <span>
-            <span className="pool-wide">All spent · </span>resets {formatResetTime(head.resetsAt)}
+            <span className="pool-wide">{spent} · </span>resets{' '}
+            {pool.shared ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}
           </span>
         ) : (
-          'All spent'
+          spent
         )}
       </span>
     );
@@ -86,7 +110,8 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
           </span>
           <span className="pool-gauge-pct">{quota.percent}%</span>
         </>
-      ) : (
+      ) : member.key ? null : (
+        // A key with no cap has nothing to fill; an account that reports no quota says so.
         <span className="pool-gauge-none">No quota reported</span>
       )}
     </span>
@@ -166,40 +191,156 @@ function MemberRow({
   );
 }
 
-/** A pool's members, with what a pool of fewer than two accounts is worth saying about itself. */
+/** What can be done to a shared pool's key where it is shown — paste a working key over it, switch it
+ *  off and on, take it out. Each is offered only to whom the server lets do it. */
+export interface KeyActions {
+  onReplace?: (key: SharedPoolKey) => void;
+  onSwitch?: (key: SharedPoolKey, enabled: boolean) => void;
+  onRemove?: (key: SharedPoolKey) => void;
+}
+
+/** One key of a shared pool: whose it is and its fingerprint, where it stands, what the others spent on
+ *  it this month against the cap its contributor set, and what the viewer may do about it. */
+function KeyRow({ pool, member, actions }: { pool: SharedPool; member: PoolMember; actions: KeyActions }) {
+  const key = member.key!;
+  const status = memberStatus(member);
+  const cap = key.shareCap;
+  const spent = key.usage.othersCostUsd;
+  const percent = cap === null ? null : cap > 0 ? Math.min(100, Math.round((spent / cap) * 100)) : 100;
+  const invalid = key.state === 'INVALID';
+  // The contributor's own switch; replacing and removing are theirs and every admin's.
+  const replace = invalid && canReplaceKey(pool, key) ? actions.onReplace : undefined;
+  const toggle = key.contributor.you ? actions.onSwitch : undefined;
+  const remove = canRemoveKey(pool, key) ? actions.onRemove : undefined;
+  return (
+    <div className="re-row pool-row pool-row-key" data-member={key.id}>
+      <div className="re-id">
+        <PersonMark pool={pool} userId={key.contributor.userId} name={key.contributor.name} />
+        <div style={{ minWidth: 0 }}>
+          <div className="re-name" title={key.label}>
+            <span className="pool-member-label">{key.label}</span>
+            {key.contributor.you && <span className="pool-you">you</span>}
+            {member.next && <span className="re-chip">NEXT</span>}
+          </div>
+          <div className="pool-key-mask">
+            {key.contributor.name} · {key.fingerprint}
+          </div>
+        </div>
+      </div>
+      <div className="pool-status">
+        <Tag color={status.color} title={status.label}>
+          {status.label}
+        </Tag>
+      </div>
+      <div className="re-quota pool-key-money">
+        {/* Short on purpose: what the others spent on it, against the cap its contributor set — the
+            whole sentence is the cell's own title. */}
+        <div
+          className="re-quota-head"
+          title={`What the others spent on this key this month${cap === null ? '' : `, of the $${cap} its contributor allows`}`}
+        >
+          <b>Others</b>
+          <span>
+            ${spent.toFixed(2)}
+            {cap === null ? '' : ` of $${cap}`}
+          </span>
+        </div>
+        {percent !== null && (
+          <div className={`runner-util ${percent >= 90 ? 'full' : ''}`}>
+            <span className="runner-util-fill" style={{ width: `${percent}%` }} />
+          </div>
+        )}
+      </div>
+      <div className="re-act">
+        {replace && (
+          <Button size="small" type="primary" onClick={() => replace(key)}>
+            Replace key
+          </Button>
+        )}
+        {toggle && (
+          <Tooltip title={key.enabled ? 'Disable — no session starts on it until you enable it' : 'Enable'}>
+            <Button
+              size="small"
+              type="text"
+              icon={key.enabled ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+              onClick={() => toggle(key, !key.enabled)}
+              aria-label={`${key.enabled ? 'Disable' : 'Enable'} ${key.label}`}
+            />
+          </Tooltip>
+        )}
+        {remove && (
+          <Popconfirm
+            title={`Remove ${key.label}?`}
+            description="It is deleted from the Orbit server, and no session runs on it again."
+            okText="Remove"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => remove(key)}
+          >
+            <Button
+              size="small"
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              aria-label={`Remove ${key.label} from this pool`}
+            />
+          </Popconfirm>
+        )}
+      </div>
+      {invalid && (
+        <div className="pool-why">
+          {canReplaceKey(pool, key)
+            ? 'Rejected by OpenAI — replace it with a working key to put it back in the pool.'
+            : `Rejected by OpenAI — only ${key.contributor.name} or the pool’s admins can replace it.`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A pool's members, with what a pool of fewer than two accounts is worth saying about itself. A shared
+ *  pool's members are its keys (KeyRow), and `keyActions` what can be done to them here. */
 export function PoolMembers({
   pool,
   refusals,
   onRemove,
+  keyActions,
 }: {
   pool: ProviderPool;
   refusals: PoolRefusals;
   onRemove?: (member: PoolMember) => void;
+  keyActions?: KeyActions;
 }) {
   const [only] = pool.members;
+  const { shared } = pool;
   return (
     <>
       {/* Every door that takes a provider refuses a pool with nothing in it (the server's
           `unavailable`), so this says that rather than where such a session would run. */}
       {pool.members.length === 0 && (
-        <div className="pool-note">No accounts yet — no session can start on this pool until one is added.</div>
+        <div className="pool-note">
+          No {shared ? 'keys' : 'accounts'} yet — no session can start on this pool until one is added.
+        </div>
       )}
       {/* Not of one the pool no longer admits: on its own that account still runs, and in the pool
           it can't. */}
-      {pool.members.length === 1 && !memberRefusal(only, refusals) && (
+      {pool.members.length === 1 && !shared && !memberRefusal(only, refusals) && (
         <div className="pool-note">
           With one account this pool is the same as using <b>{only.label}</b> on its own. Add another
           so a session can move when this one runs out.
         </div>
       )}
-      {pool.members.map((member) => (
-        <MemberRow
-          key={member.id}
-          member={member}
-          refusal={memberRefusal(member, refusals)}
-          onRemove={onRemove && (() => onRemove(member))}
-        />
-      ))}
+      {pool.members.map((member) =>
+        shared && member.key ? (
+          <KeyRow key={member.id} pool={shared} member={member} actions={keyActions ?? {}} />
+        ) : (
+          <MemberRow
+            key={member.id}
+            member={member}
+            refusal={memberRefusal(member, refusals)}
+            onRemove={onRemove && (() => onRemove(member))}
+          />
+        ),
+      )}
     </>
   );
 }
@@ -209,11 +350,13 @@ function PoolCard({
   refusals,
   collapsed,
   onToggle,
+  keyActions,
 }: {
   pool: ProviderPool;
   refusals: PoolRefusals;
   collapsed: boolean;
   onToggle: () => void;
+  keyActions?: KeyActions;
 }) {
   return (
     <div className={`re-card pool-card${collapsed ? ' collapsed' : ''}`} data-pool={pool.id}>
@@ -222,28 +365,45 @@ function PoolCard({
           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
             ▸
           </span>
+          <PoolEngineMark pool={pool} />
           <span className="re-runner">{pool.label}</span>
+          {pool.shared && <span className="re-chip pool-shared-chip">SHARED</span>}
           <Availability pool={pool} refusals={refusals} />
         </button>
         <span className="re-head-sp" />
+        {pool.shared && <PeopleStack pool={pool.shared} />}
         <PoolGauge pool={pool} />
         <Link className="re-manage" to={`/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
           <span className="pool-wide">Manage </span>→
         </Link>
       </div>
-      {!collapsed && <PoolMembers pool={pool} refusals={refusals} />}
+      {!collapsed && <PoolMembers pool={pool} refusals={refusals} keyActions={keyActions} />}
     </div>
   );
 }
 
 /**
  * The Providers page's middle section: the user's account pools — several Claude subscriptions
- * under one name, each session starting on whichever has the most room. Between the engines above
- * (one machine's login) and the keys below (what a pool is made of), whose verdicts say which
- * accounts a pool would no longer admit (`refusals`, poolRefusals).
+ * under one name, each session starting on whichever has the most room — and the shared pools they
+ * are in, several people's OpenAI keys under one name (sharedPoolAsProviderPool). Between the engines
+ * above (one machine's login) and the keys below (what an account pool is made of), whose verdicts say
+ * which accounts a pool would no longer admit (`refusals`, poolRefusals). Its head makes another pool
+ * of either kind (NewPoolModal); a key OpenAI refused is replaced from its card, and taken out on the
+ * pool's own page.
  */
-export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refusals: PoolRefusals }) {
+export function AccountPools({
+  pools,
+  refusals,
+  rows,
+}: {
+  pools: ProviderPool[];
+  refusals: PoolRefusals;
+  /** The user's own keys: what a new Claude pool is made of. */
+  rows: ProviderRow[];
+}) {
   const isMobile = useIsMobile();
+  const [creating, setCreating] = useState(false);
+  const [replacing, setReplacing] = useState<{ pool: SharedPool; key: SharedPoolKey } | null>(null);
   const [fold, setFold] = useState<Record<string, boolean>>(readFold);
   const toggle = (id: string, open: boolean) =>
     setFold((prev) => {
@@ -258,15 +418,19 @@ export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refus
 
   return (
     <div className="re-sec pool-sec">
-      <div className="re-sec-head">
+      <div className="re-sec-head pool-sec-head">
         <h3>Account pools</h3>
         <span className="re-sec-sub">
-          Several Claude subscriptions under one name — each session starts on the account with the
-          most room in its 5-hour window.
+          Several keys under one name — each session starts on the one with the most room, and moves
+          on when it runs out.
         </span>
+        <Button size="small" className="pool-new" onClick={() => setCreating(true)}>
+          New pool
+        </Button>
       </div>
       {pools.map((pool) => {
         const open = fold[pool.id] ?? !isMobile;
+        const { shared } = pool;
         return (
           <PoolCard
             key={pool.id}
@@ -274,9 +438,14 @@ export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refus
             refusals={refusals}
             collapsed={!open}
             onToggle={() => toggle(pool.id, open)}
+            keyActions={shared && { onReplace: (key) => setReplacing({ pool: shared, key }) }}
           />
         );
       })}
+      {creating && <NewPoolModal rows={rows} onClose={() => setCreating(false)} />}
+      {replacing && (
+        <ReplaceKeyModal pool={replacing.pool} poolKey={replacing.key} onClose={() => setReplacing(null)} />
+      )}
     </div>
   );
 }
@@ -307,16 +476,7 @@ export function PoolAccountsModal({
 }) {
   const message = useToast();
   const qc = useQueryClient();
-  // Both lists carry public ids, but compared canonically: a pool member is a key row by identity.
-  const members = new Set(pool?.members.map((member) => routeId(member.id)) ?? []);
-  // Joinable first, then the refusals this dialog exists to explain, then what is in already.
-  const rank = (entry: { ok: boolean; member: boolean }) => (entry.ok ? 0 : entry.member ? 2 : 1);
-  const listed = rows
-    .map((row) => {
-      const member = members.has(routeId(row.id));
-      return { row, member, ...admissionOf(row, member) };
-    })
-    .sort((a, b) => rank(a) - rank(b));
+  const listed = accountPicks(rows, pool);
   const [label, setLabel] = useState('Claude accounts');
   // A new pool starts with every account that can join; adding to one starts from none.
   const [picked, setPicked] = useState<string[]>(() =>
@@ -360,26 +520,208 @@ export function PoolAccountsModal({
           <Input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} />
         </label>
       )}
-      <div className="pool-pick-list">
-        {listed.map(({ row, member, ok, why }) => (
-          <label key={row.id} className={`pool-pick${ok ? '' : ' off'}`} data-provider={row.id}>
-            <Checkbox
-              checked={member || picked.includes(row.id)}
-              disabled={!ok}
-              onChange={(e) =>
-                setPicked((prev) =>
-                  e.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id),
-                )
-              }
-            />
-            <ProviderTile slug={row.presetSlug ?? row.slug} label={row.label} size={24} />
-            <span className="pool-pick-text">
-              <span className="pool-pick-name">{row.label}</span>
-              <span className={`pool-pick-why${ok || member ? '' : ' refused'}`}>{why}</span>
-            </span>
-          </label>
-        ))}
+      <AccountPickList listed={listed} picked={picked} onPick={setPicked} />
+    </Modal>
+  );
+}
+
+/** Every key the user has, as a row of the account picker, with the server's verdict on it — joinable
+ *  first, then the refusals the picker exists to explain, then what `pool` holds already. */
+function accountPicks(rows: ProviderRow[], pool?: ProviderPool) {
+  // Both lists carry public ids, but compared canonically: a pool member is a key row by identity.
+  const members = new Set(pool?.members.map((member) => routeId(member.id)) ?? []);
+  const rank = (entry: { ok: boolean; member: boolean }) => (entry.ok ? 0 : entry.member ? 2 : 1);
+  return rows
+    .map((row) => {
+      const member = members.has(routeId(row.id));
+      return { row, member, ...admissionOf(row, member) };
+    })
+    .sort((a, b) => rank(a) - rank(b));
+}
+
+function AccountPickList({
+  listed,
+  picked,
+  onPick,
+}: {
+  listed: ReturnType<typeof accountPicks>;
+  picked: string[];
+  onPick: (update: (prev: string[]) => string[]) => void;
+}) {
+  return (
+    <div className="pool-pick-list">
+      {listed.map(({ row, member, ok, why }) => (
+        <label key={row.id} className={`pool-pick${ok ? '' : ' off'}`} data-provider={row.id}>
+          <Checkbox
+            checked={member || picked.includes(row.id)}
+            disabled={!ok}
+            onChange={(e) =>
+              onPick((prev) => (e.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id)))
+            }
+          />
+          <ProviderTile slug={row.presetSlug ?? row.slug} label={row.label} size={24} />
+          <span className="pool-pick-text">
+            <span className="pool-pick-name">{row.label}</span>
+            <span className={`pool-pick-why${ok || member ? '' : ' refused'}`}>{why}</span>
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * "New pool": the engine it runs, its name, and who can use it. A Codex pool holds OpenAI API keys
+ * that each person pastes on its page once it exists — it is shared: whoever makes it adds people by
+ * the email of their Orbit account, and says whether they may put keys of their own in. A Claude pool
+ * is the user's own Claude subscriptions, picked here the way "Create a pool" picks them.
+ */
+export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: () => void }) {
+  const message = useToast();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [engine, setEngine] = useState<'claude' | 'codex'>('codex');
+  // Untouched, the name follows the engine.
+  const [label, setLabel] = useState<string | null>(null);
+  const name = label ?? (engine === 'codex' ? 'Codex keys' : 'Claude accounts');
+  const [who, setWho] = useState<'me' | 'people'>('people');
+  const [emails, setEmails] = useState<string[]>([]);
+  // An address typed but not yet turned into a tag still counts.
+  const [typing, setTyping] = useState('');
+  const [canAdd, setCanAdd] = useState(true);
+  const listed = accountPicks(rows);
+  const [picked, setPicked] = useState<string[]>(() =>
+    listed.filter((entry) => entry.ok).map((entry) => entry.row.id),
+  );
+
+  const create = useMutation({
+    mutationFn: async (): Promise<{ id?: string; missed: string[] }> => {
+      if (engine === 'claude') {
+        await api('/providers/pools', { method: 'POST', body: { label: name.trim(), providerIds: picked } });
+        return { missed: [] };
+      }
+      const pool = await api<SharedPool>(SHARED_POOLS_BASE, { method: 'POST', body: { label: name.trim() } });
+      const at = `${SHARED_POOLS_BASE}/${encodeId(pool.id)}`;
+      const missed: string[] = [];
+      if (who === 'people') {
+        const people = [...new Set([...emails, typing].map((email) => email.trim()).filter(Boolean))];
+        for (const email of people) {
+          // One unknown address doesn't undo the pool or the rest: it is named once they are in.
+          await api(`${at}/people`, { method: 'POST', body: { email } }).catch((e: Error) =>
+            missed.push(`${email} (${e.message})`),
+          );
+        }
+        if (!canAdd) await api(at, { method: 'PATCH', body: { membersCanAdd: false } });
+      }
+      return { id: pool.id, missed };
+    },
+    onSuccess: ({ id, missed }) => {
+      void qc.invalidateQueries({ queryKey: ['providers'] });
+      if (missed.length) message.warning(`Pool created — not added: ${missed.join(', ')}`);
+      else message.success('Pool created');
+      onClose();
+      // Where its first key goes in.
+      if (id) navigate(`/providers/pools/${encodeId(id)}`);
+    },
+    onError: (e: Error) => {
+      void qc.invalidateQueries({ queryKey: ['providers'] });
+      message.error(e.message || 'Failed');
+    },
+  });
+
+  return (
+    <Modal
+      open
+      width={520}
+      title="New account pool"
+      onCancel={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            type="primary"
+            disabled={!name.trim() || (engine === 'claude' && picked.length === 0)}
+            loading={create.isPending}
+            onClick={() => create.mutate()}
+          >
+            Create pool
+          </Button>
+        </>
+      }
+    >
+      <div className="np-field">
+        <span className="np-field-l">Engine</span>
+        <Segmented
+          className="np-engine"
+          value={engine}
+          onChange={(value) => setEngine(value as 'claude' | 'codex')}
+          options={[
+            {
+              value: 'claude',
+              label: (
+                <>
+                  <ProviderTile slug="anthropic" label="Claude" size={16} /> Claude
+                </>
+              ),
+            },
+            {
+              value: 'codex',
+              label: (
+                <>
+                  <ProviderTile slug="openai" label="Codex" size={16} /> Codex
+                </>
+              ),
+            },
+          ]}
+        />
+        <div className="np-field-h">
+          A Codex pool holds OpenAI API keys — each person pastes their own once the pool exists. A
+          Claude pool is made of your Anthropic API keys.
+        </div>
       </div>
+      <label className="np-field">
+        <span className="np-field-l">Name</span>
+        <Input value={name} onChange={(e) => setLabel(e.target.value)} maxLength={60} />
+      </label>
+      {engine === 'codex' ? (
+        <div className="np-field">
+          <span className="np-field-l">Who can use it</span>
+          <Radio.Group value={who} onChange={(e) => setWho(e.target.value as 'me' | 'people')}>
+            <Radio value="me">Just me</Radio>
+            <Radio value="people">Me and people I add</Radio>
+          </Radio.Group>
+          {who === 'people' && (
+            <>
+              <Select
+                mode="tags"
+                className="np-people"
+                value={emails}
+                onChange={(next: string[]) => {
+                  setEmails(next);
+                  setTyping('');
+                }}
+                onSearch={setTyping}
+                searchValue={typing}
+                tokenSeparators={[',', ' ']}
+                open={false}
+                placeholder="Emails of their Orbit accounts"
+                aria-label="People to add"
+              />
+              <div className="np-field-h">
+                They see it on their Providers page and in the session picker, and can start sessions on it.
+              </div>
+              <Checkbox checked={canAdd} onChange={(e) => setCanAdd(e.target.checked)} className="np-can-add">
+                They can add their own keys
+              </Checkbox>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="np-field">
+          <span className="np-field-l">Accounts</span>
+          <AccountPickList listed={listed} picked={picked} onPick={setPicked} />
+        </div>
+      )}
     </Modal>
   );
 }

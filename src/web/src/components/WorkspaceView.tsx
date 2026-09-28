@@ -138,6 +138,7 @@ import {
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
 import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
+import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
   decideContextSeed,
   dirtyContextSeed,
@@ -1403,14 +1404,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const configuredProvidersQuery = useQuery(providersQuery());
   // The user's account pools, which that catalogue doesn't list: each is one more provider to pick
   // and run on, with the Claude CLI's own models (poolsAsProviders), and each session on one runs on
-  // one of its accounts — the account the status bar names.
+  // one of its accounts — the account the status bar names. The shared pools they are in come first,
+  // drawn the same way with their keys as members (sharedPoolAsProviderPool): Codex, on a key.
   const accountPoolsQuery = useQuery(providerPoolsQuery());
+  const sharedPools = useQuery(sharedPoolsQuery());
+  const accountPools = useMemo(
+    () => [...(sharedPools.data ?? []).map(sharedPoolAsProviderPool), ...(accountPoolsQuery.data ?? [])],
+    [sharedPools.data, accountPoolsQuery.data],
+  );
   const configuredProviders = useMemo(
-    () => [...(configuredProvidersQuery.data ?? []), ...poolsAsProviders(accountPoolsQuery.data ?? [])],
-    [configuredProvidersQuery.data, accountPoolsQuery.data],
+    () => [...(configuredProvidersQuery.data ?? []), ...poolsAsProviders(accountPools)],
+    [configuredProvidersQuery.data, accountPools],
   );
   const configuredProvidersLoaded =
-    configuredProvidersQuery.data !== undefined && !accountPoolsQuery.isPending;
+    configuredProvidersQuery.data !== undefined && !accountPoolsQuery.isPending && !sharedPools.isPending;
   // The picked session lives in the URL (/sessions/:id, a base62 public id) so
   // it deep-links and survives a refresh; selecting a session = navigation.
   // Decode once here; everything downstream works with the raw session UUID.
@@ -2592,14 +2599,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.modelCatalog,
         runner.runtimeDefaultModels,
         runner.engines,
-        accountPoolsQuery.data,
+        accountPools,
       ),
     [
       configuredProviders,
       runner.modelCatalog,
       runner.runtimeDefaultModels,
       runner.engines,
-      accountPoolsQuery.data,
+      accountPools,
     ],
   );
   const currentProviderChoiceForDraft = useMemo(
@@ -5906,10 +5913,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // On a draft that is the account the claim will pick. On a session it is the one the detail row
   // recorded (the pick, until its first claim), and nobody until that row is in: a session still
   // loading must not borrow the draft's answer.
-  const shownPool = accountPoolsQuery.data?.find((pool) => pool.slug === shownProvider) ?? null;
+  const shownPool = accountPools.find((pool) => pool.slug === shownProvider) ?? null;
+  // A shared pool's session records the key its claim chose, an account pool's the account.
+  const shownPoolMemberId = shownPool?.shared
+    ? detailForSelected?.poolKeyId
+    : detailForSelected?.poolMemberProviderId;
   const shownPoolAccount =
     shownPool && (!selectedId || detailForSelected)
-      ? sessionPoolAccount(shownPool, selectedId ? detailForSelected?.poolMemberProviderId : null)
+      ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
@@ -8345,7 +8356,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 title={
                   shownPoolAccount.current
                     ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
-                    : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — the account with the most room right now`
+                    : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — ${
+                        shownPool.shared ? 'the key it picks for you' : 'the account with the most room'
+                      } right now`
                 }
               >
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>

@@ -6,6 +6,7 @@ import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
+import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { AccountPools, PoolHint } from '../components/AccountPools';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
@@ -21,9 +22,11 @@ import { useToast } from '../lib/toast';
  * billed per token. Adding or editing one of those happens on its own page (ProviderConnectPage),
  * so a vendor's setup stays deep-linkable.
  *
- * Between the two, once there is one, the account pools (AccountPools): several of those keys'
- * Claude subscriptions dispatched under one name. Before there is one, the keys list opens with the
- * offer to make it — but only when at least two keys could join, since a pool of one is the key.
+ * Between the two, the account pools (AccountPools): several of those keys' Claude subscriptions
+ * dispatched under one name, and the shared pools the user is in — several people's OpenAI keys under
+ * one name. Its head makes a new one of either kind. Before there is an account pool, the keys list
+ * also opens with the offer to make one — but only when at least two keys could join, since a pool of
+ * one is the key.
  */
 export function ProvidersPage() {
   const message = useToast();
@@ -34,7 +37,8 @@ export function ProvidersPage() {
   // Which account is busy moves with sessions, not with provider edits, so nothing pushes it: read
   // again while the page is open.
   const pools = useQuery({ ...providerPoolsQuery(), refetchInterval: 60_000 });
-  const poolList = pools.data ?? [];
+  const shared = useQuery({ ...sharedPoolsQuery(), refetchInterval: 60_000 });
+  const poolList = [...(shared.data ?? []).map(sharedPoolAsProviderPool), ...(pools.data ?? [])];
   const eligible = poolEligibleCount(providers.data ?? []);
   const refusals = poolRefusals(providers.data ?? []);
 
@@ -155,8 +159,11 @@ export function ProvidersPage() {
       <RunnerEngines />
 
       {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
-          leave sessions dispatching to something the page no longer lets you see or delete. */}
-      {poolList.length > 0 && <AccountPools pools={poolList} refusals={refusals} />}
+          leave sessions dispatching to something the page no longer lets you see or delete. The
+          section stands with none too: its head is where a pool is made. */}
+      {!pools.isPending && !shared.isPending && (
+        <AccountPools pools={poolList} refusals={refusals} rows={providers.data ?? []} />
+      )}
 
       <div className="re-sec-head" style={{ marginTop: 28 }}>
         <h3>Your API keys</h3>
@@ -165,7 +172,7 @@ export function ProvidersPage() {
         </span>
       </div>
 
-      {pools.isSuccess && poolList.length === 0 && eligible >= 2 && (
+      {pools.isSuccess && pools.data.length === 0 && eligible >= 2 && (
         <PoolHint rows={providers.data ?? []} eligible={eligible} />
       )}
 
