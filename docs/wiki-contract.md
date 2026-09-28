@@ -430,10 +430,14 @@ owner 2026-09-27 定：核实必须拿得到证据。预览 space 里出处全�
 95.7% 被判 unsupported；有一条可读出处的 op，unsupported 只有 0.9%。JSON 的 `reviewModes.verification.evidence` 与 `.reopen`、
 `reviewModes.entryConfirm`、`floors.taintedWaits` 是权威，下面是说明。
 
-- **出处原文**：提交时的引文校验和核实列表读的是**同一份**原文（`wiki-verify-evidence.ts` 的 `runEventText`）。run_event：
-  user / assistant / thinking 取 `text`；tool_use 是工具名加输入（每个键一行）；tool_result 是 `content`（字符串，或各文本块按行拼接，
-  图片块没有字），工具报错时前面标一句；error 取 `message`；system 只取它带的文字（`text`、`notice`、`stderr`），`subtype=context`
-  这类统计没有原文。空串或只有空白算**读不到**：claude 的 thinking 大多是空串，那是一条没有内容的记录，不是一条「什么都没说」的证据。
+- **出处原文**：提交时的引文校验、核实列表、案卷行的位置（16.3）读的是**同一份**原文（`wiki-verify-evidence.ts`：`runEventText`、
+  `toolCallText`、`approvalText`）。run_event：user / assistant / thinking 取 `text`；tool_use 是工具名加输入（每个键一行）；
+  tool_result 是 `content`（字符串，或各文本块按行拼接，图片块没有字），工具报错时前面标一句；error 取 `message`；background_task 取
+  `command` 与 `summary`；turn_end 取 `subtype`；system 只取它带的文字（`text`、`notice`、`stderr`），`subtype=context` 这类统计没有原文。
+  tool_call 行是调用和结果合在一起：工具名、输入（每个键一行）、输出（字符串、文本块，或把文本块放在 `content` 里的结果）——引命令和引输出
+  一样是这条记录的原话（判据 2 第 2 版之前只有输出）。approval 是回答与 owner 的附言各一行，ExitPlanMode 再加它批的 plan。
+  每种文本都由若干「部分」按行拼成，顺序固定。空串或只有空白算**读不到**：claude 的 thinking 大多是空串，那是一条没有内容的记录，
+  不是一条「什么都没说」的证据。
   交给核实者前先过共享脱敏器（`secret-redaction.ts`，含本 owner `workspace.env` 的真实值），再按 `verificationSourceMaxChars`（8,000 字）截断。
 - **证据标记**：核实列表的每个 item 带 `evidence: readable | unreadable`（至少一条出处有原文 / 一条都没有）。服务端记结论时**自己再读一遍**，
   不信 runner 报的，并把它存进 op 的 `verification_evidence`（迁移 0314；0314 之前的结论为 NULL），读回来是 `verification.evidence`。
@@ -739,10 +743,25 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 - 打分与装箱照演示的打包器 v2；每行以 `L12` 开头，`sources` 把每个行名对到一手记录（turn / event / tool_call / task_comment /
   approval / merge_receipt / owner_decision），维护作业提议条目时引用这些记录，不引用案卷。服务端的出处解析因此补了
   `merge_receipt` 与 `owner_decision`（owner 解决的 blocker；它不算 Tiered 的 owner 原话）。
+- **每行记原文位置（判据 2 第 2 版，`maintenance.dossier.spans`）**：`sources` 的每一项是 `{ ref, kind, id, spans }`，
+  `spans` 是 `[{ start, end, text }]`——该行的字在记录原文里的位置：记录的**那一份**原文（7.5，即引文校验读的文本）先脱敏，
+  按**码点**计的 `[start, end)`，`text` 是那一段逐字原文。原样抄的行一个 span；压缩过的行按它保留的片段各一个 span，
+  顺序排列、互不重叠：工具行是命令（或路径）、结果首行、结果末行，截断的消息是截断前保留的那段，thinking 是命中信号的各句，
+  评论是首段和结论段，AskUserQuestion 是回答里的问题和答案。案卷自己的字（说话人、`$ `、`→ ok:`、`ERR:`、`…[cut]`、选项列表）不进 span。
+  一行没显示记录里的字时，指向它代表的那段：重复的开场 prompt 指向 prompt，plan 的决定指向 plan；没有任何字的记录（不带话的打断）
+  是 `{0, 0, ''}`。工具调用的输入输出只对**装进案卷的行**整条读（存储超过 256 KiB 的输出不读：这行的调用和结果首行照样定位，末行不定位）。
+  `wiki-dossier.pg.spec.ts` 逐行核对：按位置从记录原文（脱敏后）取出的字与该行声明的原文逐字一致，压缩行也一样。
+- **维护作业按位置引原话**（`maintenance.job.citation`）：模型给的引文先要逐字出自它引的那一行（否则照旧算问题、重问一次）；
+  再按引文比对的读法（去掉反引号和星号、弯引号拉直、空白合一）在该行的各 span 里找：落在某一个 span 里，就把**记录原文在那里的字**
+  （标记、引号、空白都按原文）当 quote，位置 `{ start, end }` 放进 source 的 `locator`，引文超长截到 `quoteMaxChars`；
+  跨了案卷的缩写（`$ go test → ERR: …`）、跨了案卷剪掉的空隙、或含脱敏掉的字，就只挂记录，不带 quote 也不带 locator。
+  dry run 仍拿不到的引文连同 locator 一起摘掉。服务端的案卷若还不带 spans（旧服务端），照旧用行里的字当 quote。
 - **先脱敏再截断**：每条记录的文本先过共享脱敏器（owner 的 workspace.env 值作字面量），再裁剪、打分、装箱；最后整段再过一遍。
   每个会话不超过 8,000 token（`wikiEstimateTokens`：ASCII ÷ 3.4 + 其他 ÷ 1.25 + 1），装不下的被截断并标 `truncated`。
-- **确定性**：同样的记录两次抽取字节一致，哈希（正文 + NUL + sources 的 JSON 的 sha256）相同；抽取不读时钟。
-- **只存 (sourceIds, hash)**：`wiki_dossier` 每个 space、每个会话一行，存 sources、hash、token 数和发放它的页的位置，没有任何列存正文。
+- **确定性**：同样的记录两次抽取字节一致、spans 相同，哈希（正文 + NUL + sources 的 ref、kind、id 的 JSON 的 sha256）相同；spans 不进哈希：
+  它们是同一批记录里字的位置，正文和记录都没变的案卷，作业已经读过。抽取不读时钟。
+- **只存 (sourceIds, hash)**：`wiki_dossier` 每个 space、每个会话一行，存 sources（每行的记录和 spans 的位置，**不存 span 的字**）、hash、
+  token 数和发放它的页的位置，没有任何列存正文。
   同一 hash 已在游标推进过的页上发过时，`unchanged = true`，作业可以跳过。
 - **批量项目只给聚合统计**：任务标题把数字读成 `#` 之后，同一项目（没有项目时同一清单）里有 20 个以上同模板的任务，就是批量项目，
   它的会话不出案卷，只出一条聚合：任务按状态计数、本页会话数、最常见的报错签名（FineWeb 的 11 万个任务只有 7 个模板）。
