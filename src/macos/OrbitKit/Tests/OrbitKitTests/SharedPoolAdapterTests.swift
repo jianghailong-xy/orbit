@@ -152,6 +152,20 @@ final class SharedPoolAdapterTests: XCTestCase {
                        "Team Codex is running this session on orbit-org-1")
     }
 
+    /// Which key a session is on travels in the shared pool's own field, and only on the detail —
+    /// the list's summaries never carry it, and an event must not clear it.
+    func testTheSessionDetailCarriesTheKeyItsClaimChose() throws {
+        let decoder = JSONDecoder()
+        let detail = #"{"id": "s1", "status": "RUNNING", "provider": "team-codex", "poolKeyId": "34JNbOSl1WkZm4QhuDl3nN"}"#
+        XCTAssertEqual(try decoder.decode(Session.self, from: Data(detail.utf8)).poolKeyId,
+                       "34JNbOSl1WkZm4QhuDl3nN")
+        let listRow = #"{"id": "s1", "status": "RUNNING", "provider": "team-codex"}"#
+        XCTAssertNil(try decoder.decode(Session.self, from: Data(listRow.utf8)).poolKeyId)
+        let merged = try decoder.decode(Session.self, from: Data(detail.utf8))
+            .settingTitle("Renamed")
+        XCTAssertEqual(merged.poolKeyId, "34JNbOSl1WkZm4QhuDl3nN", "a rename keeps the key it is on")
+    }
+
     /// A session on a shared pool is on the key its last claim recorded (`poolKeyId`) — the account
     /// pool's own read, in the shared pool's field.
     func testTheSessionIsOnTheKeyItsClaimRecorded() {
