@@ -362,6 +362,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		LeaseOwner:         r.LeaseOwner,
 		MaxSeq:             r.MaxSeq,
 		Source:             r.Source,
+		WikiMaintenance:    r.WikiMaintenance,
 	}
 }
 

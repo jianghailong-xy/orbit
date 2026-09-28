@@ -25,8 +25,11 @@ import {
   WIKI_GIT_ANCHOR_TYPES,
   WIKI_KINDS,
   WIKI_LIMITS,
+  WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_MAINTENANCE_LIST_TITLE,
   WIKI_MAINTENANCE_RULES,
+  WIKI_MAINTENANCE_RUN,
+  WIKI_MAINTENANCE_RUN_V1,
   WIKI_OPS,
   WIKI_OP_DECISIONS,
   WIKI_PUSHABLE_TRUST,
@@ -472,10 +475,20 @@ describe('wiki contract', () => {
     expect(WIKI_DEFAULT_SPACE_SETTINGS.maintenance).toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
     expect(CONTRACT.space.settings.reservedForPhase2).not.toContain('maintenance');
     expect(wikiSpaceSettings({}).maintenance).toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
-    expect(wikiSpaceSettings({ maintenance: { enabled: 'yes', dailyTokenBudget: -1, provider: '' } }).maintenance)
+    expect(wikiSpaceSettings({ maintenance: { enabled: 'yes', dailyRunLimit: -1, provider: '' } }).maintenance)
       .toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
-    expect(wikiMaintenanceSettings({ enabled: true, workspaceId: 'w', listId: 'l', dailyTokenBudget: 5 }))
-      .toEqual({ enabled: true, workspaceId: 'w', provider: 'local-vllm', dailyTokenBudget: 5, listId: 'l' });
+    expect(wikiMaintenanceSettings({ enabled: true, workspaceId: 'w', listId: 'l', dailyRunLimit: 5 }))
+      .toEqual({ enabled: true, workspaceId: 'w', provider: 'local-vllm', dailyRunLimit: 5, listId: 'l' });
+    // A day's runs are counted, not its tokens: 8 by default, 1 to 48, and anything else reads as the default —
+    // a value out of bounds, one that is not a whole number, and the token budget this setting replaced.
+    expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyRunLimit).toBe(8);
+    expect(setting.bounds.dailyRunLimit).toEqual(WIKI_MAINTENANCE_DAILY_RUN_LIMIT);
+    expect(WIKI_MAINTENANCE_DAILY_RUN_LIMIT).toEqual({ min: 1, max: 48 });
+    for (const [stored, reads] of [[1, 1], [48, 48], [0, 8], [49, 8], [2.5, 8], ['12', 8]] as const) {
+      expect(wikiMaintenanceSettings({ dailyRunLimit: stored }).dailyRunLimit).toBe(reads);
+    }
+    expect(wikiMaintenanceSettings({ dailyTokenBudget: 2_000_000 })).toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
+    expect(setting.channel).toMatch(/dailyRunLimit/u);
 
     const maintenance = CONTRACT.maintenance;
     expect(maintenance.rules).toEqual(WIKI_MAINTENANCE_RULES);
@@ -505,6 +518,25 @@ describe('wiki contract', () => {
     // The dossier's text is never stored: the one table that keeps anything of it keeps its sources and hash.
     expect(maintenance.tables).toEqual(['wiki_cursor', 'wiki_dossier']);
     expect(maintenance.dossier.storage).toMatch(/text is never stored/u);
+  });
+
+  it('ships the run a maintenance session is claimed with, as the contract states it', () => {
+    // Design §8.2's guardrails, which the claim writes into every maintenance session's agent config.
+    const run = CONTRACT.maintenance.run;
+    expect(run.maxTurns).toBe(WIKI_MAINTENANCE_RUN.maxTurns);
+    expect(WIKI_MAINTENANCE_RUN.maxTurns).toBe(120);
+    expect(run.disallowedTools).toEqual([...WIKI_MAINTENANCE_RUN.disallowedTools]);
+    expect([...WIKI_MAINTENANCE_RUN.disallowedTools]).toEqual(['Task', 'Agent', 'WebFetch', 'WebSearch']);
+    expect(run.permissionMode).toBe(WIKI_MAINTENANCE_RUN.permissionMode);
+    expect(run.runtime).toBe(WIKI_MAINTENANCE_RUN.runtime);
+    expect(run.providerFallbacks).toEqual([]);
+    // Only a runner that declares the capability is handed one; the runner side pins the same string.
+    expect(run.capability).toBe(WIKI_MAINTENANCE_RUN_V1);
+    // The clean start is the runner's; what the server promises of it is the shape of the field it sends.
+    expect(run.field).toMatch(/providerFallbacks, maxTurns, disallowedTools, cleanStart, refusal\?/u);
+    expect(run.cleanStart.flags).toEqual(expect.arrayContaining(['--bare', '--strict-mcp-config', '--max-turns 120']));
+    expect(run.cleanStart.thinking).toMatch(/CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0/u);
+    expect(run.cleanStart.auth).toMatch(/apiKeyHelper/u);
   });
 
   it('re-verifies the anchors git can check, on the routes and by the rules the contract states', () => {

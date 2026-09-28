@@ -47,6 +47,11 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import {
+  wikiMaintenanceRunOf,
+  wikiMaintenanceSessionSql,
+  withWikiMaintenanceRun,
+} from '../wiki/wiki-maintenance-session';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -95,10 +100,11 @@ export class QueueService {
     waitMs = 0,
     supportsTerminalHandoff = false,
     supportsSourcePin = false,
+    supportsWikiMaintenance = false,
   ): Promise<ClaimedSession | null> {
     const deadline = Date.now() + waitMs;
     for (;;) {
-      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin);
+      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin, supportsWikiMaintenance);
       if (job) return job;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return null;
@@ -110,6 +116,7 @@ export class QueueService {
     runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     supportsTerminalHandoff: boolean,
     supportsSourcePin: boolean,
+    supportsWikiMaintenance: boolean,
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     // Atomically claim one PENDING session assigned to this runner. The runner id
@@ -205,6 +212,13 @@ export class QueueService {
             AND (
               ${supportsSourcePin}::boolean
               OR s."source_state" = 'UNBOUND'
+            )
+            -- The same refusal for a Wiki maintenance session (wiki/wiki-maintenance-session.ts): it is
+            -- started clean, pinned and bounded, and a runner that does not declare wiki-maintenance-run/v1
+            -- would start it as an ordinary session instead. It waits for a runner that can.
+            AND (
+              ${supportsWikiMaintenance}::boolean
+              OR NOT ${wikiMaintenanceSessionSql('s')}
             )
             -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
             -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
@@ -378,6 +392,8 @@ export class QueueService {
       (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
       0;
     const workspace = session.workspace;
+    // A Wiki maintenance session's run (wiki/wiki-maintenance-session.ts), null for every other session.
+    const maintenance = await wikiMaintenanceRunOf(this.prisma, session);
     const declared = session.provider ?? null;
     // A configured (custom) provider borrows a built-in runtime: resolve the runner-facing
     // built-in provider, model, and process env (baseUrl + decrypted key injected)
@@ -386,11 +402,12 @@ export class QueueService {
     // user could burn another tenant's key by naming their slug. A slug no provider holds may be one
     // of the owner's account pools, which dispatches as the member chosen for this claim.
     const declaredIsBuiltin = isBuiltinProvider(declared, session.providerBuiltin);
+    // A maintenance run is never dispatched through a pool: it has no member to fall back on (its refusal says so).
     const customRow = declaredIsBuiltin
       ? null
       : ((await this.prisma.modelProvider.findFirst({
           where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
-        })) ?? (await this.resolvePoolMember(this.prisma, session, declared!)));
+        })) ?? (maintenance ? null : await this.resolvePoolMember(this.prisma, session, declared!)));
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
         declaredProvider: declared,
@@ -471,7 +488,8 @@ export class QueueService {
     // and that absence is the compatibility guarantee, not an omission: it is exactly the payload
     // every runner has always received, so nothing about their behaviour changes (SR46).
     const source = sessionSourceSnapshot(session, await this.sourceBinding(session.sourceCodebaseId));
-    return {
+    // A maintenance session's run goes on top: its guardrails, and the clean start the runner reads it by.
+    return withWikiMaintenanceRun({
       sessionId: session.id,
       provider,
       runtimeSessionId,
@@ -574,7 +592,7 @@ export class QueueService {
         env: exec.env,
       },
       source,
-    };
+    }, maintenance);
   }
 
   /**
