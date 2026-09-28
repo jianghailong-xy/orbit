@@ -12718,6 +12718,364 @@ button.chat-jump-start:hover {
   margin-top: 16px;
 }
 
+/* ============================================================================
+   Shared pools: several people's OpenAI API keys under one name (lib/sharedPools.ts).
+   The account pool's card with a key to a row, plus its people and its rules.
+   ========================================================================== */
+/* A person is a circle with their initial, in their colour in the pool. */
+.pool-av {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1;
+}
+.pool-you {
+  flex: none;
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+/* The head: the engine's mark before the name, SHARED after it, the people at the right. */
+.pool-card .re-toggle .provider-tile {
+  flex: none;
+  margin-right: 2px;
+}
+.re-chip.pool-shared-chip {
+  flex: none;
+  margin-left: 0;
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.pool-people {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  margin-right: 6px;
+}
+.pool-people .pool-av {
+  box-shadow: 0 0 0 2px var(--bg-raised, #fff);
+}
+.pool-people .pool-av + .pool-av {
+  margin-left: -5px;
+}
+.pool-people-more {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+/* The section head carries the way to make another pool. */
+.pool-sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.pool-sec-head h3 {
+  white-space: nowrap;
+}
+.pool-sec-head .pool-new {
+  margin-left: auto;
+  align-self: center;
+  flex: none;
+}
+/* A key's status says more than an account's ("At cap · resets Oct 1"), so on a desktop its row takes
+   the room the money's bar can spare. The phone's own two-column row below is narrower than this. */
+@media (min-width: 701px) {
+  .pool-card .re-row.pool-row-key,
+  .pool-detail .re-row.pool-row-key {
+    grid-template-columns: minmax(137px, 1fr) 178px minmax(128px, 190px) 172px;
+  }
+}
+/* Whose key it is and all anyone sees of it: `Wikova · sk-…AB12`. */
+.pool-key-mask {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── the pool's page: its title, its people and its rules ─────────────────────── */
+.pool-page-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pool-page-title .page-title {
+  margin-bottom: 0;
+}
+.pool-sub-sec {
+  margin-top: 16px;
+}
+.pool-card .re-head .pool-head-count {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+  margin-left: 6px;
+}
+.pool-head-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.pool-person {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 240px) 28px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+}
+.pool-person + .pool-person {
+  border-top: 1px solid var(--border-subtle);
+}
+.pool-person-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.pool-person-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.pool-person-name > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pool-person-name .re-chip {
+  flex: none;
+}
+.pool-person-meta {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.pool-share {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.pool-share .runner-util {
+  flex: 1;
+  margin-top: 0;
+}
+.pool-share-pct {
+  width: 32px;
+  text-align: right;
+}
+.pool-person-more {
+  color: var(--text-3);
+  text-align: center;
+}
+.pool-rule {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 14px;
+}
+.pool-rule + .pool-rule {
+  border-top: 1px solid var(--border-subtle);
+}
+.pool-rule-t {
+  font-size: 13.5px;
+  color: var(--text-1);
+}
+.pool-rule-h {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.pool-danger-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pool-danger-note {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ── "Add a key" / "Replace key" ─────────────────────────────────────────────── */
+.pa-lead {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.6;
+  margin: 2px 0 12px;
+}
+.pa-facts {
+  margin: 0 0 14px;
+  padding: 10px 12px 10px 30px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.pa-facts li + li {
+  margin-top: 4px;
+}
+.pa-facts b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+/* Kept on purpose: whoever puts a key in is told it can't be resold and is theirs to answer for. */
+.pa-risk {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--warning-border, #f5d6a3);
+  border-radius: 8px;
+  background: var(--warning-tint, #fff8ec);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.pa-risk .anticon {
+  margin-top: 3px;
+  color: var(--warning);
+}
+.pa-done {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 4px 0 8px;
+}
+.pa-done-t {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.pa-done-s {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+.pa-done .anticon {
+  font-size: 22px;
+  color: var(--success, #16a34a);
+  margin-top: 2px;
+}
+.pa-dup .anticon {
+  color: var(--warning);
+}
+.pa-acct {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.pa-acct-t {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.pa-acct-s {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ── New pool ─────────────────────────────────────────────────────────────────── */
+.np-field {
+  display: block;
+  margin: 0 0 14px;
+}
+.np-field-l {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.np-field-h {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.np-field-h.np-field-err {
+  color: var(--error);
+}
+.np-engine .ant-segmented-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.np-people {
+  width: 100%;
+  margin-top: 10px;
+}
+.np-can-add {
+  margin-top: 8px;
+}
+
+@media (max-width: 700px) {
+  /* The name outranks the chip and the people on a phone's head line: the pool's own page carries
+     SHARED, and the Members card who is in it. */
+  .pool-people,
+  .pool-card .re-toggle .pool-shared-chip {
+    display: none;
+  }
+  /* A key's actions sit at the right edge of a line of their own. */
+  .pool-row.pool-row-key .re-act {
+    grid-column: 1 / -1;
+    margin-top: -4px;
+  }
+  /* The money is what a key's row is about, so it keeps a line of its own under the name; the bar
+     waits for a wider window, as a personal pool's does. */
+  .pool-row .re-quota.pool-key-money {
+    display: block;
+    grid-column: 1 / -1;
+    margin-left: 38px;
+  }
+  .pool-row .re-quota.pool-key-money .runner-util {
+    display: none;
+  }
+  .pool-person {
+    grid-template-columns: minmax(0, 1fr) 28px;
+    row-gap: 6px;
+  }
+  .pool-person > :nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+    padding-left: 38px;
+  }
+  .pool-person > :nth-child(3) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  /* The members' note drops under their title. */
+  .pool-sub-sec .re-head {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .pool-sub-sec .pool-head-note {
+    display: block;
+    order: 5;
+    width: 100%;
+  }
+  .pool-rule {
+    gap: 14px;
+  }
+}
+
 /* The connect page (/providers/new/:slug, /providers/:id): a narrow, numbered walkthrough. */
 .provider-form {
   max-width: 680px;

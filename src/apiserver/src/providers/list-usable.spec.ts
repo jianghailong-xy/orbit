@@ -88,13 +88,28 @@ test("the caller's own account pools are listed by name, on Claude, and only the
     { slug: 'claude-accounts', label: 'Claude accounts' },
   ]).listUsable('user-1');
 
-  assert.deepEqual(captured.poolWhere, { ownerId: 'user-1' });
+  // Their own account pools, and the shared pools they are in (migration 0321) — nobody else's.
+  assert.deepEqual(captured.poolWhere, {
+    OR: [{ ownerId: 'user-1', shared: false }, { shared: true, people: { some: { userId: 'user-1' } } }],
+  });
   assert.deepEqual(listed.at(-1), {
     slug: 'claude-accounts',
     label: 'Claude accounts',
     runtime: 'claude',
     builtin: false,
   });
+});
+
+test('a shared pool the caller is in is listed by name, on Codex', async () => {
+  const listed = await serviceFor([DEEPSEEK], undefined, [
+    { slug: 'claude-accounts', label: 'Claude accounts', shared: false },
+    { slug: 'team-codex', label: 'Team Codex', shared: true },
+  ]).listUsable('user-1');
+
+  assert.deepEqual(listed.slice(-2), [
+    { slug: 'claude-accounts', label: 'Claude accounts', runtime: 'claude', builtin: false },
+    { slug: 'team-codex', label: 'Team Codex', runtime: 'codex', builtin: false },
+  ]);
 });
 
 test('a preset-backed row is described by the preset, not by the copy it stored', async () => {

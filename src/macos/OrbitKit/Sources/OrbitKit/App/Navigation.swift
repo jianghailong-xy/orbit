@@ -50,6 +50,10 @@ public enum NavNode: Hashable, Sendable {
     /// Every other page Settings' list opens — Notifications, Providers, Shared links, Change
     /// password, Admin — each a frame of Settings' own stack like the runners list above it.
     case settingsPage(SettingsPage)
+    /// A pool's page, pushed from Settings → Providers: an account pool of the user's own Claude
+    /// subscriptions, read-only here, or a shared pool of OpenAI API keys, which is run from its page.
+    case accountPool(poolID: String)
+    case sharedPool(poolID: String)
     case userDetail(userID: String)
     /// One project's page, pushed from the Projects list or from the drawer's project rows.
     case projectDetail(projectID: String)

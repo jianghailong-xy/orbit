@@ -9,6 +9,7 @@ import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
 import { TransientDbConflictFilter } from './common/transient-db-conflict.filter';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
+import { outsideThePoolGateway } from './providers/pool-gateway.controller';
 
 declare global {
   interface BigInt {
@@ -29,8 +30,9 @@ async function bootstrap() {
 
   // Pasted-image turns carry base64 in the JSON body; Nest's default 100kb express
   // limit rejects them with 413. Match the gateway/web nginx client_max_body_size (10m).
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ extended: true, limit: '10mb' }));
+  // Not for the shared pools' gateway, which forwards the body codex sent unread (pool-gateway.controller.ts).
+  app.use(outsideThePoolGateway(json({ limit: '10mb' })));
+  app.use(outsideThePoolGateway(urlencoded({ extended: true, limit: '10mb' })));
 
   // The session-context headers carry public ids like every other id position. Before the guards,
   // so no guard can see the un-normalized spelling.

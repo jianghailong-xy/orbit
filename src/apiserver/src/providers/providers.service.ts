@@ -191,7 +191,8 @@ export class ProvidersService {
    *
    * The caller's own account pools are listed too, by name alone: which members a pool holds, and
    * their keys, are nothing a caller needs to dispatch with it. A pool none of whose accounts can run
-   * is still listed, and the doors refuse it with the reason (QueueService.accountPoolRefusal).
+   * is still listed, and the doors refuse it with the reason (QueueService.accountPoolRefusal). So are
+   * the shared pools the caller is in (migration 0321), on Codex; one they are not in is not named.
    */
   async listUsable(ownerId: string): Promise<UsableProvider[]> {
     const rows = await this.prisma.modelProvider.findMany({
@@ -214,9 +215,9 @@ export class ProvidersService {
       },
     });
     const pools = await this.prisma.providerPool.findMany({
-      where: { ownerId },
+      where: { OR: [{ ownerId, shared: false }, { shared: true, people: { some: { userId: ownerId } } }] },
       orderBy: { createdAt: 'asc' },
-      select: { slug: true, label: true },
+      select: { slug: true, label: true, shared: true },
     });
     return [
       // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
@@ -229,8 +230,13 @@ export class ProvidersService {
         return { ...view, builtin: false };
       }),
       // A pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own —
-      // so, like a built-in engine, it names no model list of its own.
-      ...pools.map((pool) => ({ ...pool, runtime: AgentProvider.CLAUDE, builtin: false })),
+      // so, like a built-in engine, it names no model list of its own. A shared pool runs Codex on
+      // OpenAI's own endpoint, whose models are the Codex CLI's.
+      ...pools.map(({ shared, ...pool }) => ({
+        ...pool,
+        runtime: shared ? AgentProvider.CODEX : AgentProvider.CLAUDE,
+        builtin: false,
+      })),
     ];
   }
 
@@ -319,9 +325,10 @@ export class ProvidersService {
    * Write a row under the first free slug for this base. Two people connecting the same vendor at once
    * would pick the same free slug, so a lost race just re-picks against what's now taken rather than
    * surfacing as an error about an identifier nobody chose. A pool and a provider racing for one slug
-   * end the same way: migration 0265's guard refuses the loser with the same unique violation.
+   * end the same way: migration 0265's guard refuses the loser with the same unique violation. Shared
+   * pools take their slugs here too (SharedPoolsService.create).
    */
-  private async withFreeSlug<T>(base: string, write: (slug: string) => Promise<T>): Promise<T> {
+  async withFreeSlug<T>(base: string, write: (slug: string) => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         return await write(await this.freeSlug(base));
@@ -399,7 +406,8 @@ export class ProvidersService {
    *  pool read that asks after quota (poolViews). */
   async listPools(ownerId: string) {
     const rows = await this.prisma.providerPool.findMany({
-      where: { ownerId },
+      // A shared pool is its people's, read on its own page (SharedPoolsService).
+      where: { ownerId, shared: false },
       orderBy: { createdAt: 'asc' },
       select: POOL_QUOTA_SELECT,
     });
@@ -552,7 +560,10 @@ export class ProvidersService {
   }
 
   private async getScopedPool(ownerId: string, id: string) {
-    const pool = await this.prisma.providerPool.findFirst({ where: { id, ownerId }, select: POOL_SELECT });
+    const pool = await this.prisma.providerPool.findFirst({
+      where: { id, ownerId, shared: false },
+      select: POOL_SELECT,
+    });
     if (!pool) throw new NotFoundException('pool not found');
     return poolView(pool);
   }
@@ -629,7 +640,10 @@ export class ProvidersService {
    */
   private async runningMemberIds(ownerId: string, members: { id: string; slug: string }[]): Promise<Set<string>> {
     if (members.length === 0) return new Set();
-    const pools = await this.prisma.providerPool.findMany({ where: { ownerId }, select: { slug: true } });
+    const pools = await this.prisma.providerPool.findMany({
+      where: { ownerId, shared: false },
+      select: { slug: true },
+    });
     const sessions = await this.prisma.session.findMany({
       where: {
         ownerId,

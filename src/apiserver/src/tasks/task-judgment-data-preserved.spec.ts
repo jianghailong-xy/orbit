@@ -1346,7 +1346,32 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and criterion row are out of its reach. No function, trigger or type is created, replaced or
       // dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and
       // names none of the six preserved objects. No INSERT, UPDATE or DELETE: the table starts empty.
-      '0320_wiki_maintenance_run'],
+      '0320_wiki_maintenance_run',
+      // Shared Codex pools: four `ADD COLUMN`s on `provider_pool` (constant defaults, so catalog-only)
+      // and one CHECK over two of them, which every stored pool — `claude`, not shared — satisfies; one
+      // nullable `ADD COLUMN` on `session` (`pool_key_id`, no default, no index, no CHECK, no foreign
+      // key, so no stored session row is rewritten or constrained); and four new tables —
+      // `provider_pool_person`, `pool_api_key`, `pool_gateway_token`, `pool_usage` — with their CHECKs,
+      // indexes and foreign keys, which constrain only their own new rows. Read against every claim
+      // above: `task`, `project` and `project_acceptance_criterion_definition` are not named, so the 0177
+      // pair and every stored task and criterion row are out of its reach; `session` and `user` are
+      // named otherwise only as the tables foreign keys reference, and the keys' `ON DELETE CASCADE` is a
+      // referential action on the new tables' rows. It names no `project_acceptance_*` object and none
+      // of the six preserved triggers/functions, creates no function, trigger, enum or type — so it is
+      // not another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP TYPE`. No
+      // INSERT, UPDATE or DELETE: every new table starts empty and nothing is backfilled. Written as
+      // 0320_shared_provider_pool on the pool project's line and renumbered 0321 before it reached main,
+      // whose 0320_wiki_maintenance_run had taken the number; it was never deployed under the old name.
+      '0321_shared_provider_pool',
+      // When a shared pool's key is out of budget: one nullable `ADD COLUMN` on `pool_api_key`
+      // (`spent_until`, no default, no index, no CHECK), a table 0321 created, so no stored row is
+      // rewritten or constrained. Read against every claim above: no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion row
+      // are out of its reach. No function, trigger or type is created, replaced or dropped — no
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
+      // six preserved objects. No INSERT, UPDATE or DELETE: every key reads NULL, and nothing is
+      // backfilled.
+      '0322_pool_key_spent_until'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

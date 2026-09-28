@@ -6887,11 +6887,19 @@ export class SessionsService {
       throw new BadRequestException('provider not available');
     }
     if (poolRuntime) await this.assertUsablePool(session.ownerId, requested, tx);
-    const from = execRuntime({
-      declaredProvider: declared,
-      declaredProviderBuiltin: session.providerBuiltin,
-      customRow: currentRow,
-    });
+    // A session already on a pool has no row either, and runs on that pool's engine — a shared pool's
+    // on Codex, which the Claude a slug nothing holds falls back to would misread.
+    const fromPool =
+      isBuiltinProvider(declared, session.providerBuiltin) || currentRow
+        ? null
+        : await accountPoolRuntime(tx, session.ownerId, declared);
+    const from =
+      fromPool ??
+      execRuntime({
+        declaredProvider: declared,
+        declaredProviderBuiltin: session.providerBuiltin,
+        customRow: currentRow,
+      });
     const to =
       poolRuntime ??
       execRuntime({

@@ -361,3 +361,41 @@ describe('account pools among the choices', () => {
     expect(moves).toEqual(['claude', 'claude-accounts', 'anthropic', 'anthropic-2', 'deepseek']);
   });
 });
+
+describe('shared pools among the choices', () => {
+  // A shared pool of OpenAI keys as WorkspaceView hands it in: its keys as members
+  // (sharedPoolAsProviderPool), and a Codex entry in the catalogue (poolsAsProviders).
+  const team = {
+    id: 'team',
+    slug: 'team-codex',
+    label: 'Team Codex',
+    members: [{ slug: 'k1' }, { slug: 'k2' }, { slug: 'k3' }],
+    shared: {},
+  };
+  const configured: ConfiguredProvider[] = [
+    deepseek,
+    { slug: team.slug, label: team.label, runtime: 'codex', models: [], presetSlug: 'openai', modelsFromRuntime: true },
+  ];
+
+  it('offers one after the engines, wearing the Codex mark and counting its keys', () => {
+    const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'team-codex', 'deepseek']);
+    const tile = choices.find((c) => c.slug === 'team-codex')!;
+    expect(tile).toMatchObject({ kind: 'pool', label: 'Team Codex', poolSize: 3, poolUnit: 'key', glyphKey: 'openai' });
+    // Its model is the Codex CLI's own.
+    expect(tile.modelLabel).toBe('GPT-5.6 Sol');
+  });
+
+  it('holds it to the Codex CLI being there, not the Claude one', () => {
+    const noCodex = providerChoices(configured, catalog, undefined, [{ engine: 'codex', installed: false, auth: 'unknown' }], [team]);
+    expect(noCodex.find((c) => c.slug === 'team-codex')).toMatchObject({ unavailable: 'Not installed', fixEngine: 'codex' });
+    const noClaude = providerChoices(configured, catalog, undefined, [{ engine: 'claude', installed: false, auth: 'unknown' }], [team]);
+    expect(noClaude.find((c) => c.slug === 'team-codex')?.unavailable).toBeUndefined();
+  });
+
+  it('lets a codex session move onto it, and not a claude one', () => {
+    const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
+    expect(sameRuntimeChoices('codex', choices, configured, catalog).map((c) => c.slug)).toEqual(['codex', 'team-codex']);
+    expect(sameRuntimeChoices('claude', choices, configured, catalog).map((c) => c.slug)).not.toContain('team-codex');
+  });
+});

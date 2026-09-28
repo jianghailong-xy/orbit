@@ -372,6 +372,8 @@ final class AppModel {
     private(set) var admin: AdminModel?
     /// Every public link the account has made: Settings → Shared links, and the count on its row.
     private(set) var sharedLinks: SharedLinksModel?
+    /// The shared pools the account is in: Settings → Providers, and each pool's page.
+    private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
     /// The account's projects: the Projects section and the drawer's project rows.
@@ -419,6 +421,7 @@ final class AppModel {
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
+        sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
         // macOS has no APNs path, so a NOTIFY_USER watch that matched is announced from the refetch;
@@ -856,6 +859,11 @@ final class AppModel {
         case .providerChanged:
             scheduleLibraryRefresh(.agents)
             scheduleControlRefresh()
+            // A shared pool's people are told of every change to it — a key going in, a rule — so a
+            // pool page that is open shows it. Read only once Providers has asked for the list.
+            if sharedPools?.loadState.hasLoaded == true {
+                Task { await sharedPools?.load() }
+            }
         case .sessionCreated, .sessionUpdated:
             if let summary = ev.payload(ControlSessionSummary.self) {
                 // Session state is the authority for a task row's running/queued overlays. The

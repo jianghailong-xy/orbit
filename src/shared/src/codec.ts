@@ -374,6 +374,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'providerIds',
   // The pool member a session last ran on (migration 0268): the same provider address as above.
   'poolMemberProviderId',
+  // Shared pools (migration 0321): the person who put a key in, a ledger row's key, and the key a
+  // session's last claim chose. Addresses of a key and a person the pool page hands out and takes back.
+  'contributorId',
+  'keyId',
+  'poolKeyId',
   // `[K6]` §7: the known-good point a merge landed, and the attempt that produced it. Addresses,
   // not fences — a checkpoint is audit material a person reads and quotes back ("merge cp X"), and
   // the merge gate's refusals name one, so it has to survive the round trip in the spelling

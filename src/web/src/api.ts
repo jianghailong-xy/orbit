@@ -1169,6 +1169,8 @@ export interface SessionDetail {
   provider?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
+  /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
+  poolKeyId?: string | null;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;

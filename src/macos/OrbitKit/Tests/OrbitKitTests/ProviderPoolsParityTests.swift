@@ -11,6 +11,11 @@ import XCTest
 ///   declares (`unavailable` among them), and the session detail still declares
 ///   `poolMemberProviderId` (`api.ts`);
 /// - the member states are the server's `PoolMemberState` union and the web's;
+/// - what web declares beyond that is exactly its shared-pool adapter: `sharedPoolAsProviderPool`
+///   (`lib/sharedPools.ts`) draws a shared pool as an account pool — each member carrying its `key`, the
+///   pool the whole view as `shared`, a key OpenAI refused as `INVALID` — out of GET
+///   /providers/shared-pools, which the server's account pools never carry. This client reads that
+///   endpoint into `SharedPool` (Models/SharedPools.swift) instead, so the three stay web's own;
 /// - a pool that cannot run is greyed in the server's own words, which the web's pool head says too;
 /// - the picker's and the status bar's words are the web's, word for word.
 ///
@@ -96,9 +101,16 @@ final class ProviderPoolsParityTests: XCTestCase {
 
     // MARK: - the payload
 
+    /// What web's pool types declare for its shared-pool adapter alone (see the type's comment).
+    private static let webSharedMember: Set<String> = ["key"]
+    private static let webSharedPool: Set<String> = ["shared"]
+    private static let webSharedState: Set<String> = ["INVALID"]
+
     func testTheMemberDecodesExactlyTheFieldsWebDeclares() throws {
         let web = try declaredFields(interfaceBody("PoolMember", in: source(Self.anchor), file: Self.anchor))
-        XCTAssertEqual(try encodedKeys(fullMember), web)
+        XCTAssertEqual(try encodedKeys(fullMember), web.subtracting(Self.webSharedMember))
+        XCTAssertTrue(Self.webSharedMember.isSubset(of: web),
+                      "\(Self.anchor)'s PoolMember no longer carries a shared pool's key — drop it from this check")
     }
 
     func testThePoolDecodesExactlyTheFieldsWebDeclares() throws {
@@ -106,7 +118,9 @@ final class ProviderPoolsParityTests: XCTestCase {
         let pool = ProviderPool(id: "p", slug: "claude-accounts", label: "Claude accounts",
                                 resetsAt: "2026-09-25T10:00:00.000Z", unavailable: "No account can run",
                                 members: [fullMember])
-        XCTAssertEqual(try encodedKeys(pool), web)
+        XCTAssertEqual(try encodedKeys(pool), web.subtracting(Self.webSharedPool))
+        XCTAssertTrue(Self.webSharedPool.isSubset(of: web),
+                      "\(Self.anchor)'s ProviderPool no longer carries the shared pool — drop it from this check")
         XCTAssertTrue(web.contains("unavailable"), "\(Self.anchor) no longer declares `unavailable` on a pool")
     }
 
@@ -114,7 +128,12 @@ final class ProviderPoolsParityTests: XCTestCase {
         let mine = Set(PoolMemberState.allCases.map(\.rawValue)).subtracting(["UNKNOWN"])
         let server = "src/apiserver/src/providers/providers.service.ts"
         XCTAssertEqual(try unionMembers("PoolMemberState", in: source(server), file: server), mine)
-        XCTAssertEqual(try unionMembers("PoolMemberState", in: source(Self.anchor), file: Self.anchor), mine)
+        let web = try unionMembers("PoolMemberState", in: source(Self.anchor), file: Self.anchor)
+        XCTAssertEqual(web.subtracting(Self.webSharedState), mine)
+        XCTAssertTrue(Self.webSharedState.isSubset(of: web),
+                      "\(Self.anchor) no longer has a refused key's state — drop it from this check")
+        // Where this client says it instead: a shared pool's key.
+        XCTAssertEqual(PoolKeyState.invalid.rawValue, "INVALID")
     }
 
     func testTheSessionDetailStillDeclaresTheRecordedMember() throws {
@@ -132,17 +151,26 @@ final class ProviderPoolsParityTests: XCTestCase {
     /// The status bar's account names whose it is in the web's own sentences (WorkspaceView's tooltip).
     /// Rendered with sentinel names, then the sentinels swapped for the web's interpolations, so the
     /// whole sentence has to match rather than the words either side of a name.
+    ///
+    /// The web's sentence for the member the next session starts on ends by saying how it was chosen,
+    /// which differs for a shared pool's key; an account pool's words are the branch this client says.
     func testTheAccountSaysWhoseItIsInTheWebsSentences() throws {
         let web = try source("src/web/src/components/WorkspaceView.tsx")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         let pool = ProviderPool(id: "p", slug: "s", label: "POOLNAME")
         let member = PoolMember(id: "m", slug: "k", label: "MEMBERNAME", state: .available)
-        for current in [true, false] {
-            let mine = ProviderPools.accountHelp(pool: pool, account: PoolAccount(member: member, current: current))
-            let theirs = mine
+        func theirs(_ current: Bool) -> String {
+            ProviderPools.accountHelp(pool: pool, account: PoolAccount(member: member, current: current))
                 .replacingOccurrences(of: "POOLNAME", with: "${shownPool.label}")
                 .replacingOccurrences(of: "MEMBERNAME", with: "${shownPoolAccount.member.label}")
-            XCTAssertTrue(web.contains("`\(theirs)`"), "WorkspaceView.tsx has no `\(theirs)`")
         }
+        XCTAssertTrue(web.contains("`\(theirs(true))`"), "WorkspaceView.tsx has no `\(theirs(true))`")
+        let next = theirs(false)
+        let chosen = " — the account with the most room right now"
+        XCTAssertTrue(next.hasSuffix(chosen))
+        let opening = next.dropLast(chosen.count)
+        XCTAssertTrue(web.contains("`\(opening) — ${ shownPool.shared ? 'the key it picks for you' : 'the account with the most room' } right now`"),
+                      "WorkspaceView.tsx no longer says `\(next)` for an account pool")
     }
 
     /// A pool that cannot run is greyed in the words the server puts on it (`poolViews`' `unavailable`),
@@ -170,13 +198,17 @@ final class ProviderPoolsParityTests: XCTestCase {
         let spent = ProviderPool(id: "p", slug: "s", label: "L", resetsAt: "2026-09-25T10:30:00.000Z",
                                  members: [PoolMember(id: "m", slug: "k", label: "K", state: .spent)])
         let withReset = try XCTUnwrap(ProviderPools.spentNote(spent, now: now))
-        let head = try XCTUnwrap(withReset.components(separatedBy: "resets ").first)
-        XCTAssertTrue(web.contains("\(head)</span>resets {formatResetTime(head.resetsAt)}"),
-                      "AccountPools.tsx no longer says `\(head)resets <time>`")
+        let head = try XCTUnwrap(withReset.components(separatedBy: " · resets ").first)
+        // The head's first run is chosen by the pool's kind — a shared pool's keys are capped, not spent —
+        // and an account pool's reset is `formatResetTime`, the same clock this client reads.
+        let prose = web.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        XCTAssertTrue(prose.contains("const spent = pool.shared ? 'All at cap' : '\(head)';"),
+                      "AccountPools.tsx no longer heads a spent account pool with `\(head)`")
+        XCTAssertTrue(prose.contains("{spent} · </span>resets{' '} {pool.shared ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}"),
+                      "AccountPools.tsx no longer says `\(head) · resets <time>`")
 
         let noReset = ProviderPool(id: "p", slug: "s", label: "L", members: spent.members)
-        XCTAssertEqual(ProviderPools.spentNote(noReset, now: now), "All spent")
-        XCTAssertTrue(web.contains("'All spent'"))
+        XCTAssertEqual(ProviderPools.spentNote(noReset, now: now), head)
     }
 
     func testThePickersWordsAreTheWebs() throws {

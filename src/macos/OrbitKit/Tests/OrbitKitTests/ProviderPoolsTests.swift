@@ -257,6 +257,47 @@ final class ProviderPoolsTests: XCTestCase {
         XCTAssertNil(ProviderPools.formatResetTime("soon", now: now, timeZone: utc))
     }
 
+    // MARK: - the pool's page (Settings → Providers → an account pool)
+
+    /// Each member's status, in the words and colours of the web page's tags (`memberStatus`).
+    func testEachMembersStatusIsTheWebsWordsAndColour() {
+        func status(_ m: PoolMember) -> PoolStatus { ProviderPools.memberStatus(m, now: now, timeZone: utc) }
+        XCTAssertEqual(status(member(1, .running)), PoolStatus(label: "Running now", tone: .brand))
+        XCTAssertEqual(status(member(2, .available)), PoolStatus(label: "Available", tone: .success))
+        XCTAssertEqual(status(member(3, .spent, resetsAt: "2026-09-25T10:30:00.000Z")),
+                       PoolStatus(label: "Spent · resets 10:30", tone: .warning))
+        XCTAssertEqual(status(member(4, .spent)), PoolStatus(label: "Spent", tone: .warning))
+        XCTAssertEqual(status(member(5, .refused)), PoolStatus(label: "Unavailable · key refused", tone: .danger))
+        XCTAssertEqual(status(member(6, .disabled)), PoolStatus(label: "Disabled", tone: .neutral))
+        XCTAssertEqual(status(member(7, .noQuota)), PoolStatus(label: "No quota reported", tone: .neutral))
+        XCTAssertEqual(status(member(8, .unknown)), PoolStatus(label: "No quota reported", tone: .neutral))
+    }
+
+    /// A row's gauge is the window that stopped a spent member, else the 5-hour one.
+    func testAMembersGaugeIsTheWindowThatMatters() {
+        XCTAssertEqual(ProviderPools.memberQuota(member(1, .available, fiveHour: 40)).map { [$0.label, "\($0.percent)"] },
+                       ["5-hour limit", "40"])
+        let weekly = PoolMember(id: "m", slug: "m", label: "M",
+                                planUsage: PlanUsageSnapshot(provider: "claude", fiveHour: PlanUsageWindow(utilization: 30),
+                                                             sevenDay: PlanUsageWindow(utilization: 100)),
+                                state: .spent)
+        XCTAssertEqual(ProviderPools.memberQuota(weekly)?.label, "Weekly · all models")
+        XCTAssertNil(ProviderPools.memberQuota(member(2, .noQuota)))
+    }
+
+    /// The page's head and its Accounts header: how many can run, and the one the next session starts on.
+    func testThePageSaysHowManyCanRunAndWhichIsNext() {
+        let three = pool([member(1, .running), member(2, .available, next: true, label: "Home"), member(3, .spent)])
+        XCTAssertEqual(ProviderPools.pageSubtitle(three), "2 of 3 accounts available")
+        XCTAssertEqual(ProviderPools.headline(three, now: now, timeZone: utc), "Next: Home")
+        let spent = pool([member(1, .spent)], resetsAt: "2026-09-25T10:30:00.000Z")
+        XCTAssertEqual(ProviderPools.pageSubtitle(spent), "0 of 1 account available")
+        XCTAssertEqual(ProviderPools.headline(spent, now: now, timeZone: utc), "All spent · resets 10:30")
+        XCTAssertEqual(ProviderPools.headline(pool([member(1, .refused)], unavailable: "No account can run"), now: now),
+                       "No account can run")
+        XCTAssertEqual(ProviderPools.headline(pool([]), now: now), "No account can run")
+    }
+
     // MARK: - a pool as a provider the composer can run
 
     private let catalog = RunnerModelCatalog(claude: [RunnerModelInfo(value: "claude-opus-5", label: "Opus 5"),

@@ -25,8 +25,7 @@ public enum ProviderPools {
     /// The picker's section of pools, in the words the /providers page heads its pools with (web's
     /// `AccountPools`).
     public static let sectionTitle = "Account pools"
-    public static let sectionFooter = "Several Claude subscriptions under one name — each session "
-        + "starts on the account with the most room in its 5-hour window."
+    public static let sectionFooter = ProvidersOverview.accountPoolsDetail
 
     /// The pools as providers the pickers and the composer resolve like any configured one: a pool
     /// runs on its members' Claude subscriptions, whose models are the Claude CLI's own — the model
@@ -79,6 +78,65 @@ public enum ProviderPools {
         guard let resetsAt = pool.resetsAt,
               let time = formatResetTime(resetsAt, now: now, timeZone: timeZone) else { return "All spent" }
         return "All spent · resets \(time)"
+    }
+
+    // MARK: the pool's page (Settings → Providers → an account pool)
+
+    /// The page's head: what the pool is, and how many of its accounts a session could start on now
+    /// (web's `availabilityOf`, less the admission refusals only the web page reads).
+    public static let pageTitle = "Account pool"
+    public static let accountsHeader = "Accounts"
+    /// The web page's sentence under the pool's name; on a phone, the Accounts section's footer.
+    public static let accountsFooter = "Each session starts on the account with the most room in its 5-hour window, and stays on it until that one runs out."
+
+    public static func pageSubtitle(_ pool: ProviderPool) -> String {
+        let n = pool.members.count
+        return "\(readyCount(pool)) of \(n) account\(n == 1 ? "" : "s") available"
+    }
+
+    /// The "2" of "2 of 3 accounts available": the members a session could start on now (web's
+    /// `canTakeWork`). One that reports no quota counts — the claim still picks it, just last.
+    public static func readyCount(_ pool: ProviderPool) -> Int {
+        pool.members.filter { [.available, .running, .noQuota].contains($0.state) }.count
+    }
+
+    /// The Accounts header's trailing words (web's `PoolGauge`): the account the next session starts
+    /// on; with none, when the first spent one frees up; with none that can run, why.
+    public static func headline(_ pool: ProviderPool, now: Date = Date(), timeZone: TimeZone = .current) -> String {
+        if let next = pool.members.first(where: \.next) { return "Next: \(next.label)" }
+        if let unavailable = pool.unavailable { return unavailable }
+        if pool.members.contains(where: { $0.state == .spent }) {
+            return spentNote(pool, now: now, timeZone: timeZone) ?? "All spent"
+        }
+        return "No account can run"
+    }
+
+    /// A member's status tag (web's `memberStatus`).
+    public static func memberStatus(_ member: PoolMember, now: Date = Date(),
+                                    timeZone: TimeZone = .current) -> PoolStatus {
+        switch member.state {
+        case .running: return PoolStatus(label: "Running now", tone: .brand)
+        case .available: return PoolStatus(label: "Available", tone: .success)
+        case .spent:
+            guard let resetsAt = member.resetsAt,
+                  let time = formatResetTime(resetsAt, now: now, timeZone: timeZone) else {
+                return PoolStatus(label: "Spent", tone: .warning)
+            }
+            return PoolStatus(label: "Spent · resets \(time)", tone: .warning)
+        case .refused: return PoolStatus(label: "Unavailable · key refused", tone: .danger)
+        case .disabled: return PoolStatus(label: "Disabled", tone: .neutral)
+        case .noQuota, .unknown: return PoolStatus(label: "No quota reported", tone: .neutral)
+        }
+    }
+
+    /// The gauge a member's row shows (web's `memberQuota`): the window that stopped a spent member,
+    /// else the 5-hour window the pool ranks its members by. Nil when it reports no quota.
+    public static func memberQuota(_ member: PoolMember) -> PlanUsageRow? {
+        guard let rows = member.planUsage?.rows, !rows.isEmpty else { return nil }
+        if member.state == .spent, let binding = rows.first(where: { $0.window.utilization >= 100 }) {
+            return binding
+        }
+        return rows.first(where: { $0.key == "fiveHour" }) ?? rows.first
     }
 
     /// When a window resets, as the pages say it: `14:05` within a day, `Mon 14:05` beyond that — a

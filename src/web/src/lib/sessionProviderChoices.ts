@@ -27,13 +27,15 @@ export const ENGINE_SLUGS = [
 export type ProviderChoiceKind = 'engine' | 'byok' | 'pool';
 
 /** An account pool as the picker needs it: its slug, its name, and which providers it holds — and,
- *  when none of them can run, why (ProviderPool.unavailable) and the pool's id, whose page fixes it. */
+ *  when none of them can run, why (ProviderPool.unavailable) and the pool's id, whose page fixes it.
+ *  `shared` marks a shared pool of OpenAI keys, which runs on Codex rather than Claude. */
 export interface PoolChoiceSource {
   id: string;
   slug: string;
   label: string;
   members: { slug: string }[];
   unavailable?: string | null;
+  shared?: object;
 }
 
 export interface ProviderChoice {
@@ -60,6 +62,8 @@ export interface ProviderChoice {
   fixHref?: string;
   /** An account pool: how many accounts it holds, counted on its tile. */
   poolSize?: number;
+  /** What `poolSize` counts when it is not accounts: a shared pool's keys. */
+  poolUnit?: 'key';
   /** A configured provider that is also an account in one of the user's pools. Still pickable on
    *  its own — pinning one account is a real need — but offered behind "Pin a specific account",
    *  since the pool beside it already runs on it. */
@@ -186,21 +190,26 @@ export function providerChoices(
   });
   // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
   // carries one of its accounts' keys. And it needs one of those accounts to be able to run at all,
-  // which the server says (`unavailable`) and refuses the pool without.
-  const claudeBlocker = byokBlocker(engineHealth?.find((e) => e.engine === AgentProvider.CLAUDE));
-  const accountPools: ProviderChoice[] = pools.map((pool) => ({
-    slug: pool.slug,
-    label: pool.label,
-    kind: 'pool' as const,
-    ...brandForProvider(pool.slug, pool.label, 'anthropic'),
-    modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
-    poolSize: pool.members.length,
-    ...(claudeBlocker
-      ? { unavailable: claudeBlocker, fixEngine: AgentProvider.CLAUDE }
-      : pool.unavailable
-        ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
-        : {}),
-  }));
+  // which the server says (`unavailable`) and refuses the pool without. A shared pool's CLI is Codex,
+  // whose runs carry a session token for the pool's gateway.
+  const accountPools: ProviderChoice[] = pools.map((pool) => {
+    const runtime = pool.shared ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+    const blocker = byokBlocker(engineHealth?.find((e) => e.engine === runtime));
+    return {
+      slug: pool.slug,
+      label: pool.label,
+      kind: 'pool' as const,
+      ...brandForProvider(pool.slug, pool.label, ENGINE_PRESET[runtime]),
+      modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
+      poolSize: pool.members.length,
+      ...(pool.shared ? { poolUnit: 'key' as const } : {}),
+      ...(blocker
+        ? { unavailable: blocker, fixEngine: runtime }
+        : pool.unavailable
+          ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
+          : {}),
+    };
+  });
   const poolSlugs = new Set(pools.map((pool) => pool.slug));
   const pooled = new Set(pools.flatMap((pool) => pool.members.map((member) => member.slug)));
   // A configured row that shadows a built-in slug would give the picker two rows that dispatch

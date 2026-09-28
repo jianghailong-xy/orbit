@@ -213,19 +213,20 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('renders nothing of pools while fewer than two keys could join one', async () => {
+  it('with no pool, the section is its head alone — New pool — and offers no Claude pool while fewer than two keys could join one', async () => {
     keys = [WORK, METERED, GATEWAY];
     pools = [];
     await mount('/providers');
     expect(heading('Your API keys')).not.toBeNull();
-    expect(section()).toBeNull();
-    expect(text()).not.toContain('Account pools');
+    // Where any pool is made, a Codex one included, so it stands before there is one.
+    expect(button('New pool', section()!)).not.toBeNull();
+    expect(section()!.querySelector('.pool-card')).toBeNull();
     expect(text()).not.toContain('Create a pool');
 
     keys = [METERED, GATEWAY];
     await act(async () => root.unmount());
     await mount('/providers');
-    expect(section()).toBeNull();
+    expect(section()!.querySelector('.pool-card')).toBeNull();
     expect(text()).not.toContain('Create a pool');
   });
 
@@ -233,7 +234,7 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     keys = [WORK, HOME, METERED];
     pools = [];
     await mount('/providers');
-    expect(section()).toBeNull();
+    expect(section()!.querySelector('.pool-card')).toBeNull();
     const hint = container.querySelector<HTMLElement>('.pool-hint');
     expect(hint?.textContent).toContain('2 of your keys are Claude subscriptions.');
     // At the top of the keys section: after its heading, before the keys table.
