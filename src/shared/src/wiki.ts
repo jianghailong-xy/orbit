@@ -90,9 +90,16 @@ export const WIKI_OP_DECISIONS = [
 ] as const;
 export type WikiOpDecision = (typeof WIKI_OP_DECISIONS)[number];
 
-/** What the owner does with one pending op in Review. */
-export const WIKI_DECIDE_ACTIONS = ['accept', 'edit', 'reject'] as const;
+/**
+ * What the owner does with one pending op in Review. The last three answer a challenge and nothing
+ * else (contract `anchorRules.verify.answers`): Re-confirm, Amend or Retire the entry it names.
+ */
+export const WIKI_DECIDE_ACTIONS = ['accept', 'edit', 'reject', 'reconfirm', 'amend', 'retire'] as const;
 export type WikiDecideAction = (typeof WIKI_DECIDE_ACTIONS)[number];
+
+/** The decide actions that answer a challenge op, and only a challenge op. */
+export const WIKI_CHALLENGE_ANSWERS = ['reconfirm', 'amend', 'retire'] as const;
+export type WikiChallengeAnswer = (typeof WIKI_CHALLENGE_ANSWERS)[number];
 
 /** A rejection names one of these; the labels are the words Review shows. */
 export const WIKI_REJECT_REASONS = ['not_true', 'not_useful', 'duplicate', 'too_specific'] as const;
@@ -653,8 +660,21 @@ export type WikiAnchorInput =
 
 /** An anchor as the server keeps it: what was proposed, and its last check. A proposer never sends `check`. */
 export type WikiAnchor = WikiAnchorInput & {
-  check?: { state: WikiAnchorState; ref: string | null; at: string | null };
+  check?: WikiAnchorCheck;
 };
+
+/**
+ * An anchor's last check, as the server keeps it beside the anchor (contract `anchorRules.verify.check`).
+ * A symbol the check found carries the hash of its region then, and the hash it is held to: its own
+ * `regionSha256`, or — for a symbol anchor that names none — the region its first check found.
+ */
+export interface WikiAnchorCheck {
+  state: WikiAnchorState;
+  ref: string | null;
+  at: string | null;
+  regionSha256?: string;
+  baselineSha256?: string;
+}
 
 /** A source as a proposer cites it. `{ kind: 'turn', session: 'self' }` is the calling session. */
 export interface WikiSourceInput {
@@ -1031,6 +1051,88 @@ export interface WikiDossierPage {
   batches: WikiDossierBatch[];
   errorClusters: WikiErrorCluster[];
   state: WikiCursorState;
+}
+
+// ── Anchor re-verification (criterion 4, contract `anchorRules.verify`) ────────────────────────
+
+/** The anchor types a maintenance run re-verifies with git, on origin/main (design §4.4). */
+export const WIKI_GIT_ANCHOR_TYPES = ['path', 'symbol', 'commit'] as const;
+export type WikiGitAnchorType = (typeof WIKI_GIT_ANCHOR_TYPES)[number];
+
+/** The numbers the anchor re-verification runs by (contract `anchorRules.verify.rules`). */
+export const WIKI_ANCHOR_RULES = {
+  /** A symbol's region: the line the symbol is found on and the lines after it, this many in all. */
+  symbolRegionLines: 20,
+  /** Entries one read of the anchors list carries when the caller names no limit, and the most it may name. */
+  listEntriesDefault: 50,
+  listEntriesMax: 200,
+  /** Entries one report carries at most. */
+  reportEntriesMax: 50,
+} as const;
+
+/** One git anchor of an entry, as the anchors list hands it to the runner that re-verifies it. */
+export interface WikiDueAnchor {
+  /** Its place in the entry's `anchors`: what the report names it by. */
+  index: number;
+  type: WikiGitAnchorType;
+  path?: string;
+  symbol?: string;
+  sha?: string;
+  /** A symbol's baseline: the hash its region is held to, or null before its first check found one. */
+  regionSha256?: string | null;
+}
+
+/** An active entry with git anchors, at the revision its report must name. */
+export interface WikiAnchorDueEntry {
+  entryId: string;
+  revision: number;
+  anchors: WikiDueAnchor[];
+}
+
+/** `GET /api/runner/wiki/spaces/:id/anchors`. */
+export interface WikiAnchorList {
+  spaceId: string;
+  /** The work directory of the space's workspace on this runner, as stored (`~/orbit` is not expanded). */
+  repo: { workspaceId: string; workDir: string } | null;
+  entries: WikiAnchorDueEntry[];
+  /** The last entryId of this page, to read the next; null on the last page. */
+  next: string | null;
+}
+
+/** One anchor's check, as the runner reports it. */
+export interface WikiAnchorCheckInput {
+  index: number;
+  type: WikiGitAnchorType;
+  state: 'verified' | 'changed' | 'missing';
+  /** A symbol found: the sha256 of its region on the checked ref. */
+  regionSha256?: string;
+}
+
+/** `POST /api/runner/wiki/spaces/:id/anchor-checks`. */
+export interface WikiAnchorReport {
+  /** The commit origin/main named after the fetch: the 40-character sha every check was made on. */
+  ref: string;
+  entries: Array<{ entryId: string; revision: number; checks: WikiAnchorCheckInput[] }>;
+}
+
+/** What one entry's report became. */
+export type WikiAnchorOutcome =
+  | {
+      entryId: string;
+      status: 'recorded';
+      anchorState: WikiAnchorState;
+      trust: WikiTrust;
+      challenged: boolean;
+      /** The system challenge this report filed, or null when it filed none. */
+      challengeOpId: string | null;
+    }
+  | { entryId: string; status: 'stale'; message: string }
+  | { entryId: string; status: 'refused'; httpStatus: number; code?: WikiRefusalCode; message: string };
+
+export interface WikiAnchorReportResult {
+  spaceId: string;
+  ref: string;
+  outcomes: WikiAnchorOutcome[];
 }
 
 export interface WikiSpace {

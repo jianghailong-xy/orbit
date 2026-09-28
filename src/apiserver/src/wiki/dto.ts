@@ -227,6 +227,19 @@ export class WikiVerificationReportDto {
   verdicts?: unknown;
 }
 
+/**
+ * POST /api/runner/wiki/spaces/:id/anchor-checks — what a maintenance run's re-verification found
+ * (contract `anchorRules.verify.report`). `@Allow()`d and left to WikiService like the verdicts: the
+ * report is refused WIKI_SCHEMA naming its field, and each entry is judged on its own.
+ */
+export class WikiAnchorReportDto {
+  @Allow()
+  ref?: unknown;
+
+  @Allow()
+  entries?: unknown;
+}
+
 /** The owner's answer to one pending op, or to several of one changeset in one call. */
 export class WikiDecideDto {
   @IsArray()

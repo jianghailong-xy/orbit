@@ -302,7 +302,59 @@
   "anchorRules": {
     "stored": "The server keeps each anchor's last check beside it (its state, the ref it was checked on and when). A proposer never sends those: an anchor carrying a key its type does not name is refused WIKI_SCHEMA.",
     "gitOnRunner": "A check that needs git runs on a runner, in the maintenance run (phase 2). The apiserver runs no git.",
-    "invalidates": "changed or missing takes the entry out of the push at once and files a system challenge for Review, where the owner re-confirms (a new baseline), amends or retires it."
+    "invalidates": "changed or missing takes the entry out of the push at once and files a system challenge for Review, where the owner re-confirms (a new baseline), amends or retires it.",
+    "verify": {
+      "phase": 2,
+      "doc": "docs/wiki-contract.md section 17; design section 4.4",
+      "types": ["path", "symbol", "commit"],
+      "typesNote": "The anchors git can check. The other four are the server's or a recipe run's to check, and no check writes them yet: an entry that carries one reads unchecked until one does (aggregate).",
+      "rules": {
+        "symbolRegionLines": 20,
+        "listEntriesDefault": 50,
+        "listEntriesMax": 200,
+        "reportEntriesMax": 50
+      },
+      "who": "Maintenance sessions of the space, as maintenance.dossier.who: a headless call is refused 400, any other session of the owner WIKI_NOT_MAINTENANCE_SESSION, another owner's space a plain 404. What a check writes takes entries out of the push and files challenges in the owner's Review, so no other session reports one.",
+      "list": {
+        "route": "GET /api/runner/wiki/spaces/:id/anchors",
+        "query": {
+          "after": "optional: the next a page gave; the page starts after that entry",
+          "limit": "optional: entries a page carries, 1 to rules.listEntriesMax, default rules.listEntriesDefault"
+        },
+        "answers": "The space's active entries that carry at least one git anchor, in id order: each with its current revision and its git anchors, each anchor with its index in the entry's anchors and, for a symbol, the regionSha256 it is held to (null before its first check found one). A proposal waiting in Review is not listed: it is checked once it applies. repo is the checkout the run re-verifies in when it names none (repo), and next names the last entry of the page while more remain."
+      },
+      "report": {
+        "route": "POST /api/runner/wiki/spaces/:id/anchor-checks",
+        "body": {
+          "ref": "required: the 40-character sha refs/remotes/origin/main named after the fetch, the commit every check was made on",
+          "entries": "required: 1 to rules.reportEntriesMax of { entryId, revision (as the list gave it), checks: [{ index, type, state, regionSha256 (a symbol found, and only that) }] }"
+        },
+        "each": "Every entry is recorded on its own, in a transaction of its own, and answered recorded (with the entry's anchorState, trust, challenged, and the challenge this report filed or null), stale, or refused. An entry no longer active, no longer at the revision named, or without an anchor of the reported type at a reported index is stale: nothing of it is written, and the next run reads it again. A malformed entry is refused WIKI_SCHEMA naming its field; an entry of another space is refused 404.",
+        "status": "A report that recorded an entry, or found one stale, answers 200. One every entry of which was refused answers the status of its first refusal, every outcome in the body. A report whose ref or entries do not have this shape is refused WIKI_SCHEMA whole."
+      },
+      "fetch": "The runner fetches origin's main into refs/remotes/origin/main first (git fetch origin +refs/heads/main:refs/remotes/origin/main) and checks every anchor on the commit that ref then names. A fetch that fails checks nothing and reports nothing.",
+      "checks": {
+        "path": "git cat-file -e <ref>:<path>, the path taken without a leading ./ or / and without a trailing /: found is verified, and not found is missing.",
+        "symbol": "git grep -n -w -F -I finds the first line, in the file (or in the first file under the path, in path order), on which the symbol occurs as a whole word. Its region is that line and the lines after it, rules.symbolRegionLines in all or fewer at the end of the file, each ended by a newline, and regionSha256 is the sha256 of the region in lowercase hex. No such line is missing. The server holds a found symbol to its baseline (baseline): the same hash is verified, any other changed.",
+        "commit": "git merge-base --is-ancestor <sha> <ref>: an ancestor is verified. Anything else — a sha that is not an ancestor of origin/main, or one this repository does not have at all — is missing: a sha that is not on main poisons whatever depends on it."
+      },
+      "baseline": "A symbol anchor is held to its own regionSha256. One that names none is held to the region its first check found, which that check adopts and keeps as its baselineSha256. A check that finds the symbol changed or missing never moves the baseline: only the owner's Re-confirm (answers.reconfirm) does.",
+      "check": "Each reported anchor's last check is kept beside it in wiki_entry.anchors, as check: { state, ref, at } and, for a symbol found, regionSha256 (what this check found) and baselineSha256 (the baseline a check adopted). A revision stores its anchors as they were written, without it, and an amend's conflict answer shows them the same way.",
+      "aggregate": "wiki_entry.anchor_state is missing when any anchor's last check is missing, else changed when any is changed, else unchecked when any anchor has no check or the entry has no anchor, else verified; anchor_checked_ref and anchor_checked_at are the ref and the time of the last check. applyOp writes them and nothing else does (storage.singleWriter): a check, and an amend that gives the anchors anew, which leaves them unchecked unless they carry the checks Re-confirm kept.",
+      "challenge": "A check that leaves an active entry changed or missing takes it out of the push at once (push.eligible.anchorStateNot) and, while no challenge of it is open, files one system challenge in the same transaction: a changeset of origin maintenance with no session, written through the one write entry point, whose challenge op says in its reason which anchors no longer hold and the ref they were checked on. It counts against no session's quota. While any challenge of the entry is open, no second one is filed.",
+      "answers": {
+        "reconfirm": "decide action reconfirm: the entry is kept as it stands on the ref its anchors were last checked on. A symbol whose region changed is held to the region that check found, written as its own regionSha256, and an anchor that check found missing is dropped — in a revision of the owner's, with the entry's sources, when that changed anything. It touches the anchors and nothing else, so a decision, which is never otherwise rewritten, is re-confirmed the same way. An entry whose trust is auto or unreviewed becomes confirmed. The challenge is accepted, and the entry is back in the push once nothing else holds it out.",
+        "amend": "decide action amend, with edited shaped as an amend's changes (at least one key): the owner's changes laid over the entry as the owner's revision, with the entry's sources, and confirmed as Re-confirm confirms. Anchors the changes leave alone are re-baselined as Re-confirm would; anchors the changes give are new and unchecked. A kind that is never rewritten (a decision) is refused WIKI_SCHEMA. The challenge is edited.",
+        "retire": "decide action retire: the owner's own retire of the entry at its current revision, recorded through the one write entry point with the note as its reason (or the challenge's reason when there is no note). The challenge is withdrawn with the entry, as every op of an entry that leaves active is.",
+        "only": "The three answer a challenge op and nothing else: on any other op they are refused WIKI_SCHEMA. A challenge of an entry that is not active any more is recorded conflict and applies nothing. accept, edit and reject keep their meaning for a challenge too."
+      },
+      "tiered": "The Tiered pitfall rule reads anchor_state (reviewModes.tiered.auto.machineVerified.pitfall), so a check is how an add qualifies: a check that leaves verified a pitfall the Tiered mode applied as unreviewed — live, not tainted, its current revision the one a tiered op wrote — while the space is still Tiered makes it auto in the same transaction, when that op's own sources span rules.pitfallMinSessions independent sessions.",
+      "cli": "orbit wiki anchors verify --space <id> [--repo <path>] [--json]",
+      "tool": "none: a maintenance run's CLI verb, like maintenance.cli, with no MCP tool beside it.",
+      "repo": "--repo, or the list's repo: the work directory of a workspace bound to the space — the calling session's own when it is one of them, else the space's maintenance workspace, else the first bound workspace that lives on the calling runner — as the workspace stores it. A leading ~ is expanded on the runner, to its home.",
+      "precondition": "Re-verify anchors only as a Wiki maintenance run of the space, in a checkout of its repository, and report only what git said: every state is read from origin/main just after a fetch, and an anchor git could not check is reported as nothing.",
+      "exit": "The command exits non-zero when the fetch failed, when git could not check an anchor, or when the server refused an entry; a stale entry is not a failure."
+    }
   },
   "anchorStates": {
     "unchecked": "not checked yet: the state of every new anchor",
@@ -546,9 +598,10 @@
     "challengeRule": "A challenge applies at once from every origin, tainted or not: it only raises a flag, and the flag's whole effect is to take the entry out of the push until the owner answers it.",
     "decide": {
       "route": "POST /api/wiki/changesets/:id/decide",
-      "actions": ["accept", "edit", "reject"],
+      "actions": ["accept", "edit", "reject", "reconfirm", "amend", "retire"],
       "reject": "names one of rejectReasons, and may add a note",
       "edit": "carries the owner's version, shaped as an amend's changes over the proposal",
+      "challengeAnswers": "reconfirm, amend and retire answer a challenge op, and only a challenge op: anchorRules.verify.answers.",
       "channel": "the user door only (agentSurface.decide)"
     }
   },
@@ -952,7 +1005,7 @@
         "maintenanceRoutes": [
           "GET /api/runner/wiki/spaces/:id/dossiers",
           "GET /api/runner/wiki/spaces/:id/anchors",
-          "POST /api/runner/wiki/anchor-checks",
+          "POST /api/runner/wiki/spaces/:id/anchor-checks",
           "POST /api/runner/wiki/spaces/:id/cursor"
         ],
         "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION",
