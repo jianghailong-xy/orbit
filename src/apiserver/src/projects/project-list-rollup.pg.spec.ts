@@ -147,13 +147,16 @@ test('the project index buckets every project in one pass and agrees with the pr
 
       // ---- Three projects, filed oldest first so `createdAt desc` is a known order -------------
       //
-      //   cross    OPEN   a1 OPEN (free)  a2 OPEN -> b1 (ANOTHER project, OPEN)  a3 IN_PROGRESS
-      //                   a4 DONE         a5 CANCELLED  a6 OPEN -> a3 (IN_PROGRESS)
-      //   failed   DONE   b1 OPEN (free)  b2 FAILED  b3 OPEN -> b2 (abandoned)   b4 DONE
-      //   empty    OPEN   no tasks at all
+      //   cross    OPEN       a1 OPEN (free)  a2 OPEN -> b1 (ANOTHER project, OPEN)  a3 IN_PROGRESS
+      //                       a4 DONE         a5 CANCELLED  a6 OPEN -> a3 (IN_PROGRESS)
+      //   failed   CANCELLED  b1 OPEN (free)  b2 FAILED  b3 OPEN -> b2 (abandoned)  b4 DONE
+      //   empty    OPEN       no tasks at all
       const crossId = await makeProject(db, ownerId, 'cross-project prerequisites');
-      // Filed DONE so the `?status=` narrowing has something to select, and so the cross-project
-      // edge below points INTO a project the unfiltered index still has to look through.
+      // Filed CANCELLED so the `?status=` narrowing has something to select, and so the
+      // cross-project edge below points INTO a project the unfiltered index still has to look
+      // through. It is also the fixture's one cancelled goal, which is what b1's lane below is
+      // about: no door starts a task of a cancelled project, so a task that owes nothing is still
+      // not Ready. The Ready lane is pinned on the cross project, whose a1 is free the same way.
       const failedId = await makeProject(db, ownerId, 'a run that broke', ProjectStatus.CANCELLED);
       const emptyId = await makeProject(db, ownerId, 'nothing filed yet');
 
@@ -202,9 +205,10 @@ test('the project index buckets every project in one pass and agrees with the pr
               done: 1, failed: 0, cancelled: 1 });
 
           // b2 is explicit in FAILED, and task_start refuses b3 until that failed prerequisite is
-          // explicitly resolved or replaced.
+          // explicitly resolved or replaced. b1 owes nothing and is blocked anyway: its project is
+          // CANCELLED, and the READY lane offers only what a door would accept.
           assert.deepEqual(listed.get(failedId)!.buckets,
-            { running: 0, ready: 1, blocked: 1, awaitingVerification: 0,
+            { running: 0, ready: 0, blocked: 2, awaitingVerification: 0,
               done: 1, failed: 1, cancelled: 0 });
           assert.equal(listed.get(failedId)!._count.tasks, 4, 'FAILED still counts toward the total');
           assert.equal(
@@ -293,18 +297,31 @@ test('the project index buckets every project in one pass and agrees with the pr
 
       await t.test('?status= narrows the projects and still buckets the ones it returns',
         async () => {
-          const done = (await projects.list(ownerId, ProjectStatus.CANCELLED)) as unknown as Listed[];
-          assert.deepEqual(done.map((row) => row.id), [failedId]);
-          // The narrowed aggregate scopes which projects it groups, never which tasks a
-          // prerequisite may be looked up in: b3's FAILED prerequisite is still found.
-          assert.deepEqual(done[0].buckets, {
-            running: 0, ready: 1, blocked: 1, awaitingVerification: 0,
+          const cancelled = (await projects.list(ownerId, ProjectStatus.CANCELLED)) as unknown as Listed[];
+          assert.deepEqual(cancelled.map((row) => row.id), [failedId]);
+          // The narrowed aggregate scopes which projects it GROUPS and nothing else: the row it
+          // returns is the same seven numbers the unfiltered index and the project's own page
+          // compute for it — b1 blocked because the goal is cancelled, b3 blocked on the FAILED
+          // prerequisite it cannot start on, b2 explicit in FAILED, b4 DONE.
+          assert.deepEqual(cancelled[0].buckets, {
+            running: 0, ready: 0, blocked: 2, awaitingVerification: 0,
             done: 1, failed: 1, cancelled: 0,
           });
-          assert.deepEqual(done[0].buckets, (await page.panorama(ownerId, failedId)).buckets);
+          assert.deepEqual(cancelled[0].buckets, (await page.panorama(ownerId, failedId)).buckets);
 
           const open = (await projects.list(ownerId, ProjectStatus.OPEN)) as unknown as Listed[];
           assert.deepEqual(open.map((row) => row.id).sort(), [crossId, emptyId].sort());
+          // Which projects are grouped is all the narrowing scopes, so what it returns for the ones
+          // it keeps is what the unfiltered index returns for them — compared lane for lane rather
+          // than spelled out again, since agreement is the claim in this title. The lanes the
+          // prerequisite edges decide are in that comparison too: they are read from the whole task
+          // table, whoever the rows being grouped belong to. A narrowed rollup that scoped the
+          // lookup alongside the grouping, or re-derived READY for the projects it kept, parts from
+          // the index here.
+          assert.deepEqual(
+            open.find((row) => row.id === crossId)!.buckets,
+            (await byId()).get(crossId)!.buckets,
+          );
         });
 
       await t.test('another owner’s work is in nobody else’s buckets', async () => {
