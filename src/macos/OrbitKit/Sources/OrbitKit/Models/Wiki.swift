@@ -476,14 +476,29 @@ public enum WikiVerificationVerdict: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// What the verifier could read of an op's sources when its verdict was recorded (contract
+/// `reviewModes.verification.evidence`): with none of them readable, the verdict applied nothing
+/// past Unreviewed.
+public enum WikiVerificationEvidence: String, Codable, Sendable, CaseIterable {
+    case readable, unreadable
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiVerificationEvidence(rawValue: raw) ?? .unknown
+    }
+}
+
 /// An op's verification trail: the verdict, the verifier's reason, the model that gave it and when,
-/// and the entry a duplicate named (contract `reviewModes.verification.trail`).
+/// the entry a duplicate named (contract `reviewModes.verification.trail`), and what the verifier
+/// could read — nil for a verdict recorded before the server kept that mark.
 public struct WikiOpVerification: Codable, Equatable, Sendable {
     public let verdict: WikiVerificationVerdict?
     public let reason: String?
     public let model: String?
     public let at: String?
     public let duplicateOf: String?
+    public let evidence: WikiVerificationEvidence?
 }
 
 /// One op of a changeset. `payload` is the op as it was submitted (redacted), which is where a

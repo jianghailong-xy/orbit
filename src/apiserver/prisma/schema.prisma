@@ -5700,6 +5700,12 @@ model WikiChangesetOp {
   verificationModel       String?   @map("verification_model")
   verifiedAt              DateTime? @map("verified_at") @db.Timestamptz(3)
   verificationDuplicateOf String?   @map("verification_duplicate_of") @db.Uuid
+  /// What the verifier could read when its verdict was recorded (0314): `readable` or `unreadable`
+  /// — the text of no source at all, which caps the verdict at Unreviewed. NULL for a verdict recorded
+  /// before 0314, and for an op without one.
+  verificationEvidence    String?   @map("verification_evidence")
+  /// The trail of every earlier verdict of an op that was reopened (0314), oldest first: a JSON array.
+  verificationHistory     Json      @default("[]") @map("verification_history")
 
   @@unique([changesetId, seq], map: "wiki_changeset_op_changeset_seq_key")
   @@map("wiki_changeset_op")

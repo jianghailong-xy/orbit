@@ -1296,7 +1296,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // of the six preserved objects. No table, column, constraint, index, trigger or type is created,
       // altered or dropped, and no `task`, `session`, `project` or `project_acceptance_*` object is
       // named. No INSERT, UPDATE or DELETE: no row is read, locked or rewritten.
-      '0313_wiki_search_text_cost'],
+      '0313_wiki_search_text_cost',
+      // Orbit Wiki verification evidence (a verdict has to be able to read its sources): two columns
+      // on `wiki_changeset_op` — one nullable with no default, one NOT NULL with a constant default
+      // ('[]'), both catalog-only — and two CHECKs over them. Read against every claim above: only
+      // `wiki_changeset_op` is named, which is not a preserved relation, and no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named. No function, trigger or type is created,
+      // replaced or dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every stored op has no evidence mark and an empty history,
+      // so every row satisfies both CHECKs as it stands.
+      '0314_wiki_verification_evidence'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
