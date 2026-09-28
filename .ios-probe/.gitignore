@@ -1,0 +1,10 @@
+# Copied in by run.sh (never committed — the point is that they are the app's files, the shipped
+# one taken from the commit the phone is running), plus everything the build writes.
+Sources/NeedsYouBannerView.swift
+Sources/NeedsYouBannerViewShipped.swift
+Sources/Typography.swift
+Sources/Platform.swift
+Probe.xcodeproj/
+.dd/
+shots/
+build.log
