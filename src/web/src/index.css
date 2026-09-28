@@ -16201,6 +16201,21 @@ button.chat-jump-start:hover {
 .wk-status-row .wk-sep { color: var(--text-4); }
 .wk-status-row .wk-warn-text, .wk-status-row .wk-warn-text b { color: var(--warning); }
 .wk-status-review { display: inline-flex; align-items: center; gap: 8px; }
+/* The maintenance part of the status row (criterion 5, mocks 11 ② and 12 ④): amber while the run waits and red
+   when it broke, as the session list's dots are; Set up and View run are links. */
+.wk-maint { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.wk-maint--muted { color: var(--text-3); }
+.wk-maint--warn, .wk-status-row .wk-maint--warn b { color: var(--warning); }
+.wk-maint--error, .wk-status-row .wk-maint--error b { color: var(--error); }
+.wk-maint-ok { color: var(--success); font-weight: 600; }
+.wk-maint-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.wk-maint--warn .wk-maint-dot { background: var(--warning-solid); }
+.wk-maint--error .wk-maint-dot { background: var(--error-solid); }
+.wk-maint-spin { width: 11px; height: 11px; border-radius: 50%; flex: none; border: 1.6px solid var(--brand-border);
+                 border-top-color: var(--brand); animation: runner-spin 0.9s linear infinite; }
+.wk-maint-link { color: var(--brand); text-decoration: none; white-space: nowrap; }
+.wk-maint-link:hover { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) { .wk-maint-spin { animation: none; } }
 .wk-crumb { font-size: 13px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
 .wk-crumb a { color: var(--brand); text-decoration: none; }
 .wk-crumb .ic { font-size: 10px; color: var(--text-4); }
