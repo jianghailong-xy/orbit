@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 520" role="img" aria-labelledby="title desc">
+  <title id="title">Orbit task graph and runner preview</title>
+  <desc id="desc">A decorative preview of a task graph, runner status, and approval card</desc>
+  <defs><linearGradient id="panel" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#182747"/><stop offset="1" stop-color="#10192d"/></linearGradient><linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8eb5ff"/><stop offset="1" stop-color="#3d73ff"/></linearGradient></defs>
+  <rect width="760" height="520" rx="28" fill="#0a1020" stroke="#314469"/>
+  <rect x="26" y="24" width="708" height="52" rx="14" fill="#111c34"/>
+  <circle cx="54" cy="50" r="9" fill="#73e1b0"/><text x="76" y="57" fill="#dbe6ff" font-family="ui-sans-serif,system-ui" font-size="19" font-weight="700">Orbit / launch project</text>
+  <rect x="566" y="38" width="136" height="25" rx="12" fill="#173e3b"/><text x="583" y="56" fill="#8ef0c4" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="700">● runner online</text>
+  <rect x="26" y="98" width="438" height="392" rx="18" fill="url(#panel)"/>
+  <text x="52" y="137" fill="#f2f5ff" font-family="ui-sans-serif,system-ui" font-size="22" font-weight="750">Durable task graph</text>
+  <text x="52" y="163" fill="#8fa4c9" font-family="ui-sans-serif,system-ui" font-size="14">Dependencies survive the chat window.</text>
+  <path d="M153 235v55m0 0h137m0 0v55m-137-55H91m199 55h80" fill="none" stroke="#5574a8" stroke-width="3"/>
+  <rect x="66" y="191" width="174" height="57" rx="13" fill="#263d68" stroke="#5c83c7"/><text x="84" y="216" fill="#b9d1ff" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="700">PREREQUISITE</text><text x="84" y="237" fill="#fff" font-family="ui-sans-serif,system-ui" font-size="14">Map migration</text>
+  <rect x="204" y="307" width="174" height="57" rx="13" fill="#254e4a" stroke="#61c6a0"/><text x="222" y="332" fill="#9af2c9" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="700">READY</text><text x="222" y="353" fill="#fff" font-family="ui-sans-serif,system-ui" font-size="14">Run test rescue</text>
+  <rect x="42" y="307" width="98" height="57" rx="13" fill="#222e48"/><text x="59" y="332" fill="#97acd0" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="700">HISTORY</text><text x="59" y="353" fill="#fff" font-family="ui-sans-serif,system-ui" font-size="14">2 notes</text>
+  <rect x="492" y="98" width="242" height="392" rx="18" fill="#111c34"/>
+  <text x="518" y="137" fill="#f2f5ff" font-family="ui-sans-serif,system-ui" font-size="20" font-weight="750">Review point</text>
+  <rect x="518" y="165" width="190" height="102" rx="13" fill="#2b2039" stroke="#9d83dd"/><text x="536" y="192" fill="#d7c8ff" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="700">APPROVAL</text><text x="536" y="217" fill="#fff" font-family="ui-sans-serif,system-ui" font-size="14">git push origin</text><text x="536" y="240" fill="#fff" font-family="ui-sans-serif,system-ui" font-size="14">feature/migration</text><text x="536" y="258" fill="#b8a9df" font-family="ui-sans-serif,system-ui" font-size="12">Allow · Deny</text>
+  <text x="518" y="310" fill="#8fa4c9" font-family="ui-sans-serif,system-ui" font-size="13">SESSION HISTORY</text><path d="M518 331h172M518 354h145M518 377h160" stroke="#415579" stroke-width="8" stroke-linecap="round"/><circle cx="526" cy="423" r="7" fill="#73e1b0"/><text x="542" y="429" fill="#d8e8ff" font-family="ui-sans-serif,system-ui" font-size="14">human merge decision</text>
+</svg>

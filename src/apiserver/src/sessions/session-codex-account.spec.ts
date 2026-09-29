@@ -9,7 +9,7 @@ import { SessionsService } from './sessions.service';
  * New Session screen can also pick one for a single session (Session.codexAccount): stored as picked,
  * read ahead of the workspace's choice wherever the session's run is dispatched — and, at create,
  * by the sign-in preflight, which has to judge the account the session will actually run on. When
- * neither the session nor its workspace picked one, create picks the account with the most room and
+ * neither the session nor its workspace picked one, create picks the account Automatic ranks first and
  * stores it, so the session stays there.
  */
 
@@ -107,7 +107,7 @@ const DEFAULT_SPENT = {
   },
 };
 
-test('with no account picked for it or its workspace, a session starts on the one with the most room, and keeps it', async () => {
+test('with no account picked for it or its workspace, a session starts on the one Automatic picks, and keeps it', async () => {
   const fixture = makeService(null, { engines: BOTH_IN, planUsage: DEFAULT_SPENT });
   await fixture.service.create('owner-1', CODEX);
   // Stored on the session: every door after this reads it, so the session stays on Work.

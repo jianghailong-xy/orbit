@@ -355,8 +355,10 @@ export const createInteractiveSession = (body: {
   /** Start the session in Claude Code's fast lane (`/fast`). Omitted → off. */
   fastMode?: boolean;
   /** Which of the runner's Codex accounts the session runs on (`default` or a slot id), picked on
-   *  the New Session screen. Omitted follows the workspace's account. */
+   *  the New Session screen — which pins it there. Omitted is Automatic, or the workspace's account. */
   codexAccount?: string;
+  /** The same for a session on the built-in Claude engine: one of the runner's Claude accounts. */
+  claudeAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -742,6 +744,13 @@ export const updateSessionConfig = (
     provider?: string;
   },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
+
+/** Move a session on the built-in Codex or Claude engine to another of its runner's accounts — which
+ *  pins it there — or back onto `automatic`. Spawn-only, like a provider: a live session's engine
+ *  re-spawns on the new account once no turn is in flight, and an ended one takes it on its next
+ *  resume. */
+export const switchSessionAccount = (sessionId: string, account: string) =>
+  api(`/sessions/${sessionId}/account`, { method: 'PATCH', body: { account } });
 
 /** Rename a session's display title. Works on any session (live or ended) and never
  *  touches the runner — purely a metadata update. */
@@ -1246,6 +1255,13 @@ export interface SessionDetail {
   /** The Codex account picked for this session on the New Session screen; null follows the
    *  workspace's (`workspace.codexAccount`). */
   codexAccount?: string | null;
+  /** That account was picked by hand, and the session stays on it: its usage limit waits for the
+   *  reset. False is Automatic — Orbit moves the session to an account with room when it hits one. */
+  codexAccountPinned?: boolean;
+  /** The Claude account picked or chosen for this session; null follows the workspace's. */
+  claudeAccount?: string | null;
+  /** See codexAccountPinned. */
+  claudeAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
