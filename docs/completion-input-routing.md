@@ -395,6 +395,8 @@ fact any more" note at the `route(...)` call (lines 389-391):
 >   `pending` and not counted. A refused delivery (switch, fuse, no conversation, an ended one), a
 >   revision that was only recorded, and one whose time is up are the owner's card at once, as on
 >   2026-09-10. The decision door is unchanged: the owner may decide any revision at any moment.
+>   `TaskCompletionEvidenceService.submit` nudges open pages only after the routing, so the re-read
+>   it prompts already sees the hold instead of drawing, for one poll, a card the coordinator holds.
 >
 > **Why this is not the relay 2026-09-10 removed.** That turn could only pass the question on, and
 > the card died with it. This one asks its reader for the answer, and the owner's card does not

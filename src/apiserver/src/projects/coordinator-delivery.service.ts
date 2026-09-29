@@ -232,6 +232,10 @@ export class CoordinatorDeliveryService {
    * from the same predicate the fact was derived from, with the Run control beside it; and because
    * the key is back, the next time the same release is derived — a receipt reported again, the
    * same work promoted upstream — it reaches whichever conversation the project has by then.
+   *
+   * An Automatic project's evidence revision is the second fact on this door
+   * (`CompletionEvidenceProducer`), and its owner's sense is the evidence card: the pending read
+   * lists every revision no conversation was handed, so a refused one is on it at once.
    */
   async queue(fact: WakeFact, authorize: WakeAuthorizer): Promise<CoordinatorDeliveryOutcome> {
     const claimed = await this.wakes.claim(fact, authorize);
