@@ -412,6 +412,16 @@ struct ComposerView: View {
                     .help(help)
                     .accessibilityLabel(help)
             }
+            // Which of the runner's Codex accounts this session spends, named the way a pool's account
+            // is: the gauge beside it is that account's quota.
+            if let label = console.codexAccountLabel {
+                Text(label)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 140)
+                    .help(console.codexAccountHelp)
+                    .accessibilityLabel(console.codexAccountHelp)
+            }
             if let usage = console.planUsage {
                 PlanUsageIndicator(usage: usage)
             }

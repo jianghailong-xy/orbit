@@ -25,6 +25,12 @@ public enum CodexAccounts {
         return windows(own).isEmpty ? nil : own
     }
 
+    /// What an account is called where one is named: "Default", or what the user called it.
+    public static func label(_ id: String, accounts: [RunnerEngineAccount]?) -> String {
+        if id == defaultID { return "Default" }
+        return accounts?.first { $0.id == id }?.name ?? "Account \(id)"
+    }
+
     /// `wanted` when the runner reports it, else Default — the account dispatch runs a session on
     /// (the server's `accountOnRunner`).
     public static func onRunner(_ wanted: String?, accounts: [RunnerEngineAccount]?) -> String {

@@ -72,6 +72,13 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.snapshot(usage(62, 18, nil), account: "default")?.primary?.utilization, 62)
     }
 
+    func testAnAccountIsNamedTheWayThePickerNamesIt() {
+        let accounts = [account("default"), account(pro, name: "kxugfvukxczwl@mail.com"), account("c0ffee42")]
+        XCTAssertEqual(CodexAccounts.label("default", accounts: accounts), "Default")
+        XCTAssertEqual(CodexAccounts.label(pro, accounts: accounts), "kxugfvukxczwl@mail.com")
+        XCTAssertEqual(CodexAccounts.label("c0ffee42", accounts: accounts), "Account c0ffee42")
+    }
+
     func testAnIdTheRunnerDoesNotReportRunsOnDefault() {
         XCTAssertEqual(CodexAccounts.onRunner(pro, accounts: both), pro)
         XCTAssertEqual(CodexAccounts.onRunner("c0ffee42", accounts: both), "default")
