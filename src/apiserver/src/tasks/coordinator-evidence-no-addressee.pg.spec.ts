@@ -14,6 +14,7 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CompletionEvidenceProducer } from '../projects/completion-evidence.producer';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
 import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
@@ -25,7 +26,10 @@ import {
 import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
 import { CriterionUnlandedProducer } from '../projects/criterion-unlanded.producer';
+import { DependentReadyProducer } from '../projects/dependent-ready.producer';
+import { ProjectSettledUnmergedProducer } from '../projects/project-settled-unmerged.producer';
 import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
+import { TaskDispatchRefusalProducer } from '../projects/task-dispatch-refusal.producer';
 import { TaskExceptionInputProducer } from '../projects/task-exception-input.producer';
 import { WakeDispositionService } from '../projects/wake-disposition.service';
 import { QueueService } from '../queue/queue.service';
@@ -59,11 +63,14 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
  *
  * WHAT THE DEFINED BEHAVIOUR IS, IN ALL THREE
  * ===========================================
- * Nobody is told, which since that date is true of every revision, and the fact is never dropped:
- * the question belongs to the derived read, `TaskCompletionEvidenceService.pending`, which is what
+ * Nobody is told, which since that date is true of every revision in a project whose coordinator
+ * switch is off — every project here — and the fact is never dropped: the question belongs to the
+ * derived read, `TaskCompletionEvidenceService.pending`, which is what
  * `GET /api/tasks/evidence-decisions/pending` returns and what the decision card is drawn from. A
  * question with no reader is still a question, and the read that recomputes it from the ledger
- * cannot lose one.
+ * cannot lose one. (Since 2026-09-29 an Automatic project's coordinator is handed the revision to
+ * decide; where it cannot be — no conversation, or one that is a run of the task — the owner is
+ * asked at once, which `projects/automatic-evidence-to-coordinator.pg.spec.ts` holds.)
  *
  * So every case below asserts both halves: what the ledger recorded — a consumed fact, or no fact at
  * all — with nothing said to any conversation, and then that the evidence is still in front of a
@@ -119,23 +126,23 @@ async function connect(): Promise<Stack> {
   const sessions = new SessionsService(prisma, queue, realtime);
   const wakes = () => new CoordinatorWakeService(prisma);
   const judgments = new CoordinatorJudgmentService(prisma, wakes(), sessions);
-  const disposition = new WakeDispositionService(
-    prisma,
-    judgments,
-    new CoordinatorDeliveryService(prisma, wakes(), sessions),
-  );
+  const deliveries = () => new CoordinatorDeliveryService(prisma, wakes(), sessions);
+  const convergence = () => new CoordinatorConvergenceService(prisma);
+  const disposition = new WakeDispositionService(prisma, judgments, deliveries());
   const router = new CompletionInputRouter(
     wakes(),
-    new ProjectTasksSettledProducer(
-      prisma,
-      judgments,
-      new CoordinatorConvergenceService(prisma),
-      new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
-    ),
-    new TaskExceptionInputProducer(prisma, new CoordinatorConvergenceService(prisma)),
-    new CriterionReadyProducer(prisma, new CoordinatorConvergenceService(prisma)),
+    new ProjectTasksSettledProducer(prisma, judgments, convergence(), deliveries()),
+    new TaskExceptionInputProducer(prisma, convergence()),
+    new CriterionReadyProducer(prisma, convergence()),
     disposition,
-    new CriterionUnlandedProducer(prisma, new CoordinatorConvergenceService(prisma)),
+    new CriterionUnlandedProducer(prisma, convergence()),
+    new TaskDispatchRefusalProducer(prisma, convergence(), deliveries()),
+    new DependentReadyProducer(prisma, convergence(), deliveries()),
+    new ProjectSettledUnmergedProducer(prisma, convergence(), deliveries()),
+    // The evidence door's own: what hands an Automatic project's revisions to its coordinator.
+    // No project here is Automatic, so it hands over nothing — and it is here so that is a fact
+    // about the projects rather than about a router built without it.
+    new CompletionEvidenceProducer(prisma, convergence(), deliveries()),
   );
   return { db, evidence: new TaskCompletionEvidenceService(prisma, undefined, router) };
 }

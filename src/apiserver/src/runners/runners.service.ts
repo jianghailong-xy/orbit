@@ -109,6 +109,10 @@ export class RunnersService {
         // Same: reported, not configured. Withdraws Bypass from this machine's Mode pickers, which
         // is the only reason clients need to know (see ROOT_REFUSED_PERMISSION_MODES).
         runsAsRoot: true,
+        // The runner page's Capacity › Keep Free reads the floor it writes (PATCH minFreeDiskMb),
+        // and About › Repos Folder shows where this machine clones to (reported, not configured).
+        minFreeDiskMb: true,
+        reposRoot: true,
         // What Codex rate-limit reset admission reads about this machine
         // (docs/codex-rate-limit-reset-contract.md §4, §6.1). The web disables its reset entry on
         // the same codexResetRefusal answer the create route refuses with, so it needs the same

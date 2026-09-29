@@ -32,6 +32,12 @@ T4 检索、T5 runner 工具、T6 推送、T7 实时事件、T8–T10 客户端�
 `WIKI_PLAN_STALE` / `WIKI_PLAN_UNCONFIRMED`，写文档的入口先调 `requireConfirmedPlan`，见新增的 §21；迁移 `0325_wiki_plan`，
 JSON 里是 `plan` 一节。
 
+**判据 9 第 2 版（阶段 2，2026-09-29）：文档**：给人读的主视图改为按确认的 plan 逐节写的文档；脚注指向一手原文（设计文档、代码、
+契约带 `path@sha#L起-止`，会话记录带 id 与字符区间）并附逐字引文，条目只作 via entry；会话记录的引文由服务端重读原文逐字核对，
+仓库引文收 runner 在某 sha 上的核对；逐句存状态与脚注明细，超过 5% 无出处或核对不过整篇待审；某节材料指纹不变不重写，每节记下
+生成时的 origin/main 提交；条目被拒、退役或锚点失效时经它引用的句子撤下；一个新拒绝码 `WIKI_DOC_INVALID`，见新增的 §22；
+迁移 `0326_wiki_docs`，JSON 里是 `docs` 一节。§18 的按主题文章保留，直到客户端切换。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -437,10 +443,14 @@ owner 2026-09-27 定：核实必须拿得到证据。预览 space 里出处全�
 95.7% 被判 unsupported；有一条可读出处的 op，unsupported 只有 0.9%。JSON 的 `reviewModes.verification.evidence` 与 `.reopen`、
 `reviewModes.entryConfirm`、`floors.taintedWaits` 是权威，下面是说明。
 
-- **出处原文**：提交时的引文校验和核实列表读的是**同一份**原文（`wiki-verify-evidence.ts` 的 `runEventText`）。run_event：
-  user / assistant / thinking 取 `text`；tool_use 是工具名加输入（每个键一行）；tool_result 是 `content`（字符串，或各文本块按行拼接，
-  图片块没有字），工具报错时前面标一句；error 取 `message`；system 只取它带的文字（`text`、`notice`、`stderr`），`subtype=context`
-  这类统计没有原文。空串或只有空白算**读不到**：claude 的 thinking 大多是空串，那是一条没有内容的记录，不是一条「什么都没说」的证据。
+- **出处原文**：提交时的引文校验、核实列表、案卷行的位置（16.3）读的是**同一份**原文（`wiki-verify-evidence.ts`：`runEventText`、
+  `toolCallText`、`approvalText`）。run_event：user / assistant / thinking 取 `text`；tool_use 是工具名加输入（每个键一行）；
+  tool_result 是 `content`（字符串，或各文本块按行拼接，图片块没有字），工具报错时前面标一句；error 取 `message`；background_task 取
+  `command` 与 `summary`；turn_end 取 `subtype`；system 只取它带的文字（`text`、`notice`、`stderr`），`subtype=context` 这类统计没有原文。
+  tool_call 行是调用和结果合在一起：工具名、输入（每个键一行）、输出（字符串、文本块，或把文本块放在 `content` 里的结果）——引命令和引输出
+  一样是这条记录的原话（判据 2 第 2 版之前只有输出）。approval 是回答与 owner 的附言各一行，ExitPlanMode 再加它批的 plan。
+  每种文本都由若干「部分」按行拼成，顺序固定。空串或只有空白算**读不到**：claude 的 thinking 大多是空串，那是一条没有内容的记录，
+  不是一条「什么都没说」的证据。
   交给核实者前先过共享脱敏器（`secret-redaction.ts`，含本 owner `workspace.env` 的真实值），再按 `verificationSourceMaxChars`（8,000 字）截断。
 - **证据标记**：核实列表的每个 item 带 `evidence: readable | unreadable`（至少一条出处有原文 / 一条都没有）。服务端记结论时**自己再读一遍**，
   不信 runner 报的，并把它存进 op 的 `verification_evidence`（迁移 0314；0314 之前的结论为 NULL），读回来是 `verification.evidence`。
@@ -662,6 +672,10 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   50 条里超过 30% unsupported 退回 Tiered 且只通知一次、Automatic 默认不抽检且打开后每 200 条抽 1 条、抽检卡不占 30 条名额；
   runner-go 的 `TestWikiVerify*` 用假的 vLLM 端点覆盖四种结论、读不成结论、401、离开 Automatic，以及干净启动的 argv 与环境
   （机器上有真 Claude Code 时另用真的跑一遍）；Go 钉住四种结论（`wikiVerifyVerdicts`），Swift 钉住 `states.op.values` 里的 `verifying` 与四种结论。
+- **文档**（§22）：`wikiContract.spec.ts` 钉住 `docs` 的闭集、规则、schema、迁移里的 CHECK、路由与链接规则；`wiki-docs.pg.spec.ts` 在真库上
+  验证没有已确认的 plan 拒写、会话引文逐字核对（伪造、翻译、拼接、省略号、条目标题当原话都核对不过）、仓库引文缺 sha 拒收、过渡句与
+  5% 线、材料不变不重写、Reject / 退役 / 锚点失效撤句并标待重写、不进推送也不能当出处、跨租户 404；Go 的 `TestWikiDoc*` 钉住写入请求的字段
+  与路由，Swift 的 `WikiDocsContractTests` 钉住闭集、读取形状，以及会话记录脚注拼出 `SessionRecordLink` 深链。
 
 ---
 
@@ -746,10 +760,25 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 - 打分与装箱照演示的打包器 v2；每行以 `L12` 开头，`sources` 把每个行名对到一手记录（turn / event / tool_call / task_comment /
   approval / merge_receipt / owner_decision），维护作业提议条目时引用这些记录，不引用案卷。服务端的出处解析因此补了
   `merge_receipt` 与 `owner_decision`（owner 解决的 blocker；它不算 Tiered 的 owner 原话）。
+- **每行记原文位置（判据 2 第 2 版，`maintenance.dossier.spans`）**：`sources` 的每一项是 `{ ref, kind, id, spans }`，
+  `spans` 是 `[{ start, end, text }]`——该行的字在记录原文里的位置：记录的**那一份**原文（7.5，即引文校验读的文本）先脱敏，
+  按**码点**计的 `[start, end)`，`text` 是那一段逐字原文。原样抄的行一个 span；压缩过的行按它保留的片段各一个 span，
+  顺序排列、互不重叠：工具行是命令（或路径）、结果首行、结果末行，截断的消息是截断前保留的那段，thinking 是命中信号的各句，
+  评论是首段和结论段，AskUserQuestion 是回答里的问题和答案。案卷自己的字（说话人、`$ `、`→ ok:`、`ERR:`、`…[cut]`、选项列表）不进 span。
+  一行没显示记录里的字时，指向它代表的那段：重复的开场 prompt 指向 prompt，plan 的决定指向 plan；没有任何字的记录（不带话的打断）
+  是 `{0, 0, ''}`。工具调用的输入输出只对**装进案卷的行**整条读（存储超过 256 KiB 的输出不读：这行的调用和结果首行照样定位，末行不定位）。
+  `wiki-dossier.pg.spec.ts` 逐行核对：按位置从记录原文（脱敏后）取出的字与该行声明的原文逐字一致，压缩行也一样。
+- **维护作业按位置引原话**（`maintenance.job.citation`）：模型给的引文先要逐字出自它引的那一行（否则照旧算问题、重问一次）；
+  再按引文比对的读法（去掉反引号和星号、弯引号拉直、空白合一）在该行的各 span 里找：落在某一个 span 里，就把**记录原文在那里的字**
+  （标记、引号、空白都按原文）当 quote，位置 `{ start, end }` 放进 source 的 `locator`，引文超长截到 `quoteMaxChars`；
+  跨了案卷的缩写（`$ go test → ERR: …`）、跨了案卷剪掉的空隙、或含脱敏掉的字，就只挂记录，不带 quote 也不带 locator。
+  dry run 仍拿不到的引文连同 locator 一起摘掉。服务端的案卷若还不带 spans（旧服务端），照旧用行里的字当 quote。
 - **先脱敏再截断**：每条记录的文本先过共享脱敏器（owner 的 workspace.env 值作字面量），再裁剪、打分、装箱；最后整段再过一遍。
   每个会话不超过 8,000 token（`wikiEstimateTokens`：ASCII ÷ 3.4 + 其他 ÷ 1.25 + 1），装不下的被截断并标 `truncated`。
-- **确定性**：同样的记录两次抽取字节一致，哈希（正文 + NUL + sources 的 JSON 的 sha256）相同；抽取不读时钟。
-- **只存 (sourceIds, hash)**：`wiki_dossier` 每个 space、每个会话一行，存 sources、hash、token 数和发放它的页的位置，没有任何列存正文。
+- **确定性**：同样的记录两次抽取字节一致、spans 相同，哈希（正文 + NUL + sources 的 ref、kind、id 的 JSON 的 sha256）相同；spans 不进哈希：
+  它们是同一批记录里字的位置，正文和记录都没变的案卷，作业已经读过。抽取不读时钟。
+- **只存 (sourceIds, hash)**：`wiki_dossier` 每个 space、每个会话一行，存 sources（每行的记录和 spans 的位置，**不存 span 的字**）、hash、
+  token 数和发放它的页的位置，没有任何列存正文。
   同一 hash 已在游标推进过的页上发过时，`unchanged = true`，作业可以跳过。
 - **批量项目只给聚合统计**：任务标题把数字读成 `#` 之后，同一项目（没有项目时同一清单）里有 20 个以上同模板的任务，就是批量项目，
   它的会话不出案卷，只出一条聚合：任务按状态计数、本页会话数、最常见的报错签名（FineWeb 的 11 万个任务只有 7 个模板）。
@@ -865,6 +894,8 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
 ---
 
 ## 18. 文档视图 · 生成：主题、文章与脚注（判据 9）
+
+> 判据 9 于 2026-09-28 改写：给人读的主视图改为按 plan 逐节写的文档（§22）。本节的按主题文章保留、照常可读，直到客户端切到文档。
 
 JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（归主题、指纹、校验、读写），user 门在
 `wiki/wiki-articles.controller.ts`，runner 门在 `runner-api/runner-wiki-articles.controller.ts`，CLI 在
@@ -1161,3 +1192,122 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
   - `POST /api/wiki/plan-proposals/:id/decide`：`{ action: accept | reject, note? }`。
 - 每次存下版本、确认、提出或决定建议，事务提交后发一次 `wiki.changed`（只带 space id）。
 - plan 不是知识：不进推送块，不能当出处，`wiki_search` / `wiki_get` 不返回它。
+
+## 22. 文档：按确认的 plan 逐节写，脚注引一手原文（判据 9 第 2 版）
+
+JSON 里是 `docs`；迁移 `0326_wiki_docs`；服务端在 `src/apiserver/src/wiki/wiki-docs.ts`（写入、核对、分类、读）与
+`wiki-doc-withdrawal.ts`（撤句），user 门在 `wiki/wiki-docs.controller.ts`，runner 门在 `runner-api/runner-wiki-docs.controller.ts`；
+共享类型在 `src/shared/src/wikiDocs.ts`，runner-go 在 `wiki_docs.go`，OrbitKit 在 `Models/WikiDocs.swift`。按节取材与写作
+（`orbit wiki docs build`）和客户端各有自己的任务，照本节写。
+
+### 22.1 四张表
+
+- `wiki_doc`：一篇一行，用 plan 篇的 slug 跨版本对应。记最近一次写入依据的已确认版本（`plan_id`、`plan_version`、`plan_doc_id`）、
+  状态（`ok` / `needs_review`）、那次写入读仓库时的 origin/main 提交（`repo_sha`）和时间。
+- `wiki_doc_section`：写过的一节一行，用 plan 节的 key 对应。记依据的 plan 节、材料指纹（`material_sha256`）、生成时读仓库的
+  origin/main 提交（`repo_sha`）、块（`blocks`）、模型、统计、生成时刻，以及 `stale_at`：有句子被撤下时写上，下一次维护运行重写这一节。
+- `wiki_doc_sentence`：一句一行：正文、状态、无出处句带出的新事实记号，撤下时写明时间、原因与经由的条目。
+- `wiki_doc_footnote`：一个句子的一个脚注一行：种类、位置（仓库原文 `path@sha#L起-止`；记录是 id 加字符区间）、逐字引文
+  （已脱敏）、仓库原文附带的那几行（`excerpt`）、结论、谁核对的（`server` / `runner`）、via entry。
+- 旧的按主题文章（§18，`wiki_topic_summary`）保留、照常可读，直到客户端切到文档。
+- 历史引用不挂外键：plan 的行、via entry、撤下时记的条目、脚注的记录 id。四张表都经 `(…, owner_id)` 复合外键级联到 space。
+
+### 22.2 写入：`POST /api/runner/wiki/spaces/:id/docs/:slug`
+
+- **谁能写**：本 space 的维护会话（`isWikiMaintenanceSession`），以及 API 服务器进程里的导入（`origin: 'import'`、无会话、无用户）。
+  别的会话 `WIKI_NOT_MAINTENANCE_SESSION`，不带会话头 400，别的 owner 的 space 404。user 门没有写文档的路由。
+- **次序**：写入者 → `requireConfirmedPlan`（没有已确认的 plan 就 `WIKI_PLAN_UNCONFIRMED`，只有草稿也算没有）→ 这一篇在已确认的
+  plan 里（否则 404）→ 请求的 `planVersion` 就是已确认的版本（否则 `WIKI_PLAN_STALE`）→ 形状 → 核对 → 一个事务写入。
+- **请求**：`{ planVersion, repoSha, model?, sections: [{ key, materialSha256, markdown, footnotes }] }`。一次最多 20 节（整篇）。
+  - `repoSha`：这次读仓库时 origin/main 的提交，40 位小写 hex，必填；写到的每一节都记下它。
+  - 仓库脚注（`design_doc` / `code` / `contract`）：`{ kind, path, sha, lines: { start, end }, section?, symbol?, quote?, excerpt?, verified, viaEntryId? }`，
+    `sha` 必填（7–64 位 hex），`verified` 是 runner 在那个 sha 上自己核对的结果。
+  - 记录脚注（`turn`、`event`、`tool_call`、`task`、`task_comment`、`approval`、`owner_decision`、`merge_receipt`、`note`）：
+    `{ kind, ref, chars?: { start, end }, quote?, viaEntryId? }`。
+  - 引文最多 1000 字，`null` 或不给算没给引文；`viaEntryId` 必须是本 space 的条目。
+- **形状不对**：`WIKI_DOC_INVALID`（422），`errors[]` 逐条 `{ path, message }`，一次列全（最多 200 条，消息里写总数）：schema 外字段、
+  仓库脚注缺 sha 或行号、行号倒着、记录脚注缺 id、plan 这篇没有的节、同一节写两次、不是本 space 条目的 via entry、`repoSha`
+  不是 40 位提交……什么都不写，runner 改完一起重发。
+- **正文**：Markdown，`[n]` 指本节的 `footnotes[n-1]`。第一行若是标题，那是本节自己的标题（plan 已给），丢掉；围栏代码块是一个
+  code 块、不核对；其余标题行是 heading 块；列表项是 item 块，缩进的下一行接着它；其余连续行到空行为一段。段与列表项按文章的规则
+  断句（§18.4：`。！？`，以及后面跟空白或行尾的句点和英文 `?` / `!`，代码段里不断），所以「；」不算句末。越界的标记指不到脚注，
+  去掉并计数（`markersDropped`）；只有标记没有字的不算一句；一节一句都没有就拒。
+- 句子、标题、代码块、引文和附带的行，落库前都过共享脱敏器（带 owner 的 workspace.env 值）。
+
+### 22.3 核对
+
+- **会话记录由服务端核对**：按记录 id 在本账号自己的行里重读原文——经 `WikiService.sourceText`，也就是条目出处的引文核对、核实者
+  读到的原文、案卷行的位置所用的同一个读法（`wiki-verify-evidence.ts`：event 是 `runEventText`，tool call 是工具名、输入和输出
+  放在一起，approval 是回答和附言、以及它决定的 plan）——先脱敏，再和同样脱敏过的引文逐字比。给了 `chars` 就只在那一段里找。
+  找到的位置记为字符区间（脱敏后文本的码点），连同记录所在的会话、序号、时间、标签，供页面拼链接。
+- **比对前折叠**：NFC；全角标点 `，。：；（）！？「」“”‘’、『』【】—–` 读作对应的半角；去掉 `**`、`__`、反引号；Markdown 转义读作
+  被转义的字符；去掉全部空白。原文另比一遍去掉每行开头注释符（`//`、`///`、`/*`、`*`、`*/`、`#`）的样子，所以引代码注释的话也找得到。
+  引文必须是原文里连续的一段：省略号不是可以跳过的缺口；翻译、转述、把两段拼成一句都找不到。折叠后不足 4 个字的引文到处都找得到，
+  一律算找不到。
+- **结论**：`verified`；`not_found`（不在原文里）；`no_quote`（没给引文）；`unresolved`（记录不是本账号的、已删、或根本不是记录）。
+- **仓库引文由 runner 核对**：服务端没有 checkout，照收 runner 的结论，记为「由 runner 在某 sha 上核对」（`checked_by = runner`、
+  `sha`）；没带 sha 的拒收。仓库脚注不会是 `unresolved`。
+
+### 22.4 句子的状态，整篇待审
+
+| 状态 | 条件 |
+|---|---|
+| `sourced` | 带脚注，其中至少一个 `verified` |
+| `unverified` | 带脚注，一个都没核对过 |
+| `withdrawn` | 某个脚注经由的条目已被拒、退役、被取代，或锚点变了 / 不见了（22.6） |
+| `transition` | 不带脚注，句中每个事实记号都已出现在同篇有出处的句子或标题里（篇的标题、读者的问题、各节标题、正文里的标题块） |
+| `unsourced` | 不带脚注，有新的事实记号；这些记号随句存下 |
+
+- **事实记号**：反引号里的代码；3 个字符以上的英文标识符或路径（`the`、`and`、`for`、`with`、`not`、`are`、`can`、`its`、`but`、`via` 不算）；
+  两位以上的数字；带单位的数（秒、分钟、小时、天、个、条、次、%、ms、s、MB、KB）。一律小写、去空白。
+- 每写一节就对整篇重新分类一次：一节里的过渡句要对上其他节现在说的话。
+- 无出处和核对不过的句子不删，逐句标出。二者合计**超过**全篇句子的 5%（正好 5% 不算），整篇标 `needs_review`。已撤下的句子计入总数、
+  不计入分子：它们等重写。
+
+### 22.5 不变不重写
+
+- `materialSha256` 是 runner 算的：这一节在 plan 里的定义（标题、类别、covers、篇幅、来源条件）加上它取到的材料。服务端不重算，只比。
+- 已存的这一节指纹相同、且没有被撤过句（`stale_at` 为空），就不写（`outcome: unchanged`，行原样不动）；否则整节替换，句子和脚注随之。
+- 已确认的 plan 里这篇不再有的节，下一次写这篇时删掉。没有时钟重写任何东西（硬约束 5）。
+- 每节的 `repoSha` 读接口会带回来（22.7），维护作业拿它和当前 origin/main 比：节引用的设计文档、代码或契约变了，就重写这一节
+  （owner 09-29：agent 往 `docs/` 写了新东西，wiki 要跟上）。比对是维护作业的事，服务端只存、只还。
+
+### 22.6 撤句
+
+- 条目被拒（Reject）、退役、被取代，或锚点变成 `changed` / `missing` 时，经它引用的句子（有脚注的 via entry 是它）标为 `withdrawn`，
+  记下时间、原因（`rejected` / `retired` / `superseded` / `anchor_changed` / `anchor_missing`）和条目；所在的节写上 `stale_at`，由下一次
+  维护运行重写（不看指纹）。
+- **钩子挂在条目状态唯一的写入点上**：`WikiService.recomputeFlags`，`applyOp` 的每个分支都以它收尾（设计 §3，`storage.singleWriter`），
+  在条目自己的事务里做，所以没有哪条改条目的路径会漏掉它，也没有另开条目状态的写入点。
+- 写文档时，经由的条目已处在上述状态的，那一句当场就是 `withdrawn`、那一节当场 `stale`。写入事务先以 `FOR SHARE` 按 id 锁住所有
+  via entry，所以同时发生的 Reject 会等写完再撤掉它写的句子；两边都是先条目、后文档，不会互相死锁出环。
+
+### 22.7 读
+
+- **user 门**（JWT，owner 本人；别的 owner 的 space 或文档一律 404）：
+  - `GET /api/wiki/spaces/:id/docs`：目录。已确认 plan 的大类（编号从 1 起）→ 篇（编号 `<大类>.<序号>`、标题、读者的问题、是否写了、
+    状态、更新时间、依据的 plan 版本）→ 节（编号、标题、类别、是否写了、是否待重写）。没有已确认的 plan 时 `plan` 为 null、目录为空。
+  - `GET /api/wiki/spaces/:id/docs/:slug`：文档页。编号、标题、读者的问题、写给谁、含与不含（不含的篇给出编号和标题）、大类、篇幅、
+    状态、依据的 plan 版本与当前版本、`repoSha`、更新时间；各节按 plan 的顺序，带 `repoSha`、块和句子（状态、脚注号、新事实记号、
+    撤下的原因与条目）；脚注按首次出现编号（同一原文、同一位置、同一引文只编一个号），每个带种类、结论、谁核对的、引文、位置字符串
+    和链接数据；以及 via entry 现在的样子（种类、标题、状态、trust、锚点状态）和它带进来的脚注号。plan 里有、还没写的篇：`written: false`，
+    各节空着；plan 里没有的：404。
+  - `GET /api/wiki/spaces/:id/doc-index`：A–Z 索引。plan 的全部篇，加上别的篇没有同名的节标题（「总览」「已知的坑」「约定」这类
+    篇篇都有的不收），各带所在篇的编号、标题、大类和是否写了，按标题排序（客户端再按拼音分组）。
+- **链接数据**（`docs.links`）：
+  - turn、event、tool_call 的脚注带**记录 id（`recordId`）和它所在的会话 id（`sessionId`）**——`wiki_source` 只存记录 id，客户端拼深链
+    要两个一起：web 用 `sessionRecordHref(sessionId, recordId)`，iOS 用 `SessionRecordLink.url(session:record:)`，服务端的读取是
+    `GET /api/sessions/:id/events/page?around=<recordId>`。
+  - 其余记录带它所在的东西：approval、merge receipt 带会话，task comment 带任务，owner decision 带项目，note 带路径；另有会话、任务、
+    项目的标题，turn / event 的序号、时间与标签（turn 的 kind、event 的 type、工具名、评论的作者类型、receipt 的结果）。
+  - 仓库原文带 path、sha、行号、章节或符号，以及 runner 附带的那几行。
+- **runner 门**（维护会话）：`GET /api/runner/wiki/spaces/:id/docs`：已确认 plan 的版本，和每篇已写的文档：依据的版本、状态、`repoSha`、
+  各节的指纹、`repoSha`、是否待重写、生成时刻——维护作业据此决定重写哪些节。
+- 每次写入有节被写，事务提交后发一次 `wiki.changed`（只带 space id）。
+
+### 22.8 视图，不是知识
+
+- 不进 `<orbit_wiki_context>`：推送只读 `wiki_entry`。
+- 不能当出处：没有任何出处种类指向文档、节、句子或脚注，引用它们一律 `WIKI_SOURCE_UNRESOLVED`；脚注的种类（`design_doc` 等）本身
+  也不是出处种类，写进条目的出处是 `WIKI_SCHEMA`。
+- agent 的 `wiki_search` / `wiki_get` 只返回条目。没有读写文档的 MCP 工具。

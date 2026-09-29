@@ -150,6 +150,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_PLAN_GATE',
   'WIKI_PLAN_STALE',
   'WIKI_PLAN_UNCONFIRMED',
+  'WIKI_DOC_INVALID',
 ] as const;
 export type WikiRefusalCode = (typeof WIKI_REFUSAL_CODES)[number];
 
@@ -750,7 +751,7 @@ export interface WikiRefusal {
   code: WikiRefusalCode;
   message: string;
   /** `WIKI_SCHEMA`: every field that failed; `WIKI_PLAN_GATE`: everything the plan's gate found, each
-   *  also naming its check (`WikiPlanGateError`). */
+   *  also naming its check (`WikiPlanGateError`); `WIKI_DOC_INVALID`: everything wrong with a document write. */
   errors?: WikiFieldError[];
 }
 
@@ -983,15 +984,36 @@ export function wikiEstimateTokens(text: string): number {
   return Math.floor(ascii / 3.4 + other / 1.25) + 1;
 }
 
+/**
+ * Where one line's words are in its record (criterion 2, revision 2; contract `maintenance.dossier.spans`):
+ * `[start, end)` in code points of the record's text — the text a quote of it is checked against, redacted —
+ * and the words found there.
+ */
+export interface WikiDossierSpan {
+  start: number;
+  end: number;
+  /** The record's redacted text from `start` to `end`, verbatim. Handed out, never stored. */
+  text: string;
+}
+
 /** One line's first-hand record: what a proposal made from the dossier cites (contract `sourceKinds`). */
 export interface WikiDossierSource {
   /** The line's short name in the dossier text, `L1`, `L2`, … */
   ref: string;
   kind: WikiSourceKind;
   id: string;
+  /**
+   * The pieces of the record the line was made from, in order. A line copied whole is one span; a line the
+   * dossier compressed — a tool call to its command and its result's first and last line, a message cut short, a
+   * thought to its signal sentences — has a span for each piece of its record it kept.
+   */
+  spans: WikiDossierSpan[];
 }
 
-/** One session's dossier. Its text is never stored: only `sources` and `hash` are (wiki_dossier). */
+/**
+ * One session's dossier. Its text is never stored: only `sources` — each span's position, never its words — and
+ * `hash` are (wiki_dossier).
+ */
 export interface WikiDossier {
   sessionId: string;
   taskId: string | null;

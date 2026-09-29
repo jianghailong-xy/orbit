@@ -161,7 +161,7 @@ import {
   type AuthorityRefusalCode,
   type AuthorityRequiredAction,
 } from '../projects/coordinator-authority';
-import { criteriaFromDefinitions } from '../projects/project-acceptance';
+import { criteriaFromDefinitions, criterionKeyOf } from '../projects/project-acceptance';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
@@ -253,6 +253,10 @@ import {
   taskCriterionChangeRefusalBody,
   taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
+import {
+  criterionAsksForOwnerConfirmation,
+  ownerConfirmationNotDelegatedBody,
+} from './owner-confirmed-automatic-delegation';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -3481,6 +3485,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const criterionDeclaration = (await this.resolveCriterionDeclarations(
       ownerId, [{ projectId: scopedProjectId, criterionKey: dto.criterionKey }],
     )).get(0) ?? null;
+    // Against the same project and the criterion that declaration resolved to, still before the
+    // transaction: an agent cannot hand this task to the owner in an Automatic project unless that
+    // criterion asks for them.
+    await this.assertOwnerConfirmationDelegated(ownerId, creatorSessionId, [{
+      itemIndex: null,
+      completionCriterion: dto.completionCriterion,
+      projectId: scopedProjectId,
+      criterionDefinitionId: criterionDeclaration?.criterionDefinitionId,
+    }]);
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
     const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
@@ -4387,6 +4400,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const criterionDeclarations = await this.resolveCriterionDeclarations(
       ownerId, items.map((item, index) => (frozen.has(index) ? {} : item)),
     );
+    // Item by item over the same projects and the criteria just resolved, and above the dry run
+    // for the reason the two checks above are. One item handed to the owner refuses the batch.
+    await this.assertOwnerConfirmationDelegated(
+      ownerId,
+      creatorSessionId,
+      items.flatMap((item, index) => (frozen.has(index) ? [] : [{
+        itemIndex: index,
+        completionCriterion: item.completionCriterion,
+        projectId: item.projectId,
+        criterionDefinitionId: criterionDeclarations.get(index)?.criterionDefinitionId,
+      }])),
+    );
     // Unit L4: the plan, judged whole and before the transaction. Every dimension, every item, all
     // findings at once — and nothing written if any of them refuses (AC5).
     // A dry run always preflights. `planNeedsPreflight` is false for the owner's own writes (§4 R1
@@ -5160,6 +5185,61 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       requiredAction: 'NAME_THE_CRITERION_THIS_SERVES',
       message: `criterionKey ${declared} cannot be recorded: ${why}`,
     };
+  }
+
+  /**
+   * `owner-confirmed-automatic-delegation.ts`, over the rows these writes would leave: a session
+   * does not declare OWNER_CONFIRMED on work in an Automatic project unless the criterion that work
+   * serves asks for the owner.
+   *
+   * Asked by all three write doors after every declaration check and before the transaction, so a
+   * refused write leaves no row and a refused batch none of its items. `criterionDefinitionId` is
+   * the criterion each item serves once written — what `resolveCriterionDeclarations` resolved, or
+   * on an update the one the row keeps — and a criterion of any other project than the one the
+   * item lands in is none of that project's. A write with no session, or with no OWNER_CONFIRMED
+   * item filed in a project, reads nothing.
+   */
+  private async assertOwnerConfirmationDelegated(
+    ownerId: string,
+    actingSessionId: string | undefined,
+    items: ReadonlyArray<{
+      itemIndex: number | null;
+      completionCriterion: TaskCompletionCriterionValue | null | undefined;
+      projectId: string | null | undefined;
+      criterionDefinitionId: string | null | undefined;
+    }>,
+  ): Promise<void> {
+    if (!actingSessionId) return;
+    const declared = items.filter((item) =>
+      item.completionCriterion === 'OWNER_CONFIRMED' && item.projectId);
+    if (declared.length === 0) return;
+    const automatic = await this.prisma.project.findMany({
+      where: {
+        id: { in: [...new Set(declared.map((item) => item.projectId!))] },
+        ownerId,
+        coordinatorEnabled: true,
+      },
+      select: { id: true },
+    });
+    const automaticIds = automatic.map((project) => project.id);
+    const governed = declared.filter((item) => automaticIds.includes(item.projectId!));
+    if (governed.length === 0) return;
+    const definitionIds = [...new Set(governed
+      .map((item) => item.criterionDefinitionId)
+      .filter((id): id is string => !!id))];
+    const served = definitionIds.length === 0 ? [] : await this.prisma
+      .projectAcceptanceCriterionDefinition.findMany({
+        where: { id: { in: definitionIds }, projectId: { in: automaticIds } },
+        select: { id: true, projectId: true, verificationMethod: true },
+      });
+    for (const item of governed) {
+      const criterion = served.find((definition) =>
+        definition.id === item.criterionDefinitionId && definition.projectId === item.projectId);
+      if (criterion && criterionAsksForOwnerConfirmation(criterion.verificationMethod)) continue;
+      throw new ConflictException(ownerConfirmationNotDelegatedBody(
+        criterion ? criterionKeyOf(criterion.id) : null, item.itemIndex,
+      ));
+    }
   }
 
   /**
@@ -8123,6 +8203,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ownerId, [{ projectId: boundProjectId, criterionKey: dto.criterionKey }],
       )).get(0) ?? null
       : null;
+    // The task as this write leaves it — the merged criterion, the project it is filed under and
+    // the criterion it serves — asked only when the write moves one of the three: a row that
+    // already stands is not re-judged by an edit that declares nothing new. Before the transaction,
+    // like every refusal on this path.
+    {
+      const projectId = dto.projectId === undefined ? before.projectId : (dto.projectId ?? null);
+      const criterionDefinitionId = dto.criterionKey === undefined
+        ? before.criterionDefinitionId
+        : (criterionDeclaration?.criterionDefinitionId ?? null);
+      if (completionCriterion !== before.completionCriterion
+        || projectId !== before.projectId
+        || criterionDefinitionId !== before.criterionDefinitionId) {
+        await this.assertOwnerConfirmationDelegated(ownerId, actingSessionId, [{
+          itemIndex: null, completionCriterion, projectId, criterionDefinitionId,
+        }]);
+      }
+    }
     // Whether this write can move the task within the project/subtask structure. It decides both
     // that the hierarchy rules are checked at all and that the write takes the owner lock: the
     // check and the update it authorises have to be one serialized step, not two.
@@ -9494,12 +9591,39 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // not have one taken on its behalf — and it is also the only SELECTIVE thing this scan has,
     // standing where AUTO_RUN_READY_SQL puts its dependency anchor: a candidate has to belong to
     // one of the few projects whose coordinator is on, rather than be any OPEN task in the
-    // deployment. Not measured the way that anchor was (264ms -> 32ms); if this scan ever turns up
-    // in a slow log, `task_project_id_idx` is the join to look at first.
+    // deployment. Selective only while those projects are small: on 2026-09-29 one of them held
+    // 109,878 of the deployment's 112k tasks, and this scan reads its ~82k OPEN auto-run tasks to
+    // find the ~55 with no edge (0.7–1.4s, through `task_project_id_idx`).
+    //
+    // The project's budget is counted ONCE per sweep, for every project together (`occupied`), and
+    // not per candidate row. As a correlated subquery beside `rank` it was evaluated once for each
+    // row the window emitted, re-counting the same project every time — measured 2026-09-29: 53
+    // candidates of that one project, 294ms a count, 15.6s of a 16.3s statement. Entered through
+    // the few sessions that occupy anything and grouped by project it is one pass of ~6ms, and it
+    // is MATERIALIZED so that "once" is the statement's shape rather than the planner's choice.
+    // The same count per project in the same snapshot, so the same rows; a project nothing occupies
+    // has no `occupied` row, which is the zero the subquery counted.
     //
     // `project.status` is read by both predicates rather than by this join — through
     // projectNotCancelledSql, the clause every door applies — so the two scans cannot fork on it.
     rows.push(...(await this.prisma.$queryRaw<typeof rows>`
+      WITH occupied AS MATERIALIZED (
+        -- Counted exactly as the completion edge counts it, down to the skipped statuses: a slot is
+        -- held by work that is still OUTSTANDING, so the parked AWAITING_INPUT run of a task that
+        -- has just finished does not fill the budget it was released into.
+        SELECT o.project_id, count(*)::int AS "tasks"
+          FROM task o
+         WHERE o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
+           AND EXISTS (
+             SELECT 1 FROM session s
+              WHERE s.task_id = o.id
+                AND s.status IN (${Prisma.join(
+                  TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+                  ', ',
+                )})
+           )
+         GROUP BY o.project_id
+      )
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority"
@@ -9514,24 +9638,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                row_number() OVER (
                  PARTITION BY t.project_id ORDER BY t.priority DESC, t.created_at, t.id
                ) AS "rank",
-               -- Counted exactly as the completion edge counts it, down to the skipped statuses: a
-               -- slot is held by work that is still OUTSTANDING, so the parked AWAITING_INPUT run
-               -- of a task that has just finished does not fill the budget it was released into.
-               p.max_concurrent_tasks - (
-                 SELECT count(*)::int FROM task o
-                  WHERE o.project_id = p.id
-                    AND o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
-                    AND EXISTS (
-                      SELECT 1 FROM session s
-                       WHERE s.task_id = o.id
-                         AND s.status IN (${Prisma.join(
-                           TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-                           ', ',
-                         )})
-                    )
-               ) AS "free"
+               p.max_concurrent_tasks - COALESCE(occupied."tasks", 0) AS "free"
           FROM task t
           JOIN project p ON p.id = t.project_id AND p.coordinator_enabled = true
+          LEFT JOIN occupied ON occupied.project_id = p.id
          WHERE ${PROJECT_INDEPENDENT_READY_SQL}
       ) c
       LEFT JOIN workspace a ON a.id = c.assignee_id

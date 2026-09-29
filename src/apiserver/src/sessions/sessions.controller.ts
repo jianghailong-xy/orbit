@@ -674,6 +674,11 @@ export class SessionsController {
    * than a seq (scroll-up). `hasMore` signals older events remain. `maxPayload=N` opts into
    * preview-sized tool bodies (see truncate-payload); omitting it returns them whole, which is
    * what a client built before this endpoint learned to refetch expects.
+   *
+   * Two reads from the middle, for a link that names one record (see transcript-around.ts):
+   * `around=<turn | event | tool_call id>&limit=N` returns the page that record sits in, with the
+   * `anchor` it resolved to and a `before` / `after` cursor; `after=<seq>&limit=N` returns the N
+   * events just newer than a seq, paging from there back down to the tail.
    */
   @Get(':id/events/page')
   eventPage(
@@ -683,11 +688,28 @@ export class SessionsController {
     @Query('before') before?: string,
     @Query('limit') limit?: string,
     @Query('maxPayload') maxPayload?: string,
+    @Query('after') after?: string,
+    @Query('around', PublicIdPipe) around?: string,
   ) {
     const num = (s?: string): number | undefined => {
       const n = Number(s);
       return s !== undefined && s !== '' && Number.isFinite(n) ? n : undefined;
     };
+    if (around !== undefined) {
+      return this.sessions.getEventPageAround(user.userId, id, {
+        around,
+        limit: num(limit),
+        maxPayload: parseMaxPayload(maxPayload),
+      });
+    }
+    const newerThan = num(after);
+    if (newerThan !== undefined) {
+      return this.sessions.getEventPageAfter(user.userId, id, {
+        after: newerThan,
+        limit: num(limit),
+        maxPayload: parseMaxPayload(maxPayload),
+      });
+    }
     return this.sessions.getEventPage(user.userId, id, {
       tail: num(tail),
       before: num(before),

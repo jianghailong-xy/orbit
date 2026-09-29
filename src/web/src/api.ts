@@ -285,6 +285,46 @@ export const getSessionEventPage = (
   return api<EventPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
 };
 
+/** A page read from the middle of a transcript (`around=` or `after=`), with a cursor each way:
+ *  `before` is what to pass as `before=` for the page older than this one, `after` what to pass as
+ *  `after=` for the page newer. Null when that direction has nothing more — an `after` of null means
+ *  the page reaches the session's latest event. */
+export interface TranscriptWindowPage extends EventPage {
+  before: number | null;
+  after: number | null;
+}
+
+/** The page around one record, and where the record resolved to: an event is itself, a turn the
+ *  `user` event its message entered the transcript as, a tool call its `tool_use`. */
+export interface TranscriptAroundPage extends TranscriptWindowPage {
+  anchor: { kind: 'turn' | 'event' | 'tool_call'; id: string; seq: number };
+}
+
+/** The page of a session's history around one record — a turn, an event or a tool call, named by
+ *  its id in either spelling — for a link that opens the session at that record
+ *  (lib/transcriptDeepLink). 404 when it is not a record of this session. */
+export const getSessionEventPageAround = (
+  id: string,
+  recordId: string,
+  opts: { limit?: number; signal?: AbortSignal } = {},
+): Promise<TranscriptAroundPage> => {
+  const qs = new URLSearchParams({ around: recordId, maxPayload: String(MAX_EVENT_PAYLOAD) });
+  if (opts.limit != null) qs.set('limit', String(opts.limit));
+  return api<TranscriptAroundPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
+};
+
+/** The page just newer than a seq — how a window opened at a record pages back down to the latest
+ *  message, the mirror of `before`. */
+export const getSessionEventPageAfter = (
+  id: string,
+  after: number,
+  opts: { limit?: number; signal?: AbortSignal } = {},
+): Promise<TranscriptWindowPage> => {
+  const qs = new URLSearchParams({ after: String(after), maxPayload: String(MAX_EVENT_PAYLOAD) });
+  if (opts.limit != null) qs.set('limit', String(opts.limit));
+  return api<TranscriptWindowPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
+};
+
 /** The untrimmed payload of one event, fetched when the user expands a card that arrived
  *  `truncated` — so a big Read/Write body costs a request only if someone actually opens it. */
 export const getSessionEventFull = (id: string, seq: number): Promise<EventPageEvent> =>

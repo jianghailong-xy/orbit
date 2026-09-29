@@ -124,13 +124,20 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
         if (insertFails) throw insertFails;
         // Plus the two rows every project response is folded from, in the shape the include asks
         // for (the nested writes above are what CREATES them; this is what reading them back
-        // looks like).
-        return { id: PROJECT_ID, ...data, members: [], runtime: { coordinatorGeneration: 0n } };
+        // looks like). `coordinatorEnabled` is the column default the insert does not name.
+        return {
+          id: PROJECT_ID,
+          coordinatorEnabled: false,
+          ...data,
+          members: [],
+          runtime: { coordinatorGeneration: 0n },
+        };
       },
       // The re-read a structured create makes after writing its criterion definitions, so the
       // response carries the rows the database normalized rather than the ones it was sent.
       findUniqueOrThrow: async () => ({
         id: PROJECT_ID,
+        coordinatorEnabled: false,
         ...(creates[creates.length - 1] ?? {}),
         members: [],
         runtime: { coordinatorGeneration: 0n },
@@ -272,13 +279,29 @@ test('promotion tells the current turn its coordinator role without rewriting it
   assert.deepEqual(f.sessionCreates, []);
   assert.equal(f.sessionUpdateSql.length, 1);
   assert.doesNotMatch(f.sessionUpdateSql[0], /"prompt"/i);
+  // A project recorded from a session starts with Automatic off (the runner door refuses the
+  // field), so the promotion carries that text.
   assert.equal(
     created.coordinatorInstructions,
-    buildCoordinatorInstructions('Crawl', PROJECT_ID),
+    buildCoordinatorInstructions('Crawl', PROJECT_ID, false),
   );
   assert.match(created.coordinatorInstructions, /不是用来替它干活/);
   assert.match(created.coordinatorInstructions, /先读再说/);
   assert.match(created.coordinatorInstructions, /账号所有者通道记录/);
+});
+
+// The runner door refuses `coordinatorEnabled`, so a project recorded from a session is created
+// with Automatic off. The text is still read off the created row rather than assumed, so it cannot
+// disagree with the project it describes.
+test('promotion describes the Automatic setting the created project actually has', async () => {
+  const f = makeService();
+
+  const created = await f.inSession({ title: 'Crawl', coordinatorEnabled: true });
+
+  assert.equal(
+    created.coordinatorInstructions,
+    buildCoordinatorInstructions('Crawl', PROJECT_ID, true),
+  );
 });
 
 test('a headless project create does not invent a coordinator transition', async () => {
@@ -468,10 +491,12 @@ test('a second project from the same session gets its OWN coordinator, in the sa
   // And the caller is told it was NOT promoted. Saying nothing would be read as the promotion,
   // since that is what recording a project from a session has always meant.
   assert.match(result.coordinatorInstructions, /协调会话不是你/);
-  assert.notEqual(
-    result.coordinatorInstructions,
-    buildCoordinatorInstructions('Crawl again', PROJECT_ID),
-  );
+  for (const coordinatorEnabled of [false, true]) {
+    assert.notEqual(
+      result.coordinatorInstructions,
+      buildCoordinatorInstructions('Crawl again', PROJECT_ID, coordinatorEnabled),
+    );
+  }
 
   // The first attempt still wrote nothing. One statement is what makes half-written unreachable:
   // the insert that would have carried the binding is the insert that raised, so there is no

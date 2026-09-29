@@ -41,6 +41,7 @@ import { RunnerWikiMaintenanceController } from './runner-wiki-maintenance.contr
 import { RunnerWikiAnchorsController } from './runner-wiki-anchors.controller';
 import { RunnerWikiArticlesController } from './runner-wiki-articles.controller';
 import { RunnerWikiPlanController } from './runner-wiki-plan.controller';
+import { RunnerWikiDocsController } from './runner-wiki-docs.controller';
 import { RunnerWikiMaintainController } from './runner-wiki-maintain.controller';
 
 @Module({
@@ -94,6 +95,8 @@ import { RunnerWikiMaintainController } from './runner-wiki-maintain.controller'
     RunnerWikiArticlesController,
     // The plan (contract `plan`): a maintenance run's read, draft and proposal.
     RunnerWikiPlanController,
+    // The documents (contract `docs`): what a maintenance run has written, and its write of a document.
+    RunnerWikiDocsController,
     // The maintenance job's routes (criterion 3): a run's start, proposals, end, and the task's check.
     RunnerWikiMaintainController,
   ],

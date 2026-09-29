@@ -658,7 +658,7 @@
       },
       "evidence": {
         "why": "Owner, 2026-09-27 (criterion 7, revision 4): a verification has to be able to read its evidence. A verifier handed no text judges the claim alone, and its verdict is no verdict about the records: in the preview space 95.7% of the ops whose sources were all tool, thinking and system events were found unsupported, against 0.9% of the ops with one source whose text it could read.",
-        "text": "Every source is read as its record's text, and it is the same text a submission's quote is checked against. A run event: user, assistant and thinking, its text; tool_use, its tool's name and its input; tool_result, its content — a string, or the text of its blocks — marked when the tool reported an error; error, its message; system, only the words it carries (text, notice, stderr), so a system event that is counts has none. Empty or blank text is none: an empty thinking is a record with nothing in it to read, not evidence that says nothing. A verifier is handed the text redacted by the shared redactor, then cut at rules.verificationSourceMaxChars.",
+        "text": "Every source is read as its record's text, and it is the same text a submission's quote is checked against and a dossier line's spans count in (maintenance.dossier.spans). A run event: user, assistant and thinking, its text; tool_use, its tool's name and its input; tool_result, its content — a string, or the text of its blocks — marked when the tool reported an error; error, its message; background_task, its command and its summary; turn_end, its subtype; system, only the words it carries (text, notice, stderr), so a system event that is counts has none. A tool call's row is the call and its result together: its tool's name, its input, then its output — a string, the text of its blocks, or the text of the blocks of a result that carries them as content. An approval is its answers and the owner's note, a line each, and for an ExitPlanMode the plan it decided. Each is its parts, one per line, in that order (src/apiserver/src/wiki/wiki-verify-evidence.ts). Empty or blank text is none: an empty thinking is a record with nothing in it to read, not evidence that says nothing. A verifier is handed the text redacted by the shared redactor, then cut at rules.verificationSourceMaxChars.",
         "column": "verification_evidence",
         "values": ["readable", "unreadable"],
         "mark": "readable when at least one of the op's sources has text, unreadable when none has. Each op of the list carries it (evidence), so a verifier knows before it asks a model; and the server reads it again when it records a verdict, never taking the verifier's word for it, and stores it with the verdict. NULL for a verdict recorded before migration 0314, and while there is no verdict.",
@@ -887,9 +887,20 @@
       "signals": "Lines are scored as the demo's packer v2 scored them: an owner rule or decision, a surprise in the agent's words or thinking, a failure followed by a success of the same command, an irreversible command, the agent's explanation after an owner's question. The owner's words and decisions, the task's opening prompt, a settled task's closing comments, the merge receipts and the session's closing reply are taken first, then windows around the signals, then the agent's longer replies.",
       "redaction": "Every line and every header string goes through src/apiserver/src/common/secret-redaction.ts, with the owner's workspace.env values as literals, BEFORE it is measured or packed: what is cut to the budget is already redacted.",
       "budget": "A dossier is at most rules.dossierMaxTokens by wikiEstimateTokens (ASCII characters / 3.4 plus other characters / 1.25, plus one). A session whose timeline does not fit is cut to it and marked truncated.",
-      "determinism": "The same records give the same text byte for byte, and the same hash: sha256 of the text, a NUL, and the sources as JSON. Nothing in a dossier reads the clock.",
-      "sources": "Each line of the text starts with its short name (L1, L2, …), and sources maps each to the first-hand record it came from: turn, event, tool_call, task, task_comment, approval, merge_receipt or owner_decision. A proposal made from the dossier cites those records, never the dossier.",
-      "storage": "Only the sources and the hash are stored (wiki_dossier, one row per space and session, rewritten each time the session is handed out). The text is never stored. unchanged says the same hash was handed out on a page the cursor has since advanced past.",
+      "determinism": "The same records give the same text byte for byte, the same spans, and the same hash: sha256 of the text, a NUL, and the sources' ref, kind and id as JSON. The spans are not hashed: they are where the same records' words are, and a dossier whose text and records did not change is one a run has read. Nothing in a dossier reads the clock.",
+      "sources": "Each line of the text starts with its short name (L1, L2, …), and sources maps each to the first-hand record it came from — turn, event, tool_call, task, task_comment, approval, merge_receipt or owner_decision — and to where in that record the line's words are (spans). A proposal made from the dossier cites those records, never the dossier.",
+      "sourceFields": ["ref", "kind", "id", "spans"],
+      "spans": {
+        "fields": ["start", "end", "text"],
+        "why": "Criterion 2, revision 2 (owner, 2026-09-28): a dossier's lines are its own writing — a tool call as its command and its result's first and last line, a message cut to a cap — and a quote copied from that writing is not in the record it cites: the maintenance trial could not verify 13 of its 49 sources, and 70% of the preview space's sources carried no quote. Each line says where its words are, so a proposal can quote the record's own words, and a footnote can be held to them.",
+        "unit": "start and end are code points of the record's text — the one text a quote of it is checked against (reviewModes.verification.evidence.text) — redacted by the shared redactor with the owner's workspace.env values as literals; text is the words from start to end, verbatim.",
+        "pieces": "A line copied whole is one span. A line the dossier compressed has a span for each piece of its record it kept, in order, none overlapping: a tool call's command (or path) and its result's first and last line, a message's part before its cap, a thought's signal sentences, a comment's first paragraph and its conclusions, an approval's answers and note. The dossier's own words — a speaker, a marker (\"$ \", \"→ ok:\", \"ERR:\", \"…[cut]\"), an option list — are in no span.",
+        "standsFor": "A line that shows none of its record's words points at the words it stands for: a repeated opening prompt at the prompt, a plan's decision at the plan. A record with no words at all is one span from 0 to 0.",
+        "check": "Every line of every dossier goes back to its record: the record's text, redacted, from start to end, is the span's text (wiki-dossier.pg.spec.ts).",
+        "reads": "A tool call's input and output are read whole for the lines a dossier carries, and an output past 256 KiB as stored is not: its line's call and the first line of its result are placed, its last line is not.",
+        "stored": "Handed out with the words; stored as start and end alone."
+      },
+      "storage": "Only the sources — each line's record and where its spans are, never the words in them — and the hash are stored (wiki_dossier, one row per space and session, rewritten each time the session is handed out). The text is never stored. unchanged says the same hash was handed out on a page the cursor has since advanced past.",
       "batchProjects": "A session whose task shares its title template (digits read as #) with rules.batchTemplateMinTasks or more tasks of its project, or of its list when it has no project, is a batch project's: such sessions get no dossier each, only the batch's counts — its tasks by status, its sessions on the page, and its commonest tool error signatures.",
       "errorClusters": "tool_call.is_error grouped by the tool and the normalized first line of its output (numbers, hex, paths and quoted text read as placeholders), over the space's sessions that came to rest in the last rules.errorClusterLookbackDays days; a signature is a cluster when rules.errorClusterMinSessions or more sessions share it, and a page carries the clusters its own sessions are in."
     },
@@ -1011,7 +1022,7 @@
           "context: GET …/maintenance/run — the space and its repository, the maintenance workspace's work directory, the topics, the guardrails' numbers and the position the task expects",
           "checkout: the maintenance workspace's work directory, ~ expanded to the runner account's home, fetched; a checkout that is not the space's repository (its origin URL, its root commit) fails the run",
           "dossiers: pages from the cursor up to the expected position (until); a dossier unchanged since it was processed is skipped",
-          "extract: one clean Claude Code call to the local model per dossier (the demo's A2+6: an 8k dossier, no thinking, at most rules.entriesPerSessionMax entries), told the space's repository and to answer {\"offTopic\": true} for a session about something else; each entry checked as the demo's extract.py checked it — kind, fields, each source a line of the dossier with its quote copied from that line, anchors that exist on origin/main — and the rejected ones asked for once more",
+          "extract: one clean Claude Code call to the local model per dossier (the demo's A2+6: an 8k dossier, no thinking, at most rules.entriesPerSessionMax entries), told the space's repository and to answer {\"offTopic\": true} for a session about something else; each entry checked as the demo's extract.py checked it — kind, fields, each source a line of the dossier with its quote copied from that line, anchors that exist on origin/main — and the rejected ones asked for once more; a quote one of its line's spans holds (read as a quote is compared) is proposed as the record's own words there, with locator {start, end} (maintenance.job.citation), and one no span holds cites the record with neither",
           "self-check: the entries as adds, grouped by topic into batches of at most limits.opsPerChangeset ops (limits.opsPerTurn in Manual), each proposed with dryRun; a quote the server does not find is dropped from its source and the op checked again, an op still refused is dropped, and one the review queue holds back is not proposed",
           "breaker: when the space holds breakerMinActiveEntries active entries or more, the ops the mode would apply across every batch may change at most breakerMaxChangedPercent of them; more trips the breaker before anything is recorded",
           "propose: each batch through POST …/maintenance/changesets, origin maintenance; an op the server refuses now fails the run",
@@ -1024,6 +1035,11 @@
         "tokens": "The report's tokens are every model call the run made — extraction, verification and articles — as Claude Code reported them."
       },
       "offTopic": "A session in the space's workspaces that is not about the space's repository yields no entry: the extraction prompt names the repository and what it is, and asks for {\"offTopic\": true} for such a session; and an entry whose code anchors none exist in the repository is dropped. Both are counted in the report (offTopic, entries.foreign).",
+      "citation": {
+        "locator": ["start", "end"],
+        "rule": "A source an extracted entry cites is the record behind the line it names. Its quote, when the model gave one, is looked for in the words the line's spans hold, read as a quote is compared (backticks and asterisks aside, curly quotes straight, a run of whitespace one space): found in one span, the source carries the record's own words there — marks, quotes and spacing as the record has them, cut to limits.quoteMaxChars — as its quote, and where they are as its locator, code points of the record's redacted text. A quote no single span holds — the dossier's shorthand for the record, or words across a gap the dossier cut — and one holding words the redactor took out cite the record with no quote and no locator. A dossier from a server whose lines carry no spans keeps the line's words as the quote, and the self-check's dry run holds them to the record.",
+        "strip": "A quote the server does not find is taken off its source with its locator, and the op checked again (run.steps, self-check)."
+      },
       "breaker": "The circuit breaker over a run (wiki-maintenance-breaker.ts): a maintenance run's changeset counts reviewModes.floors.circuitBreaker over the whole run — every entry its earlier changesets changed through the mode is spent, and the active entries are counted as they stood when the run began — and its refusal says the run stops and moves no cursor.",
       "report": "What a run reports when it ends (WikiMaintenanceReport): sessions, dossiers, unchanged, offTopic, entries {extracted, kept, dropped, foreign, principles}, ops {proposed, recorded, refused, selfCheckDropped, heldBack, applied, waiting}, verification, anchors, articles, tokens {input, output, calls}, seconds, and stoppedAt when it did not succeed. At most 16,000 bytes of JSON, kept on the run's row with ops.refused as a column of its own.",
       "check": {
@@ -1313,6 +1329,122 @@
     "tool": "none: no MCP tool reads, confirms or decides anything of the plan (hard constraint 2). The drafting job's verbs are the CLI's."
   },
 
+  "docs": {
+    "phase": 2,
+    "doc": "docs/wiki-contract.md section 22; criterion 9 (revised 2026-09-28)",
+    "migration": "src/apiserver/prisma/migrations/0326_wiki_docs/migration.sql",
+    "tables": ["wiki_doc", "wiki_doc_section", "wiki_doc_sentence", "wiki_doc_footnote"],
+    "means": "A space's documents, written section by section from the plan its owner confirmed (plan.guard): a document is a plan document, named by its slug, and a section a plan section, named by its key. Every footnote points at a first-hand original — a design-document section, code or a contract at a commit, or one of Orbit's own records — with its verbatim quote, and the entry it was found through is kept as the via entry: an entry is the way in, never the source. What each sentence is, and how each footnote was checked, is stored sentence by sentence. A document is a view for people: never pushed, never a source, and never returned by wiki_search or wiki_get. The topic articles (articles, wiki_topic_summary) stay, readable as they are, until the clients have moved to the documents.",
+    "statuses": {
+      "ok": "no more than rules.needsReviewAbove of its sentences are unsourced or unverified",
+      "needs_review": "more than rules.needsReviewAbove of its sentences are unsourced or unverified: the whole document is marked for review"
+    },
+    "sentenceStatuses": {
+      "sourced": "it carries a footnote whose check passed (verdict verified)",
+      "transition": "it carries no footnote and brings no new fact: every fact token in it (factTokens) is already in a sourced sentence or a heading of the same document",
+      "unsourced": "it carries no footnote and states a fact no sourced sentence or heading of the document carries; the tokens that are new are stored with it",
+      "unverified": "it carries footnotes, and none of them passed its check",
+      "withdrawn": "a footnote of it came through an entry since rejected, retired or superseded, or whose anchor changed or went missing (withdrawal); it stays, struck through, until its section is written again"
+    },
+    "footnoteKinds": {
+      "design_doc": "a section of a design document in the repository: path@sha#Lstart-end, and the section's heading",
+      "code": "code in the repository: path@sha#Lstart-end, and the symbol",
+      "contract": "a contract in the repository: path@sha#Lstart-end",
+      "turn": "a conversation turn, by its id",
+      "event": "a run event — a reply, a thinking, a tool call's input or its result, an error — by its id",
+      "tool_call": "a tool call's output, by its id",
+      "task": "a task's title and description, by its id",
+      "task_comment": "a task comment, by its id",
+      "approval": "an approval's answers and note, by its id",
+      "owner_decision": "a blocker the owner resolved with a note, by its id",
+      "merge_receipt": "a merge receipt, by its id",
+      "note": "a file orbit wiki import registered, by its id"
+    },
+    "repoKinds": ["design_doc", "code", "contract"],
+    "recordKinds": ["turn", "event", "tool_call", "task", "task_comment", "approval", "owner_decision", "merge_receipt", "note"],
+    "verdicts": {
+      "verified": "the quote is in the original",
+      "not_found": "the quote is not in the original; a quote shorter than rules.quoteMinChars once folded is not checked, and is not found either",
+      "no_quote": "the footnote gave no quote, so nothing could be checked",
+      "unresolved": "the record it names is not one of this account's — another owner's, deleted, or none at all; a repository footnote is never unresolved"
+    },
+    "checkers": {
+      "server": "a record's footnote: the server read the record again and checked the quote itself",
+      "runner": "a repository footnote: the runner checked the quote at sha, in the checkout the server does not have"
+    },
+    "withdrawReasons": ["rejected", "retired", "superseded", "anchor_changed", "anchor_missing"],
+    "blockKinds": {
+      "paragraph": "a paragraph, cut into sentences",
+      "item": "a list item, cut into sentences",
+      "heading": "a heading inside the section: its text, which counts as a heading for factTokens",
+      "code": "a fenced code block: its text, which is not checked"
+    },
+    "rules": {
+      "needsReviewAbove": 0.05,
+      "quoteMinChars": 4,
+      "quoteMaxChars": 1000,
+      "excerptMaxChars": 4000,
+      "markdownMaxChars": 20000,
+      "sectionsPerWrite": 20,
+      "footnotesPerSection": 200,
+      "textMaxChars": 1000,
+      "errorsMax": 200
+    },
+    "rulesNote": "Lengths are counted in characters (Unicode code points). needsReviewAbove is a share of all the document's sentences, withdrawn ones included: more than it marks the whole document, and exactly 5% does not. quoteMinChars counts the folded quote (verification.normalization). sectionsPerWrite is plan.rules.sectionsMax, so one write can carry a whole document. errorsMax is the most errors one refusal lists; its message counts them all.",
+    "schema": {
+      "write": ["planVersion", "repoSha", "model", "sections"],
+      "section": ["key", "materialSha256", "markdown", "footnotes"],
+      "repoFootnote": ["kind", "path", "sha", "lines", "section", "symbol", "quote", "excerpt", "verified", "viaEntryId"],
+      "recordFootnote": ["kind", "ref", "chars", "quote", "viaEntryId"],
+      "lines": ["start", "end"],
+      "chars": ["start", "end"]
+    },
+    "schemaNote": "Every field a write may carry, at each level, and no other: anything else is refused WIKI_DOC_INVALID. planVersion, repoSha (the origin/main commit the run read the repository at, 40 lowercase hex) and sections are required; model is not. A section needs key (a section of the confirmed plan's document, once per write), materialSha256 (64 lowercase hex), markdown (not blank, at most rules.markdownMaxChars) and footnotes (at most rules.footnotesPerSection, and may be empty). A repository footnote (repoKinds) needs path, sha (7-64 lowercase hex: one with no sha is refused), lines { start, end } (1-based, inclusive) and verified, the runner's own check; section, symbol, quote, excerpt and viaEntryId are optional. A record footnote (recordKinds) needs ref, the record's id; chars { start, end } (code points of the record's redacted text, end exclusive), quote and viaEntryId are optional. viaEntryId, when given, is an entry of the space. A quote is at most rules.quoteMaxChars; null or left out is no quote.",
+    "markdown": "A section's body is Markdown with footnote markers [n], n naming its section's footnotes[n-1]. A first line that is a heading is the section's own title, which the plan names, and is dropped. A fenced code block is one code block and is not checked; any other heading line is a heading block; a list item (-, *, +, 1., 1), 1、) is an item block, and an indented line under it continues it; other lines up to a blank line are one paragraph (a leading > is dropped, a line of three dashes, stars or underscores is skipped). Paragraphs and items are cut into sentences as articles.validation.sentences cuts an article — at 。！？, and at a full stop or an ASCII ? or ! before a space or the line's end, outside code spans — so a ； ends nothing. A marker outside a code span names a footnote; one outside 1 to the section's footnote count names none and is dropped (stats.markersDropped), and a run of markers with no words is not a sentence. A section with no sentence is refused.",
+    "verification": {
+      "records": "The server reads the record again, among the account's own rows, through the one reader a record has (WikiService.sourceText, whose texts wiki-verify-evidence.ts defines: runEventText for an event, a tool call's name, input and output together, an approval's answers and note — and the plan it decided — a merge receipt's and an owner decision's line as the dossier writes them), so a document and an entry citing the same record check their quotes against the same words; it redacts it with the shared redactor and the owner's workspace.env values, and looks for the quote — redacted the same way — in it, both folded (normalization). chars, when given, narrows the search to that range. The range the quote was found at is stored (char_start, char_end: code points of the redacted text), and so are the record's session, number, time and label, for the page's link. A translated, paraphrased or spliced quote — two passages of the record joined as one — is not found.",
+      "repository": "The server has no checkout. A repository footnote carries the runner's own check of its quote against the lines it names (verified) and the commit it read them at (sha); it is stored as checked by the runner at that sha, and a footnote with no sha is refused. excerpt, when the runner sends it, is those lines as it read them, redacted, for the page to show.",
+      "normalization": "Before a quote is compared, quote and original alike are folded: Unicode NFC; the full-width punctuation ，。：；（）！？「」“”‘’、『』【】—– read as its ASCII counterpart; ** and __ and backticks dropped; a Markdown escape read as the character it escapes; every whitespace dropped. The original is compared a second time with each line's leading comment marker (//, ///, /*, *, */ or #) taken off, so a quote of a comment's words is found. A quote is one passage: an ellipsis is not a gap to skip."
+    },
+    "factTokens": "A sentence's fact tokens: each code span (its content); each ASCII identifier or path ([A-Za-z_][A-Za-z0-9_./-]*[A-Za-z0-9_]) of at least 3 characters that is not one of the, and, for, with, not, are, can, its, but, via; each number of two or more digits; and each number with a unit (秒 分钟 小时 天 个 条 次 % ms s MB KB) — matched in that order, lowercased, whitespace dropped.",
+    "classification": "A sentence with a footnote is sourced when one of its footnotes is verified and unverified when none is; withdrawn when one of them came through an entry withdrawal names. A sentence with none is a transition when every fact token in it is among those of the document's sourced sentences and headings — its plan sections' titles, the heading blocks of its written sections, its title and its question — and unsourced otherwise, its new tokens stored with it. The whole document is classified again each time a section of it is written, so a transition answers to what the other sections say now. The document is needs_review when its unsourced and unverified sentences are more than rules.needsReviewAbove of all of them; withdrawn sentences are not counted among those: they wait for their section to be written again.",
+    "fingerprint": "materialSha256 is the runner's: sha256 over the section's definition in the plan (title, kind, covers, length, sources) and the material it gathered for it, as it gathered it. The server does not recompute it; it compares it with the one stored.",
+    "repoSha": "Every section is stored with the origin/main commit it was generated at (repoSha, from the write that wrote it), and a document with its last write's. A maintenance run compares a section's repoSha with origin/main as it stands, and writes again a section whose design documents, code or contracts changed since (owner 2026-09-29: the wiki follows what agents write into docs/); that comparison is the run's, and the server only keeps the sha and hands it back (reads.writerState, reads.doc).",
+    "regeneration": "A section whose stored materialSha256 is the one a write names, and from which nothing was withdrawn (stale_at null), is not written again: its outcome is unchanged and its rows are left as they are. Every other section a write names is replaced whole, its sentences and footnotes with it. A write names the confirmed plan version it was written from (planVersion); one that is not the confirmed version is WIKI_PLAN_STALE and writes nothing. A section the confirmed plan's document no longer has is dropped when the document is next written. No clock rewrites anything (hard constraint 5): the maintenance run writes after facts arrived.",
+    "withdrawal": "When an entry is rejected, retired or superseded, or its anchor state becomes changed or missing, every sentence with a footnote that came through it (via entry) is withdrawn — status withdrawn, with when, why (withdrawReasons) and the entry — and its section is marked stale (stale_at), so the next maintenance run writes it again. It happens in the entry's own transaction, at its single state writer (WikiService.recomputeFlags, which every applyOp branch ends in; storage.singleWriter), so no path that moves an entry can forget it. A write with a footnote that comes through such an entry stores that sentence withdrawn, and its section stale, at once; and it takes its via entries FOR SHARE before anything else, so a rejection racing it waits for it and then withdraws what it wrote.",
+    "links": {
+      "sessionRecord": "A footnote on a turn, an event or a tool call carries the record's id (recordId) and the session it is in (sessionId), both read when the write checked it: wiki_source keeps a record's id alone, and the page needs the pair to link the record — web sessionRecordHref(sessionId, recordId), iOS SessionRecordLink.url(session:record:), which open the session at it through GET /api/sessions/:id/events/page?around=<recordId>. Any other record carries what it is in: an approval or a merge receipt its session (sessionId), a task comment its task (taskId), an owner decision its project (projectId), a note its path (notePath).",
+      "repository": "A repository footnote carries its path, sha and lines (path@sha#Lstart-end): the page links that file at that commit in the space's repository."
+    },
+    "view": {
+      "push": "Never in <orbit_wiki_context>: the push reads wiki_entry and nothing else.",
+      "source": "Never a source: no source kind names a document, a section, a sentence or a footnote (sourceRules.firstHand), so citing one is WIKI_SOURCE_UNRESOLVED.",
+      "agents": "Never returned by wiki_search or wiki_get: both read entries alone, and a document's ids are no entry's.",
+      "readers": "The owner, on the user door. Another owner's space or document is a plain 404."
+    },
+    "who": {
+      "write": "A maintenance run of the space (isWikiMaintenanceSession, maintenance.session) through the runner door, and an import the API server's container runs itself (origin import, no session and no user). Every other caller is refused WIKI_NOT_MAINTENANCE_SESSION, a headless call 400, another owner's space a plain 404; the user door has no write route. Every write asks requireConfirmedPlan first (plan.guard): with no confirmed plan it is WIKI_PLAN_UNCONFIRMED.",
+      "read": "The owner, on the user door."
+    },
+    "routes": {
+      "directory": "GET /api/wiki/spaces/:id/docs",
+      "doc": "GET /api/wiki/spaces/:id/docs/:slug",
+      "index": "GET /api/wiki/spaces/:id/doc-index",
+      "writerState": "GET /api/runner/wiki/spaces/:id/docs",
+      "write": "POST /api/runner/wiki/spaces/:id/docs/:slug"
+    },
+    "reads": {
+      "directory": "{ spaceId, plan: { version, confirmedAt } | null, docs: { total, written }, categories }: the confirmed plan's categories in its order (number from 1), each with its documents (number <category>.<n>, title, question, written, status, updatedAt, planVersion) and each document's sections (number, title, kind, written, stale). A space with no confirmed plan has none.",
+      "doc": "One document of the confirmed plan: its number, title, question, audience, scope (scopeOut's documents with their number and title), category, length, status, and when, from which plan version and at which origin/main commit (repoSha) it was written; its sections in the plan's order, each with the commit it was generated at and its blocks, a block's sentences each with its status, its footnote numbers, its new tokens and, once withdrawn, why, when and through which entry; its footnotes, numbered by first appearance — the same original and quote cited twice is one number — each with its kind, verdict, who checked it, its quote, its location (path@sha#Lstart-end, or <kind>:<record id>#c<start>-<end>) and what the page links to (links): a repository original's path, sha, lines, section, symbol and excerpt; a record's id (recordId), character range, session (sessionId, with recordId the pair a turn's, an event's or a tool call's deep link needs) and its title, number, time and label, task and project and their titles, a note's path; and its via entry; and the via entries as they stand now, with the footnotes each carried. A document of the plan not written yet is written false with its sections unwritten; one the plan does not have is a 404. counts and unsourcedShare are its sentences' as they stand.",
+      "index": "Every document of the confirmed plan, and every section whose title no other document of the plan shares — the ones every document has (known pitfalls, conventions, overview) are left out — each with its document's number and title, its category and whether it is written, in title order.",
+      "writerState": "{ spaceId, planVersion, docs: [{ slug, planVersion, status, repoSha, updatedAt, sections: [{ key, materialSha256, repoSha, stale, generatedAt }] }] }: what is written, for a run to tell which sections to write again — a stale one, one whose material changed, or one whose repoSha origin/main has moved past in what it cites."
+    },
+    "requests": {
+      "write": "{ planVersion, repoSha, model?, sections: [{ key, materialSha256, markdown, footnotes: [{ kind, path, sha, lines, section?, symbol?, quote?, excerpt?, verified, viaEntryId? } | { kind, ref, chars?, quote?, viaEntryId? }] }] }"
+    },
+    "tool": "none: no MCP tool reads or writes a document. Writing is a maintenance run's verb on the CLI; reading is the owner's, in the Wiki."
+  },
+
   "refusals": [
     { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
     { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },
@@ -1333,7 +1465,8 @@
     { "code": "WIKI_ARTICLE_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "An article write named an entry-set fingerprint that is not its topic's current one: the topic's entries changed while the articles were being written (articles.regeneration). Nothing is written; the next run writes them from the entries as they stand." },
     { "code": "WIKI_PLAN_GATE", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan draft, an owner's edit of the plan, a proposed change to it or the acceptance of one did not pass the plan's gate (plan.gate): errors[] lists everything it found, each with its check and where it is. Nothing is stored." },
     { "code": "WIKI_PLAN_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan request was built on a version that is no longer the space's newest (plan.versions), confirmed a version that is no longer a draft, or answered a proposal already decided. Nothing is written; read the plan again." },
-    { "code": "WIKI_PLAN_UNCONFIRMED", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A space's documents were to be written, or a change proposed to its plan, and the space has no plan its owner confirmed (plan.guard)." }
+    { "code": "WIKI_PLAN_UNCONFIRMED", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A space's documents were to be written, or a change proposed to its plan, and the space has no plan its owner confirmed (plan.guard)." },
+    { "code": "WIKI_DOC_INVALID", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A document write does not have the shape docs.schema gives it: a field it does not name, a repository footnote with no sha or no lines, a record footnote with no id, a section the confirmed plan's document does not have, a via entry that is not an entry of the space. errors[] lists everything it found, each { path, message }, the first docs.rules.errorsMax. Nothing is written." }
   ],
   "refusalRules": {
     "order": ["changesetSize", "schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "taint", "effect", "quota", "similar"],
@@ -1409,7 +1542,10 @@
           "GET /api/wiki/spaces/:id/plan/versions/:version",
           "POST /api/wiki/spaces/:id/plan/edits",
           "POST /api/wiki/spaces/:id/plan/versions/:version/confirm",
-          "POST /api/wiki/plan-proposals/:id/decide"
+          "POST /api/wiki/plan-proposals/:id/decide",
+          "GET /api/wiki/spaces/:id/docs",
+          "GET /api/wiki/spaces/:id/docs/:slug",
+          "GET /api/wiki/spaces/:id/doc-index"
         ]
       },
       "runner": {
@@ -1435,7 +1571,9 @@
           "GET /api/runner/wiki/spaces/:id/maintenance/check",
           "GET /api/runner/wiki/spaces/:id/plan",
           "POST /api/runner/wiki/spaces/:id/plan/drafts",
-          "POST /api/runner/wiki/spaces/:id/plan/proposals"
+          "POST /api/runner/wiki/spaces/:id/plan/proposals",
+          "GET /api/runner/wiki/spaces/:id/docs",
+          "POST /api/runner/wiki/spaces/:id/docs/:slug"
         ],
         "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION. The maintenance job's check (maintenance.job.check) also answers the space's owner's runner with no session, since a task's acceptance command runs with none.",
         "verificationRoutes": [
@@ -1494,7 +1632,8 @@
       "a verdict was recorded, after its transaction commits",
       "pending ops expired or were withdrawn",
       "a topic's articles were written, or a space's topics seeded, after the transaction commits",
-      "a version of a space's plan was stored or confirmed, or a change to it proposed or decided, after the transaction commits"
+      "a version of a space's plan was stored or confirmed, or a change to it proposed or decided, after the transaction commits",
+      "a document's sections were written, after the transaction commits"
     ],
     "notPublishedWhen": ["an idempotent replay", "a dryRun", "a request that recorded nothing"],
     "correctness": "Nothing depends on it. Dropping every announcement changes only how long a client waits: clients re-read on focus and on reconnect.",

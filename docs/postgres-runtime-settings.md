@@ -50,6 +50,20 @@
 
 代价就是那 20 秒，且只付一次。
 
+### 0.2 落地记录（2026-09-29）
+
+main `0022dd5f9`（合入 `030ca7f98`）。重建前确认：compose 在 `/root/orbit` 下解析出的 PGDATA 挂载源是
+`/root/orbit/data/postgres`、当晚的 `pg_basebackup` 已在 00:23:34 结束、没有跑了 10 秒以上的查询、
+`--dry-run` 只重建 `orbit-postgres`。
+
+| | |
+|---|---|
+| `docker compose up -d --no-deps --wait postgres` | 00:31:47.8 → 00:32:06.3 健康，**约 18.5 秒** |
+| 容器 | `9276427a…`（09-24 起）→ `997b7775…`，挂载源不变 |
+| 数据 | 重建前后 `user=6 session=4557 task=112005`、已完成迁移 330 条，一字不差 |
+| apiserver | 162 行连接类报错，**全部落在 00:31:51–00:32:00**；健康之后零报错，`/api/health` 200 |
+| 其余 | pg_stat_statements 跨重启保留（统计起点仍是 09-19 20:03）；WAL 归档照常推进、`failed_count=0`；`postgresql.auto.conf` 未动 |
+
 **配置现在其实分在三处，记一笔：** compose 的 `command`（本文件管的）；`postgresql.conf` 里是 initdb 的
 默认值（`shared_buffers = 128MB` 就在这里）；`postgresql.auto.conf` 里有一行 `log_lock_waits = 'on'`——
 那是 2026-09-19 17:06 有人用 `ALTER SYSTEM` 写的，与项目规范相悖，但它有用（§2 的锁等待数据就靠它），
@@ -260,10 +274,54 @@ pid 1909054（`backend_start` 2026-09-03 00:26:52，最后一条语句停在 00:
 
 ## 8. `idle_in_transaction_session_timeout` 生效的实证
 
-（落地后在生产上跑，结果见本节下方的记录。）
+2026-09-29 00:33Z，落地（00:32:06 容器健康）后在生产上跑。**没有用会话级 `SET` 缩短等待**——那只能证明机制，
+证明不了 compose 里那个值在生效——而是用集群默认值实打实等满 300 秒。
 
-**方法上的一个坑**：让后端进入 `idle in transaction` 的必须是**客户端停顿**，不能是服务端 `SELECT pg_sleep(n)`——
-`pg_sleep` 执行期间后端是 `active`，这个计时器根本不走。首轮我写在这里的配方就犯了这个错，已改。
+探针会话（`application_name=itx-timeout-probe`）：
+
+```
+ pid | idle_in_tx_timeout |    source    |    t_utc
+-----+--------------------+--------------+--------------
+ 403 | 5min               | command line | 00:33:48.525      ← 生效的就是 compose 命令行上的值
+
+BEGIN
+   xid    | took_lock | idle_from_utc
+----------+-----------+---------------
+ 67796024 |           | 00:33:48.533                          ← 拿了 xid，拿了一把 advisory 锁
+
+client 00:33:48: going idle inside the open transaction; no statement is running
+client 00:39:18: woke up, sending the next statement
+FATAL:  terminating connection due to idle-in-transaction timeout
+server closed the connection unexpectedly
+connection to server was lost
+psql exit=2
+```
+
+服务端日志：
+
+```
+2026-09-29 00:38:48.533 UTC [403] FATAL:  terminating connection due to idle-in-transaction timeout
+```
+
+| | |
+|---|---|
+| 进入闲置 | 00:33:48.533 |
+| 被服务端终止 | 00:38:48.533——**恰好 300.000 秒** |
+| 另一个会话 00:34:03 看到的 pid 403 | `idle in transaction`、`backend_xid=67796024`、持有 1 把 advisory 锁 |
+| 终止之后 | 后端消失；那把锁无人持有；`txid_status(67796024) = aborted`——事务被回滚，不再压住 xmin |
+
+探针那把锁用的是单个 bigint 键（`pg_advisory_xact_lock(hashtext('itx-timeout-probe')::bigint)`），与应用用的
+双 int 键不在同一个键空间，不会挡到任何真实请求；探针也没碰任何业务行。
+
+**方法上的两个坑，重跑时别再踩：**
+
+1. 让后端进入 `idle in transaction` 的必须是**客户端停顿**（psql 里 `\! sleep n`），不能是服务端
+   `SELECT pg_sleep(n)`——`pg_sleep` 执行期间后端是 `active`，这个计时器根本不走。首轮写在这里的配方就犯了这个错。
+2. 想用一个 PL/pgSQL 循环盯着 `pg_stat_activity` 等某个 pid 消失，**每轮要先 `PERFORM pg_stat_clear_snapshot()`**：
+   `pg_stat_activity` 在一个事务里只取一次快照，而整个 DO 块就是一个事务。这次的观察会话就因此一直看着
+   00:34:03 那张旧快照，直到被自己的 `statement_timeout` 砍掉——它先 `SET statement_timeout = '420s'`，
+   也确实是在 **420.0 秒**（00:34:03 → 00:41:03）而不是默认的 300 秒被砍，顺带证实了 §1 那个会话级逃生门有效。
+   终止本身不依赖它：服务端日志与探针自己的输出各自独立地记下了。
 
 首轮顺带量过一次**真实**的 idle-in-transaction 间隙：250ms 采样 `pg_stat_activity`，窗口 2026-09-17
 23:54:32Z → 00:01:42Z（7.2 分钟），抓到 **28 个不同后端的 90 次** idle-in-transaction：最长的一次 idle 间隙
