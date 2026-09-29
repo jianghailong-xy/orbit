@@ -492,6 +492,17 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // is on its number, an integer.
   'docId',
   'proposalId',
+  // The documents (migration 0326): the plan document and section a document and its section were
+  // written from, a sentence's section, a footnote's sentence, the entry a footnote came through or a
+  // withdrawal names, and a footnote's record on the page. Addresses a reader follows; none carries a
+  // foreign key (provenance), so each may 404 — never a fence.
+  'planDocId',
+  'planSectionId',
+  'sectionId',
+  'sentenceId',
+  'viaEntryId',
+  'withdrawnEntryId',
+  'recordId',
   // The plan's jobs (migration 0327): the job a check or a redraft names, and the owner who asked for
   // one (a history reference with no foreign key). Addresses a reader follows — never a fence.
   'jobId',

@@ -151,6 +151,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_PLAN_STALE',
   'WIKI_PLAN_UNCONFIRMED',
   'WIKI_PLAN_NO_JOB',
+  'WIKI_DOC_INVALID',
 ] as const;
 export type WikiRefusalCode = (typeof WIKI_REFUSAL_CODES)[number];
 
@@ -751,7 +752,7 @@ export interface WikiRefusal {
   code: WikiRefusalCode;
   message: string;
   /** `WIKI_SCHEMA`: every field that failed; `WIKI_PLAN_GATE`: everything the plan's gate found, each
-   *  also naming its check (`WikiPlanGateError`). */
+   *  also naming its check (`WikiPlanGateError`); `WIKI_DOC_INVALID`: everything wrong with a document write. */
   errors?: WikiFieldError[];
 }
 

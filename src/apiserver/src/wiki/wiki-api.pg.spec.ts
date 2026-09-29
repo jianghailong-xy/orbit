@@ -363,6 +363,8 @@ test('the refusals, limits and effect policy this door answers with are the cont
       ['WIKI_CURSOR_BEHIND', 409],
       ['WIKI_CURSOR_INVALID', 400],
       ['WIKI_DISABLED', 404],
+      // The documents (migration 0326, contract `docs.schema`).
+      ['WIKI_DOC_INVALID', 422],
       ['WIKI_IDEMPOTENCY_KEY_REUSED', 409],
       ['WIKI_KIND_OWNER_ONLY', 403],
       ['WIKI_NOT_MAINTENANCE_SESSION', 403],

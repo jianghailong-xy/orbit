@@ -68,6 +68,7 @@ import {
   storedAnchors,
   type AnchorReportEntry,
 } from './wiki-anchors';
+import { docWithdrawReason, withdrawDocSentences } from './wiki-doc-withdrawal';
 import { mergeReceiptText, ownerResolutionText } from './wiki-dossier';
 import { wikiMaintenanceRunChanges } from './wiki-maintenance-breaker';
 import { checkWikiMaintenanceInput, setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
@@ -197,6 +198,7 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_PLAN_STALE: 409,
   WIKI_PLAN_UNCONFIRMED: 409,
   WIKI_PLAN_NO_JOB: 409,
+  WIKI_DOC_INVALID: 422,
 };
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */
@@ -3489,11 +3491,16 @@ export class WikiService {
    *
    * `unsupported`: a confirmed entry that every live source has left (design §9, Delete means forget).
    * What the owner wrote is never marked — an owner's entry is not supported by quotes it did not take.
+   *
+   * And the documents (contract `docs.withdrawal`): an entry rejected, retired or superseded, or whose
+   * anchor changed or went missing, withdraws every document sentence that came through it, in this same
+   * transaction — here, because every branch of `applyOp` ends here, so no path that moves an entry can
+   * leave a sentence standing on it.
    */
   private async recomputeFlags(tx: Tx, ownerId: string, entryId: string): Promise<void> {
     const entry = await tx.wikiEntry.findFirst({
       where: { id: entryId, ownerId },
-      select: { id: true, trust: true, status: true, currentRevision: true },
+      select: { id: true, trust: true, status: true, currentRevision: true, anchorState: true },
     });
     if (!entry) return;
     const revision = await tx.wikiEntryRevision.findFirst({
@@ -3512,6 +3519,8 @@ export class WikiService {
       where: { id: entryId, ownerId },
       data: { unsupported, challenged },
     });
+    const withdraws = docWithdrawReason(entry);
+    if (withdraws) await withdrawDocSentences(tx, ownerId, entryId, withdraws);
   }
 
   /**
