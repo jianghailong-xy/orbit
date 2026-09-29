@@ -3,7 +3,7 @@
  *
  * WHAT A START IS
  * ---------------
- * Until migration 0330 nothing recorded that a project had started. "Start the project" confirmed
+ * Until migration 0331 nothing recorded that a project had started. "Start the project" confirmed
  * the criteria and, as a side effect of the same press, turned `coordinator_enabled` on; whether a
  * project had begun was then read back off that switch and off whether a confirmation existed. The
  * owner never chose where the tasks land, Automatic was switched on without being named, and the
@@ -25,7 +25,7 @@
  *       line by the default rule over its tasks and dependencies as they stand, Automatic on, its
  *       concurrency limit left alone;
  *   (8) on a started project that door only confirms;
- *   (9) the backfill: each of the three ways a project could start before 0330 gives it a start
+ *   (9) the backfill: each of the three ways a project could start before 0331 gives it a start
  *       time, the earliest one it has, and a project with none of them stays unstarted.
  *   (10) a project with no repository can be started on main, and not on a branch it cannot have.
  *
@@ -86,7 +86,7 @@ const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
 const MIGRATION = readFileSync(
-  path.resolve(__dirname, '../../prisma/migrations/0330_project_started_at/migration.sql'),
+  path.resolve(__dirname, '../../prisma/migrations/0331_project_started_at/migration.sql'),
   'utf8',
 );
 

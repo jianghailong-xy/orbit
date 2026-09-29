@@ -41,7 +41,7 @@
  * It starts the project. `ProjectsService.create` no longer writes `coordinator_enabled`, so a new
  * project lands on the column's false and the coordinator may do nothing until a person has said
  * what would settle it — which makes this door the one authorization to work on a project, and its
- * HUMAN_ONLY refusal the thing that stops an agent from authorising its own. (Since 0330 that start
+ * HUMAN_ONLY refusal the thing that stops an agent from authorising its own. (Since 0331 that start
  * is the one `POST /projects/:id/start` makes, with the default settings — `started_at` written and
  * Automatic on — and on a project already started this door only confirms:
  * `project-start-door.pg.spec.ts` (7) and (8).) `(5)` asserts both
@@ -697,7 +697,7 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     assert.ok(!message.content.includes(AUTOMATIC), 'a task Orbit starts by itself is not');
 
     // What the clients draw instead of those words: the same facts, as a card, on the queued turn —
-    // and, off the same key, nothing at all for somebody else. Since 0330 a press on this door
+    // and, off the same key, nothing at all for somebody else. Since 0331 a press on this door
     // starts the project with the default settings and records them (`project-start-door.pg.spec.ts`
     // (7)), so the card carries those too: main, because this workspace names no repository to
     // branch; Automatic on; the concurrency limit the project already had; no merge check.

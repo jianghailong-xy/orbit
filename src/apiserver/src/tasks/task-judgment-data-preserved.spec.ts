@@ -1408,7 +1408,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or
       // DELETE: every new table starts empty.
       '0325_wiki_plan',
-      // A project's start as a fact of its own (0330): one nullable `ADD COLUMN` with no default on
+      // A project's start as a fact of its own (0331): one nullable `ADD COLUMN` with no default on
       // `project` (`started_at`, catalog-only), one nullable `ADD COLUMN` with no default on
       // `project_standard_set_confirmation` (`started_with`) with one CHECK every stored row satisfies
       // as it reads NULL, and one UPDATE that backfills `started_at` — and writes nothing else — on the
@@ -1420,7 +1420,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers/functions, creates or replaces no function, trigger, enum or type — so it is not
       // another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP`. No INSERT or
       // DELETE, and no task, criterion or confirmation row is rewritten.
-      '0330_project_started_at'],
+      '0331_project_started_at'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

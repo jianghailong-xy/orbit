@@ -334,7 +334,7 @@ export async function tellCoordinatorProjectStarted(
  *
  * Not started is `started_at` still null on an OPEN project that states criteria: nothing has
  * started it — neither the start card nor the older confirmation card, and none of the ways a
- * project could start before the column existed, which migration 0330 backfilled. The Automatic
+ * project could start before the column existed, which migration 0331 backfilled. The Automatic
  * switch is not one of them any more: it says how the project runs, not whether it has started. A
  * project without criteria has no card to press, so it is not held here.
  */

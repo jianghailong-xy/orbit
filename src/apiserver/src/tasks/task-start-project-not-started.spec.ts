@@ -12,7 +12,7 @@ import { fakeReceiptStore } from './task-run-receipt-fake';
  * while its owner was still being asked "Start the project". The runner's door — the MCP tool and
  * `orbit task start` — is refused until the owner has started it; the owner's own Run is not.
  *
- * Started is `project.started_at` (migration 0330), which only a start writes. Until then it was read
+ * Started is `project.started_at` (migration 0331), which only a start writes. Until then it was read
  * off `coordinator_enabled` and whether a confirmation existed, so the Automatic switch started a
  * project too; it says how a project runs now, not whether it has started.
  */
