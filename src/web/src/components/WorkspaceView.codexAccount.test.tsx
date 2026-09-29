@@ -167,11 +167,16 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   };
   // The plan gauge, not the context ring beside it (which shares the pill class).
   const usage = () => mounted().querySelector<HTMLElement>('button.composer-usage[aria-label^="Plan usage"]');
-  /** The open list's account rows (portaled out of the mount), as "name quota". */
-  const accountRows = () =>
-    [...document.querySelectorAll<HTMLElement>('.np-account')].map((row) =>
+  /** The open list's account rows (portaled out of the mount), as "name quota". Waits for the list to
+   *  paint: a portal opens some frames after the press, and a loaded host takes longer than a local run. */
+  const accountRows = async () => {
+    await act(async () => {
+      await vi.waitFor(() => expect(document.querySelector('.np-account')).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+    return [...document.querySelectorAll<HTMLElement>('.np-account')].map((row) =>
       [...row.querySelectorAll('.np-row-name, .np-row-model')].map((part) => part.textContent).join(' '),
     );
+  };
   const pickedRow = () => document.querySelector<HTMLElement>('.np-account.picked .np-row-name')?.textContent;
   /** Which Codex account the quota gauge's popover names (portaled out of the mount), and the note
    *  under it: opened by a press, as on a phone. */
@@ -295,7 +300,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     composerRowNamesNoAccount();
 
     await click(mounted().querySelector('.np-card'));
-    expect(accountRows()).toEqual(['Automatic resets soonest', 'Default 5h 100%', 'Work Weekly 0%']);
+    expect(await accountRows()).toEqual(['Automatic resets soonest', 'Default 5h 100%', 'Work Weekly 0%']);
     expect(pickedRow()).toBe('Automatic');
     await click(mounted().querySelector('.np-card'));
 
@@ -331,7 +336,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
     await click(mounted().querySelector('.np-card'));
-    expect(accountRows()).toEqual(['Default 5h 100%', 'Work Weekly 0%']);
+    expect(await accountRows()).toEqual(['Default 5h 100%', 'Work Weekly 0%']);
     expect(pickedRow()).toBe('Work');
     await click(mounted().querySelector('.np-card'));
 
@@ -417,13 +422,23 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   });
 
   /** The composer's model menu, opened, with its Provider submenu open: that submenu's rows. */
+  /** Waits for `what` to render, some frames after the click that asked for it: the menus are portals,
+   *  and a loaded CI host takes longer to paint one than a local run does. */
+  const render = async (what: () => Element | null) => {
+    await act(async () => {
+      await vi.waitFor(() => expect(what()).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+  };
   const providerMenuRows = async () => {
     await click(mounted().querySelector('button.composer-model-chip'));
+    await render(() => document.querySelector('.ant-dropdown-menu'));
     const provider = [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-submenu-title')].find((el) =>
       el.textContent?.startsWith('Provider'),
     );
     if (!provider) return null;
     await click(provider);
+    // Its items too: the submenu opens on a later frame than the title does.
+    await render(() => document.querySelector('.ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item'));
     return [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item')];
   };
   /** A row as it reads: its text, and ✓ where it is ticked. */
