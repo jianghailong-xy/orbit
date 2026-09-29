@@ -41,30 +41,37 @@ extension PlatformImage {
         #endif
     }
 
-    /// A profile photo as it is sent: the middle square of this image, scaled down to at most `side`
+    /// A profile photo as it is sent: the square `crop` of this image in its own points (the crop
+    /// screen's, `AvatarCrop.cropRect`) — its middle square without one — scaled down to at most `side`
     /// pixels, as a JPEG on white. The server keeps what it is given, so the size is decided here.
-    func orbitAvatarJPEG(side: Int = 512) -> Data? {
+    func orbitAvatarJPEG(crop: CGRect? = nil, side: Int = 512) -> Data? {
         #if os(macOS)
         guard let source = cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let pixelsPerPoint = size.width > 0 ? CGFloat(source.width) / size.width : 1
         #elseif os(iOS)
         // Redrawn first, so a camera photo's orientation is in its pixels rather than its metadata.
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         let upright = UIGraphicsImageRenderer(size: size, format: format).image { _ in draw(at: .zero) }
         guard let source = upright.cgImage else { return nil }
+        let pixelsPerPoint = scale
         #endif
+        let bounds = CGRect(x: 0, y: 0, width: source.width, height: source.height)
         let edge = min(source.width, source.height)
-        let crop = CGRect(x: (source.width - edge) / 2, y: (source.height - edge) / 2, width: edge, height: edge)
-        guard edge > 0, let square = source.cropping(to: crop) else { return nil }
-        let out = min(edge, side)
-        guard let context = CGContext(data: nil, width: out, height: out, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        let square = crop.map {
+            CGRect(x: $0.minX * pixelsPerPoint, y: $0.minY * pixelsPerPoint,
+                   width: $0.width * pixelsPerPoint, height: $0.height * pixelsPerPoint).integral.intersection(bounds)
+        } ?? CGRect(x: (source.width - edge) / 2, y: (source.height - edge) / 2, width: edge, height: edge)
+        guard !square.isEmpty, let cut = source.cropping(to: square) else { return nil }
+        let out = min(Int(min(square.width, square.height)), side)
+        guard out > 0, let context = CGContext(data: nil, width: out, height: out, bitsPerComponent: 8, bytesPerRow: 0,
+                                               space: CGColorSpaceCreateDeviceRGB(),
+                                               bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
         let frame = CGRect(x: 0, y: 0, width: out, height: out)
         context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
         context.fill(frame)
         context.interpolationQuality = .high
-        context.draw(square, in: frame)
+        context.draw(cut, in: frame)
         guard let scaled = context.makeImage() else { return nil }
         #if os(macOS)
         return NSBitmapImageRep(cgImage: scaled).representation(using: .jpeg, properties: [.compressionFactor: 0.85])
