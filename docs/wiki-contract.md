@@ -26,6 +26,12 @@ T4 检索、T5 runner 工具、T6 推送、T7 实时事件、T8–T10 客户端�
 归主题先看条目锚到的代码路径；脚注和字数由代码校验；一个新拒绝码 `WIKI_ARTICLE_STALE`，见新增的 §18；迁移
 `0317_wiki_topic_articles`，JSON 里是 `articles` 一节。
 
+**判据 11（阶段 2，2026-09-29）：Wiki plan**：写文档之前先有 plan——大类、文档、每篇的读者与范围、大纲，以及每一节从哪里取材；
+本地模型起草，服务端检查闸把关（schema、篇数、受保护的篇、引用），owner 只经 JWT 门确认；plan 留版本，已确认的版本不再改动；
+维护作业落不进任何一节的知识产出「plan 修改建议」，owner 接受后才变成新草稿。三个新拒绝码 `WIKI_PLAN_GATE` /
+`WIKI_PLAN_STALE` / `WIKI_PLAN_UNCONFIRMED`，写文档的入口先调 `requireConfirmedPlan`，见新增的 §21；迁移 `0325_wiki_plan`，
+JSON 里是 `plan` 一节。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -40,6 +46,7 @@ T4 检索、T5 runner 工具、T6 推送、T7 实时事件、T8–T10 客户端�
 | Automatic 核实的行为测试 | `src/apiserver/src/wiki/wiki-verify.pg.spec.ts`（服务端），`src/runner-go/wiki_verify_test.go`（`orbit wiki verify`，假 vLLM 端点） |
 | 案卷与游标的行为测试 | `src/apiserver/src/wiki/wiki-dossier.pg.spec.ts`（服务端），`src/runner-go/wiki_dossier_test.go`（`orbit wiki dossier` / `orbit wiki cursor advance`） |
 | 文章的行为测试 | `src/apiserver/src/wiki/wiki-articles.pg.spec.ts`（服务端），`src/runner-go/wiki_articles_test.go`（`orbit wiki articles`，假 vLLM 端点），`WikiArticlesContractTests.swift`（OrbitKit） |
+| plan 的行为测试 | `src/apiserver/src/wiki/wiki-plan.pg.spec.ts`（服务端：检查闸、版本、确认、修改建议、跨租户），`src/runner-go/wiki_plan_test.go`（runner 门三条路由与检查闸的错误），`WikiPlanContractTests.swift`（OrbitKit） |
 
 **本任务不做**：服务、控制器、MCP 工具、推送、实时事件的实现，以及任何 UI。它们各自的任务照本契约写。
 
@@ -1081,3 +1088,95 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
   东西」和最后一次错误的第一行；kind `wiki-maintenance-failing`，thread `wiki-<space>`，不改角标。在语句之后、任何事务之外发，尽力而为：
   手机没响，失败照样记下。
 - 成功的运行把计数清零（§16.4），下一轮连续失败到它自己的第 3 次再推一次。
+
+## 21. Wiki plan：先有 plan，owner 确认后才写文档（判据 11）
+
+JSON 里是 `plan`；迁移 `0325_wiki_plan`；服务端在 `src/apiserver/src/wiki/wiki-plan.ts`（检查闸、版本、修改建议、`requireConfirmedPlan`），
+user 门在 `wiki/wiki-plan.controller.ts`，runner 门在 `runner-api/runner-wiki-plan.controller.ts`；共享类型在 `src/shared/src/wikiPlan.ts`，
+runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作业（`orbit wiki plan draft / revise`）、按 plan 写文档和客户端各有
+自己的任务，照本节写。
+
+### 21.1 四张表与版本
+
+- `wiki_plan` 一行是 plan 的**一个版本**：版本号（每个 space 从 1 数起）、状态、谁做的（`origin`：`maintenance` 是维护会话的起草作业，
+  `owner` 是 owner 的编辑或接受的修改建议）、修订的哪一版（`base_version`）、大类（JSON）、声明的「需新增」字段、这一版被要求的
+  篇数范围、检查闸报告、runner 报告的仓库引用核对结果与对应的 sha、谁在何时确认。
+- `wiki_plan_doc` 一行一篇：大类、slug、标题、读者带着的问题、写给谁、含与不含（不含的归到哪篇）、预计篇幅、是否受保护。
+- `wiki_plan_section` 一行一节：顺序、在本篇内稳定的 `key`、标题、类别、讲什么、篇幅、材料来源条件。
+- `wiki_plan_proposal` 一行一条修改建议：理由、改动内容、由哪些事实引起、状态与 owner 的回答。
+- 状态：`draft`（过了闸、等 owner）、`confirmed`（owner 确认的、文档据以写的那一版）、`superseded`（被更新的草稿或新的确认取代，
+  原样留作历史）。每个 space 至多一个草稿、至多一个已确认版本（两个部分唯一索引）。
+- **已确认的版本不再改动**：篇和节只插入；起草、编辑、接受建议都产生新版本，在 space 行的锁（`FOR NO KEY UPDATE`）下一个事务写完。
+  一个版本唯一会被更新的是它自己那一行 `wiki_plan` 的状态（被确认、被取代）。所以 owner 确认的那一版，就是文档据以写的那一版，一字不差。
+- 草稿和编辑都要写明它建在哪一版上（`baseVersion`，首个草稿为 null），而且必须是当前最新的未取代版本（有草稿就是草稿，否则是已确认版）；
+  否则 `WIKI_PLAN_STALE`（409），什么都不写。接受建议建在它找到的最新版本上，写入期间 plan 变了也同样 409。
+
+### 21.2 plan 的形状（`plan.schema`）
+
+- 草稿是 `{ categories, docs, newFields? }`，两个都是列表：文档用大类的 `key` 指明所属大类，大类和文档都按目录顺序排。
+- 大类：`key`（slug）、`title`、`question`、`forAgents`（给 agent 的开发约定单列一类，判据 11）。
+- 文档：`category`、`slug`、`title`、`question`、`audience`、`scopeIn`、`scopeOut: [{ text, docs: [slug] }]`、`length: { min, max }`、
+  `protected`、`sections`；`audience`、`scopeIn`、`sections` 不能为空。
+- 节：`key`（可省，服务端给：沿用上一版同标题那节的 key，否则下一个 `s<n>`）、`title`、`kind`（十类闭集：overview、concepts、flow、
+  interface、data、ops、pitfalls、decisions、conventions、other）、`covers`、`length`、`sources`。
+- `sources`：`docs: [{ path, section }]`（设计文档章节）、`code: [{ path, symbols }]`（代码文件与符号）、`contracts: [{ path }]`、
+  `sessions`（会话条件，或 null）：`projects`（按 id 或完整标题）、`since` / `until`（`YYYY-MM-DD` 或 null）、`keywords`、`anchorPaths`、
+  `entryKinds`、`topics`（本 space 的主题 slug）、`evidence`（要找什么样的原话）。
+- **需新增的字段**：schema 没有的字段一律拒。模型真需要新字段时，在 `newFields` 里声明 `{ at, name, why }`（`at` 是 category、doc 或
+  section），值放进该对象的 `extra` 里、按名字存，和 schema 自己的字段分开；检查闸报告的 `needsNewFields` 列出来给 owner 看。声明的名字
+  已是 schema 字段的拒，`extra` 里没声明的名字也拒。owner 的编辑和修改建议只能用所改版本已声明的字段。
+
+### 21.3 检查闸（`plan.gate`）
+
+四项，按顺序跑，全部跑完一起回答，不在第一个错误处停：
+
+| check | 查什么 |
+|---|---|
+| `schema` | 每个字段都在 schema 里（或已声明为需新增），类型对、长度在 `rules` 内；节的类别在闭集里；大类 key、文档 slug、同篇的节 key 不重复 |
+| `docCount` | 篇数在目标范围内：请求没写 `target` 时是 `rules.docsMin`–`rules.docsMax`（20–35），写了就按它（上限 `docsCeiling` 200） |
+| `protected` | 被修订版本里受保护的篇，在新版本里原样保留：slug、大类、字段、各节及其顺序都不变（节的 key 不算）；只有 owner 能把一篇设为受保护，草稿或建议自己设的拒。owner 自己的编辑不查这一项 |
+| `references` | 会话条件里的项目是 owner 的（按 id，或只有一个项目叫这个名字的完整标题）、主题是本 space 的、条目 kind 在闭集里；文档的大类是本 plan 的大类；`scopeOut` 指向的篇是本 plan 的篇；建议的事实是本 space 的条目或 owner 的会话 |
+
+- 不过闸：`WIKI_PLAN_GATE`（422），`errors[]` 逐条给出 `{ check, path, message }`，`path` 从请求根算起
+  （草稿是 `plan.docs[3].sections[2].sources.sessions.projects[0]`，编辑是 `doc.…` / `section.…`，建议是 `change.doc.…`）；编辑和建议
+  会让整个 plan 变成什么样，关于那份结果的错误按结果 plan 的位置写（`plan.docs[20].protected`）。最多列 `rules.errorsMax`（200）条，
+  消息里写总数。什么都不存，起草作业把清单交回模型重做。
+- **仓库引用不在服务端查**：文件、docs 章节、符号、契约只在 checkout 里有，服务端没有。起草作业在 runner 上、在某个 sha 上核对，随草稿报
+  `repoCheck: { sha, checked, missing: [{ kind, ref, at }] }`（`kind` 为 file / docSection / symbol / contract）；服务端原样存在版本上
+  （`repo_sha`、`repo_check`），不评判。owner 做出的版本没有 runner 核对过，这两项为空。
+- 过了闸的版本存检查闸报告：`{ checkedAt, checks（各项 passed；owner 编辑时 protected 为 skipped）, docs, target, needsNewFields }`。
+
+### 21.4 修改建议（`plan.proposals`）
+
+- 维护作业遇到落不进 plan 任何一节的新知识，就提一条建议：理由（`reason`）、改动内容（`change: { doc, category? }`：这篇文档应有的样子
+  ——按 slug 替换 plan 里的那篇，或者新增一篇；需要新大类时一并给出）、由哪些事实引起（`facts: [{ kind: entry | session, id }]`）。
+- 提建议要求 space 已有确认的 plan（否则 `WIKI_PLAN_UNCONFIRMED`）；建议对着已确认版本过闸（含受保护检查），存为 `pending`。
+  **接受之前，plan 的任何版本都不变。**
+- owner 拒绝：只结算这条建议（可附 note），plan 不动。owner 接受：把文档放进当前最新版本（替换同 slug 的篇，或插在同大类最后一篇之后），
+  **重新过闸**（plan 可能已经变了），过了就产生新草稿（`origin: owner`，记下 `proposal_id`），建议记 `accepted` 与 `resultVersion`，
+  二者在一个事务里；没过就 `WIKI_PLAN_GATE`，建议保持 pending。新草稿照常等 owner 确认。
+- 已决定的建议再回答：`WIKI_PLAN_STALE`。
+
+### 21.5 守卫：`requireConfirmedPlan`
+
+- `requireConfirmedPlan(db, { ownerId, spaceId })`：返回 space 已确认的版本 `{ id, version, confirmedAt }`，没有就抛
+  `WIKI_PLAN_UNCONFIRMED`（409）。只有草稿不算。写文档的入口（判据 9 的任务）在写之前调它，可传入自己持有的事务。
+
+### 21.6 谁能做什么，路由
+
+- **runner 门**（`maintenanceRoutes`）：只对本 space 的维护会话（`isWikiMaintenanceSession`）开放；别的会话 `WIKI_NOT_MAINTENANCE_SESSION`，
+  不带会话头 400，别的 owner 的 space 404。
+  - `GET /api/runner/wiki/spaces/:id/plan`：当前已确认版本、草稿、待定建议；
+  - `POST /api/runner/wiki/spaces/:id/plan/drafts`：`{ baseVersion, target?, plan, repoCheck, model? }`，过闸存为新草稿；
+  - `POST /api/runner/wiki/spaces/:id/plan/proposals`：`{ reason, change, facts }`，过闸存为待定建议。
+- **user 门**：只认 JWT，owner 本人；带会话头的请求（任何角色）一律 `WIKI_OWNER_CHANNEL_ONLY`，读也一样，在读任何东西之前拒。
+  别的 owner 的 space、版本、建议一律 404。runner 门没有任何确认或决定的路由，也不做 MCP 工具（硬约束 2）。
+  - `GET /api/wiki/spaces/:id/plan`：`{ spaceId, confirmed, draft, proposals }`；
+  - `GET /api/wiki/spaces/:id/plan/versions`：全部版本，新的在前（版本号、状态、来源、修订自哪版、篇数、时间）；
+  - `GET /api/wiki/spaces/:id/plan/versions/:version`：某一版全文；会话条件里的项目读作 `{ id, title }`（标题是现在的，项目已删为 null）；
+  - `POST /api/wiki/spaces/:id/plan/edits`：`{ baseVersion, docSlug, doc }` 改一整篇（新 slug 即改名），或
+    `{ baseVersion, docSlug, sectionKey, section }` 改其中一节，产生新草稿；
+  - `POST /api/wiki/spaces/:id/plan/versions/:version/confirm`：确认草稿，原已确认的版本被取代；不是草稿的 `WIKI_PLAN_STALE`；
+  - `POST /api/wiki/plan-proposals/:id/decide`：`{ action: accept | reject, note? }`。
+- 每次存下版本、确认、提出或决定建议，事务提交后发一次 `wiki.changed`（只带 space id）。
+- plan 不是知识：不进推送块，不能当出处，`wiki_search` / `wiki_get` 不返回它。

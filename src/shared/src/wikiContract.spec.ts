@@ -83,6 +83,19 @@ import {
   wikiMaintenanceRunSessions,
 } from './wikiMaintain';
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
+import {
+  WIKI_PLAN_FACT_KINDS,
+  WIKI_PLAN_GATE_CHECKS,
+  WIKI_PLAN_NEW_FIELD_LEVELS,
+  WIKI_PLAN_ORIGINS,
+  WIKI_PLAN_PROPOSAL_ACTIONS,
+  WIKI_PLAN_PROPOSAL_STATUSES,
+  WIKI_PLAN_REPO_REF_KINDS,
+  WIKI_PLAN_RULES,
+  WIKI_PLAN_SCHEMA,
+  WIKI_PLAN_SECTION_KINDS,
+  WIKI_PLAN_STATUSES,
+} from './wikiPlan';
 
 /**
  * Holds `src/shared/src/wiki.ts` to `contracts/wiki.contract.json`, the hand-written authority
@@ -775,6 +788,67 @@ describe('wiki contract', () => {
     expect(status('WIKI_ARTICLE_STALE')).toBe(409);
     expect(CONTRACT.realtime.publishedWhen.some((when: string) => /articles were written/u.test(when))).toBe(true);
     expect(articles.cli.tool).toMatch(/^none/u);
+  });
+
+  it('ships the plan the contract states: its closed sets, rules and schema, its tables, its gate and its doors', () => {
+    // Criterion 11: a plan drafted by the model, held by a gate the server runs, confirmed by the owner.
+    const plan = CONTRACT.plan;
+    expect(plan.phase).toBe(2);
+    expect(plan.tables).toEqual(['wiki_plan', 'wiki_plan_doc', 'wiki_plan_section', 'wiki_plan_proposal']);
+    expect(plan.migration).toMatch(/0325_wiki_plan/u);
+    expect(keysOf(plan.statuses)).toEqual([...WIKI_PLAN_STATUSES]);
+    expect(keysOf(plan.origins)).toEqual([...WIKI_PLAN_ORIGINS]);
+    expect(keysOf(plan.sectionKinds)).toEqual([...WIKI_PLAN_SECTION_KINDS]);
+    expect(keysOf(plan.proposals.statuses)).toEqual([...WIKI_PLAN_PROPOSAL_STATUSES]);
+    expect(plan.proposals.actions).toEqual([...WIKI_PLAN_PROPOSAL_ACTIONS]);
+    expect(plan.proposals.factKinds).toEqual([...WIKI_PLAN_FACT_KINDS]);
+    expect(plan.gate.checks).toEqual([...WIKI_PLAN_GATE_CHECKS]);
+    expect(plan.newFields.levels).toEqual([...WIKI_PLAN_NEW_FIELD_LEVELS]);
+    expect(plan.rules).toEqual(WIKI_PLAN_RULES);
+    expect(plan.schema).toEqual(Object.fromEntries(Object.entries(WIKI_PLAN_SCHEMA).map(([level, keys]) => [level, [...keys]])));
+    // The target a draft is held to by default is the one the owner named: 20 to 35 documents.
+    expect([WIKI_PLAN_RULES.docsMin, WIKI_PLAN_RULES.docsMax]).toEqual([20, 35]);
+    // Every level that may hold a declared field carries `extra`, and declares nothing else by that name.
+    for (const level of WIKI_PLAN_NEW_FIELD_LEVELS) expect(WIKI_PLAN_SCHEMA[level]).toContain('extra');
+    for (const kind of WIKI_PLAN_REPO_REF_KINDS) expect(plan.gate.repo).toContain(kind);
+
+    // The migration's CHECKs are the contract's closed sets and numbers.
+    const sql = readFileSync(path.join(ROOT, plan.migration), 'utf8');
+    const quoted = (values: readonly string[]) => values.map((v) => `'${v}'`).join(', ');
+    expect(sql).toContain(`"status" IN (${quoted(WIKI_PLAN_STATUSES)})`);
+    expect(sql).toContain(`"origin" IN (${quoted(WIKI_PLAN_ORIGINS)})`);
+    expect(sql.replace(/\s+/gu, ' ')).toContain(`"kind" IN ( ${quoted(WIKI_PLAN_SECTION_KINDS)})`);
+    expect(sql).toContain(`"status" IN (${quoted(WIKI_PLAN_PROPOSAL_STATUSES)})`);
+    expect(sql).toContain(`"docs_max" <= ${WIKI_PLAN_RULES.docsCeiling}`);
+    expect(sql).toContain(`char_length("title") <= ${WIKI_PLAN_RULES.titleMaxChars}`);
+    expect(sql).toContain(`char_length("question") <= ${WIKI_PLAN_RULES.questionMaxChars}`);
+    expect(sql).toContain(`char_length("covers") <= ${WIKI_PLAN_RULES.coversMaxChars}`);
+    expect(sql).toContain(`char_length("reason") <= ${WIKI_PLAN_RULES.reasonMaxChars}`);
+    expect(sql).toContain(`"length_max" <= ${WIKI_PLAN_RULES.lengthMaxChars}`);
+    // A space has one draft and one confirmed version at a time.
+    expect(sql).toMatch(/UNIQUE INDEX IF NOT EXISTS "wiki_plan_space_id_draft_key" ON "wiki_plan" \("space_id"\) WHERE "status" = 'draft'/u);
+    expect(sql).toMatch(/UNIQUE INDEX IF NOT EXISTS "wiki_plan_space_id_confirmed_key" ON "wiki_plan" \("space_id"\) WHERE "status" = 'confirmed'/u);
+
+    // Its doors: the owner's six on the user door, a maintenance run's three on the runner door, and
+    // nothing the runner door has confirms or decides.
+    const routes = plan.routes;
+    const user: string[] = CONTRACT.agentSurface.doors.user.routes;
+    const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
+    for (const route of [routes.state, routes.versions, routes.version, routes.edit, routes.confirm, routes.decide]) expect(user).toContain(route);
+    for (const route of [routes.runnerState, routes.draft, routes.propose]) expect(maintenanceRoutes).toContain(route);
+    for (const route of [routes.runnerState, routes.draft, routes.propose]) expect(route).not.toMatch(/confirm|decide/u);
+    expect(plan.who.owner).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
+    expect(plan.who.draft).toMatch(/isWikiMaintenanceSession/u);
+    expect(plan.guard).toMatch(/^requireConfirmedPlan\(/u);
+    expect(plan.guard).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
+    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
+    expect(status('WIKI_PLAN_GATE')).toBe(422);
+    expect(status('WIKI_PLAN_STALE')).toBe(409);
+    expect(status('WIKI_PLAN_UNCONFIRMED')).toBe(409);
+    expect(CONTRACT.realtime.publishedWhen.some((when: string) => /plan was stored or confirmed/u.test(when))).toBe(true);
+    // No tool: confirming and deciding are the owner's (hard constraint 2).
+    expect(plan.tool).toMatch(/^none/u);
+    for (const tool of CONTRACT.agentSurface.tools) expect(tool).not.toMatch(/plan/u);
   });
 
   it('declares every refusal once, with a status and a scope, and names no code it does not declare', () => {
