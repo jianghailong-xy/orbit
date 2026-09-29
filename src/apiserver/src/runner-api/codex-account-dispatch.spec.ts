@@ -61,6 +61,10 @@ const ENGINES: RunnerEngineHealth[] = [
 interface Scenario {
   /** The workspace's choice (Workspace.codexAccount). */
   codexAccount?: string | null;
+  /** The session's own pick on the New Session screen (Session.codexAccount). */
+  sessionAccount?: string | null;
+  /** The workspace's Claude account (Workspace.claudeAccount). */
+  claudeAccount?: string | null;
   /** What the assigned runner reported (Runner.engines). */
   engines?: unknown;
   /** The session's provider identity; a configured slug also needs `customRow`. */
@@ -90,6 +94,7 @@ function sessionRow(s: Scenario) {
     prompt: 'hello',
     runtimeSessionId: 'thread-1',
     inboxLeaseOwner: LEASE_OWNER,
+    codexAccount: s.sessionAccount ?? null,
     branch: null,
     mergeTarget: null,
     workspaceId: WORKSPACE_ID,
@@ -115,6 +120,7 @@ function sessionRow(s: Scenario) {
       model: null,
       env: s.env ?? null,
       codexAccount: s.codexAccount ?? null,
+      claudeAccount: s.claudeAccount ?? null,
       workDir: '/srv/repo',
       autoInitGit: false,
       defaultMergeTarget: null,
@@ -216,6 +222,65 @@ test('a workspace that picked no account injects no CODEX_HOME: the runner resol
   // With no env of its own, still nothing: not even an empty CODEX_HOME for the runner to trip on.
   assert.equal((await claim({ codexAccount: null })).env, undefined);
   assert.equal((await reclaim({ codexAccount: null })).env, undefined);
+});
+
+test('an account picked for the session wins over its workspace\'s, through every door', async () => {
+  // Picked on the New Session screen, on a workspace that picked none.
+  const onWork: Scenario = { sessionAccount: WORK, codexAccount: null, env: { RUST_LOG: 'warn' } };
+  const claimed = await claim(onWork);
+  assert.deepEqual(claimed.env, { RUST_LOG: 'warn', CODEX_HOME: WORK_HOME });
+  assert.deepEqual((await reclaim(onWork)).env, claimed.env);
+  assert.deepEqual(await reload(onWork, AgentProvider.CODEX), claimed.env);
+
+  // Default picked on a workspace set to Work: Default is a pick of its own, not "no pick", so the
+  // session stays on the runner's own login rather than falling through to the workspace's account.
+  const onDefault: Scenario = { sessionAccount: 'default', codexAccount: WORK, env: { RUST_LOG: 'warn' } };
+  assert.deepEqual((await claim(onDefault)).env, { RUST_LOG: 'warn' });
+  assert.deepEqual((await reclaim(onDefault)).env, { RUST_LOG: 'warn' });
+  assert.deepEqual(await reload(onDefault, AgentProvider.CODEX), { RUST_LOG: 'warn' });
+
+  // A pick the runner does not report runs on Default, as the workspace's does — not on the
+  // workspace's account, which is not what anyone picked for this session.
+  const gone: Scenario = { sessionAccount: 'c0ffee42', codexAccount: WORK };
+  assert.equal((await claim(gone)).env, undefined);
+  assert.equal((await reclaim(gone)).env, undefined);
+});
+
+test('a workspace on another Claude account dispatches its Claude sessions in that account\'s CLAUDE_CONFIG_DIR, through every door', async () => {
+  const CLAUDE_WORK = 'c1a0de42';
+  const CLAUDE_WORK_HOME = '/home/dev/.orbit/claude-accounts/c1a0de42';
+  const engines: RunnerEngineHealth[] = [
+    {
+      engine: 'claude',
+      installed: true,
+      auth: 'yes',
+      version: '2.1.278',
+      accounts: [
+        { id: 'default', home: '/home/dev/.claude', auth: 'yes' },
+        { id: CLAUDE_WORK, name: 'Work', home: CLAUDE_WORK_HOME, auth: 'yes' },
+      ],
+    },
+    ENGINES[1],
+  ];
+  const s: Scenario = {
+    provider: AgentProvider.CLAUDE,
+    claudeAccount: CLAUDE_WORK,
+    codexAccount: WORK,
+    engines,
+    env: { RUST_LOG: 'warn' },
+  };
+  const claimed = await claim(s);
+  assert.equal(claimed.provider, AgentProvider.CLAUDE);
+  assert.deepEqual(claimed.env, { RUST_LOG: 'warn', CLAUDE_CONFIG_DIR: CLAUDE_WORK_HOME });
+  assert.deepEqual((await reclaim(s)).env, claimed.env);
+  assert.deepEqual(await reload(s, AgentProvider.CLAUDE), claimed.env);
+
+  // The same workspace's Codex sessions run on its Codex pick; each engine reads its own variable.
+  assert.deepEqual((await claim({ ...s, provider: AgentProvider.CODEX })).env, { RUST_LOG: 'warn', CODEX_HOME: WORK_HOME });
+  // No Claude pick, or one this runner does not report: nothing injected, and the runner resolves
+  // Default itself.
+  assert.deepEqual((await claim({ ...s, claudeAccount: null })).env, { RUST_LOG: 'warn' });
+  assert.deepEqual((await claim({ ...s, claudeAccount: 'c0ffee42' })).env, { RUST_LOG: 'warn' });
 });
 
 test('an account the assigned runner does not report runs on Default instead of failing', async () => {
@@ -330,7 +395,7 @@ test('reset v1 reads Default only, so a workspace on another account is an accou
   assert.equal(await refusal(null), 'CAPABILITY_MISSING');
 });
 
-test('a workspace stores the slot id, never a path, and Default as no choice at all', async () => {
+test('a workspace stores the slot id or Default, never a path', async () => {
   // The pipe main.ts installs.
   const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false });
   const body = async (metatype: typeof CreateWorkspaceDto | typeof UpdateWorkspaceDto, raw: object) =>
@@ -364,7 +429,9 @@ test('a workspace stores the slot id, never a path, and Default as no choice at 
     return written[0];
   };
   assert.equal((await update({ codexAccount: WORK })).codexAccount, WORK);
-  assert.equal((await update({ codexAccount: 'default' })).codexAccount, null);
+  // `default` pins the workspace to Default; null is Automatic (automaticCodexAccount), so the two are
+  // stored apart.
+  assert.equal((await update({ codexAccount: 'default' })).codexAccount, 'default');
   assert.equal((await update({ codexAccount: null })).codexAccount, null);
   // A PATCH that says nothing about the account leaves it as it stands.
   assert.equal((await update({ name: 'renamed' })).codexAccount, undefined);

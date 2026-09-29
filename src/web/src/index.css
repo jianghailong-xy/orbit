@@ -13666,6 +13666,25 @@ button.chat-jump-start:hover {
 .np-pinned {
   padding-left: 14px;
 }
+/* An engine's own accounts on this runner, under its row: which one this session spends. The tick
+   takes the mark's column, so the account names line up with the engine's. */
+.np-account-tick {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--brand);
+}
+.np-account.picked {
+  color: var(--text-1);
+}
+.np-account .np-row-model.near-limit {
+  color: var(--warning);
+}
+/* Account names are often emails, so the list makes room for one beside its quota. */
+.np-list.with-accounts {
+  width: 280px;
+}
 /* The composer's account pill: which of a pool's accounts this session is spending. */
 .composer-account {
   padding-right: 6px;
