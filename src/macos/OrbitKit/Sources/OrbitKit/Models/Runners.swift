@@ -168,15 +168,37 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public let version: String?
     /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`.
     public let auth: String?
+    /// The accounts this engine is signed into on the runner, Default first — reported for an engine
+    /// whose CLI keeps a login per directory (Codex, Claude). Absent from an older runner.
+    public let accounts: [RunnerEngineAccount]?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
     public var signedIn: Bool { auth == "yes" }
 
-    public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil) {
+    public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
+                accounts: [RunnerEngineAccount]? = nil) {
         self.engine = engine
         self.installed = installed
         self.version = version
+        self.auth = auth
+        self.accounts = accounts
+    }
+}
+
+/// One of a runner's accounts of an engine (shared `RunnerEngineAccount`): `default`, the directory
+/// the runner's own environment selects, or a slot it added. Only what the clients read is modelled.
+public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
+    /// `default`, or the slot's id — what a session is created with (`codexAccount`).
+    public let id: String
+    /// What the user called it. Absent for Default.
+    public let name: String?
+    /// The CLI's own answer for this account: `yes` / `no` / `unknown`.
+    public let auth: String?
+
+    public init(id: String, name: String? = nil, auth: String? = nil) {
+        self.id = id
+        self.name = name
         self.auth = auth
     }
 }
@@ -310,6 +332,9 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let credits: PlanUsageCredits?
     public let rateLimits: [PlanUsageRateLimit]?
     public let fetchedAt: String?
+    /// The runner's other accounts of this engine, by account id, each as its own windows: this
+    /// snapshot's windows are Default's (web `codexAccountSnapshot`).
+    public var accounts: [String: PlanUsageSnapshot]? = nil
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
                 sevenDay: PlanUsageWindow? = nil, sevenDayOpus: PlanUsageWindow? = nil,
@@ -318,7 +343,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
-                fetchedAt: String? = nil) {
+                fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil) {
         self.provider = provider
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
@@ -333,6 +358,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
         self.credits = credits
         self.rateLimits = rateLimits
         self.fetchedAt = fetchedAt
+        self.accounts = accounts
     }
 }
 

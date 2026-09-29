@@ -102,6 +102,14 @@ final class ConsoleModel {
     /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
     /// once the session exists — so the next draft here opens on it without the override.
     private(set) var draftProviderOverride: String?
+    /// Draft only: a Codex account picked under Codex in the new-session picker (`default` or a slot
+    /// id). Nil leaves it to the workspace: its own pick, else Automatic — the account with the most
+    /// room, which the server chooses when it creates the session.
+    private(set) var draftCodexAccount: String?
+    /// Which Codex account this session runs on, from its detail: its own (`Session.codexAccount`),
+    /// and its workspace's for a session that stored none. Only a detail read sets them.
+    private(set) var sessionCodexAccount: String?
+    private(set) var workspaceCodexAccount: String?
     /// A provider switch made while this session was ENDED. There is nothing to PATCH then, so it
     /// rides along with the resume that revives it — the route Model/Mode/Effort already take.
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
@@ -235,8 +243,38 @@ final class ConsoleModel {
     /// and none at all while no account can be named.
     var planUsage: PlanUsageSnapshot? {
         if currentPool != nil { return poolAccount?.member.planUsage }
+        // A built-in Codex session spends one of the runner's accounts — the one it runs on.
+        if provider == "codex", codexAccount != CodexAccounts.defaultID {
+            return CodexAccounts.snapshot(runnerPlanUsage?.snapshot(for: "codex"), account: codexAccount)
+        }
         return AgentDefaults.planUsage(for: provider, runner: runnerPlanUsage,
                                        configured: configuredProviders)
+    }
+    /// The runner's Codex accounts, as its heartbeat reports them.
+    var codexAccounts: [RunnerEngineAccount] {
+        runnerEngines?.first { $0.engine == "codex" }?.accounts ?? []
+    }
+    /// Automatic is on offer for this draft: its workspace picked no Codex account, and the runner has
+    /// more than one to choose between (`CodexAccounts.automaticOffered`).
+    var codexAutomaticOffered: Bool {
+        isDraft && CodexAccounts.automaticOffered(agent: draftAgent, accounts: codexAccounts)
+    }
+    /// This draft starts on Automatic: it is on offer and no account is picked.
+    var codexAutomatic: Bool { codexAutomaticOffered && draftCodexAccount == nil }
+    /// The Codex account this draft or session runs on, as far as its runner reports it: a draft's
+    /// pick, else its workspace's, else the one Automatic would choose now; a session's own, else its
+    /// workspace's. Default when the runner lists no such account, as dispatch resolves it.
+    var codexAccount: String {
+        let wanted: String?
+        if isDraft {
+            wanted = draftCodexAccount ?? draftAgent?.codexAccount
+                ?? (codexAutomatic
+                    ? CodexAccounts.roomiest(codexAccounts, usage: runnerPlanUsage?.snapshot(for: "codex"))
+                    : nil)
+        } else {
+            wanted = sessionCodexAccount ?? workspaceCodexAccount
+        }
+        return CodexAccounts.onRunner(wanted, accounts: codexAccounts)
     }
     private(set) var modelCatalog: RunnerModelCatalog?
     /// What the session's runner last reported about each engine CLI it can host. A provider
@@ -1061,6 +1099,8 @@ final class ConsoleModel {
         provider = s.provider ?? "claude"
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        sessionCodexAccount = s.codexAccount
+        workspaceCodexAccount = s.agent?.codexAccount
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
         // already touched the picker while the session request was in flight, their explicit value
@@ -1195,6 +1235,8 @@ final class ConsoleModel {
         adoptServerSnapshot(s)
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        sessionCodexAccount = s.codexAccount
+        workspaceCodexAccount = s.agent?.codexAccount
         return true
     }
 
@@ -1302,6 +1344,15 @@ final class ConsoleModel {
         effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
                                                 catalog: modelCatalog,
                                                 configured: configuredProviders)
+    }
+
+    /// Pick one of the runner's accounts of `slug` for this draft — or Automatic (`nil`) — from the rows
+    /// under that engine in the new-session picker. Picks the engine too, when it isn't the one
+    /// picked. Like the provider, it binds the session being drafted and rewrites no workspace setting.
+    func pickDraftAccount(_ slug: String, _ account: String?) {
+        guard isDraft else { return }
+        if slug != provider { pickDraftProvider(slug) }
+        draftCodexAccount = account
     }
 
     /// Adopt a provider catalogue with the pools folded in, each resolved like a key: a shared pool
@@ -1958,12 +2009,16 @@ final class ConsoleModel {
                 // explicit false the server would have to remember anyway.
                 fastMode: fastMode ? true : nil,
                 shell: shell ? true : nil,
-                attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
+                attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
+                // Only an explicit pick, as with the provider: none leaves it to the workspace's
+                // account, or to Automatic, which the server resolves when it creates the session.
+                codexAccount: provider == "codex" ? draftCodexAccount : nil))
             composerText = ""
             pendingAttachments = []
             // The pick was this session's binding; nothing to write back. The next draft here
             // opens on it anyway, because the default is read from what the project last ran.
             draftProviderOverride = nil
+            draftCodexAccount = nil
             // The Mode pick is different: without a write-back it lived on this one session, while
             // the runs nobody starts from a composer — task-launched, MCP-created — keep resolving
             // the ACCOUNT default server-side. Web parity, and best-effort: a failed write costs a
