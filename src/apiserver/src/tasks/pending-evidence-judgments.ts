@@ -1,5 +1,7 @@
 import { TaskStatus } from '@prisma/client';
 import type { CreatorType, Prisma as PrismaTypes, TaskEvidenceDecisionValue } from '@prisma/client';
+import { completionEvidenceWakeKey } from '../projects/completion-input';
+import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
 import {
   CRITERION_MOVED_ACTION,
   REQUIRES_INDEPENDENT_SESSION_ACTION,
@@ -43,6 +45,16 @@ import {
  * has looked at yet is still here on the next read, and nothing has to be re-sent for it to be.
  * Its cost is the one `docs/completion-input-routing.md` §A2 D1 names, and narrowing WHO it is
  * read for is still how that comes down.
+ *
+ * EXCEPT WHILE AN AUTOMATIC PROJECT'S COORDINATOR IS DECIDING IT (2026-09-29)
+ * ------------------------------------------------------------------------
+ * In a project whose coordinator switch is on, a revision that conversation can decide is
+ * delivered to it to decide (`CompletionEvidenceProducer`), and the owner's card is the fallback:
+ * such a revision is not placed in `pending`, and not counted, while the coordinator holds it
+ * (`coordinatorHolds` below says exactly when that is). Nothing is written to take it back — the
+ * hold is read off the delivery's own ledger row and the project's clock, so it ends by itself.
+ * It decides only where the question is ASKED: the decision door takes the owner's answer at any
+ * moment, held or not.
  *
  * WHY EACH ROW CARRIES A REASON RATHER THAN A FLAG
  * ------------------------------------------------
@@ -207,13 +219,78 @@ function ageSeconds(readAt: Date, submittedAt: Date): number {
 }
 
 /**
- * The tasks whose LATEST evidence revision carries no decision yet, each with that revision — the
- * population both the queue and the badge's count (`countPendingEvidenceJudgments`) place, read by
- * one query so the two cannot come to disagree about it. `projectIds` narrows it to those projects.
+ * The tasks whose latest revision the project's coordinator is deciding right now, by task id.
+ *
+ * A revision is held while ALL of these are true when it is read:
+ *
+ *   * its wake was DELIVERED — the revision the task's latest evidence row names, by the fact's own
+ *     key, under the project the task is filed under now;
+ *   * that project is still Automatic: switched off, it is the owner's card again, as it is for
+ *     every project that is not (2026-09-10's behaviour, kept for them unchanged);
+ *   * the conversation it was delivered to has not ended (`sessionHasEnded`, the line the delivery
+ *     itself refuses on): a conversation that is over will not decide anything;
+ *   * and the project's `exceptionEscalationSeconds` have not run out since the delivery was
+ *     bound. `updatedAt` is that moment: the compare-and-set that writes DELIVERED is the row's
+ *     last write.
+ *
+ * A delivery that was refused has no DELIVERED row, and a revision that was only recorded has none
+ * either, so both are the owner's from the start.
+ */
+async function coordinatorHolds(
+  tx: PrismaTypes.TransactionClient,
+  latest: ReadonlyArray<{
+    taskId: string;
+    projectId: string | null;
+    revision: bigint;
+    criterionRevision: string;
+    evidenceDigest: string;
+  }>,
+  readAt: Date,
+): Promise<Set<string>> {
+  const subjects = new Map<string, { taskId: string; projectId: string }>();
+  for (const row of latest) {
+    if (row.projectId == null) continue;
+    const key = completionEvidenceWakeKey(row.taskId, {
+      revision: row.revision.toString(),
+      criterionRevision: row.criterionRevision,
+      evidenceDigest: row.evidenceDigest,
+    });
+    subjects.set(key, { taskId: row.taskId, projectId: row.projectId });
+  }
+  const held = new Set<string>();
+  if (subjects.size === 0) return held;
+
+  const delivered = await tx.projectCoordinatorWake.findMany({
+    where: { idempotencyKey: { in: [...subjects.keys()] }, status: 'DELIVERED' },
+    select: {
+      idempotencyKey: true,
+      projectId: true,
+      updatedAt: true,
+      project: { select: { coordinatorEnabled: true, exceptionEscalationSeconds: true } },
+      session: { select: SESSION_ENDING_SELECT },
+    },
+  });
+  for (const wake of delivered) {
+    const subject = subjects.get(wake.idempotencyKey);
+    if (!subject || wake.projectId !== subject.projectId) continue;
+    if (!wake.project.coordinatorEnabled) continue;
+    if (!wake.session || sessionHasEnded(wake.session)) continue;
+    const escalatesAt = wake.updatedAt.getTime() + wake.project.exceptionEscalationSeconds * 1_000;
+    if (readAt.getTime() < escalatesAt) held.add(subject.taskId);
+  }
+  return held;
+}
+
+/**
+ * The tasks whose LATEST evidence revision carries no decision yet, each with that revision and
+ * whether the project's coordinator holds it (`coordinatorHolds`) — the population both the queue
+ * and the badge's count (`countPendingEvidenceJudgments`) place, read by one query so the two
+ * cannot come to disagree about it. `projectIds` narrows it to those projects.
  */
 async function unansweredLatestEvidence(
   tx: PrismaTypes.TransactionClient,
   ownerId: string,
+  readAt: Date,
   projectIds?: readonly string[],
 ) {
   const tasks = await tx.task.findMany({
@@ -238,6 +315,8 @@ async function unansweredLatestEvidence(
         take: 1,
         select: {
           revision: true,
+          criterionRevision: true,
+          evidenceDigest: true,
           submittedAt: true,
           evidence: true,
           decisions: { select: { id: true }, take: 1 },
@@ -245,10 +324,22 @@ async function unansweredLatestEvidence(
       },
     },
   });
-  return tasks.flatMap((task) => {
+  const unanswered = tasks.flatMap((task) => {
     const [latest] = task.completionEvidence;
     return latest && latest.decisions.length === 0 ? [{ task, latest }] : [];
   });
+  const held = await coordinatorHolds(
+    tx,
+    unanswered.map(({ task, latest }) => ({
+      taskId: task.id,
+      projectId: task.projectId,
+      revision: latest.revision,
+      criterionRevision: latest.criterionRevision,
+      evidenceDigest: latest.evidenceDigest,
+    })),
+    readAt,
+  );
+  return unanswered.map((row) => ({ ...row, heldByCoordinator: held.has(row.task.id) }));
 }
 
 /**
@@ -290,7 +381,8 @@ export async function readPendingEvidenceJudgments(
 ): Promise<PendingEvidenceJudgmentQueue> {
   const pending: PendingEvidenceJudgment[] = [];
   const waitingOnYou: PendingEvidenceJudgment[] = [];
-  for (const { task, latest } of await unansweredLatestEvidence(tx, ownerId)) {
+  const unanswered = await unansweredLatestEvidence(tx, ownerId, readAt);
+  for (const { task, latest, heldByCoordinator } of unanswered) {
     const envelope = storedEnvelope(latest.evidence);
     const disqualification = await decidingSessionDisqualification(
       tx,
@@ -332,9 +424,10 @@ export async function readPendingEvidenceJudgments(
     // in front of every session that CAN answer it; an undecidable row this reader did not file is
     // already in front of the run that has to file the next revision. Either copy would be a row
     // whose only possible reading is "not your problem", which is a broadcast however quietly it
-    // is worded.
+    // is worded. And a decidable row an Automatic project's coordinator holds is not asked of
+    // anybody else until the hold ends — that is the whole of what the hold changes.
     if (standing === null) {
-      if (disqualification === null) pending.push(row);
+      if (disqualification === null && !heldByCoordinator) pending.push(row);
     } else if (disqualification !== null) {
       waitingOnYou.push(row);
     }
@@ -389,26 +482,29 @@ export async function readPendingEvidenceJudgments(
  * coordinator, counting that project's tasks only — exactly the rows the coordinator conversation
  * draws an evidence card for (`evidenceDecisionCardRows` on the web). This is the "Needs you"
  * badge's evidence source (`owner-decision-signal.ts`), keyed by project; the envelope and the
- * citations a card renders are not paid for.
+ * citations a card renders are not paid for. `readAt` is the read's clock, as it is there: it is
+ * what a coordinator's hold is measured against.
  */
 export async function countPendingEvidenceJudgments(
   tx: PrismaTypes.TransactionClient,
   ownerId: string,
   coordinators: ReadonlyArray<{ projectId: string; session: { id: string; taskId: string | null } }>,
+  readAt: Date = new Date(),
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
   if (coordinators.length === 0) return counts;
   const coordinatorOf = new Map(coordinators.map((c) => [c.projectId, c.session]));
-  const unanswered = await unansweredLatestEvidence(tx, ownerId, [...coordinatorOf.keys()]);
-  for (const { task, latest } of unanswered) {
+  const unanswered = await unansweredLatestEvidence(tx, ownerId, readAt, [...coordinatorOf.keys()]);
+  for (const { task, latest, heldByCoordinator } of unanswered) {
     const projectId = task.projectId;
     const session = projectId == null ? undefined : coordinatorOf.get(projectId);
     if (projectId == null || session === undefined) continue;
-    // The placement above, asked in the same order: a live standard to decide against, then a
-    // reader the door would take the decision from.
+    // The placement above, asked in the same order: a live standard to decide against, a reader
+    // the door would take the decision from, and nobody else deciding it first.
     if ((await criterionStandingRefusal(tx, task, latest.evidence)) !== null) continue;
     const scope = { ownerId, taskId: task.id };
     if ((await decidingSessionDisqualification(tx, scope, session)) !== null) continue;
+    if (heldByCoordinator) continue;
     counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
   }
   return counts;
