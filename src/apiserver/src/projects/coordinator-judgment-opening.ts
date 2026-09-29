@@ -17,12 +17,12 @@ import type { DerivedProjectDoneReading } from './project-done-derived';
  * WHY THIS IS NOT `coordinator-opening.ts`
  * ========================================
  * That one is the opening of a user-origin conversation, and it is written for a reader who will
- * answer it: it says "推进靠的是跟人对话" and "没有任何自动的环会替你决定什么时候动". Both are
- * true there and false here. This session was decided on by something automatic — a fact
- * `CoordinatorWakeService` claimed — and there is nobody on the other end of it. Reusing that
- * opening would open every judgment by telling it two things that are not so, which is the mistake
- * 60dece5e removed from the OLD opening (it described a §9.2 policy matrix no code enforced any
- * more) and worth not making a second time.
+ * answer it: with the project's Automatic switch off it says "推进靠的是跟人对话" and
+ * "没有任何自动的环会替你决定什么时候动". Both are true there and false here. This session was
+ * decided on by something automatic — a fact `CoordinatorWakeService` claimed — and there is
+ * nobody on the other end of it. Reusing that opening would open every judgment by telling it two
+ * things that are not so, which is the mistake 60dece5e removed from the OLD opening (it described
+ * a §9.2 policy matrix no code enforced any more) and worth not making a second time.
  *
  * FACTS FIRST; ONE CLOSED PROTOCOL FOR PROJECT SETTLEMENT
  * ======================================================
