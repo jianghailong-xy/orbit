@@ -307,6 +307,8 @@ async function world(
       coordinatorEnabled: options.coordinatorEnabled ?? true,
       coordinatorWorkspaceId: ids.workspaceId,
       ...(coordinator.sessionId ? { coordinatorSessionId: coordinator.sessionId } : {}),
+      // Started: only a started, unpaused project moves by itself (project-pause-dispatch.ts).
+      startedAt: new Date(),
     },
   });
   await db.projectRuntime.upsert({

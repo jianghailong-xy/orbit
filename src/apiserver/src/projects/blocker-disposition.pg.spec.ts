@@ -312,6 +312,9 @@ async function fixture(
       coordinatorEnabled: options.coordinatorEnabled ?? true,
       coordinatorWorkspaceId: workspaceId,
       coordinatorSessionId,
+      // Started by its owner: the release of the next task this file observes is a move the project
+      // makes by itself, and only a started, unpaused project makes one (project-pause-dispatch.ts).
+      startedAt: new Date(),
     },
   });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
