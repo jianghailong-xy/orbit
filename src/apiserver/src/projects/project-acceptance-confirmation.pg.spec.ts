@@ -729,7 +729,7 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     const switchTo = (coordinatorEnabled: boolean) =>
       switching.update(ownerId, project.id, { coordinatorEnabled } as never);
     // A project its owner started whose Automatic is off, as an older client leaves it: paused by
-    // that switch (migration 0332's backfill writes exactly this). Only a started project moves
+    // that switch (migration 0334's backfill writes exactly this). Only a started project moves
     // by itself, so only for one does the switch coming on make Orbit start anything — the
     // unstarted twin at the end of this case is told nothing.
     await prisma.project.update({
