@@ -132,6 +132,81 @@ final class WikiPlanContractTests: XCTestCase {
         XCTAssertEqual(decoded.confirmed?.docs?.first?.sections?.first?.kind, .unknown)
     }
 
+    /// The plan's jobs (contract `plan.jobs`): their closed sets, the owner's redraft route on the user door
+    /// and the run's five on the runner door's maintenance routes, and the refusal a run with no job gets.
+    func testTheJobsClosedSetsAndRoutesAreTheContracts() throws {
+        let jobs = try XCTUnwrap(try planSection()["jobs"] as? [String: Any], "the contract's plan has no jobs")
+        XCTAssertEqual(Set(try XCTUnwrap(jobs["kinds"] as? [String: Any]).keys), known(WikiPlanJobKind.self))
+        XCTAssertEqual(Set(try XCTUnwrap(jobs["triggers"] as? [String: Any]).keys), known(WikiPlanJobTrigger.self))
+        XCTAssertEqual(Set(try XCTUnwrap(jobs["states"] as? [String: Any]).keys), known(WikiPlanJobState.self))
+        let held = try XCTUnwrap(jobs["held"] as? [String: Any])
+        XCTAssertEqual(try XCTUnwrap(held["reasons"] as? [String]),
+                       WikiPlanJobHeldReason.allCases.filter { $0 != .unknown }.map(\.rawValue))
+        let rules = try XCTUnwrap(jobs["rules"] as? [String: Any])
+        XCTAssertEqual(rules["attemptsMax"] as? Int, 3)
+        let routes = try XCTUnwrap(jobs["routes"] as? [String: String])
+        let doors = try XCTUnwrap((try contract()["agentSurface"] as? [String: Any])?["doors"] as? [String: Any])
+        let user = Set(try XCTUnwrap((doors["user"] as? [String: Any])?["routes"] as? [String]))
+        let maintenance = Set(try XCTUnwrap((doors["runner"] as? [String: Any])?["maintenanceRoutes"] as? [String]))
+        XCTAssertTrue(user.contains(try XCTUnwrap(routes["redraft"])), "the redraft is not a route of the user door")
+        for name in ["context", "progress", "finish", "check", "materials"] {
+            XCTAssertTrue(maintenance.contains(try XCTUnwrap(routes[name], name)), "\(name) is not a maintenance route")
+        }
+        let refusals = try XCTUnwrap(try contract()["refusals"] as? [[String: Any]])
+        XCTAssertEqual(refusals.first { $0["code"] as? String == "WIKI_PLAN_NO_JOB" }?["httpStatus"] as? Int, 409)
+    }
+
+    /// The job on the plan's read, as each card of the plan page draws it: queued behind a run, held with
+    /// why, running on a round, and failed with the gate's errors; a value a later server adds is `.unknown`.
+    func testTheJobDecodes() throws {
+        let running = #"""
+        {"spaceId":"34WSpace","confirmed":null,"draft":null,"proposals":[],
+         "job":{"id":"34WJob","spaceId":"34WSpace","kind":"draft","trigger":"space_created","state":"running","instructions":null,
+                "requestedAt":"2026-09-29T00:41:00.000Z","held":null,"waitingFor":null,"taskId":"34WTask","provider":"local-vllm",
+                "sessionId":"34WSession","madeAt":"2026-09-29T00:41:00.000Z","startedAt":"2026-09-29T00:42:00.000Z","endedAt":null,
+                "attempt":1,"attemptsMax":3,"version":null,"errors":[],"error":null,"report":null,"draft":null}}
+        """#
+        let job = try XCTUnwrap(try JSONDecoder().decode(WikiPlanState.self, from: Data(running.utf8)).job)
+        XCTAssertEqual(job.kind, .draft)
+        XCTAssertEqual(job.trigger, .spaceCreated)
+        XCTAssertEqual(job.state, .running)
+        XCTAssertEqual(job.provider, "local-vllm")
+        XCTAssertEqual(job.attempt, 1)
+        XCTAssertEqual(job.attemptsMax, 3)
+
+        let queued = #"""
+        {"id":"34WJob","kind":"revise","trigger":"owner","state":"queued","instructions":"合并到 30 篇左右",
+         "waitingFor":{"taskId":"34WMaint","title":"Wiki maintenance: orbit","sessionId":"34WRun","startedAt":"2026-09-29T00:37:00.000Z"}}
+        """#
+        let waiting = try JSONDecoder().decode(WikiPlanJob.self, from: Data(queued.utf8))
+        XCTAssertEqual(waiting.state, .queued)
+        XCTAssertEqual(waiting.kind, .revise)
+        XCTAssertEqual(waiting.instructions, "合并到 30 篇左右")
+        XCTAssertEqual(waiting.waitingFor?.sessionId, "34WRun")
+
+        let held = #"{"id":"34WJob","kind":"draft","state":"held","held":{"reason":"no_maintenance_workspace","at":"2026-09-29T00:41:00.000Z"}}"#
+        XCTAssertEqual(try JSONDecoder().decode(WikiPlanJob.self, from: Data(held.utf8)).held?.reason, .noMaintenanceWorkspace)
+
+        let failed = #"""
+        {"created":false,"job":{"id":"34WJob","kind":"draft","state":"failed","attempt":3,"attemptsMax":3,
+         "errors":[{"check":"docCount","path":"plan.docs","message":"the plan has 40 documents; it must have 20 to 35"}],
+         "error":"the draft did not pass the plan's gate in 3 rounds",
+         "report":{"categories":11,"docs":40,"sections":321,"attempts":[{"attempt":1,"local":12,"server":0,"checks":{"references":11,"docCount":1}}],
+                   "tokens":{"input":1300000,"output":150000,"calls":70},"seconds":6400,"model":"qwen3.8-27b-fp8"}}}
+        """#
+        let result = try JSONDecoder().decode(WikiPlanRedraftResult.self, from: Data(failed.utf8))
+        XCTAssertFalse(result.created)
+        XCTAssertEqual(result.job.state, .failed)
+        XCTAssertEqual(result.job.errors?.first?.check, .docCount)
+        XCTAssertEqual(result.job.report?.attempts?.first?.checks?["references"], 11)
+        XCTAssertEqual(result.job.report?.tokens?.calls, 70)
+
+        let later = #"{"id":"34WJob","kind":"index","trigger":"schedule","state":"paused","held":{"reason":"gpu_busy"}}"#
+        let unknown = try JSONDecoder().decode(WikiPlanJob.self, from: Data(later.utf8))
+        XCTAssertEqual([unknown.kind.rawValue, unknown.trigger?.rawValue, unknown.state.rawValue, unknown.held?.reason.rawValue],
+                       ["unknown", "unknown", "unknown", "unknown"])
+    }
+
     /// The history, and a refusal of the gate: every error with its check, where it is and why.
     func testTheHistoryAndTheGatesErrorsDecode() throws {
         let history = #"""
