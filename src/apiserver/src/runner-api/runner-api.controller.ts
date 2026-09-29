@@ -286,6 +286,7 @@ import {
   advertisedRunnerProviders,
   runnerAdvertisesProvider,
 } from './runner-provider-support';
+import { START_CARD_REVIEWS_MESSAGE, startCardReviewsCreate } from './unstarted-project-create';
 import {
   freezeSessionSourcePin,
   hasResolvedSource,
@@ -3370,6 +3371,13 @@ export class RunnerApiController {
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
     const autoAllowed = existing ? false : await this.standingGrantCovers(session, dto);
+    // The same shape for a coordinator's task creates in a project nobody has started: the start
+    // card reviews them, so none of them is a question on its own (`unstarted-project-create.ts`).
+    const allowedMessage = autoAllowed
+      ? AUTO_ALLOWED_MESSAGE
+      : !existing && (await startCardReviewsCreate(this.prisma, session, dto.toolName, dto.input))
+        ? START_CARD_REVIEWS_MESSAGE
+        : null;
     // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
     // its session, and the server already knows which turn it leased to that session — the runner
     // has been polling inside it since the dequeue. It is what makes an abandoned call provable
@@ -3403,14 +3411,14 @@ export class RunnerApiController {
           toolUseId: toolUseId ?? null,
           turnId: openingTurn?.id ?? null,
           backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
-          ...(autoAllowed
-            ? { status: 'ALLOWED', decidedAt: new Date(), message: AUTO_ALLOWED_MESSAGE }
+          ...(allowedMessage
+            ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
             : {}),
         },
       }));
     // An already-answered approval raises no card and buzzes no phone: not interrupting is the
     // entire point of having granted it.
-    if (!existing && !autoAllowed) {
+    if (!existing && !allowedMessage) {
       this.realtime.publish(sessionId, {
         seq: 0,
         type: RunEventType.APPROVAL_REQUEST,

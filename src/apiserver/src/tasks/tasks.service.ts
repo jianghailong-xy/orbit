@@ -4091,7 +4091,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const assigneeIds = [...new Set(items.map((i) => i.assigneeId).filter((v): v is string => !!v))];
     const externalIds = [...new Set(items.flatMap((i) => i.dependsOnTaskIds ?? []))];
     const listIds = [...new Set(items.map((i) => i.listId).filter((v): v is string => !!v))];
-    const [assignees, prerequisites, lists] = await Promise.all([
+    const projectIds = [...new Set(items.map((i) => i.projectId).filter((v): v is string => !!v))];
+    const [assignees, prerequisites, lists, unstartedProjects] = await Promise.all([
       this.prisma.workspace.findMany({
         where: { id: { in: assigneeIds }, ownerId },
         select: { id: true, name: true, runnerId: true },
@@ -4104,7 +4105,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: listIds }, ownerId },
         select: { id: true, title: true, paused: true },
       }),
+      // The ones NOT started, so a project this read does not find counts as started: the error
+      // left is over-reporting, the direction this card is kept on (see below).
+      projectIds.length
+        ? this.prisma.project.findMany({
+            where: { id: { in: projectIds }, ownerId, startedAt: null },
+            select: { id: true },
+          })
+        : [],
     ]);
+    // Nothing in a project its owner has not started runs by itself: the start card is where
+    // its tasks are decided, and pressing it is what releases them — so an item that would start on
+    // its own, now or at its runAt, waits for that instead.
+    const unstarted = new Set(unstartedProjects.map((p) => p.id));
     // A paused list is out of the sweep entirely (AUTO_RUN_READY_SQL), so nothing landing in one
     // starts however runnable it looks. Without this the card announced runs for a campaign that
     // was explicitly stopped — and `paused` is precisely how someone builds a large campaign
@@ -4119,6 +4132,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let needsManualStart = 0;
     let notDispatchable = 0;
     let scheduled = 0;
+    let awaitingProjectStart = 0;
     let internalEdges = 0;
     let externalEdges = 0;
     const now = Date.now();
@@ -4139,6 +4153,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         !!item.assigneeId &&
         !!runnerOf.get(item.assigneeId) &&
         !(item.listId && pausedLists.has(item.listId));
+      const awaitsStart = !!item.projectId && unstarted.has(item.projectId);
       // A scheduled item is classified by what is ACTUALLY standing between it and a run, in the
       // order the sweep would hit them — not by its schedule alone. The clock is the last of the
       // conditions to be checked, never the first, because `scheduled` is the strongest claim on
@@ -4151,6 +4166,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (runAt) {
         if (waitsOnBatch || waitsOnExisting) blocked += 1;
         else if (!runnable) notDispatchable += 1;
+        // In place, but the clock is not the last thing left: the owner has to start the project.
+        else if (awaitsStart) awaitingProjectStart += 1;
         // Everything is in place and the only thing left is the time.
         else if (runAt.getTime() > now) scheduled += 1;
         // Already due on arrival. Without this branch a batch scheduled for "now" reported fifty
@@ -4179,16 +4196,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const hasPrerequisites =
         (item.dependsOnRefs?.length ?? 0) + (item.dependsOnTaskIds?.length ?? 0) > 0;
       if (!hasPrerequisites) {
-        if (item.projectId && item.autoRunWhenReady !== false && runnable) startingNow += 1;
-        else needsManualStart += 1;
+        if (!(item.projectId && item.autoRunWhenReady !== false && runnable)) needsManualStart += 1;
+        else if (awaitsStart) awaitingProjectStart += 1;
+        else startingNow += 1;
         continue;
       }
       if (waitsOnBatch || waitsOnExisting) {
         blocked += 1;
         continue;
       }
-      if (item.autoRunWhenReady !== false && runnable) startingNow += 1;
-      else notDispatchable += 1;
+      if (!(item.autoRunWhenReady !== false && runnable)) notDispatchable += 1;
+      else if (awaitsStart) awaitingProjectStart += 1;
+      else startingNow += 1;
     }
     return {
       taskCount: items.length,
@@ -4209,6 +4228,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // of which would misdescribe it; a client that predates the field ignores it and simply
       // does not count these as starting now, which is the true statement.
       scheduled,
+      // Would start by themselves, now or at their runAt, but in a project its owner has not
+      // started: they start with the project. Named for the reason `scheduled` is — "needs a manual
+      // start" would say the start releases nothing — and ignored the same way by older clients.
+      awaitingProjectStart,
       internalEdges,
       externalEdges,
       lists: lists.map((l) => ({ id: l.id, title: l.title })),
