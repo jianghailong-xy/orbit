@@ -9,6 +9,7 @@ import {
   TestModelProviderDto,
   UpdateModelProviderDto,
 } from './dto';
+import { CodexLoginService } from './codex-login.service';
 import { ProvidersService } from './providers.service';
 
 /**
@@ -20,7 +21,10 @@ import { ProvidersService } from './providers.service';
 @UseGuards(JwtAuthGuard)
 @Controller('providers')
 export class ProvidersController {
-  constructor(private readonly providers: ProvidersService) {}
+  constructor(
+    private readonly providers: ProvidersService,
+    private readonly codexLogin: CodexLoginService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser) {
@@ -102,5 +106,43 @@ export class ProvidersController {
     @Param('providerId', PublicIdPipe) providerId: string,
   ) {
     return this.providers.removePoolMember(user.userId, id, providerId);
+  }
+
+  // One of the caller's pools, as its page reads it: the members it holds and — for a Codex pool of
+  // their own — the ChatGPT account it runs on (migration 0323), by email and masked either way. Another
+  // owner's pool answers 404, as it does on every route here.
+  @Get('pools/:id')
+  getPool(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.providers.getPool(user.userId, id);
+  }
+
+  // The ChatGPT login of one of the caller's own Codex pools: the OFFICIAL codex CLI's device flow, run
+  // on this server in a throwaway CODEX_HOME. POST starts it and answers with the page to open and the
+  // one-time code to type there; GET is the poll — the first one after the owner approved stores the
+  // credential, encrypted, and answers with the account; DELETE gives the attempt up. Nothing any of them
+  // returns carries a token: an account is named by its email and `…AB12`.
+  //
+  // Only the owner of the pool reaches any of this — another user's pool is not found, and the account
+  // can be signed in, polled, cancelled or signed out by nobody else.
+  @Post('pools/:id/codex-login')
+  startCodexLogin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.codexLogin.start(user.userId, id);
+  }
+
+  @Get('pools/:id/codex-login')
+  pollCodexLogin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.codexLogin.poll(user.userId, id);
+  }
+
+  @Delete('pools/:id/codex-login')
+  cancelCodexLogin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.codexLogin.cancel(user.userId, id);
+  }
+
+  // The account out of the pool: the tokens this server held for it go with it. The next sign-in (by the
+  // owner, the only one who can) is what puts an account back.
+  @Delete('pools/:id/codex-login/account')
+  signOutCodexLogin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.codexLogin.signOut(user.userId, id);
   }
 }

@@ -62,6 +62,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { outsideThePoolGateway, PoolGatewayController } from './pool-gateway.controller';
 import { PoolGatewayService } from './pool-gateway.service';
+import { PoolLoginGatewayService } from './pool-login-gateway.service';
 import { PoolUsageLedger } from './pool-usage-ledger';
 import { ProvidersService } from './providers.service';
 import { nextUsageWindowStart, usageWindowStart } from './shared-pool';
@@ -239,7 +240,11 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
 
   @Module({
     controllers: [PoolGatewayController],
-    providers: [{ provide: PoolGatewayService, useValue: gateway }],
+    providers: [
+      { provide: PoolGatewayService, useValue: gateway },
+      // A login pool's token is the other gateway's (pool-login-gateway.pg.spec.ts); this spec sends none.
+      { provide: PoolLoginGatewayService, useValue: {} },
+    ],
   })
   class GatewayDoors {}
   // main.ts's own layers, the body parsers included: the gateway has to get codex's body unread past them.

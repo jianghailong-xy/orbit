@@ -121,6 +121,8 @@ function database(rows: ProviderRow[]) {
     id: pool.id,
     slug: pool.slug,
     label: pool.label,
+    engine: 'claude',
+    logins: [],
     createdAt: at,
     updatedAt: at,
     members: pool.members.map((providerId) => {

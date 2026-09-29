@@ -34,6 +34,9 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     public let fixEngine: String?
     /// An account pool: how many accounts it holds, counted on its mark. Nil for anything else.
     public let poolSize: Int?
+    /// What `poolSize` counts when it is not accounts: a shared pool's keys (web's `poolUnit`), said
+    /// on the mark's badge. Nil counts accounts.
+    public let poolUnit: String?
     /// A configured provider that is also an account in one of the user's pools. Still pickable on
     /// its own — pinning one account is a real need — but offered behind "Pin a specific account",
     /// since the pool beside it already runs on it.
@@ -46,7 +49,7 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
 
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
                 unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
-                inPool: Bool = false, note: String? = nil) {
+                poolUnit: String? = nil, inPool: Bool = false, note: String? = nil) {
         self.slug = slug
         self.label = label
         self.kind = kind
@@ -55,6 +58,7 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
         self.unavailable = unavailable
         self.fixEngine = fixEngine
         self.poolSize = poolSize
+        self.poolUnit = poolUnit
         self.inPool = inPool
         self.note = note
     }
@@ -99,11 +103,12 @@ public enum SessionProviderChoices {
     /// someone else's machine. A runner that has reported nothing claims nothing, so all three stay
     /// runnable — as does any engine missing from a partial report.
     ///
-    /// The user's account pools come after the engines, each one choice that runs on Claude with its
-    /// accounts' own keys. The providers in a pool stay pickable, marked `inPool` for the picker to
-    /// fold away. `configured` is expected to carry the pools too (`ProviderPools.asProviders`),
-    /// since that is where a pool's models and runtime are resolved from; `pools` says which of its
-    /// entries are pools.
+    /// The user's pools come after the engines, each one choice that runs on its members' own
+    /// credentials. The providers in a pool stay pickable, marked `inPool` for the picker to fold
+    /// away. `configured` is expected to carry the pools too (`ProviderPools.asProviders`), since
+    /// that is where a pool's models and runtime are resolved from; `pools` says which of its
+    /// entries are pools — a shared pool of OpenAI keys (its `shared` set) runs Codex rather than
+    /// Claude, on a key the server picks for the session.
     public static func choices(configured: [ConfiguredProvider],
                                catalog: RunnerModelCatalog? = nil,
                                engines: [RunnerEngineHealth]? = nil,
@@ -122,19 +127,22 @@ public enum SessionProviderChoices {
                 fixEngine: blocker == nil ? nil : slug)
         }
         // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
-        // carries one of its accounts' keys. A missing CLI outranks the accounts, because it is the
-        // one of the two a runner can fix.
-        let claudeBlocker = byokBlocker(health("claude"))
+        // carries one of its members' credentials. A missing CLI outranks the members, because it is
+        // the one of the two a runner can fix. A shared pool's CLI is Codex, whose runs carry a
+        // session token for the pool's gateway.
         let poolChoices = pools.map { pool -> ProviderChoice in
-            ProviderChoice(
+            let runtime = pool.shared != nil ? "codex" : "claude"
+            let blocker = byokBlocker(health(runtime))
+            return ProviderChoice(
                 slug: pool.slug,
                 label: pool.label,
                 kind: .pool,
-                brandKey: "anthropic",
+                brandKey: enginePreset[runtime],
                 modelLabel: modelLabel(for: pool.slug, configured: configured, catalog: catalog),
-                unavailable: claudeBlocker ?? ProviderPools.unavailableReason(pool),
-                fixEngine: claudeBlocker == nil ? nil : "claude",
+                unavailable: blocker ?? ProviderPools.unavailableReason(pool),
+                fixEngine: blocker == nil ? nil : runtime,
                 poolSize: pool.members.count,
+                poolUnit: pool.shared != nil ? "key" : nil,
                 note: ProviderPools.spentNote(pool, now: now))
         }
         let poolSlugs = Set(pools.map(\.slug))
@@ -217,6 +225,13 @@ public enum SessionProviderChoices {
             kind: AgentDefaults.isBuiltInProvider(provider) ? .engine : .byok,
             brandKey: enginePreset[provider] ?? configured.first { $0.slug == provider }?.presetSlug,
             modelLabel: modelLabel(for: provider, configured: configured, catalog: catalog))
+    }
+
+    /// What a pool's mark counts, as web labels that badge: an account pool's accounts, a shared
+    /// pool's keys (`"2 keys"`, `"1 account"`). Screen-reader only — the number itself is what is
+    /// drawn — but it is the pool's own word for what sits in its corner, so it is web's sentence.
+    public static func poolBadgeLabel(size: Int, unit: String?) -> String {
+        "\(size) \(unit ?? "account")\(size == 1 ? "" : "s")"
     }
 
     /// The label for a provider's resolved default model, or a plain hint when the provider picks

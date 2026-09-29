@@ -11,9 +11,13 @@ import Foundation
 
 /// Where one member of a pool stands, in the order the claim reads a member.
 public enum PoolMemberState: String, Codable, Sendable, CaseIterable {
-    /// Its key was refused (401/403). Final for that key: a new one is the way back.
+    /// Its key was refused (401). Final for that key: a new one is the way back.
     case refused = "REFUSED"
     case disabled = "DISABLED"
+    /// The ChatGPT account of a Codex pool of one's own, which OpenAI refused: only its owner's sign-in
+    /// again puts it back (`CodexLoginPool`). Never on the wire as a member's state — the adapter reads
+    /// it off the account.
+    case signedOut = "SIGNED_OUT"
     /// A window is used up; `PoolMember.resetsAt` says when it frees up.
     case spent = "SPENT"
     /// A session is generating on it right now.
@@ -21,6 +25,11 @@ public enum PoolMemberState: String, Codable, Sendable, CaseIterable {
     case available = "AVAILABLE"
     /// It runs, but reports no 5-hour window: last in line, which is not the same as idle.
     case noQuota = "NO_QUOTA"
+    /// The usage endpoint would not report this credential's quota (403 — a Claude Code setup token
+    /// carries no `user:profile` scope), while the credential itself is fine: it runs, ranked behind
+    /// every member whose quota could be read. Not `.refused`, which is the endpoint turning the key
+    /// itself away (401).
+    case usageUnknown = "USAGE_UNKNOWN"
     /// Forward-compatibility floor: a state this build does not know. Nothing here reads it as spent,
     /// and whether its pool can run at all is the server's to say (`ProviderPool.unavailable`).
     case unknown = "UNKNOWN"
@@ -50,10 +59,20 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
     /// The member a session starting now would run on — the claim's own selector, asked the way the
     /// claim asks it. At most one member of a pool carries it.
     public let next: Bool
+    /// In a shared pool a member is one of its keys: the key as the server reads it, which is where
+    /// this client keeps what web marks its members with (`sharedPools.ts`'s `member.key`) — that a
+    /// key OpenAI refused is INVALID rather than the pool's own `refused` words, and that its cap is
+    /// a month, not a window. Added by the adapter (`SharedPools.asProviderPool`), never decoded:
+    /// the server's own pools carry no such field.
+    public let key: SharedPoolKey?
+    /// In a Codex pool of one's own the one member is its ChatGPT account (web's `member.login`):
+    /// added by the adapter (`CodexLoginPool.drawn`) off the pool's `login`, never decoded.
+    public let login: CodexLogin?
 
     public init(id: String, slug: String, label: String, presetSlug: String? = nil,
                 enabled: Bool = true, planUsage: PlanUsageSnapshot? = nil,
-                state: PoolMemberState, resetsAt: String? = nil, next: Bool = false) {
+                state: PoolMemberState, resetsAt: String? = nil, next: Bool = false,
+                key: SharedPoolKey? = nil, login: CodexLogin? = nil) {
         self.id = id
         self.slug = slug
         self.label = label
@@ -63,6 +82,8 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
         self.state = state
         self.resetsAt = resetsAt
         self.next = next
+        self.key = key
+        self.login = login
     }
 
     public init(from decoder: Decoder) throws {
@@ -76,6 +97,10 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
         state = try c.decodeIfPresent(PoolMemberState.self, forKey: .state) ?? .unknown
         resetsAt = try c.decodeIfPresent(String.self, forKey: .resetsAt)
         next = try c.decodeIfPresent(Bool.self, forKey: .next) ?? false
+        // Not on the wire: a shared pool's key is attached by the adapter that draws it as a member,
+        // and so is a Codex pool's ChatGPT account.
+        key = nil
+        login = nil
     }
 }
 
@@ -90,20 +115,35 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
     /// account freeing up is enough for work to continue.
     public let resetsAt: String?
     /// Set only when no member can run at all, and no reset will change that — none in it, or each
-    /// one disabled, refused by the endpoint, or one the pool would not admit today: why, in a few
-    /// words ("No accounts", "No account can run"). The server refuses to start or switch a session
-    /// onto such a pool, or to pin a task to it. A pool whose members are only spent never carries it.
+    /// one disabled, its key refused by the endpoint, or one the pool would not admit today: why, in a
+    /// few words ("No accounts", "No account can run"). The server refuses to start or switch a session
+    /// onto such a pool, or to pin a task to it. A pool whose members are only spent never carries it,
+    /// and neither does one whose members' quotas could not be read: it runs on one of them.
     public let unavailable: String?
     public let members: [PoolMember]
+    /// A shared pool (web's `sharedPoolAsProviderPool`): the whole of it as its page reads it — its
+    /// people, its rules and the viewer's place in it. Absent on an account pool of the user's own,
+    /// and the one field that says which kind this is: a shared pool runs Codex on one of its keys,
+    /// its members are those keys, and its caps are a month. Attached by the adapter, never decoded.
+    public let shared: SharedPool?
+    /// What it runs on: `claude` (the 0265 pools of one's own Claude keys) or `codex` — a pool of
+    /// one's own ChatGPT account (migration 0323). Absent from an older server: `claude`.
+    public let engine: String
+    /// A Codex pool of one's own: the ChatGPT account it runs on, or nil before anyone signed in.
+    public let login: CodexLogin?
 
     public init(id: String, slug: String, label: String, resetsAt: String? = nil,
-                unavailable: String? = nil, members: [PoolMember] = []) {
+                unavailable: String? = nil, members: [PoolMember] = [],
+                shared: SharedPool? = nil, engine: String = "claude", login: CodexLogin? = nil) {
         self.id = id
         self.slug = slug
         self.label = label
         self.resetsAt = resetsAt
         self.unavailable = unavailable
         self.members = members
+        self.shared = shared
+        self.engine = engine
+        self.login = login
     }
 
     public init(from decoder: Decoder) throws {
@@ -111,6 +151,21 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
         id = try c.decode(String.self, forKey: .id)
         slug = try c.decode(String.self, forKey: .slug)
         label = try c.decodeIfPresent(String.self, forKey: .label) ?? slug
+        engine = ((try? c.decodeIfPresent(String.self, forKey: .engine)) ?? nil) ?? "claude"
+        // An account in a shape this build cannot read is left out rather than losing the pool.
+        login = (try? c.decodeIfPresent(CodexLogin.self, forKey: .login)) ?? nil
+        // Not on the wire: this says which *kind* of pool a row is, and only the client's own
+        // catalogue knows it (a shared pool is read from its own endpoint, Models/SharedPools.swift).
+        shared = nil
+        if engine == "codex" {
+            // A Codex pool of one's own has no member providers: its ChatGPT account is its one
+            // member, and what the pool says of itself is read off that account (web's `withLogin`).
+            let drawn = CodexLoginPool.drawn(slug: slug, login: login)
+            members = drawn.members
+            unavailable = drawn.unavailable
+            resetsAt = drawn.resetsAt
+            return
+        }
         resetsAt = try c.decodeIfPresent(String.self, forKey: .resetsAt)
         // A reason in a shape this build cannot read is no reason to lose the pool — and no reason.
         let reason = (try? c.decodeIfPresent(String.self, forKey: .unavailable)) ?? nil

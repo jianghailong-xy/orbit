@@ -1765,8 +1765,9 @@ private struct AcceptanceConfirmationReceiptCard: View {
 private struct CoordinatorQuestionCardView: View {
     let console: ConsoleModel
     let itemID: String
-    /// The option this window picked. Starts on the coordinator's recommendation, where it made one.
-    @State private var chosen: Int?
+    /// The row this window picked: one of the coordinator's options, or this card's own Other row.
+    /// Starts on the coordinator's recommendation, where it made one.
+    @State private var chosen: CoordinatorQuestionChoice?
     @State private var text = ""
     @State private var sending = false
     /// What the door answered, when the press was made HERE. The card becomes its own receipt —
@@ -1823,12 +1824,12 @@ private struct CoordinatorQuestionCardView: View {
         // recommendation nobody can see the shape of is not one.
         .task(id: itemID) {
             if chosen == nil, case .open(let row) = console.questionStanding(itemID) {
-                chosen = row.question?.recommendedOption
+                chosen = row.question?.recommendedOption.map { .option($0) }
             }
         }
     }
 
-    /// The question, its options, and — when it was asked without any — a box to answer it in.
+    /// The question, its options, the row that means "none of these", and a box to answer it in.
     private func asked(_ row: ProjectOpenItemRow, _ question: CoordinatorQuestion) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(question.question)
@@ -1838,15 +1839,23 @@ private struct CoordinatorQuestionCardView: View {
                 optionRow(index: index, option: option,
                           recommended: index == question.recommendedOption)
             }
-            if question.options.isEmpty {
-                TextField(CoordinatorQuestions.freeAnswerPrompt, text: $text, axis: .vertical)
-                    .lineLimit(2...8)
-                    .textFieldStyle(.plain)
-                    .font(.orbitProse)
-                    .padding(.horizontal, 10).padding(.vertical, 8)
-                    .background(Color.blue.opacity(0.08),
-                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+            // The last row is this card's own, and it is a row rather than a hint because the owner
+            // has to be able to SEE that answering in their own words is allowed before they type
+            // them: beside a chosen option the box is a note on it, and that is how a coordinator
+            // once received "none of these fits" as agreement with the recommendation.
+            if !question.options.isEmpty {
+                otherRow()
             }
+            // Always there, above: none of the options may be what the owner wants, and one that is
+            // may still need a condition said with it.
+            TextField(CoordinatorQuestions.answerPrompt(question: question, chosen: chosen),
+                      text: $text, axis: .vertical)
+                .lineLimit(2...8)
+                .textFieldStyle(.plain)
+                .font(.orbitProse)
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .background(Color.blue.opacity(0.08),
+                            in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
             // What it holds up and what happens if nobody answers, in the server's own words — the
             // same line the project page's row carries, so the two cannot say different things.
             if !row.detailLine.isEmpty {
@@ -1857,27 +1866,46 @@ private struct CoordinatorQuestionCardView: View {
         }
     }
 
-    /// One option: a radio, its label, the recommendation where it was made, and the reason the
-    /// coordinator gave for it. Pressing anywhere on the row picks it — a 44pt target, not a dot.
+    /// One of the coordinator's alternatives.
     private func optionRow(index: Int, option: CoordinatorQuestion.Option,
                            recommended: Bool) -> some View {
+        choiceRow(selected: CoordinatorQuestions.optionIndex(chosen) == index,
+                  label: option.label, why: option.description, recommended: recommended) {
+            chosen = .option(index)
+        }
+    }
+
+    /// The row this card adds after them. Drawn exactly like an option, because it is one: the
+    /// alternatives the coordinator offered are not the only answers there are.
+    private func otherRow() -> some View {
+        choiceRow(selected: CoordinatorQuestions.isOther(chosen),
+                  label: CoordinatorQuestions.otherOption, why: nil, recommended: false) {
+            chosen = .other
+        }
+    }
+
+    /// One row that can be picked: a radio, its label, the recommendation where it was made, and
+    /// the reason the coordinator gave for it. Pressing anywhere on the row picks it — a 44pt
+    /// target, not a dot.
+    private func choiceRow(selected: Bool, label: String, why: String?, recommended: Bool,
+                           pick: @escaping () -> Void) -> some View {
         Button {
             PlatformHaptics.tap()
-            chosen = index
+            pick()
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: chosen == index ? "largecircle.fill.circle" : "circle")
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                     .font(.orbitMeta)
-                    .foregroundStyle(chosen == index ? Color.blue : Color.secondary)
+                    .foregroundStyle(selected ? Color.blue : Color.secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(option.label).font(.orbitProse)
+                        Text(label).font(.orbitProse)
                         if recommended {
                             Text(CoordinatorQuestions.recommended)
                                 .font(.orbitLabel).foregroundStyle(Color.blue)
                         }
                     }
-                    if let why = option.description {
+                    if let why {
                         Text(why).font(.orbitLabel).foregroundStyle(.secondary)
                     }
                 }
@@ -1909,9 +1937,10 @@ private struct CoordinatorQuestionCardView: View {
         else { return }
         PlatformHaptics.tap()
         sending = true
-        let words = CoordinatorQuestions.answerInWords(question: question, option: chosen, text: text)
+        let words = CoordinatorQuestions.answerInWords(
+            question: question, option: CoordinatorQuestions.optionIndex(chosen), text: text)
         Task {
-            if let answered = await console.answerQuestion(row, option: chosen, text: text) {
+            if let answered = await console.answerQuestion(row, chosen: chosen, text: text) {
                 sent = words
                 receipt = answered
             }

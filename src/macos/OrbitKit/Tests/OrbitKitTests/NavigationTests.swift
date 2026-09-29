@@ -112,6 +112,25 @@ final class NavigationTests: XCTestCase {
                        "the same session opened from the list keeps the system back-swipe")
     }
 
+    /// A project's page carries it the same way: opened from one of the drawer's project rows, its
+    /// left edge goes back to the drawer instead of to the Projects list under it (the owner's
+    /// report, 2026-09-29).
+    func testAProjectPageCarriesHowItWasOpened() {
+        var nav = NavState(section: .projects)
+        nav.path = [.projectDetail(projectID: "p1", origin: .drawer)]
+        XCTAssertTrue(nav.projectFromDrawer, "a drawer-opened project page yields the edge to the drawer")
+        XCTAssertEqual(nav.selectedProjectID, "p1", "and it is still the project showing")
+
+        nav.pop()
+        XCTAssertFalse(nav.projectFromDrawer, "the list page has no project to yield anything")
+        XCTAssertTrue(nav.sectionAtRoot)
+
+        nav.push(.projectDetail(projectID: "p1"))
+        XCTAssertFalse(nav.projectFromDrawer,
+                       "the same project opened from the list keeps the system back-swipe")
+        XCTAssertEqual(nav.selectedProjectID, "p1")
+    }
+
     /// A three-column shell means "replace what the detail pane shows", not "go deeper" — which is
     /// what lets one state drive both shell shapes without either knowing which one it is.
     func testSelectingInAThreeColumnShellReplacesTheTopInsteadOfDeepening() {

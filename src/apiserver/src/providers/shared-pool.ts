@@ -101,10 +101,43 @@ export async function mintPoolGatewayToken(
 }
 
 /**
- * What a shared-pool session dispatches as: a Codex provider whose endpoint is the pool gateway and whose
- * key is the session token — so the runner's own translation of a configured Codex provider
- * (runner-go codexProviderArgs) points its codex at the gateway, and no key of the pool is in the job.
- * OpenAI is the Codex CLI's own endpoint, so the model space is the CLI's (followsRuntimeCatalog).
+ * A login pool's session tokens start with this, a shared pool's with `orbit-gw-`: the prefix is how the
+ * gateway knows which table to look a token up in (PoolLoginToken or PoolGatewayToken).
+ */
+export const POOL_LOGIN_TOKEN_PREFIX = 'orbit-gwl-';
+
+/**
+ * mintPoolGatewayToken for a Codex pool of one person's own (migration 0324): the same build-by-build
+ * token, kept in `pool_login_token` and prefixed POOL_LOGIN_TOKEN_PREFIX so the gateway knows to look for
+ * it there. It is bound to `accountId`, the account the pool holds at this build — taking that account out
+ * of the pool deletes the token — or to none when the pool holds none, which the gateway answers with that.
+ * Earlier tokens of the same session on the same pool stay good and move with it; its tokens for another
+ * pool, and its expired or revoked ones, are deleted.
+ */
+export async function mintPoolLoginToken(
+  db: Prisma.TransactionClient | PrismaService,
+  binding: { poolId: string; userId: string; sessionId: string; accountId: string | null },
+  now: Date,
+): Promise<string> {
+  const token = `${POOL_LOGIN_TOKEN_PREFIX}${generateToken(32)}`;
+  const expiresAt = new Date(now.getTime() + POOL_GATEWAY_TOKEN_TTL_MS);
+  await db.poolLoginToken.deleteMany({
+    where: {
+      sessionId: binding.sessionId,
+      OR: [{ poolId: { not: binding.poolId } }, { expiresAt: { lte: now } }, { revokedAt: { not: null } }],
+    },
+  });
+  await db.poolLoginToken.updateMany({ where: { sessionId: binding.sessionId }, data: { expiresAt } });
+  await db.poolLoginToken.create({ data: { ...binding, tokenHash: sha256(token), expiresAt } });
+  return token;
+}
+
+/**
+ * What a pool session dispatches as — a shared pool's, or a login pool's (migration 0324): a Codex
+ * provider whose endpoint is the pool gateway and whose key is the session token — so the runner's own
+ * translation of a configured Codex provider (runner-go codexProviderArgs) points its codex at the
+ * gateway, and no key or login of the pool is in the job. The gateway sends it on to the Codex CLI's own
+ * endpoint for the pool's credential, so the model space is the CLI's (followsRuntimeCatalog).
  */
 export function sharedPoolExecRow(sessionToken: string): ModelProviderRow {
   return {

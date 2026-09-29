@@ -157,13 +157,16 @@ func TestRejectionMarkerMatchesRealCLIOutput(t *testing.T) {
 // the user asking again, and must preempt. Getting this wrong locked the user out for the full
 // relay timeout: start() saw a relay running and returned, so the retry never reached the CLI.
 func TestStartIsIdempotentPerAttemptButPreemptsANewOne(t *testing.T) {
-	running := &loginRun{key: providerClaude, attempt: "A"}
-	r := &loginRelay{runs: map[string]*loginRun{providerClaude: running}}
+	// Seeded under the key start() looks up — the machine's own login — or start() finds no relay
+	// running, really signs in, and reports after this test has returned.
+	key := loginAccountKey(providerClaude, "")
+	running := &loginRun{key: key, attempt: "A"}
+	r := &loginRelay{runs: map[string]*loginRun{key: running}}
 
 	// Same attempt redelivered: no-op, and the running relay is left alone.
 	r.start(LoginCommand{Action: "start", Engine: providerClaude, Attempt: "A"}, func(LoginResultRequest) { t.Error("redelivered start should not report") })
 	r.mu.Lock()
-	kept := r.runs[providerClaude]
+	kept := r.runs[key]
 	r.mu.Unlock()
 	if kept != running || kept.attempt != "A" {
 		t.Fatalf("redelivered start disturbed the relay: %+v", kept)
@@ -172,7 +175,7 @@ func TestStartIsIdempotentPerAttemptButPreemptsANewOne(t *testing.T) {
 	// An empty attempt (older control plane) keeps the old no-op behaviour rather than churning.
 	r.start(LoginCommand{Action: "start", Engine: providerClaude}, func(LoginResultRequest) { t.Error("empty attempt should not restart") })
 	r.mu.Lock()
-	kept = r.runs[providerClaude]
+	kept = r.runs[key]
 	r.mu.Unlock()
 	if kept != running {
 		t.Error("an attempt-less start from an old control plane should not preempt")

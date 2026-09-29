@@ -74,7 +74,7 @@ test('account pools against PostgreSQL', { skip, concurrency: 1, timeout: 300_00
   process.env.PROVIDER_SECRET_KEY ??= 'provider-pool-pg-spec';
   const realtime = { publishForUser: () => undefined, publishForAllUsers: () => undefined };
   // The pool list reads each member's quota; nothing here is about quota, so every member has none.
-  const planUsage = { snapshot: () => null, refused: () => false };
+  const planUsage = { snapshot: () => null, usageStanding: () => null };
   const service = new ProvidersService(prisma as unknown as PrismaService, realtime as never, planUsage as never);
 
   const newUser = async (name: string) =>

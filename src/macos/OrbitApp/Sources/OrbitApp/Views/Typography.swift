@@ -23,6 +23,7 @@ import SwiftUI
 // orbitMono        code blocks, tool output, commands, paths, branch .footnote    13 mono  11.5 mono
 // orbitDiffLine    diff body lines                                   .caption     12 mono  11 mono
 // orbitMonoFine    diff gutters/gaps, tiny mono badges               .caption2    11 mono  10 mono
+// orbitCode        a one-time code to type elsewhere (device sign-in) .title2      22 mono  20 mono
 // orbitSectionLabel tracked-out micro headers (OUTPUT / ERROR)       .caption2    11       9
 // orbitMeta        glance metadata: timestamps, badges, chevrons     .caption2    11       10 (.caption2)
 // orbitGlyph       row-scale icons: status glyphs, + button, avatar  .subheadline 15       15
@@ -46,6 +47,7 @@ extension Font {
     static let orbitMono: Font = .system(.footnote, design: .monospaced)
     static let orbitDiffLine: Font = .system(.caption, design: .monospaced)
     static let orbitMonoFine: Font = .system(.caption2, design: .monospaced)
+    static let orbitCode: Font = .system(.title2, design: .monospaced).weight(.semibold)
     static let orbitSectionLabel: Font = .caption2
     static let orbitMeta: Font = .caption2
     static let orbitGlyph: Font = .subheadline
@@ -76,6 +78,7 @@ extension Font {
     static let orbitMono: Font = .system(size: 11.5, design: .monospaced)
     static let orbitDiffLine: Font = .system(size: 11, design: .monospaced)
     static let orbitMonoFine: Font = .system(size: 10, design: .monospaced)
+    static let orbitCode: Font = .system(size: 20, weight: .semibold, design: .monospaced)
     static let orbitSectionLabel: Font = .system(size: 9)
     static let orbitMeta: Font = .caption2
     static let orbitGlyph: Font = .system(size: 15)

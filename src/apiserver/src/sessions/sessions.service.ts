@@ -2972,6 +2972,9 @@ export class SessionsService {
       // Read, never spread: it is the input to the count below, and a client that wants to know
       // which jobs are moving asks the count, not the per-job instants behind it.
       runningBgJobActivity,
+      // OpenAI's own id of the ChatGPT account a login-pool session runs on (migration 0324): no response
+      // names an account but by its email and masked form (providers/codex-login.ts).
+      poolCodexAccountId: _poolCodexAccountId,
       ...rest
     } = projected;
     const tags = tagLinks

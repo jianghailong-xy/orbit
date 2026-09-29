@@ -39,9 +39,16 @@ const POOL = 'pool-slug';
 function listPools(
   members: ReturnType<typeof member>[],
   usage: Record<string, PlanUsageSnapshot>,
-  { refused = [] as string[], running = [] as { provider: string; poolMemberProviderId: string | null }[] } = {},
+  {
+    refused = [] as string[],
+    unreadable = [] as string[],
+    running = [] as { provider: string; poolMemberProviderId: string | null }[],
+  } = {},
 ) {
-  const pools = [{ id: 'pool-1', slug: POOL, label: 'Claude accounts', createdAt: new Date(0), updatedAt: new Date(0), members }];
+  const pools = [{
+    id: 'pool-1', slug: POOL, label: 'Claude accounts', createdAt: new Date(0), updatedAt: new Date(0),
+    engine: 'claude', logins: [], members,
+  }];
   return new ProvidersService(
     {
       providerPool: { findMany: async () => pools },
@@ -50,7 +57,8 @@ function listPools(
     {} as never,
     {
       snapshot: (row: { id: string }) => usage[row.id] ?? null,
-      refused: (row: { id: string }) => refused.includes(row.id),
+      usageStanding: (row: { id: string }) =>
+        refused.includes(row.id) ? 'KEY_REFUSED' : unreadable.includes(row.id) ? 'USAGE_UNKNOWN' : null,
     } as never,
   ).listPools('user-1');
 }
@@ -110,6 +118,37 @@ test('a refused key or a disabled row never reads as available, whatever it last
   );
   assert.deepEqual(states(pool), { refused: 'REFUSED', off: 'DISABLED', open: 'AVAILABLE' });
   assert.deepEqual(next(pool), ['open']);
+});
+
+test('a quota the endpoint would not report reads as usage unreadable, and the member still runs', async () => {
+  // A setup token without the profile scope: the usage read is refused, the credential is not — the
+  // state says which, and says it in words of its own (not the refused key's).
+  const [pool] = await listPools([member('setup'), member('read'), member('setup-2')], { read: fiveHour(40) }, {
+    unreadable: ['setup', 'setup-2'],
+  });
+  assert.deepEqual(states(pool), { setup: 'USAGE_UNKNOWN', read: 'AVAILABLE', 'setup-2': 'USAGE_UNKNOWN' });
+  // Ranked behind every member whose quota was read, ahead of nothing: the one reading takes the run.
+  assert.deepEqual(next(pool), ['read']);
+  assert.equal(pool.unavailable, null);
+
+  // Nothing else in the pool can run: the next session still starts, on the setup token.
+  const [alone] = await listPools([member('setup')], {}, { unreadable: ['setup'] });
+  assert.deepEqual(next(alone), ['setup']);
+  assert.equal(alone.unavailable, null, 'a pool of nothing but these is not one that cannot run');
+  assert.deepEqual(states(alone), { setup: 'USAGE_UNKNOWN' });
+
+  // Beside a spent account, whose reading IS known, the unknown one is next until that one resets.
+  const resets = at(HOUR);
+  const [mixed] = await listPools([member('setup'), member('spent')], { spent: fiveHour(100, resets) }, {
+    unreadable: ['setup'],
+  });
+  assert.deepEqual(next(mixed), ['setup']);
+
+  // A key the endpoint refused (401) is the other thing entirely: no next member, no run.
+  const [refusedPool] = await listPools([member('dead')], {}, { refused: ['dead'] });
+  assert.deepEqual(next(refusedPool), []);
+  assert.equal(refusedPool.unavailable, 'No account can run');
+  assert.deepEqual(states(refusedPool), { dead: 'REFUSED' });
 });
 
 test('a member some session is generating on right now is Running now', async () => {

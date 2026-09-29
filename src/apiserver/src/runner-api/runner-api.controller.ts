@@ -2098,8 +2098,8 @@ export class RunnerApiController {
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
       // scope mirrors the claim path: a personal provider resolves only for its owner's sessions,
       // and an account pool is rebuilt on the member the claim would choose, not the runner's login — a
-      // shared pool on the gateway, with a token of its own, as the claim builds it. A maintenance run, as
-      // on the claim, never through a pool.
+      // shared pool, or a Codex pool of the owner's own login, on the gateway with a token of its own, as
+      // the claim builds it. A maintenance run, as on the claim, never through a pool.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
       const customRow = declaredIsBuiltin
         ? null
@@ -2111,7 +2111,8 @@ export class RunnerApiController {
           })) ??
           (maintenance
             ? null
-            : ((await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
+            : ((await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
+              (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
               (await this.queue.resolveSharedPool(this.prisma, s, declared!)))));
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
@@ -3277,7 +3278,8 @@ export class RunnerApiController {
    * recorded as the claim records it (QueueService.resolvePoolMember) — through `tx`, which holds this
    * session's row. Resolved as a plain slug, it would come up on the runner's own login. A switch onto a
    * shared pool re-spawns on its gateway with a token minted for the new process
-   * (QueueService.resolveSharedPool).
+   * (QueueService.resolveSharedPool), and one onto a Codex pool of the owner's own login the same way, on
+   * its account (QueueService.resolveLoginPool).
    */
   private async reloadProviderEnv(
     tx: Prisma.TransactionClient,
@@ -3301,6 +3303,7 @@ export class RunnerApiController {
         providerBuiltin: true,
         poolMemberProviderId: true,
         poolKeyId: true,
+        poolCodexAccountId: true,
         usesRuntimeDefaultModel: true,
         workspace: { select: { model: true, env: true, codexAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
@@ -3315,6 +3318,7 @@ export class RunnerApiController {
             OR: [{ ownerId: null }, { ownerId: session.ownerId }],
           },
         })) ??
+        (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
         (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
         (await this.queue.resolveSharedPool(tx, session, session.provider!)));
     const exec = resolveProviderExec({
@@ -3995,14 +3999,17 @@ export class RunnerApiController {
       // key. That is re-sent the moment another key can take it, or at the first reset when none can
       // (QueueService.sharedPoolKeyRetryAt) — the account pool's "room on another member re-sends now",
       // for keys. Decided from the keys, not from the engine's words, and never for a turn whose key can
-      // still run: that failure was not the key's.
+      // still run: that failure was not the key's. A login pool's turn its account's usage limit ended is
+      // armed the same way, at the reset the backend named (QueueService.loginPoolRetryAt) — the session
+      // waits for its one account and is never moved.
       const keyRetryAt =
         dto.status === RunStatus.FAILED
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         // Only a configured provider's slug can name a pool, as in quotaRetryAt.
         && !isBuiltinProvider(current.provider)
-          ? await this.queue.sharedPoolKeyRetryAt(tx, current, new Date())
+          ? ((await this.queue.sharedPoolKeyRetryAt(tx, current, new Date()))
+            ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
       const retryArmAt = keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
@@ -5357,13 +5364,15 @@ export class RunnerApiController {
             })
           : null;
       // A shared pool's key that ended the run is waited out the same way, from the keys rather than the
-      // words (QueueService.sharedPoolKeyRetryAt): now while another key can take the work.
+      // words (QueueService.sharedPoolKeyRetryAt): now while another key can take the work — and a login
+      // pool's spent account until the reset the backend named (QueueService.loginPoolRetryAt).
       const keyRetryAt =
         effectiveStatus === RunStatus.FAILED
         && current.retryAt == null
         && !quotaSpent
         && !isBuiltinProvider(current.provider)
-          ? await this.queue.sharedPoolKeyRetryAt(tx, current, new Date())
+          ? ((await this.queue.sharedPoolKeyRetryAt(tx, current, new Date()))
+            ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
       const quotaRetryAt = quotaSpent
         ? await this.quotaRetryAt(tx, runner.id, current, dto.error!, workspace)
