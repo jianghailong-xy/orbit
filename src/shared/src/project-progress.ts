@@ -12,6 +12,7 @@
  * lets both sides name the same interface instead of keeping two that drift.
  */
 import type { IntegrationCheckResult } from './dto';
+import type { ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
 export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
@@ -411,6 +412,15 @@ export interface ProjectStartedCard {
   held: Array<{ id: string; title: string }>;
   /** How many such tasks there are in all. */
   heldCount: number;
+  /**
+   * The settings the start left the project running with (`project-start.ts`), as it recorded
+   * them. Absent for a start that recorded none — the Automatic switch, and every confirmation made
+   * before starts carried their settings.
+   */
+  settings?: ProjectStartSettings;
+  /** Which of `settings` are not what the start was asked for, in card order — empty when all of
+   *  them are. Present exactly when `settings` is. */
+  differsFromRequest?: ProjectStartSettingKey[];
 }
 
 /**

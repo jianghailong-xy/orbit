@@ -5,10 +5,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ProjectStatus, TaskStatus } from '@prisma/client';
-import { type ProjectStartedCard, uuidToBase62 } from '@orbit/shared';
+import {
+  type ProjectStartRecord,
+  type ProjectStartSettingKey,
+  type ProjectStartSettings,
+  type ProjectStartedCard,
+  uuidToBase62,
+} from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import type { SessionsService } from '../sessions/sessions.service';
+import { branchName } from './project-criterion-landing';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
 
 /**
@@ -16,13 +23,15 @@ import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
  *
  * §0 — WHY THE PLATFORM SAYS IT
  * =============================
- * "Start the project" (`ProjectAcceptanceService.confirmStandardSet`) turns `coordinator_enabled`
- * on, and so does the web project page's Automatic switch (`ProjectsService.update`). Either way
- * the switch lets Orbit start this project's tasks — the ones opted into auto-run, and no
- * others. A coordinator that filed its tasks to be started by hand and then waited for the owner's
- * go-ahead was never told the go-ahead came: the press spoke to the dispatcher, and the one party
- * holding the work was a conversation it never reached. On 2026-09-23 a project was started with
- * all eight of its tasks held that way, its coordinator parked on a question, and nothing moved.
+ * A start (`ProjectAcceptanceService.startProject`, and "Start the project" on the older card, which
+ * starts it with the default settings) writes the project's `started_at` and the settings it runs
+ * with, and the web project page's Automatic switch (`ProjectsService.update`) turns
+ * `coordinator_enabled` on. Either press lets Orbit start this project's tasks — the ones opted into
+ * auto-run, and no others. A coordinator that filed its tasks to be started by hand and then waited
+ * for the owner's go-ahead was never told the go-ahead came: the press spoke to the dispatcher, and
+ * the one party holding the work was a conversation it never reached. On 2026-09-23 a project was
+ * started with all eight of its tasks held that way, its coordinator parked on a question, and
+ * nothing moved.
  *
  * §1 — WHAT IT SAYS, AND WHAT IT DOES NOT
  * =======================================
@@ -57,11 +66,22 @@ export interface HeldTask {
 }
 
 /**
- * Which press turned the project on: the owner confirming its criteria, or the owner moving its
- * Automatic switch — each keyed by what that press wrote, so one start is told once.
+ * Which press turned the project on: the owner starting it, which confirms its criteria, or the
+ * owner moving its Automatic switch — each keyed by what that press wrote, so one start is told once.
+ *
+ * A start that recorded the settings it left the project with carries them as `record` (the
+ * confirmation's `started_with`), and `lineLocked` when its integration line had already started and
+ * so stayed where it was.
  */
 export type ProjectStart =
-  | { by: 'CONFIRMATION'; confirmationId: string; criteriaCount: number; at: Date }
+  | {
+    by: 'CONFIRMATION';
+    confirmationId: string;
+    criteriaCount: number;
+    at: Date;
+    record?: ProjectStartRecord;
+    lineLocked?: boolean;
+  }
   | { by: 'SWITCH'; configRevision: string; at: Date };
 
 /** Every project-start turn's client id starts here, which is how a reader recognises one. */
@@ -134,16 +154,20 @@ export async function readProjectStartedCard(
   if (!ownerId) return null;
   let projectId: string;
   let criteriaCount: number | null = null;
+  // What the start recorded beside its confirmation (`project-start.ts`): only a start's
+  // confirmation has one, and a card carries it only then.
+  let record: ProjectStartRecord | null = null;
   if (key.by === 'CONFIRMATION') {
     const confirmation = await prisma.projectStandardSetConfirmation.findFirst({
       where: { id: key.confirmationId, ownerId },
-      select: { projectId: true, criteriaMaterial: true },
+      select: { projectId: true, criteriaMaterial: true, startedWith: true },
     });
     if (!confirmation) return null;
     projectId = confirmation.projectId;
     criteriaCount = Array.isArray(confirmation.criteriaMaterial)
       ? confirmation.criteriaMaterial.length
       : null;
+    record = confirmation.startedWith as unknown as ProjectStartRecord | null;
   } else {
     projectId = key.projectId;
   }
@@ -158,7 +182,31 @@ export async function readProjectStartedCard(
     projectTitle: project.title,
     criteriaCount,
     ...(await readHeldTasks(prisma, projectId)),
+    ...(record ? { settings: record.settings, differsFromRequest: record.differsFromRequest } : {}),
   };
+}
+
+/** The words a setting goes by when the message names it as different. */
+const SETTING_NAMES: Record<ProjectStartSettingKey, string> = {
+  line: 'the integration line',
+  automatic: 'Automatic',
+  maxConcurrentTasks: 'the concurrency limit',
+  mergeCheckCommand: 'the merge check',
+};
+
+/** The settings a start left the project with, in one line, as the message says them. */
+function projectStartSettingsLine(settings: ProjectStartSettings): string {
+  const line = settings.line === 'PROJECT_BRANCH'
+    ? `tasks land on the project branch ${
+      settings.projectBranchName ? branchName(settings.projectBranchName) : 'of its own'} first`
+    : 'tasks land directly into main';
+  const tasks = settings.maxConcurrentTasks === 1 ? 'task' : 'tasks';
+  return [
+    line,
+    `Automatic ${settings.automatic ? 'on' : 'off'}`,
+    `at most ${settings.maxConcurrentTasks} ${tasks} at a time`,
+    settings.mergeCheckCommand ? `merge check \`${settings.mergeCheckCommand}\`` : 'no merge check',
+  ].join(' · ');
 }
 
 /** The message's words. `held` is at most `PROJECT_STARTED_LISTED_TASKS` of `heldCount`. */
@@ -181,6 +229,20 @@ export function projectStartedMessage(input: {
     `${what} From now on Orbit starts this project’s tasks that are set to run on their own `
       + '(autoRunWhenReady), within its concurrency limit.',
   ];
+  // What the start set, and what of it is not what the start was asked for — the part a
+  // coordinator that suggested settings needs in order to know what the owner changed.
+  if (start.by === 'CONFIRMATION' && start.record) {
+    const { settings, differsFromRequest } = start.record;
+    let told = `It runs with: ${projectStartSettingsLine(settings)}.`;
+    if (differsFromRequest.length > 0) {
+      told += ` Different from what the start asked for: ${
+        differsFromRequest.map((key) => SETTING_NAMES[key]).join(', ')}.`;
+      if (start.lineLocked && differsFromRequest.includes('line')) {
+        told += ' Its integration line had already started, so it stays where it was.';
+      }
+    }
+    paragraphs.push(told);
+  }
   if (input.heldCount === 0) {
     paragraphs.push(
       'None of its open tasks is set to be started by hand, so none of them is waiting on you.',
@@ -270,10 +332,11 @@ export async function tellCoordinatorProjectStarted(
  * them itself sixteen seconds later, while the owner was still being asked whether to start — the
  * card said the project had not begun, and the project page showed two runs.
  *
- * Not started means the card is still asking: an OPEN project with criteria nobody has ever
- * confirmed, and switched off. A project the owner turned on with its Automatic switch has been
- * started, and so has one confirmed once and switched off since. A project without criteria has
- * no card to press, so it is not held here.
+ * Not started is `started_at` still null on an OPEN project that states criteria: nothing has
+ * started it — neither the start card nor the older confirmation card, and none of the ways a
+ * project could start before the column existed, which migration 0331 backfilled. The Automatic
+ * switch is not one of them any more: it says how the project runs, not whether it has started. A
+ * project without criteria has no card to press, so it is not held here.
  */
 export interface ProjectAwaitingStart {
   projectId: string;
@@ -281,15 +344,12 @@ export interface ProjectAwaitingStart {
 }
 
 export async function projectAwaitingStart(
-  prisma: Pick<
-    PrismaService,
-    'project' | 'projectAcceptanceCriterionDefinition' | 'projectStandardSetConfirmation'
-  >,
+  prisma: Pick<PrismaService, 'project' | 'projectAcceptanceCriterionDefinition'>,
   ownerId: string,
   projectId: string,
 ): Promise<ProjectAwaitingStart | null> {
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ownerId, status: ProjectStatus.OPEN, coordinatorEnabled: false },
+    where: { id: projectId, ownerId, status: ProjectStatus.OPEN, startedAt: null },
     select: { title: true },
   });
   if (!project) return null;
@@ -297,12 +357,7 @@ export async function projectAwaitingStart(
     where: { projectId },
     select: { id: true },
   });
-  if (!criterion) return null;
-  const confirmation = await prisma.projectStandardSetConfirmation.findFirst({
-    where: { projectId },
-    select: { id: true },
-  });
-  return confirmation ? null : { projectId, title: project.title };
+  return criterion ? { projectId, title: project.title } : null;
 }
 
 /** The 409 an agent's `task_start` gets for a task in a project nobody has started. */

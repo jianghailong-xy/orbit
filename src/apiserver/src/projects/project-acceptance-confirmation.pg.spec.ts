@@ -41,7 +41,10 @@
  * It starts the project. `ProjectsService.create` no longer writes `coordinator_enabled`, so a new
  * project lands on the column's false and the coordinator may do nothing until a person has said
  * what would settle it — which makes this door the one authorization to work on a project, and its
- * HUMAN_ONLY refusal the thing that stops an agent from authorising its own. `(5)` asserts both
+ * HUMAN_ONLY refusal the thing that stops an agent from authorising its own. (Since 0331 that start
+ * is the one `POST /projects/:id/start` makes, with the default settings — `started_at` written and
+ * Automatic on — and on a project already started this door only confirms:
+ * `project-start-door.pg.spec.ts` (7) and (8).) `(5)` asserts both
  * halves on the row itself, and `(6)` the other door into that column: `ProjectsService.update`
  * takes the switch on its own, with no second field to name — which it did not until 0292, when
  * `assertLevelNamedWhenTurningOn` still answered a one-field request with a 400. `(7)` is who
@@ -694,7 +697,10 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     assert.ok(!message.content.includes(AUTOMATIC), 'a task Orbit starts by itself is not');
 
     // What the clients draw instead of those words: the same facts, as a card, on the queued turn —
-    // and, off the same key, nothing at all for somebody else.
+    // and, off the same key, nothing at all for somebody else. Since 0331 a press on this door
+    // starts the project with the default settings and records them (`project-start-door.pg.spec.ts`
+    // (7)), so the card carries those too: main, because this workspace names no repository to
+    // branch; Automatic on; the concurrency limit the project already had; no merge check.
     assert.deepEqual(await queuedCard(waiting.sessionId), {
       by: 'CONFIRMATION',
       projectId: waiting.id,
@@ -702,6 +708,8 @@ test('the owner confirms one version of a project’s acceptance standard set, a
       criteriaCount: 1,
       held: [{ id: waiting.heldId, title: HELD }],
       heldCount: 1,
+      settings: { line: 'MAIN', automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null },
+      differsFromRequest: [],
     });
     const key = projectStartOfTurn(message.client_turn_id);
     assert.ok(key, 'the message is not recognisable as a start by its own key');

@@ -1417,7 +1417,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // are out of its reach. No function, trigger or type is created, replaced or dropped — no `CREATE OR
       // REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the six
       // preserved objects. No INSERT, UPDATE or DELETE: every new table starts empty.
-      '0326_wiki_docs'],
+      '0326_wiki_docs',
+      // A project's start as a fact of its own (0331): one nullable `ADD COLUMN` with no default on
+      // `project` (`started_at`, catalog-only), one nullable `ADD COLUMN` with no default on
+      // `project_standard_set_confirmation` (`started_with`) with one CHECK every stored row satisfies
+      // as it reads NULL, and one UPDATE that backfills `started_at` — and writes nothing else — on the
+      // projects that were already started. Read against every claim above: `project` is named, as
+      // the table the column is added to and the one the UPDATE writes, and only that new column is
+      // assigned; no trigger on `project` fires on it, and none is created. `task` and `session` are
+      // named only as the tables that UPDATE reads, and `project_standard_set_confirmation` is not a
+      // preserved relation. It names no `project_acceptance_*` object and none of the six preserved
+      // triggers/functions, creates or replaces no function, trigger, enum or type — so it is not
+      // another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP`. No INSERT or
+      // DELETE, and no task, criterion or confirmation row is rewritten.
+      '0331_project_started_at'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
