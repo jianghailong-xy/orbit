@@ -48,8 +48,47 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(projects.contains("ProjectsListView(rowNavigation: .push)"))
         XCTAssertTrue(projects.contains("case .projectDetail(let projectID, _):"))
         XCTAssertTrue(projects.contains("ProjectDetailView(projectID: projectID)"))
-        XCTAssertFalse(projects.contains("TaskDetailPage"),
-                       "a project's task opens in Tasks, whose stack its detail store follows")
+        // A project's task opens over the project's page on this stack, so the back swipe returns to
+        // the project. It used to open in Tasks — whose every-task scope is the tasks outside
+        // projects since 2026-09-26 — where back landed on a list the task is not in.
+        XCTAssertTrue(projects.contains("case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)"),
+                      "a project's task is a page of the Projects stack")
+    }
+
+    /// A task row on a project's page — and the other task links on it: the graph, the held tasks,
+    /// an item's task — pushes the task over the page, on the phone and in the wide shells alike.
+    /// The wide shells' pane draws that task over its project with the way back to it, and the task
+    /// page's project line, over that project's page, goes back down to it instead of stacking a
+    /// second copy of the page (the web's project page opens its tasks the same way).
+    func testAProjectsTaskOpensOverItsPageAndItsProjectLineGoesBack() throws {
+        let view = code(try appSource("Views/ProjectsView.swift"))
+        let open = try slice(view, from: "private func openTask(_ taskID: String) {", to: "\n    }")
+        XCTAssertTrue(open.contains("model.push(.taskDetail(taskID: taskID))"))
+        XCTAssertFalse(open.contains("route(to: .task"), "not in Tasks")
+
+        let pane = try slice(view, from: "struct ProjectDetailPane: View {", to: "\n}\n")
+        let task = try XCTUnwrap(pane.range(of: "if let taskID = model.nav.taskDetailOnTop, model.nav.projectBeneathTask != nil {"),
+                                 "the pane draws a task only over its project's page")
+        let project = try XCTUnwrap(pane.range(of: "} else if let id = model.selectedProjectID {"))
+        XCTAssertTrue(task.lowerBound < project.lowerBound, "the task on top wins over the page under it")
+        XCTAssertTrue(pane.contains("TaskDetailPage(taskID: taskID)"))
+        XCTAssertTrue(pane.contains("Button { model.nav.pop() }"), "with the way back to the page")
+
+        let tasks = code(try appSource("Views/TasksView.swift"))
+        let line = try slice(tasks, from: "private func projectLine(_ project: TaskProjectRef) -> some View {", to: "label: {")
+        XCTAssertTrue(line.contains("model.openTaskProject(project.id)"))
+
+        let app = code(try appSource("AppModel.swift"))
+        let back = try slice(app, from: "func openTaskProject(_ id: String) {", to: "\n    }")
+        let pop = try XCTUnwrap(back.range(of: "if nav.returnToProject(id) { return }"))
+        let openIt = try XCTUnwrap(back.range(of: "openProject(id)"))
+        XCTAssertTrue(pop.lowerBound < openIt.lowerBound, "back down when the page is right there, open it otherwise")
+
+        // Selecting in the wide shells' list takes a task open over the project with it — except
+        // selecting the same project again, which is no change.
+        let selected = try slice(app, from: "var selectedProjectID: String? {", to: "\n    }\n")
+        XCTAssertTrue(selected.contains("if nav.projectBeneathTask != nil {"))
+        XCTAssertTrue(selected.contains("nav.pop()"))
     }
 
     func testTheThreeColumnShellsSelectThroughAProjectionOfTheStack() throws {

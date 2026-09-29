@@ -329,12 +329,23 @@ private struct ProjectsPlaceholder: View {
 
 // MARK: - One project
 
-/// The Projects section's detail: the page for whichever project is on top of the section's stack.
+/// The Projects section's detail: the page for whichever project is on top of the section's stack —
+/// or, over it, the task one of its rows opened (the pair the phone pushes), with the way back to it.
 struct ProjectDetailPane: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let id = model.selectedProjectID {
+        if let taskID = model.nav.taskDetailOnTop, model.nav.projectBeneathTask != nil {
+            TaskDetailPage(taskID: taskID)
+                .id(taskID)
+                .toolbar {
+                    ToolbarItem(placement: .navigation) {
+                        Button { model.nav.pop() } label: {
+                            Label("Back to the project", systemImage: "chevron.backward")
+                        }
+                    }
+                }
+        } else if let id = model.selectedProjectID {
             ProjectDetailView(projectID: id).id(id)
         } else {
             ContentUnavailableView("Projects", systemImage: "square.grid.2x2",
@@ -1325,9 +1336,12 @@ struct ProjectDetailView: View {
         .buttonStyle(.plain)
     }
 
-    /// A task opens where tasks live — the Tasks section — through the app's one door for it.
+    /// A task opens over this page: pushed on the stack the page is on, so back — the phone's swipe,
+    /// the wide shells' pane — returns here. Not in Tasks, whose every-task scope is the tasks
+    /// outside projects: a project's task opened there sat over a list it is not in, and back landed
+    /// on that list instead of on this page.
     private func openTask(_ taskID: String) {
-        model.route(to: .task(taskID))
+        model.push(.taskDetail(taskID: taskID))
     }
 
     // MARK: menu

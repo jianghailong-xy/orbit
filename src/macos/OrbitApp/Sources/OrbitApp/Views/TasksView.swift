@@ -1420,7 +1420,8 @@ private struct TaskDetailContent: View {
     }
 
     private func projectLine(_ project: TaskProjectRef) -> some View {
-        Button { model.openProject(project.id) } label: {
+        // Over that project's page (a row of it opened this task) it is the way back down to it.
+        Button { model.openTaskProject(project.id) } label: {
             HStack(spacing: 5) {
                 Image(systemName: AppSection.projects.systemImage)
                 Text(project.title).lineLimit(1)

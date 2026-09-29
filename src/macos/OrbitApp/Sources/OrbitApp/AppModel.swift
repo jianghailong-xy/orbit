@@ -161,6 +161,14 @@ final class AppModel {
     var selectedProjectID: String? {
         get { nav.selectedProjectID }
         set {
+            // The list's selection is a project. With one of its tasks open over it, selecting that
+            // same project again is no change; selecting another, or clearing it, takes the task
+            // page with it — a task shows over its own project's page and nowhere else.
+            if nav.projectBeneathTask != nil {
+                guard newValue.map(PublicID.storageKey) != nav.selectedProjectID.map(PublicID.storageKey)
+                else { return }
+                nav.pop()
+            }
             if let id = newValue {
                 nav.replaceTop(with: .projectDetail(projectID: id))
             } else if case .projectDetail = nav.path.last {
@@ -1797,6 +1805,14 @@ final class AppModel {
     func openProject(_ id: String, origin: NavOrigin = .list) {
         selectedSection = .projects
         nav.path = [.projectDetail(projectID: id, origin: origin)]
+    }
+
+    /// The project line on a task's page. Over that project's own page — one of its rows opened the
+    /// task, on the phone's Projects stack or in the wide shells' Projects pane — it goes back down
+    /// to that page instead of stacking a second copy of it; anywhere else it opens the project.
+    func openTaskProject(_ id: String) {
+        if nav.returnToProject(id) { return }
+        openProject(id)
     }
 
     /// A project's page opened from inside a conversation — a coordinator conversation's title, a
