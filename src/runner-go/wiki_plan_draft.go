@@ -486,6 +486,7 @@ func (r *wikiPlanRun) checkout() error {
 	if err != nil {
 		return err
 	}
+	ref = r.resumedSha(root, ref)
 	if want := strings.TrimSpace(r.job.Space.Repo.URLNorm); want != "" {
 		origin, _ := wikiImportGit(root, "remote", "get-url", "origin")
 		if got := normalizeWikiRepoURL(origin); got != want {
@@ -552,10 +553,7 @@ func (r *wikiPlanRun) model() error {
 // runner (so a rerun of the same job finds what the first one wrote). What it holds is reused only for the
 // same job, repository sha, version and instructions.
 func (r *wikiPlanRun) workDir() error {
-	dir := strings.TrimSpace(r.opts.workDir)
-	if dir == "" {
-		dir = filepath.Join(machineHome(), "wiki-plan", r.spaceID, firstNonEmpty(r.job.Job.ID, "run"))
-	}
+	dir := r.workPath()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("the work directory %s could not be made: %w", dir, err)
 	}
@@ -590,6 +588,35 @@ func (r *wikiPlanRun) workDir() error {
 	}
 	r.say("Work directory %s%s.", dir, map[bool]string{true: "", false: " (reusing what an earlier run of this job wrote)"}[r.fresh])
 	return nil
+}
+
+func (r *wikiPlanRun) workPath() string {
+	if dir := strings.TrimSpace(r.opts.workDir); dir != "" {
+		return dir
+	}
+	return filepath.Join(machineHome(), "wiki-plan", r.spaceID, firstNonEmpty(r.job.Job.ID, "run"))
+}
+
+// resumedSha is the sha an earlier run of this job drafted from, when it left its answers in the work
+// directory and that sha is still on origin/main: a run cut off — the endpoint gone, the runner restarted —
+// picks up at the tree its answers were written against, instead of starting over because main moved.
+func (r *wikiPlanRun) resumedSha(root, ref string) string {
+	raw, err := os.ReadFile(filepath.Join(r.workPath(), "meta.json"))
+	if err != nil {
+		return ref
+	}
+	var meta struct {
+		Job string `json:"job"`
+		Sha string `json:"sha"`
+	}
+	if json.Unmarshal(raw, &meta) != nil || meta.Job == "" || meta.Job != r.job.Job.ID || meta.Sha == ref || !wikiCommitSha.MatchString(meta.Sha) {
+		return ref
+	}
+	if _, err := wikiImportGit(root, "merge-base", "--is-ancestor", meta.Sha, ref); err != nil {
+		return ref
+	}
+	r.say("Resuming this job at %s, the origin/main its earlier run drafted from (origin/main is now %s).", shortWikiHash(meta.Sha), shortWikiHash(ref))
+	return meta.Sha
 }
 
 func (r *wikiPlanRun) saveText(name, text string) {

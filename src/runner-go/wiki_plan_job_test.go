@@ -651,6 +651,60 @@ func TestWikiPlanLeavesACountStillOutsideTheTargetToTheGate(t *testing.T) {
 	}
 }
 
+// ── A run cut off, and run again ────────────────────────────────────────────────────────────────
+
+func TestWikiPlanResumesAtTheShaItsEarlierRunDraftedFrom(t *testing.T) {
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	model := &planModel{}
+	vllm := newFakeVLLM(t, model.answer)
+	planSession(t, door.URL, vllm)
+	fakeVerifyClaude(t)
+	work := t.TempDir()
+
+	if _, printed, err := runPlanCLI(t, work, "draft", "--target", "3-3"); err != nil {
+		t.Fatalf("the first run: %v\n%s", err, printed)
+	}
+	first := draftSent(t, door, 1).RepoCheck.Sha
+	asked := len(vllm.Requests())
+	// main moves on before the job is run again.
+	moved := t.TempDir()
+	mustGit(t, moved, "clone", "-q", f.bare, ".")
+	mustGit(t, moved, "config", "user.email", "test@orbit")
+	mustGit(t, moved, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(moved, "NOTES.md"), []byte("# Notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, moved, "add", ".")
+	mustGit(t, moved, "commit", "-q", "-m", "later")
+	mustGit(t, moved, "push", "-q", "origin", "main")
+
+	if _, printed, err := runPlanCLI(t, work, "draft", "--target", "3-3"); err != nil {
+		t.Fatalf("the run again: %v\n%s", err, printed)
+	}
+	if again := draftSent(t, door, 2).RepoCheck.Sha; again != first {
+		t.Errorf("the run again drafted at %s, not at %s where its answers were written", again, first)
+	}
+	if n := len(vllm.Requests()); n != asked {
+		t.Errorf("the run again asked the model %d more times; every answer was in the work directory", n-asked)
+	}
+
+	// A sha that is no longer on origin/main is not resumed: the run starts over at origin/main.
+	meta, err := os.ReadFile(filepath.Join(work, "meta.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "meta.json"), []byte(strings.Replace(string(meta), first, strings.Repeat("0", 40), 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, printed, err := runPlanCLI(t, work, "draft", "--target", "3-3"); err != nil {
+		t.Fatalf("the run over: %v\n%s", err, printed)
+	}
+	if sha := draftSent(t, door, 3).RepoCheck.Sha; sha == first || len(vllm.Requests()) == asked {
+		t.Errorf("a run whose sha is gone reused its answers: drafted at %s after %d calls", sha, len(vllm.Requests()))
+	}
+}
+
 // ── References, and a round with the gate's errors ──────────────────────────────────────────────
 
 func TestWikiPlanChecksRepositoryAndCrossReferencesAndRedoesWithTheErrors(t *testing.T) {
