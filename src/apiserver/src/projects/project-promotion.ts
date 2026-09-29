@@ -157,14 +157,14 @@ export interface AutomaticConfirmationFacts {
  *
  * THE WHOLE DEFINITION, AND NOT A WORD WIDER. The owner's rule has two halves — the line is the
  * project's own branch, and Automatic is on — and a clean landing under them, in a project that is
- * not paused. Clean is: nothing
- * conflicted, every check green, the check said which main it ran against and which tree it passed
- * (without those there is nothing to hold the landing to), and no integration exception standing
- * open on the project. The last clause, "main has not moved since the check", cannot be known here —
- * the control plane has no repository — so it is enforced where it can be, at the push: the landing
- * is sent out bound to the checked tip, and a runner that finds main elsewhere lands nothing and
- * hands the candidate back (M-T12). Which is why a runner that has not said it does that is itself a
- * refusal: on an older one, a moved main would be checked again and merged, and that is not clean.
+ * not paused. Clean is: nothing conflicted, every check green, the check said which main it ran
+ * against and which tree it passed (without those there is nothing to hold the landing to), and no
+ * integration exception standing open on the project. The last clause, "main has not moved since
+ * the check", cannot be known here — the control plane has no repository — so it is enforced where
+ * it can be, at the push: the landing is sent out bound to the checked tip, and a runner that finds
+ * main elsewhere lands nothing and hands the candidate back (M-T12). Which is why a runner that has
+ * not said it does that is itself a refusal: on an older one, a moved main would be checked again
+ * and merged, and that is not clean.
  *
  * Every refusal is today's behaviour, unchanged: the card, exactly as it would have opened.
  */

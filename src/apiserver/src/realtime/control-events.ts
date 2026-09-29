@@ -69,11 +69,12 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
 }
 
 /** The user-scoped events — the owner's libraries, a project's pending criteria decisions, whether
- *  a project moves, the owner's watches, and the owner's wiki: they carry no session, so `toControlEvent` routes them by
- *  owner id and ships an empty `sessionId` (see the ControlEvent doc comment). A watch belongs to its
- *  owner and not to the session observing it: a NOTIFY_USER watch has no observer session at all. A
- *  wiki space belongs to the account — the session that proposed into it is one writer among many,
- *  and the owner's own writes in Review come from no session at all. */
+ *  a project moves, the owner's watches, and the owner's wiki: they carry no session, so
+ *  `toControlEvent` routes them by owner id and ships an empty `sessionId` (see the ControlEvent
+ *  doc comment). A watch belongs to its owner and not to the session observing it: a NOTIFY_USER
+ *  watch has no observer session at all. A wiki space belongs to the account — the session that
+ *  proposed into it is one writer among many, and the owner's own writes in Review come from no
+ *  session at all. */
 export function isUserScopedType(t: ControlEventType): boolean {
   return (
     t === ControlEventType.TASK_LIST_CHANGED ||

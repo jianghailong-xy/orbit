@@ -717,11 +717,12 @@ async function runnerHandsBackMovedUpstream(
  *
  * The authorization is the owner's to take back, and a queue stands between the check and the push.
  * A project whose Automatic was switched off in between — or which was paused, or whose line was
- * moved to main, or which has had an integration exception opened since — no longer has the yes this
- * landing was queued under, and it is not pushed on the strength of one that was withdrawn. The rule is the same one
- * (`automaticConfirmationRefusal`), over the facts the check left on the promotion and the project as
- * it stands now: the check is not judged a second time, only what the owner and the line can change.
- * main moving since the check is still the runner's to see, at the push.
+ * moved to main, or which has had an integration exception opened since — no longer has the yes
+ * this landing was queued under, and it is not pushed on the strength of one that was withdrawn.
+ * The rule is the same one (`automaticConfirmationRefusal`), over the facts the check left on the
+ * promotion and the project as it stands now: the check is not judged a second time, only what the
+ * owner and the line can change. main moving since the check is still the runner's to see, at the
+ * push.
  */
 export async function automaticLandingRefusal(
   tx: Prisma.TransactionClient,
