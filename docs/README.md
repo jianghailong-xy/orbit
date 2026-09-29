@@ -8,6 +8,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | If you want to… | Read |
 | --- | --- |
 | Understand the product and its use cases | [Product introduction](product-intro.md) |
+| Reuse the approved public positioning and launch copy | [GitHub launch messaging brief](messaging-brief.md) |
 | Run Orbit on your own server | [Self-hosting](self-hosting.md) |
 | Understand the system and trust boundaries | [Architecture overview](architecture.md) |
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
