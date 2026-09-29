@@ -50,7 +50,9 @@ const wikiDossierDescription = wikiDossierPrecondition + " This is a Wiki mainte
 	"merge receipts, criteria revised), oldest first, with one dossier for each session those facts name — its " +
 	"timeline compressed, redacted and cut to a token budget, each line led by its short name (L1, L2 and so on), and " +
 	"sources mapping each name to the turn, event, tool call, task, comment, approval, merge receipt or owner decision " +
-	"it came from, which is what a proposal cites. A batch project's sessions come as counts rather than a dossier " +
+	"it came from, which is what a proposal cites, and to where in that record's text the line's words are (@start-end, " +
+	"code points of the record's redacted text: a quote copied from there is the record's own words). A batch " +
+	"project's sessions come as counts rather than a dossier " +
 	"each, and tool errors several of the space's sessions share come as error clusters. The page ends with its " +
 	"cursor token: `orbit wiki cursor advance --to` that token is how the run says it processed everything up to it, " +
 	"and when more is true, --after the same token reads the next page. Any session but a maintenance run of the " +
@@ -116,11 +118,23 @@ type wikiDossier struct {
 	Unchanged bool                `json:"unchanged"`
 }
 
-// wikiDossierSource is one line's first-hand record: what a proposal made from the dossier cites.
+// wikiDossierSource is one line's first-hand record — what a proposal made from the dossier cites — and
+// where in that record's text the line's words are (contract `maintenance.dossier.spans`).
 type wikiDossierSource struct {
-	Ref  string `json:"ref"`
-	Kind string `json:"kind"`
-	ID   string `json:"id"`
+	Ref   string            `json:"ref"`
+	Kind  string            `json:"kind"`
+	ID    string            `json:"id"`
+	Spans []wikiDossierSpan `json:"spans"`
+}
+
+// wikiDossierSpan is one piece of a line's words in its record: from Start to End in code points of the
+// record's text — the text a quote of it is checked against, redacted — and the words found there. A line
+// the dossier compressed has a span for each piece of its record it kept: a tool call's command and its
+// result's first and last line, a thought's signal sentences.
+type wikiDossierSpan struct {
+	Start int    `json:"start"`
+	End   int    `json:"end"`
+	Text  string `json:"text"`
 }
 
 // wikiDossierBatch is a batch project's sessions of the page, which come as counts and no dossier each.
@@ -313,7 +327,7 @@ func describeWikiDossierPage(spaceID string, page wikiDossierPage) string {
 		fmt.Fprintf(&b, "\n── %s\n%s\n", strings.Join(header, " · "), strings.TrimRight(dossier.Text, "\n"))
 		sources := make([]string, 0, len(dossier.Sources))
 		for _, source := range dossier.Sources {
-			sources = append(sources, source.Ref+"="+source.Kind+":"+source.ID)
+			sources = append(sources, source.Ref+"="+source.Kind+":"+source.ID+wikiDossierSpansAt(source.Spans))
 		}
 		if len(sources) == 0 {
 			sources = append(sources, "none")
@@ -356,6 +370,19 @@ func describeWikiDossierPage(spaceID string, page wikiDossierPage) string {
 		}
 	}
 	return b.String()
+}
+
+// wikiDossierSpansAt is where a line's words are in its record, as the sources line prints it:
+// `@12-40,52-60`, code points of the record's redacted text.
+func wikiDossierSpansAt(spans []wikiDossierSpan) string {
+	if len(spans) == 0 {
+		return ""
+	}
+	at := make([]string, 0, len(spans))
+	for _, span := range spans {
+		at = append(at, fmt.Sprintf("%d-%d", span.Start, span.End))
+	}
+	return "@" + strings.Join(at, ",")
 }
 
 // shortWikiHash is enough of a dossier's hash to tell two apart at a glance.
