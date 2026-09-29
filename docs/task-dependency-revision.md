@@ -7,8 +7,8 @@
 |---|---|
 | migration | `src/apiserver/prisma/migrations/0132_task_dependency_revision/migration.sql` |
 | 锁序里的位置（秩 70） | `src/apiserver/src/common/lock-order.ts` |
-| dispatch 侧：秩 70 取锁 | `src/apiserver/src/projects/project-authorization.service.ts` |
-| dispatch 侧：秩 10 预锁（I4） | `src/apiserver/src/projects/project-task-dispatcher.service.ts` |
+| ~~dispatch 侧：秩 70 取锁~~ | ~~`src/apiserver/src/projects/project-authorization.service.ts`~~ **已删除（`6418a1e5`，见 §3）** |
+| ~~dispatch 侧：秩 10 预锁（I4）~~ | ~~`src/apiserver/src/projects/project-task-dispatcher.service.ts`~~ **已删除（`6418a1e5`，见 §3）** |
 | 真实 PG 回归（两种提交顺序、批量、回滚） | `src/apiserver/src/deadlock/dependency-revision.pg.spec.ts` |
 | 回归夹具 + **可执行的回滚 SQL**（`ROLLBACK_0132`） | `src/apiserver/src/deadlock/dependency-revision-fixture.ts` |
 | 基线要用的历史 touch 触发器 | `src/apiserver/src/deadlock/pre-0132-dispatch-touch.ts` |
@@ -24,7 +24,7 @@ scripts/deadlock-barrier.sh all                   # 两条基线 + 锁序回归 
 把 `task.updated_at` 当 dispatch 版本比较。真正起作用的一直是那把**行锁**：
 
 * 边写 → `UPDATE "task" SET "updated_at"` → 该 Task 行 `FOR NO KEY UPDATE`；
-* dispatch 决策 → `SELECT … FROM "task" … FOR SHARE`（`project-task-dispatcher.service.ts`）。
+* dispatch 决策 → `SELECT … FROM "task" … FOR SHARE`（~~`project-task-dispatcher.service.ts`~~，**已删除**，见 §3）。
 
 `FOR SHARE` 与 `FOR NO KEY UPDATE` 冲突，于是两者互斥：要么边先落、决策看到新边，要么决策先跑、边排在
 Session 之后。**空边集**也因此可锁——边集为空时没有边行可以 `FOR SHARE`，但那个 Task 行永远在。
@@ -73,8 +73,13 @@ UPDATE "task_dependency_revision" r SET "revision" = r."revision" + 1
 
 ## 3. dispatch 侧：读/锁 + 提交边界复查
 
-`ProjectAuthorizationService.authorizeInTransaction`（已有的 fencing transaction）在锁完前置 Task
-之后加一条：
+> **本节描述的 dispatch 侧两半今天都已删除**（`6418a1e5`，2026-08-23，随 coordinator 控制环一起：
+> `ProjectAuthorizationService` 与 `ProjectTaskDispatcherService`）。它们留在这里，是因为 0132 装进
+> **数据库**的那一半还在——表、三个推进触发器、提交边界 `session_dispatch_dependency_check`——而下面是
+> 那次 migration 的记录。今天 `src/apiserver/src` 里没有一处读 `task_dependency_revision`。
+
+~~`ProjectAuthorizationService.authorizeInTransaction`~~（当时的 fencing transaction，已随控制环删除）
+在锁完前置 Task 之后加一条：
 
 ```sql
 SELECT r."revision" FROM "task_dependency_revision" r
@@ -100,10 +105,14 @@ writer    持有 user(10)      →  等 revision(70)  （边写之后的推进�
 ```
 
 修法是把 dispatch 那把本来就会取的锁提前，和 I2 对 Task 写做的事一模一样——
-`dispatchInTransaction` 的**第一条**语句改成 `FOR KEY SHARE OF u FOR SHARE OF t`。同一行、同一模式、
+~~`dispatchInTransaction`~~ 的**第一条**语句改成 `FOR KEY SHARE OF u FOR SHARE OF t`。同一行、同一模式、
 只是提前，因此既没加强也没削弱任何东西。回归里有一条专门把这一句去掉重跑同一对事务并断言拿到
-`40P01`（`a dispatch that skips the owner pre-lock deadlocks against an edge write`），所以这条不变量
-不会在某次重构里被悄悄拿掉。
+`40P01`（`a dispatch that skips the owner pre-lock deadlocks against an edge write`）。
+
+**这条语句今天不存在了**（**已删除：`6418a1e5`**）：`ProjectTaskDispatcherService` 与产生上面那个
+`40P01` 的 `ProjectAuthorizationService` 一起随控制环删除，所以 I4 在应用侧的两半都没有现役实现。
+回归保留，因为它测的是 0132 装进数据库的那套边界（表、推进触发器、`session_dispatch_dependency_check`），
+不是今天谁会发出的语句——夹具与 migration 的文本由 spec 直接钉住，历史不会漂。
 
 它还有一个副作用值得写下来：`FOR KEY SHARE` 与 `FOR UPDATE` 冲突，所以**一次派发和本 owner 的任何边
 写入现在完全串行**。这意味着今天所有边写入方（它们全都拿 owner mutex）与派发之间，秩 10 就已经是一道
@@ -137,7 +146,7 @@ Coordinator 派发生效：用户手动"开始执行"一个前置未完成的任
 | `TasksService.addDependency` / `removeDependency` | 秩 10 + 秩 30 预锁 creator Session | **只有秩 10**。边写不再写 `task` 行，就没有第二次写去重跑外键 |
 | `TasksService.applyDag` | 秩 10 + 整批 Task 的 creator Session | **只有秩 10** |
 | `TasksService.update` 的 `rewritesTaskRow` | `dependsOnTaskIds !== undefined \|\| !!supersession` | **`!!supersession`**。依赖替换不再让 `task` 行被写第二次 |
-| `ProjectTaskDispatcherService.dispatchInTransaction` 第一条语句 | `FOR SHARE OF t` | **`FOR KEY SHARE OF u FOR SHARE OF t`**（I4，见上） |
+| ~~`ProjectTaskDispatcherService.dispatchInTransaction` 第一条语句~~ | `FOR SHARE OF t` | **`FOR KEY SHARE OF u FOR SHARE OF t`**（I4，见上）——**已删除（`6418a1e5`）**：这个类、这条语句与它秩 70 的读取方 `ProjectAuthorizationService` 一起随控制环消失，今天应用侧没有 `task_dependency_revision` 的读者 |
 
 这不是顺手清理：`FOR KEY SHARE` 与 runner 持有 Session 的 `FOR UPDATE` 冲突，所以旧的预锁会让一次改依赖
 去等一个**无关的正在跑的 run**。这正是任务说的"扩大 Task/creator_session FK 锁域"。
