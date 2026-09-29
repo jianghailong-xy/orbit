@@ -36,6 +36,13 @@ final class AgentsModel {
     /// keys: a new-session draft is what offers pools, and the draft seed resolves a workspace that
     /// runs on one through them.
     private(set) var providerPools: [ProviderPool] = []
+    /// The shared Codex pools this account is in (GET /providers/shared-pools), read into their own
+    /// model. A new-session draft offers them beside the account pools (`allPools`), and the
+    /// Providers page lists them on their own — which is why the two are kept apart here.
+    private(set) var sharedPools: [SharedPool] = []
+    /// Every pool a new-session draft may offer, in web's order: the shared ones drawn as account
+    /// pools whose members are their keys (`SharedPools.asProviderPool`), then this account's own.
+    var allPools: [ProviderPool] { SharedPools.asProviderPools(sharedPools) + providerPools }
     /// How the workspace-list fetches have gone: tells a failed fetch from an empty list, and holds
     /// the launch landing open until one succeeds (`LoadFailureLogic`).
     private(set) var loadState = ListLoadState()
@@ -94,11 +101,55 @@ final class AgentsModel {
         let catalog = modelCatalog(for: runnerId)
         return AgentDefaults.effectiveDefaultModel(
             for: provider, catalog: catalog,
-            configured: configuredProviders + ProviderPools.asProviders(providerPools),
+            configured: configuredProviders + ProviderPools.asProviders(allPools),
             runtimeDefaults: runnerId.flatMap { runnerRuntimeDefaultModels[$0] })
     }
 
     func agent(_ id: String) -> Agent? { items.first { $0.id == id } }
+
+    // MARK: a Codex pool of one's own — its ChatGPT account (migration 0323)
+
+    /// The pools read again: an account went in or out, or a pool went.
+    func reloadPools() async {
+        if let pools = try? await api.providerPools() { providerPools = pools }
+    }
+
+    /// "Sign in with ChatGPT": the page to open and the one-time code, from the server's device sign-in.
+    func startCodexLogin(_ pool: ProviderPool) async throws -> CodexLoginAttempt {
+        try await api.startCodexLogin(poolID: pool.id)
+    }
+
+    func pollCodexLogin(_ pool: ProviderPool) async throws -> CodexLoginPoll {
+        try await api.pollCodexLogin(poolID: pool.id)
+    }
+
+    /// Best-effort: a sign-in nobody finishes also runs out on the server by itself.
+    func cancelCodexLogin(_ pool: ProviderPool) async {
+        _ = try? await api.cancelCodexLogin(poolID: pool.id)
+    }
+
+    /// Sign the pool's account out: the server deletes the sign-in it held. Why it didn't, or nil.
+    func signOutCodexLogin(_ pool: ProviderPool) async -> String? {
+        do {
+            try await api.signOutCodexLogin(poolID: pool.id)
+            await reloadPools()
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
+    /// Delete one of the account's own pools: it is gone from the list. Why it didn't, or nil.
+    func deletePool(_ pool: ProviderPool) async -> String? {
+        do {
+            try await api.deleteProviderPool(pool.id)
+            let key = PublicID.storageKey(pool.id)
+            providerPools.removeAll { PublicID.storageKey($0.id) == key }
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
 
     func load() async {
         loadState.begin()
@@ -112,6 +163,7 @@ final class AgentsModel {
                 configuredProvidersLoaded = true
             }
             if let pools = try? await api.providerPools() { providerPools = pools }
+            if let shared = try? await api.sharedPools() { sharedPools = shared }
             loadState.succeed()
         } catch {
             errorText = friendly(error)

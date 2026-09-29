@@ -30,6 +30,15 @@ import { ago } from '../lib/watches';
  *
  * NOTHING HERE DECIDES WHO MAY ANSWER. The answer door takes the owner's own credential and
  * refuses an acting session (§5.2 R10); this draws what that door serves and posts to it.
+ *
+ * WHY THE OPTIONS END WITH "OTHER". The door has always taken words alone, and the box beside the
+ * options has always been able to carry them — but a box beside a CHOSEN option reads as a note on
+ * it, and that is how a coordinator received "none of these fits" as agreement with the
+ * recommendation plus a caveat, and went on to act on it. Naming the row that means "my own words"
+ * makes answering in prose a choice the owner makes rather than something this card infers from
+ * where the text happened to be typed. It also replaces the gesture this card used to hide here —
+ * pressing the chosen option again to take the choice back — which nothing on the card said.
+ * (The two shapes it was chosen over: `docs/mocks/coordinator-question-other.html`.)
  */
 
 /**
@@ -63,6 +72,8 @@ export const SEND_ANSWER = 'Send answer';
 /** The box beside the options says what its text will be: a note on the choice, or the answer. */
 export const NOTE_PROMPT = 'Add a note (optional)';
 export const OWN_ANSWER_PROMPT = 'Or type your own answer…';
+/** The row this card adds after the coordinator's own: the words are the answer, not a note. */
+export const OTHER_OPTION = 'Other — say it in my own words';
 export const RECOMMENDED = 'Recommended';
 export const ANSWERED_HEADING = 'Answered';
 /** An answer with nobody to tell yet: R11 tells the next coordinator when one is bound. */
@@ -98,6 +109,19 @@ function answerInWords(question: CoordinatorQuestion, option: number | null, tex
   return [chosen, text.trim()].filter(Boolean).join(' — ');
 }
 
+/**
+ * What the owner settled on: one of the coordinator's options by index, the Other row this card
+ * adds — where the words in the box are the answer rather than a note — or, on a question that
+ * recommended none of its options, nothing at all.
+ */
+const OTHER = 'other';
+type Choice = number | typeof OTHER | null;
+
+/** The option an answer names, or null when the answer is words alone. */
+function optionIndex(chosen: Choice): number | null {
+  return typeof chosen === 'number' ? chosen : null;
+}
+
 export function CoordinatorQuestionCard({
   projectId,
   row,
@@ -110,7 +134,7 @@ export function CoordinatorQuestionCard({
 }): JSX.Element | null {
   const qc = useQueryClient();
   const question = row.question;
-  const [chosen, setChosen] = useState<number | null>(question?.recommendedOption ?? null);
+  const [chosen, setChosen] = useState<Choice>(question?.recommendedOption ?? null);
   const [text, setText] = useState('');
   const answer = useMutation({
     mutationFn: (body: { option?: number; text?: string }) =>
@@ -137,7 +161,7 @@ export function CoordinatorQuestionCard({
         </div>
         <p className="coordinator-question-receipt">
           <span className="coordinator-question-verdict">
-            {`✓ ${answerInWords(question, chosen, text) || '(no answer given)'}`}
+            {`✓ ${answerInWords(question, optionIndex(chosen), text) || '(no answer given)'}`}
           </span>
           <span className="coordinator-question-foot">
             {`by you · ${receipt.delivery ? DELIVERED_TO_COORDINATOR : WAITING_FOR_COORDINATOR}`}
@@ -149,13 +173,16 @@ export function CoordinatorQuestionCard({
 
   const free = question.options.length === 0;
   const trimmed = text.trim();
+  const chosenOption = optionIndex(chosen);
   // A choice, some text, or both — the door takes any of them. Beside a choice the text is a note on
-  // it; on its own it is the answer, which is how the owner says none of the options is theirs.
-  const sendable = chosen !== null || trimmed !== '';
+  // it; on its own it is the answer, which is what the Other row is for. That row with an empty box
+  // is not an answer, and the door refuses it (`an answer needs an option or some text`), so the
+  // press stays disabled exactly while there is nothing to take.
+  const sendable = chosenOption !== null || trimmed !== '';
   const send = () => {
     if (!sendable || answer.isPending) return;
     answer.mutate({
-      ...(chosen !== null ? { option: chosen } : {}),
+      ...(chosenOption !== null ? { option: chosenOption } : {}),
       ...(trimmed ? { text: trimmed } : {}),
     });
   };
@@ -182,11 +209,6 @@ export function CoordinatorQuestionCard({
               name={`question-${row.itemId}`}
               checked={chosen === index}
               onChange={() => setChosen(index)}
-              // Pressing the chosen option again takes it back: the recommendation starts out
-              // chosen, and without this there is no way back to answering in words alone.
-              onClick={() => {
-                if (chosen === index) setChosen(null);
-              }}
             />
             <span className="coordinator-question-option-text">
               {option.label}
@@ -199,6 +221,23 @@ export function CoordinatorQuestionCard({
             </span>
           </label>
         ))}
+        {/* The last row is this card's own, and it is a row rather than a hint because the owner
+            has to be able to SEE that answering in their own words is allowed before they type
+            them. Choosing it takes the choice off the recommendation: from there the box is the
+            answer, and the receipt carries the words with no option in front of them. */}
+        {free ? null : (
+          <label
+            className={`coordinator-question-option${chosen === OTHER ? ' is-chosen' : ''}`}
+          >
+            <input
+              type="radio"
+              name={`question-${row.itemId}`}
+              checked={chosen === OTHER}
+              onChange={() => setChosen(OTHER)}
+            />
+            <span className="coordinator-question-option-text">{OTHER_OPTION}</span>
+          </label>
+        )}
         {/* Always there: none of the options may be what the owner wants, and one that is may
             still need a condition said with it. */}
         <Input.TextArea
@@ -206,7 +245,9 @@ export function CoordinatorQuestionCard({
           value={text}
           maxLength={2000}
           autoSize={{ minRows: 2, maxRows: 8 }}
-          placeholder={free ? 'Your answer' : chosen !== null ? NOTE_PROMPT : OWN_ANSWER_PROMPT}
+          placeholder={
+            free ? 'Your answer' : chosenOption !== null ? NOTE_PROMPT : OWN_ANSWER_PROMPT
+          }
           onChange={(event) => setText(event.target.value)}
         />
         {/* What it holds up and what happens if nobody answers, in the server's own words — the

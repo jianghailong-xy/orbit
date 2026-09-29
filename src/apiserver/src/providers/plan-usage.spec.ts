@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { parseSubscriptionUsage, probesSubscriptionUsage, usageErrorMessage } from './plan-usage';
+import { parseSubscriptionUsage, probesSubscriptionUsage, usageErrorMessage, usageFailureKind } from './plan-usage';
 
 const OAT = 'sk-ant-oat01-abcdef';
 
@@ -67,6 +67,24 @@ test('a payload carrying no window we understand reads as no quota, not an empty
   assert.equal(parseSubscriptionUsage({ something_else: 1 }, 'now'), null);
   assert.equal(parseSubscriptionUsage(null, 'now'), null);
   assert.equal(parseSubscriptionUsage('nope', 'now'), null);
+});
+
+test('the endpoint refusing to READ a token is not the endpoint refusing the token', () => {
+  // The live case: a Claude Code setup token holds no `user:profile` scope, so this endpoint turns the
+  // read away while sessions run on the very same token. Nothing is wrong with the key.
+  assert.equal(usageFailureKind(403, 'OAuth token does not meet scope requirement user:profile'), 'USAGE_UNKNOWN');
+  // A 403 says the same thing whatever words it comes with.
+  assert.equal(usageFailureKind(403, ''), 'USAGE_UNKNOWN');
+  // And a scope complaint reported as 401 is that same refusal, not a dead key.
+  assert.equal(usageFailureKind(401, 'insufficient scope'), 'USAGE_UNKNOWN');
+
+  // A 401 that is about the credential itself is a refused key — the verdict a session would meet.
+  assert.equal(usageFailureKind(401, 'invalid x-api-key'), 'KEY_REFUSED');
+  assert.equal(usageFailureKind(401, ''), 'KEY_REFUSED');
+
+  // Anything else is the endpoint's own trouble, and the read is worth retrying.
+  assert.equal(usageFailureKind(429, 'rate limited'), null);
+  assert.equal(usageFailureKind(500, 'oops'), null);
 });
 
 test("a refusal is reported in the endpoint's own words", () => {

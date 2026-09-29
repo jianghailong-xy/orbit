@@ -108,9 +108,17 @@ struct NeedsYouBannerView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(needsYouTint)
-            // Hairline below only — the nav bar draws its own above.
-            .overlay(alignment: .bottom) { Divider() }
+            // The wash rides on the bar material, never on its own: this is a top inset, and the
+            // transcript (or list) goes on scrolling under it, so a bare 12% tint let the rows' text
+            // read straight through the bar's own line. `.bar` is what every other band pinned
+            // under the nav bar sits on (the console's "↑ Your question", the iPad scope picker),
+            // and like theirs it runs on up behind the nav bar. The wash stops at the bar's own
+            // edge, so it is this line — not the page's title above it — that reads as waiting.
+            .background(needsYouTint, ignoresSafeAreaEdges: [])
+            .background(.bar)
+            // Hairline below only. Stacked, not bare: a lone `Divider()` in an overlay has no stack
+            // axis and drew as a vertical line down the middle of the bar.
+            .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -78,7 +78,7 @@ final class SharedPoolsTests: XCTestCase {
         func mark(_ key: SharedPoolKey) -> SharedPoolKey {
             let c = key.contributor
             return SharedPoolKey(id: key.id, label: key.label, fingerprint: key.fingerprint, state: key.state,
-                                 enabled: key.enabled, shareCap: key.shareCap,
+                                 enabled: key.enabled, shareCap: key.shareCap, spentUntil: key.spentUntil,
                                  contributor: PoolKeyContributor(userId: c.userId, name: c.name, you: c.userId == userId),
                                  usage: key.usage, running: key.running)
         }
@@ -222,6 +222,54 @@ final class SharedPoolsTests: XCTestCase {
         let noWindow = SharedPool(id: pool.id, slug: pool.slug, label: pool.label, keys: pool.keys)
         XCTAssertEqual(SharedPoolPage.status(try key(pool, "ios-build"), in: noWindow),
                        PoolStatus(label: "At cap", tone: .warning))
+    }
+
+    /// A key OpenAI has put out of budget (`spentUntil`, the gateway's mark on an upstream
+    /// `insufficient_quota`): read off the payload, out until its own mark, and no session of anybody's
+    /// starts on it — its contributor's included, where a cap stops only the others.
+    func testAKeyOpenAIPutOutOfBudgetIsOutUntilItsMark() throws {
+        let pool = try team()
+        let json = """
+        {"id": "\(Self.id(16))", "label": "chen-org-2", "fingerprint": "sk-…5V8N", "state": "ACTIVE",
+         "enabled": true, "shareCap": 50, "spentUntil": "2026-09-30T06:00:00.000Z",
+         "contributor": {"userId": "\(Self.chen)", "name": "Chen Yu", "you": false},
+         "usage": {"inputTokens": 1, "outputTokens": 1, "costUsd": 18, "othersCostUsd": 18},
+         "running": false, "next": false}
+        """
+        let spent = try decoder.decode(SharedPoolKey.self, from: Data(json.utf8))
+        XCTAssertEqual(spent.spentUntil, "2026-09-30T06:00:00.000Z")
+        XCTAssertEqual(SharedPoolPage.status(spent, in: pool),
+                       PoolStatus(label: "Out of budget · resets Sep 30", tone: .warning))
+
+        let withIt = SharedPool(id: pool.id, slug: pool.slug, label: pool.label, engine: pool.engine,
+                                viewerRole: pool.viewerRole, window: pool.window,
+                                people: pool.people, keys: pool.keys + [spent])
+        // No session starts on it: what can run is what the other keys made of the pool.
+        XCTAssertEqual(SharedPoolPage.keyState(spent), .spent)
+        XCTAssertEqual(SharedPoolPage.availableCount(withIt), 2)
+        XCTAssertEqual(SharedPoolPage.subtitle(withIt), "4 members · 2 of 6 keys available")
+        XCTAssertEqual(SharedPoolPage.keysHeadline(withIt), "Next: orbit-org-1")
+        // Nothing that can run: the head names OpenAI's mark — the soonest key back — rather than the month.
+        let only = SharedPool(id: "p", slug: "p", label: "P", window: pool.window, keys: [spent])
+        XCTAssertEqual(SharedPoolPage.keysHeadline(only), "All out of budget · resets Sep 30")
+        // A cap among the stops keeps the cap's words, with the reset the first of them comes back at.
+        let mixed = SharedPool(id: "p", slug: "p", label: "P", window: pool.window,
+                               keys: [try key(pool, "ios-build"), spent])
+        XCTAssertEqual(SharedPoolPage.keysHeadline(mixed), "All at cap · resets Sep 30")
+
+        // Its own contributor is stopped too, and out of budget outranks a cap the others have spent.
+        let mine = SharedPoolKey(id: "k", label: "k", fingerprint: "sk-…0000",
+                                 spentUntil: "2026-09-30T06:00:00.000Z",
+                                 contributor: PoolKeyContributor(userId: Self.wikova, name: "Wikova", you: true))
+        XCTAssertEqual(SharedPoolPage.status(mine, in: pool).label, "Out of budget · resets Sep 30")
+        let capped = try key(pool, "ios-build")
+        XCTAssertTrue(SharedPoolPage.atCap(capped))
+        let cappedAndSpent = SharedPoolKey(id: capped.id, label: capped.label, fingerprint: capped.fingerprint,
+                                           shareCap: capped.shareCap, spentUntil: "2026-09-30T06:00:00.000Z",
+                                           contributor: capped.contributor, usage: capped.usage)
+        XCTAssertEqual(SharedPoolPage.status(cappedAndSpent, in: pool).label, "Out of budget · resets Sep 30")
+        XCTAssertFalse(SharedPoolPage.allOutOfBudget(withIt))
+        XCTAssertTrue(SharedPoolPage.allOutOfBudget(only))
     }
 
     /// A cap stops everyone's sessions on the key but its contributor's.

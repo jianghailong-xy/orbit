@@ -64,6 +64,10 @@ export class CreateProviderPoolDto {
   /** The providers it starts with. Each must pass the admission a later add does; one that fails
    *  refuses the whole create. */
   @IsOptional() @IsArray() @IsPublicId({ each: true }) providerIds?: string[];
+  /** What the pool runs on: `claude` (the default) is the 0265 pool of the caller's own Claude
+   *  subscription providers; `codex` (migration 0323) is a pool of the caller's own that holds one
+   *  ChatGPT login this server signs in and keeps, and so starts with no members at all. */
+  @IsOptional() @IsIn(['claude', 'codex']) engine?: string;
 }
 
 export class AddProviderPoolMemberDto {

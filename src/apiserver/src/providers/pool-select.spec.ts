@@ -35,8 +35,13 @@ function fiveHour(utilization: number): PlanUsageSnapshot {
   return reported({ five_hour: { utilization, resets_at: IN_TWO_HOURS } });
 }
 
-function member(slug: string, usage: PlanUsageSnapshot | null, refused = false): PoolCandidate<Row> {
-  return { row: { id: `id-${slug}`, slug }, usage, refused };
+function member(slug: string, usage: PlanUsageSnapshot | null, refused = false, usageUnreadable = false): PoolCandidate<Row> {
+  return { row: { id: `id-${slug}`, slug }, usage, refused, usageUnreadable };
+}
+
+/** A member whose quota the endpoint will not report (403): a credential that still runs. */
+function unreadable(slug: string, usage: PlanUsageSnapshot | null = null): PoolCandidate<Row> {
+  return member(slug, usage, false, true);
 }
 
 function hold(candidate: PoolCandidate<Row>, resetsAt: string | null) {
@@ -130,7 +135,34 @@ test('spent means any window at 100% whose reset has not passed yet', () => {
   assert.equal(chosen(selectPoolMember([reset], null, NOW)), 'anthropic');
 });
 
-test('a member whose key was refused (401/403) is unavailable, not idle', () => {
+test('a member whose quota could not be read is a candidate — last in line, never UNAVAILABLE', () => {
+  // A setup token: the usage endpoint refuses the READ (a scope it lacks), not the key, which runs
+  // sessions perfectly well. Whatever it last reported does not rank it: nothing says what is left.
+  const setup = unreadable('anthropic', fiveHour(0));
+  assert.equal(chosen(selectPoolMember([setup, member('anthropic-2', fiveHour(80))], null, NOW)), 'anthropic-2');
+  // Behind a member with a reading, ahead of a field it would otherwise sit last in either way.
+  assert.equal(chosen(selectPoolMember([member('anthropic-2', fiveHour(99)), setup, unreadable('anthropic-3')], null, NOW)), 'anthropic-2');
+  // No reading anywhere: one of them takes the run — the pool does not read as one that cannot run.
+  assert.equal(chosen(selectPoolMember([setup, unreadable('anthropic-2')], null, NOW)), 'anthropic');
+  assert.equal(chosen(selectPoolMember([setup], null, NOW)), 'anthropic');
+
+  // Sticky still wins while it is usable, unreadable or not: this is not a reason to move a session off
+  // the account it is already on.
+  const roomier = member('anthropic', fiveHour(10));
+  const onSetup = unreadable('anthropic-2');
+  assert.equal(chosen(selectPoolMember([roomier, onSetup], onSetup.row.id, NOW)), 'anthropic-2');
+
+  // A member the endpoint refused is the other thing: no candidate, and a pool of nothing else has no
+  // member to run on at all.
+  const refused = member('anthropic', fiveHour(0), true);
+  assert.equal(chosen(selectPoolMember([refused, unreadable('anthropic-2')], null, NOW)), 'anthropic-2');
+  assert.deepEqual(selectPoolMember([refused, member('anthropic-2', null, true)], null, NOW), {
+    kind: 'UNAVAILABLE',
+    members: [hold(refused, null), hold(member('anthropic-2', null, true), null)],
+  });
+});
+
+test('a member whose key was refused (401) is unavailable, not idle', () => {
   // The service keeps a refused key's last snapshot, so it can still read as untouched.
   const refused = member('anthropic', fiveHour(0), true);
   assert.equal(chosen(selectPoolMember([refused, member('anthropic-2', fiveHour(80))], null, NOW)), 'anthropic-2');
@@ -180,6 +212,8 @@ test("a claim on a spent pool still runs on the pool's own accounts: its member,
   // Nothing any reset brings back: no member at all, and dispatch falls back as for a deleted provider.
   assert.equal(choosePoolMember([member('anthropic', fiveHour(10), true)], null, NOW), null);
   assert.equal(choosePoolMember([], null, NOW), null);
+  // A quota nobody could read is not that: the claim still runs on the member, setup token and all.
+  assert.equal(choosePoolMember([unreadable('anthropic')], null, NOW)?.slug, 'anthropic');
   assert.equal(choosePoolMember([later, member('anthropic-3', fiveHour(20))], later.row.id, NOW)?.slug, 'anthropic-3');
 });
 
@@ -232,6 +266,10 @@ test('a pool takes work now while a member has room, and at the earliest reset o
 test('a pool that reports nothing to go by has no time of its own', () => {
   // Nobody has reported, which is not room.
   assert.equal(poolResumesAt([member('anthropic', null), member('anthropic-2', null)], NOW), null);
+  // Nor is a quota the endpoint would not report: the brake has nothing to go by either, and the claim
+  // sends the work to the setup token rather than holding it for a number that is not coming.
+  assert.equal(poolResumesAt([unreadable('anthropic')], NOW), null);
+  assert.deepEqual(selectPoolMember([unreadable('anthropic')], null, NOW).kind, 'SELECTED');
   // Nor is a refused key's leftover snapshot a report.
   assert.equal(poolResumesAt([member('anthropic', fiveHour(10), true), member('anthropic-2', null)], NOW), null);
   // Spent, with no member saying when it resets.

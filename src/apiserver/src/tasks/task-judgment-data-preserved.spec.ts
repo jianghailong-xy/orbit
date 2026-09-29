@@ -1372,6 +1372,32 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // six preserved objects. No INSERT, UPDATE or DELETE: every key reads NULL, and nothing is
       // backfilled.
       '0322_pool_key_spent_until',
+      // A pool of one person's own that runs on their ChatGPT login, held by this server (0323): one
+      // `DROP CONSTRAINT` and one `ADD CONSTRAINT` of `provider_pool_engine_check`, whose new form admits
+      // `codex` to a pool that is not shared — every stored pool is a 0265 personal Claude one or a 0321
+      // shared Codex one, and each still satisfies it, so no row is rewritten or refused — and one new
+      // table, `pool_codex_login`, with its primary key, its two CHECKs and its composite foreign key
+      // (pool_id, user_id) → provider_pool(id, owner_id). Read against every claim above: no `task`,
+      // `session`, `project` or `project_acceptance_*` object is named — `provider_pool` is, as the table
+      // the CHECK is replaced on and the parent the new foreign key references, and neither is a preserved
+      // relation. No function, trigger, type or enum is created, replaced or dropped — no `CREATE OR
+      // REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects — and no `ALTER TYPE` or `DROP TYPE`. No INSERT, UPDATE or DELETE: the new table
+      // starts empty and nothing is backfilled.
+      '0323_pool_codex_login',
+      // The gateway of a login pool (0324): three nullable `ADD COLUMN`s with no default on
+      // `pool_codex_login` (catalog-only); one nullable `ADD COLUMN` on `session` (`pool_codex_account_id`,
+      // no default, no index, no CHECK, no foreign key — 0321's `pool_key_id` exactly — so no stored
+      // session row is rewritten or constrained); and two new tables, `pool_login_token` and
+      // `pool_login_usage`, with their indexes and foreign keys, which constrain only their own new rows.
+      // Read against every claim above: `task`, `project` and `project_acceptance_criterion_definition`
+      // are not named, so the 0177 pair and every stored task and criterion row are out of its reach;
+      // `session` is named otherwise only as the table two foreign keys reference, and their `ON DELETE
+      // CASCADE` is a referential action on the new tables' rows. It names no `project_acceptance_*`
+      // object and none of the six preserved triggers/functions, creates no function, trigger, enum or
+      // type — so it is not another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP
+      // TYPE`. No INSERT, UPDATE or DELETE: both new tables start empty and nothing is backfilled.
+      '0324_pool_login_gateway',
       // The wiki's plan: four new tables — `wiki_plan` (a version of a space's plan), `wiki_plan_doc`,
       // `wiki_plan_section` and `wiki_plan_proposal` — the first and the last reaching `wiki_space`
       // through (space_id, owner_id), a document its version and a section its document the same way,
