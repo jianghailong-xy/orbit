@@ -19,7 +19,7 @@ import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
-import { buildDossier, loadDossierRecords, ownerEnvLiterals, type DossierReader } from './wiki-dossier';
+import { buildDossier, loadDossierRecords, ownerEnvLiterals, storedDossierSources, type DossierReader } from './wiki-dossier';
 import { normalizeRepoUrl, WikiRefusalError } from './wiki.service';
 
 export { isWikiMaintenanceSession, setWikiMaintenance, wikiMaintenanceSpaceOf } from './wiki-maintenance-settings';
@@ -608,7 +608,7 @@ export class WikiMaintenance {
       if (batchOf.has(sessionId)) continue;
       const records = await loadDossierRecords(this.prisma, ownerId, sessionId);
       if (!records) continue;
-      dossiers.push(buildDossier(records, { literals, maxTokens: options.maxTokens }));
+      dossiers.push(await buildDossier(this.prisma, records, { literals, maxTokens: options.maxTokens }));
     }
     const errorClusters = await this.errorClusters(scope, sessionIds, now, literals);
 
@@ -640,7 +640,7 @@ export class WikiMaintenance {
     };
   }
 
-  /** The furthest position handed out, and each dossier's sources and hash — never its text. */
+  /** The furthest position handed out, and each dossier's sources and hash — never its text, nor its spans' words. */
   private async recordIssue(
     ownerId: string,
     spaceId: string,
@@ -661,7 +661,7 @@ export class WikiMaintenance {
         for (const dossier of dossiers) {
           const data = {
             hash: dossier.hash,
-            sourceIds: dossier.sources as unknown as Prisma.InputJsonValue,
+            sourceIds: storedDossierSources(dossier.sources) as unknown as Prisma.InputJsonValue,
             tokens: dossier.tokens,
             truncated: dossier.truncated,
             pageAt: end.at,

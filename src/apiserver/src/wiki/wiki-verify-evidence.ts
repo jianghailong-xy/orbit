@@ -4,20 +4,36 @@ import { redactSecrets } from '../common/secret-redaction';
 /**
  * What a verification can read (criterion 7, revision 4; contract `reviewModes.verification.evidence`).
  *
- * ONE TEXT PER RECORD, FOR EVERY READER. A run event's text is what a submission's quote is checked
- * against (`resolveSources`), what a verifier is handed (`listVerifications`) and what a document's
- * footnote is checked against (`wiki-docs.ts`, contract `docs.verification.records`), so none of them
- * disagrees about what a record says: a quote taken from what the verifier read verifies, and a
- * verdict is never about text the quote check did not see. A tool call's, a task's and an approval's
- * text are defined here for the same reason.
+ * ONE TEXT PER RECORD, FOR EVERY READER. A record's text is what a submission's quote is checked against
+ * (`resolveSources`), what a verifier is handed (`listVerifications`), and what a dossier line's position
+ * counts in (criterion 2, revision 2; contract `maintenance.dossier.spans`), so none of them disagrees
+ * about what a record says: a quote taken from what the verifier read verifies, a verdict is never about
+ * text the quote check did not see, and the words a dossier line points at are the words a quote of them
+ * is checked against.
  *
- * WHAT AN EVENT SAYS. A user's, an assistant's and a thinking event carry prose (`text`); a tool call
- * is its tool's name and its input; a tool result is its content, a string or the text of its blocks;
- * an error is its message; and a system event only the words it carries (a compaction's summary, a
- * runner's notice, an engine's stderr) — the rest of them are counts. Empty is not text: Claude's
- * thinking arrives empty far more often than not, and an empty record is one there is nothing to read
- * in, not a piece of evidence that says nothing.
+ * WHAT A RECORD SAYS. A user's, an assistant's and a thinking event carry prose (`text`); a tool call is its
+ * tool's name and its input; a tool result is its content, a string or the text of its blocks; an error is
+ * its message; a background task its command and what it reported; a turn's end how it ended; and a
+ * system event only the words it carries (a compaction's summary, a runner's notice, an engine's stderr) —
+ * the rest of them are counts. A tool call's row is the call and its result together: its tool's name, its
+ * input and its output. An approval is the answers given and the owner's note, and for a plan the plan it
+ * decided. Empty is not text: Claude's thinking arrives empty far more often than not, and an empty record
+ * is one there is nothing to read in, not a piece of evidence that says nothing.
+ *
+ * IN PARTS. Each text is its parts, one per line — a field, or one key of a tool's input — so that what
+ * places a dossier line's words in it can find the part they came from (`wiki-dossier.ts`).
  */
+
+/** One part of a record's text: the field or the input key it is, and its words. */
+export interface RecordPart {
+  key: string;
+  text: string;
+}
+
+/** A record's text: its parts, one per line, or null when it has none. */
+export function partsText(parts: readonly RecordPart[]): string | null {
+  return parts.length > 0 ? parts.map((part) => part.text).join('\n') : null;
+}
 
 /** A string worth reading: not missing, not only whitespace. */
 export function hasText(text: unknown): text is string {
@@ -28,19 +44,30 @@ function field(payload: unknown, name: string): unknown {
   return payload !== null && typeof payload === 'object' ? (payload as Record<string, unknown>)[name] : undefined;
 }
 
-/** The non-blank string fields of a payload, in the order named, one per line. */
-function textFields(payload: unknown, names: readonly string[]): string | null {
-  const parts = names.map((name) => field(payload, name)).filter(hasText);
-  return parts.length > 0 ? parts.join('\n') : null;
+/** The non-blank string fields of a payload, in the order named. */
+function textFields(payload: unknown, names: readonly string[]): RecordPart[] {
+  return names.flatMap((name) => {
+    const text = field(payload, name);
+    return hasText(text) ? [{ key: name, text }] : [];
+  });
 }
 
 /** A tool's input as a person would read it: each key on its line, a string as itself. */
-function inputText(input: unknown): string {
-  if (typeof input === 'string') return input;
-  if (input === null || typeof input !== 'object' || Array.isArray(input)) return JSON.stringify(input ?? null);
-  return Object.entries(input as Record<string, unknown>)
-    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
-    .join('\n');
+function inputParts(input: unknown): RecordPart[] {
+  if (typeof input === 'string') return [{ key: 'input', text: input }];
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) return [{ key: 'input', text: JSON.stringify(input ?? null) }];
+  return Object.entries(input as Record<string, unknown>).map(([key, value]) => ({
+    key: `input.${key}`,
+    text: `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`,
+  }));
+}
+
+/** A tool's name and its input, as a tool_use event and a tool call's row both begin. */
+function callParts(name: unknown, input: unknown): RecordPart[] {
+  const parts: RecordPart[] = hasText(name) ? [{ key: 'name', text: name }] : [];
+  if (input === undefined) return parts;
+  const given = inputParts(input);
+  return hasText(partsText(given)) ? [...parts, ...given] : parts;
 }
 
 /** A tool result's content: a string, or the text of each of its blocks (an image has none). */
@@ -51,51 +78,87 @@ function contentText(content: unknown): string | null {
   return parts.length > 0 ? parts.join('\n') : null;
 }
 
-/** The text one run event carries, or null when it carries none. */
-export function runEventText(type: string, payload: unknown): string | null {
+/** The parts of the text one run event carries: none when it carries none. */
+export function runEventParts(type: string, payload: unknown): RecordPart[] {
   switch (type) {
     case 'user':
     case 'assistant':
     case 'thinking':
       return textFields(payload, ['text']);
-    case 'tool_use': {
-      const name = field(payload, 'name');
-      const input = field(payload, 'input');
-      const parts = [hasText(name) ? name : null, input === undefined ? null : inputText(input)].filter(hasText);
-      return parts.length > 0 ? parts.join('\n') : null;
-    }
+    case 'tool_use':
+      return callParts(field(payload, 'name'), field(payload, 'input'));
     case 'tool_result': {
       const text = contentText(field(payload, 'content'));
-      if (text === null) return null;
-      return field(payload, 'isError') === true ? `The tool reported an error:\n${text}` : text;
+      if (text === null) return [];
+      const content = { key: 'content', text };
+      return field(payload, 'isError') === true ? [{ key: 'error', text: 'The tool reported an error:' }, content] : [content];
     }
     case 'error':
       return textFields(payload, ['message']);
+    case 'background_task':
+      return textFields(payload, ['command', 'summary']);
+    case 'turn_end':
+      return textFields(payload, ['subtype']);
     case 'system':
       return textFields(payload, ['text', 'notice', 'stderr']);
     default:
-      return null;
+      return [];
   }
 }
 
-/** A record's JSON column as text: a string as itself, anything else as its JSON. */
-export function jsonText(value: unknown): string {
+/** The text one run event carries, or null when it carries none. */
+export function runEventText(type: string, payload: unknown): string | null {
+  return partsText(runEventParts(type, payload));
+}
+
+/**
+ * A tool's output as a person reads it: a string, or the text of its blocks — a list of them, or the
+ * `content` of a result that carries its blocks there — and anything else as its JSON.
+ */
+export function toolOutputText(output: unknown): string | null {
+  if (output === null || output === undefined) return null;
+  if (typeof output === 'string' || Array.isArray(output)) return contentText(output);
+  const blocks = field(output, 'content');
+  if (Array.isArray(blocks)) return contentText(blocks);
+  const json = JSON.stringify(output);
+  return hasText(json) ? json : null;
+}
+
+/** The parts of a tool call's text: its tool's name, its input, and its output. */
+export function toolCallParts(call: { name: string | null; input: unknown; output: unknown }): RecordPart[] {
+  const output = toolOutputText(call.output);
+  return [
+    ...callParts(call.name, call.input === null ? undefined : call.input),
+    ...(output === null ? [] : [{ key: 'output', text: output }]),
+  ];
+}
+
+/** The text a tool call's row carries: the call and its result together. */
+export function toolCallText(call: { name: string | null; input: unknown; output: unknown }): string | null {
+  return partsText(toolCallParts(call));
+}
+
+/** A record's value as text: a string as itself, anything else as its JSON. */
+function asText(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value ?? null);
 }
 
-/** A tool call's text: its output, or none while it has none. */
-export function toolCallText(output: unknown): string | null {
-  return output === null || output === undefined ? null : jsonText(output);
+/**
+ * The parts of an approval's text: the answers given and the owner's note — each a line, empty or not — and,
+ * for a plan, the plan it decided.
+ */
+export function approvalParts(approval: { toolName: string; input: unknown; answers: unknown; message: string | null }): RecordPart[] {
+  const parts: RecordPart[] = [
+    { key: 'answers', text: approval.answers === null ? '' : asText(approval.answers) },
+    { key: 'message', text: approval.message ?? '' },
+  ];
+  const plan = approval.toolName === 'ExitPlanMode' ? field(approval.input, 'plan') : undefined;
+  return hasText(plan) ? [...parts, { key: 'plan', text: plan }] : parts;
 }
 
-/** A task's text: its title, and its description under it. */
-export function taskText(task: { title: string; description: string | null }): string {
-  return `${task.title}\n${task.description ?? ''}`;
-}
-
-/** An approval's text: the answers given, and the note beside them. */
-export function approvalText(approval: { answers: unknown; message: string | null }): string {
-  return [approval.answers === null || approval.answers === undefined ? '' : jsonText(approval.answers), approval.message ?? ''].join('\n');
+/** The text an approval carries. */
+export function approvalText(approval: { toolName: string; input: unknown; answers: unknown; message: string | null }): string {
+  return partsText(approvalParts(approval))!;
 }
 
 /**

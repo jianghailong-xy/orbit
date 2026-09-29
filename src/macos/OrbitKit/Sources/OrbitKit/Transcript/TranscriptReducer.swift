@@ -315,6 +315,35 @@ public struct TranscriptReducer: Sendable, Codable {
         state.hasMoreOlder = page.hasMore && bounds != nil
     }
 
+    /// Make the page around one record the whole window — a link to that record (`SessionRecordLink`).
+    ///
+    /// The window is re-seeded the way a `resync` re-seeds it, from this page instead of the tail: its
+    /// older edge from the page's `before` cursor, exactly as a tail page's `hasMore` sets it. Where
+    /// the page stops short of the latest event the window has a gap below it, which the console
+    /// tracks (it holds the live stream off until paging down closes it, see `appendNewer`).
+    ///
+    /// The run status is the one thing a historical page does not get to say: its `status`/`result`
+    /// events describe the session as it was then, and the composer reads this status for now. The
+    /// status the window already had is kept; the pages that bring the window down to the tail
+    /// bring the current one with them.
+    public mutating func applyRecordPage(_ page: EventPage) {
+        let status = state.status
+        resetForResync()
+        applyTailPage(EventPage(events: page.events, hasMore: page.before != nil))
+        state.status = status
+    }
+
+    /// Fold an `after=` page — chronological and newer than everything loaded — onto the end of the
+    /// window: how a window opened at a record pages back down to the tail. Its events are newer than
+    /// the window by construction, so they fold exactly as the live stream would have folded them.
+    /// Like a tail page, a real stored row positions `maxSeq` even when its kind is live-only.
+    public mutating func appendNewer(_ page: EventPage) {
+        for ev in page.events { apply(ev) }
+        if let high = Self.persistedPageBounds(page.events)?.high, high > state.maxSeq {
+            state.maxSeq = high
+        }
+    }
+
     /// Fold a `before=oldestSeq` history page — chronological and strictly older than everything
     /// loaded — in FRONT of the current window: the scroll-up half of tail-first pagination (web
     /// AgentView's `loadOlder`). The page is folded standalone by a sub-reducer, then grafted: its

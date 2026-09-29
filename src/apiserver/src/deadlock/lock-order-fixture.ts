@@ -265,7 +265,11 @@ export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): Sc
       sql: LOCK_OWNER, values: [ids.ownerId] },
     // Rank 40. The status write below fires `project_acceptance_task_fact_update`, which takes
     // this exact lock from an AFTER trigger; taking it here is what stops the transaction being
-    // caught holding the Task while the Project authorization adapter waits for it.
+    // caught holding the Task while a project-first taker waits for it — the direction every live
+    // taker of these two rows uses (`SessionsService.resume` takes the project FOR NO KEY UPDATE,
+    // and only then confirms its scope with `FOR SHARE OF t NOWAIT`). The pre-lock that first
+    // declared this rank's order was `ProjectAuthorizationService`'s, deleted with the coordinator
+    // loop in `6418a1e5`, 2026-08-23.
     { op: 'run', party: 'dependency', label: 'D2 lock-project',
       sql: 'SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE', values: [ids.projectId] },
     { op: 'run', party: 'dependency', label: 'D3 update-task',
@@ -345,9 +349,11 @@ export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): Sc
  * The admission fence, from the one arrival that is still a wait.
  *
  * The fence exists because Project/Agent admission counts Session rows: a Session entering or
- * leaving the live-claim set has to line up with the Project row lock the authorization adapter
- * takes, or a dispatch decision is made against a count that is already wrong. It is rank 40 of
- * the canonical order, taken by a transaction that already holds its Session at rank 30.
+ * leaving the live-claim set has to line up with the Project row lock every project-first taker of
+ * these rows holds, or something is counted against a world that is already moving
+ * (`SessionsService.resume`, `ProjectHandoffService.declare` and `TasksService.refenceProjectScope`
+ * all take the project before the rows they are about). It is rank 40 of the canonical order,
+ * taken by a transaction that already holds its Session at rank 30.
  *
  * ONE arrival, not both, since 0130 replaced `session_project_capacity_serialize` with
  * `session_admission_lock_order`: the fence's project lock is `FOR NO KEY UPDATE NOWAIT` now, so
@@ -355,8 +361,12 @@ export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): Sc
  * queuing. There is no wait to schedule in that direction, so it is not a barrier scenario —
  * `lock-order.pg.spec.ts` proves it directly, as a refusal with nothing written.
  *
- * `capacity` is the Session status write; `admission` is the adapter's
- * `SELECT … FROM "project" … FOR NO KEY UPDATE`.
+ * `capacity` is the Session status write; `admission` is a HISTORICAL REPLAY of the far side — the
+ * statement the 0132-era Project authorization adapter issued (`ProjectAuthorizationService`, a
+ * `SELECT … FROM "project" … FOR NO KEY UPDATE` followed by a `FOR SHARE` on the task; deleted with
+ * the coordinator loop in `6418a1e5`, 2026-08-23). No live path issues it any more; the path that
+ * takes this pair in this shape today is `SessionsService.resume`, whose project acquisition is the
+ * same ordinary blocking lock.
  */
 export function capacityFenceScenario(ids: FixtureIds): ScenarioSpec {
   const parties = [
@@ -389,8 +399,10 @@ export function capacityFenceScenario(ids: FixtureIds): ScenarioSpec {
   const run = (party: string, step: Step): PlanStep =>
     ({ op: 'run', party, label: step.label, sql: step.sql, values: step.values });
 
-  // The Session write gets there first: the adapter's project lock waits for the fence. This
-  // direction is unchanged by 0130 — the adapter's own lock is an ordinary blocking one.
+  // The Session write gets there first: the admission party's project lock waits for the fence.
+  // This direction is unchanged by 0130 — the lock it takes here is an ordinary blocking one (the
+  // same mode `SessionsService.resume` takes on the project today), so the party arriving second
+  // queues rather than being refused.
   return {
     name: 'capacity-fence/session-first',
     parties,
