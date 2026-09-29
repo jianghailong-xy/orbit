@@ -2,12 +2,15 @@
  * The near-neighbour lookup every add runs, at the size a maintenance run or an import writes into.
  *
  * `WikiService.nearNeighbours` answers `similar[]` for every add and supersede: the five entries of the
- * space whose search text is most trigram-similar to the draft's title and summary. It runs inside the
- * changeset's one interactive transaction, which Prisma closes after 5 s. On production, at 2,606
+ * space whose search text is most trigram-similar to the draft's title and summary. It ran inside the
+ * changeset's one interactive transaction, which Prisma closed after 5 s. On production, at 2,606
  * entries, it was planned as a scan of the space that tested every row at ~0.1 ms a row, so a large
  * space took one to three ops per changeset. Migration 0313 prices that test for the planner; the
  * lookup hands the draft's text over as an InitPlan output, and asks for a rejection's reason only for
- * the rows it returns.
+ * the rows it returns. Even so, on 2026-09-29 a maintenance run's thirty adds at 4,300 entries spent a
+ * third of the transaction in it under a loaded host and the transaction closed (P2028): now every
+ * draft's neighbours are read before the transaction opens, in one statement, and the transaction
+ * re-checks them (wiki-neighbours.ts) under a timeout of its own.
  *
  * The data, bulk-inserted in SQL: first a space of 2,606 entries alone in the table — production as it
  * was when its writes slowed down — and then beside it one space of 10,000 active entries and another
@@ -26,9 +29,21 @@
  *      order, and a rejected neighbour still with the reason it was rejected;
  *   4. after an explicit ANALYZE the lookup among the 10,000 and the 5,000 reads the trigram index,
  *      never scans the table, and asks for a reason once per row it returns, not once per candidate;
- *   5. thirty adds into the 10,000 commit, within 3 s of the same thirty into an empty space in the
- *      same run. Relative, because the absolute time of a changeset is mostly its twelve statements an
- *      add (`recordOp`, `applyOp`, `recomputeFlags`) and the host's load, neither of which this is about.
+ *   5. thirty adds into the 10,000 commit, their transaction within 3 s of the same thirty's into an
+ *      empty space in the same run. Relative, because the absolute time of a changeset is mostly its
+ *      twelve statements an add (`recordOp`, `applyOp`, `recomputeFlags`) and the host's load, neither of
+ *      which this is about; and the transaction's, because the lookups are paid before it opens.
+ *
+ * And, of the neighbours read before the transaction (a second test, over the same data):
+ *   6. what thirty drafts are answered is what the lookup inside the transaction answers, draft by
+ *      draft, and the one statement that reads them reads the trigram index once per draft;
+ *   7. a draft meets what the changeset's own earlier ops wrote — a lineage an add wrote, an entry a
+ *      retire moved, an entry an amend rewrote — exactly as when every lookup ran inside, and a neighbour
+ *      another writer changed between the read and the transaction is read again;
+ *   8. a maintenance run's thirty adds among 10,000 entries, each citing three records, keep the
+ *      transaction well under the 5 s that closed it, with no lookup inside it, and no longer than
+ *      the same thirty into an empty space; every step's time is in the diagnostics;
+ *   9. with every statement slowed, and with four such changesets at once, every one commits.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-scale.pg.spec.ts
  *
@@ -37,12 +52,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { toUuid } from '@orbit/shared';
+import { toUuid, type WikiSimilar } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -52,8 +68,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RealtimeService } from '../realtime/realtime.service';
 import { WikiController } from './wiki.controller';
+import { ChangesetNeighbours, type NeighbourDraft } from './wiki-neighbours';
 import { WikiRetrieval } from './wiki-retrieval';
-import { WikiService } from './wiki.service';
+import { WikiService, type WikiPrincipal } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -66,12 +83,131 @@ const OPS = 30;
 /** What the thirty adds into the 10,000 may take over the same thirty into an empty space. */
 const OVER_BASELINE_MS = 3_000;
 
+// ── the probe ───────────────────────────────────────────────────────────────────────────────────
+
+/** One statement the service under test issued, inside its changeset's transaction or before it. */
+interface Statement {
+  inside: boolean;
+  /** `model.operation`, or `raw:<which statement>` for a raw one. */
+  what: string;
+  ms: number;
+}
+
+/** One transaction the service under test opened. */
+interface Opened {
+  /** What it was opened with. */
+  options: unknown;
+  /** From the closure's start to the commit: what Prisma's timeout counts. */
+  ms: number;
+  committed: boolean;
+  error?: string;
+}
+
+type Call = (...args: unknown[]) => unknown;
+
+/** Which raw statement this is, by what it says. */
+function rawStatement(args: readonly unknown[]): string {
+  const first = args[0] as { sql?: string } | readonly string[] | undefined;
+  const text = Array.isArray(first) ? first.join('?') : ((first as { sql?: string } | undefined)?.sql ?? '');
+  if (/AS "earlier"/u.test(text)) return 'raw:neighbour pairs';
+  if (/similarity\(/u.test(text)) return 'raw:neighbours';
+  if (/"current_revision" AS "currentRevision"/u.test(text)) return 'raw:neighbour re-check';
+  if (/"applied_by_mode"/u.test(text)) return 'raw:run changes';
+  return 'raw:other';
+}
+
+/**
+ * The client the service under test is handed instead of the real one: every statement timed and named,
+ * inside its transaction or before it; every one slowed by `delayMs`, and a neighbour lookup by
+ * `lookupDelayMs` more, as a loaded host slows them — the lookup most; and `beforeTransaction` run once,
+ * between what a submission reads before its transaction and the transaction itself, which is when
+ * another writer can commit in between.
+ */
+class Probe {
+  statements: Statement[] = [];
+  opened: Opened[] = [];
+  delayMs = 0;
+  lookupDelayMs = 0;
+  beforeTransaction: (() => Promise<void>) | null = null;
+  readonly client: PrismaClient;
+
+  constructor(real: PrismaClient) {
+    this.client = this.wrap(real, false) as PrismaClient;
+  }
+
+  reset(): void {
+    this.statements = [];
+    this.opened = [];
+    this.delayMs = 0;
+    this.lookupDelayMs = 0;
+    this.beforeTransaction = null;
+  }
+
+  private wrap(target: object, inside: boolean): unknown {
+    return new Proxy(target, {
+      get: (object, property) => {
+        const value = Reflect.get(object, property, object) as unknown;
+        if (property === '$transaction' && !inside && typeof value === 'function') {
+          return async (work: (tx: unknown) => Promise<unknown>, options?: unknown) => {
+            const hook = this.beforeTransaction;
+            this.beforeTransaction = null;
+            if (hook) await hook();
+            let started = 0;
+            try {
+              const result = await (value as Call).call(object, (tx: object) => {
+                started = performance.now();
+                return work(this.wrap(tx, true));
+              }, options);
+              this.opened.push({ options, ms: performance.now() - started, committed: true });
+              return result;
+            } catch (error) {
+              this.opened.push({
+                options,
+                ms: started ? performance.now() - started : 0,
+                committed: false,
+                error: String((error as Error)?.message ?? error),
+              });
+              throw error;
+            }
+          };
+        }
+        if (typeof property === 'string' && /^\$(queryRaw|executeRaw)/u.test(property) && typeof value === 'function') {
+          return (...args: unknown[]) => this.run(inside, rawStatement(args), () => (value as Call).apply(object, args));
+        }
+        if (typeof property === 'string' && !/^[$_]/u.test(property) && value !== null && typeof value === 'object') {
+          return new Proxy(value, {
+            get: (delegate, operation) => {
+              const fn = Reflect.get(delegate, operation, delegate) as unknown;
+              if (typeof fn !== 'function') return fn;
+              return (...args: unknown[]) => this.run(inside, `${property}.${String(operation)}`, () => (fn as Call).apply(delegate, args));
+            },
+          });
+        }
+        return typeof value === 'function' ? (value as Call).bind(object) : value;
+      },
+    });
+  }
+
+  private async run(inside: boolean, what: string, statement: () => unknown): Promise<unknown> {
+    const delay = this.delayMs + (what === 'raw:neighbours' ? this.lookupDelayMs : 0);
+    if (delay > 0) await sleep(delay);
+    const started = performance.now();
+    try {
+      return await statement();
+    } finally {
+      this.statements.push({ inside, what, ms: performance.now() - started });
+    }
+  }
+}
+
 interface Harness {
   base: string;
   sql: Client;
   prisma: PrismaClient;
   app: INestApplication;
+  /** The service both doors are served by, over `probe.client`. */
   service: WikiService;
+  probe: Probe;
   /** bearer → the account it was issued to */
   bearers: Map<string, string>;
 }
@@ -86,7 +222,8 @@ function boot(): Promise<Harness> {
     await verifyCoordinatorPgIdentity(sql);
     const prisma = prismaClientFor(URL);
     const bearers = new Map<string, string>();
-    const service = new WikiService(prisma as unknown as PrismaService, {
+    const probe = new Probe(prisma);
+    const service = new WikiService(probe.client as unknown as PrismaService, {
       publishWikiChanged: () => undefined,
     } as unknown as RealtimeService);
 
@@ -117,7 +254,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, service, bearers };
+    return { base: await app.getUrl(), sql, prisma, app, service, probe, bearers };
   })();
   return harness;
 }
@@ -307,12 +444,15 @@ async function account(h: Harness, name: string): Promise<Account> {
   return { id, bearer: `bearer-${id}` };
 }
 
-/** A Manual space: the owner's own writes apply at once in every mode, so the mode only keeps it plain. */
-async function space(h: Harness, ownerId: string, slug: string): Promise<string> {
+/**
+ * A Manual space unless another mode is named: the owner's own writes apply at once in every mode, so
+ * the mode only keeps it plain. A maintenance run writes into the Automatic space the owner's is.
+ */
+async function space(h: Harness, ownerId: string, slug: string, mode: 'manual' | 'automatic' = 'manual'): Promise<string> {
   const id = randomUUID();
   await h.sql.query(
     `INSERT INTO "wiki_space"("id","owner_id","slug","title","settings") VALUES ($1,$2,$3,'spec',$4)`,
-    [id, ownerId, slug, JSON.stringify({ reviewMode: 'manual' })],
+    [id, ownerId, slug, JSON.stringify({ reviewMode: mode })],
   );
   return id;
 }
@@ -740,7 +880,7 @@ test('0313 · the near-neighbour lookup at 2,606 and at 10,000 entries', { skip,
     await assertReadsTheIndex(h, fx.other, fx.otherSpace, OTHER);
   });
 
-  await t.test(`${OPS} adds into ${BIG.toLocaleString('en-US')} entries commit within ${OVER_BASELINE_MS / 1_000} s of the same into an empty space`, async () => {
+  await t.test(`${OPS} adds into ${BIG.toLocaleString('en-US')} entries commit, their transaction within ${OVER_BASELINE_MS / 1_000} s of the same into an empty space`, async () => {
     const warm = await space(h, fx.owner.id, 'warm-up');
     const empty = await space(h, fx.owner.id, 'empty');
     const next = corpus(3);
@@ -753,24 +893,550 @@ test('0313 · the near-neighbour lookup at 2,606 and at 10,000 entries', { skip,
     const warmUp = await propose(h, fx.owner, warm, { ops: drafts.slice(0, 3) });
     assert.equal(warmUp.status, 200, `the warm-up: answered ${warmUp.status} ${JSON.stringify(warmUp.body)}`);
 
+    h.probe.reset();
     const baseline = await propose(h, fx.owner, empty, { ops: drafts });
     assert.equal(baseline.status, 200, `the empty space: answered ${baseline.status} ${JSON.stringify(baseline.body)}`);
     assert.equal(applied(baseline), OPS, 'every add into the empty space applies');
+    const [baselineTransaction] = h.probe.opened;
 
     // A transaction Prisma closed (P2028) answers 500, and writes nothing.
+    h.probe.reset();
     const loadedRun = await propose(h, fx.owner, fx.big, { ops: drafts });
-    t.diagnostic(`baseline (empty space) ${Math.round(baseline.ms)} ms; ${BIG.toLocaleString('en-US')} entries ${Math.round(loadedRun.ms)} ms`);
+    const [loadedTransaction] = h.probe.opened;
+    const lookups = h.probe.statements.filter((statement) => statement.what === 'raw:neighbours' && !statement.inside);
+    t.diagnostic(`baseline (empty space) ${Math.round(baseline.ms)} ms, its transaction ${Math.round(baselineTransaction.ms)} ms; `
+      + `${BIG.toLocaleString('en-US')} entries ${Math.round(loadedRun.ms)} ms, its transaction ${Math.round(loadedTransaction.ms)} ms, `
+      + `the lookup before it ${Math.round(lookups.reduce((sum, lookup) => sum + lookup.ms, 0))} ms`);
     assert.equal(loadedRun.status, 200, `the big space: answered ${loadedRun.status} ${JSON.stringify(loadedRun.body)}`);
     assert.equal(applied(loadedRun), OPS, 'every add into the big space applies');
+    // The transaction, not the request: the lookups the 10,000 cost are paid before it opens (the second
+    // test below), and what the transaction still does is the same statements for either space. The
+    // request as a whole pays the lookups wherever they run, at whatever the host's load makes them cost —
+    // that the lookup reads the index is asserted above, as a plan, which no load changes.
     assert.ok(
-      loadedRun.ms <= baseline.ms + OVER_BASELINE_MS,
-      `${OPS} adds took ${Math.round(loadedRun.ms)} ms among ${BIG} entries and ${Math.round(baseline.ms)} ms in an `
-        + `empty space: the lookup costs more than ${OVER_BASELINE_MS} ms a changeset at this size`,
+      loadedTransaction.ms <= baselineTransaction.ms + OVER_BASELINE_MS,
+      `${OPS} adds held their transaction ${Math.round(loadedTransaction.ms)} ms among ${BIG} entries and `
+        + `${Math.round(baselineTransaction.ms)} ms in an empty space: the space's size reached the transaction`,
     );
     const committed = await h.sql.query(
       `SELECT count(*)::int AS n FROM "wiki_entry" WHERE "space_id" = $1 AND "status" = 'active'`,
       [fx.big],
     );
     assert.equal(committed.rows[0].n, BIG + OPS, 'the big space holds its entries and the thirty new ones');
+  });
+});
+
+// ── the neighbours read before the transaction ──────────────────────────────────────────────────
+
+/** Where the drafts' neighbours were looked up: before the transaction, and inside it. */
+function lookupsOf(probe: Probe): { before: number; inside: number } {
+  const lookups = probe.statements.filter((statement) => statement.what === 'raw:neighbours');
+  return { before: lookups.filter((lookup) => !lookup.inside).length, inside: lookups.filter((lookup) => lookup.inside).length };
+}
+
+/** The step of an add a statement belongs to, as the diagnostics name them. */
+function stepOf(what: string): string {
+  if (what.startsWith('raw:neighbour') || what === 'wikiChangesetOp.findMany') return 'neighbours';
+  if (/^(conversationTurn|runEvent|toolCall|task|taskComment|approval|sessionMergeReceipt|projectBlocker|wikiNote)\./u.test(what)) {
+    return 'sources and taint';
+  }
+  if (what.endsWith('.count') || what === 'raw:run changes') return 'review mode and quotas';
+  if (/\.(create|createMany|update|updateMany|upsert|delete|deleteMany)$/u.test(what)) return 'writes';
+  return 'other reads';
+}
+
+interface Timing {
+  statements: number;
+  ms: number;
+  steps: Map<string, { statements: number; ms: number }>;
+}
+
+/** The statements before the transaction, or inside it, by step. */
+function timing(probe: Probe, inside: boolean): Timing {
+  const own = probe.statements.filter((statement) => statement.inside === inside);
+  const steps = new Map<string, { statements: number; ms: number }>();
+  for (const statement of own) {
+    const step = steps.get(stepOf(statement.what)) ?? { statements: 0, ms: 0 };
+    step.statements += 1;
+    step.ms += statement.ms;
+    steps.set(stepOf(statement.what), step);
+  }
+  return { statements: own.length, ms: own.reduce((sum, statement) => sum + statement.ms, 0), steps };
+}
+
+function spelled(of: Timing): string {
+  const steps = [...of.steps]
+    .sort((left, right) => right[1].ms - left[1].ms)
+    .map(([step, spent]) => `${step} ${spent.statements} × ${Math.round(spent.ms)} ms`);
+  return `${of.statements} statements, ${Math.round(of.ms)} ms: ${steps.join('; ')}`;
+}
+
+interface Outcome {
+  seq: number;
+  status: string;
+  entryId?: string | null;
+  waitsFor?: string;
+  similar?: WikiSimilar[];
+}
+
+/** A changeset's outcomes with every entry it wrote named by the op that wrote it, so two runs compare. */
+function comparable(answer: Record<string, unknown>, ops: ReadonlyArray<Record<string, unknown>>): unknown[] {
+  const outcomes = answer.ops as Outcome[];
+  const written = new Map<string, string>();
+  outcomes.forEach((outcome, seq) => {
+    if ((ops[seq].op === 'add' || ops[seq].op === 'supersede') && outcome.entryId) written.set(outcome.entryId, `written by op ${seq}`);
+  });
+  return outcomes.map((outcome) => ({
+    status: outcome.status,
+    similar: (outcome.similar ?? []).map((near) => ({ ...near, id: written.get(near.id) ?? near.id })),
+  }));
+}
+
+/**
+ * The same changeset recorded with every lookup inside its transaction — as it was before the neighbours
+ * were read ahead of it — and rolled back, so the space is as it was for the run under test.
+ */
+async function everyLookupInside(h: Harness, principal: WikiPrincipal, spaceId: string, ops: unknown[]): Promise<Record<string, unknown>> {
+  const record = (h.service as unknown as { recordChangeset: Call }).recordChangeset.bind(h.service);
+  const settings = (await h.sql.query(`SELECT "settings" FROM "wiki_space" WHERE "id" = $1`, [spaceId])).rows[0].settings;
+  const rollback = new Error('the reference run is rolled back');
+  let answer: Record<string, unknown> | undefined;
+  await h.prisma
+    .$transaction(async (tx) => {
+      answer = (await record(tx, principal, { id: spaceId, settings }, ops, { rationale: 'the reference', ops }, null, [])) as Record<string, unknown>;
+      throw rollback;
+    }, { timeout: 60_000, maxWait: 10_000 })
+    .catch((error: unknown) => {
+      if (error !== rollback) throw error;
+    });
+  assert.ok(answer, 'the reference run answered');
+  return answer!;
+}
+
+/** Entries already in the space, written directly: what a changeset's drafts will meet. */
+async function standing(h: Harness, ownerId: string, spaceId: string, texts: readonly Text[]): Promise<string[]> {
+  const ids: string[] = [];
+  for (const text of texts) {
+    const id = randomUUID();
+    await h.sql.query(
+      `INSERT INTO "wiki_entry"("id","owner_id","space_id","kind","status","trust","current_revision","title","summary","fields")
+       VALUES ($1,$2,$3,'concept','active','confirmed',1,$4,$5,$6)`,
+      [id, ownerId, spaceId, text.title, text.summary, JSON.stringify(text.fields)],
+    );
+    ids.push(id);
+  }
+  return ids;
+}
+
+/** The statement `ChangesetNeighbours.read` builds for these drafts — captured rather than copied — explained. */
+async function explainRead(h: Harness, ownerId: string, spaceId: string, drafts: NeighbourDraft[]): Promise<{ root: PlanNode; text: string }> {
+  const captured: Prisma.Sql[] = [];
+  const recorder = {
+    $queryRaw: (statement: Prisma.Sql) => {
+      captured.push(statement);
+      return Promise.resolve([]);
+    },
+    wikiChangesetOp: { findMany: () => Promise.resolve([]) },
+  };
+  await ChangesetNeighbours.read(recorder as never, ownerId, spaceId, drafts);
+  const statement = captured[0];
+  const json = await h.sql.query<{ 'QUERY PLAN': Array<{ Plan: PlanNode }> }>(
+    `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.text}`,
+    statement.values as unknown[],
+  );
+  const text = await h.sql.query<{ 'QUERY PLAN': string }>(`EXPLAIN (ANALYZE, BUFFERS) ${statement.text}`, statement.values as unknown[]);
+  return { root: json.rows[0]['QUERY PLAN'][0].Plan, text: text.rows.map((row) => row['QUERY PLAN']).join('\n') };
+}
+
+/** A draft as a lookup is asked about it. */
+function asDraft(seq: number, text: Text): NeighbourDraft {
+  return {
+    seq,
+    text: `${text.title} ${text.summary}`.trim(),
+    exclude: null,
+    written: { title: text.title, summary: text.summary, aliases: [], fields: text.fields },
+  };
+}
+
+// ── a maintenance run's changesets ──────────────────────────────────────────────────────────────
+
+/** One of the owner's sessions, in a workspace of theirs. */
+async function session(h: Harness, ownerId: string): Promise<string> {
+  const workspace = randomUUID();
+  await h.sql.query(`INSERT INTO "workspace"("id","name","owner_id") VALUES ($1,'spec',$2)`, [workspace, ownerId]);
+  const id = randomUUID();
+  await h.sql.query(
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","dispatch_origin","updated_at")
+     VALUES ($1,'a wiki session','p',$2,$2,$3,'USER',now())`,
+    [id, ownerId, workspace],
+  );
+  return id;
+}
+
+/** `count` tool calls of a session, none of them a web read: what the taint check reads, op after op. */
+async function toolCalls(h: Harness, sessionId: string, count: number): Promise<void> {
+  await h.sql.query(
+    `INSERT INTO "tool_call"("id","session_id","name","output")
+     SELECT gen_random_uuid(), $1::uuid, (ARRAY['Bash','Read','Edit','Grep'])[1 + g % 4], '"ok"'::jsonb
+       FROM generate_series(1, $2::int) g`,
+    [sessionId, count],
+  );
+}
+
+interface Records {
+  turns: string[];
+  calls: string[];
+  events: string[];
+}
+
+/** `count` of each record a dossier line cites — a turn, a tool call, an event — the i-th of each saying `fact <i>`. */
+async function citedRecords(h: Harness, sessionId: string, count: number): Promise<Records> {
+  const records: Records = {
+    turns: Array.from({ length: count }, () => randomUUID()),
+    calls: Array.from({ length: count }, () => randomUUID()),
+    events: Array.from({ length: count }, () => randomUUID()),
+  };
+  await h.sql.query(
+    `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","content","status","kind","send_intent")
+     SELECT r."id", $2::uuid, r."n"::int, gen_random_uuid()::text, 'the owner said fact ' || (r."n" - 1) || ' holds for the run',
+            'ANSWERED', 'message', 'NEXT_TURN'
+       FROM unnest($1::uuid[]) WITH ORDINALITY AS r("id", "n")`,
+    [records.turns, sessionId],
+  );
+  await h.sql.query(
+    `INSERT INTO "tool_call"("id","session_id","name","output")
+     SELECT r."id", $2::uuid, 'Bash', to_jsonb('the command printed fact ' || (r."n" - 1) || ' in full')
+       FROM unnest($1::uuid[]) WITH ORDINALITY AS r("id", "n")`,
+    [records.calls, sessionId],
+  );
+  await h.sql.query(
+    `INSERT INTO "run_event"("id","session_id","seq","type","payload")
+     SELECT r."id", $2::uuid, r."n"::int, 'assistant', jsonb_build_object('text', 'the agent noticed fact ' || (r."n" - 1) || ' while it worked')
+       FROM unnest($1::uuid[]) WITH ORDINALITY AS r("id", "n")`,
+    [records.events, sessionId],
+  );
+  return records;
+}
+
+/** `count` adds as a maintenance run proposes them: each citing a turn, a tool call and an event, with a quote. */
+function maintenanceOps(records: Records, seed: number, count = OPS): Array<Record<string, unknown>> {
+  const next = corpus(seed);
+  return Array.from({ length: count }, (_unused, n) => {
+    const i = (seed * OPS + n) % records.turns.length;
+    return {
+      op: 'add',
+      entry: { kind: 'concept', ...next() },
+      sources: [
+        { kind: 'turn', ref: records.turns[i], quote: `fact ${i} holds` },
+        { kind: 'tool_call', ref: records.calls[i], quote: `printed fact ${i}` },
+        { kind: 'event', ref: records.events[i], quote: `noticed fact ${i}` },
+      ],
+    };
+  });
+}
+
+interface Maintained {
+  /** The session the run proposes from. */
+  maintainer: string;
+  records: Records;
+  /** Automatic, with 10,000 active entries. */
+  big: string;
+  /** Automatic, with none. */
+  empty: string;
+  /** Automatic, for the warm-up. */
+  warm: string;
+}
+
+let maintained: Promise<Maintained> | undefined;
+
+/** The owner's Automatic spaces a maintenance run writes into: one of 10,000 entries, one empty. */
+function maintenanceLoaded(h: Harness, owner: Account): Promise<Maintained> {
+  maintained ??= (async () => {
+    const maintainer = await session(h, owner.id);
+    const cited = await session(h, owner.id);
+    await toolCalls(h, maintainer, 400);
+    await toolCalls(h, cited, 2_000);
+    const records = await citedRecords(h, cited, 120);
+    const big = await space(h, owner.id, 'maintained', 'automatic');
+    const empty = await space(h, owner.id, 'maintained-empty', 'automatic');
+    const warm = await space(h, owner.id, 'maintained-warm-up', 'automatic');
+    await bulkEntries(h, owner.id, big, BIG, 5);
+    await settle(h);
+    await h.sql.query('ANALYZE "tool_call"');
+    return { maintainer, records, big, empty, warm };
+  })();
+  return maintained;
+}
+
+/** Every op of a maintenance run's changeset recorded, each waiting for its verification. */
+function assertAllRecorded(answer: Record<string, unknown>, count: number, why: string): void {
+  const outcomes = answer.ops as Outcome[];
+  assert.equal(outcomes.length, count, `${why}: ${JSON.stringify(answer).slice(0, 500)}`);
+  const refused = outcomes.filter((outcome) => outcome.status !== 'pending' || outcome.waitsFor !== 'verification');
+  assert.deepEqual(refused, [], `${why}: every op waits for its verification`);
+}
+
+test('the neighbours read before the transaction · the same similar[], and a transaction that no longer grows with the space', { skip, concurrency: 1, timeout: 600_000 }, async (t) => {
+  const h = await boot();
+  const fx = await loaded(h);
+  const { probe, service } = h;
+  const owner: WikiPrincipal = { origin: 'owner', ownerId: fx.owner.id, userId: fx.owner.id, sessionId: null, toolCallId: null };
+  const lookup = (h.service as unknown as {
+    nearNeighbours: (tx: unknown, owner: string, space: string, draft: Record<string, unknown>, exclude: string | null) => Promise<WikiSimilar[]>;
+  }).nearNeighbours.bind(h.service);
+
+  await t.test('thirty drafts: what was read before the transaction is what the lookup inside it answers, draft by draft', async () => {
+    const next = corpus(7);
+    const ops: Array<Record<string, unknown>> = [
+      { op: 'add', entry: { kind: 'concept', ...DRAFT }, sources: [] },
+      { op: 'supersede', entryId: fx.family.close, baseRevision: 1, entry: { kind: 'concept', ...DRAFT }, sources: [] },
+      ...Array.from({ length: OPS - 2 }, () => ({ op: 'add', entry: { kind: 'concept', ...next() }, sources: [] })),
+    ];
+    probe.reset();
+    const answer = await service.submitChangeset(owner, fx.big, { rationale: 'thirty drafts', ops: ops as never, dryRun: true });
+    const outcomes = answer.ops as Outcome[];
+    assert.equal(outcomes.length, OPS);
+    for (const [seq, op] of ops.entries()) {
+      const inside = await lookup(h.prisma, fx.owner.id, fx.big, op.entry as Record<string, unknown>, op.op === 'supersede' ? fx.family.close : null);
+      assert.deepEqual(outcomes[seq].similar ?? [], inside, `draft ${seq}'s similar[] is not what the lookup inside the transaction answers`);
+    }
+    // What that rests on, so it cannot pass by comparing empty lists: the planted family, the supersede's
+    // exclusion, and the rejected neighbour's reason.
+    assert.deepEqual((outcomes[0].similar ?? []).map((near) => near.id), ['twin', 'same', 'close', 'rejected', 'fifth'].map((key) => fx.family[key]));
+    assert.equal(outcomes[0].similar?.[3].rejectedReason, 'duplicate');
+    assert.deepEqual((outcomes[1].similar ?? []).map((near) => near.id), ['twin', 'same', 'rejected', 'fifth', 'sixth'].map((key) => fx.family[key]));
+    assert.deepEqual(lookupsOf(probe), { before: 1, inside: 0 }, 'thirty drafts are one statement before the transaction, and none inside it');
+    t.diagnostic(`thirty drafts, ${outcomes.filter((outcome) => (outcome.similar ?? []).length > 0).length} with neighbours: `
+      + `before the transaction ${spelled(timing(probe, false))}; inside ${spelled(timing(probe, true))}`);
+  });
+
+  await t.test('the statement that reads them asks the trigram index once per draft, and never reads the table', async () => {
+    await analyze(h);
+    const next = corpus(8);
+    const drafts = [DRAFT, ...Array.from({ length: 9 }, () => next())].map((text, seq) => asDraft(seq, text));
+    const { root, text } = await explainRead(h, fx.owner.id, fx.big, drafts);
+    const nodes = nodesOf(root);
+    const index = nodes.filter((node) => node['Index Name'] === 'wiki_entry_search_trgm');
+    assert.equal(index.length, 1, `the read does not ask the trigram index:\n${text}`);
+    assert.equal(index[0]['Actual Loops'], drafts.length, `the trigram index is not asked once per draft:\n${text}`);
+    assert.doesNotMatch(index[0]['Index Cond'] ?? '', /Migration numbers/u, `the read was planned around a draft's text:\n${text}`);
+    assert.deepEqual(
+      nodes.filter((node) => node['Node Type'] === 'Seq Scan' && node['Relation Name'] === 'wiki_entry'),
+      [],
+      `the read scans the table of entries:\n${text}`,
+    );
+    const tested = nodes
+      .filter((node) => node['Relation Name'] === 'wiki_entry')
+      .reduce(
+        (sum, node) => sum
+          + (node['Actual Rows'] + (node['Rows Removed by Index Recheck'] ?? 0) + (node['Rows Removed by Filter'] ?? 0))
+            * node['Actual Loops'],
+        0,
+      );
+    assert.ok(tested / drafts.length < BIG / 10, `the read tested ${tested} entries for ${drafts.length} drafts:\n${text}`);
+    const returned = root['Actual Rows'];
+    assert.ok(returned >= 5, `the planted draft's five are among what the read returns:\n${text}`);
+    for (const subplan of nodes.filter((node) => node['Parent Relationship'] === 'SubPlan')) {
+      assert.ok(
+        subplan['Actual Loops'] <= returned,
+        `${subplan['Subplan Name']} ran ${subplan['Actual Loops']} times for ${returned} rows returned:\n${text}`,
+      );
+    }
+  });
+
+  await t.test('a draft meets what the changeset\'s earlier ops wrote, exactly as when every lookup ran inside', async () => {
+    const shared = { definition: 'A shell that runs after the turn', boundaries: 'Not an agent tool' };
+    const first: Text = {
+      title: 'Acceptance shells run after the turn ends',
+      summary: '验收命令在回合结束后运行 in the same worktree as the session',
+      fields: shared,
+    };
+    const second: Text = {
+      title: 'Acceptance shells run after the turn has ended',
+      summary: '验收命令在回合结束后运行 in the same worktree as the session did',
+      fields: shared,
+    };
+    const copied: Text = {
+      title: 'The worktree overlay copies the Prisma client',
+      summary: '每个 worktree 复制自己的 Prisma client instead of reading the main checkout',
+      fields: { definition: 'A copied client', boundaries: 'Not the main checkout' },
+    };
+    const [retired] = await standing(h, fx.owner.id, fx.big, [copied]);
+    const ops: Array<Record<string, unknown>> = [
+      { op: 'add', entry: { kind: 'concept', ...first }, sources: [] },
+      { op: 'add', entry: { kind: 'concept', ...second }, sources: [] },
+      { op: 'retire', entryId: retired, baseRevision: 1, reason: 'the overlay no longer copies it', sources: [] },
+      {
+        op: 'add',
+        entry: { kind: 'concept', ...copied, title: 'The worktree overlay copies the Prisma client per tree' },
+        sources: [],
+      },
+      { op: 'add', entry: { kind: 'concept', ...corpus(9)() }, sources: [] },
+    ];
+    const reference = comparable(await everyLookupInside(h, owner, fx.big, ops), ops);
+    probe.reset();
+    const answer = await service.submitChangeset(owner, fx.big, { rationale: 'what earlier ops wrote', ops: ops as never });
+    assert.deepEqual(comparable(answer, ops), reference, 'similar[] is not what it is with every lookup inside the transaction');
+    const outcomes = answer.ops as Outcome[];
+    assert.equal(outcomes[1].similar?.[0]?.id, outcomes[0].entryId, 'the second draft meets the lineage the first one wrote');
+    const again = outcomes[3].similar?.find((near) => near.id === retired);
+    assert.equal(again?.status, 'retired', 'a draft meets the entry an earlier op retired, as retired');
+    // Looked up again inside: the draft that meets an earlier draft's lineage, and the one whose neighbour
+    // an earlier op retired; the other two as read before the transaction.
+    assert.deepEqual(lookupsOf(probe), { before: 1, inside: 2 });
+
+    // An amend rewrites an entry, which can then rank anywhere: every draft after it is looked up again.
+    const rewritten = { title: 'Runner restarts leave an index.lock behind', summary: '重启留下 index.lock，下一次 git status 失败 until it is removed' };
+    const [amended] = await standing(h, fx.owner.id, fx.big, [{
+      title: 'Trigram lookups price their test',
+      summary: 'COST 10000 steers the planner to the GIN index',
+      fields: { definition: 'A priced function', boundaries: 'Not an index' },
+    }]);
+    const amending: Array<Record<string, unknown>> = [
+      { op: 'amend', entryId: amended, baseRevision: 1, changes: rewritten, sources: [] },
+      {
+        op: 'add',
+        entry: {
+          kind: 'concept',
+          title: 'Runner restarts leave an index.lock',
+          summary: '重启留下 index.lock，下一次 git status 失败 until someone removes it',
+          fields: { definition: 'A stale lock file', boundaries: 'Not a git bug' },
+        },
+        sources: [],
+      },
+    ];
+    const amendReference = comparable(await everyLookupInside(h, owner, fx.big, amending), amending);
+    probe.reset();
+    const amendAnswer = await service.submitChangeset(owner, fx.big, { rationale: 'an amend, then a draft', ops: amending as never });
+    assert.deepEqual(comparable(amendAnswer, amending), amendReference, 'similar[] after an amend is not what it is with every lookup inside');
+    const met = (amendAnswer.ops as Outcome[])[1].similar?.find((near) => near.id === amended);
+    assert.equal(met?.title, rewritten.title, 'the draft meets the entry as the amend rewrote it');
+    assert.deepEqual(lookupsOf(probe), { before: 1, inside: 1 });
+  });
+
+  await t.test('a neighbour another writer changes between the read and the transaction is read again inside it', async () => {
+    const shared = { definition: 'A replay of the recorded range', boundaries: 'Not a rebase' };
+    const [moved, retired] = await standing(h, fx.owner.id, fx.big, [
+      { title: 'Session merges replay the recorded base', summary: 'session_merge 按记录的 base_sha 重放 the commits since it', fields: shared },
+      { title: 'Session merges replay from the recorded base', summary: 'session_merge 按记录的 base_sha 重放 every commit since', fields: shared },
+    ]);
+    const draft = {
+      kind: 'concept',
+      title: 'Session merges replay the recorded base sha',
+      summary: 'session_merge 按记录的 base_sha 重放 the commits since it',
+      fields: shared,
+    };
+    const ops = [
+      { op: 'add', entry: draft, sources: [] },
+      { op: 'add', entry: { kind: 'concept', ...corpus(10)() }, sources: [] },
+    ];
+    const retitled = 'Session merges replay the base they recorded';
+    probe.reset();
+    probe.beforeTransaction = async () => {
+      // Another writer, between the read and the transaction: an amend of one neighbour, a retire of another.
+      await h.sql.query(`UPDATE "wiki_entry" SET "title" = $2, "current_revision" = 2 WHERE "id" = $1`, [moved, retitled]);
+      await h.sql.query(`UPDATE "wiki_entry" SET "status" = 'retired', "retired_at" = now(), "valid_to" = now() WHERE "id" = $1`, [retired]);
+    };
+    const answer = await service.submitChangeset(owner, fx.big, { rationale: 'a neighbour moved', ops: ops as never });
+    const similar = new Map(((answer.ops as Outcome[])[0].similar ?? []).map((near) => [near.id, near]));
+    assert.equal(similar.get(moved)?.title, retitled, 'the neighbour is listed as it reads now, not as it was read');
+    const score = await h.sql.query<{ score: number }>(
+      `SELECT similarity(wiki_entry_search_text("title", "summary", "aliases", "fields"), $2)::float8 AS "score" FROM "wiki_entry" WHERE "id" = $1`,
+      [moved, `${draft.title} ${draft.summary}`],
+    );
+    assert.equal(similar.get(moved)?.score, Number(score.rows[0].score), 'and scored by its text now');
+    assert.equal(similar.get(retired)?.status, 'retired', 'the neighbour retired in between is listed retired');
+    assert.deepEqual(lookupsOf(probe), { before: 1, inside: 1 }, 'the draft whose neighbours moved is looked up again, and only it');
+    assert.equal(probe.statements.filter((statement) => statement.inside && statement.what === 'raw:neighbour re-check').length, 1);
+  });
+
+  const mx = await maintenanceLoaded(h, fx.owner);
+  const maintainer: WikiPrincipal = { origin: 'maintenance', ownerId: fx.owner.id, userId: null, sessionId: mx.maintainer, toolCallId: null };
+
+  await t.test(`a maintenance run's ${OPS} adds among ${BIG.toLocaleString('en-US')} entries keep the transaction well under 5 s, with no lookup inside it`, async () => {
+    // The first request of a process pays for what every later one reuses.
+    assertAllRecorded(
+      await service.submitChangeset(maintainer, mx.warm, { rationale: 'the warm-up', ops: maintenanceOps(mx.records, 20, 3) as never }),
+      3,
+      'the warm-up',
+    );
+    probe.reset();
+    assertAllRecorded(
+      await service.submitChangeset(maintainer, mx.empty, { rationale: 'into an empty space', ops: maintenanceOps(mx.records, 21) as never }),
+      OPS,
+      'the empty space',
+    );
+    const empty = { opened: probe.opened[0], before: timing(probe, false), inside: timing(probe, true) };
+
+    probe.reset();
+    const started = performance.now();
+    assertAllRecorded(
+      await service.submitChangeset(maintainer, mx.big, { rationale: 'among ten thousand', ops: maintenanceOps(mx.records, 22) as never }),
+      OPS,
+      'the big space',
+    );
+    const wall = performance.now() - started;
+    const opened = probe.opened[0];
+    const before = timing(probe, false);
+    const inside = timing(probe, true);
+    t.diagnostic(`empty space: transaction ${Math.round(empty.opened.ms)} ms; before it ${spelled(empty.before)}; inside ${spelled(empty.inside)}`);
+    t.diagnostic(`${BIG.toLocaleString('en-US')} entries: ${Math.round(wall)} ms in all, transaction ${Math.round(opened.ms)} ms; `
+      + `before it ${spelled(before)}; inside ${spelled(inside)}`);
+
+    assert.deepEqual(probe.opened.map((transaction) => transaction.options), [{ timeout: 15_000, maxWait: 5_000 }], 'the transaction names its own timeout');
+    assert.ok(opened.committed);
+    // The lookup, where the time that grows with the space went: one statement before the transaction for
+    // all thirty drafts, none inside it — whose share of the neighbours is the one re-check.
+    assert.deepEqual(lookupsOf(probe), { before: 1, inside: 0 }, 'a draft was looked up inside the transaction');
+    const recheck = inside.steps.get('neighbours') ?? { statements: 0, ms: 0 };
+    assert.ok(recheck.statements <= 1, `the transaction read the neighbours ${recheck.statements} times`);
+    assert.ok(
+      recheck.ms <= opened.ms * 0.1,
+      `the neighbours took ${Math.round(recheck.ms)} ms of the transaction's ${Math.round(opened.ms)} ms`,
+    );
+    // Well under the 5 s that closed it, and no longer than into an empty space: what is left is the
+    // statements an add is made of, whatever the size of the space.
+    assert.ok(opened.ms < 5_000, `the transaction was open ${Math.round(opened.ms)} ms`);
+    assert.ok(
+      opened.ms <= empty.opened.ms + 1_000,
+      `the transaction took ${Math.round(opened.ms)} ms among ${BIG} entries and ${Math.round(empty.opened.ms)} ms in an empty space`,
+    );
+  });
+
+  await t.test('every statement slowed as a loaded host slows it, the lookup most: the changeset still commits', async () => {
+    probe.reset();
+    probe.delayMs = 5;
+    probe.lookupDelayMs = 250;
+    assertAllRecorded(
+      await service.submitChangeset(maintainer, mx.big, { rationale: 'on a slow host', ops: maintenanceOps(mx.records, 23) as never }),
+      OPS,
+      'the slowed changeset',
+    );
+    const opened = probe.opened[0];
+    t.diagnostic(`every statement +5 ms and the lookup +250 ms: transaction ${Math.round(opened.ms)} ms; `
+      + `before it ${spelled(timing(probe, false))}; inside ${spelled(timing(probe, true))}`);
+    assert.ok(opened.committed && opened.ms < 15_000, `the transaction was open ${Math.round(opened.ms)} ms`);
+    // The slowest statement is paid once, before the transaction; inside it thirty would be 7.5 s.
+    assert.deepEqual(lookupsOf(probe), { before: 1, inside: 0 });
+  });
+
+  await t.test('four such changesets at once all commit', async () => {
+    probe.reset();
+    const answers = await Promise.all(
+      [24, 25, 26, 27].map((seed) => service.submitChangeset(maintainer, mx.big, { rationale: `at once ${seed}`, ops: maintenanceOps(mx.records, seed) as never })),
+    );
+    for (const [n, answer] of answers.entries()) assertAllRecorded(answer, OPS, `changeset ${n + 1} of four`);
+    t.diagnostic(`four at once: transactions ${probe.opened.map((transaction) => `${Math.round(transaction.ms)} ms`).join(', ')}; `
+      + `before them ${spelled(timing(probe, false))}; inside ${spelled(timing(probe, true))}`);
+    assert.equal(probe.opened.length, 4);
+    for (const transaction of probe.opened) {
+      assert.ok(transaction.committed && transaction.ms < 15_000, `a transaction was open ${Math.round(transaction.ms)} ms: ${transaction.error ?? ''}`);
+    }
+    assert.deepEqual(lookupsOf(probe), { before: 4, inside: 0 });
+    const committed = await h.sql.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM "wiki_entry" WHERE "space_id" = $1 AND "status" = 'proposed'`,
+      [mx.big],
+    );
+    assert.equal(committed.rows[0].n, OPS * 6, 'every add of the six changesets wrote its lineage, proposed until verified');
   });
 });
