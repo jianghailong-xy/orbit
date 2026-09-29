@@ -6,7 +6,9 @@ feedback, runtime integrations, and code.
 ## Before you start
 
 - Search [existing issues](https://github.com/jianghailong-xy/orbit/issues) before opening a new one.
-- Use the issue forms for reproducible bugs and product proposals.
+- Use the [bug report](https://github.com/jianghailong-xy/orbit/issues/new?template=bug_report.yml) or [feature request](https://github.com/jianghailong-xy/orbit/issues/new?template=feature_request.yml) form for actionable public Issues.
+- Use [Discussions](https://github.com/jianghailong-xy/orbit/discussions) for questions, early ideas, release feedback, and showcases. The [community guide](COMMUNITY.md) explains the channel and label conventions.
+- If you are new to the repository, start with an open [good first issue](https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). Claim it in a comment before starting so two people do not duplicate the work.
 - For a large feature, schema change, new dependency, protocol change, or visible product redesign, open an
   issue before investing in an implementation. Early agreement on scope prevents wasted work.
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in all project spaces.
@@ -69,6 +71,8 @@ A reviewable pull request:
 - updates the nearest public guide in the same change.
 
 Maintainers may ask for a change to be split, simplified, or discussed in an issue before it is merged.
+The [community guide](COMMUNITY.md#maintainer-response-convention) describes response targets; they are
+volunteer targets, not an SLA.
 
 ## Documentation
 

@@ -8,8 +8,12 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | If you want to… | Read |
 | --- | --- |
 | Understand the product and its use cases | [Product introduction](product-intro.md) |
+| Watch or record the 90-second product walkthrough | [90-second demo storyboard](90-second-demo.md) |
 | Reuse the approved public positioning and launch copy | [GitHub launch messaging brief](messaging-brief.md) |
+| Follow project direction | [Public roadmap](../ROADMAP.md) |
 | Run Orbit on your own server | [Self-hosting](self-hosting.md) |
+| Publish or upgrade a release | [Release process](release-process.md) |
+| Verify a fresh install and runner heartbeat | [Clean-host smoke record](evidence/clean-install-2026-09-29.md) |
 | Understand the system and trust boundaries | [Architecture overview](architecture.md) |
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
 | Automate tasks and sessions | [Runner CLI and automation](runner-cli.md) |
@@ -21,6 +25,8 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 
 - [Product introduction](product-intro.md) — the problem Orbit solves, a day-in-the-life walkthrough, and
   current boundaries.
+- [90-second demo storyboard](90-second-demo.md) — timed shots, narration, evidence rules, and the canonical
+  opening/close for a GitHub product demo.
 - [Self-hosting](self-hosting.md) — Docker Compose, secrets, runners, TLS, upgrades, and production checks.
 - [Runner CLI and automation](runner-cli.md) — task/session commands, service tokens, and authorization
   boundaries.
@@ -70,12 +76,17 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   owner-review actions are judgment-role boundaries with action-specific traceability rather than
   proof of human presence, including the same-host threat model and stronger alternatives.
 
-Design notes capture the reasoning and implementation state at the time they were written. When a design note
-conflicts with current code or a current operator guide, the code and operator guide are authoritative. Notes
-that include an "implementation differences" section should be read with that section in mind.
+Design notes capture the reasoning and implementation state at the time they were written. They are historical
+context, not a promise that every proposed behavior exists. When a design note conflicts with current code or a
+current operator guide, the code and operator guide are authoritative. Notes that include an "implementation
+differences" section should be read with that section in mind; contributors should append such a section rather
+than silently rewriting the historical decision.
 
 ## Project and community
 
+- [Community guide](../COMMUNITY.md) — channel choice, labels, good first issues, maintainer response targets,
+  and the boundary between current guides and design history.
+- [Public roadmap](../ROADMAP.md) — now / next / later direction without date promises.
 - [Contributing](../CONTRIBUTING.md) — workflow, tests, and pull-request expectations.
 - [Governance](../GOVERNANCE.md) — decision making and the path to maintainership.
 - [Security](../SECURITY.md) — supported versions and vulnerability reporting.
