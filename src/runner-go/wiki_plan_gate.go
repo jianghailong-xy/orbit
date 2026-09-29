@@ -123,15 +123,24 @@ func (r *wikiPlanRun) assemble() wikiPlanAssembled {
 	return a
 }
 
+// wikiPlanCountError is the gate's error for a plan of n documents, when n is outside the target.
+func wikiPlanCountError(n int, target wikiPlanLength) (wikiPlanGateError, bool) {
+	if n >= target.Min && n <= target.Max {
+		return wikiPlanGateError{}, false
+	}
+	advice := "merge documents that answer the same reader's question"
+	if n < target.Min {
+		advice = "split the broadest documents, or add the ones the categories are missing"
+	}
+	return wikiPlanGateError{Check: "docCount", Path: "plan.docs", Message: fmt.Sprintf("the plan has %d documents; it must have %d to %d: %s",
+		n, target.Min, target.Max, advice)}, true
+}
+
 // whole is what no one document can say: the count, and the protected documents and moves.
 func (g *wikiPlanGate) whole(slugs, keys map[string]bool) {
 	r := g.run
-	if n := len(g.a.plan.Docs); n < r.target.Min || n > r.target.Max {
-		advice := "merge documents that answer the same reader's question"
-		if n < r.target.Min {
-			advice = "split the broadest documents, or add the ones the categories are missing"
-		}
-		g.fail("docCount", "plan.docs", "the plan has %d documents; it must have %d to %d: %s", n, r.target.Min, r.target.Max, advice)
+	if e, outside := wikiPlanCountError(len(g.a.plan.Docs), r.target); outside {
+		g.a.errors = append(g.a.errors, e)
 	}
 	if r.base == nil {
 		return

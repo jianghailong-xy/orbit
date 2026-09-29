@@ -193,7 +193,7 @@ func wikiPlanCatFiles(root string, files []string, oids map[string]string) (map[
 }
 
 var (
-	wikiPlanFence   = regexp.MustCompile("^\\s*(```+|~~~+)")
+	wikiPlanFence       = regexp.MustCompile("^\\s*(```+|~~~+)")
 	wikiPlanHeadingLine = regexp.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`)
 )
 

@@ -34,8 +34,8 @@ type wikiPlanSectionDraft struct {
 // wikiPlanSessionsDraft is a section's session condition as the model wrote it.
 type wikiPlanSessionsDraft struct {
 	Projects, Keywords, AnchorPaths, EntryKinds, Topics []string
-	Since, Until, Evidence                             string
-	Stray                                              []string
+	Since, Until, Evidence                              string
+	Stray                                               []string
 }
 
 // wikiPlanUnit is one document of the draft: its card in the catalogue, what the model wrote of it, and
@@ -65,9 +65,9 @@ type wikiPlanUnit struct {
 
 // wikiPlanHeader is a document's header as the model wrote it.
 type wikiPlanHeader struct {
-	Title, Question                             string
-	Audience, ScopeIn, ScopeOut                 []string
-	Length                                      string
+	Title, Question                                  string
+	Audience, ScopeIn, ScopeOut                      []string
+	Length                                           string
 	KeyDocs, KeyCode, KeyContracts, Topics, Projects []string
 }
 

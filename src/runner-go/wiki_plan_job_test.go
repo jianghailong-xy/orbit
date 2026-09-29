@@ -218,6 +218,9 @@ const planRules = "## 引用规则\n1. 脚注引一手原文。\n## 归并规则
 type planModel struct {
 	mu      sync.Mutex
 	prompts []string
+	// skeleton answers the catalogue by the time it is asked for (1, 2, …); without it, planSkeleton.
+	skeleton  func(n int) string
+	skeletons int
 	// outline answers a document's outline by its title; redo a redo of it.
 	outline func(title string) string
 	redo    func(title string, prompt string) string
@@ -239,6 +242,13 @@ func (m *planModel) answer(prompt string) (int, string) {
 	}
 	switch {
 	case strings.Contains(prompt, "第一步：文档目录的骨架"), strings.Contains(prompt, "# 任务：改正 wiki「"):
+		if m.skeleton != nil {
+			m.mu.Lock()
+			m.skeletons++
+			n := m.skeletons
+			m.mu.Unlock()
+			return http.StatusOK, m.skeleton(n)
+		}
 		return http.StatusOK, planSkeleton
 	case strings.Contains(prompt, "第二步：给大类「产品」"):
 		return http.StatusOK, planDetailsProduct
@@ -518,6 +528,112 @@ func TestWikiPlanDraftsInFourStepsEachStreamedToDisk(t *testing.T) {
 	if text := describeWikiPlanSummary(summary); !strings.Contains(text, "stored as version 1") || !strings.Contains(text, "Tokens:") ||
 		!strings.Contains(text, "round 1: passed") {
 		t.Errorf("what the session reports: %s", text)
+	}
+}
+
+// ── The count, before any document ──────────────────────────────────────────────────────────────
+
+// planSkeletonFour is planSkeleton with one document more.
+const planSkeletonFour = "## 1. 产品 `product` —— 这个服务是什么、怎么运转\n" +
+	"- 1.1 服务概览 `service-overview`｜这个服务是什么、由哪些部分组成｜含：定位；组件；入口\n" +
+	"- 1.2 存储 `storage`｜数据怎么存、怎么取｜含：Store；保存\n" +
+	"- 1.3 发布渠道 `release-channels`｜版本从哪里发出去｜含：渠道；节奏\n" +
+	"## 2. 开发约定 `dev` —— 给写代码的 agent 看的约定 [agents]\n" +
+	"- 2.1 测试约定 `testing`｜怎么跑测试｜含：go test；夹具\n"
+
+func TestWikiPlanSendsACatalogueOutsideTheTargetBackBeforeAnyDocument(t *testing.T) {
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	model := &planModel{skeleton: func(n int) string {
+		if n == 1 {
+			return planSkeletonFour
+		}
+		return planSkeleton
+	}}
+	vllm := newFakeVLLM(t, model.answer)
+	planSession(t, door.URL, vllm)
+	fakeVerifyClaude(t)
+
+	summary, printed, err := runPlanCLI(t, t.TempDir(), "draft", "--target", "3-3")
+	if err != nil {
+		t.Fatalf("orbit wiki plan draft: %v\n%s", err, printed)
+	}
+	// The catalogue of four went back with the gate's own count error before anything else was asked.
+	var order []string
+	for _, request := range vllm.Requests() {
+		switch {
+		case strings.Contains(request.Prompt, "第一步"):
+			order = append(order, "catalogue")
+		case strings.Contains(request.Prompt, "第二步"), strings.Contains(request.Prompt, "第三步"), strings.Contains(request.Prompt, "第四步"):
+			order = append(order, "body")
+			if strings.Contains(request.Prompt, "release-channels") {
+				t.Errorf("a document was written for the catalogue that was sent back:\n%s", request.Prompt)
+			}
+		}
+	}
+	if len(order) != 8 || order[0] != "catalogue" || order[1] != "catalogue" || strings.Count(strings.Join(order, " "), "catalogue") != 2 {
+		t.Errorf("the calls: %v, want the catalogue twice and then the six the draft of three documents asks", order)
+	}
+	again := model.asked("# 任务：改正 wiki「")
+	if len(again) != 1 || !strings.Contains(again[0], "[docCount] plan.docs：the plan has 4 documents; it must have 3 to 3: "+
+		"merge documents that answer the same reader's question") || !strings.Contains(again[0], "release-channels") {
+		t.Fatalf("the catalogue was not sent back with its count: %d prompts\n%s", len(again), strings.Join(again, "\n----\n"))
+	}
+	// Not a round: the one draft went through the gates at the first.
+	if got := planAttempts(door); !reflect.DeepEqual(got, []int{1}) {
+		t.Errorf("the rounds reported were %v, want [1]", got)
+	}
+	if sent := draftSent(t, door, 1); len(sent.Plan.Docs) != 3 {
+		t.Errorf("the draft sent has %d documents", len(sent.Plan.Docs))
+	}
+	if summary.Outcome != "succeeded" || len(summary.Report.Attempts) != 1 || summary.Report.Tokens.Calls != 8 {
+		t.Errorf("the summary: %+v", summary)
+	}
+}
+
+func TestWikiPlanLeavesACountStillOutsideTheTargetToTheGate(t *testing.T) {
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	model := &planModel{}
+	vllm := newFakeVLLM(t, model.answer)
+	planSession(t, door.URL, vllm)
+	fakeVerifyClaude(t)
+
+	summary, printed, err := runPlanCLI(t, t.TempDir(), "draft", "--target", "4-5")
+	if err == nil || !strings.Contains(err.Error(), "did not pass the plan's gate in 3 rounds") {
+		t.Fatalf("a catalogue that stayed at three documents for a target of 4–5: %v\n%s", err, printed)
+	}
+	// Each round: the catalogue, then twice more with the count before any document; then the gate judges.
+	if n := len(model.asked("第一步")); n != 9 {
+		t.Errorf("the catalogue was asked for %d times, want 3 in each of 3 rounds", n)
+	}
+	again := model.asked("# 任务：改正 wiki「")
+	if len(again) != 8 {
+		t.Fatalf("the catalogue was sent back %d times, want 8", len(again))
+	}
+	for _, prompt := range again {
+		if !strings.Contains(prompt, "[docCount] plan.docs：the plan has 3 documents; it must have 4 to 5: split the broadest documents") {
+			t.Errorf("a catalogue sent back without its count:\n%s", prompt)
+		}
+	}
+	// The documents were written once: the catalogues sent back kept every one of them.
+	if n := len(model.asked("第二步")) + len(model.asked("第三步 —— 给《")); n != 5 {
+		t.Errorf("%d details and outlines were asked for, want the first round's 5", n)
+	}
+	if n := len(door.of(http.MethodPost, "plan/drafts")); n != 0 {
+		t.Errorf("the server was sent %d drafts this runner's gate refused", n)
+	}
+	if got := planAttempts(door); !reflect.DeepEqual(got, []int{1, 2, 3}) {
+		t.Errorf("the rounds reported were %v", got)
+	}
+	for _, round := range summary.Report.Attempts {
+		if round.Checks["docCount"] != 1 {
+			t.Errorf("a round without the count: %+v", round)
+		}
+	}
+	end := planFinish(t, door)
+	if errs, _ := end["errors"].([]interface{}); end["outcome"] != "failed" || len(errs) != 1 || !strings.Contains(fmt.Sprint(errs[0]), "docCount") {
+		t.Errorf("the job's end: %v", end)
 	}
 }
 

@@ -750,6 +750,9 @@ func (r *wikiPlanRun) draft(attempt int) error {
 	catalogue := parseWikiPlanCatalogue(answer)
 	r.adoptCatalogue(catalogue, false)
 	r.say("The catalogue: %d categories, %d documents.", len(r.cats), len(r.units))
+	if err := r.catalogueToTarget(attempt); err != nil {
+		return err
+	}
 	var rulesErr error
 	var rulesDone sync.WaitGroup
 	rulesDone.Add(1)
@@ -773,6 +776,33 @@ func (r *wikiPlanRun) draft(attempt int) error {
 			return rulesErr
 		}
 		r.say("Step 4 of 4: the rules draft was not written (%v); the plan does not need it.", rulesErr)
+	}
+	return nil
+}
+
+// wikiPlanCountTries is how many times a draft's catalogue outside the target is written again before any
+// document of it is: the gate would refuse the count whole, and every body written for documents that are
+// then merged away is paid for twice. A count still outside after them is the gate's to hand back.
+const wikiPlanCountTries = 2
+
+// catalogueToTarget sends a draft's catalogue that is outside the target back with the gate's own count
+// error, before any document's body is written for it. A revision's is left to the gate: it carries most
+// of its documents as they were, so little is written for nothing.
+func (r *wikiPlanRun) catalogueToTarget(attempt int) error {
+	if r.opts.kind == "revise" && r.base != nil {
+		return nil
+	}
+	for try := 1; try <= wikiPlanCountTries; try++ {
+		count, outside := wikiPlanCountError(len(r.units), r.target)
+		if !outside {
+			return nil
+		}
+		r.say("The catalogue has %d documents, outside %d–%d: written again before any document of it (%d of %d).",
+			len(r.units), r.target.Min, r.target.Max, try, wikiPlanCountTries)
+		if err := r.redoCatalogue(attempt, fmt.Sprintf("catalogue-count-%d", try), []wikiPlanGateError{count}, wikiPlanAssembled{}); err != nil {
+			return err
+		}
+		r.say("The catalogue: %d categories, %d documents.", len(r.cats), len(r.units))
 	}
 	return nil
 }
@@ -1018,7 +1048,10 @@ func (r *wikiPlanRun) redo(attempt int, errs []wikiPlanGateError, last wikiPlanA
 	}
 	if len(catalogue) > 0 {
 		r.say("Round %d: the catalogue again, for %s.", attempt, wikiCount(len(catalogue), "error", "errors"))
-		if err := r.redoCatalogue(attempt, catalogue, last); err != nil {
+		if err := r.redoCatalogue(attempt, "catalogue", catalogue, last); err != nil {
+			return err
+		}
+		if err := r.catalogueToTarget(attempt); err != nil {
 			return err
 		}
 	}
@@ -1120,16 +1153,16 @@ func wikiPlanMergeHeader(next, prev wikiPlanHeader) wikiPlanHeader {
 	return next
 }
 
-// redoCatalogue writes the catalogue again with its errors.
-func (r *wikiPlanRun) redoCatalogue(attempt int, errs []wikiPlanGateError, last wikiPlanAssembled) error {
+// redoCatalogue writes the catalogue again with its errors; its answer is kept as unit's.
+func (r *wikiPlanRun) redoCatalogue(attempt int, unit string, errs []wikiPlanGateError, last wikiPlanAssembled) error {
 	lines := r.errorLines(errs, last)
 	var answer string
 	var err error
 	parses := func(text string) bool { return parseWikiPlanCatalogue(text) != nil }
 	if r.opts.kind == "revise" && r.base != nil {
-		answer, err = r.ask(attempt, "revise-catalogue", "catalogue", r.revisionCataloguePrompt(errs, lines), parses)
+		answer, err = r.ask(attempt, "revise-catalogue", unit, r.revisionCataloguePrompt(errs, lines), parses)
 	} else {
-		answer, err = r.ask(attempt, "skeleton", "catalogue", r.fullMaterials()+"\n"+r.catalogueRedoPrompt(lines), parses)
+		answer, err = r.ask(attempt, "skeleton", unit, r.fullMaterials()+"\n"+r.catalogueRedoPrompt(lines), parses)
 	}
 	if err != nil {
 		return err
