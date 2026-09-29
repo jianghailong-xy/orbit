@@ -15,10 +15,25 @@ const fmtReset = (d?: string): string =>
 /** What Tab moves between inside the popover. */
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** Whose quota the popover's windows are: one of the runner's Codex accounts, where it has several.
+ *  `note` says how a new session came to it when nothing picked one. */
+export interface PlanUsageAccount {
+  label: string;
+  note?: string;
+}
+
 // Compact plan-usage indicator for the composer footer (right of the effort pill).
-// The pill shows the binding/primary window; hover or press reveals every reported window and, for a
-// session on the runner's own Codex sign-in, its earned reset credits.
-export function PlanUsageIndicator({ usage, reset }: { usage: PlanUsageSnapshot; reset?: CodexResetContext }) {
+// The pill shows the binding/primary window; hover or press reveals every reported window, the account
+// they belong to and, for a session on the runner's own Codex sign-in, its earned reset credits.
+export function PlanUsageIndicator({
+  usage,
+  reset,
+  account,
+}: {
+  usage: PlanUsageSnapshot;
+  reset?: CodexResetContext;
+  account?: PlanUsageAccount;
+}) {
   const rows = planUsageRows(usage);
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -61,6 +76,15 @@ export function PlanUsageIndicator({ usage, reset }: { usage: PlanUsageSnapshot;
       tabIndex={-1}
       onKeyDown={onPanelKeyDown}
     >
+      {account && (
+        <div className="cu-account">
+          <div className="cu-head">
+            <span className="cu-label">Account</span>
+            <span className="cu-account-name">{account.label}</span>
+          </div>
+          {account.note && <div className="cu-reset">{account.note}</div>}
+        </div>
+      )}
       {rows.map(({ key, label, groupLabel, window, percent, nearLimit }) => {
         return (
           <div className="cu-row" key={key}>

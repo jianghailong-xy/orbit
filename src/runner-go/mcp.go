@@ -640,6 +640,23 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		return toolResult("The question is with the account owner. Their answer will arrive as a "+
 			"message in this conversation; nothing is waiting on this call.\n"+prettyJSON(raw), false)
 
+	case "project_request_start":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		body, err := projectStartRequestBody(args)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		// The asking session IS the authority, as it is for ask_owner: the server checks it against
+		// the project's own coordinator pointer, so a call made from anywhere else files nothing.
+		raw, err := s.t.requestProjectStart(s.sessionID, id, body)
+		if err != nil {
+			return toolResult(projectStartRequestRefusal(err), true)
+		}
+		return toolResult(projectStartRequestFiled(raw), false)
+
 	case "open_item_resolve":
 		id := getString(args, "projectId")
 		itemID := getString(args, "itemId")
@@ -2232,7 +2249,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			"autoRunWhenReady": map[string]interface{}{
 				"type":        "boolean",
-				"description": "Once all prerequisites are DONE, auto-run this task without a manual start (default true). Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. Ignored when there are no prerequisites.",
+				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. For a task in no project it only matters when there are prerequisites.",
 			},
 			"completionPolicy": map[string]interface{}{
 				"type":        "string",
@@ -2754,6 +2771,69 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"new question.",
 				},
 			}, "projectId", "question"),
+		},
+		{
+			"name": "project_request_start",
+			"description": "Ask the account owner to start the project you coordinate. Until they " +
+				"start it, task_start is refused for its tasks, and this is how the start is put in " +
+				"front of them: call it once the plan is written — the criteria stated, the work filed " +
+				"as tasks under the project, and EVERY acceptance criterion served by at least one task " +
+				"(criterionKey on task_create/task_update). Orbit checks the plan first. If it is not " +
+				"ready the call is refused and nothing is filed, with every reason listed at once, each " +
+				"with what to do: no criteria or no tasks, a criterion no task serves, a task whose " +
+				"assignee is not on a runner, a project branch asked for with no repository to hold it. " +
+				"Fix them all and call again. If it is ready, the request is filed and this returns AT " +
+				"ONCE — it does not wait for the owner — with the request's itemId and any warnings: " +
+				"tasks set to start by hand (autoRunWhenReady=false), and Automatic on a project branch " +
+				"with no merge check. The owner then sees a \"Start this project?\" card with your " +
+				"settings as suggestions, may change any of them, and presses Start; you are told when " +
+				"the project starts. Suggest what you would choose and say why in one sentence. Asking " +
+				"again replaces the open request, and changing the plan before the start — tasks, " +
+				"dependencies or criteria — voids it, so ask again after the plan changes. Only the " +
+				"conversation the project is coordinated from may ask, and only before it has started.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"line": map[string]interface{}{
+					"type": "string",
+					"enum": []string{"PROJECT_BRANCH", "MAIN"},
+					"description": "Where its finished tasks land. PROJECT_BRANCH: on the project's own " +
+						"branch first, where tasks that depend on each other are checked together before " +
+						"main. MAIN: directly into main, for a single task or an urgent fix — every merge " +
+						"into main then asks the owner.",
+				},
+				"projectBranchName": map[string]interface{}{
+					"type": "string",
+					"description": "With PROJECT_BRANCH only: the branch as a full ref (refs/heads/…). " +
+						"Leave it out for refs/heads/project/<project id>.",
+				},
+				"automatic": map[string]interface{}{
+					"type": "boolean",
+					"description": "Whether you run the project for the owner: you decide when each task is " +
+						"done, handle conflicts and failed checks, and the project branch merges into main " +
+						"once its merge check passes. false brings those to the owner; the project runs " +
+						"either way.",
+				},
+				"maxConcurrentTasks": map[string]interface{}{
+					"type":        "integer",
+					"minimum":     1,
+					"maximum":     maxProjectConcurrentTasks,
+					"description": "How many of its tasks may run at once.",
+				},
+				"mergeCheckCommand": map[string]interface{}{
+					"type": "string",
+					"description": "The command run on the combined tree before anything lands — on the " +
+						"project branch and again before main. Leave it out for none; with Automatic on a " +
+						"project branch that is a warning, since the branch would merge into main untested.",
+				},
+				"why": map[string]interface{}{
+					"type": "string",
+					"description": "One sentence on why the plan is ready and why these settings, shown " +
+						"to the owner on the card as written.",
+				},
+			}, "projectId", "line", "automatic", "maxConcurrentTasks", "why"),
 		},
 		{
 			"name": "open_item_resolve",

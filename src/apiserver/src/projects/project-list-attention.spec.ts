@@ -153,6 +153,20 @@ test('a coordinator-kind item is the coordinator’s, not one of the four, even 
   assert.equal(row?.coordinatorItems, null);
 });
 
+// A coordinator's request to start the project is the owner's from birth and not one of the four:
+// until the list learns to say "Ready to start" it files the project under nothing, rather than under
+// an escalation or a coordinator item it is not.
+test('a start request files its project under none of the four and not with the coordinator', async () => {
+  const { prisma } = fakePrisma([], [
+    { projectId: 'project-a', kind: 'START_REQUEST', assignee: 'OWNER', assigneeReason: 'DEFAULT', count: 1, oldestWaitingSince: new Date(), nextEscalationAt: null },
+  ]);
+
+  const row = (await readProjectListAttention(prisma, OWNER_ID)).get('project-a');
+
+  assert.deepEqual(row?.ownerItems, []);
+  assert.equal(row?.coordinatorItems, null);
+});
+
 test('a project with no open blockers and no items has one explicit empty shape', () => {
   assert.deepEqual(emptyProjectListAttention(), {
     userBlockers: 0,

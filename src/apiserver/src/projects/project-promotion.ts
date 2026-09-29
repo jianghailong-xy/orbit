@@ -26,6 +26,11 @@ import type { IntegrationCheckResult } from './project-integration-job';
  * no integration exception standing open on the project, and main exactly where the check left it.
  * `automaticConfirmationRefusal` below is that whole definition, and the runner enforces its last
  * clause at the moment of the push (M-T12).
+ *
+ * And only while the project moves: a paused project merges nothing into main by itself (Pause
+ * project stops "new tasks, wake-ups and merges into main"). Its checked candidates go to the owner
+ * as the card, exactly as they would with Automatic off, and pausing between the check and the
+ * landing hands the landing back the same way.
  */
 
 /** What is being promoted (§3.2). A MAIN-line project has no branch of its own, so it promotes the
@@ -130,6 +135,8 @@ export interface AutomaticConfirmationFacts {
   line: 'PROJECT_BRANCH' | 'MAIN' | null;
   /** The project's Automatic setting, `coordinator_enabled`. */
   coordinatorEnabled: boolean;
+  /** Whether the project is paused (`paused_at` set): nothing merges into main by itself then. */
+  projectPaused: boolean;
   /** What the check reported. */
   conflicts: readonly string[];
   checks: readonly IntegrationCheckResult[];
@@ -149,14 +156,15 @@ export interface AutomaticConfirmationFacts {
  * null when the platform may confirm it itself (M7, M-T11).
  *
  * THE WHOLE DEFINITION, AND NOT A WORD WIDER. The owner's rule has two halves — the line is the
- * project's own branch, and Automatic is on — and a clean landing under them. Clean is: nothing
- * conflicted, every check green, the check said which main it ran against and which tree it passed
- * (without those there is nothing to hold the landing to), and no integration exception standing
- * open on the project. The last clause, "main has not moved since the check", cannot be known here —
- * the control plane has no repository — so it is enforced where it can be, at the push: the landing
- * is sent out bound to the checked tip, and a runner that finds main elsewhere lands nothing and
- * hands the candidate back (M-T12). Which is why a runner that has not said it does that is itself a
- * refusal: on an older one, a moved main would be checked again and merged, and that is not clean.
+ * project's own branch, and Automatic is on — and a clean landing under them, in a project that is
+ * not paused. Clean is: nothing conflicted, every check green, the check said which main it ran
+ * against and which tree it passed (without those there is nothing to hold the landing to), and no
+ * integration exception standing open on the project. The last clause, "main has not moved since
+ * the check", cannot be known here — the control plane has no repository — so it is enforced where
+ * it can be, at the push: the landing is sent out bound to the checked tip, and a runner that finds
+ * main elsewhere lands nothing and hands the candidate back (M-T12). Which is why a runner that has
+ * not said it does that is itself a refusal: on an older one, a moved main would be checked again
+ * and merged, and that is not clean.
  *
  * Every refusal is today's behaviour, unchanged: the card, exactly as it would have opened.
  */
@@ -165,6 +173,7 @@ export function automaticConfirmationRefusal(facts: AutomaticConfirmationFacts):
     return 'the project integrates on main itself, and a merge into main from a MAIN line always asks';
   }
   if (!facts.coordinatorEnabled) return 'Automatic is off for this project';
+  if (facts.projectPaused) return 'the project is paused, and a paused project merges nothing into main by itself';
   if (facts.conflicts.length > 0) return 'the check reported conflicts';
   if (!facts.checks.every(checkPassed)) return 'a check on the combined tree did not pass';
   if (!facts.upstreamShaChecked || !facts.mergeTreeSha) {

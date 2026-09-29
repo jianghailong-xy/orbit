@@ -116,6 +116,8 @@ async function dependentTask(
   await db.project.create({
     data: {
       id: projectId, ownerId: ids.ownerId, title: label,
+      // Started: only a started, unpaused project moves by itself (project-pause-dispatch.ts).
+      startedAt: new Date(),
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, projectId, label);
@@ -127,6 +129,9 @@ async function dependentTask(
   await db.task.create({
     data: task(prerequisiteId, `${label} prerequisite`, {
       status: opts.prerequisiteStatus ?? TaskStatus.DONE,
+      // Not opted into auto-run, so an OPEN prerequisite STAYS open: it depends on nothing, and a
+      // started project releases such a task by itself whichever way Automatic is set.
+      autoRunWhenReady: false,
     }),
   });
   await db.task.create({

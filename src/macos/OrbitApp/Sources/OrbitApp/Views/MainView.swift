@@ -224,7 +224,7 @@ struct AccountFooter: View {
             }
         } label: {
             HStack(spacing: 10) {
-                AvatarMonogram(name: display)
+                AccountAvatar(name: display)
                 Text(display ?? "Account")
                     .fontWeight(.semibold)
                     .lineLimit(1)
@@ -250,8 +250,39 @@ struct AccountFooter: View {
     }
 }
 
-/// Circular initials avatar — the first letter of the name/email, like the web's `Avatar`. The
-/// sidebar's footer draws it at row size; Settings' header on iOS draws the same one large.
+/// The signed-in account's avatar: its profile photo once the app has it (`AppModel.avatarImage`),
+/// else the name's first letter. The sidebar's footer draws it at row size; Settings draws it large.
+struct AccountAvatar: View {
+    @Environment(AppModel.self) private var model
+    let name: String?
+    var diameter: CGFloat = 32
+    var font: Font = .orbitGlyph.weight(.semibold)
+
+    var body: some View {
+        if let photo = model.avatarImage {
+            AvatarPhoto(image: photo, diameter: diameter)
+        } else {
+            AvatarMonogram(name: name, diameter: diameter, font: font)
+        }
+    }
+}
+
+/// A photo cut to an avatar's circle.
+struct AvatarPhoto: View {
+    let image: PlatformImage
+    var diameter: CGFloat = 32
+
+    var body: some View {
+        Image(platformImage: image)
+            .resizable()
+            .scaledToFill()
+            .frame(width: diameter, height: diameter)
+            .clipShape(Circle())
+    }
+}
+
+/// Circular initials avatar — the first letter of the name/email, like the web's `Avatar`, drawn
+/// wherever there is no photo to draw (`AccountAvatar`).
 struct AvatarMonogram: View {
     let name: String?
     var diameter: CGFloat = 32

@@ -30,7 +30,8 @@ import type { PrismaService } from '../prisma/prisma.service';
  * migration, not a deploy that starts writing a value the database has never seen.
  */
 
-/** What an item is about (§4.2). Only TASK_FAILED has a producer today; the rest have their own tasks. */
+/** What an item is about (§4.2), and a coordinator's request to start its project
+ *  (`START_REQUEST`, `project-start-request.ts`; migration 0333). */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -39,6 +40,7 @@ export const OPEN_ITEM_KINDS = [
   'PROMOTION_APPROVAL',
   'COORDINATOR_QUESTION',
   'FUSE_PAUSED',
+  'START_REQUEST',
 ] as const;
 export type OpenItemKind = (typeof OPEN_ITEM_KINDS)[number];
 

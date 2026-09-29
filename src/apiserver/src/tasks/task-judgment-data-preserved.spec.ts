@@ -1417,7 +1417,57 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // are out of its reach. No function, trigger or type is created, replaced or dropped — no `CREATE OR
       // REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the six
       // preserved objects. No INSERT, UPDATE or DELETE: every new table starts empty.
-      '0326_wiki_docs'],
+      '0326_wiki_docs',
+      // The Codex account one session was started on (0330): one nullable `ADD COLUMN` on `session`
+      // (`codex_account`, TEXT, no default, no index, no CHECK, no foreign key — 0324's
+      // `pool_codex_account_id` exactly — so the ALTER is catalog-only and no stored session row is
+      // rewritten or constrained) and nothing else. Read against every claim above: `task`, `project`
+      // and `project_acceptance_criterion_definition` are not named, so the 0177 pair and every stored
+      // task and criterion row are out of its reach. It names no `project_acceptance_*` object and none
+      // of the six preserved triggers/functions, and creates no function, trigger, enum or type — so it
+      // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0330_session_codex_account',
+      // A project's start as a fact of its own (0331): one nullable `ADD COLUMN` with no default on
+      // `project` (`started_at`, catalog-only), one nullable `ADD COLUMN` with no default on
+      // `project_standard_set_confirmation` (`started_with`) with one CHECK every stored row satisfies
+      // as it reads NULL, and one UPDATE that backfills `started_at` — and writes nothing else — on the
+      // projects that were already started. Read against every claim above: `project` is named, as
+      // the table the column is added to and the one the UPDATE writes, and only that new column is
+      // assigned; no trigger on `project` fires on it, and none is created. `task` and `session` are
+      // named only as the tables that UPDATE reads, and `project_standard_set_confirmation` is not a
+      // preserved relation. It names no `project_acceptance_*` object and none of the six preserved
+      // triggers/functions, creates or replaces no function, trigger, enum or type — so it is not
+      // another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP`. No INSERT or
+      // DELETE, and no task, criterion or confirmation row is rewritten.
+      '0331_project_started_at',
+      // A coordinator's request to start its project (0333): `project_open_item_kind_chk` and
+      // `project_open_item_owner_only_chk` are dropped and added back admitting `START_REQUEST`, which
+      // every stored item satisfies — none holds the new kind — so no row is rewritten or refused.
+      // Read against every claim above: `project_open_item` is the only relation named, and it is not
+      // a preserved one; no `task`, `session`, `project` or `project_acceptance_*` object is named, so
+      // the 0177 pair and every stored task and criterion row are out of its reach. No function,
+      // trigger, enum or type is created, replaced or dropped — no `CREATE OR REPLACE FUNCTION`, so it
+      // is not another writer of the DONE fence and names none of the six preserved objects. No
+      // INSERT, UPDATE or DELETE.
+      '0333_project_start_request',
+      // A project's pause as a fact of its own (0334): two nullable `ADD COLUMN`s with no default on
+      // `project` (`paused_at`, `paused_reason`, catalog-only) with one CHECK every stored row
+      // satisfies as both read NULL, and one UPDATE that pauses the started projects whose Automatic
+      // is off — writing those two columns and nothing else. Read against every claim above:
+      // `project` is named, as the table the columns are added to and the one the UPDATE writes; no
+      // trigger on `project` fires on either column, and none is created. It names no `task`,
+      // `session` or `project_acceptance_*` object and none of the six preserved triggers/functions,
+      // creates or replaces no function, trigger, enum or type — so it is not another writer of the
+      // DONE fence — and carries no `ALTER TYPE` and no `DROP`. No INSERT or DELETE.
+      '0334_project_paused',
+      // A profile photo of one's own (0335): one new table, `user_avatar`, keyed by the user it belongs
+      // to, with two CHECKs (the three image types, and a non-empty photo) and a foreign key to `user`
+      // whose `ON DELETE CASCADE` is a referential action on the new table's rows. Read against every
+      // claim above: no `task`, `session`, `project` or `project_acceptance_*` object is named, so the
+      // 0177 pair and every stored task and criterion row are out of its reach. No function, trigger or
+      // type is created, replaced or dropped — so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: the new table starts empty.
+      '0335_user_avatar'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

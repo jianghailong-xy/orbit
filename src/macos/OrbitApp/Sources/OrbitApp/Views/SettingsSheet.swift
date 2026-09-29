@@ -89,6 +89,8 @@ struct SettingsHomeView: View {
     /// The avatar and name are the page's title while they are on screen; the bar names the page
     /// once they have scrolled under it.
     @State private var headerScrolledAway = false
+    /// The edit-profile card, which the avatar and name open.
+    @State private var editingProfile = false
 
     private var isAdmin: Bool { model.user?.role == "ADMIN" }
 
@@ -118,6 +120,9 @@ struct SettingsHomeView: View {
                             isPresented: $confirmingSignOut, titleVisibility: .visible) {
             Button(SettingsCopy.signOut, role: .destructive) { model.logout() }
             Button(SharePanelCopy.cancel, role: .cancel) {}
+        }
+        .sheet(isPresented: $editingProfile) {
+            ProfileEditSheet(name: model.user?.name ?? "")
         }
         // Changes apply the moment they are made, as settings do on iOS. Each write is guarded
         // against the value the account already has, so seeding the pickers never writes.
@@ -152,14 +157,24 @@ struct SettingsHomeView: View {
         return model.user?.email ?? ""
     }
 
+    /// The account, as ChatGPT's sheet opens: the avatar with a pencil on it and the name under it,
+    /// both one button that opens the edit-profile card.
     private var header: some View {
         Section {
-            VStack(spacing: 8) {
-                AvatarMonogram(name: displayName, diameter: 72, font: .largeTitle.weight(.medium))
-                Text(displayName)
-                    .font(.headline)
-                    .lineLimit(1)
+            Button { editingProfile = true } label: {
+                VStack(spacing: 8) {
+                    AccountAvatar(name: displayName, diameter: 72, font: .largeTitle.weight(.medium))
+                        .overlay(alignment: .bottomTrailing) { EditBadge() }
+                    Text(displayName)
+                        .font(.headline)
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(SettingsCopy.editProfile)
+            .accessibilityValue(displayName)
             .frame(maxWidth: .infinity)
             .onGeometryChange(for: Bool.self) { proxy in
                 proxy.frame(in: .scrollView).maxY < 0
@@ -276,6 +291,19 @@ struct SettingsHomeView: View {
     }
 }
 
+/// The pencil on the header's avatar, where ChatGPT puts it: a grey disc rimmed in the page's own
+/// colour, so it reads as set into the avatar's corner.
+private struct EditBadge: View {
+    var body: some View {
+        Image(systemName: "pencil")
+            .font(.orbitLabel.weight(.semibold))
+            .foregroundStyle(Color.primary)
+            .frame(width: 30, height: 30)
+            .background(Color(uiColor: .systemGray5), in: Circle())
+            .overlay(Circle().strokeBorder(Color(uiColor: .systemGroupedBackground), lineWidth: 2))
+    }
+}
+
 /// A row's glyph and name, both in the label colour: a form row's icon would otherwise take the
 /// accent, and inside a button's label even `.primary` resolves to it.
 private struct SettingsRowLabel: View {
@@ -319,6 +347,236 @@ private func turnOnAlerts(_ model: AppModel, now: Bool?) async -> Bool? {
         _ = await UIApplication.shared.open(url)
     }
     return now
+}
+
+// MARK: - Edit profile
+
+/// The card the header opens — ChatGPT's edit-profile card, with what an Orbit account has: the
+/// photo and the name, the avatar following the field while there is no photo. The photo is changed
+/// from the avatar (taken, chosen, or removed, each cropped square by the system's Move and Scale).
+/// Nothing is written until Save, which writes the photo and then the name (`ProfileEdit.steps`);
+/// Cancel or a swipe down leaves the account as it was. A save that fails keeps the card up and says
+/// why where the caption was — and what had already landed stays landed.
+private struct ProfileEditSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var draft: String
+    @State private var photo: ProfileEdit.Photo = .unchanged
+    /// The chosen photo, decoded once for the card to show until Save.
+    @State private var chosenImage: PlatformImage?
+    @State private var askingForPhoto = false
+    @State private var photoSource: PhotoSource?
+    @State private var saving = false
+    @State private var failure: String?
+    /// The card is as tall as what it holds, as ChatGPT's is — this is that height as last measured.
+    @State private var height: CGFloat = 440
+
+    init(name: String) {
+        _draft = State(initialValue: name)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                Button { askingForPhoto = true } label: {
+                    avatar.overlay(alignment: .bottomTrailing) { CameraBadge() }
+                }
+                .buttonStyle(.plain)
+                .disabled(saving)
+                .accessibilityLabel(SettingsCopy.choosePhoto)
+                .padding(.top, 28)
+                .confirmationDialog(SettingsCopy.choosePhoto, isPresented: $askingForPhoto,
+                                    titleVisibility: .hidden) {
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        Button(SettingsCopy.takePhoto) { photoSource = .camera }
+                    }
+                    Button(SettingsCopy.choosePhoto) { photoSource = .library }
+                    if showsPhoto {
+                        Button(SettingsCopy.removePhoto, role: .destructive) {
+                            photo = .removed
+                            chosenImage = nil
+                        }
+                    }
+                    Button(SharePanelCopy.cancel, role: .cancel) {}
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(SettingsCopy.nameLabel)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                    TextField(SettingsCopy.namePlaceholder, text: $draft)
+                        .font(.orbitControl)
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .onSubmit(save)
+                        .disabled(saving)
+                        .accessibilityLabel(SettingsCopy.nameLabel)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 50)
+                        .overlay(Capsule().strokeBorder(Color(uiColor: .separator), lineWidth: 1))
+                    Text(failure ?? SettingsCopy.nameCaption)
+                        .font(.orbitLabel)
+                        .foregroundStyle(failure == nil ? Color.secondary : Color.red)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 24)
+
+                Button(action: save) {
+                    Text(SettingsCopy.saveProfile)
+                        .fontWeight(.semibold)
+                        .opacity(saving ? 0 : 1)
+                        .overlay { if saving { ProgressView().tint(.white) } }
+                        .padding(.horizontal, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .disabled(!ProfileEdit.canSave(draft, saved: model.user?.name, photo: photo))
+                .padding(.top, 28)
+
+                Button(SharePanelCopy.cancel) { dismiss() }
+                    .padding(.vertical, 12)
+                    .padding(.top, 4)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 12)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { measured in
+                height = measured
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationDetents([.height(height)])
+        .interactiveDismissDisabled(saving)
+        .onChange(of: draft) { _, _ in failure = nil }
+        .onChange(of: photo) { _, _ in failure = nil }
+        .fullScreenCover(item: $photoSource) { source in
+            PhotoPicker(source: source.sourceType) { picked in
+                if let picked, let jpeg = picked.orbitAvatarJPEG() {
+                    photo = .replaced(jpeg)
+                    chosenImage = PlatformImage(data: jpeg)
+                }
+                photoSource = nil
+            }
+            .ignoresSafeArea()
+        }
+        // A presentation of its own, like the Settings sheet under it.
+        .preferredColorScheme(model.preferredColorScheme)
+    }
+
+    /// The avatar as it will be after Save: the chosen photo, none, or the account's own.
+    @ViewBuilder private var avatar: some View {
+        switch photo {
+        case .replaced:
+            if let chosenImage { AvatarPhoto(image: chosenImage, diameter: 96) } else { monogram }
+        case .removed:
+            monogram
+        case .unchanged:
+            if let saved = model.avatarImage { AvatarPhoto(image: saved, diameter: 96) } else { monogram }
+        }
+    }
+
+    private var monogram: some View {
+        AvatarMonogram(name: draft, diameter: 96, font: .orbitHeroGlyph.weight(.medium))
+    }
+
+    /// Whether there is a photo to remove — the chosen one, or the account's.
+    private var showsPhoto: Bool {
+        switch photo {
+        case .replaced: return true
+        case .removed: return false
+        case .unchanged: return model.user?.avatarUpdatedAt != nil
+        }
+    }
+
+    private func save() {
+        let steps = ProfileEdit.steps(draft, saved: model.user?.name, photo: photo)
+        guard !saving, !steps.isEmpty else { return }
+        saving = true
+        Task {
+            for step in steps {
+                // A photo that landed is the account's now, so a second Save does not send it again.
+                let failed: String?
+                switch step {
+                case .setPhoto(let jpeg):
+                    failed = await model.saveAvatar(jpeg)
+                    if failed == nil { photo = .unchanged }
+                case .removePhoto:
+                    failed = await model.removeAvatar()
+                    if failed == nil { photo = .unchanged }
+                case .rename(let name):
+                    failed = await model.saveName(name)
+                }
+                if let failed {
+                    failure = failed
+                    saving = false
+                    return
+                }
+            }
+            saving = false
+            dismiss()
+        }
+    }
+}
+
+/// The camera on the card's avatar, where ChatGPT puts it: a white disc that opens the photo's
+/// actions.
+private struct CameraBadge: View {
+    var body: some View {
+        Image(systemName: "camera")
+            .font(.orbitLabel.weight(.semibold))
+            .foregroundStyle(Color.primary)
+            .frame(width: 32, height: 32)
+            .background(Color(uiColor: .systemBackground), in: Circle())
+            .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+    }
+}
+
+/// Where a new photo comes from.
+private enum PhotoSource: String, Identifiable {
+    case camera, library
+
+    var id: String { rawValue }
+    var sourceType: UIImagePickerController.SourceType { self == .camera ? .camera : .photoLibrary }
+}
+
+/// UIKit's image picker with its square Move and Scale step — the crop a profile photo needs, which
+/// PhotosPicker does not offer — for the camera or the library. Hands back the cropped image, or nil
+/// when cancelled.
+private struct PhotoPicker: UIViewControllerRepresentable {
+    let source: UIImagePickerController.SourceType
+    let done: (UIImage?) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = source
+        picker.allowsEditing = true
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ picker: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(done: done) }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let done: (UIImage?) -> Void
+
+        init(done: @escaping (UIImage?) -> Void) { self.done = done }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            done((info[.editedImage] ?? info[.originalImage]) as? UIImage)
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { done(nil) }
+    }
 }
 
 // MARK: - Notifications

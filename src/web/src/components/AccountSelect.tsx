@@ -8,6 +8,9 @@ import type { Runner } from './TasksSidePanel';
 /** The account every runner has: the directory its own environment selects. */
 const DEFAULT = 'default';
 
+/** The Codex field's value for Automatic, which the workspace stores as null: the Select needs a string. */
+const AUTOMATIC = '';
+
 /** The accounts a runner reported for `engine`, Default first. None from a runner too old to list
  *  them, or from an engine whose CLI keeps a single login for the machine. */
 export function accountsOf(
@@ -60,8 +63,12 @@ const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: str
 
 /**
  * Which account of `engine` this workspace's sessions run on (the workspace form's Advanced part).
- * `null` is Default. The choice is stored as the account's id and resolved on the runner that runs
- * the session, so an id this runner does not report runs on Default — which its option says.
+ * The choice is stored as the account's id and resolved on the runner that runs the session, so an id
+ * this runner does not report runs on Default — which its option says.
+ *
+ * `null` is Default for Claude. For Codex on a runner with more than one account it is Automatic: each
+ * new session starts on the account with the most room and keeps it (automaticCodexAccount on the
+ * server), so Default is saved as `default` there, a choice of its own.
  *
  * `envDir` is the engine's own config-directory variable typed into the same form's environment:
  * until an account is picked here that is where the sessions run, and a picked account replaces it.
@@ -83,6 +90,7 @@ export function AccountSelect({
   const copy = ENGINE_COPY[engine] ?? { label: 'Account', envVar: '', sessions: engine };
   const health = runner.engines?.find((entry) => entry.engine === engine);
   const accounts = accountsOf(runner, engine);
+  const automatic = engine === 'codex' && accounts.length >= 2;
   const options: AccountOption[] = accounts.map((account) => ({
     value: account.id,
     label:
@@ -100,23 +108,31 @@ export function AccountSelect({
       status: accountStatus(runner, engine, { id: DEFAULT, auth }),
     });
   }
-  if (value !== null && !accounts.some((account) => account.id === value)) {
+  if (value !== null && value !== DEFAULT && !accounts.some((account) => account.id === value)) {
     options.push({
       value,
       label: `Account ${value}`,
       status: 'not on this runner — sessions run on Default',
     });
   }
+  if (automatic) {
+    options.unshift({
+      value: AUTOMATIC,
+      label: 'Automatic',
+      status: 'each new session starts on the account with the most room',
+    });
+  }
   const typedDir = envDir?.trim();
-  // A pick this runner does not report injects nothing, so a typed directory still applies to it.
-  const replacesTyped = value !== null && accounts.some((account) => account.id === value);
+  // A pick this runner does not report injects nothing, and neither does Default, so a typed directory
+  // still applies to them.
+  const replacesTyped = value !== null && value !== DEFAULT && accounts.some((account) => account.id === value);
   return (
     <div className="rd-form-field">
       <div className="rd-form-label">{copy.label}</div>
       <Select<string, AccountOption>
         className="rd-codex-account"
-        value={value ?? DEFAULT}
-        onChange={(next) => onChange(next === DEFAULT ? null : next)}
+        value={value ?? (automatic ? AUTOMATIC : DEFAULT)}
+        onChange={(next) => onChange(next === AUTOMATIC || (!automatic && next === DEFAULT) ? null : next)}
         options={options}
         optionRender={(option) => (
           <div>
@@ -126,8 +142,11 @@ export function AccountSelect({
         )}
       />
       <div className="rd-path-hint rd-path-muted">
-        Only applies to sessions that run {copy.sessions} on this machine. Leave it on Default unless
-        this repo needs the other account.
+        {automatic
+          ? `Only applies to sessions that run ${copy.sessions} on this machine. Automatic starts each new ` +
+            'session on the account with the most room, and keeps it there.'
+          : `Only applies to sessions that run ${copy.sessions} on this machine. Leave it on Default unless ` +
+            'this repo needs the other account.'}
       </div>
       {typedDir && copy.envVar && (
         <div className="rd-path-hint rd-path-warn">
@@ -135,7 +154,7 @@ export function AccountSelect({
             ? `The account picked here replaces ${copy.envVar}=${tildePath(typedDir)} from ` +
               'Environment variables.'
             : `${copy.envVar} is set under Environment variables, so sessions run in ` +
-              `${tildePath(typedDir)}, not Default.`}
+              `${tildePath(typedDir)}, not ${value === null && automatic ? 'on an automatic pick' : 'Default'}.`}
         </div>
       )}
     </div>

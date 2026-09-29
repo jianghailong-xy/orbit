@@ -110,6 +110,9 @@ async function releasedTask(
     data: {
       id: projectId, ownerId: ids.ownerId, title: label,
       coordinatorEnabled: opts.coordinatorEnabled,
+      // Started: a project moves by itself only once its owner has started it and while it is not
+      // paused (project-pause-dispatch.pg.spec.ts). That is a different question from this file's.
+      startedAt: new Date(),
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, projectId, label);
@@ -193,6 +196,7 @@ test('the scheduled sweep dispatches a coordinated Project\'s due task',
       await s.db.project.create({
         data: {
           id: projectId, ownerId: ids.ownerId, title: 't1-due', coordinatorEnabled: true,
+          startedAt: new Date(),
         },
       });
       await establishProjectContractForPgTest(s.db, ids.ownerId, projectId, 't1-due');

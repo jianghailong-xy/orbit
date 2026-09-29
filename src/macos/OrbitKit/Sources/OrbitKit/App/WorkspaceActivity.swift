@@ -48,6 +48,7 @@ public enum WorkspaceRunnerAvailabilityLogic {
         switch status {
         case .online, .draining: return true
         case .offline: return false
+        case .unknown: return nil
         case nil: return nil
         }
     }

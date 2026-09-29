@@ -353,6 +353,38 @@ function repositoryUnknown(message: string): ConflictException {
   return new ConflictException({ statusCode: 409, code: 'INTEGRATION_REPOSITORY_UNKNOWN', message });
 }
 
+/** The repository a project with no binding yet would be bound to: the one its coordination
+ *  workspace names, canonicalised — or null when that workspace names none. */
+async function coordinationRepository(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  projectId: string,
+): Promise<string | null> {
+  const [workspace] = await tx.$queryRaw<Array<{ repoUrl: string | null }>>(Prisma.sql`
+    SELECT w."repo_url" AS "repoUrl"
+      FROM "project" p
+      LEFT JOIN "workspace" w ON w."id" = p."coordinator_workspace_id"
+     WHERE p."id" = ${projectId}::uuid AND p."owner_id" = ${ownerId}::uuid`);
+  return workspace?.repoUrl ? canonicalRepoUrl(workspace.repoUrl) : null;
+}
+
+/**
+ * The repository this project integrates into, canonical: its binding's, or — before it has one —
+ * the one its coordination workspace names. Null when neither names one, which is the project a
+ * start refuses a project branch and a merge check for (`startProjectLine`).
+ */
+export async function projectRepository(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  projectId: string,
+): Promise<string | null> {
+  const bound = await tx.projectCodebase.findFirst({
+    where: { projectId, slot: 'primary' },
+    select: { canonicalRepoUrl: true },
+  });
+  return bound?.canonicalRepoUrl ?? coordinationRepository(tx, ownerId, projectId);
+}
+
 /**
  * The account owner's integration settings, applied under the binding's lock (L-T1, L-T2, L-T5).
  *
@@ -398,12 +430,7 @@ export async function configureProjectIntegration(
 
   let row = await lockCodebase(tx, projectId);
   if (!row) {
-    const [workspace] = await tx.$queryRaw<Array<{ repoUrl: string | null }>>(Prisma.sql`
-      SELECT w."repo_url" AS "repoUrl"
-        FROM "project" p
-        LEFT JOIN "workspace" w ON w."id" = p."coordinator_workspace_id"
-       WHERE p."id" = ${projectId}::uuid AND p."owner_id" = ${ownerId}::uuid`);
-    const repository = workspace?.repoUrl ? canonicalRepoUrl(workspace.repoUrl) : null;
+    const repository = await coordinationRepository(tx, ownerId, projectId);
     if (!repository) {
       throw repositoryUnknown('this project has no repository to integrate into: its coordination '
         + 'workspace names no remote. Open its coordinator in a workspace cloned from a repository first.');
@@ -481,6 +508,116 @@ async function codeTaskWork(
   return { repoUrl: work.workspace?.repoUrl ?? null };
 }
 
+/**
+ * The default rule (L2) over this project's code tasks and their dependencies as they stand now:
+ * the one reading of it, for the first integration and for a start that was given no line.
+ */
+export async function projectDefaultLine(
+  db: Pick<Prisma.TransactionClient, 'task' | 'taskDependency'>,
+  projectId: string,
+): Promise<IntegrationLine> {
+  const codeTasks = await db.task.findMany({
+    where: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+    select: { id: true },
+  });
+  const ids = codeTasks.map((task) => task.id);
+  const edges = await db.taskDependency.findMany({
+    where: { taskId: { in: ids }, dependsOnTaskId: { in: ids } },
+    select: { taskId: true, dependsOnTaskId: true },
+  });
+  return defaultIntegrationLine(codeTasks, edges);
+}
+
+/** The line half of a start's settings — what `startProjectLine` is asked for and answers with. */
+export interface StartLineSettings {
+  line: IntegrationLine;
+  /** A full `refs/heads/…` ref, only with `PROJECT_BRANCH`. */
+  projectBranchName?: string;
+  mergeCheckCommand: string | null;
+}
+
+/**
+ * The line a start would give a project whose owner chose nothing (`POST
+ * /projects/:id/acceptance/confirmation` on a project not yet started): the line it is already on
+ * or the owner already chose, if either; else the default rule over its tasks as they stand — and
+ * `MAIN` for a project with no repository, where no project branch can exist. The merge check it
+ * already has, if any.
+ */
+export async function defaultStartLine(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  projectId: string,
+): Promise<StartLineSettings> {
+  const row = await readProjectCodebase(tx, projectId);
+  const mergeCheckCommand = row?.mergeCheckCommand ?? null;
+  const decided = row ? decidedLine(row) : null;
+  if (row && decided) {
+    return decided === 'PROJECT_BRANCH'
+      ? { line: decided, projectBranchName: row.integrationRef, mergeCheckCommand }
+      : { line: decided, mergeCheckCommand };
+  }
+  if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
+    return { line: 'MAIN', mergeCheckCommand };
+  }
+  return { line: await projectDefaultLine(tx, projectId), mergeCheckCommand };
+}
+
+/**
+ * A start's line and merge check, applied under the binding's lock (rank 55) as the owner's choice.
+ *
+ * A participant, like `configureProjectIntegration`, which does the writing: the caller owns the
+ * transaction and holds the project row. Three ways it goes:
+ *
+ *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
+ *     merge check, and says so — `locked`, with the line the project is actually on.
+ *   * THERE IS NO REPOSITORY. A project with no binding whose coordination workspace names no remote
+ *     has nothing a line or a check could be recorded on, and nothing ever lands on a branch of it.
+ *     A start that asks for `MAIN` and no check asks nothing of it and writes nothing; one asking for
+ *     a project branch or a merge check is refused, 409 `INTEGRATION_REPOSITORY_UNKNOWN`, because
+ *     writing the rest of the start without them would drop what the owner chose.
+ *   * OTHERWISE the line is written `EXPLICIT` — binding the project first when it has no binding —
+ *     together with the merge check.
+ *
+ * Answers with the line and check as they stand once it is done.
+ */
+export async function startProjectLine(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; settings: StartLineSettings },
+): Promise<StartLineSettings & { locked: boolean }> {
+  const { ownerId, projectId, settings } = input;
+  const mergeCheckCommand = settings.mergeCheckCommand?.trim() || null;
+  const row = await lockCodebase(tx, projectId);
+  const locked = !!row?.integrationStartedAt;
+  if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
+    if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null) {
+      throw repositoryUnknown('this project has no repository to integrate into, so it can have '
+        + 'neither a project branch nor a merge check: its coordination workspace names no remote. '
+        + 'Start it on main with no merge check, or open its coordinator in a workspace cloned from '
+        + 'a repository first.');
+    }
+    return { line: 'MAIN', mergeCheckCommand: null, locked: false };
+  }
+  await configureProjectIntegration(tx, {
+    ownerId,
+    projectId,
+    settings: locked
+      ? { mergeCheckCommand }
+      : {
+        line: settings.line,
+        ...(settings.line === 'PROJECT_BRANCH' && settings.projectBranchName !== undefined
+          ? { projectBranchName: settings.projectBranchName }
+          : {}),
+        mergeCheckCommand,
+      },
+  });
+  const written = (await readProjectCodebase(tx, projectId))!;
+  const line = decidedLine(written)!;
+  const stands = { mergeCheckCommand: written.mergeCheckCommand, locked };
+  return line === 'PROJECT_BRANCH'
+    ? { line, projectBranchName: written.integrationRef, ...stands }
+    : { line, ...stands };
+}
+
 /** Whether a task is code work the platform integrates (§1.1), read only from committed rows. */
 export async function isCodeTask(
   db: Pick<Prisma.TransactionClient, 'task'>,
@@ -539,16 +676,7 @@ export async function startOnFirstIntegration(
   if (!row.integrationStartedAt) {
     let integrationRef = row.integrationRef;
     if (row.integrationRefSource !== 'EXPLICIT') {
-      const codeTasks = await tx.task.findMany({
-        where: { projectId: first.projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
-        select: { id: true },
-      });
-      const ids = codeTasks.map((task) => task.id);
-      const edges = await tx.taskDependency.findMany({
-        where: { taskId: { in: ids }, dependsOnTaskId: { in: ids } },
-        select: { taskId: true, dependsOnTaskId: true },
-      });
-      integrationRef = defaultIntegrationLine(codeTasks, edges) === 'PROJECT_BRANCH'
+      integrationRef = await projectDefaultLine(tx, first.projectId) === 'PROJECT_BRANCH'
         ? projectBranchRef(first.projectId)
         : row.upstreamRef;
     }

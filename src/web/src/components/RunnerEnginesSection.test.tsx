@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import type { RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
+import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
+import { encodeId } from '../lib/idCodec';
 import { RunnerEnginesSection } from './RunnerEnginesSection';
 import type { Runner } from './TasksSidePanel';
 
@@ -38,6 +39,25 @@ const render = (r: Runner) =>
       </MemoryRouter>
     </QueryClientProvider>,
   );
+
+/** Each engine row as rendered: where it leads, its sign-in column (tone and words), and its quota
+ *  column — one entry per window (`label percent%`, `!` when nearly spent), or the words in its place. */
+const rowsOf = (html: string) =>
+  [...html.matchAll(/<a class="rd-engine-row" href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map(([, href, row]) => ({
+    name: /class="rd-engine-name">([^<]*)</.exec(row)?.[1],
+    href: href.replaceAll('&amp;', '&'),
+    signIn: /class="rd-engine-auth (\w+)">([^<]*)</.exec(row)?.slice(1, 3),
+    quota: [
+      ...row.matchAll(/class="rd-quota( near)?"><div class="rd-quota-head"><span>([^<]*)<\/span><span class="rd-quota-pct">([^<]*)</g),
+    ].map(([, near, label, percent]) => `${label} ${percent}${near ? ' !' : ''}`),
+    quotaNote: /class="rd-engine-muted">([^<]*)</.exec(row)?.[1] ?? null,
+  }));
+
+const account = (id: string, auth: RunnerEngineAccount['auth']): RunnerEngineAccount => ({
+  id,
+  home: `/root/.orbit/codex-accounts/${id}`,
+  auth,
+});
 
 describe("a machine's engine CLIs", () => {
   it('lists every engine on the machine, including the one you cannot sign into', () => {
@@ -144,5 +164,102 @@ describe("a machine's engine CLIs", () => {
     expect(html).toContain('9d behind 2.1.228');
     // The machine's own sentence rides along as the tooltip, same as on Providers.
     expect(html).toContain('5m1s');
+  });
+});
+
+describe("each engine's sign-in, quota and way to its sign-in", () => {
+  // wikova's engines on 2026-09-29, as runnerAttention.cases.json has them.
+  const wikova = (over: Partial<Runner> = {}) =>
+    runner({
+      planUsage: {
+        provider: 'claude',
+        fiveHour: { utilization: 14, resetsAt: '2026-09-29T02:59:59Z' },
+        sevenDay: { utilization: 98, resetsAt: '2026-10-02T03:59:59Z' },
+      } as PlanUsage,
+      engines: [
+        health({ engine: 'claude', version: '2.1.284 (Claude Code)' }),
+        health({
+          engine: 'codex',
+          version: 'codex-cli 0.158.0',
+          accounts: [account('default', 'yes'), account('1fda3f43', 'yes')],
+        }),
+        health({ engine: 'kimi', version: '2.1.1' }),
+        health({ engine: 'opencode', version: '1.18.33' }),
+      ],
+      ...over,
+    });
+
+  it('writes each version as its number, whatever the CLI wraps it in', () => {
+    const html = render(wikova());
+    expect([...html.matchAll(/class="rd-engine-version"[^>]*>([^<]*)</g)].map(([, v]) => v)).toEqual([
+      '2.1.284',
+      '0.158.0',
+      '2.1.1',
+      '1.18.33',
+    ]);
+    expect(html).not.toContain('(Claude Code)');
+    expect(html).not.toContain('codex-cli');
+  });
+
+  it('says who is signed in, counting the accounts when there are several', () => {
+    expect(rowsOf(render(wikova())).map((row) => [row.name, ...(row.signIn ?? [])])).toEqual([
+      ['Claude Code', 'ok', 'Signed in'],
+      ['Codex', 'ok', '2 accounts signed in'],
+      ['Kimi Code', 'ok', 'Signed in'],
+      // OpenCode signs in per provider, with nothing on the machine to report.
+      ['OpenCode', 'muted', '—'],
+    ]);
+  });
+
+  it('never reads a CLI that would not say as signed in, and names what is out or missing', () => {
+    const rows = rowsOf(
+      render(
+        runner({
+          engines: [
+            health({ engine: 'claude', auth: 'unknown' }),
+            health({ engine: 'codex', accounts: [account('default', 'yes'), account('work', 'no')] }),
+            health({ engine: 'kimi', auth: 'no' }),
+            health({ engine: 'opencode', installed: false, auth: 'unknown' }),
+          ],
+        }),
+      ),
+    );
+    expect(rows.map((row) => [row.name, ...(row.signIn ?? [])])).toEqual([
+      ['Claude Code', 'muted', '—'],
+      // One account out is a sign-in this machine needs, whatever the others say.
+      ['Codex', 'warn', 'Signed out'],
+      ['Kimi Code', 'warn', 'Signed out'],
+      ['OpenCode', 'muted', 'Not installed'],
+    ]);
+  });
+
+  it('shows every quota window of a signed-in login, amber from 90%', () => {
+    // Its runner reports Claude's windows only: Codex is signed in with nothing to show.
+    const rows = rowsOf(render(wikova()));
+    expect(rows.map((row) => [row.name, row.quota, row.quotaNote])).toEqual([
+      ['Claude Code', ['5-hour limit 14%', 'Weekly · all models 98% !'], null],
+      ['Codex', [], 'No quota reported'],
+      ['Kimi Code', [], 'No quota reported'],
+      ['OpenCode', [], '—'],
+    ]);
+    // Signed out, the last reading is about sessions that can no longer start.
+    const out = rowsOf(render(wikova({ engines: [health({ engine: 'claude', auth: 'no' })] })));
+    expect(out.map((row) => [row.quota, row.quotaNote])).toEqual([[[], '—']]);
+  });
+
+  it('leads every row to that engine’s sign-in on Providers, its card opened', () => {
+    const r = wikova();
+    expect(rowsOf(render(r)).map((row) => row.href)).toEqual(
+      ['claude', 'codex', 'kimi', 'opencode'].map(
+        (engine) => `/providers?runner=${encodeId(r.id)}&engine=${engine}`,
+      ),
+    );
+  });
+
+  it('says under the rows what keeps them current — and what waits for an offline machine', () => {
+    expect(render(wikova())).toContain(
+      'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.',
+    );
+    expect(render(wikova({ online: false }))).toContain('Signing in and updating need the runner online.');
   });
 });

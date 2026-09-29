@@ -108,6 +108,7 @@ for (const method of [
   'removeProject',
   'resolveBlocker',
   'ensureCoordinator',
+  'requestStart',
 ] as const) {
   test(`the project id is resolved through PublicIdPipe on ${method}`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
@@ -158,6 +159,54 @@ test('the blocker id is resolved through PublicIdPipe on resolveBlocker', () => 
     (blockerArg.pipes ?? []).some((pipe) => pipe === PublicIdPipe || pipe instanceof PublicIdPipe),
     'blockerId does not resolve through PublicIdPipe',
   );
+});
+
+test('requestStart is exposed as POST projects/:id/start-requests', () => {
+  const handler = RunnerProjectsController.prototype.requestStart;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id/start-requests');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
+/**
+ * A start request is filed in the runner owner's scope, as the session that sent it: the service is
+ * what compares that session with the project's coordinator, so the header has to reach it — read
+ * from `x-orbit-session-id`, trimmed, and nothing else.
+ */
+test('requestStart files the request in the runner owner scope, as the acting session', async () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'requestStart') as
+    | Record<string, { data?: unknown }>
+    | undefined;
+  const headers = Object.values(args ?? {})
+    .map((arg) => arg.data)
+    .filter((data) => typeof data === 'string' && data.includes('-'));
+  assert.deepEqual(headers, ['x-orbit-session-id']);
+
+  const seen: unknown[] = [];
+  const openItems = {
+    requestStart: async (...call: unknown[]) => {
+      seen.push(call);
+      return { itemId: 'item-1', state: 'OPEN', warnings: [] };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    openItems,
+  );
+  const body = {
+    line: 'PROJECT_BRANCH' as const,
+    automatic: true,
+    maxConcurrentTasks: 3,
+    mergeCheckCommand: 'npm test',
+    why: 'every criterion has a task serving it',
+  };
+
+  const filed = await controller.requestStart(RUNNER, ` ${SESSION_ID} `, 'project-1', body);
+
+  assert.deepEqual(seen, [['owner-1', 'project-1', SESSION_ID, body]]);
+  assert.deepEqual(filed, { itemId: 'item-1', state: 'OPEN', warnings: [] });
 });
 
 /**
@@ -536,6 +585,11 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     'listProjectHandoffs',
     'recordMergeEvidence',
     'removeProject',
+    // The coordinator asking the owner to START the project (`project_request_start`). Beside the
+    // question and for the same reasons: only the conversation the project is coordinated from may
+    // ask, and asking starts nothing — the owner's press on the start card does — so the acting
+    // session is the whole authority check and no orchestration credential is spent.
+    'requestStart',
     // A blocker is this project's OWN wait, which is why it has a write where the crossing above
     // has none: the person it waits on is this account's owner, and the runner puts the agent's
     // argument in front of them as a card before anything here is called. Nobody signs for anybody
@@ -572,6 +626,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     listProjectHandoffs: RequestMethod.GET,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
+    requestStart: RequestMethod.POST,
     resolveBlocker: RequestMethod.POST,
     resolveOpenItem: RequestMethod.POST,
     // POST: it writes a turn, and a rotation is a side effect it may have. Both are the send the
