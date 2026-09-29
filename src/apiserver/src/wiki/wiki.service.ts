@@ -76,7 +76,7 @@ import { canonicalRepoUrl } from '../projects/project-integration-line';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { evidenceOf, readBeforeRevision4, runEventText, verifierText } from './wiki-verify-evidence';
+import { approvalText, evidenceOf, readBeforeRevision4, runEventText, toolCallText, verifierText } from './wiki-verify-evidence';
 import { entryAppliedBy } from './wiki-run-reads';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
@@ -535,11 +535,6 @@ function contentSha256(content: PreparedDraft): string {
 
 /** A string's characters, counted the way the schema's CHECK counts them. */
 const lengthOf = (value: string): number => [...value].length;
-
-/** A record's text, whatever shape its column holds it in. */
-function asText(value: unknown): string {
-  return typeof value === 'string' ? value : JSON.stringify(value ?? null);
-}
 
 /** The kind a draft names, when it names one this phase writes. */
 function draftKind(value: unknown): WikiKind | null {
@@ -3607,8 +3602,12 @@ export class WikiService {
    * owner decision, a blocker the owner resolved with a note — and a `note`, a file `orbit wiki import`
    * registered (contract `import.source`). Everything else the contract lists belongs to a phase that
    * does not write yet: a `url` is an assumption's, which phase 1 refuses.
+   *
+   * Its `text` is the one text a record has: what a quote is checked against, what a verifier reads, and
+   * what a dossier line's position counts in (contract `maintenance.dossier.spans`) — which is why it is
+   * not private: whatever holds a position to its record reads the record through here.
    */
-  private async sourceText(
+  async sourceText(
     tx: Tx,
     principal: WikiPrincipal,
     source: { kind: WikiSourceKind; ref?: string; session?: 'self'; seq?: number },
@@ -3681,12 +3680,14 @@ export class WikiService {
         if (!ref) return null;
         const call = await tx.toolCall.findFirst({
           where: { id: ref, ...ownerScoped },
-          select: { id: true, output: true, sessionId: true },
+          select: { id: true, name: true, input: true, output: true, sessionId: true },
         });
         if (!call) return null;
         return {
           ref: call.id,
-          text: call.output === null ? null : asText(call.output),
+          // The call and its result together (`toolCallText`): a quote of the command is as much the
+          // record's words as a quote of what it printed.
+          text: toolCallText(call),
           tainted: false,
           ownerWords: false,
           sessionId: call.sessionId,
@@ -3714,13 +3715,12 @@ export class WikiService {
         if (!ref) return null;
         const approval = await tx.approval.findFirst({
           where: { id: ref, ...ownerScoped },
-          select: { id: true, answers: true, message: true, sessionId: true, toolName: true, status: true, decidedById: true },
+          select: { id: true, input: true, answers: true, message: true, sessionId: true, toolName: true, status: true, decidedById: true },
         });
         if (!approval) return null;
-        const text = [approval.answers === null ? '' : asText(approval.answers), approval.message ?? ''].join('\n');
         return {
           ref: approval.id,
-          text,
+          text: approvalText(approval),
           tainted: await this.sessionWasTainted(tx, approval.sessionId),
           ownerWords: isOwnerAnswer(approval),
           sessionId: approval.sessionId,
