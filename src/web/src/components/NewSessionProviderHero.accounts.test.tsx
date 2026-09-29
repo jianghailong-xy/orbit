@@ -86,9 +86,11 @@ describe('Codex accounts in the New Session picker', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('lists them right under Codex, ticks the one the session would start on, and names it', async () => {
+  it('lists them right under Codex and ticks the one the session would start on', async () => {
     await mount('codex', '3fa91c2e');
-    expect(container.querySelector('.np-summary')?.textContent).toBe('Codex·GPT-5.5·Work·Manage');
+    // The line under the card names no account: an email does not fit it on a phone, and the
+    // composer's quota gauge names the account in its popover.
+    expect(container.querySelector('.np-summary')?.textContent).toBe('Codex·GPT-5.5·Manage');
 
     await click(container.querySelector('.np-card'));
     const names = Array.from(document.body.querySelectorAll('.np-list .np-row-name')).map((el) => el.textContent);
@@ -105,7 +107,6 @@ describe('Codex accounts in the New Session picker', () => {
 
   it('picks Codex on an account from another provider, and ticks nothing while Codex is not the pick', async () => {
     await mount('claude', 'default');
-    // Not Codex, so no account of it is named under the card.
     expect(container.querySelector('.np-summary')?.textContent).toBe('Claude·Opus 5.5·Manage');
     await click(container.querySelector('.np-card'));
     expect(document.body.querySelector('.np-account.picked')).toBeNull();
@@ -115,8 +116,6 @@ describe('Codex accounts in the New Session picker', () => {
 
   it('offers Automatic above the accounts when it is on offer, ticked — not the account — while it is the pick', async () => {
     await mount('codex', '3fa91c2e', true);
-    // The account Automatic would start it on is named, and marked as its choice.
-    expect(container.querySelector('.np-summary')?.textContent).toBe('Codex·GPT-5.5·Work (auto)·Manage');
     await click(container.querySelector('.np-card'));
     const names = Array.from(document.body.querySelectorAll('.np-list .np-row-name')).map((el) => el.textContent);
     expect(names.slice(0, 6)).toEqual(['Claude', 'Codex', 'Automatic', 'Default', 'Work', 'Old']);

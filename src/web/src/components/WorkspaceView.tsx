@@ -6231,7 +6231,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   );
   const shownAccount =
     shownProvider === 'codex' ? shownCodexAccount : shownProvider === 'claude' ? shownClaudeAccount : 'default';
-  // The Codex account named beside the quota gauge, once the runner has more than one to tell apart.
+  // The Codex account named in the quota gauge's popover, once the runner has more than one to tell apart.
   const shownCodexAccountRow =
     shownProvider === 'codex' && codexAccountsHere.length >= 2
       ? (codexAccountsHere.find((account) => account.id === shownCodexAccount) ?? { id: 'default', name: undefined })
@@ -8699,26 +8699,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 </span>
               </Tooltip>
             )}
-            {/* Which of the runner's Codex accounts this session spends — the quota beside it is that
-                account's. A draft names the one it would start on. */}
-            {!shownPool && shownCodexAccountLabel && (
-              <Tooltip
-                title={
-                  selectedId
-                    ? `This session runs on the Codex account ${shownCodexAccountLabel}`
-                    : draftCodexAccount || pickedWorkspace?.codexAccount
-                      ? `A new session runs on the Codex account ${shownCodexAccountLabel}`
-                      : `A new session starts on ${shownCodexAccountLabel} — the Codex account with the most room right now`
-                }
-              >
-                <span className="composer-pill composer-account" data-codex-account={shownCodexAccount}>
-                  <span className="composer-account-name">{shownCodexAccountLabel}</span>
-                </span>
-              </Tooltip>
-            )}
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
+                // Which of the runner's Codex accounts this quota is, named inside the popover rather
+                // than beside the gauge, where a phone's toolbar has no room for an email. A draft
+                // names the one it would start on.
+                account={
+                  !shownPool && shownCodexAccountLabel
+                    ? {
+                        label: shownCodexAccountLabel,
+                        ...(!selectedId && !draftCodexAccount && !pickedWorkspace?.codexAccount
+                          ? { note: 'Automatic — the account with the most room right now' }
+                          : {}),
+                      }
+                    : undefined
+                }
                 // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
                 // the built-in Codex runtime is offered them — on Default, whose quota this then is;
                 // the create route judges the workspace.

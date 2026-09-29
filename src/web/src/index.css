@@ -5409,6 +5409,24 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
   color: var(--text-4);
 }
+/* Whose quota the windows below are, ruled off from them. Account names are often emails: the name
+   gives way with an ellipsis, the label never does. */
+.cu-account {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cu-account .cu-head {
+  margin-bottom: 0;
+}
+.cu-account-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+}
 /* The pill is a button now — it opens a popover that can hold an action — so it sheds the UA button
    chrome and keeps the look the span had, with a ring for keyboard focus only. */
 button.composer-usage {
