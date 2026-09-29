@@ -6327,6 +6327,8 @@ model WikiDocSection {
   repoSha        String   @map("repo_sha")
   model          String?
   stats          Json     @default("{}")
+  /// `[{ material, kind, ref, action, into, reason }, …]`: what became of each piece of its material (0337).
+  dispositions   Json     @default("[]")
   generatedAt    DateTime @default(now()) @map("generated_at") @db.Timestamptz(3)
   /// A sentence of it was withdrawn: the next maintenance run writes it again.
   staleAt        DateTime? @map("stale_at") @db.Timestamptz(3)

@@ -1417,7 +1417,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // are out of its reach. No function, trigger or type is created, replaced or dropped — no `CREATE OR
       // REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the six
       // preserved objects. No INSERT, UPDATE or DELETE: every new table starts empty.
-      '0326_wiki_docs'],
+      '0326_wiki_docs',
+      // What became of a document section's material: one JSONB column, `dispositions`, added to
+      // `wiki_doc_section` with a default and a CHECK that it is an array. Read against every claim above:
+      // no `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No function, trigger or type is created,
+      // replaced or dropped — its one DO block only adds the CHECK when it is missing — so it is not another
+      // writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or DELETE.
+      '0337_wiki_doc_dispositions'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

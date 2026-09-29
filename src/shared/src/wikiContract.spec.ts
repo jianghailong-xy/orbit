@@ -85,8 +85,12 @@ import {
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 import {
   WIKI_DOC_BLOCK_KINDS,
+  WIKI_DOC_BUILD_RULES,
   WIKI_DOC_CHECKERS,
+  WIKI_DOC_DISPOSITION_ACTIONS,
   WIKI_DOC_FOOTNOTE_KINDS,
+  WIKI_DOC_MATERIAL_RULES,
+  WIKI_DOC_MATERIAL_WEIGHTS,
   WIKI_DOC_RECORD_KINDS,
   WIKI_DOC_REPO_KINDS,
   WIKI_DOC_RULES,
@@ -882,6 +886,22 @@ describe('wiki contract', () => {
     expect(keysOf(docs.blockKinds)).toEqual([...WIKI_DOC_BLOCK_KINDS]);
     expect(docs.rules).toEqual(WIKI_DOC_RULES);
     expect(docs.schema).toEqual(Object.fromEntries(Object.entries(WIKI_DOC_SCHEMA).map(([level, keys]) => [level, [...keys]])));
+    // What became of each piece of a section's material is written with it, and kept (migration 0337).
+    expect(keysOf(docs.dispositionActions)).toEqual([...WIKI_DOC_DISPOSITION_ACTIONS]);
+    expect(WIKI_DOC_SCHEMA.section).toContain('dispositions');
+    expect(docs.requests.write).toMatch(/dispositions\?: \[\{ material, kind, ref, action, into, reason \}\]/u);
+    expect(docs.dispositionsMigration).toMatch(/0337_wiki_doc_dispositions/u);
+    expect(existsSync(path.join(ROOT, docs.dispositionsMigration))).toBe(true);
+    expect(readFileSync(path.join(ROOT, docs.dispositionsMigration), 'utf8')).toContain(`CHECK (jsonb_typeof("dispositions") = 'array')`);
+    // The server's half of a section's material, and the runner's build over both halves.
+    expect(keysOf(docs.material.weights)).toEqual([...WIKI_DOC_MATERIAL_WEIGHTS]);
+    expect(docs.material.rules).toEqual(WIKI_DOC_MATERIAL_RULES);
+    expect(docs.material.records).toMatch(/sourceText/u);
+    expect(docs.material.records).toMatch(/redacted/u);
+    expect(docs.build.rules).toEqual(WIKI_DOC_BUILD_RULES);
+    expect(docs.build.cli).toMatch(/^orbit wiki docs build --space <id> \[--doc <slug>\] \[--section <key>\]/u);
+    expect(docs.build.tool).toMatch(/^none/u);
+    expect(docs.build.templates).toMatch(/Orbit has not recorded it done/u);
     // More than 5% marks a document; a whole document fits one write.
     expect(WIKI_DOC_RULES.needsReviewAbove).toBe(0.05);
     expect(WIKI_DOC_RULES.sectionsPerWrite).toBe(CONTRACT.plan.rules.sectionsMax);
@@ -924,7 +944,7 @@ describe('wiki contract', () => {
     const user: string[] = CONTRACT.agentSurface.doors.user.routes;
     const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
     for (const read of [routes.directory, routes.doc, routes.index]) expect(user).toContain(read);
-    for (const route of [routes.writerState, routes.write]) expect(maintenanceRoutes).toContain(route);
+    for (const route of [routes.writerState, routes.writerDoc, routes.material, routes.write]) expect(maintenanceRoutes).toContain(route);
     expect(user.some((route) => route.startsWith('POST') && route.includes('/docs'))).toBe(false);
     expect(docs.who.write).toMatch(/isWikiMaintenanceSession/u);
     expect(docs.who.write).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
