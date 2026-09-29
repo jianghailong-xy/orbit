@@ -503,7 +503,7 @@ export function everyPrerequisiteTailDoneSql(alias = 't'): string {
  * say. A retired one passes here and is left to the walk, which is the only thing that knows where
  * its chain ends; reading it as unsatisfied would block every dependent of a replaced attempt.
  *
- * The guard above still walks every edge, one PL/pgSQL call each. This reads only the edge table
+ * The guard above used to walk every edge, one PL/pgSQL call each. This reads only the edge table
  * and the DONE or retired rows, through their indexes, so the planner asks it of a whole owner as
  * one hashed set. On the 109,875-task project measured here, 109,737 of 110,891 edges name a
  * prerequisite that is neither, and the walk this spares was 6.3s of the project index's 7.3s.
