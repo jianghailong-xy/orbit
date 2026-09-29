@@ -133,13 +133,27 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
 }
 
 /// PATCH /runners/:id — `displayName` empty string clears the alias (falls back to machine name);
-/// nil omits. `maxConcurrent` 1…64.
+/// nil omits. `maxConcurrent` 1…64. `minFreeDiskMb` is three-state because omitting it leaves the
+/// reserve alone while an explicit JSON null turns the reserve off.
 public struct UpdateRunnerRequest: Encodable, Sendable {
     public var displayName: String?
     public var maxConcurrent: Int?
-    public init(displayName: String? = nil, maxConcurrent: Int? = nil) {
+    public var minFreeDiskMb: FieldUpdate<Int>
+
+    public init(displayName: String? = nil, maxConcurrent: Int? = nil,
+                minFreeDiskMb: FieldUpdate<Int> = .keep) {
         self.displayName = displayName
         self.maxConcurrent = maxConcurrent
+        self.minFreeDiskMb = minFreeDiskMb
+    }
+
+    private enum CodingKeys: String, CodingKey { case displayName, maxConcurrent, minFreeDiskMb }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(displayName, forKey: .displayName)
+        try c.encodeIfPresent(maxConcurrent, forKey: .maxConcurrent)
+        try minFreeDiskMb.encode(into: &c, forKey: .minFreeDiskMb)
     }
 }
 
@@ -168,17 +182,85 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public let version: String?
     /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`.
     public let auth: String?
+    public let accounts: [RunnerEngineAccount]?
+    public let update: RunnerEngineUpdate?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
     public var signedIn: Bool { auth == "yes" }
 
-    public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil) {
+    public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
+                accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil) {
         self.engine = engine
         self.installed = installed
         self.version = version
         self.auth = auth
+        self.accounts = accounts
+        self.update = update
     }
+}
+
+/// One engine login directory on the runner. Every field is optional so an account reported by a
+/// newer/older runner remains useful even when this client does not understand all of its shape.
+public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
+    public let id: String?
+    public let name: String?
+    public let auth: String?
+    public let home: String?
+    public let codexHome: String?
+    public let fingerprintPrefix: String?
+
+    public init(id: String? = nil, name: String? = nil, auth: String? = nil,
+                home: String? = nil, codexHome: String? = nil,
+                fingerprintPrefix: String? = nil) {
+        self.id = id
+        self.name = name
+        self.auth = auth
+        self.home = home
+        self.codexHome = codexHome
+        self.fingerprintPrefix = fingerprintPrefix
+    }
+}
+
+/// The updater's last word on one engine. Status is intentionally raw: a new updater state must
+/// not make the containing runner (or the complete runner list) fail to decode.
+public struct RunnerEngineUpdate: Codable, Equatable, Sendable {
+    public let status: String?
+    public let at: String?
+    public let okAt: String?
+    public let latest: String?
+    public let behindSince: String?
+    public let updatedAt: String?
+    public let message: String?
+
+    public init(status: String? = nil, at: String? = nil, okAt: String? = nil,
+                latest: String? = nil, behindSince: String? = nil,
+                updatedAt: String? = nil, message: String? = nil) {
+        self.status = status
+        self.at = at
+        self.okAt = okAt
+        self.latest = latest
+        self.behindSince = behindSince
+        self.updatedAt = updatedAt
+        self.message = message
+    }
+}
+
+/// Browser-facing engine install/update relay. Raw strings preserve forward compatibility.
+public struct RunnerInstallState: Codable, Equatable, Sendable {
+    public let status: String?
+    public let engine: String?
+    public let command: String?
+    public let message: String?
+    public let mode: String?
+}
+
+/// Browser-facing account-removal relay. Raw engine/status strings preserve forward compatibility.
+public struct RunnerAccountRemoveState: Codable, Equatable, Sendable {
+    public let engine: String?
+    public let account: String?
+    public let status: String?
+    public let message: String?
 }
 
 /// Where a runner's sign-in relay has got to (shared `RunnerLoginState`).
@@ -206,17 +288,19 @@ public struct RunnerLoginState: Codable, Equatable, Sendable {
     /// Set with `awaitingApproval`: the code to type on the page at `url` (device flow).
     public let userCode: String?
     public let message: String?
+    public let account: String?
 
     public init(status: RunnerLoginStatus? = nil, engine: String? = nil, url: String? = nil,
-                userCode: String? = nil, message: String? = nil) {
+                userCode: String? = nil, message: String? = nil, account: String? = nil) {
         self.status = status
         self.engine = engine
         self.url = url
         self.userCode = userCode
         self.message = message
+        self.account = account
     }
 
-    private enum CodingKeys: String, CodingKey { case status, engine, url, userCode, message }
+    private enum CodingKeys: String, CodingKey { case status, engine, url, userCode, message, account }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         status = (try? c.decodeIfPresent(String.self, forKey: .status))
@@ -226,13 +310,21 @@ public struct RunnerLoginState: Codable, Equatable, Sendable {
         url = try? c.decodeIfPresent(String.self, forKey: .url)
         userCode = try? c.decodeIfPresent(String.self, forKey: .userCode)
         message = try? c.decodeIfPresent(String.self, forKey: .message)
+        account = try? c.decodeIfPresent(String.self, forKey: .account)
     }
 }
 
 /// POST /runners/:id/login — start the sign-in for one engine on that machine.
 public struct StartLoginRequest: Encodable, Sendable {
     public let engine: String
-    public init(engine: LoginEngine) { self.engine = engine.rawValue }
+    public let account: String?
+    public let accountName: String?
+
+    public init(engine: LoginEngine, account: String? = nil, accountName: String? = nil) {
+        self.engine = engine.rawValue
+        self.account = account
+        self.accountName = accountName
+    }
 }
 
 /// POST /runners/:id/login/code — hand back the code the sign-in page gave the user.
@@ -252,6 +344,54 @@ public struct EnrollmentTokenInfo: Codable, Equatable, Sendable {
 /// Generic `{ ok: true }` ack (delete runner, etc.).
 public struct OkResponse: Codable, Equatable, Sendable {
     public let ok: Bool?
+}
+
+/// GET /sessions/counts — one workspace's Open-session tallies.
+public struct WorkspaceSessionCounts: Codable, Equatable, Sendable, Identifiable {
+    public let workspaceId: String
+    public let active: Int
+    public let running: Int?
+    public let jobs: Int?
+    public let needsYou: Int?
+    public var id: String { workspaceId }
+}
+
+/// GET /runners/device/:userCode — enough identity to approve the machine from another device.
+public struct DeviceInfo: Codable, Equatable, Sendable {
+    public let userCode: String?
+    public let name: String?
+    public let hostname: String?
+    public let labels: [String]?
+    public let maxConcurrent: Int?
+    public let status: String?
+    public let nameConflict: Bool?
+}
+
+/// POST /runners/:id/refresh-models acknowledges when the refresh was requested.
+public struct RunnerModelRefresh: Codable, Equatable, Sendable {
+    public let requestedAt: String?
+}
+
+/// POST /runners/reorder — the full id list in the desired order.
+public struct ReorderRunnersRequest: Encodable, Sendable {
+    public let ids: [String]
+    public init(ids: [String]) { self.ids = ids }
+}
+
+/// The shared checkout state attached to a GET /workspaces row. State stays raw so a runner adding
+/// a new git state cannot blank the workspace list.
+public struct RunnerRepoHealth: Codable, Equatable, Sendable {
+    public let root: String?
+    public let state: String?
+    public let branch: String?
+    public let paths: [String]?
+}
+
+/// Last word from the repo-cleanup relay attached to a GET /workspaces row.
+public struct RunnerRepoCleanup: Codable, Equatable, Sendable {
+    public let status: String?
+    public let branch: String?
+    public let message: String?
 }
 
 /// One provider rate-limit window (mirrors shared `PlanUsageWindow`).
@@ -398,6 +538,9 @@ public struct PlanUsageRow: Equatable, Sendable, Identifiable {
     public var percent: Int {
         min(100, max(0, Int(window.utilization.rounded())))
     }
+    /// At or past 90% used, judged on the reading rather than its rounding: 89.6 shows as 90% and
+    /// is not near the limit (web's `PlanUsageDisplayRow.nearLimit`).
+    public var nearLimit: Bool { window.utilization >= 90 }
 }
 
 private func isApproximateWindow(_ minutes: Int, _ expected: Int) -> Bool {
