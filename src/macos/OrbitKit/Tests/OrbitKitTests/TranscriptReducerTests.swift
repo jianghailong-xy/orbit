@@ -1806,6 +1806,26 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(n.afterUserMsg, "the message it would re-send is the line directly above")
     }
 
+    /// Codex reports a model at capacity as the turn's error rather than as a reply. The server arms
+    /// the same re-send for it as for a 529, so the row must be the card that says so — as a bare red
+    /// line it read as a dead end while the retry was already on its way. Other error events stay
+    /// error lines.
+    func testCodexCapacityErrorEventBecomesAnAutoRetryCard() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("go")])))
+        r.apply(RunEvent(seq: 2, type: .error, payload: .object([
+            "message": .string("Selected model is at capacity. Please try a different model.")])))
+        guard case .autoRetry(let n)? = r.state.items.last else {
+            return XCTFail("expected an auto-retry card, got \(String(describing: r.state.items.last))")
+        }
+        XCTAssertEqual(n.variant, .apiError)
+        XCTAssertEqual(n.message, "Selected model is at capacity. Please try a different model.")
+        XCTAssertTrue(n.afterUserMsg)
+
+        r.apply(RunEvent(seq: 3, type: .error, payload: .object(["message": .string("stream disconnected")])))
+        XCTAssertEqual(r.state.items.last?.asError, "stream disconnected")
+    }
+
     /// The next user message — the retry firing, a manual retry, or the user typing something else —
     /// settles the outage. Without this the card of a failure the session recovered from would keep
     /// its countdown, and (the armed retry being cleared once it fires) read as "switched off".

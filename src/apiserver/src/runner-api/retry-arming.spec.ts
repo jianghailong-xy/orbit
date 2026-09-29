@@ -139,12 +139,33 @@ test('hands back once the steps are spent instead of retrying forever', async ()
   assert.equal(plan.retryAt, null);
 });
 
-test('leaves a task-bound session to the task scheduler', async () => {
-  // The same turn also fails its task, which has its own retry budget. Two schedulers reviving
-  // one task is how you get two runs of it.
+test("arms a task's run in place, like any other session", async () => {
+  // Resuming the same session keeps the run's checkout and conversation; the task's own retry
+  // would start a new session from nothing, and a run started by hand got none at all. The task's
+  // retry waits while this one is armed (RUN_RETRY_ARMED).
+  const before = Date.now();
   const plan = await planFor({ taskId: 'task-1' }, OVERLOADED);
+  const delay = plan.retryAt!.getTime() - before;
 
-  assert.deepEqual(plan, {}, 'nothing written — not even a cleared count');
+  assert.ok(
+    delay >= API_ERROR_RETRY_BACKOFF_MS[0] && delay <= API_ERROR_RETRY_BACKOFF_MS[0] * 1.3,
+    `expected the first step (+jitter), got ${delay}ms`,
+  );
+});
+
+test("arms Codex's model-at-capacity error like a 529", async () => {
+  const before = Date.now();
+  const plan = await planFor(
+    { provider: 'codex' },
+    'Selected model is at capacity. Please try a different model.',
+  );
+  const delay = plan.retryAt!.getTime() - before;
+
+  assert.ok(
+    delay >= API_ERROR_RETRY_BACKOFF_MS[0] && delay <= API_ERROR_RETRY_BACKOFF_MS[0] * 1.3,
+    `expected the first step (+jitter), got ${delay}ms`,
+  );
+  assert.equal(plan.retryAttempts, undefined, 'the sweeper owns the count; arming must not reset it');
 });
 
 test('does not arm an error that a re-send would reproduce', async () => {

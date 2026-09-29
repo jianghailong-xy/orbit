@@ -3955,6 +3955,11 @@ export class RunnerApiController {
       // A reserved L0 turn that cannot produce a comparison is unsettled, not a guessed task
       // failure. An ordinary failed model/shell turn retains the existing FAILED behaviour.
       const failTask = failSession && !!current.taskId && !taskAcceptanceTurn;
+      // What the turn failed with. A runtime that reports its failure as the turn's error rather
+      // than as a reply (Codex) has it sent on its own; an older runner puts the reply in its place,
+      // which for a turn that said anything before it died is the agent's last sentence — recorded
+      // as the "reason" on the session and on its task, it named something that was not a failure.
+      const failureText = dto.error || dto.result;
       // Keep this formerly post-transaction cleanup behind the same process fence. It is
       // valid for duplicate completions too, so apply it before the idempotent ack check.
       let branchMerged = dto.branchMerged;
@@ -4056,8 +4061,8 @@ export class RunnerApiController {
         && current.retryAt == null
         && !current.taskId
         && current.provider === AgentProvider.CODEX
-        && isUsageLimitErrorText(dto.result)
-          ? await this.codexUsageLimitRetry(tx, runner.id, current, dto.result!)
+        && isUsageLimitErrorText(failureText)
+          ? await this.codexUsageLimitRetry(tx, runner.id, current, failureText!)
           : null;
       const retryArmAt = keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
@@ -4363,7 +4368,7 @@ export class RunnerApiController {
           // tear that process down and reclaim the slot (mirrors reaper forceFinalize).
           ...(failSession
             ? {
-                error: (acceptanceFailureReason ?? dto.result) || 'run failed',
+                error: (acceptanceFailureReason ?? failureText) || 'run failed',
                 finishedAt: new Date(),
                 cancelRequestedAt: new Date(),
                 // FAILED is where this session stops being live, so whatever it had running
@@ -4496,15 +4501,20 @@ export class RunnerApiController {
         });
       }
       let taskReclaimed = false;
-      if (failTask) {
+      // A run with a retry armed has not ended — the same session goes on in seconds or at the
+      // quota's reset — so the task is told nothing yet, as the coordinator is not
+      // (attempt-ended-unsettled). A failure comment here read as "re-run this task" beside a run
+      // already resuming. Once the retries are spent the failing turn comes back with none armed.
+      const retryPending = (retryArmAt ?? current.retryAt) != null;
+      if (failTask && !retryPending) {
         // Surface the abandoned task for a human, and open its project's exception item in this same
         // transaction (contract §4.3 B).
         taskReclaimed = await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED, {
           sessionId,
           how: 'RUN_FAILED',
-          error: dto.result || 'run failed',
+          error: failureText || 'run failed',
         });
-        await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
+        await postRunFailureComment(tx, current.taskId!, failureText || 'run failed');
       }
       taskReclaimed = taskReclaimed || acceptanceTaskChanged;
       // Last, because it reads which turns are still live and everything above is what settled
@@ -4895,6 +4905,21 @@ export class RunnerApiController {
           if (!text) return acc;
           return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
         }, null);
+      // The same provider outage when a runtime reports it as the turn's error instead of as a reply
+      // — Codex's "Selected model is at capacity". Only an error the retry would re-send past counts:
+      // every other error line is the runtime narrating its own reconnects or a failure a re-send
+      // reproduces, and neither is an answer, which is what a reply here would clear the streak for.
+      const lastRetryableError = durable
+        .filter(
+          (e) =>
+            e.type === RunEventType.ERROR &&
+            !(e.payload as { parentToolUseId?: string } | null)?.parentToolUseId,
+        )
+        .reduce<{ seq: number; text: string; turnId: string | null } | null>((acc, e) => {
+          const text = (e.payload as { message?: string } | null)?.message?.trim();
+          if (!text || !isRetryableApiErrorText(text)) return acc;
+          return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
+        }, null);
       // Denormalize the "frontier" activity for the sidebar's live status line. The
       // highest-seq durable event is the workspace's latest known state: a tool_use means a
       // tool is in flight (its tool_result hasn't landed yet) → surface its name; any
@@ -4992,9 +5017,13 @@ export class RunnerApiController {
       // quota spent, or the API overloaded — is the failure that fixes itself: the same
       // message succeeds once the window rolls over or the far side recovers. Arm a retry for
       // that moment. Detected here rather than in the runner so it also covers runners too old
-      // to know about this — they self-update on their own schedule and outlive a release.
-      const retry = lastAssistant
-        ? await this.retryPlanFor(tx, sessionId, runner.id, lastAssistant.text, lastAssistant.turnId != null)
+      // to know about this — they self-update on their own schedule and outlive a release. The
+      // engine's last word decides: a reply after an outage error means the provider answered.
+      const lastWord = lastRetryableError && (!lastAssistant || lastRetryableError.seq > lastAssistant.seq)
+        ? lastRetryableError
+        : lastAssistant;
+      const retry = lastWord
+        ? await this.retryPlanFor(tx, sessionId, runner.id, lastWord.text, lastWord.turnId != null)
         : {};
       // Whether the engine is generating right now — see Session.engineTurnActive. Tracked
       // separately from the frontier above because it must survive a tool_result (a tool
@@ -6284,9 +6313,11 @@ export class RunnerApiController {
    *  - an exhausted quota → arm for the moment it resets (below), leaving the attempt count
    *    alone: the sweeper counts against it while the snapshot keeps reporting the quota spent.
    *  - a transient provider error → arm for one backoff step out, or hand back once the steps
-   *    are spent. Task-bound sessions are excluded: such a turn also fails their task, which
-   *    has its own retry budget (tasks.service AUTO_RUN_RETRY_BACKOFF_MS), and two schedulers
-   *    reviving one task is how you get two runs of it.
+   *    are spent. A task's run is armed like any other. Resuming this session keeps its checkout
+   *    and its conversation, where the task's own retry starts a new session from nothing — and
+   *    left to that, a run started by hand was not retried at all: its owner had to send
+   *    "continue" themselves. The task's retry waits while this one is armed (tasks.service
+   *    RUN_RETRY_ARMED), and the attempt is not over until it is spent (attempt-ended-unsettled).
    *  - anything else, including an error a re-send would reproduce → the run of failures is
    *    over, so clear the count. This is the ONLY thing that clears it: doing it when a retry
    *    is dispatched instead would restart the backoff at every attempt, and a provider that
@@ -6324,10 +6355,7 @@ export class RunnerApiController {
       },
     });
     if (!session) return {};
-    if (!quotaSpent) {
-      if (session.taskId) return {};
-      return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
-    }
+    if (!quotaSpent) return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
     // A built-in Claude session on Automatic — nobody picked its account by hand, and its workspace
     // leaves the account to Orbit — moves to another of the runner's accounts with room and is re-sent
     // at once: the events path queues the reload that re-spawns its engine there, and the runner
