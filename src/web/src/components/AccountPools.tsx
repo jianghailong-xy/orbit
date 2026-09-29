@@ -491,7 +491,7 @@ function PoolCard({
 
 /**
  * The Providers page's middle section: the user's account pools — several Claude subscriptions
- * under one name, each session starting on whichever has the most room, or a Codex pool of their own
+ * under one name, each session starting on the one whose quota resets soonest, or a Codex pool of their own
  * that runs on their ChatGPT account — and the shared pools they are in, several people's OpenAI keys
  * under one name (sharedPoolAsProviderPool). Between the engines above (one machine's login) and the
  * keys below (what an account pool is made of), whose verdicts say which accounts a pool would no
@@ -530,8 +530,8 @@ export function AccountPools({
       <div className="re-sec-head pool-sec-head">
         <h3>Account pools</h3>
         <span className="re-sec-sub">
-          Several keys under one name — each session starts on the one with the most room, and moves
-          on when it runs out.
+          Several keys under one name — each session starts on one with room, and moves on when it
+          runs out.
         </span>
         <Button size="small" className="pool-new" onClick={() => setCreating(true)}>
           New pool
@@ -860,7 +860,7 @@ export function PoolHint({ rows, eligible }: { rows: ProviderRow[]; eligible: nu
     <div className="pool-hint">
       <span>
         <b>{eligible} of your keys are Claude subscriptions.</b> Pool them, and each session starts
-        on whichever has the most room in its 5-hour window.
+        on the one whose quota resets soonest, so none of it goes unused.
       </span>
       <Button size="small" type="primary" onClick={() => setOpen(true)}>
         Create a pool

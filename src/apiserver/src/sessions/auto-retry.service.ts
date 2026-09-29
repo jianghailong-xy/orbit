@@ -265,6 +265,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // Which of the runner's Codex or Claude accounts the run spends, whose quota alone can hold it
         // back: the one picked for the session, else its workspace's.
         codexAccount: true,
+        claudeAccount: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
@@ -404,7 +405,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                 session.workspace?.env,
                 {
                   codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-                  claudeAccount: session.workspace?.claudeAccount,
+                  claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
                 },
                 session.assignedRunner?.engines,
               ),

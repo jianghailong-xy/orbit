@@ -48,7 +48,7 @@ describe('Codex accounts in the New Session picker', () => {
             choices={choices}
             onPick={(slug) => picked.push([slug])}
             currentAccount={currentAccount}
-            automatic={automatic}
+            automatic={automatic === undefined ? undefined : { codex: automatic }}
             onPickAccount={(slug, account) => picked.push([slug, account])}
             runnerId={RUNNER_ID}
           />

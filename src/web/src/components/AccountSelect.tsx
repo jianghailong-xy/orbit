@@ -8,7 +8,7 @@ import type { Runner } from './TasksSidePanel';
 /** The account every runner has: the directory its own environment selects. */
 const DEFAULT = 'default';
 
-/** The Codex field's value for Automatic, which the workspace stores as null: the Select needs a string. */
+/** The field's value for Automatic, which the workspace stores as null: the Select needs a string. */
 const AUTOMATIC = '';
 
 /** The accounts a runner reported for `engine`, Default first. None from a runner too old to list
@@ -66,9 +66,10 @@ const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: str
  * The choice is stored as the account's id and resolved on the runner that runs the session, so an id
  * this runner does not report runs on Default — which its option says.
  *
- * `null` is Default for Claude. For Codex on a runner with more than one account it is Automatic: each
- * new session starts on the account with the most room and keeps it (automaticCodexAccount on the
- * server), so Default is saved as `default` there, a choice of its own.
+ * On a runner with more than one account of the engine `null` is Automatic: each new session starts on
+ * the account whose quota resets soonest, and moves when that account's usage limit stops it
+ * (automaticAccount on the server), so Default is saved as `default` there, a choice of its own. With
+ * one account `null` is Default.
  *
  * `envDir` is the engine's own config-directory variable typed into the same form's environment:
  * until an account is picked here that is where the sessions run, and a picked account replaces it.
@@ -90,7 +91,7 @@ export function AccountSelect({
   const copy = ENGINE_COPY[engine] ?? { label: 'Account', envVar: '', sessions: engine };
   const health = runner.engines?.find((entry) => entry.engine === engine);
   const accounts = accountsOf(runner, engine);
-  const automatic = engine === 'codex' && accounts.length >= 2;
+  const automatic = accounts.length >= 2;
   const options: AccountOption[] = accounts.map((account) => ({
     value: account.id,
     label:
@@ -119,7 +120,7 @@ export function AccountSelect({
     options.unshift({
       value: AUTOMATIC,
       label: 'Automatic',
-      status: 'each new session starts on the account with the most room',
+      status: 'each new session starts on the account whose quota resets soonest',
     });
   }
   const typedDir = envDir?.trim();
@@ -144,7 +145,8 @@ export function AccountSelect({
       <div className="rd-path-hint rd-path-muted">
         {automatic
           ? `Only applies to sessions that run ${copy.sessions} on this machine. Automatic starts each new ` +
-            'session on the account with the most room, and keeps it there.'
+            'session on the account whose quota resets soonest, so none of it goes unused, and moves it ' +
+            'when that account hits its limit.'
           : `Only applies to sessions that run ${copy.sessions} on this machine. Leave it on Default unless ` +
             'this repo needs the other account.'}
       </div>
