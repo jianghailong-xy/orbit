@@ -6,6 +6,8 @@ import {
   codexAccountSnapshot,
   planUsageBlockedUntil,
   planUsageReported,
+  codexAccountToMoveTo,
+  roomiestCodexAccount,
 } from './planUsage';
 
 const NOW = new Date('2026-08-03T13:00:00Z');
@@ -120,8 +122,8 @@ describe('a runner with more than one Codex account', () => {
       expect(planUsageReported(usage, 'codex', account)).toBe(false);
     }
     expect(planUsageReported(usage, 'codex', 'default')).toBe(true);
-    // Accounts are Codex's: another runtime's question is answered as before.
-    expect(planUsageReported({ provider: 'claude', fiveHour: { utilization: 1 } }, 'claude', null)).toBe(true);
+    // An engine that keeps one login for the machine has no accounts: its question is answered as before.
+    expect(planUsageReported({ provider: 'kimi', primary: { utilization: 1 } }, 'kimi', null)).toBe(true);
   });
 
   it("does not call Default reported when the snapshot holds only other accounts", () => {
@@ -142,6 +144,38 @@ describe('a runner with more than one Codex account', () => {
     expect(codexAccountSnapshot(usage, 'constructor')).toBeUndefined();
     // A snapshot from before accounts is Default's whole.
     expect(codexAccountSnapshot(codexExhausted, 'default')).toBe(codexExhausted);
+  });
+});
+
+describe('a runner with more than one Claude account', () => {
+  /** Default's windows as the Claude snapshot's own, Work's under its id — the shape the runner
+   *  reports (src/runner-go/claude_account_usage.go), nested beside a Codex snapshot. */
+  const claudeAccounts = (defaultUsed: number, workUsed: number): PlanUsage => ({
+    claude: {
+      fiveHour: { utilization: defaultUsed, resetsAt: EARLIER },
+      accounts: { [WORK]: { fiveHour: { utilization: workUsed, resetsAt: LATER } } },
+    },
+    codex: { primary: { utilization: 3, resetsAt: LATER } },
+  });
+
+  it("judges the account a run spends, and Default's windows only for Default", () => {
+    const defaultSpent = claudeAccounts(100, 8);
+    expect(planUsageBlockedUntil(defaultSpent, 'claude', NOW, 'default')).toEqual(new Date(EARLIER));
+    expect(planUsageBlockedUntil(defaultSpent, 'claude', NOW)).toEqual(new Date(EARLIER));
+    expect(planUsageBlockedUntil(defaultSpent, 'claude', NOW, WORK)).toBeNull();
+
+    const workSpent = claudeAccounts(62, 100);
+    expect(planUsageBlockedUntil(workSpent, 'claude', NOW, WORK)).toEqual(new Date(LATER));
+    expect(planUsageBlockedUntil(workSpent, 'claude', NOW, 'default')).toBeNull();
+  });
+
+  it('knows nothing about an account that has not been read, nor about a run on a key of its own', () => {
+    const usage = claudeAccounts(100, 100);
+    for (const account of ['0badf00d', null]) {
+      expect(planUsageBlockedUntil(usage, 'claude', NOW, account)).toBeNull();
+      expect(planUsageReported(usage, 'claude', account)).toBe(false);
+    }
+    expect(planUsageReported(usage, 'claude', WORK)).toBe(true);
   });
 });
 
@@ -198,5 +232,117 @@ describe('codexAccountOfEnv', () => {
     expect(codexAccountOfEnv({ CODEX_HOME: '/root/.codex' }, undefined)).toBeNull();
     expect(codexAccountOfEnv({ CODEX_API_KEY: 'sk-test' }, accounts)).toBeNull();
     expect(codexAccountOfEnv({ CODEX_HOME: '/root/.orbit/codex-accounts/3fa91c2e', OPENAI_BASE_URL: 'https://x.invalid/v1' }, accounts)).toBeNull();
+  });
+});
+
+describe('roomiestCodexAccount — where a session with no account picked starts', () => {
+  const PRO = '1fda3f43';
+  const account = (id: string, auth: 'yes' | 'no' | 'unknown' = 'yes'): RunnerEngineAccount => ({
+    id,
+    home: id === 'default' ? '/root/.codex' : `/root/.orbit/codex-accounts/${id}`,
+    auth,
+  });
+  const both = [account('default'), account(PRO)];
+  const win = (utilization: number, mins: number, resetsAt: string | undefined = LATER) => ({
+    utilization,
+    windowDurationMins: mins,
+    ...(resetsAt ? { resetsAt } : {}),
+  });
+  /** Default a Plus login (a 5-hour and a weekly window), Pro reporting only a weekly one. */
+  const usage = (fiveHour: number, weekly: number, pro: number | null, proReset?: string): PlanUsage => ({
+    codex: {
+      provider: 'codex',
+      primary: win(fiveHour, 300, EARLIER),
+      secondary: win(weekly, 10080),
+      ...(pro === null ? {} : { accounts: { [PRO]: { provider: 'codex', primary: win(pro, 10080, proReset) } } }),
+    },
+  });
+
+  it("passes over a spent account, and ranks the rest by each one's tightest window", () => {
+    // Default's 5-hour window spent: Pro, whatever its weekly use.
+    expect(roomiestCodexAccount(both, usage(100, 18, 70), NOW)).toBe(PRO);
+    // Default's tightest window is its weekly 18%, Pro's its weekly 0%.
+    expect(roomiestCodexAccount(both, usage(5, 18, 0), NOW)).toBe(PRO);
+    // Pro has used more of its only window than Default of either of its own.
+    expect(roomiestCodexAccount(both, usage(5, 18, 40), NOW)).toBe('default');
+    // A tie goes to Default.
+    expect(roomiestCodexAccount(both, usage(18, 18, 18), NOW)).toBe('default');
+  });
+
+  it('ranks an account nothing was read for after every one with a reading, but still takes it over a spent one', () => {
+    expect(roomiestCodexAccount(both, usage(90, 18, null), NOW)).toBe('default');
+    expect(roomiestCodexAccount(both, usage(100, 18, null), NOW)).toBe(PRO);
+  });
+
+  it('never picks an account the CLI says is signed out', () => {
+    expect(roomiestCodexAccount([account('default'), account(PRO, 'no')], usage(90, 18, 0), NOW)).toBe('default');
+    expect(roomiestCodexAccount([account('default', 'no'), account(PRO, 'no')], usage(0, 0, 0), NOW)).toBeNull();
+  });
+
+  it('with every account spent, starts where the first window frees up', () => {
+    // Default's 5-hour window resets EARLIER, Pro's weekly LATER.
+    expect(roomiestCodexAccount(both, usage(100, 18, 100), NOW)).toBe('default');
+    expect(roomiestCodexAccount(both, usage(100, 18, 100, '2026-08-03T14:00:00Z'), NOW)).toBe(PRO);
+  });
+
+  it('counts a spent window with no reset time as spent, and one past its reset as not', () => {
+    const noReset: PlanUsage = {
+      codex: { provider: 'codex', primary: win(100, 300, undefined), accounts: { [PRO]: { provider: 'codex', primary: win(60, 10080) } } },
+    };
+    expect(roomiestCodexAccount(both, noReset, NOW)).toBe(PRO);
+    // Past its reset, a full window is no longer spent: Default, read, beats Pro, unread.
+    const lapsed: PlanUsage = { codex: { provider: 'codex', primary: win(100, 300, '2026-08-03T12:00:00Z') } };
+    expect(roomiestCodexAccount(both, lapsed, NOW)).toBe('default');
+  });
+
+  it('has nothing to choose with fewer than two accounts', () => {
+    expect(roomiestCodexAccount([account('default')], usage(100, 18, null), NOW)).toBeNull();
+    expect(roomiestCodexAccount([], usage(100, 18, null), NOW)).toBeNull();
+    expect(roomiestCodexAccount(undefined, null, NOW)).toBeNull();
+  });
+});
+
+describe('codexAccountToMoveTo — where a session whose account hit its limit goes, between turns', () => {
+  const PRO = '1fda3f43';
+  const WORK = '3fa91c2e';
+  const account = (id: string, auth: 'yes' | 'no' | 'unknown' = 'yes'): RunnerEngineAccount => ({
+    id,
+    home: id === 'default' ? '/root/.codex' : `/root/.orbit/codex-accounts/${id}`,
+    auth,
+  });
+  const three = [account('default'), account(PRO), account(WORK)];
+  const win = (utilization: number, resetsAt = LATER) => ({ utilization, windowDurationMins: 300, resetsAt });
+  const usage = (def: number, pro: number, work: number): PlanUsage => ({
+    codex: {
+      provider: 'codex',
+      primary: win(def),
+      accounts: {
+        [PRO]: { provider: 'codex', primary: win(pro) },
+        [WORK]: { provider: 'codex', primary: win(work) },
+      },
+    },
+  });
+
+  it('moves to the other account with the most room, never back onto the one it leaves', () => {
+    expect(codexAccountToMoveTo(three, usage(100, 40, 10), NOW, 'default')).toBe(WORK);
+    // The account being left ranks first on paper (its snapshot has not caught up with the limit yet),
+    // and is still passed over: the run just said it is spent.
+    expect(codexAccountToMoveTo(three, usage(5, 40, 10), NOW, 'default')).toBe(WORK);
+    expect(codexAccountToMoveTo(three, usage(100, 40, 10), NOW, WORK)).toBe(PRO);
+  });
+
+  it('never moves onto a spent or signed-out account: then the session waits for its own reset', () => {
+    expect(codexAccountToMoveTo(three, usage(100, 100, 100), NOW, 'default')).toBeNull();
+    expect(codexAccountToMoveTo([account('default'), account(PRO, 'no')], usage(100, 0, 0), NOW, 'default')).toBeNull();
+  });
+
+  it('takes an account nothing was read for, over none at all', () => {
+    const unread: PlanUsage = { codex: { provider: 'codex', primary: win(100) } };
+    expect(codexAccountToMoveTo([account('default'), account(PRO)], unread, NOW, 'default')).toBe(PRO);
+  });
+
+  it('has nowhere to go without a second account', () => {
+    expect(codexAccountToMoveTo([account('default')], usage(100, 0, 0), NOW, 'default')).toBeNull();
+    expect(codexAccountToMoveTo(undefined, null, NOW, 'default')).toBeNull();
   });
 });

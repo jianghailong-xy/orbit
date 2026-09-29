@@ -262,8 +262,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         assignedRunner: {
           select: { planUsage: true, engines: true, status: true, lastHeartbeatAt: true },
         },
-        // Which of the runner's Codex accounts the run spends, whose quota alone can hold it back.
-        workspace: { select: { env: true, codexAccount: true } },
+        // Which of the runner's Codex or Claude accounts the run spends, whose quota alone can hold it
+        // back: the one picked for the session, else its workspace's.
+        codexAccount: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
     if (due.length === 0) return;
@@ -400,7 +402,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               runAccount(
                 session.provider,
                 session.workspace?.env,
-                session.workspace,
+                {
+                  codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
+                  claudeAccount: session.workspace?.claudeAccount,
+                },
                 session.assignedRunner?.engines,
               ),
             );

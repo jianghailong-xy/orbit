@@ -143,11 +143,11 @@ final class BackgroundJobsWiringTests: XCTestCase {
                            + "bubble this fixed, signed with the reader's own name")
 
         let card = try section(try source(Self.cardPath), from: "struct BackgroundWakeCardView",
-                               to: "private var summary")
+                               to: "private func jobRow")
         XCTAssertTrue(card.contains("var attached: (kind: String, text: String)?"),
-                      "the card has a slot for it")
+                      "the wake has a slot for it")
         XCTAssertTrue(card.contains("if let attached { AttachedNoteEntry(attached: attached) }"),
-                      "and draws it inside itself")
+                      "and draws it in its own fold")
     }
 
     /// The rule the bubble is drawn off, on its own: whitespace is not a message.

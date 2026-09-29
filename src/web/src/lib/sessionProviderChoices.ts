@@ -1,6 +1,8 @@
 import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
-import type { RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
+import type { PlanUsage, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
+import { accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
+import { planUsageRows } from './planUsage';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
@@ -70,6 +72,24 @@ export interface ProviderChoice {
    *  its own — pinning one account is a real need — but offered behind "Pin a specific account",
    *  since the pool beside it already runs on it. */
   inPool?: boolean;
+  /** The runner's own accounts of this engine, when it has signed in more than one: offered under
+   *  its row, so a session can start on another account than its workspace's. Codex only — the
+   *  engine a session can be started on an account of (Session.codexAccount). */
+  accounts?: AccountChoice[];
+}
+
+/** One of the runner's accounts of an engine, as a row under that engine in the picker. */
+export interface AccountChoice {
+  /** `default`, or the id of a slot the runner added — what the session is created with. */
+  id: string;
+  label: string;
+  /** Its own quota's first window, compactly: "5h 100%", "Weekly 0%". Absent when the runner
+   *  reports none. */
+  quota?: string;
+  /** That window is at least 90% spent — where the composer's quota pill turns orange too. */
+  nearLimit?: boolean;
+  /** Why it can't take a session: the CLI says it is signed out. */
+  unavailable?: string;
 }
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -171,6 +191,8 @@ function byokBlocker(health?: RunnerEngineHealth): string | undefined {
  * accounts' own keys. The providers in a pool stay pickable, marked `inPool` for the picker to fold
  * away. `configured` is expected to carry the pools too (poolsAsProviders), since that is where a
  * pool's models and runtime are resolved from; `pools` says which of its entries are pools.
+ *
+ * `planUsage` is the runner's quota report, read for each of its Codex accounts' own windows.
  */
 export function providerChoices(
   configured: ConfiguredProvider[],
@@ -178,9 +200,29 @@ export function providerChoices(
   runtimeDefaultModels?: RuntimeDefaultModels,
   engineHealth?: RunnerEngineHealth[] | null,
   pools: readonly PoolChoiceSource[] = [],
+  planUsage?: PlanUsage | null,
 ): ProviderChoice[] {
   const engines: ProviderChoice[] = ENGINE_SLUGS.map((slug) => {
-    const blocker = engineBlocker(engineHealth?.find((e) => e.engine === slug));
+    const health = engineHealth?.find((e) => e.engine === slug);
+    const blocker = engineBlocker(health);
+    const accounts =
+      slug === AgentProvider.CODEX && !blocker && (health?.accounts?.length ?? 0) >= 2
+        ? health!.accounts!.map((account): AccountChoice => {
+            const snapshot = accountPlanUsage(planUsage, slug, account.id);
+            const quota = account.auth === 'yes' && snapshot ? planUsageRows(snapshot)[0] : undefined;
+            return {
+              id: account.id,
+              label: account.id === 'default' ? 'Default' : account.name || `Account ${account.id}`,
+              ...(quota
+                ? {
+                    quota: `${quota.label.replace(/ limit$/, '')} ${quota.percent}%`,
+                    ...(quota.nearLimit ? { nearLimit: true } : {}),
+                  }
+                : {}),
+              ...(account.auth === 'no' ? { unavailable: 'Not signed in' } : {}),
+            };
+          })
+        : undefined;
     return {
       slug,
       label: ENGINE_LABELS[slug] ?? slug,
@@ -188,6 +230,7 @@ export function providerChoices(
       ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
       modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
       ...(blocker ? { unavailable: blocker, fixEngine: slug } : {}),
+      ...(accounts ? { accounts } : {}),
     };
   });
   // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run

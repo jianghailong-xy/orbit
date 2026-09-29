@@ -7,7 +7,7 @@
  */
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { ENGINE_ACCOUNTS_MAX, sanitizeRunnerEngines } from '../common/runner-engines';
-import { accountDir, accountOfEnv } from '@orbit/shared';
+import { accountDir, accountOfEnv, codexAccountToMoveTo, roomiestCodexAccount } from '@orbit/shared';
 import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from './account';
 
 /** An account a runner added: 4 random bytes in lowercase hex (src/runner-go/account_slot.go).
@@ -57,7 +57,8 @@ function sanitizeAccountsOf(snapshot: PlanUsageSnapshot | undefined): PlanUsageS
  * The account a run on `provider` spends, which is the account dispatch runs it on — what
  * planUsageBlockedUntil and planUsageReported are asked about, so that one account's spent quota never
  * holds back a run on another. It is decided as dispatch decides it (resolveProviderExec): the account
- * the workspace picked (Workspace.codexAccount / Workspace.claudeAccount) when its runner reports it
+ * picked for the session or else its workspace (Session.codexAccount, Workspace.codexAccount /
+ * Workspace.claudeAccount — callers pass the one that applies) when its runner reports it
  * (accountOnRunner), in place of any config-directory variable in the workspace's env; otherwise the
  * account that env selects, or Default. The resulting env is read as the runner reads it
  * (accountOfEnv), so a run with a credential of its own spends no account. Undefined for an engine
@@ -78,6 +79,65 @@ export function runAccount(
   const withChoice = picked ? { ...(env ?? {}), [dirVar]: accountDir(picked) } : env;
   return accountOfEnv(provider, withChoice, accounts);
 }
+
+/**
+ * The Codex account a new session on this workspace and runner starts on when nothing picked one for
+ * it: the runner's account with the most room right now (roomiestCodexAccount) — when the workspace
+ * picked none either, and its env selects no other CODEX_HOME and no key of its own. Null otherwise:
+ * the session then runs where the workspace's choice and env say. SessionsService.create stores the
+ * answer on the session, which keeps it for life; the task quota gate asks the same question of a task
+ * that is about to get one.
+ */
+export function automaticCodexAccount(
+  workspace: { env?: unknown; codexAccount?: string | null } | null | undefined,
+  runnerEngines: unknown,
+  planUsage: unknown,
+  now: Date,
+): string | null {
+  if (workspace?.codexAccount) return null;
+  if (runAccount('codex', workspace?.env, null, runnerEngines) !== DEFAULT_ACCOUNT) return null;
+  const accounts = sanitizeRunnerEngines(runnerEngines)?.find((engine) => engine.engine === 'codex')?.accounts;
+  return roomiestCodexAccount(accounts, isObject(planUsage) ? (planUsage as PlanUsage) : null, now);
+}
+
+/**
+ * Where a built-in Codex session goes when its account's usage limit ends a turn: another of the
+ * runner's accounts that can run now (codexAccountToMoveTo) — when its workspace leaves the account to
+ * Orbit, on the same condition as automaticCodexAccount: it picked none, and its env selects no other
+ * CODEX_HOME and no key of its own. `from` is the account the session ran on, as dispatch resolved it.
+ * Null when the session stays and waits for that account's reset: a workspace pinned to an account, a
+ * runner with no second account, or no other account with room.
+ */
+export function codexAccountAfterUsageLimit(
+  session: { codexAccount?: string | null },
+  workspace: { env?: unknown; codexAccount?: string | null } | null | undefined,
+  runnerEngines: unknown,
+  planUsage: unknown,
+  now: Date,
+): { from: string; to: string } | null {
+  if (workspace?.codexAccount) return null;
+  if (runAccount('codex', workspace?.env, null, runnerEngines) !== DEFAULT_ACCOUNT) return null;
+  const from = runAccount('codex', workspace?.env, { codexAccount: session.codexAccount }, runnerEngines);
+  if (!from) return null;
+  const accounts = codexAccountsOf(runnerEngines);
+  const to = codexAccountToMoveTo(accounts, isObject(planUsage) ? (planUsage as PlanUsage) : null, now, from);
+  return to ? { from, to } : null;
+}
+
+/**
+ * The transcript line for a Codex session moved off an account whose usage limit it hit — the twin of
+ * pool-select.ts poolSwitchNotice, in the same words, and like it never a possessive on a label. Without
+ * it the quota gauge jumping between two turns reads as a broken gauge.
+ */
+export function codexAccountSwitchNotice(move: { from: string; to: string }, runnerEngines: unknown): string {
+  const accounts = codexAccountsOf(runnerEngines);
+  const label = (id: string) =>
+    id === DEFAULT_ACCOUNT ? 'Default' : accounts?.find((account) => account.id === id)?.name || `Account ${id}`;
+  return `Switched to ${label(move.to)} — the usage limit on ${label(move.from)} is reached`;
+}
+
+const codexAccountsOf = (runnerEngines: unknown) =>
+  sanitizeRunnerEngines(runnerEngines)?.find((engine) => engine.engine === 'codex')?.accounts;
 
 /** The accounts a workspace pins its sessions to, one per engine that keeps accounts. */
 export interface WorkspaceAccountChoices {

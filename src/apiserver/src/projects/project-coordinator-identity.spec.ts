@@ -239,10 +239,12 @@ test('a project that is already coordinated changes one field at a time', async 
 
 // ── The authorization set, and its revision (§9.6 AU2/AU3) ────────────────────────────────────
 
-test('the authorization set is exactly the three fields that decide what may happen', () => {
+test('the authorization set is exactly the fields that decide what may happen', () => {
+  // `automatic` is `coordinatorEnabled`'s column as a newer client writes it (without the older
+  // switch's pause), so it is a member for the same reason.
   assert.deepEqual(
     [...ProjectsService.AUTHORIZATION_FIELDS],
-    ['coordinatorEnabled', 'maxConcurrentTasks', 'sessionBudgetPerDay'],
+    ['coordinatorEnabled', 'automatic', 'maxConcurrentTasks', 'sessionBudgetPerDay'],
   );
   // Who decides is not the same question as what a decider may do: the two are set, revoked and
   // read separately, so the coordinator's identity is deliberately not in the set above.

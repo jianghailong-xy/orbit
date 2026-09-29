@@ -415,65 +415,95 @@ final class BackgroundWakeTests: XCTestCase {
             "<scheduled-wakeup>\n  something else entirely\n</scheduled-wakeup>"))
     }
 
-    // MARK: the card it becomes
+    /// The sticky bar's question — does this note carry a wake? — answers what a full reading would,
+    /// every time it is asked, including for a block whose tag is there and whose fields are not.
+    func testSaysWhetherANoteCarriesAWakeExactlyAsTheReadingDoes() {
+        let notes: [String?] = [
+            Fixture.enDone, Fixture.zhFailed, Fixture.enScheduled, Fixture.enTwoJobs,
+            Fixture.continuation, "just a message someone typed", "", nil,
+            "<background-job-wake>\n  something else entirely\n</background-job-wake>",
+            "<scheduled-wakeup>\n  something else entirely\n</scheduled-wakeup>",
+        ]
+        for note in notes {
+            let reading = BackgroundWakeText.parse(note) != nil
+            XCTAssertEqual(BackgroundWakeText.carriesWake(note), reading, "first ask: \(String(describing: note))")
+            XCTAssertEqual(BackgroundWakeText.carriesWake(note), reading, "kept answer: \(String(describing: note))")
+        }
+        XCTAssertTrue(BackgroundWakeText.carriesWake(Fixture.enDone))
+        XCTAssertFalse(BackgroundWakeText.carriesWake(Fixture.continuation))
+    }
 
-    func testTheCardNamesWhatHappenedForEveryShapeOfWake() throws {
+    // MARK: the line it becomes
+
+    func testTheLineSaysWhatHappenedForEveryShapeOfWake() throws {
         let one = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enDone))
         XCTAssertEqual(BackgroundWakeCard.title(one), "Background job finished")
-        XCTAssertEqual(BackgroundWakeCard.summary(one), "upgrade to 39551b637 exited 0.")
+        XCTAssertEqual(BackgroundWakeCard.lineName(one), "upgrade to 39551b637")
+        XCTAssertEqual(BackgroundWakeCard.lineStatus(one), "exit 0")
+        XCTAssertFalse(BackgroundWakeCard.isPending(one))
 
         let failed = try XCTUnwrap(BackgroundWakeText.parse(Fixture.zhFailed))
         XCTAssertEqual(BackgroundWakeCard.title(failed), "Background job failed")
-        XCTAssertEqual(BackgroundWakeCard.summary(failed),
-                       "Smoke: wakeOnExit on a job that exits 3 exited 3.")
+        XCTAssertEqual(BackgroundWakeCard.lineName(failed), "Smoke: wakeOnExit on a job that exits 3")
+        XCTAssertEqual(BackgroundWakeCard.lineStatus(failed), "exit 3")
 
         let killed = try XCTUnwrap(BackgroundWakeText.parse(Fixture.zhKilled))
         XCTAssertEqual(BackgroundWakeCard.title(killed), "Background job failed")
-        XCTAssertEqual(BackgroundWakeCard.summary(killed), "Soak: 2h was killed: runner_shutdown.")
+        XCTAssertEqual(BackgroundWakeCard.lineName(killed), "Soak: 2h")
+        XCTAssertEqual(BackgroundWakeCard.lineStatus(killed), "killed: runner_shutdown")
 
+        // Nothing has come out of a job that has only written something, so the line closes on no word.
         let running = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enNewOutput))
         XCTAssertEqual(BackgroundWakeCard.title(running), "Background job has new output")
-        XCTAssertEqual(BackgroundWakeCard.summary(running), "watch main CI 34997433169 has new output.")
+        XCTAssertEqual(BackgroundWakeCard.lineName(running), "watch main CI 34997433169")
+        XCTAssertNil(BackgroundWakeCard.lineStatus(running))
+        XCTAssertTrue(BackgroundWakeCard.isPending(running))
 
+        // Several are counted by the title, named in the fold, and closed on how many failed.
         let several = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enTwoJobs))
         XCTAssertEqual(BackgroundWakeCard.title(several), "2 background jobs finished")
-        XCTAssertEqual(BackgroundWakeCard.summary(several), "1 of 2 failed.")
-
-        let allDone = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enTwoJobsNoExitCode))
-        XCTAssertEqual(BackgroundWakeCard.summary(allDone), "All 2 finished.")
+        XCTAssertNil(BackgroundWakeCard.lineName(several))
+        XCTAssertEqual(BackgroundWakeCard.lineStatus(several), "1 of 2 failed")
 
         let wakeup = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enScheduled))
         XCTAssertEqual(BackgroundWakeCard.title(wakeup), "Scheduled wakeup")
-        XCTAssertEqual(BackgroundWakeCard.summary(wakeup), "waiting for CI run 4242")
+        XCTAssertEqual(BackgroundWakeCard.lineName(wakeup), "waiting for CI run 4242")
+        XCTAssertNil(BackgroundWakeCard.lineStatus(wakeup))
+        XCTAssertTrue(BackgroundWakeCard.isPending(wakeup))
     }
 
-    /// Two jobs that both exited 0 say so; the sentence is the only place a reader is told they all
-    /// came out clean without opening the rows.
-    func testTheCardCountsSeveralCleanJobs() throws {
+    /// Several jobs that all came out clean close the line on no word at all: the title counts them
+    /// and the mark says they came out clean.
+    func testTheLineSaysNothingMoreOfSeveralCleanJobs() throws {
         let both = try XCTUnwrap(BackgroundWakeText.parse(
             Fixture.enTwoJobs.replacingOccurrences(of: "ended｜failed｜exit code 1",
                                                    with: "ended｜completed｜exit code 0")))
 
-        XCTAssertEqual(BackgroundWakeCard.summary(both), "All 2 exited 0.")
+        XCTAssertNil(BackgroundWakeCard.lineStatus(both))
+        XCTAssertFalse(BackgroundWakeCard.isPending(both))
+        let allDone = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enTwoJobsNoExitCode))
+        XCTAssertNil(BackgroundWakeCard.lineStatus(allDone))
     }
 
-    func testTheCardsRowsSayWhatEachJobWasAndWhatItWrote() throws {
+    func testTheFoldsRowsSayWhatEachJobWasAndWhatItWrote() throws {
         let wake = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enDone))
         let job = try XCTUnwrap(wake.jobs.first)
 
         XCTAssertEqual(BackgroundWakeCard.name(job), "upgrade to 39551b637")
-        XCTAssertEqual(BackgroundWakeCard.exitLabel(job), "exit 0")
+        XCTAssertEqual(BackgroundWakeCard.status(job), "exit 0")
         XCTAssertEqual(BackgroundWakeCard.jobMeta(job), "bgj_13c53745a88a · 16.2 KB of output")
-        XCTAssertEqual(BackgroundWakeCard.outcome(job), "exited 0")
 
         // A job with nothing to show says so rather than printing a zero.
         let empty = try XCTUnwrap(BackgroundWakeText.parse(Fixture.zhFailed)?.jobs.first)
         XCTAssertEqual(BackgroundWakeCard.jobMeta(empty), "bgj_209fc7f9f47a · no output")
-        // A job started without a description is named by the command it ran.
-        XCTAssertEqual(BackgroundWakeCard.name(BackgroundWakeJob(
+        // A job started without a description is named by the command it ran — on the line too.
+        let bare = BackgroundWakeJob(
             id: "bgj_1", kind: "job", command: "bash a.sh", description: nil, status: "completed",
             ended: true, exitCode: 0, killReason: nil, outputPath: nil, outputFrom: nil,
-            outputTo: nil, outputTail: "")), "bash a.sh")
+            outputTo: nil, outputTail: "")
+        XCTAssertEqual(BackgroundWakeCard.name(bare), "bash a.sh")
+        XCTAssertEqual(BackgroundWakeCard.lineName(BackgroundWake(jobs: [bare], wakeups: [], text: "", rest: "")),
+                       "bash a.sh")
         XCTAssertEqual(BackgroundWakeCard.formatBytes(54), "54 B")
         XCTAssertEqual(BackgroundWakeCard.formatBytes(350_697), "342.5 KB")
         XCTAssertEqual(BackgroundWakeCard.formatBytes(2 * 1024 * 1024), "2.0 MB")
@@ -481,30 +511,25 @@ final class BackgroundWakeTests: XCTestCase {
 
     /// A kill with no reason recorded still says what happened, and a job that ended with no exit
     /// code is not claimed to have exited anything.
-    func testTheCardSaysWhatBecameOfAJobItWasToldLittleAbout() {
+    func testTheLineSaysWhatBecameOfAJobItWasToldLittleAbout() {
         let bare = BackgroundWakeJob(id: "bgj_1", kind: "job", command: "bash a.sh", description: nil,
                                      status: "killed", ended: true, exitCode: nil, killReason: nil,
                                      outputPath: nil, outputFrom: nil, outputTo: nil, outputTail: "")
-        XCTAssertEqual(BackgroundWakeCard.outcome(bare), "was killed")
-        XCTAssertNil(BackgroundWakeCard.exitLabel(bare))
+        XCTAssertEqual(BackgroundWakeCard.status(bare), "killed")
         XCTAssertEqual(BackgroundWakeCard.jobMeta(bare), "bgj_1")
 
         let ended = BackgroundWakeJob(id: "bgj_2", kind: "job", command: "bash a.sh", description: nil,
                                       status: "completed", ended: true, exitCode: nil, killReason: nil,
                                       outputPath: nil, outputFrom: nil, outputTo: nil, outputTail: "")
-        XCTAssertEqual(BackgroundWakeCard.outcome(ended), "ended completed")
+        XCTAssertEqual(BackgroundWakeCard.status(ended), "completed")
     }
 
-    func testTheCardSaysNobodyTypedItAndKeepsTheOriginalBehindAFold() throws {
+    func testTheFoldSaysNobodyTypedItAndKeepsTheOriginalBehindIt() throws {
         let job = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enDone))
-        XCTAssertEqual(BackgroundWakeCard.meta(job, ts: "2026-09-15T18:10:00.000Z", now: now),
-                       "Queued by a background job, not typed by you · 4m ago")
-        // A card with no timestamp says only the part that is always true.
+        // When is on the line; the fold says only who queued it.
         XCTAssertEqual(BackgroundWakeCard.meta(job), "Queued by a background job, not typed by you")
-
         let wakeup = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enScheduled))
-        XCTAssertEqual(BackgroundWakeCard.meta(wakeup, ts: "2026-09-15T18:10:00.000Z", now: now),
-                       "Queued by a scheduled wakeup, not typed by you · 4m ago")
+        XCTAssertEqual(BackgroundWakeCard.meta(wakeup), "Queued by a scheduled wakeup, not typed by you")
 
         XCTAssertEqual(BackgroundWakeCard.rawSummary, "What the agent received")
         XCTAssertEqual(BackgroundWakeCard.undelivered, "The session has not confirmed it received this.")

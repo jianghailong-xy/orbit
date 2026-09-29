@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 
 import { PushModule } from '../push/push.module';
 import { SessionsModule } from '../sessions/sessions.module';
+import { CompletionEvidenceProducer } from './completion-evidence.producer';
 import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
@@ -42,7 +43,9 @@ import { WakeDispositionService } from './wake-disposition.service';
  * unbounded version of this fact is the most expensive one to have wired anywhere else.
  * `DependentReadyProducer` is here for the same one reason, and it also holds
  * `CoordinatorDeliveryService`: its fact is handed to the standing conversation by the producer
- * itself, as `ProjectTasksSettledProducer` hands over the acceptance card.
+ * itself, as `ProjectTasksSettledProducer` hands over the acceptance card. And
+ * `CompletionEvidenceProducer` is that shape again, for the evidence revisions an Automatic
+ * project's coordinator decides.
  *
  * `WakeDispositionService` is here for the other half of that argument: it decides which of the
  * three terminals an authorized wake gets, and two of them are performed by this module's own
@@ -82,6 +85,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     CriterionUnlandedProducer,
     TaskDispatchRefusalProducer,
     DependentReadyProducer,
+    CompletionEvidenceProducer,
     WakeDispositionService,
   ],
   exports: [
@@ -99,6 +103,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     CriterionUnlandedProducer,
     TaskDispatchRefusalProducer,
     DependentReadyProducer,
+    CompletionEvidenceProducer,
     WakeDispositionService,
   ],
 })

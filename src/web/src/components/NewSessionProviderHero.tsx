@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Popover } from 'antd';
 import { Link } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
-import type { ProviderChoice } from '../lib/sessionProviderChoices';
+import type { AccountChoice, ProviderChoice } from '../lib/sessionProviderChoices';
 
 /** The brand mark. Same construction as the /providers tile (gradient + white glyph), sized up:
  *  at hero size it carries a soft shadow in its own brand colour, which a 24px chip can't. An
@@ -73,6 +73,9 @@ export function NewSessionProviderHero({
   current,
   choices,
   onPick,
+  currentAccount,
+  automatic,
+  onPickAccount,
   runnerId,
   disabled,
   note,
@@ -81,6 +84,13 @@ export function NewSessionProviderHero({
   current: ProviderChoice;
   choices: ProviderChoice[];
   onPick: (slug: string) => void;
+  /** Which of `current`'s accounts the session would start on, when it lists them (`accounts`). */
+  currentAccount?: string;
+  /** Automatic is on offer — the workspace picked no account — and whether it is the pick, in which case
+   *  `currentAccount` is the account it would start on. Absent when it is not on offer. */
+  automatic?: boolean;
+  /** An account row was picked — `null` for Automatic: start on that engine, on that account of it. */
+  onPickAccount?: (slug: string, account: string | null) => void;
   /** The machine these engines live on — the sign-in link has to name it, since the Providers
    *  page lists every runner and only this one's row is the answer. */
   runnerId: string;
@@ -123,28 +133,93 @@ export function NewSessionProviderHero({
         <span className="np-row-model np-fix">{choice.unavailable}</span>
       </Link>
     ) : (
-      <button
-        key={choice.slug}
-        type="button"
-        className={`np-row${choice.slug === current.slug ? ' on' : ''}`}
-        onClick={() => {
-          setOpen(false);
-          if (choice.slug !== current.slug) onPick(choice.slug);
-        }}
-      >
-        <ProviderMark choice={choice} size={20} />
-        <span className="np-row-name">{choice.label}</span>
-        <span className="np-row-model">{choice.modelLabel}</span>
-      </button>
+      <Fragment key={choice.slug}>
+        <button
+          type="button"
+          className={`np-row${choice.slug === current.slug ? ' on' : ''}`}
+          onClick={() => {
+            setOpen(false);
+            if (choice.slug !== current.slug) onPick(choice.slug);
+          }}
+        >
+          <ProviderMark choice={choice} size={20} />
+          <span className="np-row-name">{choice.label}</span>
+          <span className="np-row-model">{choice.modelLabel}</span>
+        </button>
+        {choice.accounts && automatic !== undefined && automaticRow(choice)}
+        {choice.accounts?.map((account) => accountRow(choice, account))}
+      </Fragment>
     );
 
+  // Above the accounts, when the workspace picked none: let the session start on whichever has the most
+  // room. Ticked while it is the pick, with the account it would choose named under the card.
+  const automaticRow = (choice: ProviderChoice) => {
+    const picked = choice.slug === current.slug && automatic === true;
+    return (
+      <button
+        key="automatic"
+        type="button"
+        className={`np-row np-account${picked ? ' picked' : ''}`}
+        aria-pressed={picked}
+        onClick={() => {
+          setOpen(false);
+          if (!picked) onPickAccount?.(choice.slug, null);
+        }}
+      >
+        <span className="np-account-tick" aria-hidden="true">
+          {picked ? '✓' : ''}
+        </span>
+        <span className="np-row-name">Automatic</span>
+        <span className="np-row-model">most room</span>
+      </button>
+    );
+  };
+
+  // The engine's accounts, right under it: the tick sits in the mark's column, so the names line up
+  // with the engine's own. An account the CLI says is signed out goes to the Providers page, where
+  // its sign-in is, the way a signed-out engine does.
+  const accountRow = (choice: ProviderChoice, account: AccountChoice) => {
+    const picked = choice.slug === current.slug && automatic !== true && account.id === currentAccount;
+    return account.unavailable ? (
+      <Link
+        key={account.id}
+        to={fixLink(choice)}
+        className="np-row np-account np-unavailable"
+        title={`${choice.label} account ${account.label}: ${account.unavailable}${onRunner(choice)} — fix it on the Providers page`}
+        onClick={() => setOpen(false)}
+      >
+        <span className="np-account-tick" aria-hidden="true" />
+        <span className="np-row-name">{account.label}</span>
+        <span className="np-row-model np-fix">{account.unavailable}</span>
+      </Link>
+    ) : (
+      <button
+        key={account.id}
+        type="button"
+        className={`np-row np-account${picked ? ' picked' : ''}`}
+        aria-pressed={picked}
+        onClick={() => {
+          setOpen(false);
+          if (!picked) onPickAccount?.(choice.slug, account.id);
+        }}
+      >
+        <span className="np-account-tick" aria-hidden="true">
+          {picked ? '✓' : ''}
+        </span>
+        <span className="np-row-name">{account.label}</span>
+        {account.quota && (
+          <span className={`np-row-model${account.nearLimit ? ' near-limit' : ''}`}>{account.quota}</span>
+        )}
+      </button>
+    );
+  };
   // One flat list: whose subscription or key each row spends is already carried by its brand mark
   // and by the summary under the card, so section headers would only be chrome between the user
   // and the pick. Engines still come first (that's the order `choices` arrives in). The accounts
   // an account pool runs on fold away under it: picking the pool is the usual answer, and one of
   // them on its own is the exception.
   const list = (
-    <div className="np-list">
+    <div className={`np-list${choices.some((choice) => choice.accounts) ? ' with-accounts' : ''}`}>
       {choices.filter((choice) => !choice.inPool).map(row)}
       {pinnable.length > 0 && (
         <>
@@ -231,7 +306,9 @@ export function NewSessionProviderHero({
             <span className="np-dot">·</span>
             {/* No funding label in the healthy state: for a configured provider it's a constant the
                 user already set, and it isn't actionable here. The credential earns a line only when
-                it's broken — the `unavailable` branch above ("… · Fix it"). */}
+                it's broken — the `unavailable` branch above ("… · Fix it"). No account either: an
+                email does not fit this line on a phone, and the composer's quota gauge names the
+                account in its popover. */}
             <Link to="/providers">Manage</Link>
           </>
         )}
