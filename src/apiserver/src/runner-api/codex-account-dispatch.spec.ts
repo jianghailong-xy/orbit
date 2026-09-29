@@ -63,6 +63,8 @@ interface Scenario {
   codexAccount?: string | null;
   /** The session's own pick on the New Session screen (Session.codexAccount). */
   sessionAccount?: string | null;
+  /** The workspace's Claude account (Workspace.claudeAccount). */
+  claudeAccount?: string | null;
   /** What the assigned runner reported (Runner.engines). */
   engines?: unknown;
   /** The session's provider identity; a configured slug also needs `customRow`. */
@@ -118,6 +120,7 @@ function sessionRow(s: Scenario) {
       model: null,
       env: s.env ?? null,
       codexAccount: s.codexAccount ?? null,
+      claudeAccount: s.claudeAccount ?? null,
       workDir: '/srv/repo',
       autoInitGit: false,
       defaultMergeTarget: null,
@@ -241,6 +244,43 @@ test('an account picked for the session wins over its workspace\'s, through ever
   const gone: Scenario = { sessionAccount: 'c0ffee42', codexAccount: WORK };
   assert.equal((await claim(gone)).env, undefined);
   assert.equal((await reclaim(gone)).env, undefined);
+});
+
+test('a workspace on another Claude account dispatches its Claude sessions in that account\'s CLAUDE_CONFIG_DIR, through every door', async () => {
+  const CLAUDE_WORK = 'c1a0de42';
+  const CLAUDE_WORK_HOME = '/home/dev/.orbit/claude-accounts/c1a0de42';
+  const engines: RunnerEngineHealth[] = [
+    {
+      engine: 'claude',
+      installed: true,
+      auth: 'yes',
+      version: '2.1.278',
+      accounts: [
+        { id: 'default', home: '/home/dev/.claude', auth: 'yes' },
+        { id: CLAUDE_WORK, name: 'Work', home: CLAUDE_WORK_HOME, auth: 'yes' },
+      ],
+    },
+    ENGINES[1],
+  ];
+  const s: Scenario = {
+    provider: AgentProvider.CLAUDE,
+    claudeAccount: CLAUDE_WORK,
+    codexAccount: WORK,
+    engines,
+    env: { RUST_LOG: 'warn' },
+  };
+  const claimed = await claim(s);
+  assert.equal(claimed.provider, AgentProvider.CLAUDE);
+  assert.deepEqual(claimed.env, { RUST_LOG: 'warn', CLAUDE_CONFIG_DIR: CLAUDE_WORK_HOME });
+  assert.deepEqual((await reclaim(s)).env, claimed.env);
+  assert.deepEqual(await reload(s, AgentProvider.CLAUDE), claimed.env);
+
+  // The same workspace's Codex sessions run on its Codex pick; each engine reads its own variable.
+  assert.deepEqual((await claim({ ...s, provider: AgentProvider.CODEX })).env, { RUST_LOG: 'warn', CODEX_HOME: WORK_HOME });
+  // No Claude pick, or one this runner does not report: nothing injected, and the runner resolves
+  // Default itself.
+  assert.deepEqual((await claim({ ...s, claudeAccount: null })).env, { RUST_LOG: 'warn' });
+  assert.deepEqual((await claim({ ...s, claudeAccount: 'c0ffee42' })).env, { RUST_LOG: 'warn' });
 });
 
 test('an account the assigned runner does not report runs on Default instead of failing', async () => {

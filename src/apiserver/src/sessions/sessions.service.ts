@@ -7111,6 +7111,7 @@ export class SessionsService {
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
         codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
+        claudeAccount: session.workspace?.claudeAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       const requestedPermissionMode =

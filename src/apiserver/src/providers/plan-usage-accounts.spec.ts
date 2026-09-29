@@ -276,15 +276,16 @@ async function retryAtFor(
   planUsage: PlanUsage,
   codexAccount: string | null = null,
   sessionAccount: string | null = null,
+  claude?: { claudeAccount: string | null; text: string },
 ): Promise<Date | null | undefined> {
   const tx = transactionDouble<RetryPlanTransaction>({
     session: {
       findUnique: async () => ({
-        provider: AgentProvider.CODEX,
+        provider: claude ? AgentProvider.CLAUDE : AgentProvider.CODEX,
         taskId: null,
         retryAttempts: 0,
         codexAccount: sessionAccount,
-        workspace: { env, codexAccount },
+        workspace: { env, codexAccount, claudeAccount: claude?.claudeAccount ?? null },
       }),
     },
     runner: { findUnique: async () => ({ planUsage, engines: ENGINES }) },
@@ -302,7 +303,7 @@ async function retryAtFor(
     controller as unknown as {
       retryPlanFor(tx: RetryPlanTransaction, id: string, runnerId: string, text: string): Promise<{ retryAt?: Date | null }>;
     }
-  ).retryPlanFor(tx, 'session-1', RUNNER.id, CODEX_LIMIT);
+  ).retryPlanFor(tx, 'session-1', RUNNER.id, claude?.text ?? CODEX_LIMIT);
   return plan.retryAt;
 }
 
@@ -318,6 +319,24 @@ test('a quota-killed run is armed by the quota of the account it spends, never b
   assert.equal(await retryAtFor({ CODEX_HOME: WORK_HOME }, defaultSpent), undefined);
   assert.ok(withinJitterOf(await retryAtFor({ CODEX_HOME: WORK_HOME }, workSpent), WORK_RESET), 'a run on Work waits for Work');
   assert.equal(await retryAtFor(null, workSpent), undefined, "Work's spent quota does not hold Default back");
+});
+
+test("a Claude session is armed by the quota of the Claude account its workspace picked, never by Default's", async () => {
+  // Claude Code's words when a run hits its 5-hour window, without the reset time it usually adds.
+  const CLAUDE_LIMIT = "You've hit your session limit";
+  const claudeUsage = (defaultUsed: number, workUsed: number): PlanUsage => ({
+    claude: {
+      provider: AgentProvider.CLAUDE,
+      fiveHour: window(defaultUsed, DEFAULT_RESET),
+      accounts: { [WORK]: { provider: AgentProvider.CLAUDE, fiveHour: window(workUsed, WORK_RESET) } },
+    },
+  });
+  const on = (claudeAccount: string | null) => ({ claudeAccount, text: CLAUDE_LIMIT });
+
+  assert.ok(withinJitterOf(await retryAtFor(null, claudeUsage(62, 100), null, null, on(WORK)), WORK_RESET), 'a run on Work waits for Work');
+  assert.equal(await retryAtFor(null, claudeUsage(100, 8), null, null, on(WORK)), undefined, "Default's spent quota says nothing about it");
+  assert.ok(withinJitterOf(await retryAtFor(null, claudeUsage(100, 8), null, null, on(null)), DEFAULT_RESET), 'a run on Default waits for Default');
+  assert.equal(await retryAtFor(null, claudeUsage(62, 100), null, null, on(null)), undefined, "Work's spent quota does not hold Default back");
 });
 
 test('a session that picked its own account is armed by that account\'s quota, not its workspace\'s', async () => {

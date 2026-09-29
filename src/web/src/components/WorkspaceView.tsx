@@ -146,7 +146,8 @@ import {
   type ComposerSlashItem,
   type LocalStatusRow,
 } from '../lib/slashCommands';
-import { codexAccountPlanUsage, sessionPlanUsage } from '../lib/planUsage';
+import { sessionPlanUsage } from '../lib/planUsage';
+import { accountPlanUsage } from '../lib/engineAccounts';
 import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
@@ -6200,20 +6201,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownPool && (!selectedId || detailForSelected)
       ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
-  // Which of the runner's Codex accounts a built-in Codex session spends: the draft's pick, or the one
-  // picked for the session, else its workspace's — and Default for an id this runner does not report,
-  // as dispatch resolves it (providers/account.ts accountOnRunner).
-  const wantedCodexAccount = selectedId
-    ? (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
-    : (draftCodexAccount ?? pickedWorkspace?.codexAccount);
-  const shownCodexAccount =
-    wantedCodexAccount && accountsOf(runner, 'codex').some((account) => account.id === wantedCodexAccount)
-      ? wantedCodexAccount
-      : 'default';
+  // Which of the runner's accounts a built-in session spends — for Codex the draft's pick, or the one
+  // picked for the session, else its workspace's; for Claude its workspace's — and Default for an id
+  // this runner does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
+  const accountOnThisRunner = (engine: 'codex' | 'claude', wanted: string | null | undefined): string =>
+    wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
+  const shownCodexAccount = accountOnThisRunner(
+    'codex',
+    selectedId
+      ? (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
+      : (draftCodexAccount ?? pickedWorkspace?.codexAccount),
+  );
+  const shownClaudeAccount = accountOnThisRunner(
+    'claude',
+    selectedId ? detailForSelected?.workspace?.claudeAccount : pickedWorkspace?.claudeAccount,
+  );
+  const shownAccount =
+    shownProvider === 'codex' ? shownCodexAccount : shownProvider === 'claude' ? shownClaudeAccount : 'default';
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
-    : shownProvider === 'codex' && shownCodexAccount !== 'default'
-      ? codexAccountPlanUsage(runner.planUsage, shownCodexAccount)
+    : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'
+      ? accountPlanUsage(runner.planUsage, shownProvider, shownAccount)
       : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
   // Where this session could move without changing CLI. Offered on the two routes that actually
   // carry a provider: a live session's config PATCH, and the resume that revives an ended one. A

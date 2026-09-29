@@ -120,8 +120,8 @@ describe('a runner with more than one Codex account', () => {
       expect(planUsageReported(usage, 'codex', account)).toBe(false);
     }
     expect(planUsageReported(usage, 'codex', 'default')).toBe(true);
-    // Accounts are Codex's: another runtime's question is answered as before.
-    expect(planUsageReported({ provider: 'claude', fiveHour: { utilization: 1 } }, 'claude', null)).toBe(true);
+    // An engine that keeps one login for the machine has no accounts: its question is answered as before.
+    expect(planUsageReported({ provider: 'kimi', primary: { utilization: 1 } }, 'kimi', null)).toBe(true);
   });
 
   it("does not call Default reported when the snapshot holds only other accounts", () => {
@@ -142,6 +142,38 @@ describe('a runner with more than one Codex account', () => {
     expect(codexAccountSnapshot(usage, 'constructor')).toBeUndefined();
     // A snapshot from before accounts is Default's whole.
     expect(codexAccountSnapshot(codexExhausted, 'default')).toBe(codexExhausted);
+  });
+});
+
+describe('a runner with more than one Claude account', () => {
+  /** Default's windows as the Claude snapshot's own, Work's under its id — the shape the runner
+   *  reports (src/runner-go/claude_account_usage.go), nested beside a Codex snapshot. */
+  const claudeAccounts = (defaultUsed: number, workUsed: number): PlanUsage => ({
+    claude: {
+      fiveHour: { utilization: defaultUsed, resetsAt: EARLIER },
+      accounts: { [WORK]: { fiveHour: { utilization: workUsed, resetsAt: LATER } } },
+    },
+    codex: { primary: { utilization: 3, resetsAt: LATER } },
+  });
+
+  it("judges the account a run spends, and Default's windows only for Default", () => {
+    const defaultSpent = claudeAccounts(100, 8);
+    expect(planUsageBlockedUntil(defaultSpent, 'claude', NOW, 'default')).toEqual(new Date(EARLIER));
+    expect(planUsageBlockedUntil(defaultSpent, 'claude', NOW)).toEqual(new Date(EARLIER));
+    expect(planUsageBlockedUntil(defaultSpent, 'claude', NOW, WORK)).toBeNull();
+
+    const workSpent = claudeAccounts(62, 100);
+    expect(planUsageBlockedUntil(workSpent, 'claude', NOW, WORK)).toEqual(new Date(LATER));
+    expect(planUsageBlockedUntil(workSpent, 'claude', NOW, 'default')).toBeNull();
+  });
+
+  it('knows nothing about an account that has not been read, nor about a run on a key of its own', () => {
+    const usage = claudeAccounts(100, 100);
+    for (const account of ['0badf00d', null]) {
+      expect(planUsageBlockedUntil(usage, 'claude', NOW, account)).toBeNull();
+      expect(planUsageReported(usage, 'claude', account)).toBe(false);
+    }
+    expect(planUsageReported(usage, 'claude', WORK)).toBe(true);
   });
 });
 

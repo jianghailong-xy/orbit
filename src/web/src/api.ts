@@ -1234,6 +1234,8 @@ export interface SessionDetail {
     defaultMergeTarget?: string | null;
     /** The Codex account this workspace's sessions run on; null is Default. */
     codexAccount?: string | null;
+    /** The Claude account this workspace's sessions run on; null is Default. */
+    claudeAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;

@@ -60,9 +60,11 @@ export function codexAccountSnapshot(
 }
 
 /**
- * The snapshot of `provider`'s quota a run spends. For Codex that is one account's: `account` names
- * it (codexAccountOfEnv) and defaults to Default, the only account there was before accounts; null is
- * a run that spends no account's subscription, which no snapshot describes.
+ * The snapshot of `provider`'s quota a run spends. For an engine whose CLI keeps a login per
+ * directory — Codex, Claude — that is one account's: `account` names it (accountOfEnv) and defaults to
+ * Default, the only account there was before accounts; null is a run that spends no account's
+ * subscription, which no snapshot describes. Both engines' runners report their other accounts the
+ * same way, under the snapshot's `accounts` (codexAccountSnapshot).
  */
 function spentSnapshot(
   usage: PlanUsage,
@@ -70,7 +72,7 @@ function spentSnapshot(
   account: string | null | undefined,
 ): PlanUsageSnapshot | undefined {
   const snapshot = snapshotFor(usage, provider);
-  if (!snapshot || provider !== 'codex') return snapshot;
+  if (!snapshot || (provider !== 'codex' && provider !== 'claude')) return snapshot;
   return account === null ? undefined : codexAccountSnapshot(snapshot, account ?? CODEX_DEFAULT_ACCOUNT);
 }
 
@@ -162,9 +164,9 @@ export function codexAccountOfEnv(
  * should resume at once. With no snapshot the caller is blind, and resuming immediately is
  * what turns a multi-day quota outage into a once-a-minute respawn loop.
  *
- * For Codex the question is about one account, `account`: the one the run spends
- * (codexAccountOfEnv), Default when omitted, and null for a run spending no account's
- * subscription — about which this runner reports nothing.
+ * For Codex and Claude the question is about one account, `account`: the one the run spends
+ * (accountOfEnv), Default when omitted, and null for a run spending no account's subscription —
+ * about which this runner reports nothing.
  */
 export function planUsageReported(
   usage: PlanUsage | null | undefined,
@@ -190,8 +192,8 @@ export function planUsageReported(
  * The runner refreshes its snapshot shortly after a reset passes, so a stale-but-future
  * `resetsAt` is self-correcting; a past one is simply ignored here.
  *
- * A Codex runner can hold several accounts, each with its own quota, so what is judged is the
- * account the run will spend (`account`, as for {@link planUsageReported}): Default's exhausted
+ * A runner can hold several Codex or Claude accounts, each with its own quota, so what is judged is
+ * the account the run will spend (`account`, as for {@link planUsageReported}): Default's exhausted
  * windows hold back a run on Default, never one on another account.
  */
 export function planUsageBlockedUntil(

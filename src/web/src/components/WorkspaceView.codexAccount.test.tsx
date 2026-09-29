@@ -11,7 +11,8 @@ import type { Runner } from './TasksSidePanel';
  * A runner with two Codex accounts signed in. The New Session hero lists them under Codex, each with
  * its own quota; the one picked travels with the new session (`codexAccount`), and the composer's
  * quota gauge is that account's — on a draft and on a session started on it. Without a pick nothing
- * travels, and the session runs on its workspace's account, as it always did.
+ * travels, and the session runs on its workspace's account, as it always did. A Claude session runs on
+ * its workspace's Claude account, and its gauge is that account's too.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -104,7 +105,8 @@ class FakeEventSource {
   close() {}
 }
 
-describe('the Codex account a session runs on', { timeout: 60_000 }, () => {
+describe('the runner account a session runs on', { timeout: 60_000 }, () => {
+  let runner: Runner = RUNNER;
   let container: HTMLDivElement | null = null;
   let root: Root | null = null;
   let client: QueryClient | null = null;
@@ -130,7 +132,7 @@ describe('the Codex account a session runs on', { timeout: 60_000 }, () => {
           <MemoryRouter initialEntries={[entry]}>
             <AntApp>
               <Routes>
-                <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
+                <Route path="*" element={<WorkspaceView runner={runner} />} />
               </Routes>
             </AntApp>
           </MemoryRouter>
@@ -180,6 +182,7 @@ describe('the Codex account a session runs on', { timeout: 60_000 }, () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     detail = session(null, null);
     workspaceAccount = null;
+    runner = RUNNER;
     creates = [];
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
     vi.stubGlobal('EventSource', FakeEventSource);
@@ -315,5 +318,30 @@ describe('the Codex account a session runs on', { timeout: 60_000 }, () => {
     detail = session(null, WORK);
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 0%');
+  });
+
+  it("a Claude session shows the quota of its workspace's Claude account", async () => {
+    const claudeWork = { id: WORK, name: 'Work', home: '/root/.orbit/claude-accounts/3fa91c2e', auth: 'yes' };
+    runner = {
+      ...RUNNER,
+      engines: [
+        { engine: 'claude', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/root/.claude', auth: 'yes' }, claudeWork] },
+      ],
+      planUsage: {
+        claude: {
+          provider: 'claude',
+          fiveHour: { utilization: 100, resetsAt: RESETS },
+          accounts: { [WORK]: { provider: 'claude', fiveHour: { utilization: 30, resetsAt: RESETS } } },
+        },
+      },
+    } as unknown as Runner;
+    detail = {
+      ...session(null, null),
+      provider: 'claude',
+      model: 'claude-opus-5',
+      workspace: { id: WORKSPACE, codexAccount: null, claudeAccount: WORK },
+    };
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 30%');
   });
 });
