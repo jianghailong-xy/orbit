@@ -577,10 +577,11 @@ func (f *fakeCodexBinary) answerSessionsWith(t *testing.T, frames ...map[string]
 // runFakeCodexAppServer is `codex app-server --stdio` for the shim. It records the spawn — with the
 // CODEX_HOME it ran in — and every frame it receives, answers initialize, account/read and
 // account/rateLimits/read from the answer files — thread/start too once a test serves sessions, saying
-// that test's frames after the answer — and refuses anything else as the real server refuses an unknown
-// method — account/rateLimitResetCredit/consume included, which the recording lets a test rule out. An
-// answer file in the CODEX_HOME it runs in (fakeCodexHomeAnswer) wins over the one in dir, so each
-// account can answer for itself.
+// that test's frames after the answer, and thread/resume as the real server resumes a thread: by id,
+// from a rollout under the CODEX_HOME it runs in — and refuses anything else as the real server refuses
+// an unknown method — account/rateLimitResetCredit/consume included, which the recording lets a test
+// rule out. An answer file in the CODEX_HOME it runs in (fakeCodexHomeAnswer) wins over the one in dir,
+// so each account can answer for itself.
 func runFakeCodexAppServer(dir string) int {
 	codexHome := os.Getenv("CODEX_HOME")
 	appendJSONL(filepath.Join(dir, "spawns.jsonl"), map[string]interface{}{"pid": os.Getpid(), "argv": os.Args[1:], "codexHome": codexHome})
@@ -610,16 +611,23 @@ func runFakeCodexAppServer(dir string) int {
 		}
 		method, _ := frame["method"].(string)
 		reply := map[string]interface{}{"id": id}
-		if answer, ok := answers[method]; ok {
+		answer, answered := answers[method]
+		if _, serves := answers["thread/start"]; serves && method == "thread/resume" {
+			answer, answered = fakeCodexResume(codexHome, frame)
+			if !answered {
+				reply["error"] = map[string]interface{}{"code": -32600, "message": string(answer)}
+			}
+		}
+		if answered {
 			reply["result"] = answer
-		} else {
+		} else if reply["error"] == nil {
 			reply["error"] = map[string]interface{}{"code": -32600, "message": "the fake app-server does not answer " + method}
 		}
 		data, _ := json.Marshal(reply)
 		if _, err := os.Stdout.Write(append(data, '\n')); err != nil {
 			return 1
 		}
-		if _, answered := answers[method]; answered && method == "thread/start" {
+		if answered && (method == "thread/start" || method == "thread/resume") {
 			after, _ := os.ReadFile(filepath.Join(dir, "afterThreadStart.jsonl"))
 			if _, err := os.Stdout.Write(after); err != nil {
 				return 1
@@ -627,4 +635,21 @@ func runFakeCodexAppServer(dir string) int {
 		}
 	}
 	return 0
+}
+
+// fakeCodexResume answers thread/resume the way codex 0.159 does: the thread whose rollout is under
+// CODEX_HOME/sessions, found by the id in its file name, with that rollout's path; its words when there
+// is none. ok is false then, and the answer is the refusal's message.
+func fakeCodexResume(codexHome string, frame map[string]interface{}) (json.RawMessage, bool) {
+	params, _ := frame["params"].(map[string]interface{})
+	thread, _ := params["threadId"].(string)
+	if codexHome == "" {
+		codexHome = filepath.Join(os.Getenv("HOME"), ".codex")
+	}
+	matches, _ := filepath.Glob(filepath.Join(codexHome, "sessions", "*", "*", "*", "rollout-*-"+thread+".jsonl"))
+	if thread == "" || len(matches) == 0 {
+		return json.RawMessage("no rollout found for thread id " + thread), false
+	}
+	data, _ := json.Marshal(map[string]interface{}{"thread": map[string]interface{}{"id": thread, "path": matches[0]}})
+	return data, true
 }

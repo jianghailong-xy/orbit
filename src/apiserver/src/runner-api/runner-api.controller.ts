@@ -36,7 +36,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { runAccount } from '../providers/plan-usage-accounts';
+import { codexAccountAfterUsageLimit, codexAccountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
 import { accountEnvVar } from '../providers/account';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
@@ -390,6 +390,11 @@ export const CODEX_ACCOUNT_REMOVE_V1 = 'codex-account-remove/v1';
  *  a Claude account named by the control plane rather than the machine's one login. */
 export const CLAUDE_ACCOUNT_LOGIN_V1 = 'claude-account-login/v1';
 export const CLAUDE_ACCOUNT_REMOVE_V1 = 'claude-account-remove/v1';
+/** Runner carries a Codex session's thread onto the account its claim names when that is not the one
+ *  the thread lives in (runner codex_account_move.go). One that does not keeps the session where its
+ *  thread is, whatever the claim says — so a session is only moved off a spent account on one that
+ *  declares it. */
+export const CODEX_ACCOUNT_MOVE_V1 = 'codex-account-move/v1';
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -583,6 +588,9 @@ export type QuotaRetryTransaction = TransactionSurface<{ runner: ['findUnique'] 
 
 /** The retry plan reads the session, then hands the same transaction to the quota snapshot read. */
 export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] }> & QuotaRetryTransaction;
+
+/** A Codex usage limit reads the workspace too: whether it leaves the account to Orbit. */
+export type CodexUsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
 
 @MachineProtocol()
 @Controller('runner')
@@ -3703,6 +3711,9 @@ export class RunnerApiController {
           // Which shared pool's key a failed turn may have ended on — see `keyRetryAt` below.
           provider: true,
           poolKeyId: true,
+          // Which of the runner's Codex accounts a turn its usage limit ended ran on — see
+          // `codexUsageLimit` below.
+          codexAccount: true,
           // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
           // work that will report back and wake this session again, which is what makes a turn the
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
@@ -4029,11 +4040,28 @@ export class RunnerApiController {
           ? ((await this.queue.sharedPoolKeyRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
+      // A built-in Codex session whose account's usage limit ended the turn. Codex says so as the
+      // turn's error, never as a reply, so the events path — which reads replies (`retryPlanFor`) —
+      // never armed it, and the session sat FAILED for good. It moves to another of the runner's
+      // accounts with room when its workspace leaves the account to Orbit (Automatic), and is re-sent
+      // there at once — its thread moves with it (runner codex_account_move.go) — else it waits for
+      // this account's reset. A task's run is not: its failure settles the task, as it always has.
+      const codexUsageLimit =
+        failSession
+        && completedTurn?.kind === 'message'
+        && current.retryAt == null
+        && !current.taskId
+        && current.provider === AgentProvider.CODEX
+        && isUsageLimitErrorText(dto.result)
+          ? await this.codexUsageLimitRetry(tx, runner.id, current, dto.result!)
+          : null;
       const retryArmAt = keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
-        : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
-          ? nextAutoRetryAt(current.retryAttempts, new Date())
-          : null;
+        : codexUsageLimit
+          ? codexUsageLimit.retryAt
+          : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
+            ? nextAutoRetryAt(current.retryAttempts, new Date())
+            : null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
       // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
       // turn put back in the queue is no longer out on a delivery, so a retried completion for it
@@ -4371,6 +4399,11 @@ export class RunnerApiController {
           // queue with no arm behind it is what the "engine never came up" case used to look
           // like — the message owed an answer, sitting where nothing would deliver it.
           ...(retryArmAt ? { retryAt: retryArmAt } : {}),
+          // The account it moves to, and the line the next engine start carries into the transcript
+          // (the events path attaches it, as it does a pool's).
+          ...(codexUsageLimit?.move
+            ? { codexAccount: codexUsageLimit.move.to, poolSwitchNotice: codexUsageLimit.move.notice }
+            : {}),
           ...(acknowledgedCoordinatorContextKey
             ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
             : {}),
@@ -4483,7 +4516,9 @@ export class RunnerApiController {
         currentWorkRequeued,
         status: nextStatus,
         failSession,
-        retryAt: current.retryAt,
+        // What the STATUS below announces beside FAILED: a usage limit this turn armed is a retry
+        // on its way, and the clients draw Retrying rather than Failed.
+        retryAt: codexUsageLimit?.retryAt ?? current.retryAt,
         taskReclaimed,
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
@@ -6269,6 +6304,38 @@ export class RunnerApiController {
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
     return at ? { retryAt: at } : {};
+  }
+
+  /**
+   * The retry a built-in Codex session's usage limit arms: at once, on another of the runner's accounts
+   * with room, when its workspace leaves the account to Orbit (codexAccountAfterUsageLimit) and its
+   * runner can carry the thread there (CODEX_ACCOUNT_MOVE_V1) — or at this account's reset
+   * (quotaRetryAt). Null when no reset can be read either: nothing says when to try again, and the
+   * session stays FAILED, one message away from resuming.
+   */
+  private async codexUsageLimitRetry(
+    tx: CodexUsageLimitTransaction,
+    runnerId: string,
+    session: { ownerId: string; provider: string; codexAccount: string | null; workspaceId: string | null },
+    text: string,
+  ): Promise<{ retryAt: Date; move?: { to: string; notice: string } } | null> {
+    const now = new Date();
+    const runner = await tx.runner.findUnique({
+      where: { id: runnerId },
+      select: { planUsage: true, engines: true, capabilities: true },
+    });
+    const workspace = session.workspaceId
+      ? await tx.workspace.findUnique({
+          where: { id: session.workspaceId },
+          select: { env: true, codexAccount: true, claudeAccount: true },
+        })
+      : null;
+    const move = runner?.capabilities.includes(CODEX_ACCOUNT_MOVE_V1)
+      ? codexAccountAfterUsageLimit(session, workspace, runner.engines, runner.planUsage, now)
+      : null;
+    if (move) return { retryAt: now, move: { to: move.to, notice: codexAccountSwitchNotice(move, runner?.engines) } };
+    const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace);
+    return at ? { retryAt: at } : null;
   }
 
   /**

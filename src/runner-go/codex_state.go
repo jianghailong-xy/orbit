@@ -209,6 +209,13 @@ func codexSessionAccountSlot(agentEnv map[string]string, processEnv []string, ex
 	if err != nil {
 		return "", false
 	}
+	return codexAccountSlotOfHome(home)
+}
+
+// codexAccountSlotOfHome is the account slot whose CODEX_HOME home is: Default when it is the one the
+// runner's own environment resolves, an added slot when it is that slot's. ok is false for a directory
+// no slot is.
+func codexAccountSlotOfHome(home string) (string, bool) {
 	def, err := defaultAccountSlot(codexAccountKind)
 	if err != nil {
 		return "", false

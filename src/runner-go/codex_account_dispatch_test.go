@@ -357,9 +357,9 @@ func TestCodexAccountDispatchRefusesASessionWhoseSlotIsSignedOut(t *testing.T) {
 }
 
 // A session keeps the account its state was first opened under — its thread lives in that
-// CODEX_HOME — so a later claim naming another one (the workspace was switched meanwhile) runs it
-// where it was, and its sign-in is asked there too: the account it is switched to may not be
-// signed in yet, and that is no reason to refuse a session that is not moving.
+// CODEX_HOME — unless it can follow a later claim naming another one: the account it is switched to
+// is asked first, and when that one is not signed in yet the session runs where it was, and its
+// sign-in is asked there — that is no reason to refuse a session that is not moving.
 func TestCodexAccountDispatchKeepsASessionOnTheSlotItStartedIn(t *testing.T) {
 	m := newCodexAccountDispatchMachine(t)
 	m.signIn(t, m.work.Dir)
@@ -377,13 +377,142 @@ func TestCodexAccountDispatchKeepsASessionOnTheSlotItStartedIn(t *testing.T) {
 	if up, errs := runCodexAccountDispatchSession(t, url, claimedThrough(t, "claim", url), scratch); !up {
 		t.Fatalf("the session was not resumed on the account it started in: %v", errs)
 	}
-	if asked := m.askedToSignIn(t); len(asked) != 1 || asked[0] != m.work.Dir {
-		t.Fatalf("`codex login status` ran in %v, want the account the session started in, %s", asked, m.work.Dir)
+	if asked := m.askedToSignIn(t); len(asked) != 2 || asked[0] != other.Dir || asked[1] != m.work.Dir {
+		t.Fatalf("`codex login status` ran in %v, want the account it was switched to, %s, then the one it started in, %s",
+			asked, other.Dir, m.work.Dir)
 	}
 	partition := codexAccountDispatchPartitionDir(t, m.work.Dir)
 	for i, spawn := range m.appServers(t) {
 		if spawn.CodexHome != m.work.Dir || spawn.sqliteHome(t) != partition {
 			t.Fatalf("app-server %d ran in %q on %s, want %q on %s", i, spawn.CodexHome, spawn.sqliteHome(t), m.work.Dir, partition)
 		}
+	}
+}
+
+// A session the control plane moved off an account whose usage limit stopped it is claimed naming the
+// account it moved to. When that account is signed in, the thread follows: its rollout and its
+// sub-agents' are copied into the new CODEX_HOME at the same relative paths, the session's meta is
+// pointed there, and the whole
+// engine — the sign-in check, the state partition, the app-server that resumes the thread by id — runs
+// in the new account. The old account keeps its copy.
+func TestCodexAccountDispatchMovesASessionToTheSignedInAccountItsClaimNames(t *testing.T) {
+	m := newCodexAccountDispatchMachine(t)
+	m.signIn(t, m.work.Dir)
+	other, err := codexAccountKind.create("Other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.signIn(t, other.Dir)
+	const sessionID = "4d5e6f7a-8b9c-4dae-8f01-3b4c5d6e7f80"
+	const thread = "01a0eae2-75e2-77d0-b2fa-014b49b2870a"
+	scratch := t.TempDir()
+	started := &ClaimedSession{SessionID: sessionID, SessionUUID: sessionID, Provider: providerCodex, RuntimeSessionID: thread}
+	writeSessionMetaWithCodexState(scratch, started, t.TempDir(), codexStateLayoutShared, codexStatePartition(m.work.Dir), m.work.Dir)
+	rel := filepath.Join("sessions", "2026", "09", "29", "rollout-2026-09-29T03-58-25-"+thread+".jsonl")
+	rollout := []byte(`{"type":"session_meta","payload":{"id":"` + thread + `"}}` + "\n" + `{"type":"response_item","payload":{"type":"message","role":"user"}}` + "\n")
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(m.work.Dir, rel)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(m.work.Dir, rel), rollout, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A sub-agent it spawned the next day, and a thread of another session's, whose rollouts name only
+	// their own ids: the first line says which thread each belongs to.
+	subagent := filepath.Join("sessions", "2026", "09", "30", "rollout-2026-09-30T08-00-00-01a0ef00-0000-7000-8000-000000000001.jsonl")
+	stranger := filepath.Join("sessions", "2026", "09", "30", "rollout-2026-09-30T08-00-01-01a0ef00-0000-7000-8000-000000000002.jsonl")
+	for path, belongsTo := range map[string]string{subagent: thread, stranger: "01a0ef00-0000-7000-8000-00000000000f"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(m.work.Dir, path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		line := `{"type":"session_meta","payload":{"session_id":"` + belongsTo + `","thread_source":"subagent"}}` + "\n"
+		if err := os.WriteFile(filepath.Join(m.work.Dir, path), []byte(line), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	url := codexAccountDispatchControlPlane(t, sessionID, map[string]string{"CODEX_HOME": other.Dir})
+	job := claimedThrough(t, "claim", url)
+	job.RuntimeSessionID = thread
+	if up, errs := runCodexAccountDispatchSession(t, url, job, scratch); !up {
+		t.Fatalf("the moved session was not resumed on the account its claim names: %v", errs)
+	}
+	if got, err := os.ReadFile(filepath.Join(other.Dir, rel)); err != nil || string(got) != string(rollout) {
+		t.Fatalf("the thread's rollout in the new account: %q, %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(m.work.Dir, rel)); err != nil {
+		t.Fatalf("the old account lost its copy: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(other.Dir, subagent)); err != nil {
+		t.Fatalf("the sub-agent's rollout did not follow its thread: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(other.Dir, stranger)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("another session's rollout was carried along: %v", err)
+	}
+	if meta := readSessionMeta(filepath.Join(scratch, "meta.json")); meta == nil || meta.CodexStateHome != other.Dir ||
+		meta.CodexStatePartition != codexStatePartition(other.Dir) {
+		t.Fatalf("the session's meta still points at %+v", meta)
+	}
+	for i, home := range m.askedToSignIn(t) {
+		if home != other.Dir {
+			t.Fatalf("`codex login status` %d ran in %s, want the account the session moved to, %s", i, home, other.Dir)
+		}
+	}
+	partition := codexAccountDispatchPartitionDir(t, other.Dir)
+	spawns := m.appServers(t)
+	if len(spawns) == 0 {
+		t.Fatal("no app-server was spawned")
+	}
+	for i, spawn := range spawns {
+		if spawn.CodexHome != other.Dir || spawn.sqliteHome(t) != partition {
+			t.Fatalf("app-server %d ran in %q on %s, want %q on %s", i, spawn.CodexHome, spawn.sqliteHome(t), other.Dir, partition)
+		}
+	}
+}
+
+// A thread that cannot be carried stays where it is, and so does a session whose claim names a
+// CODEX_HOME that is no account of this runner: nothing is copied, and the meta is not touched.
+func TestCodexThreadStaysWhereItCannotBeCarried(t *testing.T) {
+	m := newCodexAccountDispatchMachine(t)
+	m.signIn(t, m.work.Dir)
+	other, err := codexAccountKind.create("Other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.signIn(t, other.Dir)
+	const sessionID = "5e6f7a8b-9cad-4ebf-9012-4c5d6e7f8091"
+	stray := t.TempDir()
+	m.signIn(t, stray)
+	for name, env := range map[string]map[string]string{
+		"no rollout of the thread in its home": {"CODEX_HOME": other.Dir},
+		"a CODEX_HOME no account is":           {"CODEX_HOME": stray},
+		"a key of its own":                     {"CODEX_HOME": other.Dir, "OPENAI_API_KEY": "sk-test"},
+	} {
+		scratch := t.TempDir()
+		started := &ClaimedSession{SessionID: sessionID, SessionUUID: sessionID, Provider: providerCodex, RuntimeSessionID: "thread-without-a-rollout"}
+		writeSessionMetaWithCodexState(scratch, started, t.TempDir(), codexStateLayoutShared, codexStatePartition(m.work.Dir), m.work.Dir)
+		job := &ClaimedSession{SessionID: sessionID, SessionUUID: sessionID, Provider: providerCodex, RuntimeSessionID: "thread-without-a-rollout",
+			Agent: AgentExecConfig{Provider: providerCodex, Env: env}}
+		moved, err := moveCodexThreadToClaimedAccount(job, scratch, t.TempDir())
+		if err != nil || moved {
+			t.Fatalf("%s: moved=%v err=%v", name, moved, err)
+		}
+		if meta := readSessionMeta(filepath.Join(scratch, "meta.json")); meta == nil || meta.CodexStateHome != m.work.Dir {
+			t.Fatalf("%s: the meta moved to %+v", name, meta)
+		}
+	}
+}
+
+// The runner says it can carry a thread to another account, in the words the control plane asks for:
+// a session is moved off a spent account only on a runner that declares codex-account-move/v1.
+func TestTheRunnerDeclaresItCarriesCodexThreadsToAnotherAccount(t *testing.T) {
+	if !strings.Contains(","+runnerCapabilitiesV1+",", ","+codexAccountMoveCapabilityV1+",") {
+		t.Fatalf("this runner does not declare %s: %q", codexAccountMoveCapabilityV1, runnerCapabilitiesV1)
+	}
+	controller, err := os.ReadFile(filepath.Join("..", "apiserver", "src", "runner-api", "runner-api.controller.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "CODEX_ACCOUNT_MOVE_V1 = '" + codexAccountMoveCapabilityV1 + "'"; !strings.Contains(string(controller), want) {
+		t.Fatalf("the control plane does not ask for %s in those words (%s)", codexAccountMoveCapabilityV1, want)
 	}
 }
