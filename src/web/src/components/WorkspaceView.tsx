@@ -75,6 +75,7 @@ import {
 } from 'react';
 import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { copyText } from '../lib/clipboard';
+import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
 import { routeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -147,6 +148,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
+import { accountPlanUsage } from '../lib/engineAccounts';
 import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
@@ -277,6 +279,7 @@ import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
+import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
   OpenItemDeliveryCard as OpenItemDelivery,
@@ -286,11 +289,13 @@ import type {
   WatchView,
 } from '@orbit/shared';
 import {
+  accountOfEnv,
   AgentProvider,
   derivePermissionSemantics,
   fastModeAvailable,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
+  roomiestCodexAccount,
   TRASH_RETENTION_DAYS,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
@@ -2564,6 +2569,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // deprecated alias of the same derived value, still served for older native builds.
   const pickedProvider: string =
     draftProvider ?? pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
+  // The Codex account picked for the draft on the New Session hero, scoped to its workspace like the
+  // provider pick. Without one a new session runs on its workspace's account (Workspace.codexAccount).
+  const [draftAccountPick, setDraftAccountPick] = useState<{
+    workspaceId?: string;
+    account: string;
+  } | null>(null);
+  const draftCodexAccount =
+    draftAccountPick && draftAccountPick.workspaceId === workspaceId ? draftAccountPick.account : null;
 
   // A provider switch made on an ENDED session, scoped to that session for the same reason the
   // draft pick is scoped to its workspace. There is nothing to PATCH while a session is ended, so
@@ -2705,6 +2718,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.runtimeDefaultModels,
         runner.engines,
         accountPools,
+        runner.planUsage,
       ),
     [
       configuredProviders,
@@ -2712,6 +2726,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.runtimeDefaultModels,
       runner.engines,
       accountPools,
+      runner.planUsage,
     ],
   );
   const currentProviderChoiceForDraft = useMemo(
@@ -2774,6 +2789,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
+  };
+  // An account row under an engine: that engine, on that account — or on Automatic (`null`). Like the
+  // provider, it binds the session being drafted and rewrites no workspace setting.
+  const pickDraftAccount = (slug: string, account: string | null): void => {
+    if (slug !== pickedProvider) pickDraftProvider(slug);
+    setDraftAccountPick(account === null ? null : { workspaceId, account });
   };
 
   // The provider is part of the draft's seed context: picking a different one has to re-seed
@@ -4591,6 +4612,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // Only when it is on. Off is the server's default and the engine's, so saying it is the
         // one way this could disagree with either of them later.
         ...(fastMode ? { fastMode: true } : {}),
+        // Only an explicit pick, as with the provider: none keeps the workspace's account.
+        ...(draftCodexAccount && pickedProvider === 'codex' ? { codexAccount: draftCodexAccount } : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -5221,19 +5244,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const repoCleanupMut = useMutation({
     mutationFn: (workspaceId: string) => cleanUpWorkspaceRepo(workspaceId),
     onSuccess: () => {
-      message.success('Cleaning up the checkout — the runner picks this up on its next heartbeat.');
+      message.success(REPO_CLEANUP_QUEUED);
       void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
     },
     onError: (e: Error) => message.error(e.message),
   });
   const askCleanUpRepo = (workspaceId: string, root: string) =>
     modal.confirm({
-      title: 'Clean up this checkout?',
-      content:
-        `Orbit will save everything ${root} currently holds — uncommitted edits, conflict markers,` +
-        ' untracked files — to a new orbit/rescue-… branch, then return the checkout to its last' +
-        ' commit so merges work again. Nothing is discarded, and the rescue branch is never deleted.',
-      okText: 'Save and clean up',
+      ...repoCleanupConfirm(root),
       onOk: () => repoCleanupMut.mutateAsync(workspaceId).catch(() => {}),
     });
   // Merge this session's worktree branch into main on the runner that ran it. Async: the
@@ -6181,9 +6199,49 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownPool && (!selectedId || detailForSelected)
       ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
+  // Which of the runner's accounts a built-in session spends — for Codex the draft's pick, or the one
+  // picked for the session, else its workspace's; for Claude its workspace's — and Default for an id
+  // this runner does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
+  const accountOnThisRunner = (engine: 'codex' | 'claude', wanted: string | null | undefined): string =>
+    wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
+  // A new session on a workspace that picked no Codex account (and whose env selects no other CODEX_HOME
+  // or key of its own) starts on the runner's account with the most room: the choice the server makes
+  // when it creates the session (automaticCodexAccount), asked here of the same numbers to say which.
+  const codexAccountsHere = accountsOf(runner, 'codex');
+  const codexAutoOffered =
+    !pickedWorkspace?.codexAccount &&
+    codexAccountsHere.length >= 2 &&
+    accountOfEnv('codex', pickedWorkspace?.env ?? null, codexAccountsHere) === 'default';
+  const codexAutoAccount = codexAutoOffered
+    ? roomiestCodexAccount(codexAccountsHere, runner.planUsage, new Date())
+    : null;
+  const shownCodexAccount = accountOnThisRunner(
+    'codex',
+    selectedId
+      ? (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
+      : (draftCodexAccount ?? pickedWorkspace?.codexAccount ?? codexAutoAccount),
+  );
+  const shownClaudeAccount = accountOnThisRunner(
+    'claude',
+    selectedId ? detailForSelected?.workspace?.claudeAccount : pickedWorkspace?.claudeAccount,
+  );
+  const shownAccount =
+    shownProvider === 'codex' ? shownCodexAccount : shownProvider === 'claude' ? shownClaudeAccount : 'default';
+  // The Codex account named in the quota gauge's popover, once the runner has more than one to tell apart.
+  const shownCodexAccountRow =
+    shownProvider === 'codex' && codexAccountsHere.length >= 2
+      ? (codexAccountsHere.find((account) => account.id === shownCodexAccount) ?? { id: 'default', name: undefined })
+      : null;
+  const shownCodexAccountLabel = shownCodexAccountRow
+    ? shownCodexAccountRow.id === 'default'
+      ? 'Default'
+      : shownCodexAccountRow.name || `Account ${shownCodexAccountRow.id}`
+    : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
-    : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
+    : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'
+      ? accountPlanUsage(runner.planUsage, shownProvider, shownAccount)
+      : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
   // Where this session could move without changing CLI. Offered on the two routes that actually
   // carry a provider: a live session's config PATCH, and the resume that revives an ended one. A
   // draft picks in the hero above instead (which offers every runtime, not one), and a terminal
@@ -7921,6 +7979,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 current={currentProviderChoiceForDraft}
                 choices={providerChoicesForRunner}
                 onPick={pickDraftProvider}
+                currentAccount={shownCodexAccount}
+                automatic={codexAutoOffered ? !draftCodexAccount : undefined}
+                onPickAccount={pickDraftAccount}
                 runnerId={runner.id}
                 // Nothing to choose until we know which workspace (and so which project) this runs in.
                 disabled={!pickedWorkspace}
@@ -8637,9 +8698,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
+                // Which of the runner's Codex accounts this quota is, named inside the popover rather
+                // than beside the gauge, where a phone's toolbar has no room for an email. A draft
+                // names the one it would start on.
+                account={
+                  !shownPool && shownCodexAccountLabel
+                    ? {
+                        label: shownCodexAccountLabel,
+                        ...(!selectedId && !draftCodexAccount && !pickedWorkspace?.codexAccount
+                          ? { note: 'Automatic — the account with the most room right now' }
+                          : {}),
+                      }
+                    : undefined
+                }
                 // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
-                // the built-in Codex runtime is offered them; the create route judges the workspace.
-                reset={shownProvider === 'codex' ? { runner, workspaceId: shownWorkspaceId } : undefined}
+                // the built-in Codex runtime is offered them — on Default, whose quota this then is;
+                // the create route judges the workspace.
+                reset={
+                  shownProvider === 'codex' && shownCodexAccount === 'default'
+                    ? { runner, workspaceId: shownWorkspaceId }
+                    : undefined
+                }
               />
             )}
             {/* Context stays visible even before the first turn reports tokens — a New Session reads

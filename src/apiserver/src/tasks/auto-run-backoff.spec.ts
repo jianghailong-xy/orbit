@@ -39,6 +39,8 @@ interface Options {
   workspaceEnv?: Record<string, string> | null;
   /** The Codex account the assignee workspace picked; null = none. */
   codexAccount?: string | null;
+  /** The Claude account the assignee workspace picked; null = none. */
+  claudeAccount?: string | null;
 }
 
 /** Every task in these fixtures is assigned to the same workspace. */
@@ -138,10 +140,15 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
         { id: 'runner-1', planUsage: options.planUsage ?? null, engines: options.engines ?? null },
       ],
     },
-    // Read for the Codex account a task's run spends, which is its workspace's to say.
+    // Read for the Codex or Claude account a task's run spends, which is its workspace's to say.
     workspace: {
       findMany: async () => [
-        { id: AGENT_ID, env: options.workspaceEnv ?? null, codexAccount: options.codexAccount ?? null },
+        {
+          id: AGENT_ID,
+          env: options.workspaceEnv ?? null,
+          codexAccount: options.codexAccount ?? null,
+          claudeAccount: options.claudeAccount ?? null,
+        },
       ],
     },
     session: {
@@ -353,17 +360,52 @@ test('the quota gate judges the Codex account the workspace runs on, never Defau
   };
 
   const defaultSpent = { ...quotaExhausted('codex', inHours(140)), accounts: { '3fa91c2e': room } };
-  assert.deepEqual(await run(defaultSpent, null), [], 'a task on Default waits for Default');
+  assert.deepEqual(await run(defaultSpent, null, 'default'), [], 'a task on Default waits for Default');
   assert.deepEqual(await run(defaultSpent, { CODEX_HOME: workHome }), ['task'], "Default's spent quota does not hold back Work");
   // A workspace that picked Work runs there, as dispatch runs it; a pick this runner does not
   // report runs on Default.
   assert.deepEqual(await run(defaultSpent, null, '3fa91c2e'), ['task'], 'nor a workspace that picked Work');
   assert.deepEqual(await run(defaultSpent, null, 'c0ffee42'), [], 'a pick the runner does not report waits for Default');
+  // A workspace that picked none has its session started on the account with the most room.
+  assert.deepEqual(await run(defaultSpent, null), ['task'], 'an automatic workspace goes to Work, which has room');
 
   const workSpent = { ...room, accounts: { '3fa91c2e': quotaExhausted('codex', inHours(140)) } };
   assert.deepEqual(await run(workSpent, { CODEX_HOME: workHome }), [], 'a task on Work waits for Work');
   assert.deepEqual(await run(workSpent, null), ['task'], "Work's spent quota does not hold back Default");
   assert.deepEqual(await run(workSpent, null, '3fa91c2e'), [], 'a workspace that picked Work waits for Work');
+
+  // Every account spent: an automatic workspace waits for the first of them to free up.
+  const bothSpent = { ...quotaExhausted('codex', inHours(140)), accounts: { '3fa91c2e': quotaExhausted('codex', inHours(3)) } };
+  assert.deepEqual(await run(bothSpent, null), [], 'nothing has room');
+});
+
+test('the quota gate judges the Claude account the workspace runs on, never Default for all of them', async () => {
+  const workHome = '/root/.orbit/claude-accounts/3fa91c2e';
+  const engines = [
+    {
+      engine: 'claude',
+      installed: true,
+      auth: 'yes',
+      accounts: [
+        { id: 'default', home: '/root/.claude', auth: 'yes' },
+        { id: '3fa91c2e', name: 'Work', home: workHome, auth: 'yes' },
+      ],
+    },
+  ];
+  const spent = { fiveHour: { utilization: 100, resetsAt: inHours(3) } };
+  const room = { fiveHour: { utilization: 8, resetsAt: inHours(3) } };
+  const run = async (claude: unknown, claudeAccount: string | null) => {
+    const { service, executed } = makeService(['task'], [], { provider: 'claude', planUsage: { claude }, engines, claudeAccount });
+    await sweep(service);
+    return executed;
+  };
+
+  const defaultSpent = { ...spent, accounts: { '3fa91c2e': room } };
+  assert.deepEqual(await run(defaultSpent, null), [], 'a task on Default waits for Default');
+  assert.deepEqual(await run(defaultSpent, '3fa91c2e'), ['task'], "Default's spent quota does not hold back a workspace on Work");
+  const workSpent = { ...room, accounts: { '3fa91c2e': spent } };
+  assert.deepEqual(await run(workSpent, '3fa91c2e'), [], 'a workspace that picked Work waits for Work');
+  assert.deepEqual(await run(workSpent, null), ['task'], "Work's spent quota does not hold back Default");
 });
 
 test('the quota gate releases once the reported reset has passed', async () => {

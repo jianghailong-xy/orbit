@@ -1,22 +1,30 @@
 import {
   ArrowLeftOutlined,
+  BranchesOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
+  CloudDownloadOutlined,
   CopyOutlined,
+  DashboardOutlined,
   DeleteOutlined,
+  DisconnectOutlined,
   DownOutlined,
   EditOutlined,
+  HddOutlined,
   ImportOutlined,
+  KeyOutlined,
+  LoginOutlined,
   MessageOutlined,
   MinusCircleOutlined,
   MoreOutlined,
   PlayCircleOutlined,
   PlusOutlined,
   RobotOutlined,
-  ThunderboltOutlined,
+  SyncOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { RunnerRepoHealth } from '@orbit/shared';
 import {
   App as AntdApp,
   Button,
@@ -24,16 +32,19 @@ import {
   Input,
   InputNumber,
   Modal,
+  Select,
   Spin,
   Switch,
   Tag,
   type MenuProps,
+  type RefSelectProps,
 } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   api,
   askClaudeHistory,
+  cleanUpWorkspaceRepo,
   countImportedSessions,
   getClaudeHistory,
   importClaudeHistory,
@@ -42,12 +53,72 @@ import {
   type ClaudeHistoryResult,
 } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
+import {
+  providersQuery,
+  publishedRunnerVersionQuery,
+  workspacePermissionRulesQuery,
+  workspaceSessionCountsQuery,
+} from '../lib/queries';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
 import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
 import { AccountSelect, offersAccount } from '../components/AccountSelect';
-import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
+import {
+  RunnerEnginesSection,
+  engineSignInHref,
+  useEngineUpdate,
+} from '../components/RunnerEnginesSection';
+import { useRunnerTokenRotation } from '../components/RunnerTokenRotation';
 import type { Runner } from '../components/TasksSidePanel';
+import { copyText } from '../lib/clipboard';
+import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
+import {
+  KEEP_FREE_TIERS,
+  compareRunnerVersions,
+  formatDiskGb,
+  keepFreeLabel,
+  latestRunnerVersion,
+  runnerAttention,
+  runnerDisk,
+  type AttentionItem,
+  type AttentionKind,
+} from '../lib/runnerAttention';
+import {
+  ATTENTION_CANT_UPDATE_ITSELF,
+  RUNNER_ABOUT,
+  RUNNER_ABOUT_HOSTNAME,
+  RUNNER_ABOUT_LAST_CHECK_IN,
+  RUNNER_ABOUT_NAME,
+  RUNNER_ABOUT_REGISTERED,
+  RUNNER_ABOUT_REPOS_FOLDER,
+  RUNNER_ABOUT_RUNS_AS,
+  RUNNER_ABOUT_VERSION,
+  RUNNER_CAPACITY,
+  RUNNER_CAPACITY_FOOTER,
+  RUNNER_COPY_COMMAND,
+  RUNNER_DISK,
+  RUNNER_KEEP_FREE,
+  RUNNER_MAX_CONCURRENT,
+  RUNNER_NEEDS_ATTENTION,
+  RUNNER_OFFLINE,
+  RUNNER_ONLINE,
+  RUNNER_REPAIR,
+  RUNNER_ROOT_NO_BYPASS,
+  RUNNER_RUNS_AS_REGULAR_USER,
+  RUNNER_RUNS_AS_ROOT,
+  RUNNER_SET_A_RESERVE,
+  RUNNER_SIGN_IN,
+  RUNNER_UPDATE_ENGINES_NOW,
+  RUNNER_VERSION_INSTALLS_WHEN_IDLE,
+  RUNNER_VERSION_LATEST,
+  RUNNER_WORKSPACES,
+  attentionQuotaResets,
+  runnerDiskUsed,
+  runnerOfflineLastSeen,
+  runnerRunningOf,
+  runnerVersionTag,
+  runnerWorkspaceRunning,
+} from '../lib/runnerCopy';
+import { ago } from '../lib/runnerEngines';
 import { useToast } from '../lib/toast';
 import { defaultModelForProvider, mergedProviderOptions } from '../lib/workspaceDefaults';
 
@@ -79,6 +150,13 @@ interface Workspace {
   workDirExists?: boolean | null;
   workDirIsGit?: boolean | null;
   workDirProbedAt?: string | null;
+  /** The filesystem under workDir, as the runner last measured it (BIGINT columns, sent as strings):
+   *  what Capacity's disk bar and the disk item in Needs Attention read. */
+  workDirFreeBytes?: string | number | null;
+  workDirTotalBytes?: string | number | null;
+  /** The checkout workDir sits in, as the runner last saw it — stuck mid-merge is a Needs Attention
+   *  item with a Repair. */
+  repoHealth?: RunnerRepoHealth | null;
   /** The runner `git init`s a non-git workDir on the next run (set by the in-session
    *  "Enable isolation" action), which changes what a non-git path means here. */
   autoInitGit?: boolean;
@@ -103,6 +181,40 @@ const fmtTime = (d?: string | null): string =>
       })
     : '—';
 
+/** A day, with the year only when it isn't this one: `Jun 18`, `Dec 3, 2025`. */
+const fmtDate = (d?: string | null): string => {
+  const at = d ? new Date(d) : null;
+  if (!at || Number.isNaN(at.getTime())) return '—';
+  return at.toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    ...(at.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
+  });
+};
+
+/** When a quota window resets, in the reader's own zone — the item carries it raw for this. */
+const fmtReset = (iso: string): string =>
+  new Date(iso).toLocaleString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+const MIB = 1024 * 1024;
+
+/** Each Needs Attention card's mark, by what it is about. */
+const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
+  offline: <DisconnectOutlined />,
+  engineSignedOut: <LoginOutlined />,
+  checkoutStuck: <BranchesOutlined />,
+  quotaNearLimit: <DashboardOutlined />,
+  diskLow: <HddOutlined />,
+  cannotSelfUpdate: <CloudDownloadOutlined />,
+  engineNotUpdating: <SyncOutlined />,
+};
+
 // Runner detail / settings page. Clicking a runner lands here (not the chat
 // console) — you manage the runner and the workspaces that run under it. The live
 // conversation belongs to a workspace, reached via each workspace's "对话" button.
@@ -126,6 +238,12 @@ export function RunnerDetailPage() {
   // Configured providers (custom slugs) are used to resolve the provider label and effective
   // Runtime-owned model shown in each workspace row.
   const configuredProviders = useQuery(providersQuery()).data ?? [];
+  // Each workspace's sessions in flight, for its row's "N running" — the sidebar's own tallies.
+  const sessionCounts = useQuery(workspaceSessionCountsQuery()).data ?? [];
+  // The newest runner release anyone can see: this instance's /dl/version.json, or any of the
+  // account's runners, whichever is newer.
+  const publishedVersion = useQuery(publishedRunnerVersionQuery()).data;
+  const latestVersion = latestRunnerVersion(publishedVersion, runners.data ?? []);
 
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
@@ -140,17 +258,50 @@ export function RunnerDetailPage() {
     onError: (e: Error) => message.error(e.message || 'Rename failed'),
   });
 
-  // Edit the runner's concurrency cap — same PATCH the rename uses.
-  const [slotsOpen, setSlotsOpen] = useState(false);
-  const [slotsVal, setSlotsVal] = useState<number | null>(1);
-  const slotsMut = useMutation({
-    mutationFn: (maxConcurrent: number) =>
-      api(`/runners/${runnerId}`, { method: 'PATCH', body: { maxConcurrent } }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['runners'] });
-      setSlotsOpen(false);
+  // What is typed into Max Concurrent, shown until its save settles. The ref is what a save reads:
+  // it is written the moment antd reports a value — including the in-range one it corrects an
+  // out-of-range entry to as focus leaves — which the state would only have by the next render.
+  const [maxDraft, setMaxDraft] = useState<number | null>(null);
+  const maxTyped = useRef<number | null>(null);
+  // Capacity saves as it changes — Max Concurrent on blur or Enter, Keep Free on pick — with the
+  // PATCH the rename uses. The value goes into the runner list at once, so a control doesn't snap
+  // back to the old number while the save lands.
+  const capacityMut = useMutation({
+    mutationFn: (patch: { maxConcurrent?: number; minFreeDiskMb?: number | null }) =>
+      api(`/runners/${runnerId}`, { method: 'PATCH', body: patch }),
+    onMutate: async (patch) => {
+      await qc.cancelQueries({ queryKey: ['runners'] });
+      const previous = qc.getQueryData<Runner[]>(['runners']);
+      if (previous) {
+        qc.setQueryData<Runner[]>(
+          ['runners'],
+          previous.map((r) => (r.id === runnerId ? { ...r, ...patch } : r)),
+        );
+      }
+      return { previous };
     },
-    onError: (e: Error) => message.error(e.message || 'Update failed'),
+    onError: (e: Error, _patch, context) => {
+      if (context?.previous) qc.setQueryData(['runners'], context.previous);
+      message.error(e.message || 'Update failed');
+    },
+    onSettled: () => {
+      setMaxDraft(null);
+      void qc.invalidateQueries({ queryKey: ['runners'] });
+    },
+  });
+  // Where the disk card's "Set a Reserve…" lands.
+  const capacityRef = useRef<HTMLElement>(null);
+  const keepFreeRef = useRef<RefSelectProps>(null);
+  const engineUpdate = useEngineUpdate(runnerId ?? '');
+  const rotation = useRunnerTokenRotation();
+  // Repair a checkout stuck mid-merge — the same request and words as a session's merge bar.
+  const repairMut = useMutation({
+    mutationFn: (workspaceId: string) => cleanUpWorkspaceRepo(workspaceId),
+    onSuccess: () => {
+      message.success(REPO_CLEANUP_QUEUED);
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+    onError: (e: Error) => message.error(e.message),
   });
   const deleteMut = useMutation({
     mutationFn: () => api(`/runners/${runnerId}`, { method: 'DELETE' }),
@@ -187,8 +338,6 @@ export function RunnerDetailPage() {
   // edits are tracked so Cancel can't discard them silently.
   const [advOpen, setAdvOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
-  // The runner's read-only diagnostics — folded away so the workspace list owns the first screen.
-  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -780,6 +929,7 @@ export function RunnerDetailPage() {
       runner?.runtimeDefaultModels,
     );
     const isOpen = formOpen && editing?.id === a.id;
+    const running = sessionCounts.find((count) => count.workspaceId === a.id)?.running ?? 0;
     return (
     <div
       key={a.id}
@@ -800,6 +950,7 @@ export function RunnerDetailPage() {
           {a.enableWorktree ? ' · isolated' : ''}
         </div>
       </div>
+      {running > 0 && <span className="rd-workspace-running">{runnerWorkspaceRunning(running)}</span>}
       <Dropdown
         trigger={['click']}
         placement="bottomRight"
@@ -883,24 +1034,130 @@ export function RunnerDetailPage() {
     );
   }
 
+  const shownName = runner.displayName || runner.name;
+  const nowMs = Date.now();
+  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion });
+
+  // Capacity's readings: the tightest disk its workspaces sit on, and the floor it keeps free.
+  const disk = runnerDisk(workspaces);
+  const reserveMb = runner.minFreeDiskMb != null && runner.minFreeDiskMb > 0 ? runner.minFreeDiskMb : null;
+  const diskWarn = !!disk && (disk.usedPercent >= 90 || (reserveMb !== null && disk.freeBytes < reserveMb * MIB));
+  // Keep Free's picks, as minFreeDiskMb with 0 standing for Off (a Select value can't be null). A
+  // floor set to something other than a tier is shown as it is, in order, rather than as "Off".
+  const keepFreeOptions = [
+    ...KEEP_FREE_TIERS.map((tier) => ({ value: tier.mb ?? 0, label: tier.label })),
+    ...(reserveMb !== null && !KEEP_FREE_TIERS.some((tier) => tier.mb === reserveMb)
+      ? [{ value: reserveMb, label: keepFreeLabel(reserveMb) }]
+      : []),
+  ].sort((a, b) => a.value - b.value);
+
+  const commitMaxConcurrent = () => {
+    const next = maxTyped.current;
+    maxTyped.current = null;
+    if (next === null) return;
+    if (next === runner.maxConcurrent) setMaxDraft(null);
+    else capacityMut.mutate({ maxConcurrent: next });
+  };
+
+  // About's version line: current, catching up by itself, or stuck until someone upgrades it.
+  const version = runner.version?.trim() || null;
+  const versionNote = (() => {
+    if (!version || !latestVersion) return null;
+    if (attention.some((item) => item.kind === 'cannotSelfUpdate')) {
+      return { text: ATTENTION_CANT_UPDATE_ITSELF, warn: true };
+    }
+    if (compareRunnerVersions(version, latestVersion) >= 0) return { text: RUNNER_VERSION_LATEST, warn: false };
+    return runner.runsAsRoot ? { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false } : null;
+  })();
+
+  const openRename = () => {
+    setRenameVal(shownName);
+    setRenaming(true);
+  };
+  const focusKeepFree = () => {
+    capacityRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    keepFreeRef.current?.focus({ preventScroll: true });
+  };
+  const copyCommand = (command: string) =>
+    void copyText(command).then((ok) => (ok ? message.success('Copied') : message.error('Copy failed')));
+
+  /** The one thing a card offers, where it has one. */
+  const attentionAction = (item: AttentionItem): ReactNode => {
+    const action = item.action;
+    switch (action?.kind) {
+      case 'signIn': {
+        const engine = action.engine;
+        return engine ? (
+          <Button size="small" onClick={() => navigate(engineSignInHref(runner.id, engine))}>
+            {RUNNER_SIGN_IN}
+          </Button>
+        ) : null;
+      }
+      case 'repair': {
+        const workspaceId = action.workspaceId;
+        const root = typeof item.params.root === 'string' ? item.params.root : '';
+        return workspaceId ? (
+          <Button
+            size="small"
+            loading={repairMut.isPending}
+            onClick={() =>
+              modal.confirm({
+                ...repoCleanupConfirm(root),
+                onOk: () => repairMut.mutateAsync(workspaceId).catch(() => {}),
+              })
+            }
+          >
+            {RUNNER_REPAIR}
+          </Button>
+        ) : null;
+      }
+      case 'setReserve':
+        return (
+          <Button size="small" onClick={focusKeepFree}>
+            {RUNNER_SET_A_RESERVE}
+          </Button>
+        );
+      case 'copyCommand': {
+        const command = action.command;
+        return command ? (
+          <Button size="small" icon={<CopyOutlined />} onClick={() => copyCommand(command)}>
+            {RUNNER_COPY_COMMAND}
+          </Button>
+        ) : null;
+      }
+      case 'updateEngines':
+        return (
+          <Button size="small" disabled={engineUpdate.isPending} onClick={() => engineUpdate.mutate()}>
+            {RUNNER_UPDATE_ENGINES_NOW}
+          </Button>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // A quota card says when the window resets first, in the reader's own time zone.
+  const attentionDetail = (item: AttentionItem): string => {
+    const resetsAt = item.params.resetsAt;
+    return typeof resetsAt === 'string'
+      ? `${attentionQuotaResets(fmtReset(resetsAt))} ${item.detail}`
+      : item.detail;
+  };
+
+  // Rename, Rotate token, Delete. Max Concurrent is no longer here: it lives in Capacity, where it
+  // saves as it changes.
   const kebab: MenuProps['items'] = [
     {
       key: 'rename',
       icon: <EditOutlined />,
       label: 'Rename',
-      onClick: () => {
-        setRenameVal(runner.displayName || runner.name);
-        setRenaming(true);
-      },
+      onClick: openRename,
     },
     {
-      key: 'slots',
-      icon: <ThunderboltOutlined />,
-      label: 'Set max concurrent',
-      onClick: () => {
-        setSlotsVal(runner.maxConcurrent ?? 1);
-        setSlotsOpen(true);
-      },
+      key: 'rotate',
+      icon: <KeyOutlined />,
+      label: 'Rotate token',
+      onClick: () => rotation.confirmRotate(runner),
     },
     { type: 'divider' },
     {
@@ -910,7 +1167,7 @@ export function RunnerDetailPage() {
       danger: true,
       onClick: () =>
         modal.confirm({
-          title: `Delete “${runner.displayName || runner.name}”?`,
+          title: `Delete “${shownName}”?`,
           content:
             'This removes the runner and its workspaces from your account. Re-register the machine to add it back.',
           okText: 'Delete',
@@ -920,6 +1177,13 @@ export function RunnerDetailPage() {
         }),
     },
   ];
+
+  const runsAs =
+    runner.runsAsRoot === true
+      ? RUNNER_RUNS_AS_ROOT
+      : runner.runsAsRoot === false
+        ? RUNNER_RUNS_AS_REGULAR_USER
+        : '—';
 
   return (
     <>
@@ -934,10 +1198,10 @@ export function RunnerDetailPage() {
         <span
           className="runner-dot"
           style={{ background: runner.online ? 'var(--success-solid)' : 'var(--dot-idle)' }}
-          title={runner.online ? 'Online' : 'Offline'}
+          title={runner.online ? RUNNER_ONLINE : RUNNER_OFFLINE}
         />
         <h1 className="page-title" style={{ margin: 0 }}>
-          {runner.displayName || runner.name}
+          {shownName}
         </h1>
         <div style={{ flex: 1 }} />
         <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: kebab }}>
@@ -945,84 +1209,184 @@ export function RunnerDetailPage() {
         </Dropdown>
       </div>
 
-      {/* The machine's read-only diagnostics are reference material, not the job: they ride on
-          one line under the title so the workspace list — the thing this page is for — starts above
-          the fold. The full grid is one click away. */}
+      {/* Who it is at a glance, on one line under the name; the facts behind it are in About. */}
       <div className="rd-metaline">
-        <span className={runner.online ? 'rd-meta-ok' : undefined}>
-          {runner.online ? 'Online' : 'Offline'}
-        </span>
-        {typeof runner.maxConcurrent === 'number' && <span>{runner.maxConcurrent} slots</span>}
-        {typeof runner.activeSessions === 'number' && runner.activeSessions > 0 && (
-          <span>{runner.activeSessions} running</span>
+        {runner.online ? (
+          <span className="rd-meta-ok">{RUNNER_ONLINE}</span>
+        ) : (
+          <span>
+            {runner.lastHeartbeatAt
+              ? runnerOfflineLastSeen(fmtTime(runner.lastHeartbeatAt))
+              : RUNNER_OFFLINE}
+          </span>
         )}
-        {runner.version && <span>v{runner.version}</span>}
+        {runner.online && typeof runner.maxConcurrent === 'number' && (
+          <span>{runnerRunningOf(runner.activeSessions ?? 0, runner.maxConcurrent)}</span>
+        )}
+        {version && <span>{runnerVersionTag(version)}</span>}
         {runner.hostname && <span>{runner.hostname}</span>}
-        <span
-          className={`rd-details-toggle${detailsOpen ? ' open' : ''}`}
-          onClick={() => setDetailsOpen(!detailsOpen)}
-        >
-          Details <DownOutlined className="rd-details-caret" />
-        </span>
       </div>
-      {detailsOpen && (
-        <div className="rd-overview">
-          <RdField label="Status" value={runner.online ? 'Online' : 'Offline'} />
-          <RdField label="Machine name" value={runner.name} />
-          <RdField label="Hostname" value={runner.hostname || '—'} />
-          <RdField label="Version" value={runner.version || '—'} />
-          <RdField label="Slots (max concurrent)" value={String(runner.maxConcurrent ?? '—')} />
-          <RdField label="Labels" value={runner.labels?.length ? runner.labels.join(', ') : '—'} />
-          <RdField label="Last heartbeat" value={fmtTime(runner.lastHeartbeatAt)} />
-          <RdField label="Enrolled" value={fmtTime(runner.enrolledAt)} />
-        </div>
+
+      {/* Only when something needs a person, above both columns: each card says what happened,
+          why it matters, and offers the one thing that fixes it. */}
+      {attention.length > 0 && (
+        <section className="rd-attention" aria-label={RUNNER_NEEDS_ATTENTION}>
+          {attention.map((item, index) => (
+            <div key={`${item.kind}:${index}`} className={`rd-attention-card ${item.tone}`}>
+              <span className="rd-attention-icon">{ATTENTION_ICON[item.kind]}</span>
+              <div className="rd-attention-main">
+                <div className="rd-attention-title">{item.title}</div>
+                <div className="rd-attention-detail">{attentionDetail(item)}</div>
+                {item.action && <div className="rd-attention-action">{attentionAction(item)}</div>}
+              </div>
+            </div>
+          ))}
+        </section>
       )}
 
-      {/* What software this machine runs and whether it's current — the same class of fact as the
-          runner version on the meta line above, which is why updating them lives here and not on
-          the Providers page. */}
-      <RunnerEnginesSection runner={runner} />
+      {/* Two columns from 641px: the machine's contents on the left, its settings and facts on the
+          right. Narrower, one column in the phone's order — Capacity, Engines, Workspaces, About —
+          which index.css sets with `order`, so the columns themselves never move. */}
+      <div className="rd-cols">
+        <div className="rd-col rd-col-main">
+          {/* What software this machine runs, whether it's signed in and current — the same class
+              of fact as the runner version, which is why updating them lives here and not on the
+              Providers page. */}
+          <RunnerEnginesSection runner={runner} />
 
-      <section className="rd-section">
-        <div className="rd-section-head">
-          <div className="rd-section-title">Workspaces</div>
-          {/* Kept in place while the create form is open — disabled rather than removed, so the
-              header doesn't reflow out from under the pointer. */}
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            disabled={formOpen && !editing}
-            onClick={() => switchTo(openCreate)}
-          >
-            Add workspace
-          </Button>
+          <section className="rd-section rd-workspaces">
+            <div className="rd-section-head">
+              <div className="rd-section-title">{RUNNER_WORKSPACES}</div>
+              {/* Kept in place while the create form is open — disabled rather than removed, so the
+                  header doesn't reflow out from under the pointer. */}
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                disabled={formOpen && !editing}
+                onClick={() => switchTo(openCreate)}
+              >
+                Add workspace
+              </Button>
+            </div>
+            {workspacesQ.isLoading ? (
+              <div style={{ padding: 24, textAlign: 'center' }}>
+                <Spin />
+              </div>
+            ) : workspaces.length === 0 && !(formOpen && !editing) ? (
+              <div className="rd-empty">
+                No workspaces under this runner yet — add one to start a conversation.
+              </div>
+            ) : (
+              <div className="rd-workspace-list">
+                {formOpen && !editing && (
+                  <div className="rd-workspace-form-wrap">{workspaceForm('create')}</div>
+                )}
+                {workspaces.map((a) =>
+                  formOpen && editing?.id === a.id ? (
+                    <div key={a.id} className="rd-workspace-editing">
+                      {workspaceRow(a)}
+                      <div className="rd-workspace-form-wrap">{workspaceForm('edit')}</div>
+                    </div>
+                  ) : (
+                    workspaceRow(a)
+                  ),
+                )}
+              </div>
+            )}
+          </section>
         </div>
-        {workspacesQ.isLoading ? (
-          <div style={{ padding: 24, textAlign: 'center' }}>
-            <Spin />
-          </div>
-        ) : workspaces.length === 0 && !(formOpen && !editing) ? (
-          <div className="rd-empty">
-            No workspaces under this runner yet — add one to start a conversation.
-          </div>
-        ) : (
-          <div className="rd-workspace-list">
-            {formOpen && !editing && (
-              <div className="rd-workspace-form-wrap">{workspaceForm('create')}</div>
-            )}
-            {workspaces.map((a) =>
-              formOpen && editing?.id === a.id ? (
-                <div key={a.id} className="rd-workspace-editing">
-                  {workspaceRow(a)}
-                  <div className="rd-workspace-form-wrap">{workspaceForm('edit')}</div>
+
+        <div className="rd-col rd-col-side">
+          <section className="rd-section rd-capacity" ref={capacityRef}>
+            <div className="rd-section-head">
+              <div className="rd-section-title">{RUNNER_CAPACITY}</div>
+            </div>
+            <div className="rd-box">
+              <div className="rd-kv">
+                <span className="rd-kv-label">{RUNNER_MAX_CONCURRENT}</span>
+                {/* Saved on blur from around the field, so it runs after antd has settled what was
+                    typed (1–64, whole) — and on Enter, which antd settles first as well. */}
+                <span onBlur={commitMaxConcurrent}>
+                  <InputNumber
+                    className="rd-max-concurrent"
+                    size="small"
+                    min={1}
+                    max={64}
+                    precision={0}
+                    value={maxDraft ?? runner.maxConcurrent ?? null}
+                    onChange={(v) => {
+                      maxTyped.current = v;
+                      setMaxDraft(v);
+                    }}
+                    onPressEnter={commitMaxConcurrent}
+                  />
+                </span>
+              </div>
+              <div className="rd-disk">
+                <div className="rd-kv-row">
+                  <span className="rd-kv-label">{RUNNER_DISK}</span>
+                  <span className="rd-kv-value">
+                    {disk
+                      ? runnerDiskUsed(
+                          formatDiskGb(disk.totalBytes - disk.freeBytes),
+                          formatDiskGb(disk.totalBytes),
+                        )
+                      : '—'}
+                  </span>
                 </div>
-              ) : (
-                workspaceRow(a)
-              ),
-            )}
-          </div>
-        )}
-      </section>
+                {disk && (
+                  <div className={`rd-disk-bar${diskWarn ? ' warn' : ''}`}>
+                    <span style={{ width: `${disk.usedPercent}%` }} />
+                  </div>
+                )}
+              </div>
+              <div className="rd-kv">
+                <span className="rd-kv-label">{RUNNER_KEEP_FREE}</span>
+                <Select
+                  ref={keepFreeRef}
+                  className="rd-keep-free"
+                  size="small"
+                  value={reserveMb ?? 0}
+                  options={keepFreeOptions}
+                  onChange={(mb: number) => capacityMut.mutate({ minFreeDiskMb: mb === 0 ? null : mb })}
+                  popupMatchSelectWidth={false}
+                />
+              </div>
+            </div>
+            <div className="rd-hint">{RUNNER_CAPACITY_FOOTER}</div>
+          </section>
+
+          <section className="rd-section rd-about">
+            <div className="rd-section-head">
+              <div className="rd-section-title">{RUNNER_ABOUT}</div>
+            </div>
+            <div className="rd-box">
+              <AboutRow label={RUNNER_ABOUT_NAME}>
+                {shownName}
+                <button type="button" className="rd-inline-link" onClick={openRename}>
+                  Rename
+                </button>
+              </AboutRow>
+              <AboutRow label={RUNNER_ABOUT_HOSTNAME}>{runner.hostname || '—'}</AboutRow>
+              <AboutRow label={RUNNER_ABOUT_VERSION}>
+                {version ?? '—'}
+                {versionNote && (
+                  <small className={versionNote.warn ? 'warn' : undefined}>{versionNote.text}</small>
+                )}
+              </AboutRow>
+              <AboutRow label={RUNNER_ABOUT_RUNS_AS}>{runsAs}</AboutRow>
+              <AboutRow label={RUNNER_ABOUT_REPOS_FOLDER}>{runner.reposRoot || '—'}</AboutRow>
+              <AboutRow label={RUNNER_ABOUT_LAST_CHECK_IN}>
+                {runner.lastHeartbeatAt ? ago(runner.lastHeartbeatAt, nowMs) : '—'}
+              </AboutRow>
+              <AboutRow label={RUNNER_ABOUT_REGISTERED}>{fmtDate(runner.enrolledAt)}</AboutRow>
+            </div>
+            {/* Root costs one permission mode: claude refuses Bypass under root. Said here because
+                the picker only ever drops it without a word. */}
+            {runner.runsAsRoot && <div className="rd-hint">{RUNNER_ROOT_NO_BYPASS}</div>}
+          </section>
+        </div>
+      </div>
       </div>
 
       <Modal
@@ -1048,41 +1412,17 @@ export function RunnerDetailPage() {
         </div>
       </Modal>
 
-      <Modal
-        title="Set max concurrent"
-        open={slotsOpen}
-        okText="Save"
-        cancelText="Cancel"
-        confirmLoading={slotsMut.isPending}
-        okButtonProps={{ disabled: slotsVal == null }}
-        onOk={() => slotsVal != null && slotsMut.mutate(slotsVal)}
-        onCancel={() => setSlotsOpen(false)}
-        destroyOnClose
-      >
-        <InputNumber
-          value={slotsVal}
-          onChange={(v) => setSlotsVal(v)}
-          min={1}
-          max={64}
-          precision={0}
-          style={{ width: '100%' }}
-          autoFocus
-        />
-        <div style={{ marginTop: 8, color: 'var(--text-3)', fontSize: 12 }}>
-          Max sessions this runner runs at once. Takes effect on the next claim — no
-          restart needed.
-        </div>
-      </Modal>
-
+      {rotation.tokenModal}
     </>
   );
 }
 
-function RdField({ label, value }: { label: string; value: string }) {
+/** One fact in About: its name on the left, the value on the right. */
+function AboutRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rd-field">
-      <div className="rd-field-label">{label}</div>
-      <div className="rd-field-value">{value}</div>
+    <div className="rd-kv">
+      <span className="rd-kv-label">{label}</span>
+      <span className="rd-kv-value">{children}</span>
     </div>
   );
 }

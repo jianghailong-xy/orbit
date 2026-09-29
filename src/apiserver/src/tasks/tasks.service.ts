@@ -225,7 +225,8 @@ import { loadVerificationEpochGates } from './verification-epoch-read';
 import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
-import { runAccount } from '../providers/plan-usage-accounts';
+import { automaticCodexAccount, runAccount } from '../providers/plan-usage-accounts';
+import { accountEnvVar } from '../providers/account';
 import { readWaitingOwnerConfirmations } from './owner-confirmation-read';
 import { accountPoolRuntime } from '../providers/custom-provider';
 import {
@@ -10221,8 +10222,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *
    * The quota is the one the task's run would spend: its runner's for its provider, because one
    * runner can host workspaces on several runtimes and only some of their quotas may be spent — and
-   * for Codex that runner's account its workspace runs on (runCodexAccount), because one runner can
-   * hold several accounts and only some of theirs may be spent. A task whose quota reports no
+   * for Codex or Claude that runner's account its workspace runs on (runAccount), because one runner
+   * can hold several accounts and only some of theirs may be spent. A task whose quota reports no
    * exhausted window, or an exhausted one with no reset time, is absent from `blocked`.
    *
    * An account pool's slug is in no runner's snapshot: its quota is its members', read the way the
@@ -10256,21 +10257,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       select: { id: true, planUsage: true, engines: true },
     });
     const runnerById = new Map(runners.map((r) => [r.id, r]));
-    // Which Codex account a run spends is its workspace's to say, so only Codex tasks' are read.
-    const codexWorkspaceIds = [
+    // Which Codex or Claude account a run spends is its workspace's to say, so only those tasks' are
+    // read.
+    const accountWorkspaceIds = [
       ...new Set(
         tasks.flatMap((t) =>
-          t.assignee?.runnerId && t.assignee.provider === 'codex' ? [t.assignee.workspaceId] : [],
+          t.assignee?.runnerId && accountEnvVar(t.assignee.provider) ? [t.assignee.workspaceId] : [],
         ),
       ),
     ];
     const workspaceById = new Map(
-      codexWorkspaceIds.length === 0
+      accountWorkspaceIds.length === 0
         ? []
         : (
             await this.prisma.workspace.findMany({
-              where: { id: { in: codexWorkspaceIds } },
-              select: { id: true, env: true, codexAccount: true },
+              where: { id: { in: accountWorkspaceIds } },
+              select: { id: true, env: true, codexAccount: true, claudeAccount: true },
             })
           ).map((w) => [w.id, w]),
     );
@@ -10292,10 +10294,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const runner = runnerById.get(assignee.runnerId);
       const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
       const workspace = workspaceById.get(assignee.workspaceId);
+      // A Codex task on a workspace that picked no account gets its session started on the runner's
+      // account with the most room (automaticCodexAccount), so that is the quota it waits on.
+      const automatic =
+        assignee.provider === 'codex' ? automaticCodexAccount(workspace, runner?.engines, usage, now) : null;
       const account = runAccount(
         assignee.provider,
         workspace?.env,
-        workspace,
+        workspace && { ...workspace, codexAccount: automatic ?? workspace.codexAccount },
         runner?.engines,
       );
       if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);

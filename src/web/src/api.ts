@@ -353,6 +353,9 @@ export const createInteractiveSession = (body: {
   effort?: string;
   /** Start the session in Claude Code's fast lane (`/fast`). Omitted → off. */
   fastMode?: boolean;
+  /** Which of the runner's Codex accounts the session runs on (`default` or a slot id), picked on
+   *  the New Session screen. Omitted follows the workspace's account. */
+  codexAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -1211,6 +1214,9 @@ export interface SessionDetail {
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
   poolKeyId?: string | null;
+  /** The Codex account picked for this session on the New Session screen; null follows the
+   *  workspace's (`workspace.codexAccount`). */
+  codexAccount?: string | null;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1226,6 +1232,10 @@ export interface SessionDetail {
     model?: string | null;
     effort?: string | null;
     defaultMergeTarget?: string | null;
+    /** The Codex account this workspace's sessions run on; null is Default. */
+    codexAccount?: string | null;
+    /** The Claude account this workspace's sessions run on; null is Default. */
+    claudeAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;
