@@ -527,6 +527,58 @@ test("a Codex session waits on the quota of the account its workspace runs on, n
   ]);
   await gone.service.sweep(NOW);
   assert.deepEqual(gone.resumed, [], 'a pick the runner does not report waits for Default');
+
+  // An account picked for the session itself is the one it runs on, whatever its workspace picked.
+  const sessionOnWork = makeService([
+    row({ provider: 'codex', assignedRunner: runner, codexAccount: '3fa91c2e', workspace: { env: null, codexAccount: null } }),
+  ]);
+  await sessionOnWork.service.sweep(NOW);
+  assert.deepEqual(sessionOnWork.resumed, [{ id: 'session-1', content: 'the original message' }], 'nor on a session that picked Work');
+  const sessionOnDefault = makeService([
+    row({ provider: 'codex', assignedRunner: runner, codexAccount: 'default', workspace: { env: null, codexAccount: '3fa91c2e' } }),
+  ]);
+  await sessionOnDefault.service.sweep(NOW);
+  assert.deepEqual(sessionOnDefault.resumed, [], 'a session that picked Default waits for Default on a workspace set to Work');
+});
+
+test("a Claude session waits on the quota of the Claude account its workspace picked, never on Default's", async () => {
+  // One runner, two Claude accounts: Default's 5-hour window spent, Work's with room.
+  const workHome = '/root/.orbit/claude-accounts/3fa91c2e';
+  const runner = {
+    planUsage: {
+      claude: {
+        provider: 'claude',
+        fiveHour: { utilization: 100, resetsAt: FUTURE },
+        accounts: { '3fa91c2e': { provider: 'claude', fiveHour: { utilization: 8, resetsAt: FUTURE } } },
+      },
+    },
+    engines: [
+      {
+        engine: 'claude',
+        installed: true,
+        auth: 'yes',
+        accounts: [
+          { id: 'default', home: '/root/.claude', auth: 'yes' },
+          { id: '3fa91c2e', name: 'Work', home: workHome, auth: 'yes' },
+        ],
+      },
+    ],
+    status: 'ONLINE',
+    lastHeartbeatAt: NOW,
+  };
+
+  const onWork = makeService([
+    row({ provider: 'claude', assignedRunner: runner, workspace: { env: null, codexAccount: null, claudeAccount: '3fa91c2e' } }),
+  ]);
+  await onWork.service.sweep(NOW);
+  assert.deepEqual(onWork.resumed, [{ id: 'session-1', content: 'the original message' }], "Default's spent quota holds nothing on Work");
+
+  const onDefault = makeService([
+    row({ provider: 'claude', assignedRunner: runner, workspace: { env: null, codexAccount: null, claudeAccount: null } }),
+  ]);
+  await onDefault.service.sweep(NOW);
+  assert.deepEqual(onDefault.resumed, [], 'a run on Default still waits for Default');
+  assert.deepEqual(onDefault.rows[0].retryAt, new Date(FUTURE));
 });
 
 // The reaper arms these: it finalized the session as 'runner offline' mid-turn. Waiting for

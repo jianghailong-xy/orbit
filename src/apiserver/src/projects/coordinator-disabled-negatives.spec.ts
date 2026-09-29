@@ -99,7 +99,7 @@ interface WiredWakeFact {
  * The fact kinds this work put behind a producer, and the control that proves the switch stops
  * each one.
  *
- * Eight kinds, sixteen controls. The mapping is many-to-one in both directions on purpose: one
+ * Ten kinds, nineteen controls. The mapping is many-to-one in both directions on purpose: one
  * kind is reached by more than one write path and is controlled once per path, one control can
  * cover two kinds when the same run drives both, and one PRODUCER can build two kinds when which
  * fact a committed world justifies is the thing it decides.
@@ -313,16 +313,39 @@ const WIRED: readonly WiredWakeFact[] = [
       },
     ],
   },
+  {
+    // An evidence revision an agent submitted, which an Automatic project hands to its coordinator
+    // to decide since 2026-09-29 (`completion-evidence.producer.ts`). Until then this was the one
+    // kind with no switch at all — recorded under `route`'s permissive default and told to nobody —
+    // and with the switch off it still is: the first control says the revision is recorded, the
+    // coordinator told nothing and nothing opened. The second is the producer's own authorizer
+    // refusing on the column, for a claim made after the router read the switch as on.
+    event: 'COMPLETION_EVIDENCE_REVISED',
+    producedBy: [
+      'projects/completion-input.ts#completionEvidenceRevisedFact',
+      'tasks/task-completion-evidence.service.ts#submit',
+    ],
+    negatives: [
+      {
+        spec: 'projects/automatic-evidence-to-coordinator.pg.spec.ts',
+        test: '(3) a project that is not Automatic records the revision, tells its coordinator nothing, and asks the owner',
+      },
+      {
+        spec: 'projects/automatic-evidence-to-coordinator.pg.spec.ts',
+        test: '(4) a claim made after the switch went off is refused on it by the producer, tells nobody, and opens nothing',
+      },
+    ],
+  },
 ];
 
 /**
  * Fact kinds with a producer that this work did not put there, and therefore makes no claim about.
  *
- * One entry. An evidence revision is submitted by an agent on purpose and is bounded by that agent,
- * which is the single case `CompletionInputRouter.route`'s permissive default is right for — it is
- * routed with no authorizer at all, so there is no switch for a control to switch off. Every kind
- * DERIVED from a world that can go round again is in `WIRED` above instead, each carrying its
- * producer's own authorizer.
+ * None today. `COMPLETION_EVIDENCE_REVISED` was the one entry until 2026-09-29: an evidence
+ * revision is submitted by an agent on purpose, and it was only ever recorded, under
+ * `CompletionInputRouter.route`'s permissive default — so there was no switch for a control to
+ * switch off. An Automatic project now hands it to its coordinator through its producer's own
+ * authorizer, which is a switch, so it is in `WIRED` above with its controls like every other kind.
  *
  * This list is the census's one escape hatch and is deliberately a literal: adding a kind here
  * instead of giving it a control is a visible edit that says "this one predates the work", which
@@ -332,15 +355,7 @@ const WIRED: readonly WiredWakeFact[] = [
  * state since 2026-09-10, when the held-criteria delivery that built it was removed; its
  * switched-off control went with it, because a fact nothing builds has no switch to prove.
  */
-const PREDATES_THIS_WORK: readonly Pick<WiredWakeFact, 'event' | 'producedBy'>[] = [
-  {
-    event: 'COMPLETION_EVIDENCE_REVISED',
-    producedBy: [
-      'projects/completion-input.ts#completionEvidenceRevisedFact',
-      'tasks/task-completion-evidence.service.ts#submit',
-    ],
-  },
-];
+const PREDATES_THIS_WORK: readonly Pick<WiredWakeFact, 'event' | 'producedBy'>[] = [];
 
 const METHOD =
   /^ {2}(?:private |protected |public |static |readonly |abstract )*(?:async )?(?:\*)?([A-Za-z0-9_$]+)\s*[(<]/;

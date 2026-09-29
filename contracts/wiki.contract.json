@@ -1332,7 +1332,7 @@
     "jobs": {
       "phase": 2,
       "doc": "docs/wiki-contract.md sections 21.7 and 21.8; criterion 11",
-      "migration": "src/apiserver/prisma/migrations/0327_wiki_plan_job/migration.sql",
+      "migration": "src/apiserver/prisma/migrations/0336_wiki_plan_job/migration.sql",
       "tables": ["wiki_plan_job"],
       "means": "A space's plan is drafted, revised and built by jobs the server runs as tasks of the space's hidden Wiki maintenance list (maintenance.list), so the session that runs one is a maintenance session (isWikiMaintenanceSession) and the plan's runner door is open to it and to nothing else. A fact asks for a job — the space's creation, or its owner — never a clock.",
       "kinds": {

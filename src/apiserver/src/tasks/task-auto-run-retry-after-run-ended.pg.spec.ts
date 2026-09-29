@@ -79,7 +79,8 @@ interface World {
   ownerId: string;
   runnerId: string;
   agentId: string;
-  /** No coordinator, so the dependency scan is what starts this project's tasks. */
+  /** No coordinator, so the dependency scan is what starts this project's tasks. Started, and not
+   *  paused: a project that does not move retries nothing (project-pause-dispatch.pg.spec.ts). */
   projectId: string;
   /** A finished task for every dependent to wait on. */
   prerequisiteId: string;
@@ -118,7 +119,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   await db.project.create({
     data: {
       id: ids.projectId, ownerId: ids.ownerId, title: label, coordinatorEnabled: false,
-      maxConcurrentTasks: 10,
+      maxConcurrentTasks: 10, startedAt: new Date(),
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, ids.projectId, label);

@@ -378,37 +378,42 @@ export class TaskCompletionEvidenceService {
       };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.submit'));
 
-    // A new revision changes what the pending-decisions read answers. Nudged after the commit, so
-    // an open page re-reads it now instead of on its next poll; the event names the task and
-    // carries none of the evidence.
-    this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, {
-      taskIds: [taskId],
-      resync: false,
-    });
-    await this.nudgeCoordinatorRow(ownerId, taskId);
-
-    // The revision itself is the trigger. A source Session may still be RUNNING or
-    // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
-    // facts appears in this route or its key.
-    //
-    // A task in NO project does not go down here, and nothing is lost by that: a wake row names a
-    // project, and this work is filed under none. Such a row is settled the way every revision is —
-    // it stays a question on the derived read (`pending` below), held against its OWN
-    // `acceptanceCriteria`, until a session that took no part in the work answers it. Pinned by
-    // `coordinator-evidence-no-addressee.pg.spec.ts`, which covers the population that already
-    // exists: the write doors no longer let one be declared.
-    if (committed.projectId && this.completionInputs) {
-      // Recorded against the consumer these rows have always named, and told to nobody: the
-      // question is the derived read's to find, and why nothing is delivered is that door's to say.
-      await this.completionInputs.routeCompletionEvidence(
-        completionEvidenceRevisedFact({
-          projectId: committed.projectId,
-          taskId,
-          revision: committed.evidenceRow.revision.toString(),
-          criterionRevision: committed.evidenceRow.criterionRevision,
-          evidenceDigest: committed.evidenceRow.evidenceDigest,
-        }),
-      );
+    try {
+      // The revision itself is the trigger. A source Session may still be RUNNING or
+      // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
+      // facts appears in this route or its key.
+      //
+      // A task in NO project does not go down here, and nothing is lost by that: a wake row names a
+      // project, and this work is filed under none. Such a row is settled the way every revision is
+      // — it stays a question on the derived read (`pending` below), held against its OWN
+      // `acceptanceCriteria`, until a session that took no part in the work answers it. Pinned by
+      // `coordinator-evidence-no-addressee.pg.spec.ts`, which covers the population that already
+      // exists: the write doors no longer let one be declared.
+      if (committed.projectId && this.completionInputs) {
+        // In an Automatic project, handed to its coordinator to decide; otherwise recorded against
+        // the consumer these rows have always named and told to nobody, the question being the
+        // derived read's to find. Which, and why, is that door's to say.
+        await this.completionInputs.routeCompletionEvidence(
+          completionEvidenceRevisedFact({
+            projectId: committed.projectId,
+            taskId,
+            revision: committed.evidenceRow.revision.toString(),
+            criterionRevision: committed.evidenceRow.criterionRevision,
+            evidenceDigest: committed.evidenceRow.evidenceDigest,
+          }),
+        );
+      }
+    } finally {
+      // A new revision changes what the pending-decisions read answers, and so does handing it to
+      // an Automatic project's coordinator, which holds it off the owner's card. Nudged after both,
+      // so an open page re-reads it now instead of on its next poll — and never draws, for that
+      // poll, a card its coordinator has just been handed. After a delivery that failed as well.
+      // The event names the task and carries none of the evidence.
+      this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, {
+        taskIds: [taskId],
+        resync: false,
+      });
+      await this.nudgeCoordinatorRow(ownerId, taskId);
     }
     return committed.evidence;
   }

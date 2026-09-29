@@ -110,6 +110,8 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
     if (path === '/runners') return [r];
     if (path === '/workspaces') return [ws];
     if (path === '/providers') return [];
+    // The workspace rows' "N running" reads the sidebar's per-workspace tallies.
+    if (path === '/sessions/counts') return [];
     if (path === '/users/me') return { id: 'u', email: 'u@example.invalid', name: 'u', createdAt: '', preferences: {} };
     if (path.includes('permission-rules')) return [];
     if (path.includes('imported')) return { count: 0 };
@@ -188,32 +190,41 @@ describe('which Codex account a workspace runs on', () => {
   it('offers each account on the runner with its own quota and sign-in, and saves the id picked', async () => {
     const { patches } = mount(runner([DEFAULT, WORK]), workspace(null));
     await openAdvanced();
-    // Nothing picked reads as Default.
-    expect(field()?.querySelector('.ant-select')?.textContent).toContain('Default (~/.codex)');
+    // Nothing picked, on a runner with two accounts, is Automatic.
+    expect(field()?.querySelector('.ant-select')?.textContent).toContain('Automatic');
 
     const offered = await options();
     expect(offered.map((o) => o.text)).toEqual([
+      ['Automatic', 'each new session starts on the account with the most room'],
       ['Default (~/.codex)', '5h limit 62% · signed in'],
       // Only Default has a quota reported: the usage probe reads Default.
       ['Work', 'signed in'],
     ]);
-    await click(offered[1].el);
+    await click(offered[2].el);
     await click(byText('button', 'Save'));
     expect(patches).toHaveLength(1);
     expect(patches[0].codexAccount).toBe(WORK.id);
   });
 
-  it('saves Default as no account at all', async () => {
-    const { patches } = mount(runner([DEFAULT, WORK]), workspace(WORK.id));
-    await openEditor();
-    // Folded, the disclosure still says something is set behind it.
-    expect(document.body.querySelector('.rd-adv-badge')?.textContent).toBe('1 configured');
-    await click(document.body.querySelector<HTMLElement>('.rd-adv-toggle')!);
-    expect(field()?.querySelector('.ant-select')?.textContent).toContain('Work');
-    const offered = await options();
-    await click(offered[0].el);
-    await click(byText('button', 'Save'));
-    expect(patches[0].codexAccount).toBeNull();
+  it('saves Automatic as no account at all, and Default as a choice of its own', async () => {
+    for (const [pick, saved] of [
+      [0, null],
+      [1, 'default'],
+    ] as const) {
+      const { patches } = mount(runner([DEFAULT, WORK]), workspace(WORK.id));
+      await openEditor();
+      // Folded, the disclosure still says something is set behind it.
+      expect(document.body.querySelector('.rd-adv-badge')?.textContent).toBe('1 configured');
+      await click(document.body.querySelector<HTMLElement>('.rd-adv-toggle')!);
+      expect(field()?.querySelector('.ant-select')?.textContent).toContain('Work');
+      const offered = await options();
+      await click(offered[pick].el);
+      await click(byText('button', 'Save'));
+      expect(patches[0].codexAccount).toBe(saved);
+      act(() => root?.unmount());
+      host?.remove();
+      root = host = null;
+    }
   });
 
   it('asks nothing of a runner with one account, and keeps the choice it never showed', async () => {
@@ -242,9 +253,15 @@ describe('which Codex account a workspace runs on', () => {
     expect(patches[0].codexAccount).toBeNull();
   });
 
-  it('does not claim Default while a CODEX_HOME typed into the env points elsewhere', async () => {
-    mount(runner([DEFAULT, WORK]), workspace(null, { CODEX_HOME: '/root/.codex-b' }));
+  it('does not claim Default, or an automatic pick, while a CODEX_HOME typed into the env points elsewhere', async () => {
+    mount(runner([DEFAULT, WORK]), workspace('default', { CODEX_HOME: '/root/.codex-b' }));
     await openAdvanced();
     expect(field()?.textContent).toContain('sessions run in ~/.codex-b, not Default');
+    act(() => root?.unmount());
+    host?.remove();
+    root = host = null;
+    mount(runner([DEFAULT, WORK]), workspace(null, { CODEX_HOME: '/root/.codex-b' }));
+    await openAdvanced();
+    expect(field()?.textContent).toContain('sessions run in ~/.codex-b, not on an automatic pick');
   });
 });

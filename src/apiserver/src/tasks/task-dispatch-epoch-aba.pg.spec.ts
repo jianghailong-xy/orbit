@@ -121,6 +121,8 @@ async function fixture(
       // LEGACY dispatch authority, which is what puts these dispatches through `execute` rather
       // than through the Coordinator — the doors this unit is about.
       coordinatorEnabled: false,
+      // Started: only a started, unpaused project moves by itself (project-pause-dispatch.ts).
+      startedAt: new Date(),
     },
   });
   await db.task.create({

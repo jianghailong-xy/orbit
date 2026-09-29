@@ -876,7 +876,7 @@ describe('wiki contract', () => {
     const jobs = CONTRACT.plan.jobs;
     expect(jobs.phase).toBe(2);
     expect(jobs.tables).toEqual(['wiki_plan_job']);
-    expect(jobs.migration).toMatch(/0327_wiki_plan_job/u);
+    expect(jobs.migration).toMatch(/0336_wiki_plan_job/u);
     expect(keysOf(jobs.kinds)).toEqual([...WIKI_PLAN_JOB_KINDS]);
     expect(keysOf(jobs.triggers)).toEqual([...WIKI_PLAN_JOB_TRIGGERS]);
     expect(keysOf(jobs.states)).toEqual([...WIKI_PLAN_JOB_STATES]);

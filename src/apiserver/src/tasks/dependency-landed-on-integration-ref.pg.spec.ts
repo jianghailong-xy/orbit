@@ -150,6 +150,8 @@ async function world(db: PrismaClient, label: string): Promise<World> {
     data: {
       id: ids.projectId, ownerId: ids.ownerId, title: `${label} project`,
       coordinatorWorkspaceId: ids.workspaceId,
+      // Started: only a started, unpaused project moves by itself (project-pause-dispatch.ts).
+      startedAt: new Date(),
     },
   });
   return ids;

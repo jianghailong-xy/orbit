@@ -215,6 +215,12 @@ public enum RunnerStatus: String, Codable, Sendable {
     case online = "ONLINE"
     case offline = "OFFLINE"
     case draining = "DRAINING"
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = RunnerStatus(rawValue: raw) ?? .unknown
+    }
 }
 
 /// Claude Code permission modes (map 1:1 to `--permission-mode`).

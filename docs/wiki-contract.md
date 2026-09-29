@@ -1196,7 +1196,7 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
 
 ### 21.7 plan 的作业：起草、修订与触发（`plan.jobs`）
 
-JSON 里是 `plan.jobs`；迁移 `0327_wiki_plan_job`；服务端在 `src/apiserver/src/wiki/wiki-plan-job.ts`，共享类型在 `src/shared/src/wikiPlan.ts`。
+JSON 里是 `plan.jobs`；迁移 `0336_wiki_plan_job`；服务端在 `src/apiserver/src/wiki/wiki-plan-job.ts`，共享类型在 `src/shared/src/wikiPlan.ts`。
 
 - **作业是维护清单里的任务**：起草（`draft`，跑 `orbit wiki plan draft`）、修订（`revise`，跑 `orbit wiki plan revise`，带 owner 的修改意见）
   和生成（`build`，确认后写文档，由写文档的任务自己建）都建在该 space 隐藏的「Wiki maintenance」清单里，所以跑它的会话就是维护会话

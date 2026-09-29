@@ -21,11 +21,16 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { ProjectStatus } from '@orbit/shared';
+import {
+  ProjectStatus,
+  type ProjectStartRequestBody,
+  type StartProjectRequestBody,
+} from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
+import { MAX_START_REQUEST_WHY } from './project-start-request';
 import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -294,15 +299,21 @@ export class UpdateProjectDto {
   integration?: UpdateProjectIntegrationDto;
 
   // ── What the project's coordinator is allowed to do ────────────────────────────────────────
-  // The three fields below are the authorization set: they are the only fields whose value decides
+  // The four fields below are the authorization set: they are the only fields whose value decides
   // whether an action the coordinator wants to take may happen. Writing any of them bumps
   // `configRevision` by one (see ProjectsService.update), which is what makes a revoke that races
   // an action readable afterwards. Everything else on this DTO is prose or filing.
 
-  /** Whether the coordinator may act at all. There is nothing else to name in the same request:
-   *  the level of automation it used to have to be given here is gone, so turning it on is the
-   *  whole write. */
+  /** Automatic, as a client that only has the one switch writes it — and means it: on those clients
+   *  the switch is also whether the project moves. Off turns Automatic off and pauses a started
+   *  project (`LEGACY_AUTOMATIC_OFF`); on turns it on and lifts that pause, never the owner's own
+   *  (`project-pause.ts`). A newer client writes `automatic` instead, and pauses with the pause door. */
   @IsSent() @IsBoolean() coordinatorEnabled?: boolean;
+  /** Automatic — the project's `coordinator_enabled` — and nothing else: whether its coordinator
+   *  decides for the owner (when a task is done, conflicts and failed checks, merging the branch into
+   *  main). It does not pause or resume the project; `POST /projects/:id/pause` and `/resume` do.
+   *  Not in the same request as `coordinatorEnabled`, which writes the same column. */
+  @IsSent() @IsBoolean() automatic?: boolean;
   /** How many of this project's tasks may be in flight at once. An admission limit: lowering it
    *  never stops anything already running. */
   @IsSent() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;
@@ -413,6 +424,54 @@ export class ConfirmAcceptanceCriteriaDto {
     message: 'criteriaDigest must be the 64-character sha256 digest of the criteria set being confirmed',
   })
   criteriaDigest!: string;
+}
+
+/**
+ * `POST /projects/:id/start` (`@orbit/shared` `StartProjectRequestBody`): the version of the
+ * criteria the owner read, and every setting the project is to run with — each one required,
+ * because a start writes the whole set and a field left out would be a setting nobody chose.
+ */
+export class StartProjectDto implements StartProjectRequestBody {
+  @Matches(SHA256_DIGEST_PATTERN, {
+    message: 'criteriaDigest must be the 64-character sha256 digest of the criteria set being confirmed',
+  })
+  criteriaDigest!: string;
+  /** Where finished tasks land: the project's own branch first, or directly into main. */
+  @IsIn(INTEGRATION_LINES) line!: IntegrationLine;
+  /** The project branch as a full ref, with `PROJECT_BRANCH` only; `refs/heads/project/<project
+   *  id>` unless named. */
+  @IsOptional()
+  @Matches(BRANCH_REF, {
+    message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
+  })
+  projectBranchName?: string;
+  /** Automatic: whether the coordinator runs the project for the owner. */
+  @IsBoolean() automatic!: boolean;
+  @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
+  /** The check run on the combined tree before anything lands; null for none. Sent either way. */
+  @ValidateIf((_object, value) => value !== null) @IsString() mergeCheckCommand!: string | null;
+  /** The coordinator's start request this start answers, when the card was drawn from one. */
+  @IsOptional() @IsPublicId() requestId?: string | null;
+}
+
+/**
+ * `POST /runner/projects/:id/start-requests` (`@orbit/shared` `ProjectStartRequestBody`): the
+ * settings a project's coordinator suggests it start with — the ones `StartProjectDto` writes, under
+ * the same rules — and why the plan is ready. The merge check may be left out, which suggests none.
+ */
+export class RequestProjectStartDto implements ProjectStartRequestBody {
+  @IsIn(INTEGRATION_LINES) line!: IntegrationLine;
+  @IsOptional()
+  @Matches(BRANCH_REF, {
+    message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
+  })
+  projectBranchName?: string;
+  @IsBoolean() automatic!: boolean;
+  @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
+  @IsOptional() @ValidateIf((_object, value) => value !== null) @IsString()
+  mergeCheckCommand?: string | null;
+  /** Shown to the owner on the card, as written. */
+  @IsString() @MinLength(1) @MaxLength(MAX_START_REQUEST_WHY) why!: string;
 }
 
 /** The two spellings a criteria decision can have. `REJECT` settles the proposal and applies

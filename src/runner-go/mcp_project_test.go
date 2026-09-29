@@ -190,6 +190,10 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 			// waiting on is the account owner — who answers `blockerResolveApprovalToolName` before
 			// anything is written, which is what keeps this a proposal rather than a self-release.
 			"project_blocker_resolve",
+			// The coordinator asking the owner to START the project. Ungated like the question it
+			// sits beside: asking starts nothing — the owner's press on the start card does — and the
+			// server checks the acting session against the project's own coordinator pointer.
+			"project_request_start",
 		}
 		if tc.orchestration {
 			want = append(want, "project_ensure_coordinator", "project_send")

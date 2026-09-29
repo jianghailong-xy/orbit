@@ -380,7 +380,7 @@ export interface WikiPlanDecisionResult {
   draft: WikiPlanVersion | null;
 }
 
-// ── The plan's jobs (contract `plan.jobs`, migration 0327) ──────────────────────────────────────
+// ── The plan's jobs (contract `plan.jobs`, migration 0336) ──────────────────────────────────────
 
 /**
  * What a job does: draft a plan (`orbit wiki plan draft`), revise the newest version with the owner's

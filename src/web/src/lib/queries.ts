@@ -79,6 +79,24 @@ export type { ConfiguredProvider };
 export const runnersQuery = () =>
   queryOptions({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
 
+/** The runner release published by this Orbit instance. Deployments without the download
+ *  manifest simply contribute no version; the runners' own reports still establish the latest. */
+export const publishedRunnerVersionQuery = () =>
+  queryOptions({
+    queryKey: ['runner-published-version'] as const,
+    queryFn: async (): Promise<string | null> => {
+      try {
+        const response = await fetch('/dl/version.json');
+        if (!response.ok) return null;
+        const body = (await response.json()) as { version?: unknown };
+        return typeof body.version === 'string' ? body.version : null;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 5 * 60_000,
+  });
+
 /** Whether the deployment has zero users — gates the signed-out boot toward /setup. */
 export const setupStatusQuery = () =>
   queryOptions({

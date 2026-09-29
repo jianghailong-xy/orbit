@@ -33,8 +33,9 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0327: origin/main and project/34VR0RwUSIcaoO7ZZqv52 stood at 0325 when this was written (2026-09-29),
--- and the project's coordinator keeps 0326 for the documents' storage. Every statement can run twice:
+-- 0336: written as 0327 when origin/main and project/34VR0RwUSIcaoO7ZZqv52 stood at 0325 (2026-09-29);
+-- renumbered before landing, when origin/main stood at 0334 and 0335 was another branch's — the first
+-- free number after the highest. Every statement can run twice:
 -- CREATE TABLE / INDEX IF NOT EXISTS, with the table's constraints inside its CREATE.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

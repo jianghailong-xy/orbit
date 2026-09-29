@@ -41,6 +41,11 @@ export interface CreateSessionDto {
    *  here: a request that names none inherits the runner's Runtime default, which only the claim
    *  knows. A session whose effective model has no fast lane simply dispatches without one. */
   fastMode?: boolean;
+  /** Which of the runner's Codex accounts this session runs on, picked on the New Session screen:
+   *  `default` or a slot id (RunnerEngineAccount.id). Omitted follows the workspace's choice
+   *  (Workspace.codexAccount). Only a session on the built-in Codex engine reads it, and an id the
+   *  runner does not report runs on Default, as the workspace's does. */
+  codexAccount?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
    *  session/turn — they're scoped to this session on create, then linked to the initial

@@ -232,6 +232,10 @@ export class CoordinatorDeliveryService {
    * from the same predicate the fact was derived from, with the Run control beside it; and because
    * the key is back, the next time the same release is derived — a receipt reported again, the
    * same work promoted upstream — it reaches whichever conversation the project has by then.
+   *
+   * An Automatic project's evidence revision is the second fact on this door
+   * (`CompletionEvidenceProducer`), and its owner's sense is the evidence card: the pending read
+   * lists every revision no conversation was handed, so a refused one is on it at once.
    */
   async queue(fact: WakeFact, authorize: WakeAuthorizer): Promise<CoordinatorDeliveryOutcome> {
     const claimed = await this.wakes.claim(fact, authorize);
@@ -299,8 +303,9 @@ export class CoordinatorDeliveryService {
    * releases or binds it around this call.
    *
    * `send` is its one caller. Until 2026-09-10 the evidence ledger's door was a second, telling this
-   * conversation about every completion evidence revision; that door now tells nobody, and this
-   * stopped being public with it.
+   * conversation about every completion evidence revision; that door stopped telling anybody, and
+   * this stopped being public with it. Since 2026-09-29 it tells an Automatic project's coordinator
+   * again, to decide rather than to relay, and it does so through `queue`.
    */
   private async message(fact: WakeFact): Promise<CoordinatorMessageOutcome> {
     const project = await this.prisma.project.findUnique({
