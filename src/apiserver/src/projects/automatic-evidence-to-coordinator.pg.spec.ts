@@ -89,6 +89,8 @@ import { WakeDispositionService } from './wake-disposition.service';
  *    (9) The hold ends the moment the coordinator cannot act: switched off, or its conversation
  *        over.
  *   (10) A revision the coordinator could not decide is only recorded, and is the owner's at once.
+ *   (11) The hold decides where the question is asked, not who may answer it: the owner's own
+ *        answer to a held revision is taken at the same door, and settles the task.
  *
  * Every "the owner is asked" is paired with a "the owner is not asked" over the same read, so a
  * read that filters nothing and a read that filters everything both fail.
@@ -888,6 +890,38 @@ test('(10) a revision the coordinator could not decide is only recorded, and the
         id: selfRun.readerSessionId, taskId: null,
       });
       assert.deepEqual(reader.pending.map((r) => r.taskId), [selfRun.taskId]);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(11) the owner may answer a revision the coordinator holds, at any moment, at the same door',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'overruled');
+      await submit(stack, w);
+      const [row] = await evidenceWakes(stack.db, w.taskId);
+      assert.equal(row!.status, 'DELIVERED', `refused with ${row!.refusalCode}`);
+      assert.deepEqual(await ownerAsked(stack, w), [], 'the revision is not held, so this proves nothing');
+
+      // What the card's button posts, from the conversation the card is drawn in, while the
+      // coordinator still holds the revision: taken, and it settles the task like any CONFIRM.
+      const decided = await stack.evidence.decide(
+        w.ownerId,
+        w.taskId,
+        { type: CreatorType.USER, id: w.ownerId },
+        { decidingSessionId: w.coordinatorSessionId!, evidenceRevision: '1', decision: 'CONFIRM' },
+      );
+      assert.equal(decided.decision, 'CONFIRM');
+      assert.equal(
+        (await stack.db.task.findUniqueOrThrow({ where: { id: w.taskId } })).status,
+        TaskStatus.DONE,
+        'the owner’s answer to a held revision did not settle the task',
+      );
+      const later = new Date(Date.now() + (ESCALATION_SECONDS + 60) * 1_000);
+      assert.deepEqual(await ownerAsked(stack, w, later), []);
+      assert.equal(await ownerCount(stack, w, later), 0);
     } finally {
       await stack.db.$disconnect();
     }

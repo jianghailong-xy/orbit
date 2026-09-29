@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { completionEvidenceRevisedFact } from './completion-input';
+import { completionEvidenceRevisedFact, completionEvidenceWakeKey } from './completion-input';
 import {
   COORDINATOR_WAKE_EVENTS,
   RETIRED_COORDINATOR_WAKE_EVENTS,
@@ -32,6 +32,19 @@ test('criterion input keys move only with their immutable fact version', () => {
   assert.equal(wakeIdempotencyKey(first), wakeIdempotencyKey(same));
   assert.notEqual(wakeIdempotencyKey(first), wakeIdempotencyKey(next));
   assert.doesNotMatch(wakeIdempotencyKey(first), new RegExp(PROJECT));
+});
+
+// The owner's pending read looks an evidence revision's delivery up by key, without building the
+// fact (`pending-evidence-judgments.ts`): the two spellings have to be one key, or a revision the
+// coordinator holds would be asked of the owner anyway.
+test('the key an evidence revision is looked up by is the key its fact is claimed under', () => {
+  const revision = { revision: '7', criterionRevision: 'a'.repeat(64), evidenceDigest: 'b'.repeat(64) };
+  const fact = completionEvidenceRevisedFact({ projectId: PROJECT, taskId: TASK, ...revision });
+  assert.equal(completionEvidenceWakeKey(TASK, revision), wakeIdempotencyKey(fact));
+  assert.notEqual(
+    completionEvidenceWakeKey(TASK, { ...revision, revision: '8' }),
+    wakeIdempotencyKey(fact),
+  );
 });
 
 // The judgment machinery was removed on 2026-09-02. Four of the five completion inputs were facts
