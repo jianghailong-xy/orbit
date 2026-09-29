@@ -569,7 +569,7 @@ func (r *wikiPlanRun) workDir() error {
 		"target": r.target, "instructions": hex.EncodeToString(sum[:8]), "model": r.cfg.model}
 	want, _ := json.Marshal(meta)
 	if have, err := os.ReadFile(filepath.Join(dir, "meta.json")); err != nil || string(have) != string(want) {
-		for _, old := range []string{"a1", "a2", "a3", "streams"} {
+		for _, old := range []string{"a1", "a2", "a3", "streams", "calls.jsonl"} {
 			_ = os.RemoveAll(filepath.Join(dir, old))
 		}
 		r.fresh = true

@@ -356,6 +356,15 @@ func TestWikiPlanDraftsInFourStepsEachStreamedToDisk(t *testing.T) {
 	planSession(t, door.URL, vllm)
 	spawns := fakeVerifyClaude(t)
 	work := t.TempDir()
+	// What another job left in the directory is not this run's: not its answers, and not its ledger.
+	if err := os.MkdirAll(filepath.Join(work, "a1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, text := range map[string]string{"meta.json": `{"job":"another"}`, "a1/skeleton-catalogue.md": "stale", "calls.jsonl": `{"step":"stale"}` + "\n"} {
+		if err := os.WriteFile(filepath.Join(work, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	summary, printed, err := runPlanCLI(t, work, "draft", "--target", "3-3")
 	if err != nil {
@@ -363,6 +372,10 @@ func TestWikiPlanDraftsInFourStepsEachStreamedToDisk(t *testing.T) {
 	}
 	if summary.Outcome != "succeeded" || summary.Version == nil || *summary.Version != 1 {
 		t.Fatalf("the run did not store version 1: %+v", summary)
+	}
+	if ledger, _ := os.ReadFile(filepath.Join(work, "calls.jsonl")); strings.Contains(string(ledger), "stale") ||
+		strings.Count(string(ledger), "\n") != summary.Report.Tokens.Calls {
+		t.Errorf("the ledger is not this run's %d calls:\n%s", summary.Report.Tokens.Calls, ledger)
 	}
 
 	// The order: the catalogue first, every category's details before any outline, the rules beside them.
