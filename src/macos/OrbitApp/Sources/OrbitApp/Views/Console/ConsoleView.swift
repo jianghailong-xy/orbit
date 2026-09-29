@@ -585,7 +585,9 @@ struct TranscriptView: View {
     // row) and the message list, so nothing here can be left stale by recycling. If no row has claimed the
     // top yet (freshly opened, before the first geometry callback) but we're scrolled below the top, fall
     // back to naming the last question so the header shows at once; at the very top / short transcripts it
-    // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet.
+    // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
+    // so is a background job's news or a wakeup coming due, a line inside an answer rather than the head
+    // of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
     private func recomputeStuck() {
         let items = console.state.items
         // Where the reader is, for the console: the needs-you bar's direction word points at a card
@@ -596,14 +598,20 @@ struct TranscriptView: View {
         if let anchor = ruler.topAnchorID {
             for item in items {
                 if item.id == anchor { break }                       // reached the top item; stop
-                if case .user(let b) = item, !b.queued { found = b.id }
+                if case .user(let b) = item, namesAQuestion(b) { found = b.id }
             }
         } else if ruler.contentOffset > 40 {
             for item in items.reversed() {
-                if case .user(let b) = item, !b.queued { found = b.id; break }
+                if case .user(let b) = item, namesAQuestion(b) { found = b.id; break }
             }
         }
         if found != stuckID { stuckID = found }
+    }
+
+    /// A turn the bar may point back at: asked already, and the head of a round rather than a line inside one.
+    private func namesAQuestion(_ b: UserBubble) -> Bool {
+        !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
+                                            taskStart: b.taskStart, startedCard: b.startedCard)
     }
 
     private var stuckBubble: UserBubble? {
@@ -730,10 +738,10 @@ struct TranscriptView: View {
     // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
     // region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. A wake — or an exception item's delivery — is still
-        // the turn the bar points back at, but it is not the person's question: it gets its card's
-        // own title and line (`StickySummary`), so the bar can't say "your question" above a card
-        // reading "not typed by you".
+        // What this turn was and what it said. A watch's wake — or an exception item's delivery — is
+        // still the turn the bar points back at, but it is not the person's question: it gets its
+        // card's own title and line (`StickySummary`), so the bar can't say "your question" above a
+        // card reading "not typed by you".
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard)

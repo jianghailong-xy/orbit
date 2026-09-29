@@ -223,85 +223,83 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
                     "the title several jobs share", Self.webCard)
     }
 
-    func testWhatBecameOfAJobIsSaidInTheSameWords() throws {
+    func testHowAJobCameOutIsSaidInTheSameWords() throws {
         let web = try flat(Self.webCard)
-        let outcome = try section(web, from: "function outcome(", to: "\n}", Self.webCard)
+        let status = try section(web, from: "function status(", to: "\n}", Self.webCard)
 
-        assertWritten(outcome, BackgroundWakeCard.outcome(job(status: "running", ended: false,
-                                                              exitCode: nil)),
-                      "what a job that is still running is said to have done", Self.webCard)
-        assertWritten(outcome, BackgroundWakeCard.outcome(job(status: "killed", exitCode: nil)),
-                      "what a killed job with no reason recorded is said to have done", Self.webCard)
-        XCTAssertEqual(BackgroundWakeCard.outcome(job(status: "killed", exitCode: nil,
-                                                      killReason: "runner_shutdown")),
-                       "was killed: runner_shutdown")
-        assertBuilt(outcome, "was killed: ${job.killReason}", "what a killed job names", Self.webCard)
-        XCTAssertEqual(BackgroundWakeCard.outcome(job(exitCode: nil)), "ended completed")
-        assertBuilt(outcome, "ended ${job.status}", "what a job that named no exit code ended as",
-                    Self.webCard)
-        XCTAssertEqual(BackgroundWakeCard.outcome(job(exitCode: 0)), "exited 0")
-        assertBuilt(outcome, "exited ${job.exitCode}", "how a job's exit code is said", Self.webCard)
+        XCTAssertEqual(BackgroundWakeCard.status(job(status: "killed", exitCode: nil)), "killed")
+        assertWritten(status, "killed", "what a killed job with no reason recorded closes on", Self.webCard)
+        XCTAssertEqual(BackgroundWakeCard.status(job(status: "killed", exitCode: nil,
+                                                     killReason: "runner_shutdown")),
+                       "killed: runner_shutdown")
+        assertBuilt(status, "`killed: ${job.killReason}`", "what a killed job names", Self.webCard)
+        XCTAssertEqual(BackgroundWakeCard.status(job(exitCode: 0)), "exit 0")
+        assertBuilt(status, "`exit ${job.exitCode}`", "how a job's exit code is said", Self.webCard)
+        XCTAssertEqual(BackgroundWakeCard.status(job(exitCode: nil)), "completed")
+        assertBuilt(status, "job.ended ? job.status : null",
+                    "what a job that named no exit code ended as, and a job that has not ended", Self.webCard)
+        XCTAssertNil(BackgroundWakeCard.status(job(status: "running", ended: false, exitCode: nil)))
     }
 
-    func testHowTheJobsCameOutIsSummarisedInTheSameWords() throws {
+    func testTheLineNamesAndClosesInTheSameWords() throws {
         let web = try flat(Self.webCard)
-        // The browser writes the line twice over: once in words, which is what this client returns
-        // and what the sticky bar at the top of the transcript names the turn with, and once as the
-        // card draws it, with the lone job's name in bold. The words are the contract, so they are
-        // asserted against the first; only the bolding is asserted against the second.
-        let summary = try section(web, from: "function summaryText(", to: "\n}", Self.webCard)
-        let bolded = try section(web, from: "function summary(", to: "\n}", Self.webCard)
+        let name = try section(web, from: "function lineName(", to: "\n}", Self.webCard)
+        let closing = try section(web, from: "function lineStatus(", to: "\n}", Self.webCard)
 
-        assertWritten(summary, BackgroundWakeCard.summary(wake(jobs: [])),
-                      "what a wakeup carrying no reason says", Self.webCard)
-        // One job's line is its name and what became of it, full stop.
-        XCTAssertEqual(BackgroundWakeCard.summary(wake(jobs: [job(description: "upgrade")])),
-                       "upgrade exited 0.")
-        assertBuilt(bolded, "</strong> {outcome(jobs[0])}.", "one job's own line", Self.webCard)
-        assertBuilt(summary, "${jobs[0].description || jobs[0].command} ${outcome(jobs[0])}.",
-                    "what one job's line calls it", Self.webCard)
-        XCTAssertEqual(BackgroundWakeCard.summary(wake(jobs: [job(), job(status: "failed", exitCode: 1)])),
-                       "1 of 2 failed.")
-        assertBuilt(summary, "${failed.length} of ${jobs.length} failed.",
-                    "how many of several jobs failed", Self.webCard)
-        XCTAssertEqual(BackgroundWakeCard.summary(wake(jobs: [job(), job()])), "All 2 exited 0.")
-        assertBuilt(summary, "All ${jobs.length} exited 0.", "several jobs that all came out clean",
+        XCTAssertEqual(BackgroundWakeCard.lineName(wake(jobs: [job(description: "upgrade")])), "upgrade")
+        assertBuilt(name, "jobs[0].description || jobs[0].command", "what one job's line calls it",
                     Self.webCard)
-        XCTAssertEqual(BackgroundWakeCard.summary(wake(jobs: [job(exitCode: nil), job(exitCode: nil)])),
-                       "All 2 finished.")
-        assertBuilt(summary, "All ${jobs.length} finished.",
-                    "several jobs that finished without all naming an exit code", Self.webCard)
+        XCTAssertEqual(BackgroundWakeCard.lineName(wake(jobs: [], wakeups: [wakeup(reason: "watching CI")])),
+                       "watching CI")
+        assertBuilt(name, "wake.wakeups[0]?.reason", "what a wakeup's line calls it", Self.webCard)
+        XCTAssertNil(BackgroundWakeCard.lineName(wake(jobs: [job(), job()])))
+        assertBuilt(name, "return null;", "several jobs going unnamed on the line", Self.webCard)
+
+        XCTAssertEqual(BackgroundWakeCard.lineStatus(wake(jobs: [job()])), "exit 0")
+        assertBuilt(closing, "return status(jobs[0]);", "a lone job's line closing on its own word",
+                    Self.webCard)
+        XCTAssertEqual(BackgroundWakeCard.lineStatus(wake(jobs: [job(), job(status: "failed", exitCode: 1)])),
+                       "1 of 2 failed")
+        assertBuilt(closing, "`${failed.length} of ${jobs.length} failed`", "how many of several jobs failed",
+                    Self.webCard)
+        XCTAssertNil(BackgroundWakeCard.lineStatus(wake(jobs: [job(), job()])))
+
+        // The clock where nothing has come out yet: a wakeup, or a job that has only written something.
+        assertBuilt(web, "!failed && (wake.jobs.length === 0 || wake.jobs.some((job) => !job.ended))",
+                    "when the line's mark is the clock", Self.webCard)
+        XCTAssertTrue(BackgroundWakeCard.isPending(wake(jobs: [])))
+        XCTAssertTrue(BackgroundWakeCard.isPending(wake(jobs: [job(status: "running", ended: false, exitCode: nil)])))
+        XCTAssertFalse(BackgroundWakeCard.isPending(wake(jobs: [job()])))
+        XCTAssertFalse(BackgroundWakeCard.isPending(wake(jobs: [job(status: "failed", exitCode: 1),
+                                                                job(status: "running", ended: false,
+                                                                    exitCode: nil)])))
     }
 
-    /// What the bar pinned to the top of the transcript calls this turn. Same rule as a watch's
-    /// wake, for the same reason — nobody typed this one either — so the bar takes this card's own
-    /// title and line (`StickySummary`), and the browser's half of that is the pair of attributes
-    /// the card stamps on its root for `WorkspaceView`'s scanner to read.
-    func testTheStickyBarNamesTheTurnInThisCardsOwnWords() throws {
+    /// The bar pinned to the top of the transcript does not point at this turn: it is a line inside
+    /// the answer, so the bar keeps naming the question (`StickySummary.isAnchor`, which
+    /// `StickySummaryTests` holds). The browser's half of that rule is the attribute pair its scanner
+    /// reads, which the line must never stamp.
+    func testTheLineIsNoTurnTheStickyBarPointsAt() throws {
         let web = try flat(Self.webCard)
-        let root = try section(web, from: "className={`bgwake ", to: "\n      >", Self.webCard)
+        let root = try section(web, from: "className={`bgwake ", to: "data-seq={seq}>", Self.webCard)
 
-        assertBuilt(root, "data-sticky-label={title(wake)}", "the label the bar takes from this card",
-                    Self.webCard)
-        assertBuilt(root, "data-sticky-text={summaryText(wake)}", "the line the bar takes from this card",
-                    Self.webCard)
-        // The card's own line falls back to that same function, so the bar and the card under it
-        // cannot come out saying two different things.
-        assertBuilt(try section(web, from: "function summary(", to: "\n}", Self.webCard),
-                    "return summaryText(wake);", "the card's line reading the words the bar reads",
-                    Self.webCard)
+        XCTAssertFalse(root.contains("data-sticky"), "the line's root stamps what the bar's scanner reads")
+        XCTAssertFalse(web.contains("data-sticky-label=") || web.contains("data-sticky-text="),
+                       "\(Self.webCard) stamps an attribute the bar's scanner reads, so the bar points "
+                           + "at the line and the question leaves it")
     }
 
     func testTheCardsOwnLinesMatchTheWebCard() throws {
         let web = try flat(Self.webCard)
 
-        // The provenance line, which is why the card exists: nobody typed this.
+        // Who queued it, in the fold: nobody typed this.
         let meta = try section(web, from: "className=\"bgwake-meta\"", to: "</div>", Self.webCard)
         assertWritten(meta, BackgroundWakeCard.meta(wake(jobs: [job()])),
                       "the line saying a background job queued the turn", Self.webCard)
         assertWritten(meta, BackgroundWakeCard.meta(wake(jobs: [])),
                       "the line saying a wakeup queued the turn", Self.webCard)
-        assertBuilt(meta, "` · ${relTime(ts)}`", "how the card dates itself", Self.webCard)
+        // When, on the line itself.
+        assertBuilt(web, "className=\"bgwake-time\">{relTime(ts)}", "how the line dates itself", Self.webCard)
 
         assertRendered(web, BackgroundWakeCard.undelivered, "the undelivered line", Self.webCard)
         assertRendered(web, BackgroundWakeCard.rawSummary,
@@ -317,7 +315,8 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
 
         // A job's row: what it was called, what it exited, and how much it wrote.
         assertBuilt(web, "job.description || job.command", "what a job's row is called", Self.webCard)
-        assertBuilt(web, "exit {job.exitCode}", "the exit code beside a job's name", Self.webCard)
+        assertBuilt(web, "{several && status(job) && <span className=\"bgwake-job-exit\">{status(job)}</span>}",
+                    "how each of several jobs came out, beside its name", Self.webCard)
         let jobMeta = try section(web, from: "className=\"bgwake-job-meta\"", to: "</div>", Self.webCard)
         assertWritten(jobMeta, "no output", "what a job that wrote nothing says", Self.webCard)
         assertBuilt(jobMeta, "${formatBytes(job.outputTo)} of output",
@@ -341,6 +340,10 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
 
     private func wake(jobs: [BackgroundWakeJob], wakeups: [ScheduledWakeup] = []) -> BackgroundWake {
         BackgroundWake(jobs: jobs, wakeups: wakeups, text: "", rest: "")
+    }
+
+    private func wakeup(reason: String?) -> ScheduledWakeup {
+        ScheduledWakeup(askedAt: nil, delaySeconds: nil, dueAt: nil, reason: reason, prompt: "")
     }
 
     private func job(status: String = "completed", ended: Bool = true, exitCode: Int? = 0,

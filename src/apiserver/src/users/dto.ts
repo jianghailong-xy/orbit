@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { PermissionMode } from '@orbit/shared';
 
 export class CreateUserDto {
@@ -19,6 +19,20 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   force?: boolean;
+}
+
+/** The longest display name an account may give itself. */
+export const USER_NAME_MAX_CHARS = 80;
+
+/**
+ * The current user's own profile. The display name is the one thing on it they change themselves:
+ * the email is the sign-in, and stays as the account was created. Trimmed server-side, where a name
+ * that is blank once trimmed is refused.
+ */
+export class UpdateProfileDto {
+  @IsString()
+  @MaxLength(USER_NAME_MAX_CHARS)
+  name!: string;
 }
 
 /**

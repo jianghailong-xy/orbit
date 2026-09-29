@@ -173,6 +173,8 @@ import {
   type TranscriptRecordKind,
 } from './transcript-around';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
+import { ACCOUNT_ID_PATTERN } from '../runners/dto';
+import { automaticCodexAccount } from '../providers/plan-usage-accounts';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_SESSION_ENDED,
@@ -673,6 +675,14 @@ export class SessionsService {
       dto.prompt === '' && !dto.shell && (dto.attachmentIds?.length ?? 0) > 0;
     if (!dto.prompt && !attachmentsAlone) throw new BadRequestException('prompt is required');
     assertPromptSize(dto.prompt, 'prompt');
+    // An account id, never a path: which account is stored here, and where it lives is only ever
+    // what the runner reports. CreateSessionDto is an interface, so nothing upstream checked it.
+    if (
+      dto.codexAccount != null &&
+      (typeof dto.codexAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.codexAccount))
+    ) {
+      throw new BadRequestException('codexAccount must be "default" or the id of one of the runner\'s accounts');
+    }
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
@@ -916,15 +926,30 @@ export class SessionsService {
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, planUsage: true },
     });
+    // The Codex account this session runs on: the one picked for it — else, when its workspace picked
+    // none either, the runner's account with the most room right now (automaticCodexAccount). Chosen
+    // once, here, and stored, so the session stays on it for life: its thread lives in that account's
+    // CODEX_HOME. Null runs on the workspace's.
+    const codexAccount =
+      dto.codexAccount ??
+      (provider === AgentProvider.CODEX && providerBuiltin && targetRunner
+        ? automaticCodexAccount(
+            { env: workspaceEnv, codexAccount: accountChoices?.codexAccount },
+            targetRunner.engines,
+            targetRunner.planUsage,
+            new Date(),
+          )
+        : null);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
         runtime,
         bringsOwnCredentials: borrowedRuntime != null,
         workspaceEnv,
-        accounts: accountChoices,
+        // The account this session runs on is the one judged, whatever the workspace says.
+        accounts: codexAccount ? { ...accountChoices, codexAccount } : accountChoices,
         runner: targetRunner,
       });
     // Typed, not a bare 409: this is an availability condition — the engine is signed out on a
@@ -966,6 +991,9 @@ export class SessionsService {
         // whose effective model has no fast lane simply dispatches without one instead of being
         // refused at create.
         fastMode: dto.fastMode === true,
+        // As picked or chosen above, `default` included: NULL is the one value that follows the
+        // workspace's choice.
+        codexAccount,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -7098,7 +7126,8 @@ export class SessionsService {
         workspaceModel: session.workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
-        codexAccount: session.workspace?.codexAccount,
+        codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
+        claudeAccount: session.workspace?.claudeAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       const requestedPermissionMode =

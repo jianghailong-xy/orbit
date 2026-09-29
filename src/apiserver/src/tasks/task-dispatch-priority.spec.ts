@@ -114,7 +114,7 @@ async function sweepOver(rows: Candidate[], room: Record<string, number>): Promi
   const service = new TasksService({
     $queryRaw: async (...args: unknown[]) => {
       const query = renderRawQuery(args);
-      if (query.shape !== 'tagged-template' || query.text.includes('coordinator_enabled')) return [];
+      if (query.shape !== 'tagged-template' || query.text.includes('WITH occupied')) return [];
       return rows.map((row) => ({
         ...row,
         ownerId: OWNER_ID,

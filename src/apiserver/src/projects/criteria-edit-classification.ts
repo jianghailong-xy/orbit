@@ -79,7 +79,7 @@ export interface CriteriaEditItem {
 }
 
 /** Weakest to strictest. A step toward the end of this list is the only automatic tightening. */
-const VERIFICATION_METHOD_RUNGS: readonly string[] = ['HUMAN', 'VERIFICATION', 'EXECUTABLE'];
+export const VERIFICATION_METHOD_RUNGS: readonly string[] = ['HUMAN', 'VERIFICATION', 'EXECUTABLE'];
 
 /** Whether `after` accepts anything `before` did not — widened, or simply incomparable. */
 function acceptedExitCodesWiden(

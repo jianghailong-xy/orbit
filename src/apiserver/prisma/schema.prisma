@@ -278,6 +278,7 @@ model User {
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
+  avatar           UserAvatar? // the profile photo, when one is set (0335)
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
@@ -706,10 +707,12 @@ model Workspace {
   // Custom environment variables injected into this workspace's runtime process (string map).
   env                 Json?     @map("env")
   // Which Codex account this workspace's Codex sessions run on: the id of a slot the runner added
-  // (8 lowercase hex, src/runner-go/codex_account_slot.go), never a path. NULL is Default, the
-  // CODEX_HOME the runner's own environment selects. Dispatch resolves the id to that slot's
-  // CODEX_HOME from the accounts the assigned runner reports (providers/codex-account.ts); an id
-  // that runner does not report runs on Default rather than failing.
+  // (8 lowercase hex, src/runner-go/codex_account_slot.go) or `default`, never a path. NULL is
+  // Automatic: a new session starts on the runner's account with the most room, stored on the session
+  // (Session.codexAccount, providers/plan-usage-accounts.ts automaticCodexAccount); a session that has
+  // none stored runs on Default, the CODEX_HOME the runner's own environment selects. Dispatch resolves
+  // the id to that slot's CODEX_HOME from the accounts the assigned runner reports (providers/account.ts);
+  // an id that runner does not report runs on Default rather than failing.
   codexAccount        String?   @map("codex_account")
   // Which Claude account this workspace's Claude sessions run on: the id of a slot the runner added
   // (8 lowercase hex), never a path. NULL is Default, the CLAUDE_CONFIG_DIR the runner's own
@@ -997,6 +1000,12 @@ model Session {
   // OpenAI's own identifier, and no relation, for the reason poolKeyId has none. Never answered by a
   // route: a response names an account by its masked form only (SessionsService.get leaves it out).
   poolCodexAccountId   String?   @map("pool_codex_account_id")
+  // Which of its runner's Codex accounts this session runs on (migration 0330): `default` or a slot id,
+  // the values Workspace.codexAccount takes — picked for it on the New Session screen, or, when neither
+  // it nor its workspace picked one, the account with the most room when it was created
+  // (automaticCodexAccount). NULL follows the workspace's choice, as every session did before. Read
+  // wherever a session's run is dispatched or its quota asked about, ahead of the workspace's.
+  codexAccount         String?   @map("codex_account")
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
   inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid
@@ -1834,6 +1843,23 @@ model SessionScheduledWakeup {
 // over HTTP regardless of backend — so DB storage is the simplest option that also
 // survives `upgrade`. Bytes are stored raw (not base64); callers base64-encode only at
 // the claude/runner boundary. Bounded by a size cap + MIME allowlist (attachments.media.ts).
+/// A user's profile photo (0335): the image every client draws where the account's avatar is, in
+/// place of the name's first letter. The client crops it square and scales it down before sending;
+/// the server keeps the bytes whole, typed by what it read off them. One per user, replaced whole;
+/// removing the photo deletes the row, and so does deleting the user. Its own table rather than
+/// columns on `user`, which every sign-in and token refresh reads.
+model UserAvatar {
+  userId    String   @id @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  // image/jpeg | image/png | image/webp, read off the bytes (user_avatar_mime_type_check).
+  mimeType  String   @map("mime_type")
+  data      Bytes
+  // When this photo was set: the version a client fetches it by (`avatarUpdatedAt` on `me`).
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("user_avatar")
+}
+
 model Attachment {
   id        String            @id @default(uuid(7)) @db.Uuid
   ownerId   String            @map("owner_id") @db.Uuid // tenant scope; reads always filter by it
@@ -2026,6 +2052,28 @@ model Project {
   /// owner (docs/project-integration-line-contract.md §4.1, migration 0278). Frozen into each item's
   /// `escalateAt` when it is created, so changing it moves only items created afterwards.
   exceptionEscalationSeconds Int @default(7200) @map("exception_escalation_seconds")
+
+  /// When the account owner started this project (migration 0331). Null: not started yet.
+  ///
+  /// Written once, by a start and by nothing else — `ProjectAcceptanceService.startProject`, in the
+  /// transaction that also confirms the criteria and writes the settings the owner chose, as a
+  /// compare-and-set on this column still being null. So a second press is refused rather than
+  /// counted, and "started" is a fact about the project rather than something read off
+  /// `coordinatorEnabled`, which is the Automatic switch and says how the project runs, not whether.
+  /// Projects started before the column existed carry the earliest of their first confirmation,
+  /// their first task-work session, or — switched on with neither — their creation.
+  startedAt DateTime? @map("started_at") @db.Timestamptz(3)
+
+  /// When the project was paused (migration 0334). Null: not paused. A project moves by itself only
+  /// while it is started and not paused: while this is set nothing starts its tasks automatically,
+  /// an agent's `task_start` is refused, and nothing is merged into main by the Automatic setting
+  /// (`tasks/project-pause-dispatch.ts`). The owner's own Run is not held.
+  pausedAt DateTime? @map("paused_at") @db.Timestamptz(3)
+  /// Who paused it, set and cleared with `pausedAt`: 'OWNER' (Pause project) or
+  /// 'LEGACY_AUTOMATIC_OFF' (a client that only knows the Automatic switch turned it off, and whose
+  /// switching it back on lifts this pause and no other). 0334's CHECK holds the set, and holds a
+  /// pause to a started project.
+  pausedReason String? @map("paused_reason")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -2668,6 +2716,12 @@ model ProjectStandardSetConfirmation {
   /// The credentialed actor. Audit provenance, and — as `docs/human-only-authority.md` says of
   /// every HUMAN_ONLY row — not proof that a person held the credential.
   confirmedById String @map("confirmed_by_id") @db.Uuid
+  /// On the confirmation a START wrote (migration 0331), what the start left the project running
+  /// with and which of those settings are not what it was asked for — `@orbit/shared`
+  /// `ProjectStartRecord`, written in the same insert and never afterwards. Null on a confirmation
+  /// that only confirmed. The "Project started" card is drawn from it, so the card shows the start
+  /// as it happened rather than whatever the settings say by the time somebody reads it.
+  startedWith Json? @map("started_with")
 
   @@index([projectId, confirmedAt(sort: Desc)], map: "project_standard_set_confirmation_recent_idx")
   @@map("project_standard_set_confirmation")
