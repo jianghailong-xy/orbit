@@ -114,8 +114,9 @@ final class SettingsStackWiringTests: XCTestCase {
     }
 
     /// The sheet moves a `NavigationStack` whose path IS Settings' stack in `NavState`, and registers
-    /// every frame that stack carries on its root — the runners list and a runner's record, the
-    /// `SettingsPage`s, and an account's record under Admin.
+    /// every frame that stack carries on its root — the runners list, a runner's record and the two
+    /// pages it pushes (an engine's, its name's), the `SettingsPage`s, and an account's record under
+    /// Admin.
     func testTheSheetsStackIsSettingsOwnStack() throws {
         let sheet = code(try slice(try appSource("Views/SettingsSheet.swift"),
                                    from: "struct SettingsSheet: View {", to: "/// The page a `SettingsPage` frame names."))
@@ -126,6 +127,8 @@ final class SettingsStackWiringTests: XCTestCase {
                                      to: "default:                          EmptyView()")
         for frame in ["case .settingsRunners:            RunnersSettingsList()",
                       "case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
+                      "case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)",
+                      "case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)",
                       "case .settingsPage(let page):     SettingsPageView(page: page)",
                       "case .userDetail(let userID):     AdminUserDetailView(userID: userID)"] {
             XCTAssertTrue(destinations.contains(frame), "the sheet renders \(frame)")
@@ -204,22 +207,35 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(saveName.contains("SettingsCopy.nameNotSaved(APIClient.failureReason(error))"))
     }
 
-    /// The photo on iOS: the card's avatar opens the photo's actions, a new one comes through UIKit's
-    /// picker with its square Move and Scale step and is cut down before it is kept as the draft.
-    func testTheCardChangesThePhotoThroughTheSystemCrop() throws {
+    /// The photo on iOS, as ChatGPT's card does it: the avatar opens a menu at the avatar — the photo
+    /// library, the camera, Files, and Remove when there is a photo — and every new photo goes through
+    /// Orbit's own round crop screen before it becomes the card's draft.
+    func testTheCardChangesThePhotoFromAMenuThroughARoundCrop() throws {
         let sheet = code(try appSource("Views/SettingsSheet.swift"))
         let card = try slice(sheet, from: "private struct ProfileEditSheet: View {", to: "private struct CameraBadge: View {")
-        XCTAssertTrue(card.contains("Button { askingForPhoto = true } label: {"))
+        XCTAssertTrue(card.contains("Menu {"))
+        XCTAssertTrue(card.contains("Label(SettingsCopy.photoLibrary, systemImage: \"photo.on.rectangle\")"))
+        XCTAssertTrue(card.contains("Button { photoFlow = .camera } label: {"))
+        XCTAssertTrue(card.contains("Label(SettingsCopy.chooseFile, systemImage: \"folder\")"))
+        XCTAssertTrue(card.contains("Label(SettingsCopy.removePhoto, systemImage: \"trash\")"))
         XCTAssertTrue(card.contains("avatar.overlay(alignment: .bottomTrailing) { CameraBadge() }"))
-        XCTAssertTrue(card.contains("Button(SettingsCopy.takePhoto) { photoSource = .camera }"))
-        XCTAssertTrue(card.contains("Button(SettingsCopy.choosePhoto) { photoSource = .library }"))
-        XCTAssertTrue(card.contains("Button(SettingsCopy.removePhoto, role: .destructive) {"))
-        XCTAssertTrue(card.contains("if let picked, let jpeg = picked.orbitAvatarJPEG() {"))
+        XCTAssertFalse(card.contains("confirmationDialog"), "the photo's actions are a menu at the avatar, not a sheet from the bottom")
+        XCTAssertTrue(card.contains(".photosPicker(isPresented: $showingLibrary, selection: $libraryPick, matching: .images)"))
+        XCTAssertTrue(card.contains(".fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image])"))
+        XCTAssertTrue(card.contains("CameraPicker { taken in photoFlow = taken.map(PhotoFlow.crop) }"))
+        XCTAssertTrue(card.contains("AvatarCropView(image: image, cancel: { photoFlow = nil }) { jpeg in"))
         XCTAssertTrue(card.contains("photo = .replaced(jpeg)"))
-        let picker = try slice(sheet, from: "private struct PhotoPicker: UIViewControllerRepresentable {",
+
+        let crop = try slice(sheet, from: "private struct AvatarCropView: View {", to: "private struct NotificationSettingsPage: View {")
+        XCTAssertTrue(crop.contains("MagnifyGesture()"), "pinched into place")
+        XCTAssertTrue(crop.contains("AvatarCrop.clampedOffset("), "and never uncovering the circle")
+        XCTAssertTrue(crop.contains("let square = AvatarCrop.cropRect(image: image.size, circle: circle, zoom: zoom, offset: offset)"))
+        XCTAssertTrue(crop.contains("image.orbitAvatarJPEG(crop: square)"))
+        XCTAssertTrue(crop.contains("Text(SettingsCopy.savePhoto)"))
+        let camera = try slice(sheet, from: "private struct CameraPicker: UIViewControllerRepresentable {",
                                to: "func imagePickerControllerDidCancel")
-        XCTAssertTrue(picker.contains("picker.allowsEditing = true"), "the square crop is the system's")
-        XCTAssertTrue(picker.contains("info[.editedImage]"))
+        XCTAssertTrue(camera.contains("picker.sourceType = .camera"))
+        XCTAssertFalse(camera.contains("allowsEditing = true"), "the square system crop is not the one used")
     }
 
     /// The photo is drawn wherever the account's avatar is: Settings' header on iOS, the sidebar's
@@ -251,6 +267,7 @@ final class SettingsStackWiringTests: XCTestCase {
     /// The runners list the sheet pushes carries the same `runnerDetail` frame the Runners section's
     /// rows do, pushed by hand through `AppModel.push` — which lands on Settings' stack while the
     /// sheet is up. One frame type, two stacks: the stack on screen is what decides where it lands.
+    /// The same goes for the two pages a runner's record pushes, its engine's and its name's.
     func testTheRunnersListInsideSettingsPushesTheSameFrameTheRunnersSectionDoes() throws {
         let runners = try appSource("Views/SkillsRunnersView.swift")
         let settingsList = code(try slice(runners, from: "struct RunnersSettingsList: View {",
@@ -260,11 +277,16 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertFalse(settingsList.contains("NavigationLink"),
                        "and is not a link — a disclosure indicator here would be the odd one out "
                        + "against the section's identical list")
+        XCTAssertTrue(settingsList.contains(".foregroundStyle(Color.primary)"),
+                      "its label is the label colour: inside a button's label even `.primary` is the tint")
 
         let shell = code(try slice(try appSource("Views/CompactShell.swift"), from: "case .runners:",
                                    to: "// FOLLOWING"))
         XCTAssertTrue(shell.contains("case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)"),
                       "the Runners section renders that same frame — the reuse is the frame type")
+        XCTAssertTrue(shell.contains("RunnerEnginePage(runnerID: runnerID, engine: engine)")
+                        && shell.contains("RunnerNamePage(runnerID: runnerID)"),
+                      "and the pages a record pushes, on its own stack as on Settings'")
     }
 
     /// macOS keeps its one grouped form — in the Settings window and the main window's column — and

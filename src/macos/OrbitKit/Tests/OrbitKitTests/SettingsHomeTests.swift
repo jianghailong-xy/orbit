@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Foundation has them on Linux
+#endif
 import XCTest
 @testable import OrbitKit
 
@@ -166,6 +169,35 @@ final class SettingsHomeTests: XCTestCase {
                        [.rename("Hailong Jiang")])
         XCTAssertEqual(ProfileEdit.steps("jianghailong.rd", saved: "jianghailong.rd", photo: .unchanged), [])
         XCTAssertEqual(ProfileEdit.steps("", saved: "jianghailong.rd", photo: .removed), [])
+    }
+
+    /// The crop screen starts with the photo just covering the circle, and never lets it uncover.
+    func testTheCropStartsCoveringTheCircleAndKeepsItCovered() {
+        XCTAssertEqual(AvatarCrop.fitted(CGSize(width: 4000, height: 3000), circle: 300), CGSize(width: 400, height: 300))
+        XCTAssertEqual(AvatarCrop.fitted(CGSize(width: 3000, height: 4000), circle: 300), CGSize(width: 300, height: 400))
+        XCTAssertEqual(AvatarCrop.clampedZoom(0.5), 1)
+        XCTAssertEqual(AvatarCrop.clampedZoom(2), 2)
+        XCTAssertEqual(AvatarCrop.clampedZoom(9), AvatarCrop.maxZoom)
+        let fitted = CGSize(width: 400, height: 300)
+        XCTAssertEqual(AvatarCrop.clampedOffset(CGSize(width: 80, height: 30), fitted: fitted, circle: 300, zoom: 1),
+                       CGSize(width: 50, height: 0), "a landscape photo slides sideways only, and only 50pt")
+        XCTAssertEqual(AvatarCrop.clampedOffset(CGSize(width: -80, height: -30), fitted: fitted, circle: 300, zoom: 1),
+                       CGSize(width: -50, height: 0))
+        XCTAssertEqual(AvatarCrop.clampedOffset(CGSize(width: 200, height: -100), fitted: fitted, circle: 300, zoom: 2),
+                       CGSize(width: 200, height: -100), "zoomed in, there is room to move both ways")
+    }
+
+    /// What is kept is the square the circle covers, in the photo's own points.
+    func testTheCropKeepsTheSquareTheCircleCovers() {
+        let photo = CGSize(width: 4000, height: 3000)
+        XCTAssertEqual(AvatarCrop.cropRect(image: photo, circle: 300, zoom: 1, offset: .zero),
+                       CGRect(x: 500, y: 0, width: 3000, height: 3000), "the middle square")
+        XCTAssertEqual(AvatarCrop.cropRect(image: photo, circle: 300, zoom: 1, offset: CGSize(width: 50, height: 0)),
+                       CGRect(x: 0, y: 0, width: 3000, height: 3000), "photo moved right: its left edge")
+        XCTAssertEqual(AvatarCrop.cropRect(image: photo, circle: 300, zoom: 1, offset: CGSize(width: -50, height: 0)),
+                       CGRect(x: 1000, y: 0, width: 3000, height: 3000), "photo moved left: its right edge")
+        XCTAssertEqual(AvatarCrop.cropRect(image: photo, circle: 300, zoom: 2, offset: .zero),
+                       CGRect(x: 1250, y: 750, width: 1500, height: 1500), "zoomed in twice: half the side, same centre")
     }
 
     func testAFailedSaveSaysWhy() {
