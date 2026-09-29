@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Orbit — Agent Mission Control</title>
+    <meta name="description" content="Self-hosted mission control for coding agents. Run agents on your own machines and keep the plan, history, and controls in one place.">
+    <meta name="theme-color" content="#0a1020">
+    <link rel="canonical" href="https://jianghailong-xy.github.io/orbit/">
+    <link rel="icon" href="assets/brand/favicon.svg" type="image/svg+xml">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Orbit">
+    <meta property="og:title" content="Orbit — Agent Mission Control">
+    <meta property="og:description" content="Self-hosted mission control for coding agents.">
+    <meta property="og:url" content="https://jianghailong-xy.github.io/orbit/">
+    <meta property="og:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.svg">
+    <meta property="og:image:type" content="image/svg+xml">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Orbit — Agent Mission Control">
+    <meta name="twitter:description" content="Self-hosted mission control for coding agents.">
+    <meta name="twitter:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.svg">
+    <link rel="stylesheet" href="assets/site.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="wrap header-row">
+        <a class="brand" href="./" aria-label="Orbit home" data-funnel="home">
+          <img src="assets/brand/logo.svg" width="142" height="38" alt="Orbit">
+        </a>
+        <nav class="nav" aria-label="Primary navigation">
+          <a href="#scenarios">Scenarios</a>
+          <a href="#demo">Demo</a>
+          <a href="#quick-start">Quick Start</a>
+          <a href="#boundaries">Boundaries</a>
+          <a href="#faq">FAQ</a>
+          <a href="https://github.com/jianghailong-xy/orbit?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=nav" class="nav-cta" data-funnel="github">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div>
+            <p class="eyebrow">Orbit — Agent Mission Control</p>
+            <h1>Self-hosted mission control for coding agents.</h1>
+            <p class="hero-copy">Run coding agents on your own machines. Keep the plan, history, and controls in one self-hosted place.</p>
+            <div class="hero-meta" aria-label="Project status">
+              <span class="pill">Pre-1.0, active development</span>
+              <span class="pill">MIT licensed</span>
+              <span class="pill">Web + macOS + iPhone/iPad</span>
+            </div>
+            <div class="hero-actions">
+              <a class="button" href="#quick-start" data-funnel="quick-start">Start with Quick Start <span aria-hidden="true">→</span></a>
+              <a class="button secondary" href="#demo">See the 90-second demo</a>
+            </div>
+            <p class="hero-note">You operate the control plane, runners, credentials, TLS, backups, and access controls. Orbit is not a managed SaaS or a no-setup autonomous service.</p>
+          </div>
+          <figure class="hero-art" data-asset-slot="product-screenshot">
+            <img src="assets/product/hero-preview.svg" width="760" height="520" alt="Decorative Orbit preview showing a durable task graph, an online runner, and an approval card">
+            <figcaption class="asset-caption">Illustrative product preview · replaceable via the <a href="assets/README.md">public-site asset contract</a></figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="scenarios">
+        <div class="wrap">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">Three launch scenarios</p>
+              <h2>Keep agent work moving without losing the human thread.</h2>
+            </div>
+            <p>These names and this order are the canonical launch copy. Each scene is something to verify, not a promise that an agent finishes without review.</p>
+          </div>
+          <div class="scenario-grid">
+            <article class="card">
+              <span class="number" aria-hidden="true">1</span>
+              <h3>Work that outlives a chat</h3>
+              <p>Turn a multi-day migration, refactor, or test rescue into a durable task graph. Dependencies, comments, and session history survive context limits, restarts, and a closed browser.</p>
+              <p class="show-line"><strong>Show</strong><br>task list → dependency → resumable session → result and comment history</p>
+            </article>
+            <article class="card">
+              <span class="number" aria-hidden="true">2</span>
+              <h3>Parallel agents without checkout collisions</h3>
+              <p>Split a backlog across runners and enable a separate git worktree per session. Review the diffs and choose what to merge; a worktree is file-collision isolation, not a security boundary.</p>
+              <p class="show-line"><strong>Show</strong><br>two tasks → isolated worktrees → diff review → human merge decision</p>
+            </article>
+            <article class="card">
+              <span class="number" aria-hidden="true">3</span>
+              <h3>Access to private infrastructure</h3>
+              <p>Run a runner beside the repository, internal CLI, VPN, or cluster access it needs. Runners poll outward, and a risky command can stop at an approval card before it proceeds.</p>
+              <p class="show-line"><strong>Show</strong><br>private-network runner → command approval → transcript and outcome</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section tight" id="demo">
+        <div class="wrap">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">90-second demo</p>
+              <h2>Three scenes, one visible intervention point.</h2>
+            </div>
+            <p>Use a tagged or explicitly named commit. Redact repository names, hostnames, tokens, cookies, internal URLs, and provider details before recording.</p>
+          </div>
+          <div class="demo-layout">
+            <div class="demo-intro" data-asset-slot="demo-gif">
+              <h3>Watch the storyboard</h3>
+              <p>The checked-in storyboard is the source of truth while a public recording is being prepared. It keeps the runner, repository, approval card, and human merge decision in frame.</p>
+              <div class="button-row">
+                <a class="button" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/90-second-demo.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=demo">Open the full script <span aria-hidden="true">↗</span></a>
+                <a class="button text" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/messaging-brief.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=messaging">Read messaging brief <span aria-hidden="true">↗</span></a>
+              </div>
+              <p class="hero-note">Reserved media slot: an approved short GIF can be added under <code>site/assets/product/demo.gif</code> with a factual caption.</p>
+            </div>
+            <div class="timeline" aria-label="Demo timeline">
+              <div class="timeline-item"><span class="time">0:00–0:08</span><div><strong>Opening</strong><span>Project page + online runner. Say the category line and core promise.</span></div></div>
+              <div class="timeline-item"><span class="time">0:08–0:32</span><div><strong>Work that outlives a chat</strong><span>Task dependency, resumable session, result, and comment history.</span></div></div>
+              <div class="timeline-item"><span class="time">0:32–0:56</span><div><strong>Parallel agents without checkout collisions</strong><span>Two isolated worktrees, a diff, and a human merge-review action.</span></div></div>
+              <div class="timeline-item"><span class="time">0:56–1:18</span><div><strong>Access to private infrastructure</strong><span>Runner heartbeat, internal tool, approval card, transcript, and outcome.</span></div></div>
+              <div class="timeline-item"><span class="time">1:18–1:30</span><div><strong>Close</strong><span>Pre-1.0 boundary, tagged release, hardening guide, and limits.</span></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="quick-start">
+        <div class="wrap">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">Quick Start</p>
+              <h2>From a trusted host to the first runner.</h2>
+            </div>
+            <p>The complete operator path stays in the repository README and self-hosting guide. This page keeps only the decision points so it remains a small public entrance.</p>
+          </div>
+          <div class="quick-grid">
+            <div class="steps">
+              <div class="step"><span class="step-index">1</span><div><h3>Start the control plane</h3><p>Clone the repository, pin a reviewed tag, create two independent secrets, and run Docker Compose on a host you control.</p></div></div>
+              <div class="step"><span class="step-index">2</span><div><h3>Add a runner</h3><p>Use <strong>Runners → Add a runner</strong> on the machine that has the checkout, tools, VPN, and agent credentials. Approve the browser enrollment.</p></div></div>
+              <div class="step"><span class="step-index">3</span><div><h3>Create a workspace and first task</h3><p>Point a workspace at the checkout, start with the tiny demo fixture if useful, and review the transcript, approvals, and result.</p></div></div>
+              <div class="button-row"><a class="button" href="https://github.com/jianghailong-xy/orbit?utm_source=github&amp;utm_medium=website&amp;utm_campaign=launch&amp;utm_content=quick-start#quick-start" data-funnel="readme-quick-start">Read the operator steps <span aria-hidden="true">↗</span></a><a class="button secondary" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/self-hosting.md?utm_source=github&amp;utm_medium=website&amp;utm_campaign=launch&amp;utm_content=self-hosting">Self-hosting hardening</a></div>
+            </div>
+            <div>
+              <div class="code-panel">
+                <header><span>trusted host · shell</span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></header>
+                <pre><code><span class="code-comment"># Pin a reviewed release before deployment</span>
+git clone https://github.com/jianghailong-xy/orbit.git
+cd orbit
+git checkout &lt;release-tag&gt;
+cp .env.example .env
+<span class="code-comment"># Set unique JWT_SECRET and PROVIDER_SECRET_KEY in .env</span>
+docker compose up -d --build
+docker compose ps</code></pre>
+              </div>
+              <p class="quick-note">The included gateway is HTTP-only and intended as a starting point. Put HTTPS and access controls in front before network exposure; operators own backups, monitoring, host hardening, and least-privilege credentials.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="boundaries">
+        <div class="wrap">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">Architecture &amp; security boundary</p>
+              <h2>Local execution, visible controls, honest limits.</h2>
+            </div>
+            <p>Orbit coordinates and supervises agents. It does not turn an operator-managed runner into a sandbox or a hosted reliability service.</p>
+          </div>
+          <div class="boundary-grid">
+            <article class="architecture">
+              <h3>How the pieces connect</h3>
+              <div class="diagram" aria-label="Architecture diagram">Web / macOS / iOS ── REST + SSE ──▶ Control plane + PostgreSQL
+  tasks · history · approvals       queue · audit · usage
+                                      ▲
+                                      │ outbound poll
+                                      │
+                               Runner + local agent runtime
+                               optional git worktree</div>
+              <ul>
+                <li>The control plane owns users, workspaces, projects, tasks, sessions, approvals, runners, and history.</li>
+                <li>Runners make outbound connections; the control plane does not require inbound access to a runner.</li>
+                <li>Worktrees reduce checkout collisions. Processes still inherit the runner OS account's permissions.</li>
+              </ul>
+            </article>
+            <article class="boundary">
+              <h3>Before attaching sensitive infrastructure</h3>
+              <p class="callout"><strong>Important:</strong> a worktree is not a security boundary, and an agent is not guaranteed to finish correctly without review, approval, or a human merge decision.</p>
+              <ul>
+                <li>Use least-privilege runner accounts and credentials; isolate hosts when the trust boundary requires it.</li>
+                <li>Use HTTPS before network exposure, protect unique secrets, restrict the gateway, and test off-host backups and restore.</li>
+                <li>This is not a hosted service, HA guarantee, zero-data-loss promise, SLA, compliance certification, or enterprise support contract.</li>
+                <li>Provider billing, model features, resume behavior, and usage data vary by engine; the provider's bill is authoritative.</li>
+              </ul>
+              <div class="button-row"><a class="button secondary" href="https://github.com/jianghailong-xy/orbit/blob/main/SECURITY.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=security">Security policy</a><a class="button secondary" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/architecture.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=architecture">Architecture notes</a></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section tight" id="faq">
+        <div class="wrap">
+          <div class="section-heading">
+            <div><p class="kicker">FAQ</p><h2>Know what you operate.</h2></div>
+            <p>Short answers for the first visit. The repository docs carry configuration and troubleshooting detail.</p>
+          </div>
+          <div class="faq-grid">
+            <details><summary>Is Orbit hosted for me?</summary><p>No. You run the control plane and PostgreSQL, decide where it is reachable, and put TLS and access controls in front of the included HTTP gateway before exposing it to a network.</p></details>
+            <details><summary>Do credentials leave the runner?</summary><p>Supported agent CLIs use the runner's local configuration and credentials. The control plane stores coordination metadata and transcripts; provider behavior and billing remain the provider's responsibility.</p></details>
+            <details><summary>Is a worktree a security sandbox?</summary><p>No. It reduces checkout collisions. Processes run as the runner OS account and can access whatever that account can access.</p></details>
+            <details><summary>What if a runner or browser goes away?</summary><p>The task graph and session history live in the control plane. A runner that loses heartbeats is treated as offline; exact resume behavior varies by engine and provider, so verify the behavior you need.</p></details>
+            <details><summary>Which runtimes are supported?</summary><p>The control plane and runner know about Claude Code, Codex, Kimi Code, and OpenCode, plus configured compatible providers. Install and authenticate the runtime on the runner and start with <code>orbit doctor</code>.</p></details>
+            <details><summary>What should I run in production?</summary><p>Orbit is pre-1.0. Pin a tagged release, review upgrade notes and the hardening guide, and treat <code>main</code> as a development branch rather than a supported release.</p></details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="community">
+        <div class="wrap">
+          <div class="section-heading">
+            <div><p class="kicker">Community &amp; contribution</p><h2>Bring a real deployment question.</h2></div>
+            <p>Support is community-maintained and best effort. Sanitize logs and never post tokens, cookies, API keys, private hostnames, repository contents, or runner configuration.</p>
+          </div>
+          <div class="community-grid">
+            <a class="link-card" href="https://github.com/jianghailong-xy/orbit/discussions?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=community"><strong>Discussions ↗</strong><span>Ask questions and share a deployment.</span></a>
+            <a class="link-card" href="https://github.com/jianghailong-xy/orbit/issues?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=issues"><strong>Issues ↗</strong><span>Report a reproducible bug or scoped proposal.</span></a>
+            <a class="link-card" href="https://github.com/jianghailong-xy/orbit/blob/main/CONTRIBUTING.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=contributing"><strong>Contribute ↗</strong><span>Read the contribution guide and code of conduct.</span></a>
+            <a class="link-card" href="https://github.com/jianghailong-xy/orbit/security?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=security-report"><strong>Report privately ↗</strong><span>Use the Security tab for vulnerability reports.</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section tight" id="roadmap">
+        <div class="wrap">
+          <div class="section-heading">
+            <div><p class="kicker">Version &amp; roadmap</p><h2>Adoption gates before bigger promises.</h2></div>
+            <p>Roadmap direction is public; delivery dates and production guarantees are not implied.</p>
+          </div>
+          <div class="roadmap">
+            <article class="roadmap-card">
+              <h3>Current release posture</h3>
+              <ul>
+                <li>Orbit is a pre-1.0 open-source project under active development.</li>
+                <li>Pin deployments to a tagged release and review upgrade notes before changing versions.</li>
+                <li>The latest published release receives best-effort security fixes; <code>main</code> is a development branch and older releases are not supported.</li>
+              </ul>
+              <p class="version-note">Check the repository's <a href="https://github.com/jianghailong-xy/orbit/releases?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=releases">Releases ↗</a> for the exact tag, checksums, known limits, and verification notes.</p>
+            </article>
+            <article class="roadmap-card">
+              <h3>Direction, not dates</h3>
+              <ul>
+                <li><strong>Now:</strong> repeatable clean-install evidence and one consistent version story.</li>
+                <li><strong>Next:</strong> screenshot-led onboarding, operator configuration reference, public changelog, and stronger community operations.</li>
+                <li><strong>Later:</strong> recurring schedules and inbound task sources, which are designed for but not built; v1.0 compatibility follows evidence gates.</li>
+              </ul>
+              <p class="version-note">Follow the <a href="https://github.com/jianghailong-xy/orbit/blob/main/ROADMAP.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=roadmap">full roadmap ↗</a> and <a href="https://github.com/jianghailong-xy/orbit/blob/main/docs/project-maturity.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=maturity">maturity gates ↗</a>.</p>
+            </article>
+          </div>
+          <p class="hero-note">Funnel we will measure next: visit → Quick Start click → runner online → first task. The site ships no tracking pixel; use GitHub/Pages traffic, tagged links, and sanitized operator evidence.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <div class="footer-row">
+          <div><a class="footer-brand" href="./">Orbit — Agent Mission Control</a><p class="footer-copy">Self-hosted mission control for coding agents. Keep the plan, history, and controls in one self-hosted place.</p></div>
+          <div class="footer-links" aria-label="Footer navigation"><a href="#quick-start">Quick Start</a><a href="#boundaries">Security boundary</a><a href="#community">Community</a><a href="https://github.com/jianghailong-xy/orbit?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer">Repository ↗</a><a href="appcast.xml">macOS updates</a></div>
+        </div>
+        <p class="footer-legal">MIT licensed · pre-1.0 · This public entrance is a curated pointer to repository documentation, not a copy of the internal docs set.</p>
+      </div>
+    </footer>
+  </body>
+</html>
